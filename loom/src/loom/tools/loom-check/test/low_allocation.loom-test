@@ -89,6 +89,24 @@ low.func.def target(@vm_target) @copy(%lhs : reg<vm.i32>, %rhs : reg<vm.i32>) ->
 
 // ====
 
+// RUN: emit low-allocation-json @copy_diagnostics diagnostics=copy-decisions
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "copy_diagnostics", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+
+low.func.def target(@vm_target) @copy_diagnostics(%lhs : reg<vm.i32>, %rhs : reg<vm.i32>) -> (reg<vm.i32>) {
+  // REMARK@+1: BACKEND/006 "vm_target" "rejected coalescing 'lhs' with 'copy'" "assigned locations differ"
+  %copy = low.copy %lhs : reg<vm.i32> -> reg<vm.i32>
+  %sum = low.op<iree.vm.add.i32>(%copy, %rhs) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
+  low.return %sum : reg<vm.i32>
+}
+
+// ----
+
+// ====
+
 // RUN: emit low-allocation-json @copy_coalesced
 
 target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}

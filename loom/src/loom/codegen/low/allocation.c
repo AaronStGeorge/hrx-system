@@ -1008,6 +1008,72 @@ static iree_status_t loom_low_allocation_emit_predicted_spills(
   return iree_ok_status();
 }
 
+static iree_string_view_t loom_low_allocation_copy_decision_name(
+    loom_low_allocation_copy_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_ALLOCATION_COPY_COALESCED:
+      return IREE_SV("accepted");
+    case LOOM_LOW_ALLOCATION_COPY_MATERIALIZED:
+      return IREE_SV("rejected");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_low_allocation_copy_decision_reason(
+    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_copy_decision_t* copy_decision) {
+  const loom_low_allocation_assignment_t* source_assignment =
+      &sidecar->assignments[copy_decision->source_assignment_index];
+  const loom_low_allocation_assignment_t* result_assignment =
+      &sidecar->assignments[copy_decision->result_assignment_index];
+  if (!loom_low_allocation_assignment_is_coalescable(source_assignment)) {
+    return IREE_SV("source value is not assigned to a register-like location");
+  }
+  if (!loom_low_allocation_assignment_is_coalescable(result_assignment)) {
+    return IREE_SV("result value is not assigned to a register-like location");
+  }
+  if (loom_low_allocation_assignment_locations_equal(source_assignment,
+                                                     result_assignment)) {
+    return IREE_SV("assigned locations match and are register-like");
+  }
+  return IREE_SV("assigned locations differ");
+}
+
+static iree_status_t loom_low_allocation_emit_copy_decisions(
+    const loom_low_allocation_sidecar_t* sidecar,
+    iree_diagnostic_emitter_t emitter) {
+  for (iree_host_size_t i = 0; i < sidecar->copy_decision_count; ++i) {
+    const loom_low_allocation_copy_decision_t* copy_decision =
+        &sidecar->copy_decisions[i];
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(loom_low_diagnostic_target_key(&sidecar->target)),
+        loom_param_string(loom_low_diagnostic_export_name(&sidecar->target)),
+        loom_param_string(loom_low_diagnostic_config_key(&sidecar->target)),
+        loom_param_string(loom_low_diagnostic_function_name(
+            sidecar->module, sidecar->function_op)),
+        loom_param_string(loom_low_diagnostic_value_name(
+            sidecar->module, copy_decision->source_value_id)),
+        loom_param_string(loom_low_diagnostic_value_name(
+            sidecar->module, copy_decision->result_value_id)),
+        loom_param_string(
+            loom_low_allocation_copy_decision_name(copy_decision->kind)),
+        loom_param_string(
+            loom_low_allocation_copy_decision_reason(sidecar, copy_decision)),
+    };
+    loom_diagnostic_emission_t emission = {
+        .op = loom_low_diagnostic_value_origin_op(
+            sidecar->module, copy_decision->result_value_id,
+            sidecar->function_op),
+        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 6),
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    IREE_RETURN_IF_ERROR(iree_diagnostic_emit(emitter, &emission));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_allocate_function(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
@@ -1083,6 +1149,11 @@ iree_status_t loom_low_allocate_function(
                        LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS)) {
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_emit_predicted_spills(&sidecar, options->emitter));
+  }
+  if (iree_any_bit_set(options->diagnostic_flags,
+                       LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS)) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_emit_copy_decisions(&sidecar, options->emitter));
   }
   *out_sidecar = sidecar;
   return iree_ok_status();

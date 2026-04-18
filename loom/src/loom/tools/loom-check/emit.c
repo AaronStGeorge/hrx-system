@@ -132,11 +132,18 @@ static iree_status_t loom_check_emit_parse_low_allocation_option(
   } else if (iree_string_view_equal(value, IREE_SV("predicted-spills"))) {
     request->low_allocation_diagnostic_flags =
         LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS;
+  } else if (iree_string_view_equal(value, IREE_SV("copy-decisions"))) {
+    request->low_allocation_diagnostic_flags =
+        LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS;
+  } else if (iree_string_view_equal(value, IREE_SV("all"))) {
+    request->low_allocation_diagnostic_flags =
+        LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS |
+        LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS;
   } else {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "low-allocation-json option 'diagnostics' expected 'none' or "
-        "'predicted-spills', got '%.*s'",
+        "'predicted-spills', 'copy-decisions', or 'all', got '%.*s'",
         (int)value.size, value.data);
   }
   request->has_low_allocation_diagnostics_option = true;

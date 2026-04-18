@@ -56,6 +56,8 @@ typedef enum loom_low_allocation_copy_kind_e {
 typedef enum loom_low_allocation_diagnostic_bits_e {
   // Emits BACKEND/008 warnings for spill plans predicted by allocation.
   LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS = 1u << 0,
+  // Emits BACKEND/006 remarks for low.copy coalescing decisions.
+  LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS = 1u << 1,
 } loom_low_allocation_diagnostic_bits_t;
 
 // Bitset of loom_low_allocation_diagnostic_bits_t values.
