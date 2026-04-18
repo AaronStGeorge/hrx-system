@@ -15,6 +15,7 @@ from loom.assembly import (
     Flags,
     OperandDict,
     Ref,
+    Region,
     ResultType,
     ResultTypeList,
     TemplateParam,
@@ -36,6 +37,7 @@ from loom.dsl import (
     Operand,
     PackedPayloadBitCountMatchesStorage,
     PositiveBitWidthAttr,
+    RegionDef,
     Result,
     SameType,
     Successor,
@@ -270,6 +272,37 @@ def test_types_of_result_field_generates_result_type_list_format() -> None:
 
     assert "LOOM_FORMAT_KIND_RESULT_TYPE_LIST" in tables_c
     assert "LOOM_FORMAT_KIND_OPERAND_TYPES" not in tables_c
+
+
+def test_region_syntax_generates_format_selector() -> None:
+    op = Op(
+        "test.region_syntax",
+        group=Dialect("test"),
+        regions=[RegionDef("body")],
+        format=[Region("body", syntax="test.do")],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "{LOOM_FORMAT_KIND_REGION, 0, LOOM_REGION_SYNTAX_TEST_DO}," in tables_c
+
+
+def test_unknown_region_syntax_is_rejected() -> None:
+    op = Op(
+        "test.region_syntax",
+        group=Dialect("test"),
+        regions=[RegionDef("body")],
+        format=[Region("body", syntax="missing.syntax")],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"Op 'test\.region_syntax': unknown region syntax "
+            r"'missing\.syntax'"
+        ),
+    ):
+        generate_tables_c("test", 0, [op])
 
 
 def test_inline_attr_dict_uses_declared_attrs() -> None:

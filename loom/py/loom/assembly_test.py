@@ -159,6 +159,12 @@ class TestRegion:
     def test_construct(self) -> None:
         r = Region("body")
         assert r.field == "body"
+        assert r.syntax == ""
+
+    def test_construct_with_syntax(self) -> None:
+        r = Region("body", syntax="test.do")
+        assert r.field == "body"
+        assert r.syntax == "test.do"
 
 
 class TestIndexList:

@@ -118,6 +118,13 @@ KEYWORD_MAP: dict[str, str] = {
     "schedule": "LOOM_KW_SCHEDULE",
 }
 
+# Maps Region(..., syntax=...) names to C parser/printer selector IDs. The
+# empty name is the canonical braced region form.
+REGION_SYNTAX_MAP: dict[str, str] = {
+    "": "LOOM_REGION_SYNTAX_DEFAULT",
+    "test.do": "LOOM_REGION_SYNTAX_TEST_DO",
+}
+
 # Maps Python TypeConstraint enum to C constraint enum name.
 TYPE_CONSTRAINT_MAP: dict[TypeConstraint, str] = {
     TypeConstraint.TILE: "LOOM_TYPE_CONSTRAINT_TILE",
@@ -842,6 +849,13 @@ def _translate_format_elements(
             return desc.kind, _resolve_attr_index(op, name, "format")
         return desc.kind, desc.index
 
+    def _resolve_region_syntax(syntax: str) -> str:
+        c_name = REGION_SYNTAX_MAP.get(syntax)
+        if c_name is None:
+            known = ", ".join(repr(name) for name in sorted(REGION_SYNTAX_MAP))
+            raise ValueError(f"Op '{op.name}': unknown region syntax {syntax!r}. Known syntaxes: {known}")
+        return c_name
+
     def _walk(fmt_elements: tuple[FormatElement, ...]) -> None:
         for element in fmt_elements:
             match element:
@@ -982,11 +996,11 @@ def _translate_format_elements(
                     payload = f"LOOM_FORMAT_REGION_TABLE_DATA({keys_index}, {default_index})"
                     elements.append(("LOOM_FORMAT_KIND_REGION_TABLE", case_index, payload))
 
-                case RegionFmt(field=name):
+                case RegionFmt(field=name, syntax=syntax):
                     kind, index = _resolve_field(name)
                     if layout.fields[name].variadic:
                         raise ValueError(f"Op '{op.name}': variadic Region '{name}' must use RegionTable or another table format")
-                    elements.append(("LOOM_FORMAT_KIND_REGION", index, "0"))
+                    elements.append(("LOOM_FORMAT_KIND_REGION", index, _resolve_region_syntax(syntax)))
 
                 case IndexList(dynamic=dynamic_field, static=static_field):
                     dyn_kind, dyn_index = _resolve_field(dynamic_field)

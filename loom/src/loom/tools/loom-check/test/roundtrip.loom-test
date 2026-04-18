@@ -134,6 +134,17 @@ func.def @simple_loop(%lo: index, %hi: index, %step: index) {
 
 // ====
 
+// Alternate region syntax is declarative parser/printer metadata. The op still
+// stores an ordinary region.
+func.def @alternate_region_syntax() {
+  test.region_syntax do {
+    test.yield
+  }
+  func.return
+}
+
+// ====
+
 // Invoke op with symbol reference.
 func.def @callee(%x: f32) -> (f32) {
   func.return %x : f32

@@ -2534,7 +2534,7 @@ static iree_status_t loom_parse_region_body(
   return iree_ok_status();
 }
 
-iree_status_t loom_parse_region(
+static iree_status_t loom_parse_braced_region(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_region_t** out_region) {
   IREE_ASSERT_ARGUMENT(region_descriptor);
@@ -2587,6 +2587,29 @@ iree_status_t loom_parse_region(
 
   *out_region = region;
   return iree_ok_status();
+}
+
+iree_status_t loom_parse_region(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_t** out_region) {
+  return loom_parse_braced_region(parser, region_descriptor, out_region);
+}
+
+iree_status_t loom_parse_region_with_syntax(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_syntax_t syntax, loom_region_t** out_region) {
+  switch (syntax) {
+    case LOOM_REGION_SYNTAX_DEFAULT: {
+      return loom_parse_braced_region(parser, region_descriptor, out_region);
+    }
+    case LOOM_REGION_SYNTAX_TEST_DO: {
+      IREE_RETURN_IF_ERROR(loom_parse_keyword(parser, LOOM_KW_DO));
+      return loom_parse_braced_region(parser, region_descriptor, out_region);
+    }
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unsupported region syntax %u", (uint32_t)syntax);
+  }
 }
 
 //===----------------------------------------------------------------------===//

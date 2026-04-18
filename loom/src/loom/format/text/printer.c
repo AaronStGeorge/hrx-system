@@ -1510,6 +1510,49 @@ static iree_status_t loom_print_braced_region(
   return iree_ok_status();
 }
 
+static char loom_print_region_syntax_first_char(loom_region_syntax_t syntax) {
+  switch (syntax) {
+    case LOOM_REGION_SYNTAX_DEFAULT:
+      return '{';
+    case LOOM_REGION_SYNTAX_TEST_DO:
+      return 'd';
+    default:
+      return '?';
+  }
+}
+
+static iree_status_t loom_print_region_body_with_syntax(
+    loom_print_context_t* ctx, const loom_region_t* region,
+    const loom_region_descriptor_t* region_descriptor,
+    loom_region_syntax_t syntax) {
+  switch (syntax) {
+    case LOOM_REGION_SYNTAX_DEFAULT: {
+      IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+      break;
+    }
+    case LOOM_REGION_SYNTAX_TEST_DO: {
+      IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "do", false));
+      IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+      break;
+    }
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unsupported region syntax %u", (uint32_t)syntax);
+  }
+
+  if (iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_SKIP_REGIONS)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(ctx->stream, "{ ... }"));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_print_braced_region(ctx, region, region_descriptor));
+  }
+  ctx->has_previous_token = true;
+  ctx->last_char = '}';
+  ctx->glue_next = false;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_print_region_table(
     loom_print_context_t* ctx, const loom_op_t* op,
     const loom_op_vtable_t* vtable, const loom_format_element_t* element) {
@@ -1847,19 +1890,11 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
               element->field_index, vtable->region_count);
         }
         loom_region_t* region = loom_op_regions(op)[element->field_index];
-        IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-        iree_host_size_t region_start = ctx->stream->offset;
-        if (iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_SKIP_REGIONS)) {
-          // Declaration mode: print empty braces placeholder.
-          IREE_RETURN_IF_ERROR(
-              loom_output_stream_write_cstring(ctx->stream, "{ ... }"));
-        } else {
-          IREE_RETURN_IF_ERROR(
-              loom_print_braced_region(ctx, region, region_descriptor));
-        }
-        ctx->has_previous_token = true;
-        ctx->last_char = '}';
-        ctx->glue_next = false;
+        loom_region_syntax_t syntax = (loom_region_syntax_t)element->data;
+        iree_host_size_t region_start = loom_print_next_token_start_offset(
+            ctx, /*glue=*/false, loom_print_region_syntax_first_char(syntax));
+        IREE_RETURN_IF_ERROR(loom_print_region_body_with_syntax(
+            ctx, region, region_descriptor, syntax));
         loom_print_report_field(
             ctx,
             loom_print_field_ref(LOOM_PRINT_FIELD_REGION, element->field_index),

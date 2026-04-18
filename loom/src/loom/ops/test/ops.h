@@ -77,7 +77,8 @@ enum {
   LOOM_OP_TEST_FACT_BUFFER_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 56),
   LOOM_OP_TEST_FACT_VIEW_ROOT_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 57),
   LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 58),
-  LOOM_OP_TEST_COUNT_ = 59,
+  LOOM_OP_TEST_REGION_SYNTAX = LOOM_OP_KIND(LOOM_DIALECT_TEST, 59),
+  LOOM_OP_TEST_COUNT_ = 60,
 };
 
 // Function visibility. Absent (0) means private.
@@ -1078,6 +1079,17 @@ iree_status_t loom_test_fact_view_element_bytes_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_REGION_SYNTAX: Test op whose body uses an alternate declarative region syntax while preserving ordinary region storage.
+// test.region_syntax do {
+//   test.yield
+// }
+LOOM_DEFINE_ISA(loom_test_region_syntax_isa, LOOM_OP_TEST_REGION_SYNTAX)
+LOOM_DEFINE_REGION(loom_test_region_syntax_body, 0)
+iree_status_t loom_test_region_syntax_build(
+    loom_builder_t* builder,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 
 // Returns the vtable array for the test dialect.
 const loom_op_vtable_t* const* loom_test_dialect_vtables(

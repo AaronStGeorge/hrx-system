@@ -711,6 +711,12 @@ iree_status_t loom_parse_region(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_region_t** out_region);
 
+// Parses a region with the requested surface syntax. All syntaxes produce an
+// ordinary loom_region_t.
+iree_status_t loom_parse_region_with_syntax(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_syntax_t syntax, loom_region_t** out_region);
+
 // Emits ERR_PARSE_009 for a result arity mismatch on |vtable| at
 // |op_name_token|.
 iree_status_t loom_parser_emit_result_count_mismatch(

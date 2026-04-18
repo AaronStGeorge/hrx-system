@@ -1620,10 +1620,11 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
               element->field_index, vtable->region_count);
         }
         loom_region_t* region = NULL;
-        IREE_RETURN_IF_ERROR(
-            loom_parse_region(parser, region_descriptor, &region));
-        IREE_RETURN_IF_ERROR(
-            loom_parsed_op_add_region(parsed, &parser->parser_arena, region));
+        IREE_RETURN_IF_ERROR(loom_parse_region_with_syntax(
+            parser, region_descriptor, (loom_region_syntax_t)element->data,
+            &region));
+        IREE_RETURN_IF_ERROR(loom_parsed_op_set_region(
+            parsed, &parser->parser_arena, element->field_index, region));
         IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
             parser, parsed, LOOM_LOCATION_FIELD_REGION, element->field_index,
             start_token));

@@ -148,7 +148,7 @@ typedef enum loom_format_kind_e {
   // declared op attrs by key and field_index is ignored. Otherwise field_index
   // references one named LOOM_ATTR_DICT attribute.
   LOOM_FORMAT_KIND_ATTR_DICT = 9,
-  // Nested region: { block+ }.
+  // Nested region. data = loom_region_syntax_t selector.
   LOOM_FORMAT_KIND_REGION = 10,
   // Mixed static/dynamic index list: [0, %x, 4].
   // field_index = dynamic operand index, data = static attr index.
@@ -225,6 +225,16 @@ typedef enum loom_format_kind_e {
 };
 typedef uint8_t loom_format_kind_t;
 
+// Surface syntax selected by a REGION format element. This affects only text
+// parsing/printing; the in-memory representation is always an ordinary
+// loom_region_t.
+typedef enum loom_region_syntax_e {
+  // Canonical braced region: { block+ }.
+  LOOM_REGION_SYNTAX_DEFAULT = 0,
+  // Test-only alternate region syntax: do { block+ }.
+  LOOM_REGION_SYNTAX_TEST_DO = 1,
+} loom_region_syntax_t;
+
 #define LOOM_FORMAT_REGION_TABLE_DATA(keys_attr_index, default_region_index) \
   ((uint16_t)(((uint16_t)(default_region_index) << 8) |                      \
               (uint16_t)(keys_attr_index)))
@@ -244,6 +254,7 @@ typedef uint8_t loom_format_kind_t;
 //   OPERAND_DICT:   dict attribute field index storing key -> operand ordinal.
 //   ATTR_TABLE:     i64 array attr field index storing row keys.
 //   REGION_TABLE:   packed keys attr index and fixed default region index.
+//   REGION:         loom_region_syntax_t parser/printer selector.
 //   BINDING_LIST:   binding kind (CAPTURE=0, ELEMENT=1).
 //   OPTIONAL_GROUP: (skip_count << 2) | anchor_category.
 typedef struct loom_format_element_t {

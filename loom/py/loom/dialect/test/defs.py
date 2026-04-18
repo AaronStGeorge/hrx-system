@@ -1431,6 +1431,29 @@ test_dim = Op(
 )
 
 # ============================================================================
+# test.region_syntax — alternate region surface syntax
+# ============================================================================
+
+test_region_syntax = Op(
+    "test.region_syntax",
+    group=test_ops,
+    doc="Test op whose body uses an alternate declarative region syntax while preserving ordinary region storage.",
+    regions=[
+        RegionDef(
+            "body",
+            doc="Body parsed through a named region syntax.",
+            single_block=True,
+            terminator="test.yield",
+        )
+    ],
+    traits=[ImplicitTerminator("test.implicit_yield")],
+    format=[Region("body", syntax="test.do")],
+    examples=[
+        "test.region_syntax do {\n  test.yield\n}",
+    ],
+)
+
+# ============================================================================
 # Registry: all test ops in declaration order
 # ============================================================================
 
@@ -1494,4 +1517,5 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_buffer_min_alignment,
     test_fact_view_root_min_alignment,
     test_fact_view_element_bytes,
+    test_region_syntax,
 )

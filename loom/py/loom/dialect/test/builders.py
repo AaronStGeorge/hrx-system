@@ -838,3 +838,18 @@ class TestBuilders:
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_view_element_bytes", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def region_syntax(self, *, body: Region | None = None) -> None:
+        """Test op whose body uses an alternate declarative region syntax while preserving ordinary region storage.
+
+        Example::
+            test.region_syntax do {
+              test.yield
+            }
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if body is not None:
+            _regions.append(body)
+        self._b.build("test.region_syntax", _operands, attributes=_attributes, regions=_regions)

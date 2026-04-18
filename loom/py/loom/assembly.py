@@ -374,11 +374,16 @@ class Region:
     one or more blocks, each with optional block arguments and a
     sequence of operations.
 
+    The optional syntax name selects an alternate parser/printer for the
+    region's surface spelling while preserving ordinary region storage. An
+    empty syntax name uses the canonical braced region form.
+
     For builders: maps to a region-building callback or context
     manager parameter.
     """
 
     field: str
+    syntax: str = ""
 
 
 # ============================================================================
