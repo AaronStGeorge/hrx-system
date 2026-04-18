@@ -108,6 +108,30 @@ typedef struct loom_pass_registry_t {
   iree_host_size_t descriptor_count;
 } loom_pass_registry_t;
 
+// Resolved descriptor entry from a textual pass pipeline.
+typedef struct loom_pass_pipeline_descriptor_entry_t {
+  // Parsed textual pipeline entry.
+  loom_pass_pipeline_entry_spec_t spec;
+  // Resolved pass descriptor.
+  const loom_pass_descriptor_t* descriptor;
+  // Zero-based index in the textual pipeline.
+  iree_host_size_t pipeline_index;
+} loom_pass_pipeline_descriptor_entry_t;
+
+// Provides optional per-entry user data while loading a textual pipeline.
+typedef iree_status_t (*loom_pass_pipeline_configure_fn_t)(
+    void* user_data, const loom_pass_pipeline_descriptor_entry_t* entry,
+    void** out_pass_user_data);
+
+// Callback invoked for each resolved pipeline entry while loading a textual
+// pass pipeline.
+typedef struct loom_pass_pipeline_configure_callback_t {
+  // Optional configure function.
+  loom_pass_pipeline_configure_fn_t fn;
+  // Opaque caller data passed to |fn|.
+  void* user_data;
+} loom_pass_pipeline_configure_callback_t;
+
 // Returns the builtin registry containing the pass implementations linked into
 // the standard Loom compiler/tool build.
 const loom_pass_registry_t* loom_pass_builtin_registry(void);
@@ -134,6 +158,14 @@ iree_status_t loom_pass_descriptor_validate_options(
 iree_status_t loom_pass_manager_add_descriptor(
     loom_pass_manager_t* manager, const loom_pass_descriptor_t* descriptor,
     iree_string_view_t options, void* user_data);
+
+// Parses |pipeline|, resolves descriptors through |registry|, and appends the
+// resulting pass entries to |manager|. |configure| may attach per-entry user
+// data after descriptor lookup and before validation/addition.
+iree_status_t loom_pass_manager_add_pipeline(
+    loom_pass_manager_t* manager, const loom_pass_registry_t* registry,
+    iree_string_view_t pipeline,
+    loom_pass_pipeline_configure_callback_t configure);
 
 #ifdef __cplusplus
 }  // extern "C"

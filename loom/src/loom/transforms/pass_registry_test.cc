@@ -118,6 +118,110 @@ TEST(PassRegistryTest, RejectsOptionsForDescriptorWithoutCreateCallback) {
   iree_arena_block_pool_deinitialize(&block_pool);
 }
 
+TEST(PassRegistryTest, AddPipelineResolvesDescriptors) {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
+                                   &block_pool);
+  loom_pass_manager_t manager;
+  IREE_ASSERT_OK(loom_pass_manager_initialize(
+      &block_pool, 0, iree_allocator_system(), &manager));
+
+  loom_pass_pipeline_configure_callback_t no_config = {};
+  IREE_ASSERT_OK(loom_pass_manager_add_pipeline(
+      &manager, loom_pass_builtin_registry(),
+      IREE_SV("canonicalize{max-iterations=2},dce"), no_config));
+
+  ASSERT_EQ(manager.count, 2u);
+  EXPECT_TRUE(iree_string_view_equal(manager.entries[0].info->name,
+                                     IREE_SV("canonicalize")));
+  EXPECT_TRUE(iree_string_view_equal(manager.entries[0].options,
+                                     IREE_SV("max-iterations=2")));
+  EXPECT_TRUE(
+      iree_string_view_equal(manager.entries[1].info->name, IREE_SV("dce")));
+
+  loom_pass_manager_deinitialize(&manager);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+typedef struct test_pipeline_config_t {
+  // User data pointer to attach to matching pipeline entries.
+  void* entry_user_data;
+} test_pipeline_config_t;
+
+static iree_status_t configure_test_pipeline_entry(
+    void* user_data, const loom_pass_pipeline_descriptor_entry_t* entry,
+    void** out_pass_user_data) {
+  test_pipeline_config_t* config = (test_pipeline_config_t*)user_data;
+  *out_pass_user_data = nullptr;
+  if (iree_string_view_equal(entry->descriptor->key, IREE_SV("dce"))) {
+    *out_pass_user_data = config->entry_user_data;
+  }
+  return iree_ok_status();
+}
+
+TEST(PassRegistryTest, AddPipelineAppliesConfigureCallback) {
+  int sentinel = 0;
+  test_pipeline_config_t config = {
+      .entry_user_data = &sentinel,
+  };
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
+                                   &block_pool);
+  loom_pass_manager_t manager;
+  IREE_ASSERT_OK(loom_pass_manager_initialize(
+      &block_pool, 0, iree_allocator_system(), &manager));
+
+  IREE_ASSERT_OK(loom_pass_manager_add_pipeline(
+      &manager, loom_pass_builtin_registry(), IREE_SV("dce"),
+      (loom_pass_pipeline_configure_callback_t){
+          .fn = configure_test_pipeline_entry,
+          .user_data = &config,
+      }));
+
+  ASSERT_EQ(manager.count, 1u);
+  EXPECT_EQ(manager.entries[0].user_data, &sentinel);
+
+  loom_pass_manager_deinitialize(&manager);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+TEST(PassRegistryTest, AddPipelineRejectsUnknownPass) {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
+                                   &block_pool);
+  loom_pass_manager_t manager;
+  IREE_ASSERT_OK(loom_pass_manager_initialize(
+      &block_pool, 0, iree_allocator_system(), &manager));
+
+  loom_pass_pipeline_configure_callback_t no_config = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_manager_add_pipeline(
+                            &manager, loom_pass_builtin_registry(),
+                            IREE_SV("definitely-not-a-pass"), no_config));
+
+  loom_pass_manager_deinitialize(&manager);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+TEST(PassRegistryTest, AddPipelineRollsBackOnFailure) {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
+                                   &block_pool);
+  loom_pass_manager_t manager;
+  IREE_ASSERT_OK(loom_pass_manager_initialize(
+      &block_pool, 0, iree_allocator_system(), &manager));
+
+  loom_pass_pipeline_configure_callback_t no_config = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_manager_add_pipeline(
+                            &manager, loom_pass_builtin_registry(),
+                            IREE_SV("dce,definitely-not-a-pass"), no_config));
+  EXPECT_EQ(manager.count, 0u);
+
+  loom_pass_manager_deinitialize(&manager);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
 TEST(PassRegistryTest, UnavailableDescriptorCannotBeAdded) {
   loom_pass_descriptor_t descriptor = {
       .key = IREE_SVL("dce"),

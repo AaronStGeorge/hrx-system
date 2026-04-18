@@ -154,6 +154,28 @@ iree_status_t loom_check_context_initialize(loom_context_t* context) {
 // Execution
 //===----------------------------------------------------------------------===//
 
+typedef struct loom_check_pass_pipeline_config_t {
+  // Low allocation pass configuration borrowed by matching pipeline entries.
+  loom_low_materialize_allocation_pass_config_t* low_allocation_config;
+} loom_check_pass_pipeline_config_t;
+
+static iree_status_t loom_check_configure_pass_pipeline_entry(
+    void* user_data, const loom_pass_pipeline_descriptor_entry_t* entry,
+    void** out_pass_user_data) {
+  IREE_ASSERT_ARGUMENT(user_data);
+  IREE_ASSERT_ARGUMENT(entry);
+  IREE_ASSERT_ARGUMENT(out_pass_user_data);
+
+  loom_check_pass_pipeline_config_t* config =
+      (loom_check_pass_pipeline_config_t*)user_data;
+  *out_pass_user_data = NULL;
+  if (iree_string_view_equal(entry->descriptor->key,
+                             IREE_SV("low-materialize-allocation"))) {
+    *out_pass_user_data = config->low_allocation_config;
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_check_execute_case(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
@@ -236,35 +258,15 @@ static iree_status_t loom_check_run_pipeline(
       low_materialize_allocation_config = {
           .descriptor_registry = low_descriptor_registry,
       };
-
-  // Parse comma-separated pass names and add each to the pipeline.
-  iree_status_t status = iree_ok_status();
-  iree_string_view_t remaining = pipeline;
-  while (iree_status_is_ok(status)) {
-    loom_pass_pipeline_entry_spec_t entry = {0};
-    bool has_entry = false;
-    status = loom_pass_pipeline_consume_entry(&remaining, &entry, &has_entry);
-    if (!iree_status_is_ok(status)) break;
-    if (!has_entry) break;
-
-    const loom_pass_descriptor_t* descriptor = NULL;
-    void* pass_user_data = NULL;
-    status = loom_pass_registry_lookup(pass_registry, entry.name, &descriptor);
-    if (iree_status_is_ok(status) && !descriptor) {
-      status =
-          iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "unknown pass: '%.*s'",
-                           (int)entry.name.size, entry.name.data);
-    }
-    if (iree_status_is_ok(status) &&
-        iree_string_view_equal(entry.name,
-                               IREE_SV("low-materialize-allocation"))) {
-      pass_user_data = &low_materialize_allocation_config;
-    }
-    if (iree_status_is_ok(status) && descriptor) {
-      status = loom_pass_manager_add_descriptor(&manager, descriptor,
-                                                entry.options, pass_user_data);
-    }
-  }
+  loom_check_pass_pipeline_config_t pipeline_config = {
+      .low_allocation_config = &low_materialize_allocation_config,
+  };
+  iree_status_t status = loom_pass_manager_add_pipeline(
+      &manager, pass_registry, pipeline,
+      (loom_pass_pipeline_configure_callback_t){
+          .fn = loom_check_configure_pass_pipeline_entry,
+          .user_data = &pipeline_config,
+      });
 
   if (iree_status_is_ok(status)) {
     status = loom_pass_manager_run(&manager, module);
