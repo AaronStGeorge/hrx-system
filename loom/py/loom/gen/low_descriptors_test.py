@@ -16,6 +16,7 @@ from loom.gen.low_descriptors import DescriptorAllowlist, generate_descriptor_se
 from loom.target.arch.amdgpu.descriptors import (
     AMDGPU_GFX12_CORE_DESCRIPTOR_SET,
     AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
+    AMDGPU_GFX1250_CORE_DESCRIPTOR_SET,
 )
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
 from loom.target.arch.x86.descriptors import X86_AVX512_CORE_DESCRIPTOR_SET
@@ -120,6 +121,30 @@ def test_generate_amdgpu_gfx12_core_descriptor_set() -> None:
     assert manifest["table_counts"]["resources"] >= 6
     assert any(descriptor["key"] == "amdgpu.v_wmma_f32_16x16x16_f16" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "amdgpu.s_wait_loadcnt" for descriptor in manifest["descriptors"])
+
+
+def test_generate_amdgpu_gfx1250_core_descriptor_set() -> None:
+    generated = generate_descriptor_set(AMDGPU_GFX1250_CORE_DESCRIPTOR_SET)
+
+    assert "loom_amdgpu_gfx1250_core_descriptor_set" in generated.header
+    assert 'LOOM_BSTRING_LITERAL("\\x13", "amdgpu.gfx1250.core")' in generated.source
+    assert "amdgpu.v_wmma_f32_16x16x32_f16" in generated.source
+    assert "amdgpu.v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8" in generated.source
+    assert "amdgpu.v_swmmac_f32_16x16x64_f16" in generated.source
+    assert "fingerprint" not in generated.source
+    assert "fingerprint" not in generated.manifest_json
+
+    manifest = json.loads(generated.manifest_json)
+    assert manifest["key"] == "amdgpu.gfx1250.core"
+    assert manifest["target"] == "amdgpu"
+    assert manifest["feature_namespace"] == "amdgpu.gfx1250.v1"
+    assert manifest["abi_version"] == 5
+    assert manifest["table_counts"]["descriptors"] >= 14
+    assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["reg_classes"] == 2
+    assert manifest["table_counts"]["resources"] >= 8
+    assert any(descriptor["key"] == "amdgpu.v_wmma_scale16_f32_16x16x128_f8f6f4_f8_f8" for descriptor in manifest["descriptors"])
+    assert any(descriptor["key"] == "amdgpu.v_swmmac_f32_16x16x64_f16" for descriptor in manifest["descriptors"])
 
 
 def test_generate_x86_avx512_core_descriptor_set() -> None:

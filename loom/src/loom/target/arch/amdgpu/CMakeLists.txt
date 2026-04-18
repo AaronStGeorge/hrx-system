@@ -36,6 +36,30 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    gfx1250_descriptors
+  HDRS
+    "gfx1250_descriptors.h"
+  SRCS
+    "gfx1250_descriptors.c"
+  DEPS
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    gfx1250_descriptors_test
+  SRCS
+    "gfx1250_descriptors_test.cc"
+  DEPS
+    ::gfx1250_descriptors
+    loom::src::loom::codegen::low::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     gfx950_descriptors
   HDRS
     "gfx950_descriptors.h"
