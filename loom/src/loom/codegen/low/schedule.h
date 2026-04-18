@@ -7,10 +7,11 @@
 // Target-independent scheduler sidecar for target-low functions.
 //
 // This layer consumes ordinary Loom IR plus descriptor tables and produces a
-// deterministic schedule sidecar. The first scheduler is intentionally
+// deterministic schedule sidecar. The default scheduler is intentionally
 // conservative: it builds the dependency graph and records a source-priority
-// topological order without mutating IR. Target hazard insertion, allocation,
-// and pressure-sensitive scoring plug into this sidecar instead of creating a
+// topological order without mutating IR. Optional strategies can score the same
+// dependency-ready sets for register pressure while still keeping target hazard
+// insertion, allocation, and diagnostics on this sidecar instead of creating a
 // second low-level IR container.
 
 #ifndef LOOM_CODEGEN_LOW_SCHEDULE_H_
@@ -56,6 +57,13 @@ enum loom_low_schedule_diagnostic_bits_e {
   LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS = 1u << 0,
 };
 typedef uint32_t loom_low_schedule_diagnostic_flags_t;
+
+typedef enum loom_low_schedule_strategy_e {
+  // Chooses the first ready node in source order.
+  LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY = 0,
+  // Chooses ready nodes using a target-independent register-pressure score.
+  LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE = 1,
+} loom_low_schedule_strategy_t;
 
 // One scheduled operation in a low function body.
 typedef struct loom_low_schedule_node_t {
@@ -127,6 +135,8 @@ typedef struct loom_low_schedule_options_t {
   iree_diagnostic_emitter_t emitter;
   // Optional backend feedback diagnostics to emit after scheduling analysis.
   loom_low_schedule_diagnostic_flags_t diagnostic_flags;
+  // Candidate selection strategy used within each dependency-ready set.
+  loom_low_schedule_strategy_t strategy;
 } loom_low_schedule_options_t;
 
 // Schedule sidecar for one low.func.def body. All arrays are arena-owned by the

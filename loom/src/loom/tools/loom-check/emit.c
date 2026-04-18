@@ -71,6 +71,10 @@ typedef struct loom_check_emit_request_t {
   loom_low_schedule_diagnostic_flags_t low_schedule_diagnostic_flags;
   // True once a low scheduler diagnostics option has been parsed.
   bool has_low_schedule_diagnostics_option;
+  // Low scheduler candidate-selection strategy requested by the RUN line.
+  loom_low_schedule_strategy_t low_schedule_strategy;
+  // True once a low scheduler strategy option has been parsed.
+  bool has_low_schedule_strategy_option;
 } loom_check_emit_request_t;
 
 typedef struct loom_check_emit_byte_buffer_t {
@@ -174,6 +178,26 @@ static iree_status_t loom_check_emit_parse_low_schedule_option(
   iree_string_view_split(token, '=', &name, &value);
   name = iree_string_view_trim(name);
   value = iree_string_view_trim(value);
+  if (iree_string_view_equal(name, IREE_SV("strategy"))) {
+    if (request->has_low_schedule_strategy_option) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "duplicate low-schedule-json option 'strategy'");
+    }
+    if (iree_string_view_equal(value, IREE_SV("source"))) {
+      request->low_schedule_strategy =
+          LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY;
+    } else if (iree_string_view_equal(value, IREE_SV("pressure"))) {
+      request->low_schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE;
+    } else {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low-schedule-json option 'strategy' expected 'source' or "
+          "'pressure', got '%.*s'",
+          (int)value.size, value.data);
+    }
+    request->has_low_schedule_strategy_option = true;
+    return iree_ok_status();
+  }
   if (!iree_string_view_equal(name, IREE_SV("diagnostics"))) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown low-schedule-json option '%.*s'",
@@ -230,6 +254,8 @@ static iree_status_t loom_check_emit_parse_request(
       .has_low_allocation_diagnostics_option = false,
       .low_schedule_diagnostic_flags = 0,
       .has_low_schedule_diagnostics_option = false,
+      .low_schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
+      .has_low_schedule_strategy_option = false,
   };
   emit_target = iree_string_view_trim(emit_target);
   iree_string_view_t target_name = iree_string_view_empty();
@@ -859,8 +885,8 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
     const loom_module_t* module, iree_string_view_t symbol_name,
     const loom_low_descriptor_registry_t* descriptor_registry,
     loom_low_schedule_diagnostic_flags_t diagnostic_flags,
-    iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* analysis_arena,
-    loom_check_result_t* result) {
+    loom_low_schedule_strategy_t strategy, iree_diagnostic_emitter_t emitter,
+    iree_arena_allocator_t* analysis_arena, loom_check_result_t* result) {
   const loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(
       loom_check_emit_find_low_func_def(module, symbol_name, &low_function));
@@ -868,6 +894,7 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
       .descriptor_registry = descriptor_registry,
       .emitter = emitter,
       .diagnostic_flags = diagnostic_flags,
+      .strategy = strategy,
   };
   loom_low_schedule_sidecar_t sidecar = {0};
   IREE_RETURN_IF_ERROR(loom_low_schedule_function(
@@ -1077,6 +1104,7 @@ iree_status_t loom_check_execute_emit(
         status = loom_check_emit_write_low_schedule_json(
             module, request.analysis_symbol_name, &low_registry.registry,
             request.low_schedule_diagnostic_flags,
+            request.low_schedule_strategy,
             (iree_diagnostic_emitter_t){
                 .fn = loom_check_diagnostic_emitter_capture_emit,
                 .user_data = &pass_diagnostic_capture,

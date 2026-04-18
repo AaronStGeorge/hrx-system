@@ -33,7 +33,8 @@
 //                           targets include low-descriptor-manifest and
 //                           target-low-registry-manifest. Analysis targets
 //                           include liveness-json @function,
-//                           low-schedule-json @function [diagnostics=...], and
+//                           low-schedule-json @function
+//                           [strategy=...] [diagnostics=...], and
 //                           low-allocation-json @function
 //                           [diagnostics=...] [class=units...].
 //   // REQUIRES: <name>[, <name>...]
