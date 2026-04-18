@@ -18,6 +18,7 @@
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/ops/target/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/emit/llvmir/target_env.h"
@@ -750,6 +751,18 @@ static iree_status_t loom_llvmir_target_legality_verify_op(
   switch (op->kind) {
     case LOOM_OP_FUNC_DEF:
     case LOOM_OP_FUNC_DECL:
+      return iree_ok_status();
+    case LOOM_OP_TARGET_SNAPSHOT:
+    case LOOM_OP_TARGET_EXPORT:
+    case LOOM_OP_TARGET_CONFIG:
+    case LOOM_OP_TARGET_BUNDLE:
+      if (op->parent_op != NULL) {
+        return loom_llvmir_target_legality_fail(
+            context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,
+            IREE_SV("target record ops are module metadata and cannot appear "
+                    "inside executable regions"),
+            iree_string_view_empty());
+      }
       return iree_ok_status();
     case LOOM_OP_LLVMIR_INLINE_ASM:
       return loom_llvmir_target_legality_verify_inline_asm(context, op);

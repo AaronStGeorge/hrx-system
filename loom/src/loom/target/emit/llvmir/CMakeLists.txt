@@ -192,6 +192,7 @@ loom_cc_library(
     loom::src::loom::ops::llvmir
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
+    loom::src::loom::ops::target
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::target::types
@@ -381,6 +382,7 @@ loom_cc_test(
     loom::src::loom::ops::llvmir
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
+    loom::src::loom::ops::target
     loom::src::loom::ops::vector
     iree::testing::gtest
     iree::testing::gtest_main

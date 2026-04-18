@@ -14,6 +14,7 @@
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"
+#include "loom/target/ir_records.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
@@ -33,6 +34,8 @@ typedef struct loom_check_emit_request_t {
   loom_check_emit_format_t format;
   // Generic target bundle used by legality and LLVMIR profile derivation.
   const loom_target_bundle_t* target_bundle;
+  // Module-local target.bundle symbol name to materialize after parsing.
+  iree_string_view_t target_bundle_symbol_name;
   // Low descriptor set used by descriptor-manifest dumps.
   const loom_low_descriptor_set_t* low_descriptor_set;
 } loom_check_emit_request_t;
@@ -49,6 +52,7 @@ static iree_status_t loom_check_emit_parse_request(
   *out_request = (loom_check_emit_request_t){
       .format = LOOM_CHECK_EMIT_LLVMIR_TEXT,
       .target_bundle = NULL,
+      .target_bundle_symbol_name = iree_string_view_empty(),
       .low_descriptor_set = NULL,
   };
   emit_target = iree_string_view_trim(emit_target);
@@ -92,6 +96,15 @@ static iree_status_t loom_check_emit_parse_request(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown emit target '%.*s'", (int)target_name.size,
                             target_name.data);
+  }
+  if (iree_string_view_starts_with(profile_name, IREE_SV("@"))) {
+    out_request->target_bundle_symbol_name =
+        iree_string_view_substr(profile_name, 1, IREE_HOST_SIZE_MAX);
+    if (iree_string_view_is_empty(out_request->target_bundle_symbol_name)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "target bundle symbol name is required");
+    }
+    return iree_ok_status();
   }
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
@@ -601,6 +614,21 @@ iree_status_t loom_check_execute_emit(
     loom_module_free(module);
     iree_arena_deinitialize(&diagnostic_arena);
     return status;
+  }
+
+  loom_target_ir_bundle_storage_t target_bundle_storage = {0};
+  if (!iree_string_view_is_empty(request.target_bundle_symbol_name)) {
+    status = loom_target_ir_bundle_from_symbol_name(
+        module, request.target_bundle_symbol_name, &target_bundle_storage);
+    if (!iree_status_is_ok(status)) {
+      loom_module_free(module);
+      status = loom_check_emit_finish_status_failure(
+          status, &diagnostic_collector, test_case, case_index, report,
+          filename, allocator, result);
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+    request.target_bundle = &target_bundle_storage.bundle;
   }
 
   loom_llvmir_target_registry_t target_registry;

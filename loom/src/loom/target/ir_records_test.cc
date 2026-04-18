@@ -120,6 +120,40 @@ TEST_F(TargetIrRecordsTest, MaterializesWasmBundle) {
   loom_module_free(module);
 }
 
+TEST_F(TargetIrRecordsTest, MaterializesBundleFromSymbolName) {
+  const char source[] =
+      "target.snapshot @wasm32 {codegen_format = wasm, target_triple = "
+      "\"wasm32-unknown-unknown\", data_layout = \"\", artifact_format = "
+      "wasm_binary, target_cpu = \"generic\", target_features = "
+      "\"+simd128\", default_pointer_bitwidth = 32, index_bitwidth = 32, "
+      "offset_bitwidth = 32, memory_space_generic = 0, memory_space_global = "
+      "0, memory_space_workgroup = 4294967295, memory_space_constant = 0, "
+      "memory_space_private = 4294967295, memory_space_host = 4294967295, "
+      "memory_space_descriptor = 4294967295}\n"
+      "target.export @wasm_export {export_symbol = \"matmul\", abi = "
+      "wasm_function, linkage = default, hal_binding_alignment = 0, "
+      "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
+      "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
+      "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
+      "target.config @wasm_config {contract_set_key = "
+      "\"wasm.core.simd128\", contract_feature_bits = 7}\n"
+      "target.bundle @wasm_target {snapshot = @wasm32, export_plan = "
+      "@wasm_export, config = @wasm_config}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_target_ir_bundle_storage_t storage = {};
+  IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
+      module, IREE_SV("wasm_target"), &storage));
+
+  EXPECT_EQ(ToString(storage.bundle.name), "wasm_target");
+  EXPECT_EQ(storage.snapshot.codegen_format, LOOM_TARGET_CODEGEN_FORMAT_WASM);
+  EXPECT_EQ(storage.export_plan.abi_kind, LOOM_TARGET_ABI_WASM_FUNCTION);
+  EXPECT_EQ(ToString(storage.config.contract_set_key), "wasm.core.simd128");
+
+  loom_module_free(module);
+}
+
 TEST_F(TargetIrRecordsTest, MaterializesHalKernelBundle) {
   const char source[] =
       "target.snapshot @gfx1100 {codegen_format = low_native, target_triple = "
@@ -162,6 +196,36 @@ TEST_F(TargetIrRecordsTest, MaterializesHalKernelBundle) {
   EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_max, 128u);
   EXPECT_EQ(storage.export_plan.hal_kernel.buffer_resource_flags, 159744u);
   EXPECT_EQ(ToString(storage.config.contract_set_key), "amdgpu.gfx11.core");
+
+  loom_module_free(module);
+}
+
+TEST_F(TargetIrRecordsTest, RejectsMissingBundleSymbolName) {
+  const char source[] =
+      "target.config @config {contract_set_key = \"iree.vm.core\", "
+      "contract_feature_bits = 0}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_target_ir_bundle_storage_t storage = {};
+  iree_status_t status = loom_target_ir_bundle_from_symbol_name(
+      module, IREE_SV("missing"), &storage);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
+
+  loom_module_free(module);
+}
+
+TEST_F(TargetIrRecordsTest, RejectsWrongBundleSymbolKind) {
+  const char source[] =
+      "target.config @config {contract_set_key = \"iree.vm.core\", "
+      "contract_feature_bits = 0}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_target_ir_bundle_storage_t storage = {};
+  iree_status_t status = loom_target_ir_bundle_from_symbol_name(
+      module, IREE_SV("config"), &storage);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 
   loom_module_free(module);
 }

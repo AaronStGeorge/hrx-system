@@ -6,6 +6,7 @@
 
 #include "loom/target/emit/llvmir/legality.h"
 
+#include <cstdint>
 #include <cstring>
 #include <string>
 
@@ -18,6 +19,7 @@
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/ops/target/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/emit/llvmir/test_target.h"
 
@@ -38,6 +40,7 @@ class LlvmIrLegalityTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_LLVMIR, loom_llvmir_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCF, loom_scf_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
 
@@ -125,6 +128,41 @@ class LlvmIrLegalityTest : public ::testing::Test {
     loom_op_t* return_op = NULL;
     IREE_ASSERT_OK(loom_func_return_build(&body_builder, &sum, 1,
                                           LOOM_LOCATION_UNKNOWN, &return_op));
+  }
+
+  void BuildTargetRecords() {
+    loom_symbol_ref_t snapshot_symbol = MakeSymbol(IREE_SV("snapshot"));
+    loom_symbol_ref_t export_symbol = MakeSymbol(IREE_SV("export"));
+    loom_symbol_ref_t config_symbol = MakeSymbol(IREE_SV("config"));
+    loom_symbol_ref_t bundle_symbol = MakeSymbol(IREE_SV("bundle"));
+    loom_op_t* snapshot_op = NULL;
+    IREE_ASSERT_OK(loom_target_snapshot_build(
+        &module_builder_, snapshot_symbol,
+        LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_LLVMIR,
+        InternString(IREE_SV("loom-test64-unknown-none")),
+        InternString(IREE_SV("e-p:64:64-i64:64-n8:16:32:64-S128")),
+        LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_ELF, InternString(IREE_SV("")),
+        InternString(IREE_SV("")), 64, 64, 64, 0, 0, 0, 0, 0, 0, UINT32_MAX,
+        LOOM_LOCATION_UNKNOWN, &snapshot_op));
+    ASSERT_NE(snapshot_op, nullptr);
+    loom_op_t* export_op = NULL;
+    IREE_ASSERT_OK(loom_target_export_build(
+        &module_builder_, 0, export_symbol, loom_symbol_ref_null(),
+        InternString(IREE_SV("add_i32")),
+        LOOM_TARGET_EXPORT_ABI_OBJECT_FUNCTION,
+        LOOM_TARGET_EXPORT_LINKAGE_DEFAULT, 0, 0, 0, 0, 0, 0, 0,
+        LOOM_LOCATION_UNKNOWN, &export_op));
+    ASSERT_NE(export_op, nullptr);
+    loom_op_t* config_op = NULL;
+    IREE_ASSERT_OK(loom_target_config_build(
+        &module_builder_, config_symbol, InternString(IREE_SV("")),
+        /*contract_feature_bits=*/0, LOOM_LOCATION_UNKNOWN, &config_op));
+    ASSERT_NE(config_op, nullptr);
+    loom_op_t* bundle_op = NULL;
+    IREE_ASSERT_OK(loom_target_bundle_build(
+        &module_builder_, bundle_symbol, snapshot_symbol, export_symbol,
+        config_symbol, LOOM_LOCATION_UNKNOWN, &bundle_op));
+    ASSERT_NE(bundle_op, nullptr);
   }
 
   void BuildStructuredIfFunction() {
@@ -233,6 +271,15 @@ class LlvmIrLegalityTest : public ::testing::Test {
 };
 
 TEST_F(LlvmIrLegalityTest, AcceptsObjectArithmetic) {
+  BuildAddI32Function();
+
+  loom_llvmir_target_legality_diagnostic_t diagnostic;
+  IREE_ASSERT_OK(VerifyTestObject(&diagnostic));
+  EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_OK);
+}
+
+TEST_F(LlvmIrLegalityTest, AcceptsModuleTargetRecordsAsMetadata) {
+  BuildTargetRecords();
   BuildAddI32Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;

@@ -50,6 +50,39 @@ static iree_status_t loom_target_ir_symbol_name(
   return loom_target_ir_string(module, symbol->name_id, field_name, out_string);
 }
 
+static iree_status_t loom_target_ir_defined_symbol_from_ref(
+    const loom_module_t* module, loom_symbol_ref_t symbol_ref,
+    iree_string_view_t field_name, loom_op_kind_t expected_kind,
+    iree_string_view_t expected_name, const loom_symbol_t** out_symbol) {
+  *out_symbol = NULL;
+  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+      symbol_ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "target record field '%.*s' references an "
+                            "unresolved symbol",
+                            (int)field_name.size, field_name.data);
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->definition == NULL || symbol->defining_op == NULL) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "target record field '%.*s' references an "
+                            "unresolved symbol",
+                            (int)field_name.size, field_name.data);
+  }
+  if (symbol->defining_op->kind != expected_kind) {
+    iree_string_view_t symbol_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_target_ir_string(module, symbol->name_id,
+                                               field_name, &symbol_name));
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target record field '%.*s' references @%.*s, expected %.*s",
+        (int)field_name.size, field_name.data, (int)symbol_name.size,
+        symbol_name.data, (int)expected_name.size, expected_name.data);
+  }
+  *out_symbol = symbol;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_target_ir_u32(int64_t value,
                                         iree_string_view_t field_name,
                                         uint32_t* out_value) {
@@ -275,4 +308,60 @@ iree_status_t loom_target_ir_bundle_from_ops(
       .config = &out_storage->config,
   };
   return iree_ok_status();
+}
+
+iree_status_t loom_target_ir_bundle_from_symbol_name(
+    const loom_module_t* module, iree_string_view_t bundle_name,
+    loom_target_ir_bundle_storage_t* out_storage) {
+  if (module == NULL || out_storage == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "module and bundle storage output are required");
+  }
+  *out_storage = (loom_target_ir_bundle_storage_t){0};
+  bundle_name = iree_string_view_trim(bundle_name);
+  if (iree_string_view_is_empty(bundle_name)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target bundle symbol name is required");
+  }
+  const loom_string_id_t bundle_name_id =
+      loom_module_lookup_string(module, bundle_name);
+  if (bundle_name_id == LOOM_STRING_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "target bundle @%.*s was not found",
+                            (int)bundle_name.size, bundle_name.data);
+  }
+  const uint16_t bundle_symbol_id =
+      loom_module_find_symbol(module, bundle_name_id);
+  if (bundle_symbol_id == LOOM_SYMBOL_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "target bundle @%.*s was not found",
+                            (int)bundle_name.size, bundle_name.data);
+  }
+
+  const loom_symbol_t* bundle_symbol =
+      &module->symbols.entries[bundle_symbol_id];
+  if (bundle_symbol->definition == NULL || bundle_symbol->defining_op == NULL) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "target bundle @%.*s has no definition",
+                            (int)bundle_name.size, bundle_name.data);
+  }
+  const loom_op_t* bundle_op = bundle_symbol->defining_op;
+  IREE_RETURN_IF_ERROR(loom_target_ir_require_op_kind(
+      bundle_op, LOOM_OP_TARGET_BUNDLE, IREE_SV("target.bundle")));
+
+  const loom_symbol_t* snapshot_symbol = NULL;
+  IREE_RETURN_IF_ERROR(loom_target_ir_defined_symbol_from_ref(
+      module, loom_target_bundle_snapshot(bundle_op), IREE_SV("snapshot"),
+      LOOM_OP_TARGET_SNAPSHOT, IREE_SV("target.snapshot"), &snapshot_symbol));
+  const loom_symbol_t* export_symbol = NULL;
+  IREE_RETURN_IF_ERROR(loom_target_ir_defined_symbol_from_ref(
+      module, loom_target_bundle_export_plan(bundle_op), IREE_SV("export_plan"),
+      LOOM_OP_TARGET_EXPORT, IREE_SV("target.export"), &export_symbol));
+  const loom_symbol_t* config_symbol = NULL;
+  IREE_RETURN_IF_ERROR(loom_target_ir_defined_symbol_from_ref(
+      module, loom_target_bundle_config(bundle_op), IREE_SV("config"),
+      LOOM_OP_TARGET_CONFIG, IREE_SV("target.config"), &config_symbol));
+  return loom_target_ir_bundle_from_ops(
+      module, bundle_op, snapshot_symbol->defining_op,
+      export_symbol->defining_op, config_symbol->defining_op, out_storage);
 }

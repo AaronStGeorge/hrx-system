@@ -57,6 +57,13 @@ iree_status_t loom_target_ir_bundle_from_ops(
     const loom_op_t* snapshot_op, const loom_op_t* export_op,
     const loom_op_t* config_op, loom_target_ir_bundle_storage_t* out_storage);
 
+// Resolves a module-local target.bundle symbol by name and materializes the
+// target records it references. |bundle_name| does not include a leading '@'.
+// Borrowed strings in |out_storage| point into |module|.
+iree_status_t loom_target_ir_bundle_from_symbol_name(
+    const loom_module_t* module, iree_string_view_t bundle_name,
+    loom_target_ir_bundle_storage_t* out_storage);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
