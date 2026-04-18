@@ -98,6 +98,111 @@ TEST(PassRegistryTest, ValidatesEnumOptionSchema) {
                             descriptor, IREE_SV("diagnostics=verbose")));
 }
 
+TEST(PassRegistryTest, DecodesTypedOptions) {
+  const loom_pass_descriptor_t* descriptor =
+      LookupBuiltinPass(IREE_SV("canonicalize"));
+  ASSERT_NE(descriptor, nullptr);
+
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
+                                   &block_pool);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool, &arena);
+
+  loom_pass_decoded_options_t decoded_options = {};
+  IREE_ASSERT_OK(loom_pass_descriptor_decode_options(
+      descriptor, IREE_SV("max-iterations=7"), &arena, &decoded_options));
+
+  EXPECT_EQ(decoded_options.descriptor, descriptor);
+  ASSERT_EQ(decoded_options.option_count, 1u);
+  ASSERT_NE(decoded_options.options, nullptr);
+  EXPECT_TRUE(decoded_options.options[0].present);
+  EXPECT_EQ(decoded_options.options[0].schema->kind,
+            LOOM_PASS_OPTION_SCHEMA_UINT32);
+  EXPECT_EQ(decoded_options.options[0].uint32_value, 7u);
+
+  iree_arena_deinitialize(&arena);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+TEST(PassRegistryTest, DecodesStringAndEnumOptions) {
+  const loom_pass_descriptor_t* descriptor =
+      LookupBuiltinPass(IREE_SV("low-materialize-allocation"));
+  ASSERT_NE(descriptor, nullptr);
+
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
+                                   &block_pool);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool, &arena);
+
+  loom_pass_decoded_options_t decoded_options = {};
+  IREE_ASSERT_OK(loom_pass_descriptor_decode_options(
+      descriptor, IREE_SV("budgets=vm.i32=2;vm.ref=1,diagnostics=spills"),
+      &arena, &decoded_options));
+
+  ASSERT_EQ(decoded_options.option_count, 2u);
+  ASSERT_NE(decoded_options.options, nullptr);
+  EXPECT_TRUE(decoded_options.options[0].present);
+  EXPECT_TRUE(iree_string_view_equal(decoded_options.options[0].string_value,
+                                     IREE_SV("vm.i32=2;vm.ref=1")));
+  EXPECT_TRUE(decoded_options.options[1].present);
+  EXPECT_EQ(decoded_options.options[1].enum_value_index, 1u);
+  EXPECT_TRUE(iree_string_view_equal(
+      decoded_options.options[1]
+          .schema->enum_values[decoded_options.options[1].enum_value_index]
+          .value,
+      IREE_SV("spills")));
+
+  iree_arena_deinitialize(&arena);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+TEST(PassRegistryTest, DecodedOptionalOptionsTrackAbsence) {
+  const loom_pass_descriptor_t* descriptor =
+      LookupBuiltinPass(IREE_SV("canonicalize"));
+  ASSERT_NE(descriptor, nullptr);
+
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
+                                   &block_pool);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool, &arena);
+
+  loom_pass_decoded_options_t decoded_options = {};
+  IREE_ASSERT_OK(loom_pass_descriptor_decode_options(
+      descriptor, iree_string_view_empty(), &arena, &decoded_options));
+
+  ASSERT_EQ(decoded_options.option_count, 1u);
+  ASSERT_NE(decoded_options.options, nullptr);
+  EXPECT_FALSE(decoded_options.options[0].present);
+
+  iree_arena_deinitialize(&arena);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+TEST(PassRegistryTest, DecodeRejectsInvalidOptions) {
+  const loom_pass_descriptor_t* descriptor =
+      LookupBuiltinPass(IREE_SV("canonicalize"));
+  ASSERT_NE(descriptor, nullptr);
+
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
+                                   &block_pool);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool, &arena);
+
+  loom_pass_decoded_options_t decoded_options = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_pass_descriptor_decode_options(
+          descriptor, IREE_SV("max-iterations=1,max-iterations=2"), &arena,
+          &decoded_options));
+
+  iree_arena_deinitialize(&arena);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
 TEST(PassRegistryTest, RejectsOptionsForDescriptorWithoutCreateCallback) {
   const loom_pass_descriptor_t* descriptor = LookupBuiltinPass(IREE_SV("dce"));
   ASSERT_NE(descriptor, nullptr);
