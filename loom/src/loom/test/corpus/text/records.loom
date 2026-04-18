@@ -14,6 +14,10 @@ low.abi.operand @extern_add_i32_rhs {abi_type = reg<vm.i32>, adapter = @extern_a
 
 low.abi.result @extern_add_i32_result {abi_type = reg<vm.i32>, adapter = @extern_add_i32, conversion = register_to_scalar, index = 0, semantic_type = i32}
 
+low.abi.effect @extern_add_i32_call {adapter = @extern_add_i32, kind = call, resource = "vm.import"}
+
+low.abi.clobber @extern_add_i32_state {adapter = @extern_add_i32, resource = "vm.state"}
+
 func.def @caller(%lhs: i32, %rhs: i32) -> (i32) {
   %sum = low.invoke @extern_add(%lhs, %rhs) {adapter = @extern_add_i32} : (i32, i32) -> (i32)
   func.return %sum : i32

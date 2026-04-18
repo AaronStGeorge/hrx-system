@@ -9,6 +9,8 @@
 from loom.dialect.low.defs import (
     ALL_LOW_OPS,
     low_abi_adapter,
+    low_abi_clobber,
+    low_abi_effect,
     low_abi_operand,
     low_abi_result,
     low_const,
@@ -28,6 +30,8 @@ __all__ = [
     "low_func_decl",
     "low_func_def",
     "low_abi_adapter",
+    "low_abi_clobber",
+    "low_abi_effect",
     "low_abi_operand",
     "low_abi_result",
     "low_invoke",

@@ -985,6 +985,7 @@ static iree_status_t loom_bytecode_reader_read_attr_value(
             IREE_SV("enum attribute has no descriptor case table"));
       }
       for (uint8_t i = 0; i < descriptor->enum_case_count; ++i) {
+        if (!descriptor->enum_case_names[i]) continue;
         if (iree_string_view_equal(
                 case_name, loom_bstring_view(descriptor->enum_case_names[i]))) {
           *out_attr = loom_attr_enum(i);

@@ -2961,6 +2961,73 @@ static const loom_error_def_t loom_err_lowering_019 = {
     .param_count = 8,
 };
 
+static const loom_error_param_def_t loom_err_lowering_020_params[] = {
+    {"callee_name", LOOM_PARAM_STRING},
+    {"caller_context", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_020 = {
+    .error_id = "ERR_LOWERING_020",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 20,
+    .summary = "Low invoke caller context is invalid.",
+    .message_template =
+        "low.invoke callee '@{callee_name}' in {caller_context} context is "
+        "invalid: {reason}",
+    .fix_hint_template =
+        "Invoke low functions from semantic function bodies through an "
+        "explicit ABI adapter, or direct-call only same-target low functions "
+        "from a low function body",
+    .param_defs = loom_err_lowering_020_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_lowering_021_params[] = {
+    {"adapter_name", LOOM_PARAM_STRING},
+    {"record_kind", LOOM_PARAM_STRING},
+    {"record_name", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_021 = {
+    .error_id = "ERR_LOWERING_021",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 21,
+    .summary = "Low ABI adapter metadata record is invalid.",
+    .message_template =
+        "low ABI adapter '@{adapter_name}' {record_kind} metadata "
+        "'@{record_name}' is invalid: {reason}",
+    .fix_hint_template =
+        "Attach effect and clobber records to a low ABI adapter and use "
+        "namespace-qualified resource keys such as 'vm.state' or 'amdgpu.vcc'",
+    .param_defs = loom_err_lowering_021_params,
+    .param_count = 4,
+};
+
+static const loom_error_param_def_t loom_err_lowering_022_params[] = {
+    {"callee_name", LOOM_PARAM_STRING}, {"boundary_name", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},      {"effect_count", LOOM_PARAM_U32},
+    {"clobber_count", LOOM_PARAM_U32},
+};
+static const loom_error_def_t loom_err_lowering_022 = {
+    .error_id = "ERR_LOWERING_022",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 22,
+    .summary = "Low invoke purity conflicts with ABI effects.",
+    .message_template =
+        "low.invoke pure callee '@{callee_name}' through '{boundary_name}' is "
+        "invalid: {reason} ({effect_count} effect record(s), {clobber_count} "
+        "clobber record(s))",
+    .fix_hint_template =
+        "Remove the pure marker, mark the direct callee pure after proving its "
+        "body, or remove the adapter effect/clobber records after proving the "
+        "low boundary has no observable effects",
+    .param_defs = loom_err_lowering_022_params,
+    .param_count = 5,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -3013,7 +3080,8 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_009,  &loom_err_lowering_010,  &loom_err_lowering_011,
     &loom_err_lowering_012,  &loom_err_lowering_013,  &loom_err_lowering_014,
     &loom_err_lowering_015,  &loom_err_lowering_016,  &loom_err_lowering_017,
-    &loom_err_lowering_018,  &loom_err_lowering_019,
+    &loom_err_lowering_018,  &loom_err_lowering_019,  &loom_err_lowering_020,
+    &loom_err_lowering_021,  &loom_err_lowering_022,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

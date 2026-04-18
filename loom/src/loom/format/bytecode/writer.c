@@ -985,6 +985,28 @@ static iree_status_t loom_bytecode_number_operation(
 static iree_status_t loom_bytecode_number_encoding(
     loom_bytecode_numbering_t* numbering, uint16_t encoding_id);
 
+static iree_status_t loom_bytecode_resolve_enum_case_name(
+    loom_attribute_t attr, const loom_attr_descriptor_t* descriptor,
+    loom_bstring_t* out_case_name) {
+  *out_case_name = NULL;
+  if (!descriptor || !descriptor->enum_case_names) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "enum attribute has no descriptor case table");
+  }
+  if (attr.raw > UINT8_MAX) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "enum attribute value exceeds uint8_t range");
+  }
+  uint8_t case_index = (uint8_t)attr.raw;
+  if (case_index >= descriptor->enum_case_count ||
+      !descriptor->enum_case_names[case_index]) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "enum attribute value has no case name");
+  }
+  *out_case_name = descriptor->enum_case_names[case_index];
+  return iree_ok_status();
+}
+
 static iree_status_t loom_bytecode_number_attr_value(
     loom_bytecode_numbering_t* numbering, loom_attribute_t attr,
     const loom_attr_descriptor_t* descriptor) {
@@ -996,14 +1018,11 @@ static iree_status_t loom_bytecode_number_attr_value(
       break;
     }
     case LOOM_ATTR_ENUM: {
-      if (descriptor && descriptor->enum_case_names) {
-        uint8_t case_index = (uint8_t)attr.raw;
-        loom_bstring_t case_name = descriptor->enum_case_names[case_index];
-        if (case_name) {
-          IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
-              numbering, loom_bstring_view(case_name), &unused_id));
-        }
-      }
+      loom_bstring_t case_name = NULL;
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_resolve_enum_case_name(attr, descriptor, &case_name));
+      IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+          numbering, loom_bstring_view(case_name), &unused_id));
       break;
     }
     case LOOM_ATTR_SYMBOL: {
@@ -1869,15 +1888,12 @@ static iree_status_t loom_bytecode_write_attr_value(
       break;
     }
     case LOOM_ATTR_ENUM: {
-      uint8_t case_index = (uint8_t)attr.raw;
       uint32_t string_writer_id = 0;
-      if (descriptor && descriptor->enum_case_names &&
-          descriptor->enum_case_names[case_index]) {
-        IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
-            numbering,
-            loom_bstring_view(descriptor->enum_case_names[case_index]),
-            &string_writer_id));
-      }
+      loom_bstring_t case_name = NULL;
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_resolve_enum_case_name(attr, descriptor, &case_name));
+      IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+          numbering, loom_bstring_view(case_name), &string_writer_id));
       IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(writer, 4));
       IREE_RETURN_IF_ERROR(
           loom_bytecode_page_writer_write_uvarint(writer, string_writer_id));
@@ -2036,15 +2052,12 @@ static iree_status_t loom_bytecode_emit_attr_value(
       break;
     }
     case LOOM_ATTR_ENUM: {
-      uint8_t case_index = (uint8_t)attr.raw;
       uint32_t string_writer_id = 0;
-      if (descriptor && descriptor->enum_case_names &&
-          descriptor->enum_case_names[case_index]) {
-        IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
-            numbering,
-            loom_bstring_view(descriptor->enum_case_names[case_index]),
-            &string_writer_id));
-      }
+      loom_bstring_t case_name = NULL;
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_resolve_enum_case_name(attr, descriptor, &case_name));
+      IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+          numbering, loom_bstring_view(case_name), &string_writer_id));
       IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 4));
       IREE_RETURN_IF_ERROR(
           loom_bytecode_emit_uvarint(builder, string_writer_id));

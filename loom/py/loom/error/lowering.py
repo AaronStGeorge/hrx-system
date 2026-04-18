@@ -427,6 +427,75 @@ ERR_LOWERING_019 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_020: Low invoke caller context is invalid.
+ERR_LOWERING_020 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=20,
+    severity=Severity.ERROR,
+    summary="Low invoke caller context is invalid.",
+    message=(
+        "low.invoke callee '@{callee_name}' in {caller_context} context is "
+        "invalid: {reason}"
+    ),
+    params=(
+        ErrorParam("callee_name", ParamKind.STRING),
+        ErrorParam("caller_context", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Invoke low functions from semantic function bodies through an explicit "
+        "ABI adapter, or direct-call only same-target low functions from a low "
+        "function body"
+    ),
+)
+
+# ERR_LOWERING_021: Low ABI adapter metadata record is invalid.
+ERR_LOWERING_021 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=21,
+    severity=Severity.ERROR,
+    summary="Low ABI adapter metadata record is invalid.",
+    message=(
+        "low ABI adapter '@{adapter_name}' {record_kind} metadata "
+        "'@{record_name}' is invalid: {reason}"
+    ),
+    params=(
+        ErrorParam("adapter_name", ParamKind.STRING),
+        ErrorParam("record_kind", ParamKind.STRING),
+        ErrorParam("record_name", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Attach effect and clobber records to a low ABI adapter and use "
+        "namespace-qualified resource keys such as 'vm.state' or 'amdgpu.vcc'"
+    ),
+)
+
+# ERR_LOWERING_022: Low invoke purity conflicts with ABI effects.
+ERR_LOWERING_022 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=22,
+    severity=Severity.ERROR,
+    summary="Low invoke purity conflicts with ABI effects.",
+    message=(
+        "low.invoke pure callee '@{callee_name}' through '{boundary_name}' "
+        "is invalid: {reason} ({effect_count} effect record(s), "
+        "{clobber_count} clobber record(s))"
+    ),
+    params=(
+        ErrorParam("callee_name", ParamKind.STRING),
+        ErrorParam("boundary_name", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+        ErrorParam("effect_count", ParamKind.U32),
+        ErrorParam("clobber_count", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Remove the pure marker, mark the direct callee pure after proving its "
+        "body, or remove the adapter effect/clobber records after proving the "
+        "low boundary has no observable effects"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -447,4 +516,7 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_017,
     ERR_LOWERING_018,
     ERR_LOWERING_019,
+    ERR_LOWERING_020,
+    ERR_LOWERING_021,
+    ERR_LOWERING_022,
 )

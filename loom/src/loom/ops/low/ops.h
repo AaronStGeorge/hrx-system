@@ -28,7 +28,9 @@ enum {
   LOOM_OP_LOW_ABI_ADAPTER = LOOM_OP_KIND(LOOM_DIALECT_LOW, 7),
   LOOM_OP_LOW_ABI_OPERAND = LOOM_OP_KIND(LOOM_DIALECT_LOW, 8),
   LOOM_OP_LOW_ABI_RESULT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 9),
-  LOOM_OP_LOW_COUNT_ = 10,
+  LOOM_OP_LOW_ABI_EFFECT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 10),
+  LOOM_OP_LOW_ABI_CLOBBER = LOOM_OP_KIND(LOOM_DIALECT_LOW, 11),
+  LOOM_OP_LOW_COUNT_ = 12,
 };
 
 // Function visibility. Absent (0) means private (module-internal).
@@ -66,6 +68,16 @@ typedef enum loom_low_abi_adapter_conversion_e {
   LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED = 1,
   LOOM_LOW_ABI_ADAPTER_CONVERSION_COUNT_ = 2,
 } loom_low_abi_adapter_conversion_t;
+
+// Effect summary row attached to a low ABI adapter.
+typedef enum loom_low_abi_effect_kind_e {
+  LOOM_LOW_ABI_EFFECT_KIND_READ = 1,
+  LOOM_LOW_ABI_EFFECT_KIND_WRITE = 2,
+  LOOM_LOW_ABI_EFFECT_KIND_READWRITE = 3,
+  LOOM_LOW_ABI_EFFECT_KIND_CALL = 4,
+  LOOM_LOW_ABI_EFFECT_KIND_UNKNOWN = 5,
+  LOOM_LOW_ABI_EFFECT_KIND_COUNT_ = 6,
+} loom_low_abi_effect_kind_t;
 
 // LOOM_OP_LOW_FUNC_DEF: Target-bound low function definition with register-typed signature values.
 // low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
@@ -210,13 +222,16 @@ LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_invoke_operands, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_invoke_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_invoke_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_invoke_adapter, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_low_invoke_purity, 2)
 enum loom_low_invoke_build_flag_bits_e {
-  LOOM_LOW_INVOKE_BUILD_FLAG_HAS_ADAPTER = 1u << 0,
+  LOOM_LOW_INVOKE_BUILD_FLAG_HAS_PURITY = 1u << 0,
+  LOOM_LOW_INVOKE_BUILD_FLAG_HAS_ADAPTER = 1u << 1,
 };
 typedef uint32_t loom_low_invoke_build_flags_t;
 iree_status_t loom_low_invoke_build(
     loom_builder_t* builder,
     loom_low_invoke_build_flags_t build_flags,
+    loom_optional uint8_t purity,
     loom_symbol_ref_t callee,
     loom_may_consume const loom_value_id_t* operands,
     iree_host_size_t operands_count,
@@ -227,6 +242,7 @@ iree_status_t loom_low_invoke_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+loom_trait_flags_t loom_low_invoke_effective_traits(const loom_op_t* op);
 iree_status_t loom_low_invoke_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -295,6 +311,47 @@ iree_status_t loom_low_abi_result_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_low_abi_result_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_ABI_EFFECT: Resource effect exposed by a low ABI adapter to semantic callers.
+// low.abi.effect @extern_add_call {adapter = @extern_add_i32, kind = call, resource = "vm.import"}
+LOOM_DEFINE_ISA(loom_low_abi_effect_isa, LOOM_OP_LOW_ABI_EFFECT)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_effect_symbol, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_effect_adapter, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_low_abi_effect_kind, 2)
+LOOM_DEFINE_ATTR_STRING(loom_low_abi_effect_resource, 3)
+enum loom_low_abi_effect_build_flag_bits_e {
+  LOOM_LOW_ABI_EFFECT_BUILD_FLAG_HAS_RESOURCE = 1u << 0,
+};
+typedef uint32_t loom_low_abi_effect_build_flags_t;
+iree_status_t loom_low_abi_effect_build(
+    loom_builder_t* builder,
+    loom_low_abi_effect_build_flags_t build_flags,
+    loom_symbol_ref_t symbol,
+    loom_symbol_ref_t adapter,
+    uint8_t kind,
+    loom_optional loom_string_id_t resource,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_abi_effect_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_ABI_CLOBBER: Resource or register class clobbered by a low ABI adapter.
+// low.abi.clobber @extern_add_vm_state {adapter = @extern_add_i32, resource = "vm.state"}
+LOOM_DEFINE_ISA(loom_low_abi_clobber_isa, LOOM_OP_LOW_ABI_CLOBBER)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_clobber_symbol, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_clobber_adapter, 1)
+LOOM_DEFINE_ATTR_STRING(loom_low_abi_clobber_resource, 2)
+iree_status_t loom_low_abi_clobber_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t symbol,
+    loom_symbol_ref_t adapter,
+    loom_string_id_t resource,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_abi_clobber_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

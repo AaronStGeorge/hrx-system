@@ -119,6 +119,18 @@ LowAbiValueConversion = EnumDef(
     doc="Per-slot conversion rule used by low ABI adapter mapping records.",
 )
 
+LowAbiEffectKind = EnumDef(
+    "LowAbiEffectKind",
+    [
+        EnumCase("read", 1, doc="Reads from the named ABI resource."),
+        EnumCase("write", 2, doc="Writes to the named ABI resource."),
+        EnumCase("readwrite", 3, doc="Reads and writes the named ABI resource."),
+        EnumCase("call", 4, doc="Performs an externally observable call."),
+        EnumCase("unknown", 5, doc="Has effects the current vocabulary cannot refine."),
+    ],
+    doc="Effect summary row attached to a low ABI adapter.",
+)
+
 # ============================================================================
 # Shared fragments
 # ============================================================================
@@ -456,6 +468,75 @@ low_abi_result = Op(
 )
 
 # ============================================================================
+# low.abi.effect — adapter-visible resource effect
+# ============================================================================
+
+low_abi_effect = Op(
+    "low.abi.effect",
+    group=low_ops,
+    doc=("Resource effect exposed by a low ABI adapter to semantic callers."),
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="low ABI effect",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef(
+            "adapter",
+            "symbol",
+            symbol_ref=SymbolReference("low ABI adapter", ["record"]),
+        ),
+        AttrDef("kind", ATTR_TYPE_ENUM, enum_def=LowAbiEffectKind),
+        AttrDef("resource", "string", optional=True),
+    ],
+    verify="loom_low_abi_effect_verify",
+    format=[
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        'low.abi.effect @extern_add_call {adapter = @extern_add_i32, kind = call, resource = "vm.import"}',
+    ],
+)
+
+# ============================================================================
+# low.abi.clobber — adapter-visible clobbered resource
+# ============================================================================
+
+low_abi_clobber = Op(
+    "low.abi.clobber",
+    group=low_ops,
+    doc=("Resource or register class clobbered by a low ABI adapter."),
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="low ABI clobber",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef(
+            "adapter",
+            "symbol",
+            symbol_ref=SymbolReference("low ABI adapter", ["record"]),
+        ),
+        AttrDef("resource", "string"),
+    ],
+    verify="loom_low_abi_clobber_verify",
+    format=[
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        'low.abi.clobber @extern_add_vm_state {adapter = @extern_add_i32, resource = "vm.state"}',
+    ],
+)
+
+# ============================================================================
 # low.invoke — call or interop edge to a low function symbol
 # ============================================================================
 
@@ -476,11 +557,14 @@ low_invoke = Op(
             optional=True,
             symbol_ref=SymbolReference("low ABI adapter", ["record"]),
         ),
+        AttrDef("purity", "enum", enum_def=Purity, optional=True),
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
+    effective_traits="loom_low_invoke_effective_traits",
     verify="loom_low_invoke_verify",
     format=[
+        OptionalGroup([Attr("purity")], anchor="purity"),
         SymbolRef("callee"),
         GLUE,
         LPAREN,
@@ -499,6 +583,7 @@ low_invoke = Op(
     examples=[
         "%result = low.invoke @extern_add(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)",
         "%result = low.invoke @extern_add(%lhs, %rhs) {adapter = @extern_add_direct} : (i32, i32) -> (i32)",
+        "%result = low.invoke pure @extern_add(%lhs, %rhs) {adapter = @extern_add_i32} : (i32, i32) -> (i32)",
     ],
 )
 
@@ -513,4 +598,6 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_abi_adapter,
     low_abi_operand,
     low_abi_result,
+    low_abi_effect,
+    low_abi_clobber,
 )
