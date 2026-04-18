@@ -4183,5 +4183,33 @@
       }
     ],
     "fix_hint_template": "Remove the pure marker, mark the direct callee pure after proving its body, or remove the adapter effect/clobber records after proving the low boundary has no observable effects"
+  },
+  {
+    "error_id": "ERR_LOWERING_023",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 23,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low function contract is invalid.",
+    "message_template": "low function '@{function_name}' {contract_name} contract is invalid: {reason}",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "contract_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Keep low function exactness and imported-code attrs complete and on the operation kind that owns them"
   }
 ]

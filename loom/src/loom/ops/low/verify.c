@@ -173,6 +173,12 @@ static loom_symbol_ref_t loom_low_function_target(const loom_op_t* op) {
   return loom_symbol_ref_null();
 }
 
+static loom_symbol_ref_t loom_low_function_symbol(const loom_op_t* op) {
+  if (loom_low_func_def_isa(op)) return loom_low_func_def_callee(op);
+  if (loom_low_func_decl_isa(op)) return loom_low_func_decl_callee(op);
+  return loom_symbol_ref_null();
+}
+
 static bool loom_low_symbol_ref_equal(loom_symbol_ref_t lhs,
                                       loom_symbol_ref_t rhs) {
   return lhs.module_id == rhs.module_id && lhs.symbol_id == rhs.symbol_id;
@@ -241,6 +247,135 @@ static iree_string_view_t loom_low_invoke_caller_kind_name(
     default:
       return IREE_SV("unknown");
   }
+}
+
+static iree_status_t loom_low_emit_function_contract_error(
+    const loom_module_t* module, const loom_op_t* op, uint16_t attr_index,
+    iree_string_view_t contract_name, iree_string_view_t reason,
+    iree_diagnostic_emitter_t emitter) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(
+          loom_low_symbol_name(module, loom_low_function_symbol(op))),
+      loom_param_with_field_ref(
+          loom_param_string(contract_name),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    attr_index)),
+      loom_param_string(reason),
+  };
+  return loom_low_emit(emitter, op,
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23),
+                       params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_low_verify_optional_enum_is_named(
+    const loom_module_t* module, const loom_op_t* op, uint16_t attr_index,
+    uint8_t value, iree_string_view_t contract_name, iree_string_view_t reason,
+    iree_diagnostic_emitter_t emitter) {
+  if (!loom_low_optional_attr_is_present(op, attr_index) || value != 0) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_function_contract_error(module, op, attr_index,
+                                               contract_name, reason, emitter);
+}
+
+static iree_status_t loom_low_verify_function_exactness_modes(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  if (loom_low_func_def_isa(op)) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+        module, op, loom_low_func_def_allocation_ATTR_INDEX,
+        loom_low_func_def_allocation(op), IREE_SV("allocation"),
+        IREE_SV("explicit allocation mode must name virtual, assigned, or "
+                "fixed"),
+        emitter));
+    IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+        module, op, loom_low_func_def_schedule_ATTR_INDEX,
+        loom_low_func_def_schedule(op), IREE_SV("schedule"),
+        IREE_SV("explicit schedule mode must name free, constrained, or "
+                "locked"),
+        emitter));
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+      module, op, loom_low_func_decl_allocation_ATTR_INDEX,
+      loom_low_func_decl_allocation(op), IREE_SV("allocation"),
+      IREE_SV("explicit allocation mode must name virtual, assigned, or fixed"),
+      emitter));
+  IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+      module, op, loom_low_func_decl_schedule_ATTR_INDEX,
+      loom_low_func_decl_schedule(op), IREE_SV("schedule"),
+      IREE_SV("explicit schedule mode must name free, constrained, or locked"),
+      emitter));
+  return iree_ok_status();
+}
+
+static bool loom_low_function_code_import_is_present(const loom_op_t* op,
+                                                     uint16_t* out_attr_index) {
+  uint16_t import_kind_attr_index = loom_low_func_def_import_kind_ATTR_INDEX;
+  uint16_t code_symbol_attr_index = loom_low_func_def_code_symbol_ATTR_INDEX;
+  if (loom_low_func_decl_isa(op)) {
+    import_kind_attr_index = loom_low_func_decl_import_kind_ATTR_INDEX;
+    code_symbol_attr_index = loom_low_func_decl_code_symbol_ATTR_INDEX;
+  }
+  if (loom_low_optional_attr_is_present(op, import_kind_attr_index)) {
+    *out_attr_index = import_kind_attr_index;
+    return true;
+  }
+  if (loom_low_optional_attr_is_present(op, code_symbol_attr_index)) {
+    *out_attr_index = code_symbol_attr_index;
+    return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_low_verify_no_code_import_on_def(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  uint16_t attr_index = 0;
+  if (!loom_low_function_code_import_is_present(op, &attr_index)) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_function_contract_error(
+      module, op, attr_index, IREE_SV("import"),
+      IREE_SV("imported code belongs on low.func.decl; low.func.def owns an "
+              "inline body"),
+      emitter);
+}
+
+static iree_status_t loom_low_verify_decl_code_import(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  bool import_kind_present = loom_low_optional_attr_is_present(
+      op, loom_low_func_decl_import_kind_ATTR_INDEX);
+  bool code_symbol_present = loom_low_optional_attr_is_present(
+      op, loom_low_func_decl_code_symbol_ATTR_INDEX);
+  IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+      module, op, loom_low_func_decl_import_kind_ATTR_INDEX,
+      loom_low_func_decl_import_kind(op), IREE_SV("import"),
+      IREE_SV("import kind must name vm, native, rocasm, or object"), emitter));
+  if (import_kind_present && code_symbol_present) {
+    iree_string_view_t code_symbol =
+        loom_low_string_or_empty(module, loom_low_func_decl_code_symbol(op));
+    if (!iree_string_view_is_empty(code_symbol)) {
+      return iree_ok_status();
+    }
+    return loom_low_emit_function_contract_error(
+        module, op, loom_low_func_decl_code_symbol_ATTR_INDEX,
+        IREE_SV("import"), IREE_SV("code symbol must not be empty"), emitter);
+  }
+  if (import_kind_present) {
+    return loom_low_emit_function_contract_error(
+        module, op, loom_low_func_decl_import_kind_ATTR_INDEX,
+        IREE_SV("import"), IREE_SV("import kind requires a code symbol string"),
+        emitter);
+  }
+  if (code_symbol_present) {
+    return loom_low_emit_function_contract_error(
+        module, op, loom_low_func_decl_code_symbol_ATTR_INDEX,
+        IREE_SV("import"), IREE_SV("code symbol requires an import kind"),
+        emitter);
+  }
+  return iree_ok_status();
 }
 
 static bool loom_low_abi_field_kind_matches_op(
@@ -1362,6 +1497,22 @@ iree_status_t loom_low_const_verify(const loom_module_t* module,
   return loom_low_verify_descriptor_key(module, op, emitter,
                                         loom_low_const_opcode(op),
                                         loom_low_const_opcode_ATTR_INDEX);
+}
+
+iree_status_t loom_low_func_def_verify(const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_function_exactness_modes(module, op, emitter));
+  return loom_low_verify_no_code_import_on_def(module, op, emitter);
+}
+
+iree_status_t loom_low_func_decl_verify(const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_function_exactness_modes(module, op, emitter));
+  return loom_low_verify_decl_code_import(module, op, emitter);
 }
 
 iree_status_t loom_low_abi_adapter_verify(const loom_module_t* module,

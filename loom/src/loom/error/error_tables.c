@@ -3028,6 +3028,27 @@ static const loom_error_def_t loom_err_lowering_022 = {
     .param_count = 5,
 };
 
+static const loom_error_param_def_t loom_err_lowering_023_params[] = {
+    {"function_name", LOOM_PARAM_STRING},
+    {"contract_name", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_023 = {
+    .error_id = "ERR_LOWERING_023",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 23,
+    .summary = "Low function contract is invalid.",
+    .message_template =
+        "low function '@{function_name}' {contract_name} contract is invalid: "
+        "{reason}",
+    .fix_hint_template =
+        "Keep low function exactness and imported-code attrs complete and on "
+        "the operation kind that owns them",
+    .param_defs = loom_err_lowering_023_params,
+    .param_count = 3,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -3081,7 +3102,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_012,  &loom_err_lowering_013,  &loom_err_lowering_014,
     &loom_err_lowering_015,  &loom_err_lowering_016,  &loom_err_lowering_017,
     &loom_err_lowering_018,  &loom_err_lowering_019,  &loom_err_lowering_020,
-    &loom_err_lowering_021,  &loom_err_lowering_022,
+    &loom_err_lowering_021,  &loom_err_lowering_022,  &loom_err_lowering_023,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

@@ -114,6 +114,8 @@ KEYWORD_MAP: dict[str, str] = {
     "using": "LOOM_KW_USING",
     "dgroups": "LOOM_KW_DGROUPS",
     "target": "LOOM_KW_TARGET",
+    "allocation": "LOOM_KW_ALLOCATION",
+    "schedule": "LOOM_KW_SCHEDULE",
 }
 
 # Maps Python TypeConstraint enum to C constraint enum name.

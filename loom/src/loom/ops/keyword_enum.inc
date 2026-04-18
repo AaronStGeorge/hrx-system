@@ -36,3 +36,5 @@
   LOOM_KW_USING = 27,  // "using"
   LOOM_KW_DGROUPS = 28,  // "dgroups"
   LOOM_KW_TARGET = 29,  // "target"
+  LOOM_KW_ALLOCATION = 30,  // "allocation"
+  LOOM_KW_SCHEDULE = 31,  // "schedule"

@@ -18,6 +18,7 @@ from typing import Any
 from loom.assembly import (
     ARROW,
     COLON,
+    COMMA,
     GLUE,
     LPAREN,
     RPAREN,
@@ -131,6 +132,57 @@ LowAbiEffectKind = EnumDef(
     doc="Effect summary row attached to a low ABI adapter.",
 )
 
+LowAllocationMode = EnumDef(
+    "LowAllocationMode",
+    [
+        EnumCase(
+            "virtual",
+            1,
+            doc="SSA values name virtual registers; allocation is still open.",
+        ),
+        EnumCase(
+            "assigned",
+            2,
+            doc="Allocation sidecars assign physical registers, but rewriting may still repair copies/spills.",
+        ),
+        EnumCase(
+            "fixed",
+            3,
+            doc="Physical register assignment is part of the low-function contract.",
+        ),
+    ],
+    doc="Register allocation exactness mode for a low function. Absent means virtual.",
+)
+
+LowScheduleMode = EnumDef(
+    "LowScheduleMode",
+    [
+        EnumCase("free", 1, doc="Instruction order may be scheduled."),
+        EnumCase(
+            "constrained",
+            2,
+            doc="Instruction order carries target constraints, but legal scheduling may still move packets.",
+        ),
+        EnumCase(
+            "locked",
+            3,
+            doc="Instruction order is part of the low-function contract.",
+        ),
+    ],
+    doc="Instruction scheduling exactness mode for a low function. Absent means free.",
+)
+
+LowCodeImportKind = EnumDef(
+    "LowCodeImportKind",
+    [
+        EnumCase("vm", 1, doc="Imported implementation is an IREE VM symbol."),
+        EnumCase("native", 2, doc="Imported implementation is a native callable symbol."),
+        EnumCase("rocasm", 3, doc="Imported implementation is an AMDGPU rocasm symbol."),
+        EnumCase("object", 4, doc="Imported implementation is a linked object-file symbol."),
+    ],
+    doc="External code source kind for an imported low function declaration.",
+)
+
 # ============================================================================
 # Shared fragments
 # ============================================================================
@@ -145,6 +197,10 @@ _FUNC_MODIFIER_ATTRS = [
     AttrDef("visibility", "enum", enum_def=Visibility, optional=True),
     AttrDef("cc", "enum", enum_def=CallingConv, optional=True),
     AttrDef("purity", "enum", enum_def=Purity, optional=True),
+    AttrDef("allocation", "enum", enum_def=LowAllocationMode, optional=True),
+    AttrDef("schedule", "enum", enum_def=LowScheduleMode, optional=True),
+    AttrDef("import_kind", "enum", enum_def=LowCodeImportKind, optional=True),
+    AttrDef("code_symbol", "string", optional=True),
     AttrDef("predicates", "predicate_list", optional=True),
 ]
 
@@ -152,12 +208,39 @@ _FUNC_MODIFIER_FORMAT: list[FormatElement] = [
     OptionalGroup([Attr("visibility")], anchor="visibility"),
     OptionalGroup([Attr("cc")], anchor="cc"),
     OptionalGroup([Attr("purity")], anchor="purity"),
+    OptionalGroup(
+        [kw("allocation"), GLUE, LPAREN, Attr("allocation"), GLUE, RPAREN],
+        anchor="allocation",
+    ),
+    OptionalGroup(
+        [kw("schedule"), GLUE, LPAREN, Attr("schedule"), GLUE, RPAREN],
+        anchor="schedule",
+    ),
+]
+
+_FUNC_TARGET_FORMAT: list[FormatElement] = [
     kw("target"),
     GLUE,
     LPAREN,
     SymbolRef("target"),
     GLUE,
     RPAREN,
+]
+
+_FUNC_IMPORT_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [
+            kw("import"),
+            GLUE,
+            LPAREN,
+            Attr("import_kind"),
+            COMMA,
+            Attr("code_symbol"),
+            GLUE,
+            RPAREN,
+        ],
+        anchor="import_kind",
+    ),
 ]
 
 _FUNC_SIGNATURE_FORMAT: list[FormatElement] = [
@@ -204,6 +287,7 @@ low_func_def = Op(
     results=[Result("results", REGISTER, variadic=True)],
     regions=[RegionDef("body", doc="Low function body.", terminator="low.return")],
     interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, body="body")],
+    verify="loom_low_func_def_verify",
     constraints=[
         BlockArgsSatisfy("body", REGISTER),
         YieldCountMatchesResults("body", "results"),
@@ -211,11 +295,13 @@ low_func_def = Op(
     ],
     format=[
         *_FUNC_MODIFIER_FORMAT,
+        *_FUNC_TARGET_FORMAT,
         *_FUNC_SIGNATURE_FORMAT,
         Region("body"),
     ],
     examples=[
         "low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n  %sum = low.op<amdgpu.v_add_u32>(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> reg<amdgpu.vgpr x1>\n  low.return %sum : reg<amdgpu.vgpr x1>\n}",
+        "low.func.def allocation(fixed) schedule(locked) target(@gfx1100) @agent_authored(%lhs: reg<amdgpu.vgpr x1>) {\n  low.return\n}",
     ],
 )
 
@@ -238,12 +324,16 @@ low_func_decl = Op(
     ),
     results=[Result("results", REGISTER, variadic=True)],
     interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, args_as_operands=True)],
+    verify="loom_low_func_decl_verify",
     format=[
         *_FUNC_MODIFIER_FORMAT,
+        *_FUNC_IMPORT_FORMAT,
+        *_FUNC_TARGET_FORMAT,
         *_FUNC_SIGNATURE_FORMAT,
     ],
     examples=[
         "low.func.decl target(@gfx1100) @extern_add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)",
+        'low.func.decl allocation(fixed) schedule(locked) import(rocasm, "mfma_16x16_seq") target(@gfx1100) @mfma_rocasm(%acc: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x4>)',
     ],
 )
 

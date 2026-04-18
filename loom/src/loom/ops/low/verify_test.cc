@@ -45,6 +45,15 @@ class LowVerifyTest : public ::testing::Test {
 
   loom_verify_result_t VerifySource(const char* source,
                                     DiagnosticCapture* verify_capture) {
+    loom_module_t* module = ParseSource(source);
+    if (!module) return {};
+    loom_verify_result_t result =
+        VerifyParsedModule(source, module, verify_capture);
+    loom_module_free(module);
+    return result;
+  }
+
+  loom_module_t* ParseSource(const char* source) {
     const char* filename = "low_verify_test.loom";
     DiagnosticCapture parse_capture;
     loom_text_parse_options_t parse_options = {};
@@ -59,11 +68,16 @@ class LowVerifyTest : public ::testing::Test {
       ADD_FAILURE() << "expected parser success, got "
                     << parse_capture.diagnostics.size() << " diagnostic(s)";
       if (module) loom_module_free(module);
-      return {};
+      return nullptr;
     }
     EXPECT_NE(module, nullptr);
-    if (!module) return {};
+    return module;
+  }
 
+  loom_verify_result_t VerifyParsedModule(const char* source,
+                                          loom_module_t* module,
+                                          DiagnosticCapture* verify_capture) {
+    const char* filename = "low_verify_test.loom";
     loom_source_entry_t source_entries[] = {{
         .source_id = FindContextSourceId(filename),
         .source = iree_make_cstring_view(source),
@@ -83,8 +97,25 @@ class LowVerifyTest : public ::testing::Test {
                                       &resolver_data};
     loom_verify_result_t result = {};
     IREE_EXPECT_OK(loom_verify_module(module, &verify_options, &result));
-    loom_module_free(module);
     return result;
+  }
+
+  loom_op_t* FindFirstLowFuncDecl(loom_module_t* module) {
+    loom_op_t* op = nullptr;
+    loom_block_for_each_op(loom_module_block(module), op) {
+      if (loom_low_func_decl_isa(op)) return op;
+    }
+    ADD_FAILURE() << "expected module to contain low.func.decl";
+    return nullptr;
+  }
+
+  loom_op_t* FindFirstLowFuncDef(loom_module_t* module) {
+    loom_op_t* op = nullptr;
+    loom_block_for_each_op(loom_module_block(module), op) {
+      if (loom_low_func_def_isa(op)) return op;
+    }
+    ADD_FAILURE() << "expected module to contain low.func.def";
+    return nullptr;
   }
 
   loom_source_id_t FindContextSourceId(const char* filename) const {
@@ -152,6 +183,216 @@ TEST_F(LowVerifyTest, InvokeMatchesPureDirectLowFunctionSignature) {
       &capture);
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_TRUE(capture.diagnostics.empty());
+}
+
+TEST_F(LowVerifyTest, ImportedDeclMatchesMappedSemanticCaller) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl allocation(fixed) schedule(locked) import(vm, "
+      "\"iree.vm.core.add_i32\") target(@vm_target) @extern_add(%lhs : "
+      "reg<vm.i32>, %rhs : reg<vm.i32>) -> (reg<vm.i32>)\n"
+      "low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = "
+      "mapped, operand_count = 2, result_count = 1}\n"
+      "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index "
+      "= 0, conversion = scalar_to_register, semantic_type = i32, abi_type = "
+      "reg<vm.i32>}\n"
+      "low.abi.operand @extern_add_i32_rhs {adapter = @extern_add_i32, index "
+      "= 1, conversion = scalar_to_register, semantic_type = i32, abi_type = "
+      "reg<vm.i32>}\n"
+      "low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, "
+      "index = 0, conversion = register_to_scalar, semantic_type = i32, "
+      "abi_type = reg<vm.i32>}\n"
+      "func.def @caller(%lhs : i32, %rhs : i32) -> (i32) {\n"
+      "  %sum = low.invoke @extern_add(%lhs, %rhs) {adapter = "
+      "@extern_add_i32} : (i32, i32) -> (i32)\n"
+      "  func.return %sum : i32\n"
+      "}\n",
+      &capture);
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(capture.diagnostics.empty());
+}
+
+TEST_F(LowVerifyTest, ImportedDeclRejectsMissingCodeSymbol) {
+  static const char* kSource =
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_add(%lhs : reg<vm.i32>) -> "
+      "(reg<vm.i32>)\n";
+  loom_module_t* module = ParseSource(kSource);
+  ASSERT_NE(module, nullptr);
+  loom_op_t* decl = FindFirstLowFuncDecl(module);
+  ASSERT_NE(decl, nullptr);
+  loom_op_attrs(decl)[loom_low_func_decl_import_kind_ATTR_INDEX] =
+      loom_attr_enum(LOOM_LOW_IMPORT_KIND_VM);
+
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifyParsedModule(kSource, module, &capture);
+  loom_module_free(module);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "import");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_func_decl_import_kind_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "import kind requires a code symbol string");
+}
+
+TEST_F(LowVerifyTest, ImportedDeclRejectsMissingImportKind) {
+  static const char* kSource =
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_add(%lhs : reg<vm.i32>) -> "
+      "(reg<vm.i32>)\n";
+  loom_module_t* module = ParseSource(kSource);
+  ASSERT_NE(module, nullptr);
+  loom_op_t* decl = FindFirstLowFuncDecl(module);
+  ASSERT_NE(decl, nullptr);
+  loom_string_id_t code_symbol_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(
+      module, IREE_SV("iree.vm.core.add_i32"), &code_symbol_id));
+  loom_op_attrs(decl)[loom_low_func_decl_code_symbol_ATTR_INDEX] =
+      loom_attr_string(code_symbol_id);
+
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifyParsedModule(kSource, module, &capture);
+  loom_module_free(module);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "import");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_func_decl_code_symbol_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "code symbol requires an import kind");
+}
+
+TEST_F(LowVerifyTest, ImportedDeclRejectsEmptyCodeSymbol) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl import(vm, \"\") target(@vm_target) @extern_add(%lhs : "
+      "reg<vm.i32>) -> (reg<vm.i32>)\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "import");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_func_decl_code_symbol_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "code symbol must not be empty");
+}
+
+TEST_F(LowVerifyTest, FuncDefRejectsImportedCodeContract) {
+  static const char* kSource =
+      "test.record @vm_target {}\n"
+      "low.func.def target(@vm_target) @inline_body() {\n"
+      "  low.return\n"
+      "}\n";
+  loom_module_t* module = ParseSource(kSource);
+  ASSERT_NE(module, nullptr);
+  loom_op_t* def = FindFirstLowFuncDef(module);
+  ASSERT_NE(def, nullptr);
+  loom_op_attrs(def)[loom_low_func_def_import_kind_ATTR_INDEX] =
+      loom_attr_enum(LOOM_LOW_IMPORT_KIND_VM);
+
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifyParsedModule(kSource, module, &capture);
+  loom_module_free(module);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "inline_body");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "import");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_func_def_import_kind_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "imported code belongs on low.func.decl; low.func.def owns an "
+            "inline body");
+}
+
+TEST_F(LowVerifyTest, FuncDefRejectsNamelessAllocationMode) {
+  static const char* kSource =
+      "test.record @vm_target {}\n"
+      "low.func.def target(@vm_target) @inline_body() {\n"
+      "  low.return\n"
+      "}\n";
+  loom_module_t* module = ParseSource(kSource);
+  ASSERT_NE(module, nullptr);
+  loom_op_t* def = FindFirstLowFuncDef(module);
+  ASSERT_NE(def, nullptr);
+  loom_op_attrs(def)[loom_low_func_def_allocation_ATTR_INDEX] =
+      loom_attr_enum(0);
+
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifyParsedModule(kSource, module, &capture);
+  loom_module_free(module);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "inline_body");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "allocation");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_func_def_allocation_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "explicit allocation mode must name virtual, assigned, or fixed");
+}
+
+TEST_F(LowVerifyTest, ImportedDeclRejectsNamelessImportKind) {
+  static const char* kSource =
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_add(%lhs : reg<vm.i32>) -> "
+      "(reg<vm.i32>)\n";
+  loom_module_t* module = ParseSource(kSource);
+  ASSERT_NE(module, nullptr);
+  loom_op_t* decl = FindFirstLowFuncDecl(module);
+  ASSERT_NE(decl, nullptr);
+  loom_string_id_t code_symbol_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(
+      module, IREE_SV("iree.vm.core.add_i32"), &code_symbol_id));
+  loom_op_attrs(decl)[loom_low_func_decl_import_kind_ATTR_INDEX] =
+      loom_attr_enum(0);
+  loom_op_attrs(decl)[loom_low_func_decl_code_symbol_ATTR_INDEX] =
+      loom_attr_string(code_symbol_id);
+
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifyParsedModule(kSource, module, &capture);
+  loom_module_free(module);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "import");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_func_decl_import_kind_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "import kind must name vm, native, rocasm, or object");
 }
 
 TEST_F(LowVerifyTest, InvokeMatchesDirectAbiAdapterSignature) {

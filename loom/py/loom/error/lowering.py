@@ -496,6 +496,26 @@ ERR_LOWERING_022 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_023: Low function contract is invalid.
+ERR_LOWERING_023 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=23,
+    severity=Severity.ERROR,
+    summary="Low function contract is invalid.",
+    message=(
+        "low function '@{function_name}' {contract_name} contract is invalid: {reason}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("contract_name", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Keep low function exactness and imported-code attrs complete and on "
+        "the operation kind that owns them"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -519,4 +539,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_020,
     ERR_LOWERING_021,
     ERR_LOWERING_022,
+    ERR_LOWERING_023,
 )

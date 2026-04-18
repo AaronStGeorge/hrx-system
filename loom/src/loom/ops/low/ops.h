@@ -54,6 +54,31 @@ typedef enum loom_low_purity_e {
   LOOM_LOW_PURITY_COUNT_ = 2,
 } loom_low_purity_t;
 
+// Register allocation exactness mode for a low function. Absent means virtual.
+typedef enum loom_low_allocation_e {
+  LOOM_LOW_ALLOCATION_VIRTUAL = 1,
+  LOOM_LOW_ALLOCATION_ASSIGNED = 2,
+  LOOM_LOW_ALLOCATION_FIXED = 3,
+  LOOM_LOW_ALLOCATION_COUNT_ = 4,
+} loom_low_allocation_t;
+
+// Instruction scheduling exactness mode for a low function. Absent means free.
+typedef enum loom_low_schedule_e {
+  LOOM_LOW_SCHEDULE_FREE = 1,
+  LOOM_LOW_SCHEDULE_CONSTRAINED = 2,
+  LOOM_LOW_SCHEDULE_LOCKED = 3,
+  LOOM_LOW_SCHEDULE_COUNT_ = 4,
+} loom_low_schedule_t;
+
+// External code source kind for an imported low function declaration.
+typedef enum loom_low_import_kind_e {
+  LOOM_LOW_IMPORT_KIND_VM = 1,
+  LOOM_LOW_IMPORT_KIND_NATIVE = 2,
+  LOOM_LOW_IMPORT_KIND_ROCASM = 3,
+  LOOM_LOW_IMPORT_KIND_OBJECT = 4,
+  LOOM_LOW_IMPORT_KIND_COUNT_ = 5,
+} loom_low_import_kind_t;
+
 // Per-slot conversion rule used by low ABI adapter mapping records.
 typedef enum loom_low_conversion_e {
   LOOM_LOW_CONVERSION_DIRECT = 0,
@@ -91,11 +116,17 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_def_target, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_visibility, 2)
 LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_cc, 3)
 LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_purity, 4)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_allocation, 5)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_schedule, 6)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_import_kind, 7)
+LOOM_DEFINE_ATTR_STRING(loom_low_func_def_code_symbol, 8)
 LOOM_DEFINE_REGION(loom_low_func_def_body, 0)
 enum loom_low_func_def_build_flag_bits_e {
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_CC = 1u << 1,
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_PURITY = 1u << 2,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_ALLOCATION = 1u << 3,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_SCHEDULE = 1u << 4,
 };
 typedef uint32_t loom_low_func_def_build_flags_t;
 iree_status_t loom_low_func_def_build(
@@ -104,6 +135,8 @@ iree_status_t loom_low_func_def_build(
     loom_optional uint8_t visibility,
     loom_optional uint8_t cc,
     loom_optional uint8_t purity,
+    loom_optional uint8_t allocation,
+    loom_optional uint8_t schedule,
     loom_symbol_ref_t target,
     loom_symbol_ref_t callee,
     const loom_type_t* arg_types,
@@ -116,6 +149,9 @@ iree_status_t loom_low_func_def_build(
     iree_host_size_t predicates_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_low_func_def_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_LOW_FUNC_DECL: Target-bound low function declaration with register-typed signature values.
 // low.func.decl target(@gfx1100) @extern_add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
@@ -127,10 +163,18 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_decl_target, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_visibility, 2)
 LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_cc, 3)
 LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_purity, 4)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_allocation, 5)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_schedule, 6)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_import_kind, 7)
+LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_code_symbol, 8)
 enum loom_low_func_decl_build_flag_bits_e {
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CC = 1u << 1,
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_PURITY = 1u << 2,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_ALLOCATION = 1u << 3,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_SCHEDULE = 1u << 4,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_KIND = 1u << 5,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CODE_SYMBOL = 1u << 6,
 };
 typedef uint32_t loom_low_func_decl_build_flags_t;
 iree_status_t loom_low_func_decl_build(
@@ -139,6 +183,10 @@ iree_status_t loom_low_func_decl_build(
     loom_optional uint8_t visibility,
     loom_optional uint8_t cc,
     loom_optional uint8_t purity,
+    loom_optional uint8_t allocation,
+    loom_optional uint8_t schedule,
+    loom_optional uint8_t import_kind,
+    loom_optional loom_string_id_t code_symbol,
     loom_symbol_ref_t target,
     loom_symbol_ref_t callee,
     const loom_type_t* arg_types,
@@ -151,6 +199,9 @@ iree_status_t loom_low_func_decl_build(
     iree_host_size_t predicates_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_low_func_decl_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_LOW_RETURN: Return register values from a low function.
 // low.return
