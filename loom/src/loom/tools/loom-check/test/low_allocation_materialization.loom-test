@@ -40,6 +40,27 @@ low.slot @spill_spill_1 {align = 4, function = @spill, size = 4, space = private
 
 // ====
 
+// RUN: pass low-materialize-allocation{budgets=vm.i32=2,diagnostics=spills}
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "spill", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+
+// WARNING@+1: BACKEND/009 "vm_target" "value 'c'" "vm.i32" "spill_spill_0"
+low.func.def target(@vm_target) @spill(%a : reg<vm.i32>, %b : reg<vm.i32>, %c : reg<vm.i32>) -> (reg<vm.i32>) {
+  %ab = low.op<iree.vm.add.i32>(%a, %b) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
+  // WARNING@+1: BACKEND/009 "vm_target" "value 'bc'" "vm.i32" "spill_spill_1"
+  %bc = low.op<iree.vm.add.i32>(%b, %c) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
+  %sum = low.op<iree.vm.add.i32>(%ab, %bc) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
+  %out = low.op<iree.vm.add.i32>(%sum, %a) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
+  low.return %out : reg<vm.i32>
+}
+
+// ----
+
+// ====
+
 // RUN: pass low-materialize-allocation{budgets=x86.zmm=1}
 
 target.snapshot @x86_snapshot {codegen_format = low_native, target_triple = "x86_64-unknown-linux-gnu", data_layout = "", artifact_format = elf, target_cpu = "x86-64-v4", target_features = "+avx512f", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
@@ -69,3 +90,20 @@ low.func.def target(@x86_target) @phys(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -
 }
 
 low.slot @phys_spill_0 {align = 64, function = @phys, size = 64, space = stack}
+
+// ====
+
+// RUN: pass low-materialize-allocation{budgets=x86.zmm=1,diagnostics=spills}
+
+target.snapshot @x86_snapshot {codegen_format = low_native, target_triple = "x86_64-unknown-linux-gnu", data_layout = "", artifact_format = elf, target_cpu = "x86-64-v4", target_features = "+avx512f", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @x86_export {export_symbol = "phys", abi = object_function, linkage = dso_local, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @x86_config {contract_set_key = "x86.avx512.core", contract_feature_bits = 0}
+target.bundle @x86_target {snapshot = @x86_snapshot, export_plan = @x86_export, config = @x86_config}
+
+// WARNING@+1: BACKEND/009 "x86_target" "value 'rhs'" "x86.zmm" "phys_spill_0"
+low.func.def target(@x86_target) @phys(%lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>) -> (reg<x86.zmm>) {
+  %sum = low.op<x86.avx512.vpaddd.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
+  low.return %sum : reg<x86.zmm>
+}
+
+// ----

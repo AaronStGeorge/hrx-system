@@ -18,6 +18,10 @@ typedef struct loom_low_materialize_allocation_pass_state_t {
   loom_low_allocation_budget_t* budgets;
   // Number of entries in |budgets|.
   iree_host_size_t budget_count;
+  // True when the pass should emit spill materialization diagnostics.
+  bool emit_spill_diagnostics;
+  // True once the diagnostics option has been parsed.
+  bool has_diagnostics_option;
 } loom_low_materialize_allocation_pass_state_t;
 
 typedef struct loom_low_materialize_allocation_parse_context_t {
@@ -31,6 +35,8 @@ static const loom_pass_option_def_t kLowMaterializeAllocationOptions[] = {
     {IREE_SVL("budgets"),
      IREE_SVL("Semicolon-separated register class budgets, such as "
               "vm.i32=2;x86.zmm=1.")},
+    {IREE_SVL("diagnostics"),
+     IREE_SVL("Diagnostic feedback to emit: none or spills.")},
 };
 
 enum {
@@ -153,12 +159,39 @@ static iree_status_t loom_low_materialize_allocation_parse_budgets(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_materialize_allocation_parse_diagnostics(
+    iree_string_view_t text,
+    loom_low_materialize_allocation_parse_context_t* context) {
+  if (context->state->has_diagnostics_option) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "duplicate option 'diagnostics' for pass 'low-materialize-allocation'");
+  }
+  text = iree_string_view_trim(text);
+  if (iree_string_view_equal(text, IREE_SV("none"))) {
+    context->state->emit_spill_diagnostics = false;
+  } else if (iree_string_view_equal(text, IREE_SV("spills"))) {
+    context->state->emit_spill_diagnostics = true;
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass 'low-materialize-allocation' option 'diagnostics' expected "
+        "'none' or 'spills', got '%.*s'",
+        (int)text.size, text.data);
+  }
+  context->state->has_diagnostics_option = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_materialize_allocation_parse_option(
     void* user_data, iree_string_view_t name, iree_string_view_t value) {
   loom_low_materialize_allocation_parse_context_t* context =
       (loom_low_materialize_allocation_parse_context_t*)user_data;
   if (iree_string_view_equal(name, IREE_SV("budgets"))) {
     return loom_low_materialize_allocation_parse_budgets(value, context);
+  }
+  if (iree_string_view_equal(name, IREE_SV("diagnostics"))) {
+    return loom_low_materialize_allocation_parse_diagnostics(value, context);
   }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
@@ -204,8 +237,13 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
       module, function.op, &allocation_options, pass->arena, &sidecar));
 
   loom_low_allocation_materialization_result_t result = {0};
+  loom_low_allocation_materialization_options_t materialization_options = {
+      .emitter = state && state->emit_spill_diagnostics
+                     ? pass->diagnostic_emitter
+                     : (iree_diagnostic_emitter_t){0},
+  };
   IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_spills(
-      module, &sidecar, NULL, pass->arena, &result));
+      module, &sidecar, &materialization_options, pass->arena, &result));
 
   loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SLOTS,
                           result.slot_count);

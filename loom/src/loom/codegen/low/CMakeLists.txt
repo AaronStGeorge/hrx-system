@@ -87,6 +87,7 @@ loom_cc_library(
     ::descriptors
     iree::base
     iree::base::internal::arena
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs

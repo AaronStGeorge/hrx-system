@@ -30,6 +30,8 @@ typedef struct loom_low_allocation_materialization_options_t {
   // The default false value rejects existing traffic so repeated or partial
   // materialization fails loud instead of stacking generated reloads.
   bool allow_existing_slot_traffic;
+  // Structured diagnostic emitter for materialized allocation feedback.
+  iree_diagnostic_emitter_t emitter;
 } loom_low_allocation_materialization_options_t;
 
 typedef struct loom_low_allocation_materialization_result_t {

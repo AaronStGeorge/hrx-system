@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
@@ -19,6 +20,97 @@ typedef struct loom_low_materialized_spill_slot_t {
   // Symbol reference for the generated low.slot record.
   loom_symbol_ref_t symbol_ref;
 } loom_low_materialized_spill_slot_t;
+
+static iree_string_view_t loom_low_allocation_symbol_name(
+    const loom_module_t* module, loom_symbol_ref_t symbol_ref) {
+  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+      symbol_ref.symbol_id >= module->symbols.count) {
+    return IREE_SV("<unnamed>");
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->name_id >= module->strings.count) return IREE_SV("<unnamed>");
+  return module->strings.entries[symbol->name_id];
+}
+
+static iree_string_view_t loom_low_allocation_string_or_empty(
+    iree_string_view_t value) {
+  return iree_string_view_is_empty(value) ? IREE_SV("<empty>") : value;
+}
+
+static iree_string_view_t loom_low_allocation_function_name(
+    const loom_low_allocation_sidecar_t* sidecar) {
+  if (loom_low_func_def_isa(sidecar->function_op)) {
+    return loom_low_allocation_symbol_name(
+        sidecar->module, loom_low_func_def_callee(sidecar->function_op));
+  }
+  return IREE_SV("<unnamed>");
+}
+
+static iree_string_view_t loom_low_allocation_value_name(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  if (value_id >= module->values.count) return IREE_SV("<unknown>");
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (value->name_id >= module->strings.count) return IREE_SV("<unnamed>");
+  return module->strings.entries[value->name_id];
+}
+
+static iree_string_view_t loom_low_allocation_value_class_name(
+    const loom_module_t* module, loom_liveness_value_class_t value_class) {
+  if (value_class.register_class_id == LOOM_STRING_ID_INVALID ||
+      value_class.register_class_id >= module->strings.count) {
+    return IREE_SV("<unknown>");
+  }
+  return module->strings.entries[value_class.register_class_id];
+}
+
+static const loom_op_t* loom_low_allocation_value_origin_op(
+    const loom_module_t* module, loom_value_id_t value_id,
+    const loom_op_t* fallback_op) {
+  if (value_id >= module->values.count) return fallback_op;
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) return fallback_op;
+  const loom_op_t* defining_op = loom_def_op(value->def);
+  return defining_op ? defining_op : fallback_op;
+}
+
+static iree_status_t loom_low_allocation_emit_materialized_spill(
+    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_spill_plan_t* plan, loom_symbol_ref_t slot_ref,
+    iree_diagnostic_emitter_t emitter) {
+  if (plan->assignment_index >= sidecar->assignment_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation spill plan references an out-of-range assignment");
+  }
+  const loom_low_allocation_assignment_t* assignment =
+      &sidecar->assignments[plan->assignment_index];
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_allocation_string_or_empty(
+          sidecar->target.bundle_storage.bundle.name)),
+      loom_param_string(loom_low_allocation_string_or_empty(
+          sidecar->target.bundle_storage.export_plan.name)),
+      loom_param_string(loom_low_allocation_string_or_empty(
+          sidecar->target.bundle_storage.config.name)),
+      loom_param_string(loom_low_allocation_function_name(sidecar)),
+      loom_param_string(
+          loom_low_allocation_value_name(sidecar->module, plan->value_id)),
+      loom_param_string(loom_low_allocation_value_class_name(
+          sidecar->module, assignment->value_class)),
+      loom_param_string(
+          loom_low_allocation_symbol_name(sidecar->module, slot_ref)),
+      loom_param_u32(plan->byte_size),
+      loom_param_u32(plan->store_count),
+      loom_param_u32(plan->reload_count),
+  };
+  loom_diagnostic_emission_t emission = {
+      .op = loom_low_allocation_value_origin_op(sidecar->module, plan->value_id,
+                                                sidecar->function_op),
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 9),
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(emitter, &emission);
+}
 
 static iree_status_t loom_low_allocation_map_slot_space(
     uint8_t slot_space, uint8_t* out_low_space) {
@@ -258,9 +350,9 @@ static iree_status_t loom_low_allocation_insert_reload_for_use(
 }
 
 static iree_status_t loom_low_allocation_materialize_one_spill_plan(
-    loom_module_t* module, const loom_op_t* function_op,
+    loom_module_t* module, const loom_low_allocation_sidecar_t* sidecar,
     const loom_low_allocation_spill_plan_t* plan, loom_symbol_ref_t slot_ref,
-    iree_arena_allocator_t* arena,
+    iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* arena,
     loom_low_allocation_materialization_result_t* result) {
   loom_use_t* uses = NULL;
   uint32_t use_count = 0;
@@ -282,7 +374,7 @@ static iree_status_t loom_low_allocation_materialize_one_spill_plan(
 
   if (plan->store_count > 0) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_insert_spill_store(
-        module, function_op, plan, slot_ref));
+        module, sidecar->function_op, plan, slot_ref));
     if (result->spill_count == UINT32_MAX) {
       return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "materialized spill count overflow");
@@ -299,7 +391,8 @@ static iree_status_t loom_low_allocation_materialize_one_spill_plan(
     }
     ++result->reload_count;
   }
-  return iree_ok_status();
+  return loom_low_allocation_emit_materialized_spill(sidecar, plan, slot_ref,
+                                                     emitter);
 }
 
 iree_status_t loom_low_allocation_materialize_spills(
@@ -325,6 +418,8 @@ iree_status_t loom_low_allocation_materialize_spills(
 
   const bool allow_existing_slot_traffic =
       options && options->allow_existing_slot_traffic;
+  const iree_diagnostic_emitter_t emitter =
+      options ? options->emitter : (iree_diagnostic_emitter_t){0};
   if (!allow_existing_slot_traffic) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_verify_no_existing_slot_traffic(
         sidecar->function_op));
@@ -345,8 +440,8 @@ iree_status_t loom_low_allocation_materialize_spills(
 
   for (iree_host_size_t i = 0; i < sidecar->spill_plan_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_one_spill_plan(
-        module, sidecar->function_op, &sidecar->spill_plans[i],
-        slots[i].symbol_ref, arena, &result));
+        module, sidecar, &sidecar->spill_plans[i], slots[i].symbol_ref, emitter,
+        arena, &result));
   }
 
   if (out_result) *out_result = result;
