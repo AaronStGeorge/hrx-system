@@ -8,7 +8,9 @@
 
 #include <string.h>
 
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/requirements.h"
+#include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 
@@ -69,13 +71,6 @@ static iree_string_view_t loom_low_allocation_module_string(
     return iree_string_view_empty();
   }
   return module->strings.entries[string_id];
-}
-
-static bool loom_low_allocation_value_class_equal(
-    loom_liveness_value_class_t lhs, loom_liveness_value_class_t rhs) {
-  return lhs.type_kind == rhs.type_kind &&
-         lhs.element_type == rhs.element_type &&
-         lhs.register_class_id == rhs.register_class_id;
 }
 
 static bool loom_low_allocation_interval_overlaps(
@@ -386,8 +381,8 @@ static bool loom_low_allocation_candidate_conflicts(
   for (iree_host_size_t i = 0; i < state->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* existing = &state->assignments[i];
     if (existing->location_kind != location_kind) continue;
-    if (!loom_low_allocation_value_class_equal(existing->value_class,
-                                               interval->value_class)) {
+    if (!loom_liveness_value_class_equal(existing->value_class,
+                                         interval->value_class)) {
       continue;
     }
     if (!loom_low_allocation_interval_overlaps(existing, &candidate)) continue;
@@ -406,8 +401,8 @@ static uint32_t loom_low_allocation_unbounded_search_limit(
   for (iree_host_size_t i = 0; i < state->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment = &state->assignments[i];
     if (assignment->location_kind != location_kind) continue;
-    if (!loom_low_allocation_value_class_equal(assignment->value_class,
-                                               value_class)) {
+    if (!loom_liveness_value_class_equal(assignment->value_class,
+                                         value_class)) {
       continue;
     }
     uint64_t assignment_end =
@@ -521,8 +516,7 @@ static bool loom_low_allocation_assignment_locations_equal(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
   return lhs->location_kind == rhs->location_kind &&
-         loom_low_allocation_value_class_equal(lhs->value_class,
-                                               rhs->value_class) &&
+         loom_liveness_value_class_equal(lhs->value_class, rhs->value_class) &&
          lhs->location_base == rhs->location_base &&
          lhs->location_count == rhs->location_count;
 }
@@ -715,8 +709,7 @@ static bool loom_low_allocation_assignment_pair_conflicts(
     return false;
   }
   if (lhs->location_kind != rhs->location_kind) return false;
-  if (!loom_low_allocation_value_class_equal(lhs->value_class,
-                                             rhs->value_class)) {
+  if (!loom_liveness_value_class_equal(lhs->value_class, rhs->value_class)) {
     return false;
   }
   return loom_low_allocation_interval_overlaps(lhs, rhs) &&
@@ -979,6 +972,42 @@ iree_status_t loom_low_allocation_verify_sidecar(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_allocation_emit_predicted_spills(
+    const loom_low_allocation_sidecar_t* sidecar,
+    iree_diagnostic_emitter_t emitter) {
+  for (iree_host_size_t i = 0; i < sidecar->spill_plan_count; ++i) {
+    const loom_low_allocation_spill_plan_t* spill_plan =
+        &sidecar->spill_plans[i];
+    const loom_low_allocation_assignment_t* assignment =
+        &sidecar->assignments[spill_plan->assignment_index];
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(loom_low_diagnostic_target_key(&sidecar->target)),
+        loom_param_string(loom_low_diagnostic_export_name(&sidecar->target)),
+        loom_param_string(loom_low_diagnostic_config_key(&sidecar->target)),
+        loom_param_string(loom_low_diagnostic_function_name(
+            sidecar->module, sidecar->function_op)),
+        loom_param_string(loom_low_diagnostic_value_name(sidecar->module,
+                                                         spill_plan->value_id)),
+        loom_param_string(loom_low_diagnostic_value_class_name(
+            sidecar->module, assignment->value_class)),
+        loom_param_u32(spill_plan->byte_size),
+        loom_param_u32(spill_plan->store_count),
+        loom_param_u32(spill_plan->reload_count),
+        loom_param_string(IREE_SV(
+            "no available non-overlapping location within register budget")),
+    };
+    loom_diagnostic_emission_t emission = {
+        .op = loom_low_diagnostic_value_origin_op(
+            sidecar->module, spill_plan->value_id, sidecar->function_op),
+        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 8),
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    IREE_RETURN_IF_ERROR(iree_diagnostic_emit(emitter, &emission));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_allocate_function(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
@@ -1050,6 +1079,11 @@ iree_status_t loom_low_allocate_function(
       .materialized_copy_count = state.materialized_copy_count,
   };
   IREE_RETURN_IF_ERROR(loom_low_allocation_verify_sidecar(&sidecar));
+  if (iree_any_bit_set(options->diagnostic_flags,
+                       LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS)) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_emit_predicted_spills(&sidecar, options->emitter));
+  }
   *out_sidecar = sidecar;
   return iree_ok_status();
 }

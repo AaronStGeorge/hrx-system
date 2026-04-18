@@ -54,6 +54,23 @@ low.func.def target(@x86_target) @phys(%lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>)
 
 // ====
 
+// RUN: emit low-allocation-json @phys_predicted_spill diagnostics=predicted-spills x86.zmm=1
+
+target.snapshot @x86_snapshot {codegen_format = low_native, target_triple = "x86_64-unknown-linux-gnu", data_layout = "", artifact_format = elf, target_cpu = "x86-64-v4", target_features = "+avx512f", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @x86_export {export_symbol = "phys_predicted_spill", abi = object_function, linkage = dso_local, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @x86_config {contract_set_key = "x86.avx512.core", contract_feature_bits = 0}
+target.bundle @x86_target {snapshot = @x86_snapshot, export_plan = @x86_export, config = @x86_config}
+
+// WARNING@+1: BACKEND/008 "x86_target" "predicts spilling x86.zmm value 'rhs'" "64 byte(s)" "1 reload(s)"
+low.func.def target(@x86_target) @phys_predicted_spill(%lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>) -> (reg<x86.zmm>) {
+  %sum = low.op<x86.avx512.vpaddd.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
+  low.return %sum : reg<x86.zmm>
+}
+
+// ----
+
+// ====
+
 // RUN: emit low-allocation-json @copy
 
 target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}

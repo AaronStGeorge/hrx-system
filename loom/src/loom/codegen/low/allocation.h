@@ -53,6 +53,14 @@ typedef enum loom_low_allocation_copy_kind_e {
   LOOM_LOW_ALLOCATION_COPY_MATERIALIZED = 2,
 } loom_low_allocation_copy_kind_t;
 
+typedef enum loom_low_allocation_diagnostic_bits_e {
+  // Emits BACKEND/008 warnings for spill plans predicted by allocation.
+  LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS = 1u << 0,
+} loom_low_allocation_diagnostic_bits_t;
+
+// Bitset of loom_low_allocation_diagnostic_bits_t values.
+typedef uint32_t loom_low_allocation_diagnostic_flags_t;
+
 // Optional fixed register budget used by tests, tuning loops, and target
 // overlays. A missing budget uses the descriptor set's physical register count;
 // a descriptor class with physical_count == 0 is treated as unbounded.
@@ -137,8 +145,10 @@ typedef struct loom_low_allocation_options_t {
   const loom_low_allocation_budget_t* budgets;
   // Number of entries in |budgets|.
   iree_host_size_t budget_count;
-  // Structured diagnostic emitter for user IR failures.
+  // Structured diagnostic emitter for allocation failures and feedback.
   iree_diagnostic_emitter_t emitter;
+  // Optional structured allocation feedback to emit.
+  loom_low_allocation_diagnostic_flags_t diagnostic_flags;
 } loom_low_allocation_options_t;
 
 // Allocation sidecar for one low.func.def body. All arrays are arena-owned by
