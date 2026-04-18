@@ -92,6 +92,38 @@ typedef struct loom_liveness_pressure_summary_t {
   uint32_t peak_point;
 } loom_liveness_pressure_summary_t;
 
+// Register-pressure budget for one value class. UINT32_MAX means the
+// corresponding live-units or live-values limit is disabled.
+typedef struct loom_liveness_pressure_budget_t {
+  // Pressure class constrained by this budget.
+  loom_liveness_value_class_t value_class;
+  // Maximum allowed boundary-live units for |value_class|.
+  uint32_t max_live_units;
+  // Maximum allowed boundary-live values for |value_class|.
+  uint32_t max_live_values;
+} loom_liveness_pressure_budget_t;
+
+enum loom_liveness_pressure_budget_violation_bits_e {
+  // Peak live units exceeded the budget.
+  LOOM_LIVENESS_PRESSURE_BUDGET_VIOLATION_LIVE_UNITS = 1u << 0,
+  // Peak live values exceeded the budget.
+  LOOM_LIVENESS_PRESSURE_BUDGET_VIOLATION_LIVE_VALUES = 1u << 1,
+};
+typedef uint32_t loom_liveness_pressure_budget_violation_flags_t;
+
+// One pressure budget violation. The pointed-to summary is owned by the
+// analysis; the record array itself is owned by the caller-provided arena.
+typedef struct loom_liveness_pressure_budget_violation_t {
+  // Index of the budget entry that was exceeded.
+  iree_host_size_t budget_index;
+  // Budget that was exceeded.
+  loom_liveness_pressure_budget_t budget;
+  // Analysis pressure summary that exceeded |budget|.
+  const loom_liveness_pressure_summary_t* summary;
+  // Bitfield describing which budget dimensions were exceeded.
+  loom_liveness_pressure_budget_violation_flags_t violation_bits;
+} loom_liveness_pressure_budget_violation_t;
+
 // Liveness analysis result for one region. All arrays are arena-owned by the
 // caller-provided arena passed to loom_liveness_analyze_region.
 typedef struct loom_liveness_analysis_t {
@@ -140,6 +172,16 @@ const loom_liveness_interval_t* loom_liveness_interval_for_value(
 // the analyzed region.
 const loom_liveness_block_info_t* loom_liveness_block_info_for_block(
     const loom_liveness_analysis_t* analysis, const loom_block_t* block);
+
+// Collects all pressure summaries that exceed |budgets|. Missing value classes
+// do not violate a budget because no value in that class was live in the
+// analyzed region.
+iree_status_t loom_liveness_collect_pressure_budget_violations(
+    const loom_liveness_analysis_t* analysis,
+    const loom_liveness_pressure_budget_t* budgets,
+    iree_host_size_t budget_count, iree_arena_allocator_t* arena,
+    const loom_liveness_pressure_budget_violation_t** out_violations,
+    iree_host_size_t* out_violation_count);
 
 #ifdef __cplusplus
 }

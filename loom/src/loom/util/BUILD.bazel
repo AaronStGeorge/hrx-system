@@ -201,11 +201,26 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "liveness_json",
+    srcs = ["liveness_json.c"],
+    hdrs = ["liveness_json.h"],
+    deps = [
+        ":json",
+        ":liveness",
+        ":stream",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_cc_test(
     name = "liveness_test",
     srcs = ["liveness_test.cc"],
     deps = [
         ":liveness",
+        ":liveness_json",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",

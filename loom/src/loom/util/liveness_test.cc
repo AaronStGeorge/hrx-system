@@ -17,6 +17,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/op_registry.h"
+#include "loom/util/liveness_json.h"
 
 namespace loom {
 namespace {
@@ -231,6 +232,25 @@ func.def @type_ref(%N: index, %v: vector<[%N]xi32>) -> (vector<[%N]xi32>) {
   EXPECT_EQ(dim_interval->end_point, vector_interval->end_point);
 }
 
+TEST_F(LivenessTest, TiedResultOperandIsLiveThroughConsumingOp) {
+  ModulePtr module = ParseModule(R"(
+func.def @tied_update(%tile: tile<4xf32>, %tensor: tensor<4xf32>, %off: index) -> (tensor<4xf32>) {
+  %updated = test.update %tile, %tensor[%off] : tile<4xf32> -> (%tensor as tensor<4xf32>)
+  func.return %updated : tensor<4xf32>
+}
+)");
+  loom_func_like_t func = FindFunction(module.get(), IREE_SV("tied_update"));
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 3u);
+
+  loom_liveness_analysis_t analysis = AnalyzeBody(module.get(), func);
+  const loom_liveness_interval_t* tensor_interval =
+      loom_liveness_interval_for_value(&analysis, args[1]);
+  ASSERT_NE(tensor_interval, nullptr);
+  EXPECT_LT(tensor_interval->start_point, tensor_interval->end_point);
+}
+
 TEST_F(LivenessTest, RegisterPressureGroupsByRegisterClassUnits) {
   ModulePtr module = ParseModule(R"(
 func.def @register_pressure(%a: reg<vm.i32>, %b: reg<vm.i32>, %c: reg<vm.i32>) -> (reg<vm.i32>) {
@@ -252,6 +272,71 @@ func.def @register_pressure(%a: reg<vm.i32>, %b: reg<vm.i32>, %c: reg<vm.i32>) -
   ASSERT_NE(pressure, nullptr);
   EXPECT_EQ(pressure->peak_live_units, 3u);
   EXPECT_EQ(pressure->peak_live_values, 3u);
+}
+
+TEST_F(LivenessTest, PressureBudgetReportsHighUnrolledRegisterUse) {
+  ModulePtr module = ParseModule(R"(
+func.def @high_pressure(%a0: reg<vm.i32>, %a1: reg<vm.i32>, %a2: reg<vm.i32>, %a3: reg<vm.i32>, %a4: reg<vm.i32>, %a5: reg<vm.i32>) -> (reg<vm.i32>) {
+  %r0 = low.copy %a0 : reg<vm.i32> -> reg<vm.i32>
+  %r1 = low.copy %a1 : reg<vm.i32> -> reg<vm.i32>
+  %r2 = low.copy %a2 : reg<vm.i32> -> reg<vm.i32>
+  %r3 = low.copy %a3 : reg<vm.i32> -> reg<vm.i32>
+  %r4 = low.copy %a4 : reg<vm.i32> -> reg<vm.i32>
+  %r5 = low.copy %a5 : reg<vm.i32> -> reg<vm.i32>
+  func.return %r0 : reg<vm.i32>
+}
+)");
+  loom_func_like_t func = FindFunction(module.get(), IREE_SV("high_pressure"));
+  loom_liveness_analysis_t analysis = AnalyzeBody(module.get(), func);
+
+  loom_string_id_t vm_i32 =
+      loom_module_lookup_string(module.get(), IREE_SV("vm.i32"));
+  ASSERT_NE(vm_i32, LOOM_STRING_ID_INVALID);
+  const loom_liveness_pressure_summary_t* pressure =
+      FindRegisterPressure(analysis, vm_i32);
+  ASSERT_NE(pressure, nullptr);
+  EXPECT_EQ(pressure->peak_live_units, 6u);
+
+  loom_liveness_pressure_budget_t budget = {
+      .value_class = pressure->value_class,
+      .max_live_units = 4,
+      .max_live_values = 4,
+  };
+  const loom_liveness_pressure_budget_violation_t* violations = nullptr;
+  iree_host_size_t violation_count = 0;
+  IREE_ASSERT_OK(loom_liveness_collect_pressure_budget_violations(
+      &analysis, &budget, 1, &analysis_arena_, &violations, &violation_count));
+  ASSERT_EQ(violation_count, 1u);
+  EXPECT_EQ(violations[0].budget_index, 0u);
+  EXPECT_EQ(violations[0].summary, pressure);
+  EXPECT_EQ(violations[0].violation_bits,
+            LOOM_LIVENESS_PRESSURE_BUDGET_VIOLATION_LIVE_UNITS |
+                LOOM_LIVENESS_PRESSURE_BUDGET_VIOLATION_LIVE_VALUES);
+}
+
+TEST_F(LivenessTest, FormatsMachineReadableJsonSummary) {
+  ModulePtr module = ParseModule(R"(
+func.def @json_pressure(%a: reg<vm.i32>, %b: reg<vm.i32>) -> (reg<vm.i32>) {
+  %r = low.copy %a : reg<vm.i32> -> reg<vm.i32>
+  %dead = low.copy %b : reg<vm.i32> -> reg<vm.i32>
+  func.return %r : reg<vm.i32>
+}
+)");
+  loom_func_like_t func = FindFunction(module.get(), IREE_SV("json_pressure"));
+  loom_liveness_analysis_t analysis = AnalyzeBody(module.get(), func);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_liveness_format_json(&analysis, &builder));
+  std::string json(iree_string_builder_buffer(&builder),
+                   iree_string_builder_size(&builder));
+  EXPECT_NE(json.find("\"format\":\"loom.liveness.v0\""), std::string::npos);
+  EXPECT_NE(json.find("\"blocks\""), std::string::npos);
+  EXPECT_NE(json.find("\"intervals\""), std::string::npos);
+  EXPECT_NE(json.find("\"pressure_summaries\""), std::string::npos);
+  EXPECT_NE(json.find("\"register_class\":\"vm.i32\""), std::string::npos);
+  EXPECT_NE(json.find("\"peak_live_units\":2"), std::string::npos);
+  iree_string_builder_deinitialize(&builder);
 }
 
 }  // namespace

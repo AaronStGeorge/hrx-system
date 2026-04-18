@@ -55,6 +55,7 @@ loom_cc_library(
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
+    loom::src::loom::ops::op_defs
     loom::src::loom::ops::op_registry
     loom::src::loom::target::emit::llvmir::core
     loom::src::loom::target::emit::llvmir::legality
@@ -84,6 +85,8 @@ loom_cc_library(
     loom::src::loom::transforms::vector_to_scalar
     loom::src::loom::transforms::verify
     loom::src::loom::util::json
+    loom::src::loom::util::liveness
+    loom::src::loom::util::liveness_json
     loom::src::loom::util::stream
   PUBLIC
 )

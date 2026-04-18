@@ -1084,6 +1084,48 @@ TEST_F(ExecuteTest, EmitTargetLowRegistryManifestUsesRegistryPackage) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, EmitLivenessJsonReportsPressureSummary) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit liveness-json @pressure\n"
+                   "func.def @pressure(%a: reg<vm.i32>, %b: reg<vm.i32>, "
+                   "%c: reg<vm.i32>) -> (reg<vm.i32>) {\n"
+                   "  %ab = low.copy %a : reg<vm.i32> -> reg<vm.i32>\n"
+                   "  %bc = low.copy %b : reg<vm.i32> -> reg<vm.i32>\n"
+                   "  %cc = low.copy %c : reg<vm.i32> -> reg<vm.i32>\n"
+                   "  func.return %ab : reg<vm.i32>\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string actual_output = ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"format\":\"loom.liveness.v0\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"intervals\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"pressure_summaries\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"register_class\":\"vm.i32\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"peak_live_units\":3"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitLivenessJsonReportsUnknownFunction) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit liveness-json @missing\n"
+                   "func.def @present() {\n"
+                   "  func.return\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("liveness-json"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("unknown function '@missing'"),
+            std::string::npos)
+      << "detail: " << DetailString(result);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, FormatModeUnimplemented) {
   loom_check_result_t result;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,

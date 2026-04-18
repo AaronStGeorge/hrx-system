@@ -231,6 +231,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    liveness_json
+  HDRS
+    "liveness_json.h"
+  SRCS
+    "liveness_json.c"
+  DEPS
+    ::json
+    ::liveness
+    ::stream
+    iree::base
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     liveness_test
@@ -238,6 +255,7 @@ loom_cc_test(
     "liveness_test.cc"
   DEPS
     ::liveness
+    ::liveness_json
     iree::base::internal::arena
     loom::src::loom::format::text::parser
     loom::src::loom::ir

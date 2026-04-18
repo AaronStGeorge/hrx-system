@@ -748,7 +748,9 @@ static iree_status_t loom_liveness_pressure_snapshot_bucket(
     snapshot->capacity = new_capacity;
   }
   *out_bucket = &snapshot->buckets[snapshot->count++];
-  (*out_bucket)->value_class = value_class;
+  **out_bucket = (loom_liveness_pressure_bucket_t){
+      .value_class = value_class,
+  };
   return iree_ok_status();
 }
 
@@ -768,35 +770,32 @@ static iree_status_t loom_liveness_pressure_snapshot_add(
 }
 
 static iree_status_t loom_liveness_record_pressure_snapshot(
-    loom_liveness_build_state_t* state, loom_liveness_bitset_t live_values,
-    const loom_block_t* block, const loom_op_t* op, uint32_t point) {
-  loom_liveness_pressure_snapshot_t snapshot = {
-      .build_state = state,
-      .buckets = NULL,
-      .count = 0,
-      .capacity = 0,
-  };
+    loom_liveness_pressure_snapshot_t* snapshot,
+    loom_liveness_bitset_t live_values, const loom_block_t* block,
+    const loom_op_t* op, uint32_t point) {
+  loom_liveness_build_state_t* state = snapshot->build_state;
+  snapshot->count = 0;
   for (iree_host_size_t word_index = 0; word_index < live_values.word_count;
        ++word_index) {
     uint64_t bits = live_values.words[word_index];
     while (bits != 0) {
       uint32_t bit_index = iree_math_count_trailing_zeros_u64(bits);
       IREE_RETURN_IF_ERROR(loom_liveness_pressure_snapshot_add(
-          (loom_value_id_t)(word_index * 64u + bit_index), &snapshot));
+          (loom_value_id_t)(word_index * 64u + bit_index), snapshot));
       bits &= bits - 1u;
     }
   }
-  for (iree_host_size_t i = 0; i < snapshot.count; ++i) {
+  for (iree_host_size_t i = 0; i < snapshot->count; ++i) {
     iree_host_size_t summary_index = 0;
     IREE_RETURN_IF_ERROR(loom_liveness_pressure_find_or_add(
-        state, snapshot.buckets[i].value_class, &summary_index));
+        state, snapshot->buckets[i].value_class, &summary_index));
     loom_liveness_pressure_summary_t* summary =
         &state->pressure_state.summaries[summary_index];
-    if (snapshot.buckets[i].live_units > summary->peak_live_units ||
-        (snapshot.buckets[i].live_units == summary->peak_live_units &&
-         snapshot.buckets[i].live_values > summary->peak_live_values)) {
-      summary->peak_live_units = snapshot.buckets[i].live_units;
-      summary->peak_live_values = snapshot.buckets[i].live_values;
+    if (snapshot->buckets[i].live_units > summary->peak_live_units ||
+        (snapshot->buckets[i].live_units == summary->peak_live_units &&
+         snapshot->buckets[i].live_values > summary->peak_live_values)) {
+      summary->peak_live_units = snapshot->buckets[i].live_units;
+      summary->peak_live_values = snapshot->buckets[i].live_values;
       summary->peak_block = block;
       summary->peak_op = op;
       summary->peak_point = point;
@@ -829,6 +828,12 @@ static iree_status_t loom_liveness_compute_pressure(
   loom_liveness_bitset_t live;
   IREE_RETURN_IF_ERROR(
       loom_liveness_bitset_allocate(state->arena, state->word_count, &live));
+  loom_liveness_pressure_snapshot_t snapshot = {
+      .build_state = state,
+      .buckets = NULL,
+      .count = 0,
+      .capacity = 0,
+  };
   for (iree_host_size_t block_index = 0;
        block_index < state->region->block_count; ++block_index) {
     const loom_block_t* block =
@@ -838,13 +843,13 @@ static iree_status_t loom_liveness_compute_pressure(
         &state->block_states[block_index];
     loom_liveness_bitset_copy(live, block_state->live_out);
     IREE_RETURN_IF_ERROR(loom_liveness_record_pressure_snapshot(
-        state, live, block, NULL, block_info->end_point));
+        &snapshot, live, block, NULL, block_info->end_point));
 
     const loom_op_t* op = block->last_op;
     uint32_t point = block_info->end_point;
     while (op) {
       IREE_RETURN_IF_ERROR(loom_liveness_record_pressure_snapshot(
-          state, live, block, op, point));
+          &snapshot, live, block, op, point));
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t result_index = 0; result_index < op->result_count;
            ++result_index) {
@@ -860,7 +865,7 @@ static iree_status_t loom_liveness_compute_pressure(
       op = op->prev_op;
     }
     IREE_RETURN_IF_ERROR(loom_liveness_record_pressure_snapshot(
-        state, live, block, NULL, block_info->start_point));
+        &snapshot, live, block, NULL, block_info->start_point));
   }
   return iree_ok_status();
 }
@@ -931,10 +936,11 @@ static iree_status_t loom_liveness_finalize_interval_array(
 iree_status_t loom_liveness_analyze_region(
     const loom_module_t* module, const loom_region_t* region,
     iree_arena_allocator_t* arena, loom_liveness_analysis_t* out_analysis) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(region);
-  IREE_ASSERT_ARGUMENT(arena);
-  IREE_ASSERT_ARGUMENT(out_analysis);
+  if (!module || !region || !arena || !out_analysis) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "module, region, arena, and output analysis are "
+                            "required for liveness analysis");
+  }
   memset(out_analysis, 0, sizeof(*out_analysis));
 
   loom_liveness_build_state_t state = {
@@ -1008,7 +1014,7 @@ iree_status_t loom_liveness_analyze_region(
 
 const loom_liveness_interval_t* loom_liveness_interval_for_value(
     const loom_liveness_analysis_t* analysis, loom_value_id_t value_id) {
-  IREE_ASSERT_ARGUMENT(analysis);
+  if (!analysis) return NULL;
   if (value_id >= analysis->value_capacity ||
       !analysis->value_interval_indices) {
     return NULL;
@@ -1023,10 +1029,100 @@ const loom_liveness_interval_t* loom_liveness_interval_for_value(
 
 const loom_liveness_block_info_t* loom_liveness_block_info_for_block(
     const loom_liveness_analysis_t* analysis, const loom_block_t* block) {
-  IREE_ASSERT_ARGUMENT(analysis);
+  if (!analysis) return NULL;
   if (!block) return NULL;
   for (iree_host_size_t i = 0; i < analysis->block_count; ++i) {
     if (analysis->blocks[i].block == block) return &analysis->blocks[i];
   }
   return NULL;
+}
+
+static const loom_liveness_pressure_summary_t*
+loom_liveness_pressure_summary_for_class(
+    const loom_liveness_analysis_t* analysis,
+    loom_liveness_value_class_t value_class) {
+  for (iree_host_size_t i = 0; i < analysis->pressure_summary_count; ++i) {
+    const loom_liveness_pressure_summary_t* summary =
+        &analysis->pressure_summaries[i];
+    if (loom_liveness_value_class_equal(summary->value_class, value_class)) {
+      return summary;
+    }
+  }
+  return NULL;
+}
+
+static loom_liveness_pressure_budget_violation_flags_t
+loom_liveness_pressure_budget_violation_bits(
+    const loom_liveness_pressure_summary_t* summary,
+    const loom_liveness_pressure_budget_t* budget) {
+  loom_liveness_pressure_budget_violation_flags_t violation_bits = 0;
+  if (budget->max_live_units != UINT32_MAX &&
+      summary->peak_live_units > budget->max_live_units) {
+    violation_bits |= LOOM_LIVENESS_PRESSURE_BUDGET_VIOLATION_LIVE_UNITS;
+  }
+  if (budget->max_live_values != UINT32_MAX &&
+      summary->peak_live_values > budget->max_live_values) {
+    violation_bits |= LOOM_LIVENESS_PRESSURE_BUDGET_VIOLATION_LIVE_VALUES;
+  }
+  return violation_bits;
+}
+
+iree_status_t loom_liveness_collect_pressure_budget_violations(
+    const loom_liveness_analysis_t* analysis,
+    const loom_liveness_pressure_budget_t* budgets,
+    iree_host_size_t budget_count, iree_arena_allocator_t* arena,
+    const loom_liveness_pressure_budget_violation_t** out_violations,
+    iree_host_size_t* out_violation_count) {
+  if (!analysis || !arena || !out_violations || !out_violation_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "analysis, arena, and output violation storage "
+                            "are required");
+  }
+  *out_violations = NULL;
+  *out_violation_count = 0;
+  if (budget_count == 0) return iree_ok_status();
+  if (!budgets) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pressure budgets are required when budget count "
+                            "is non-zero");
+  }
+
+  iree_host_size_t violation_count = 0;
+  for (iree_host_size_t budget_index = 0; budget_index < budget_count;
+       ++budget_index) {
+    const loom_liveness_pressure_summary_t* summary =
+        loom_liveness_pressure_summary_for_class(
+            analysis, budgets[budget_index].value_class);
+    if (!summary) continue;
+    if (loom_liveness_pressure_budget_violation_bits(
+            summary, &budgets[budget_index]) != 0) {
+      ++violation_count;
+    }
+  }
+  if (violation_count == 0) return iree_ok_status();
+
+  loom_liveness_pressure_budget_violation_t* violations = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, violation_count, sizeof(*violations), (void**)&violations));
+  iree_host_size_t violation_index = 0;
+  for (iree_host_size_t budget_index = 0; budget_index < budget_count;
+       ++budget_index) {
+    const loom_liveness_pressure_summary_t* summary =
+        loom_liveness_pressure_summary_for_class(
+            analysis, budgets[budget_index].value_class);
+    if (!summary) continue;
+    loom_liveness_pressure_budget_violation_flags_t violation_bits =
+        loom_liveness_pressure_budget_violation_bits(summary,
+                                                     &budgets[budget_index]);
+    if (violation_bits == 0) continue;
+    violations[violation_index++] = (loom_liveness_pressure_budget_violation_t){
+        .budget_index = budget_index,
+        .budget = budgets[budget_index],
+        .summary = summary,
+        .violation_bits = violation_bits,
+    };
+  }
+  *out_violations = violations;
+  *out_violation_count = violation_count;
+  return iree_ok_status();
 }
