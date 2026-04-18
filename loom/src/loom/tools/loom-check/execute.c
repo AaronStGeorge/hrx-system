@@ -260,14 +260,6 @@ static iree_status_t loom_check_run_pipeline(
                                IREE_SV("low-materialize-allocation"))) {
       pass_user_data = &low_materialize_allocation_config;
     }
-    if (iree_status_is_ok(status) && descriptor && descriptor->create == NULL &&
-        !iree_string_view_is_empty(entry.options)) {
-      status =
-          iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                           "pass '%.*s' does not accept options, got '{%.*s}'",
-                           (int)entry.name.size, entry.name.data,
-                           (int)entry.options.size, entry.options.data);
-    }
     if (iree_status_is_ok(status) && descriptor) {
       status = loom_pass_manager_add_descriptor(&manager, descriptor,
                                                 entry.options, pass_user_data);

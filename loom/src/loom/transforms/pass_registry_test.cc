@@ -14,6 +14,14 @@
 namespace loom {
 namespace {
 
+static const loom_pass_descriptor_t* LookupBuiltinPass(
+    iree_string_view_t name) {
+  const loom_pass_descriptor_t* descriptor = nullptr;
+  IREE_EXPECT_OK(loom_pass_registry_lookup(loom_pass_builtin_registry(), name,
+                                           &descriptor));
+  return descriptor;
+}
+
 TEST(PassRegistryTest, BuiltinRegistryVerifies) {
   IREE_ASSERT_OK(loom_pass_registry_verify(loom_pass_builtin_registry()));
 }
@@ -45,6 +53,69 @@ TEST(PassRegistryTest, LookupKnownAndUnknownPasses) {
                                            IREE_SV("definitely-not-a-pass"),
                                            &descriptor));
   EXPECT_EQ(descriptor, nullptr);
+}
+
+TEST(PassRegistryTest, ValidatesUint32OptionSchema) {
+  const loom_pass_descriptor_t* descriptor =
+      LookupBuiltinPass(IREE_SV("canonicalize"));
+  ASSERT_NE(descriptor, nullptr);
+
+  IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
+      descriptor, IREE_SV("max-iterations=4")));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_descriptor_validate_options(
+                            descriptor, IREE_SV("max-iterations=0")));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_descriptor_validate_options(
+                            descriptor, IREE_SV("max-iterations=many")));
+}
+
+TEST(PassRegistryTest, RejectsUnknownAndDuplicateOptions) {
+  const loom_pass_descriptor_t* descriptor =
+      LookupBuiltinPass(IREE_SV("canonicalize"));
+  ASSERT_NE(descriptor, nullptr);
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_pass_descriptor_validate_options(descriptor, IREE_SV("unknown=1")));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_pass_descriptor_validate_options(
+          descriptor, IREE_SV("max-iterations=1,max-iterations=2")));
+}
+
+TEST(PassRegistryTest, ValidatesEnumOptionSchema) {
+  const loom_pass_descriptor_t* descriptor =
+      LookupBuiltinPass(IREE_SV("low-materialize-allocation"));
+  ASSERT_NE(descriptor, nullptr);
+
+  IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
+      descriptor, IREE_SV("diagnostics=spills")));
+  IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
+      descriptor, IREE_SV("budgets=vm.i32=2;vm.ref=1")));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_descriptor_validate_options(
+                            descriptor, IREE_SV("diagnostics=verbose")));
+}
+
+TEST(PassRegistryTest, RejectsOptionsForDescriptorWithoutCreateCallback) {
+  const loom_pass_descriptor_t* descriptor = LookupBuiltinPass(IREE_SV("dce"));
+  ASSERT_NE(descriptor, nullptr);
+
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
+                                   &block_pool);
+  loom_pass_manager_t manager;
+  IREE_ASSERT_OK(loom_pass_manager_initialize(
+      &block_pool, 0, iree_allocator_system(), &manager));
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_manager_add_descriptor(
+                            &manager, descriptor, IREE_SV("unknown=1"),
+                            /*user_data=*/nullptr));
+
+  loom_pass_manager_deinitialize(&manager);
+  iree_arena_block_pool_deinitialize(&block_pool);
 }
 
 TEST(PassRegistryTest, UnavailableDescriptorCannotBeAdded) {

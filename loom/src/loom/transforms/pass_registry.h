@@ -24,6 +24,9 @@ extern "C" {
 // Bitset of loom_pass_descriptor_flag_bits_e values.
 typedef uint32_t loom_pass_descriptor_flags_t;
 
+// Bitset of loom_pass_option_schema_flag_bits_e values.
+typedef uint32_t loom_pass_option_schema_flags_t;
+
 // Returns static pass metadata for one descriptor.
 typedef const loom_pass_info_t* (*loom_pass_info_fn_t)(void);
 
@@ -31,6 +34,45 @@ enum loom_pass_descriptor_flag_bits_e {
   // Descriptor is known to the registry but unavailable in this build/config.
   LOOM_PASS_DESCRIPTOR_UNAVAILABLE = 1u << 0,
 };
+
+enum loom_pass_option_schema_flag_bits_e {
+  // Option must be present in the pass option dictionary.
+  LOOM_PASS_OPTION_SCHEMA_REQUIRED = 1u << 0,
+};
+
+// Kind-specific validation applied to one textual pass option.
+typedef enum loom_pass_option_schema_kind_e {
+  // Opaque non-empty string validated by the pass create callback.
+  LOOM_PASS_OPTION_SCHEMA_STRING = 0,
+  // Unsigned 32-bit integer validated against an inclusive range.
+  LOOM_PASS_OPTION_SCHEMA_UINT32 = 1,
+  // String selected from a descriptor-owned value table.
+  LOOM_PASS_OPTION_SCHEMA_ENUM = 2,
+} loom_pass_option_schema_kind_t;
+
+// One allowed value for an enum pass option.
+typedef struct loom_pass_option_enum_value_t {
+  // Accepted textual value.
+  iree_string_view_t value;
+} loom_pass_option_enum_value_t;
+
+// Typed schema for one named pass option.
+typedef struct loom_pass_option_schema_t {
+  // Option name matching a loom_pass_info_t option_defs entry.
+  iree_string_view_t name;
+  // Option value kind.
+  loom_pass_option_schema_kind_t kind;
+  // Option presence and validation flags.
+  loom_pass_option_schema_flags_t flags;
+  // Inclusive lower bound when |kind| is LOOM_PASS_OPTION_SCHEMA_UINT32.
+  uint32_t minimum_uint32;
+  // Inclusive upper bound when |kind| is LOOM_PASS_OPTION_SCHEMA_UINT32.
+  uint32_t maximum_uint32;
+  // Sorted allowed values when |kind| is LOOM_PASS_OPTION_SCHEMA_ENUM.
+  const loom_pass_option_enum_value_t* enum_values;
+  // Number of entries in |enum_values|.
+  uint16_t enum_value_count;
+} loom_pass_option_schema_t;
 
 // Static descriptor for one pass implementation.
 typedef struct loom_pass_descriptor_t {
@@ -52,6 +94,10 @@ typedef struct loom_pass_descriptor_t {
   loom_pass_descriptor_flags_t flags;
   // Explanation used when the descriptor is unavailable.
   iree_string_view_t unavailable_reason;
+  // Typed option schemas matching the pass info option definitions.
+  const loom_pass_option_schema_t* option_schema;
+  // Number of entries in |option_schema|.
+  uint16_t option_schema_count;
 } loom_pass_descriptor_t;
 
 // A sorted registry of pass descriptors.
@@ -78,6 +124,10 @@ iree_status_t loom_pass_registry_lookup(
 // Returns true when |descriptor| can be instantiated in the current build.
 bool loom_pass_descriptor_is_available(
     const loom_pass_descriptor_t* descriptor);
+
+// Validates textual option assignments against |descriptor|'s schema.
+iree_status_t loom_pass_descriptor_validate_options(
+    const loom_pass_descriptor_t* descriptor, iree_string_view_t options);
 
 // Adds |descriptor| to |manager| with caller-owned option text and borrowed
 // per-entry user data.
