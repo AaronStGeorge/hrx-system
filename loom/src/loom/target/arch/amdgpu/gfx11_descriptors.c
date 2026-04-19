@@ -997,6 +997,7 @@ static const loom_low_descriptor_t kAmdgpuGfx11CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 4,
     },
     {
         .key_string_offset =
@@ -1019,6 +1020,7 @@ static const loom_low_descriptor_t kAmdgpuGfx11CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 2,
     },
     {
         .key_string_offset =
@@ -1041,6 +1043,7 @@ static const loom_low_descriptor_t kAmdgpuGfx11CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 8,
     },
     {
         .key_string_offset =
@@ -1063,6 +1066,7 @@ static const loom_low_descriptor_t kAmdgpuGfx11CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = 3,
     },
     {
         .key_string_offset =
@@ -1085,6 +1089,7 @@ static const loom_low_descriptor_t kAmdgpuGfx11CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 3,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = 0,
     },
     {
         .key_string_offset =
@@ -1107,6 +1112,7 @@ static const loom_low_descriptor_t kAmdgpuGfx11CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 4,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = 1,
     },
     {
         .key_string_offset =
@@ -1129,6 +1135,7 @@ static const loom_low_descriptor_t kAmdgpuGfx11CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 5,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 9,
     },
     {
         .key_string_offset =
@@ -1151,6 +1158,7 @@ static const loom_low_descriptor_t kAmdgpuGfx11CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 6,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = 6,
     },
     {
         .key_string_offset =
@@ -1173,6 +1181,7 @@ static const loom_low_descriptor_t kAmdgpuGfx11CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 7,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = 7,
     },
     {
         .key_string_offset =
@@ -1195,6 +1204,7 @@ static const loom_low_descriptor_t kAmdgpuGfx11CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 8,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = 5,
     },
 };
 

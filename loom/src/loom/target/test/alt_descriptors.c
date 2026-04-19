@@ -206,6 +206,7 @@ static const loom_low_descriptor_t kTestLowAltDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 0,
     },
     {
         .key_string_offset = TEST_LOW_ALT_STRING_descriptor_test_alt_neg_i32,
@@ -227,6 +228,7 @@ static const loom_low_descriptor_t kTestLowAltDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 1,
     },
 };
 

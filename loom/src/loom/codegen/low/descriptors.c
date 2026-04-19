@@ -805,6 +805,35 @@ static iree_status_t loom_low_verify_descriptor_effect_contract(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_verify_descriptor_canonical_asm_form(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
+  if (descriptor->canonical_asm_form_ordinal ==
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
+    return iree_ok_status();
+  }
+  if (descriptor->canonical_asm_form_ordinal >=
+      descriptor_set->asm_form_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "low descriptor %" PRIu32 " canonical asm form ordinal %" PRIu32
+        " exceeds asm form count %" PRIu32,
+        descriptor_index, descriptor->canonical_asm_form_ordinal,
+        descriptor_set->asm_form_count);
+  }
+  const loom_low_asm_form_t* asm_form =
+      &descriptor_set->asm_forms[descriptor->canonical_asm_form_ordinal];
+  if (asm_form->descriptor_ordinal != descriptor_index) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low descriptor %" PRIu32 " canonical asm form ordinal %" PRIu32
+        " belongs to descriptor %" PRIu32,
+        descriptor_index, descriptor->canonical_asm_form_ordinal,
+        asm_form->descriptor_ordinal);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor_operand_roles(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
@@ -912,7 +941,10 @@ static iree_status_t loom_low_verify_descriptor(
       descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_effect_contract(
       descriptor_set, descriptor, descriptor_index));
-  return loom_low_verify_descriptor_constraints(descriptor_set, descriptor);
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_descriptor_constraints(descriptor_set, descriptor));
+  return loom_low_verify_descriptor_canonical_asm_form(
+      descriptor_set, descriptor, descriptor_index);
 }
 
 static iree_status_t loom_low_verify_operand(
@@ -2092,8 +2124,17 @@ static iree_status_t loom_low_append_manifest_descriptor_rows(
   const loom_low_schedule_class_t* schedule =
       &descriptor_set->schedule_classes[descriptor->schedule_class_id];
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      builder, ",\"schedule_class\":%" PRIu16 ",\"schedule_class_name\":",
+      builder, ",\"schedule_class\":%" PRIu16 ",\"canonical_asm_form\":",
       descriptor->schedule_class_id));
+  if (descriptor->canonical_asm_form_ordinal ==
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "null"));
+  } else {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "%" PRIu32, descriptor->canonical_asm_form_ordinal));
+  }
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, ",\"schedule_class_name\":"));
   IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
       descriptor_set, builder, schedule->name_string_offset));
   IREE_RETURN_IF_ERROR(
@@ -2378,6 +2419,53 @@ const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(
     return NULL;
   }
   return &descriptor_set->asm_forms[asm_form_ordinal];
+}
+
+iree_status_t loom_low_descriptor_set_lookup_canonical_asm_form(
+    const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t descriptor_ordinal, uint32_t* out_asm_form_ordinal) {
+  if (out_asm_form_ordinal == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low canonical asm form output is required");
+  }
+  *out_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  if (descriptor_set == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor set is required");
+  }
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
+  if (descriptor == NULL) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low descriptor ordinal %" PRIu32
+                            " is out of range",
+                            descriptor_ordinal);
+  }
+  if (descriptor->canonical_asm_form_ordinal ==
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
+    iree_string_view_t key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
+        descriptor_set, descriptor->key_string_offset, /*allow_none=*/false,
+        &key));
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "low descriptor '%.*s' has no unique canonical "
+                            "asm form",
+                            (int)key.size, key.data);
+  }
+  const loom_low_asm_form_t* asm_form = loom_low_descriptor_set_asm_form_at(
+      descriptor_set, descriptor->canonical_asm_form_ordinal);
+  if (asm_form == NULL) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low descriptor canonical asm form ordinal is out "
+                            "of range");
+  }
+  if (asm_form->descriptor_ordinal != descriptor_ordinal) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor canonical asm form references a "
+                            "different descriptor");
+  }
+  *out_asm_form_ordinal = descriptor->canonical_asm_form_ordinal;
+  return iree_ok_status();
 }
 
 iree_status_t loom_low_descriptor_set_lookup_descriptor(

@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 8u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 9u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -512,6 +512,9 @@ typedef struct loom_low_descriptor_t {
   uint16_t schedule_class_id;
   // Descriptor flags used by verifier, scheduler, and optimizer.
   loom_low_descriptor_flags_t flags;
+  // Unique canonical asm form ordinal for descriptor-driven text emission, or
+  // LOOM_LOW_ASM_FORM_ORDINAL_NONE when no unambiguous form exists.
+  uint32_t canonical_asm_form_ordinal;
 } loom_low_descriptor_t;
 
 typedef struct loom_low_descriptor_ref_t {
@@ -706,6 +709,13 @@ const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(
 // bounds.
 const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(
     const loom_low_descriptor_set_t* descriptor_set, uint32_t asm_form_ordinal);
+
+// Resolves the unique canonical asm form for |descriptor_ordinal|. Descriptors
+// with zero or multiple asm forms may intentionally have no canonical form and
+// return FAILED_PRECONDITION.
+iree_status_t loom_low_descriptor_set_lookup_canonical_asm_form(
+    const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t descriptor_ordinal, uint32_t* out_asm_form_ordinal);
 
 // Returns the stable diagnostic spelling for an operand role.
 iree_string_view_t loom_low_operand_role_name(loom_low_operand_role_t role);

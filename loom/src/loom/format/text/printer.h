@@ -82,6 +82,13 @@ iree_status_t loom_text_print_type(loom_type_t type,
                                    const loom_module_t* module,
                                    loom_output_stream_t* stream);
 
+// Prints a standalone attribute value in canonical form to the output stream.
+// Enum values print as raw numeric fallbacks because no operation field
+// descriptor is available at this boundary.
+iree_status_t loom_text_print_attribute(const loom_attribute_t* attr,
+                                        const loom_module_t* module,
+                                        loom_output_stream_t* stream);
+
 // Convenience: print module to an iree_string_builder_t.
 iree_status_t loom_text_print_module_to_builder(const loom_module_t* module,
                                                 iree_string_builder_t* builder,

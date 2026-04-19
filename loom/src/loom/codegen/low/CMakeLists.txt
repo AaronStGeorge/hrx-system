@@ -274,6 +274,26 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    packet_asm
+  HDRS
+    "packet_asm.h"
+  SRCS
+    "packet_asm.c"
+  DEPS
+    ::allocation
+    ::descriptors
+    ::packet
+    ::schedule
+    iree::base
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     packetization
   HDRS
     "packetization.h"
@@ -351,6 +371,25 @@ loom_cc_test(
     "packet_test.cc"
   DEPS
     ::packet
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    packet_asm_test
+  SRCS
+    "packet_asm_test.cc"
+  DEPS
+    ::packet_asm
+    ::packetization
+    ::verify
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )

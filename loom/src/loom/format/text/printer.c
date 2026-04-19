@@ -775,9 +775,9 @@ static iree_status_t loom_print_location(loom_output_stream_t* stream,
 // Attribute printing — writes directly to stream
 //===----------------------------------------------------------------------===//
 
-// Prints an attribute value. For enum attrs, |descriptor| provides the
-// case name table for human-readable output. Pass NULL when no
-// descriptor is available (the printer will return an error for enums).
+// Prints an attribute value. For enum attrs, |descriptor| provides the case
+// name table for human-readable output. Pass NULL when no descriptor is
+// available to print the raw enum value.
 static iree_status_t loom_print_attr(loom_output_stream_t* stream,
                                      const loom_attribute_t* attr,
                                      const loom_module_t* module,
@@ -896,6 +896,20 @@ static iree_status_t loom_print_attr(loom_output_stream_t* stream,
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown attribute kind %d", (int)attr->kind);
   }
+}
+
+iree_status_t loom_text_print_attribute(const loom_attribute_t* attr,
+                                        const loom_module_t* module,
+                                        loom_output_stream_t* stream) {
+  if (attr == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "attribute to print is required");
+  }
+  if (stream == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "attribute output stream is required");
+  }
+  return loom_print_attr(stream, attr, module, NULL);
 }
 
 //===----------------------------------------------------------------------===//

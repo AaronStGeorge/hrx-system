@@ -853,6 +853,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 3,
     },
     {
         .key_string_offset = WASM_CORE_SIMD128_STRING_descriptor_wasm_i32_add,
@@ -874,6 +875,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 2,
     },
     {
         .key_string_offset = WASM_CORE_SIMD128_STRING_descriptor_wasm_i32_sub,
@@ -895,6 +897,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 5,
     },
     {
         .key_string_offset = WASM_CORE_SIMD128_STRING_descriptor_wasm_i32_lt_u,
@@ -916,6 +919,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 4,
     },
     {
         .key_string_offset =
@@ -938,6 +942,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 10,
     },
     {
         .key_string_offset =
@@ -960,6 +965,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 8,
     },
     {
         .key_string_offset = WASM_CORE_SIMD128_STRING_descriptor_wasm_i32x4_add,
@@ -981,6 +987,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 6,
     },
     {
         .key_string_offset = WASM_CORE_SIMD128_STRING_descriptor_wasm_i32x4_mul,
@@ -1002,6 +1009,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 7,
     },
     {
         .key_string_offset = WASM_CORE_SIMD128_STRING_descriptor_wasm_v128_load,
@@ -1023,6 +1031,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 3,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = 11,
     },
     {
         .key_string_offset =
@@ -1045,6 +1054,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 4,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = 12,
     },
     {
         .key_string_offset = WASM_CORE_SIMD128_STRING_descriptor_wasm_br,
@@ -1065,6 +1075,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .schedule_class_id = 5,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING |
                  LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR,
+        .canonical_asm_form_ordinal = 0,
     },
     {
         .key_string_offset = WASM_CORE_SIMD128_STRING_descriptor_wasm_br_if_i32,
@@ -1087,6 +1098,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .schedule_class_id = 5,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING |
                  LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR,
+        .canonical_asm_form_ordinal = 1,
     },
     {
         .key_string_offset =
@@ -1110,6 +1122,7 @@ static const loom_low_descriptor_t kWasmCoreSimd128Descriptors[] = {
         .schedule_class_id = 5,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING |
                  LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR,
+        .canonical_asm_form_ordinal = 9,
     },
 };
 

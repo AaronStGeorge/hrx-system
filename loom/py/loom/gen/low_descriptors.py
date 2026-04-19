@@ -138,6 +138,7 @@ class _CompiledDescriptorSet:
     feature_mask_words: list[int]
     descriptor_rows: list[dict[str, int]]
     descriptor_refs: list[tuple[str, int]]
+    canonical_asm_form_ordinals: list[int | None]
     asm_forms: list[_CompiledAsmForm]
     asm_operand_indices: list[int]
     asm_immediates: list[_CompiledAsmImmediate]
@@ -214,6 +215,12 @@ def _hex_u64_literal(value: int) -> str:
 
 def _encoding_id_expr(value: int) -> str:
     return "LOOM_LOW_ID_NONE" if value == LOW_DESCRIPTOR_ENCODING_ID_NONE else str(value)
+
+
+def _canonical_asm_form_ordinal_expr(value: int | None) -> str:
+    if value is None:
+        return "LOOM_LOW_ASM_FORM_ORDINAL_NONE"
+    return str(value)
 
 
 def _hazard_reference_kind(hazard: Hazard) -> HazardReferenceKind:
@@ -599,6 +606,16 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
             string_pool.intern(f"immediate_{immediate.field_name}", immediate.field_name)
 
     asm_forms = _compile_asm_forms(string_pool, selected_descriptors)
+    canonical_asm_form_ordinals: list[int | None] = [None] * len(selected_descriptors)
+    asm_form_counts_by_descriptor = [0] * len(selected_descriptors)
+    for asm_form_ordinal, asm_form in enumerate(asm_forms):
+        descriptor_ordinal = asm_form.descriptor_ordinal
+        asm_form_counts_by_descriptor[descriptor_ordinal] += 1
+        canonical_asm_form_ordinals[descriptor_ordinal] = asm_form_ordinal
+    for descriptor_ordinal, form_count in enumerate(asm_form_counts_by_descriptor):
+        if form_count != 1:
+            canonical_asm_form_ordinals[descriptor_ordinal] = None
+
     asm_operand_indices: list[int] = []
     asm_immediates: list[_CompiledAsmImmediate] = []
     for asm_form in asm_forms:
@@ -732,6 +749,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         feature_mask_words=feature_mask_words,
         descriptor_rows=descriptor_rows,
         descriptor_refs=descriptor_refs,
+        canonical_asm_form_ordinals=canonical_asm_form_ordinals,
         asm_forms=asm_forms,
         asm_operand_indices=asm_operand_indices,
         asm_immediates=asm_immediates,
@@ -1096,6 +1114,7 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
                 f".constraint_count = {compiled.descriptor_rows[i]['constraint_count']},",
                 f".schedule_class_id = {compiled.schedule_class_ids[descriptor.schedule_class]},",
                 f".flags = {_flag_expr(descriptor.flags)},",
+                f".canonical_asm_form_ordinal = {_canonical_asm_form_ordinal_expr(compiled.canonical_asm_form_ordinals[i])},",
             ]
             for i, descriptor in enumerate(compiled.descriptors)
         ],

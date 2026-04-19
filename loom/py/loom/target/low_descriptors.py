@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 8
+LOW_DESCRIPTOR_SET_ABI_VERSION = 9
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 

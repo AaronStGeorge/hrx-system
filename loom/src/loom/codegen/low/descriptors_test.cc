@@ -199,6 +199,8 @@ void InitializeTestTables(TestTables* tables) {
   tables->descriptors[0].immediate_count = 1;
   tables->descriptors[0].schedule_class_id = 0;
   tables->descriptors[0].flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE;
+  tables->descriptors[0].canonical_asm_form_ordinal =
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE;
 
   tables->descriptors[1].key_string_offset = TEST_STRING_OFFSET(descriptor_add);
   tables->descriptors[1].mnemonic_string_offset =
@@ -212,6 +214,8 @@ void InitializeTestTables(TestTables* tables) {
   tables->descriptors[1].result_count = 1;
   tables->descriptors[1].schedule_class_id = 1;
   tables->descriptors[1].flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE;
+  tables->descriptors[1].canonical_asm_form_ordinal =
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE;
 
   tables->descriptor_refs[0].key_string_offset =
       TEST_STRING_OFFSET(descriptor_add);
@@ -292,6 +296,8 @@ void AddAsmForms(TestTables* tables) {
   tables->set.asm_operand_index_count =
       IREE_ARRAYSIZE(tables->asm_operand_indices);
   tables->set.asm_immediate_count = IREE_ARRAYSIZE(tables->asm_immediates);
+  tables->descriptors[0].canonical_asm_form_ordinal = 1;
+  tables->descriptors[1].canonical_asm_form_ordinal = 0;
 }
 
 void AddAddDescriptorConstraint(TestTables* tables,
@@ -553,6 +559,13 @@ TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(descriptor->operand_count, 3u);
   EXPECT_EQ(descriptor->result_count, 1u);
+
+  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  iree_status_t canonical_status =
+      loom_low_descriptor_set_lookup_canonical_asm_form(
+          &tables.set, descriptor_ordinal, &asm_form_ordinal);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, canonical_status);
+  EXPECT_EQ(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
 
   iree_status_t status = loom_low_descriptor_set_lookup_descriptor(
       &tables.set, IREE_SV("test.missing"), &descriptor_ordinal);
@@ -1117,6 +1130,15 @@ TEST(LowDescriptorsTest, AcceptsAsmFormsAndLookup) {
   EXPECT_EQ(asm_form->operand_index_count, 2u);
 
   asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_canonical_asm_form(
+      &tables.set, 1, &asm_form_ordinal));
+  EXPECT_EQ(asm_form_ordinal, 0u);
+  asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_canonical_asm_form(
+      &tables.set, 0, &asm_form_ordinal));
+  EXPECT_EQ(asm_form_ordinal, 1u);
+
+  asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
   iree_status_t status = loom_low_descriptor_set_lookup_asm_form(
       &tables.set, IREE_SV("missing"), &asm_form_ordinal);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
@@ -1140,6 +1162,16 @@ TEST(LowDescriptorsTest, RejectsDuplicateAsmFormMnemonics) {
   InitializeTestTables(&tables);
   AddAsmForms(&tables);
   tables.asm_forms[1].mnemonic_string_offset = TEST_STRING_OFFSET(mnemonic_add);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsMismatchedCanonicalAsmForm) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+  tables.descriptors[0].canonical_asm_form_ordinal = 0;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);

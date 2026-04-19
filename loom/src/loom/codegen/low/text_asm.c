@@ -166,24 +166,16 @@ static iree_status_t loom_low_descriptor_text_asm_lookup_packet_by_opcode(
                             "low descriptor ordinal is out of range");
   }
 
-  const loom_low_asm_form_t* selected_form = NULL;
-  uint32_t matching_form_count = 0;
-  for (uint32_t i = 0; i < descriptor_set->asm_form_count; ++i) {
-    const loom_low_asm_form_t* asm_form = &descriptor_set->asm_forms[i];
-    if (asm_form->descriptor_ordinal != descriptor_ordinal) continue;
-    selected_form = asm_form;
-    ++matching_form_count;
-  }
-  if (matching_form_count == 0) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "low descriptor '%.*s' has no asm form",
+  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_lookup_canonical_asm_form(
+      descriptor_set, descriptor_ordinal, &asm_form_ordinal));
+  const loom_low_asm_form_t* selected_form =
+      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
+  if (selected_form == NULL) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low descriptor '%.*s' canonical asm form ordinal "
+                            "is out of range",
                             (int)opcode.size, opcode.data);
-  }
-  if (matching_form_count > 1) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low descriptor '%.*s' has %" PRIu32
-                            " asm forms and no canonical print form",
-                            (int)opcode.size, opcode.data, matching_form_count);
   }
   return loom_low_descriptor_text_asm_make_packet(descriptor_set, selected_form,
                                                   descriptor, out_packet);

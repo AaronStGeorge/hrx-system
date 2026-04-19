@@ -789,6 +789,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 4,
     },
     {
         .key_string_offset =
@@ -811,6 +812,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 4,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -833,6 +835,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 5,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -855,6 +858,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 5,
     },
     {
         .key_string_offset =
@@ -877,6 +881,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 3,
     },
     {
         .key_string_offset = X86_AVX512_CORE_STRING_descriptor_x86_avx512_kandq,
@@ -898,6 +903,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 3,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 1,
     },
     {
         .key_string_offset =
@@ -920,6 +926,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 2,
     },
     {
         .key_string_offset = X86_AVX512_CORE_STRING_descriptor_x86_avx512_jmp,
@@ -942,6 +949,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .schedule_class_id = 6,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING |
                  LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR,
+        .canonical_asm_form_ordinal = 0,
     },
 };
 

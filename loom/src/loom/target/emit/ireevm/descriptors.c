@@ -617,6 +617,7 @@ static const loom_low_descriptor_t kIreeVmCoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 5,
     },
     {
         .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_add_i32,
@@ -637,6 +638,7 @@ static const loom_low_descriptor_t kIreeVmCoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 0,
     },
     {
         .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_sub_i32,
@@ -657,6 +659,7 @@ static const loom_low_descriptor_t kIreeVmCoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 8,
     },
     {
         .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_cmp_eq_i32,
@@ -678,6 +681,7 @@ static const loom_low_descriptor_t kIreeVmCoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 3,
     },
     {
         .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_br,
@@ -698,6 +702,7 @@ static const loom_low_descriptor_t kIreeVmCoreDescriptors[] = {
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING |
                  LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR,
+        .canonical_asm_form_ordinal = 1,
     },
     {
         .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_cond_br_i32,
@@ -720,6 +725,7 @@ static const loom_low_descriptor_t kIreeVmCoreDescriptors[] = {
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING |
                  LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR,
+        .canonical_asm_form_ordinal = 4,
     },
     {
         .key_string_offset =
@@ -742,6 +748,7 @@ static const loom_low_descriptor_t kIreeVmCoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 3,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+        .canonical_asm_form_ordinal = 2,
     },
     {
         .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_return_i32,
@@ -764,6 +771,7 @@ static const loom_low_descriptor_t kIreeVmCoreDescriptors[] = {
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING |
                  LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR,
+        .canonical_asm_form_ordinal = 6,
     },
     {
         .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_return_void,
@@ -786,6 +794,7 @@ static const loom_low_descriptor_t kIreeVmCoreDescriptors[] = {
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING |
                  LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR,
+        .canonical_asm_form_ordinal = 7,
     },
 };
 

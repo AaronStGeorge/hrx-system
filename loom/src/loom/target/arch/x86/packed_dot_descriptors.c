@@ -3661,6 +3661,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3683,6 +3684,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3705,6 +3707,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3727,6 +3730,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3749,6 +3753,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3771,6 +3776,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3793,6 +3799,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3815,6 +3822,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3837,6 +3845,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3859,6 +3868,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3881,6 +3891,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3903,6 +3914,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3925,6 +3937,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3947,6 +3960,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3969,6 +3983,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -3991,6 +4006,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4013,6 +4029,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4035,6 +4052,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4057,6 +4075,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4079,6 +4098,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4101,6 +4121,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4123,6 +4144,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4145,6 +4167,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4167,6 +4190,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4189,6 +4213,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4211,6 +4236,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4233,6 +4259,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4255,6 +4282,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4277,6 +4305,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4299,6 +4328,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4321,6 +4351,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4343,6 +4374,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4365,6 +4397,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4387,6 +4420,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4409,6 +4443,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4431,6 +4466,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4453,6 +4489,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4475,6 +4512,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4497,6 +4535,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4519,6 +4558,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4541,6 +4581,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4563,6 +4604,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4585,6 +4627,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4607,6 +4650,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4629,6 +4673,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4651,6 +4696,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4673,6 +4719,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4695,6 +4742,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4717,6 +4765,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4739,6 +4788,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4761,6 +4811,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 0,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4783,6 +4834,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
     {
         .key_string_offset =
@@ -4805,6 +4857,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .constraint_count = 2,
         .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE,
     },
 };
 
