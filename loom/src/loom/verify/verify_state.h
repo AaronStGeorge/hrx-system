@@ -4,16 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef LOOM_VERIFY_VERIFY_INTERNAL_H_
-#define LOOM_VERIFY_VERIFY_INTERNAL_H_
-
-#include <stdlib.h>
-#include <string.h>
+#ifndef LOOM_VERIFY_VERIFY_STATE_H_
+#define LOOM_VERIFY_VERIFY_STATE_H_
 
 #include "iree/base/internal/arena.h"
-#include "iree/base/internal/unicode.h"
-#include "loom/error/emitter.h"
-#include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
@@ -192,80 +186,4 @@ iree_string_view_t loom_verify_value_field_name(const loom_op_vtable_t* vtable,
                                                 char* buffer,
                                                 iree_host_size_t buffer_size);
 
-loom_diagnostic_field_ref_t loom_verify_diagnostic_field_ref(
-    uint8_t field_ref, uint16_t element_offset);
-loom_diagnostic_param_t loom_verify_param_string_for_diagnostic_field(
-    iree_string_view_t value, loom_diagnostic_field_kind_t field_kind,
-    uint16_t field_index);
-loom_diagnostic_param_t loom_verify_param_string_for_field(
-    iree_string_view_t value, uint8_t field_ref);
-loom_diagnostic_param_t loom_verify_param_string_for_indexed_field(
-    iree_string_view_t value, uint8_t field_ref, uint16_t element_offset);
-
-void loom_verify_emit_diagnostic(loom_verify_state_t* state,
-                                 const loom_diagnostic_emission_t* emission);
-void loom_verify_emit_structured(loom_verify_state_t* state,
-                                 const loom_op_t* op,
-                                 const loom_error_def_t* error,
-                                 const loom_diagnostic_param_t* params,
-                                 iree_host_size_t param_count);
-iree_status_t loom_verify_diagnostic_emitter_fn(
-    void* user_data, const loom_diagnostic_emission_t* emission);
-
-void loom_verify_op_declared_trait_consistency(loom_verify_state_t* state,
-                                               const loom_op_t* op,
-                                               const loom_op_vtable_t* vtable);
-void loom_verify_op_effective_trait_consistency(loom_verify_state_t* state,
-                                                const loom_op_t* op,
-                                                const loom_op_vtable_t* vtable);
-void loom_verify_func_purity_body_effects(loom_verify_state_t* state,
-                                          const loom_op_t* op,
-                                          const loom_op_vtable_t* vtable);
-void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
-                              const loom_op_vtable_t* vtable);
-void loom_verify_successor_targets(loom_verify_state_t* state,
-                                   const loom_op_t* op,
-                                   const loom_op_vtable_t* vtable);
-void loom_verify_type_constraints(loom_verify_state_t* state,
-                                  const loom_op_t* op,
-                                  const loom_op_vtable_t* vtable);
-void loom_verify_operand_dicts(loom_verify_state_t* state, const loom_op_t* op,
-                               const loom_op_vtable_t* vtable);
-void loom_verify_semantic_constraints(loom_verify_state_t* state,
-                                      const loom_op_t* op,
-                                      const loom_op_vtable_t* vtable);
-void loom_verify_operand_dominance(loom_verify_state_t* state,
-                                   const loom_op_t* op,
-                                   const loom_op_vtable_t* vtable);
-void loom_verify_poison_boundaries(loom_verify_state_t* state,
-                                   const loom_op_t* op,
-                                   const loom_op_vtable_t* vtable);
-void loom_verify_op_type_well_formedness(loom_verify_state_t* state,
-                                         const loom_op_t* op,
-                                         const loom_op_vtable_t* vtable);
-void loom_verify_block_arg_type_well_formedness(loom_verify_state_t* state,
-                                                const loom_block_t* block);
-void loom_verify_encoding_refs(loom_verify_state_t* state, const loom_op_t* op,
-                               const loom_op_vtable_t* vtable);
-void loom_verify_block_arg_encoding_refs(loom_verify_state_t* state,
-                                         const loom_block_t* block);
-iree_status_t loom_verify_tied_results(loom_verify_state_t* state,
-                                       const loom_op_t* op,
-                                       const loom_op_vtable_t* vtable);
-iree_status_t loom_verify_symbol_definition(loom_verify_state_t* state,
-                                            const loom_op_t* op,
-                                            const loom_op_vtable_t* vtable);
-void loom_verify_symbol_references(loom_verify_state_t* state,
-                                   const loom_op_t* op,
-                                   const loom_op_vtable_t* vtable);
-bool loom_verify_region_entry_yield(loom_verify_state_t* state,
-                                    const loom_op_t* op,
-                                    const loom_op_vtable_t* vtable,
-                                    uint8_t region_index,
-                                    uint16_t* out_yield_count,
-                                    const loom_value_id_t** out_yield_operands);
-void loom_verify_region_structure(loom_verify_state_t* state,
-                                  const loom_op_t* op,
-                                  const loom_op_vtable_t* vtable);
-
-#endif  // LOOM_VERIFY_VERIFY_INTERNAL_H_
+#endif  // LOOM_VERIFY_VERIFY_STATE_H_

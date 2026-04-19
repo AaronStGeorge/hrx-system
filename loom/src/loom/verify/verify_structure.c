@@ -4,7 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/verify/verify_internal.h"
+#include "loom/verify/verify_structure.h"
+
+#include "loom/verify/verify_diagnostics.h"
 
 static void loom_verify_emit_symbol_definition_diagnostic(
     loom_verify_state_t* state, const loom_op_t* op, loom_symbol_ref_t ref,

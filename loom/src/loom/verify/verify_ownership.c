@@ -4,7 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/verify/verify_internal.h"
+#include "loom/verify/verify_ownership.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#include "loom/verify/verify_diagnostics.h"
 
 static int loom_compare_value_ids(const void* lhs, const void* rhs) {
   loom_value_id_t lhs_id = *(const loom_value_id_t*)lhs;

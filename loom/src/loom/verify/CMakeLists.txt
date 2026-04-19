@@ -15,7 +15,11 @@ loom_cc_library(
     verify
   HDRS
     "verify.h"
-    "verify_internal.h"
+    "verify_constraints.h"
+    "verify_diagnostics.h"
+    "verify_ownership.h"
+    "verify_state.h"
+    "verify_structure.h"
   SRCS
     "verify.c"
     "verify_constraints.c"

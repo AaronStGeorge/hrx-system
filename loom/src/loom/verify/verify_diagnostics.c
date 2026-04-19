@@ -4,7 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/verify/verify_internal.h"
+#include "loom/verify/verify_diagnostics.h"
+
+#include "loom/format/text/printer.h"
 
 static bool loom_verify_resolve_location_id(const loom_verify_state_t* state,
                                             loom_location_id_t location,

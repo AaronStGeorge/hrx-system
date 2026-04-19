@@ -4,7 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/verify/verify_internal.h"
+#include "loom/verify/verify_constraints.h"
+
+#include <string.h>
+
+#include "loom/verify/verify_diagnostics.h"
+#include "loom/verify/verify_structure.h"
 
 static bool loom_constraint_property_equals(
     loom_type_t a, loom_type_t b, loom_constraint_property_t property) {
