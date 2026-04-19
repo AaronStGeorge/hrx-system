@@ -12,6 +12,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/pass/ops.h"
+#include "loom/pass/report.h"
 
 typedef struct loom_pass_interpreter_epoch_t {
   // Number of module symbols at the observation point.
@@ -186,7 +187,8 @@ static iree_status_t loom_pass_interpreter_emit_failure_diagnostic(
 static iree_status_t loom_pass_interpreter_invoke_module(
     loom_pass_interpreter_state_t* state,
     const loom_pass_program_instruction_t* instruction, loom_pass_t* pass,
-    bool* out_changed) {
+    bool* out_invocation_changed) {
+  *out_invocation_changed = false;
   const loom_pass_program_invoke_t* invoke = &instruction->invoke;
   if (!invoke->module_run) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -197,9 +199,10 @@ static iree_status_t loom_pass_interpreter_invoke_module(
   iree_status_t status = invoke->module_run(pass, state->module);
   loom_pass_interpreter_epoch_t after =
       loom_pass_interpreter_epoch(state->module);
+  *out_invocation_changed =
+      pass->changed || loom_pass_interpreter_epoch_changed(before, after);
   if (iree_status_is_ok(status)) {
-    *out_changed |= pass->changed;
-    *out_changed |= loom_pass_interpreter_epoch_changed(before, after);
+    return iree_ok_status();
   }
   return status;
 }
@@ -208,7 +211,8 @@ static iree_status_t loom_pass_interpreter_invoke_function(
     loom_pass_interpreter_state_t* state,
     const loom_pass_interpreter_frame_t* frame,
     const loom_pass_program_instruction_t* instruction, loom_pass_t* pass,
-    bool* out_changed) {
+    bool* out_invocation_changed) {
+  *out_invocation_changed = false;
   const loom_pass_program_invoke_t* invoke = &instruction->invoke;
   if (!invoke->function_run) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -234,9 +238,10 @@ static iree_status_t loom_pass_interpreter_invoke_function(
 
   pass->arena = pass->instance_arena;
   iree_arena_deinitialize(&function_arena);
+  *out_invocation_changed =
+      pass->changed || loom_pass_interpreter_epoch_changed(before, after);
   if (iree_status_is_ok(status)) {
-    *out_changed |= pass->changed;
-    *out_changed |= loom_pass_interpreter_epoch_changed(before, after);
+    return iree_ok_status();
   }
   return status;
 }
@@ -249,8 +254,13 @@ static iree_status_t loom_pass_interpreter_execute_range(
 static iree_status_t loom_pass_interpreter_invoke(
     loom_pass_interpreter_state_t* state,
     const loom_pass_interpreter_frame_t* frame,
-    const loom_pass_program_instruction_t* instruction, bool* out_changed) {
+    const loom_pass_program_instruction_t* instruction,
+    iree_host_size_t instruction_index, bool* out_changed) {
   const loom_pass_program_invoke_t* invoke = &instruction->invoke;
+  iree_time_t start_time = 0;
+  if (state->options->report) {
+    start_time = iree_time_now();
+  }
   iree_arena_allocator_t instance_arena;
   iree_arena_initialize(state->options->block_pool, &instance_arena);
 
@@ -264,36 +274,62 @@ static iree_status_t loom_pass_interpreter_invoke(
     created = iree_status_is_ok(status);
   }
 
+  bool invocation_changed = false;
   if (iree_status_is_ok(status)) {
     if (invoke->info->kind == LOOM_PASS_MODULE) {
       status = loom_pass_interpreter_invoke_module(state, instruction, &pass,
-                                                   out_changed);
+                                                   &invocation_changed);
     } else if (invoke->info->kind == LOOM_PASS_FUNCTION) {
-      status = loom_pass_interpreter_invoke_function(state, frame, instruction,
-                                                     &pass, out_changed);
+      status = loom_pass_interpreter_invoke_function(
+          state, frame, instruction, &pass, &invocation_changed);
     } else {
       status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "unsupported pass kind");
     }
   }
+  if (iree_status_is_ok(status)) {
+    *out_changed |= invocation_changed;
+  }
 
   if (created && invoke->descriptor->destroy) {
     invoke->descriptor->destroy(&pass);
   }
+
+  iree_status_t pass_status = status;
+  iree_status_t report_status = iree_ok_status();
+  if (state->options->report) {
+    iree_duration_t duration_nanoseconds = iree_time_now() - start_time;
+    report_status = loom_pass_report_append_invocation(
+        state->options->report,
+        &(loom_pass_report_invocation_options_t){
+            .instruction = instruction,
+            .instruction_index = instruction_index,
+            .anchor_kind = frame->kind,
+            .pipeline_symbol =
+                loom_pass_interpreter_pipeline_name(state, instruction),
+            .symbol_name = loom_pass_interpreter_symbol_name(state, frame),
+            .duration_nanoseconds = duration_nanoseconds,
+            .changed = invocation_changed,
+            .status_code = iree_status_code(pass_status),
+            .statistics = pass.statistics,
+        });
+  }
+
   iree_arena_deinitialize(&instance_arena);
-  if (!iree_status_is_ok(status)) {
-    status =
-        iree_status_join(status, loom_pass_interpreter_emit_failure_diagnostic(
-                                     state, frame, instruction));
+  if (!iree_status_is_ok(pass_status)) {
+    pass_status = iree_status_join(
+        pass_status, loom_pass_interpreter_emit_failure_diagnostic(
+                         state, frame, instruction));
+    pass_status = iree_status_join(pass_status, report_status);
     iree_string_view_t symbol_name =
         loom_pass_interpreter_symbol_name(state, frame);
     return iree_status_annotate_f(
-        status, "while executing pass '%.*s' at %s anchor on @%.*s",
+        pass_status, "while executing pass '%.*s' at %s anchor on @%.*s",
         (int)invoke->descriptor->key.size, invoke->descriptor->key.data,
         loom_pass_interpreter_anchor_name(frame->kind), (int)symbol_name.size,
         symbol_name.data);
   }
-  return iree_ok_status();
+  return report_status;
 }
 
 static iree_status_t loom_pass_interpreter_build_function_snapshot(
@@ -488,7 +524,7 @@ static iree_status_t loom_pass_interpreter_execute_range(
     switch (instruction->kind) {
       case LOOM_PASS_PROGRAM_INSTRUCTION_INVOKE: {
         IREE_RETURN_IF_ERROR(loom_pass_interpreter_invoke(
-            state, frame, instruction, out_changed));
+            state, frame, instruction, pc, out_changed));
         break;
       }
       case LOOM_PASS_PROGRAM_INSTRUCTION_FOR_EACH_SYMBOL: {

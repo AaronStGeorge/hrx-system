@@ -24,6 +24,7 @@ extern "C" {
 #endif
 
 typedef struct loom_pass_interpreter_t loom_pass_interpreter_t;
+typedef struct loom_pass_report_t loom_pass_report_t;
 
 // Supplies optional pass instance user data for one INVOKE instruction.
 typedef iree_status_t (*loom_pass_interpreter_configure_fn_t)(
@@ -44,6 +45,8 @@ typedef struct loom_pass_interpreter_options_t {
   iree_diagnostic_emitter_t diagnostic_emitter;
   // Optional user-data callback for pass instances.
   loom_pass_interpreter_configure_callback_t configure;
+  // Optional caller-owned execution report appended as passes run.
+  loom_pass_report_t* report;
 } loom_pass_interpreter_options_t;
 
 // Executes a module-root compiled pass program.

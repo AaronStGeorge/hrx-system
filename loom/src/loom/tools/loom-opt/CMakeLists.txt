@@ -30,6 +30,7 @@ loom_cc_binary(
     loom::src::loom::ops::op_registry
     loom::src::loom::pass::builtin_registry
     loom::src::loom::pass::registry
+    loom::src::loom::pass::report
     loom::src::loom::pass::tooling
     loom::src::loom::target::all::low_registry
     loom::src::loom::target::presets

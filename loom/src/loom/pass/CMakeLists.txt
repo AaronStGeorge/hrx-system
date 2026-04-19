@@ -107,6 +107,23 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    report
+  HDRS
+    "report.h"
+  SRCS
+    "report.c"
+  DEPS
+    ::manager
+    ::program
+    ::registry
+    iree::base
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     interpreter
   HDRS
     "interpreter.h"
@@ -114,6 +131,7 @@ loom_cc_library(
     "interpreter.c"
   DEPS
     ::program
+    ::report
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::error_defs
@@ -227,6 +245,7 @@ loom_cc_test(
   DEPS
     ::interpreter
     ::program
+    ::report
     iree::base
     loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser

@@ -24,6 +24,7 @@
 #include "loom/ops/op_registry.h"
 #include "loom/pass/builtin_registry.h"
 #include "loom/pass/registry.h"
+#include "loom/pass/report.h"
 #include "loom/pass/tooling.h"
 #include "loom/target/all/low_registry.h"
 #include "loom/target/presets.h"
@@ -40,8 +41,15 @@ IREE_FLAG(bool, verify, true,
           "Verify the module before and after executing passes.");
 IREE_FLAG(bool, list_passes, false, "Print registered passes and exit.");
 IREE_FLAG(string, pass_help, "", "Print detailed help for one pass and exit.");
+IREE_FLAG(string, pass_report, "",
+          "Pass execution report format. Use 'json' or empty/'none'.");
 IREE_FLAG(string, low_asm_descriptor_set, "",
           "Descriptor-set key used when printing low asm regions.");
+
+typedef enum loom_opt_pass_report_mode_e {
+  LOOM_OPT_PASS_REPORT_NONE = 0,
+  LOOM_OPT_PASS_REPORT_JSON = 1,
+} loom_opt_pass_report_mode_t;
 
 typedef struct loom_opt_pass_pipeline_config_t {
   // Low allocation pass configuration borrowed by matching pipeline entries.
@@ -66,6 +74,23 @@ static const char* loom_opt_pass_kind_name(loom_pass_kind_t kind) {
     default:
       return "unknown";
   }
+}
+
+static iree_status_t loom_opt_parse_pass_report_mode(
+    iree_string_view_t value, loom_opt_pass_report_mode_t* out_mode) {
+  value = iree_string_view_trim(value);
+  if (iree_string_view_is_empty(value) ||
+      iree_string_view_equal(value, IREE_SV("none"))) {
+    *out_mode = LOOM_OPT_PASS_REPORT_NONE;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("json"))) {
+    *out_mode = LOOM_OPT_PASS_REPORT_JSON;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unsupported --pass-report mode '%.*s'",
+                          (int)value.size, value.data);
 }
 
 static iree_status_t loom_opt_read_input(
@@ -307,7 +332,9 @@ static iree_status_t loom_opt_run_passes(
     iree_string_view_t filename, iree_string_view_t source,
     const loom_target_low_descriptor_registry_t* low_registry,
     iree_arena_block_pool_t* block_pool, loom_module_t* module,
+    loom_pass_report_t* report, bool* out_execution_started,
     iree_allocator_t allocator) {
+  *out_execution_started = false;
   iree_flag_string_list_t passes = FLAG_pass_list();
   iree_string_view_t pipeline_symbol =
       iree_string_view_trim(iree_make_cstring_view(FLAG_pipeline));
@@ -343,6 +370,7 @@ static iree_status_t loom_opt_run_passes(
       .block_pool = block_pool,
       .diagnostic_emitter = {.fn = loom_opt_diagnostic_emitter_emit,
                              .user_data = &pass_emitter},
+      .report = report,
       .configure =
           {
               .fn = loom_opt_configure_pass_instruction,
@@ -351,6 +379,7 @@ static iree_status_t loom_opt_run_passes(
   };
 
   if (has_pipeline_symbol) {
+    *out_execution_started = true;
     return loom_pass_tool_run_pipeline_symbol(module, pipeline_symbol,
                                               &run_options);
   }
@@ -359,11 +388,32 @@ static iree_status_t loom_opt_run_passes(
   iree_string_builder_initialize(allocator, &pipeline_builder);
   iree_status_t status = loom_opt_join_pass_list(passes, &pipeline_builder);
   if (iree_status_is_ok(status)) {
+    *out_execution_started = true;
     status = loom_pass_tool_run_flat_pipeline(
         module, iree_string_builder_view(&pipeline_builder), &run_options);
   }
   iree_string_builder_deinitialize(&pipeline_builder);
   return status;
+}
+
+static iree_status_t loom_opt_write_pass_report(
+    loom_opt_pass_report_mode_t mode, const loom_pass_report_t* report) {
+  switch (mode) {
+    case LOOM_OPT_PASS_REPORT_NONE:
+      return iree_ok_status();
+    case LOOM_OPT_PASS_REPORT_JSON: {
+      loom_output_stream_t stream;
+      loom_output_stream_for_file(stderr, &stream);
+      IREE_RETURN_IF_ERROR(loom_pass_report_format_json(report, &stream));
+      return fflush(stderr) == 0
+                 ? iree_ok_status()
+                 : iree_make_status(IREE_STATUS_DATA_LOSS,
+                                    "failed to flush pass report");
+    }
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unsupported pass report mode");
+  }
 }
 
 static iree_status_t loom_opt_print_module(
@@ -518,7 +568,9 @@ int main(int argc, char** argv) {
       "Use --pipeline to execute a named pass.pipeline symbol from the input "
       "module, or\n"
       "repeat --pass for a shallow command-line pipeline backed by the C pass "
-      "registry.\n");
+      "registry.\n"
+      "Use --pass-report=json to print a structured execution report to "
+      "stderr.\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
@@ -532,9 +584,14 @@ int main(int argc, char** argv) {
   loom_target_low_descriptor_registry_t low_registry = {0};
   const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
   iree_string_view_t source = iree_string_view_empty();
+  loom_opt_pass_report_mode_t pass_report_mode = LOOM_OPT_PASS_REPORT_NONE;
+  loom_pass_report_t pass_report = {0};
+  bool pass_report_initialized = false;
+  bool pass_execution_started = false;
 
-  iree_status_t status = iree_ok_status();
-  if (FLAG_list_passes) {
+  iree_status_t status = loom_opt_parse_pass_report_mode(
+      iree_make_cstring_view(FLAG_pass_report), &pass_report_mode);
+  if (iree_status_is_ok(status) && FLAG_list_passes) {
     status = loom_opt_print_pass_list(pass_registry);
   }
   iree_string_view_t pass_help =
@@ -557,6 +614,11 @@ int main(int argc, char** argv) {
     loom_all_low_descriptor_registry_initialize(&low_registry);
     status = loom_op_registry_initialize_context(allocator, &context);
     context_initialized = iree_status_is_ok(status);
+  }
+  if (iree_status_is_ok(status) && !metadata_only &&
+      pass_report_mode != LOOM_OPT_PASS_REPORT_NONE) {
+    loom_pass_report_initialize(allocator, &pass_report);
+    pass_report_initialized = true;
   }
 
   iree_string_view_t input_path =
@@ -585,7 +647,14 @@ int main(int argc, char** argv) {
   }
   if (iree_status_is_ok(status) && !metadata_only) {
     status = loom_opt_run_passes(filename, source, &low_registry, &block_pool,
-                                 module, allocator);
+                                 module,
+                                 pass_report_initialized ? &pass_report : NULL,
+                                 &pass_execution_started, allocator);
+  }
+  if (!metadata_only && pass_report_initialized && pass_execution_started) {
+    iree_status_t report_status =
+        loom_opt_write_pass_report(pass_report_mode, &pass_report);
+    status = iree_status_join(status, report_status);
   }
   if (iree_status_is_ok(status) && !metadata_only && FLAG_verify) {
     status = loom_opt_verify_module(filename, source, &low_registry, module);
@@ -601,6 +670,9 @@ int main(int argc, char** argv) {
     iree_status_ignore(status);
   }
 
+  if (pass_report_initialized) {
+    loom_pass_report_deinitialize(&pass_report);
+  }
   loom_module_free(module);
   iree_io_file_contents_free(contents);
   if (context_initialized) {

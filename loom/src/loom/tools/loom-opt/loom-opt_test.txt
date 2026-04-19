@@ -61,6 +61,24 @@
 // PASS-LIST: func.return %x : i32
 
 // RUN: printf '%%s\n' \
+// RUN:   'func.def @dce_report(%x: i32) -> (i32) {' \
+// RUN:   '  %dead = scalar.constant 42 : i32' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   | loom-opt --pass=dce --pass-report=json --output=%t.reported.loom 2>&1 \
+// RUN:   | FileCheck --check-prefix=REPORT %s
+// REPORT: "pass":"dce"
+// REPORT: "kind":"func"
+// REPORT: "anchor":"func"
+// REPORT: "pipeline":"__command_line"
+// REPORT: "symbol":"dce_report"
+// REPORT: "instruction_index":{{[0-9]+}}
+// REPORT: "duration_ns":{{[0-9]+}}
+// REPORT: "changed":true
+// REPORT: "status":"OK"
+// REPORT: "statistics":{"ops-eliminated":1}
+
+// RUN: printf '%%s\n' \
 // RUN:   'pass.pipeline<module> @cleanup pipeline {' \
 // RUN:   '  for func {' \
 // RUN:   '    dce' \

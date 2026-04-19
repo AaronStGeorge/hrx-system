@@ -32,6 +32,7 @@ static iree_status_t loom_pass_tool_run_program(
       .block_pool = options->block_pool,
       .diagnostic_emitter = options->diagnostic_emitter,
       .configure = options->configure,
+      .report = options->report,
   };
   if (program->root_kind == LOOM_PASS_MODULE) {
     return loom_pass_interpreter_run_module(program, module,

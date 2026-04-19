@@ -16,6 +16,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/pass/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/pass/report.h"
 #include "loom/pass/test/registry.h"
 
 namespace loom {
@@ -26,6 +27,17 @@ class ProgramStorage {
   ~ProgramStorage() { loom_pass_program_deinitialize(&program); }
 
   loom_pass_program_t program = {};
+};
+
+class ReportStorage {
+ public:
+  ReportStorage() {
+    loom_pass_report_initialize(iree_allocator_system(), &report);
+  }
+
+  ~ReportStorage() { loom_pass_report_deinitialize(&report); }
+
+  loom_pass_report_t report = {};
 };
 
 struct DiagnosticCapture {
@@ -130,7 +142,8 @@ class PassInterpreterTest : public ::testing::Test {
 
   loom_pass_interpreter_options_t InterpreterOptions(
       loom_test_pass_trace_t* trace,
-      iree_diagnostic_emitter_t diagnostic_emitter = {}) {
+      iree_diagnostic_emitter_t diagnostic_emitter = {},
+      loom_pass_report_t* report = nullptr) {
     return (loom_pass_interpreter_options_t){
         .block_pool = &block_pool_,
         .diagnostic_emitter = diagnostic_emitter,
@@ -139,6 +152,7 @@ class PassInterpreterTest : public ::testing::Test {
                 .fn = ConfigureTrace,
                 .user_data = trace,
             },
+        .report = report,
     };
   }
 
@@ -197,6 +211,64 @@ TEST_F(PassInterpreterTest, RunsFunctionRootProgram) {
       &storage.program, module, Function(module, 1), &options));
 
   EXPECT_EQ(trace.noop_invocation_count, 1);
+}
+
+TEST_F(PassInterpreterTest, AppendsExecutionReportRecords) {
+  loom_module_t* module =
+      Parse(IREE_SV("pass.pipeline<module> @pipeline pipeline {\n"
+                    "  test.module-noop\n"
+                    "  for func {\n"
+                    "    test.mark-changed\n"
+                    "  }\n"
+                    "}\n"
+                    "test.func @main() {\n"
+                    "  test.yield\n"
+                    "}\n"));
+  ASSERT_NE(module, nullptr);
+
+  ProgramStorage storage;
+  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
+
+  ReportStorage report_storage;
+  loom_test_pass_trace_t trace = {};
+  loom_pass_interpreter_options_t options =
+      InterpreterOptions(&trace, {}, &report_storage.report);
+  IREE_ASSERT_OK(
+      loom_pass_interpreter_run_module(&storage.program, module, &options));
+
+  ASSERT_EQ(report_storage.report.invocation_count, 2u);
+  const loom_pass_report_invocation_t& module_record =
+      report_storage.report.invocations[0];
+  EXPECT_TRUE(iree_string_view_equal(module_record.pass_key,
+                                     IREE_SV("test.module-noop")));
+  EXPECT_TRUE(iree_string_view_equal(module_record.pipeline_symbol,
+                                     IREE_SV("pipeline")));
+  EXPECT_TRUE(
+      iree_string_view_equal(module_record.symbol_name, IREE_SV("<none>")));
+  EXPECT_EQ(module_record.anchor_kind, LOOM_PASS_MODULE);
+  EXPECT_FALSE(module_record.changed);
+  EXPECT_GE(module_record.duration_nanoseconds, 0);
+  ASSERT_EQ(module_record.statistic_count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(module_record.statistics[0].name,
+                                     IREE_SV("invocations")));
+  EXPECT_EQ(module_record.statistics[0].value, 1);
+
+  const loom_pass_report_invocation_t& function_record =
+      report_storage.report.invocations[1];
+  EXPECT_TRUE(iree_string_view_equal(function_record.pass_key,
+                                     IREE_SV("test.mark-changed")));
+  EXPECT_TRUE(
+      iree_string_view_equal(function_record.symbol_name, IREE_SV("main")));
+  EXPECT_EQ(function_record.anchor_kind, LOOM_PASS_FUNCTION);
+  EXPECT_TRUE(function_record.changed);
+  EXPECT_GE(function_record.duration_nanoseconds, 0);
+  ASSERT_EQ(function_record.statistic_count, 2u);
+  EXPECT_TRUE(iree_string_view_equal(function_record.statistics[0].name,
+                                     IREE_SV("invocations")));
+  EXPECT_EQ(function_record.statistics[0].value, 1);
+  EXPECT_TRUE(iree_string_view_equal(function_record.statistics[1].name,
+                                     IREE_SV("synthetic-events")));
+  EXPECT_EQ(function_record.statistics[1].value, 1);
 }
 
 TEST_F(PassInterpreterTest, AppliesNamePredicateToCurrentFunction) {

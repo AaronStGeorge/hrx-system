@@ -92,11 +92,26 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "report",
+    srcs = ["report.c"],
+    hdrs = ["report.h"],
+    deps = [
+        ":manager",
+        ":program",
+        ":registry",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "interpreter",
     srcs = ["interpreter.c"],
     hdrs = ["interpreter.h"],
     deps = [
         ":program",
+        ":report",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
@@ -199,6 +214,7 @@ loom_cc_test(
     deps = [
         ":interpreter",
         ":program",
+        ":report",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
