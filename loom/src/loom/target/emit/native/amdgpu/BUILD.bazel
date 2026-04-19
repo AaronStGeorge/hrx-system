@@ -201,7 +201,9 @@ loom_cc_test(
     srcs = ["metadata_test.cc"],
     deps = [
         ":metadata",
+        "//loom/src/loom/target/emit/native:elf",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_assert_no_dependency",
     "loom_cc_library",
+    "loom_cc_test",
 )
 
 package(
@@ -50,6 +51,42 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/emit/native:assembly",
 )
 
+iree_assert_no_dependency(
+    name = "elf_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/native:elf",
+)
+
+iree_assert_no_dependency(
+    name = "elf_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/emit/native:elf",
+)
+
+iree_assert_no_dependency(
+    name = "elf_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/native:elf",
+)
+
+iree_assert_no_dependency(
+    name = "elf_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/emit/native:elf",
+)
+
+iree_assert_no_dependency(
+    name = "elf_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/native:elf",
+)
+
+iree_assert_no_dependency(
+    name = "elf_no_hal_amdgpu_dep",
+    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
+    target = "//loom/src/loom/target/emit/native:elf",
+)
+
 #===------------------------------------------------------------------------===#
 # Native assembly fragments
 #===------------------------------------------------------------------------===#
@@ -63,5 +100,27 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "elf",
+    srcs = ["elf.c"],
+    hdrs = ["elf.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/io:stream",
+    ],
+)
+
+loom_cc_test(
+    name = "elf_test",
+    srcs = ["elf_test.cc"],
+    deps = [
+        ":elf",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )

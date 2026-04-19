@@ -6,10 +6,13 @@
 
 #include "loom/target/emit/native/amdgpu/metadata.h"
 
+#include <memory>
 #include <string>
 
+#include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/emit/native/elf.h"
 
 namespace loom {
 namespace {
@@ -23,11 +26,45 @@ bool Contains(const std::string& value, const char* substring) {
   return value.find(substring) != std::string::npos;
 }
 
+using StreamPtr =
+    std::unique_ptr<iree_io_stream_t, void (*)(iree_io_stream_t*)>;
+
+StreamPtr CreateStream() {
+  iree_io_stream_t* stream = nullptr;
+  IREE_CHECK_OK(iree_io_vec_stream_create(
+      IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_WRITABLE |
+          IREE_IO_STREAM_MODE_SEEKABLE | IREE_IO_STREAM_MODE_RESIZABLE,
+      1024, iree_allocator_system(), &stream));
+  return StreamPtr(stream, iree_io_stream_release);
+}
+
+std::string StreamBytes(iree_io_stream_t* stream) {
+  const iree_io_stream_pos_t length = iree_io_stream_length(stream);
+  IREE_ASSERT_GE(length, 0);
+  std::string bytes((size_t)length, '\0');
+  IREE_CHECK_OK(iree_io_stream_seek(stream, IREE_IO_STREAM_SEEK_SET, 0));
+  IREE_CHECK_OK(iree_io_stream_read(stream, bytes.size(), bytes.data(), NULL));
+  return bytes;
+}
+
+uint16_t LoadLeU16(const std::string& bytes, size_t offset) {
+  return (uint16_t)(uint8_t)bytes[offset + 0] |
+         ((uint16_t)(uint8_t)bytes[offset + 1] << 8);
+}
+
 uint32_t LoadLeU32(const std::string& bytes, size_t offset) {
   return ((uint32_t)(uint8_t)bytes[offset + 0]) |
          ((uint32_t)(uint8_t)bytes[offset + 1] << 8) |
          ((uint32_t)(uint8_t)bytes[offset + 2] << 16) |
          ((uint32_t)(uint8_t)bytes[offset + 3] << 24);
+}
+
+uint64_t LoadLeU64(const std::string& bytes, size_t offset) {
+  uint64_t value = 0;
+  for (size_t i = 0; i < 8; ++i) {
+    value |= (uint64_t)(uint8_t)bytes[offset + i] << (8 * i);
+  }
+  return value;
 }
 
 size_t Align4(size_t value) { return (value + 3u) & ~3u; }
@@ -149,6 +186,73 @@ TEST(AmdgpuMetadataTest, AppendsElfNoteMetadata) {
   for (size_t i = desc_offset + payload.size(); i < note_size; ++i) {
     EXPECT_EQ((uint8_t)note[i], 0u);
   }
+}
+
+TEST(AmdgpuMetadataTest, WritesElfEnvelopeContainingMetadataNote) {
+  loom_amdgpu_metadata_kernel_t kernel = MinimalKernel();
+  loom_amdgpu_code_object_metadata_t metadata = MetadataForKernel(&kernel);
+
+  iree_string_builder_t note_builder;
+  iree_string_builder_initialize(iree_allocator_system(), &note_builder);
+  IREE_ASSERT_OK(
+      loom_amdgpu_metadata_append_elf_note(&metadata, &note_builder));
+  std::string note = BuilderString(note_builder);
+  iree_string_builder_deinitialize(&note_builder);
+
+  const loom_native_elf64le_section_t sections[] = {{
+      .name = IREE_SV(".note"),
+      .type = LOOM_NATIVE_ELF_SECTION_TYPE_NOTE,
+      .flags = LOOM_NATIVE_ELF_SECTION_FLAG_ALLOC,
+      .address = 0,
+      .alignment = 4,
+      .entry_size = 0,
+      .link = 0,
+      .info = 0,
+      .contents = iree_make_const_byte_span(note.data(), note.size()),
+  }};
+  const loom_native_elf64le_segment_t segments[] = {{
+      .type = LOOM_NATIVE_ELF_PROGRAM_TYPE_NOTE,
+      .flags = LOOM_NATIVE_ELF_PROGRAM_FLAG_READ,
+      .first_section = 0,
+      .section_count = 1,
+      .virtual_address = 0,
+      .physical_address = 0,
+      .alignment = 4,
+  }};
+  const loom_native_elf64le_file_t file = {
+      .type = LOOM_NATIVE_ELF_FILE_TYPE_DYN,
+      .machine = LOOM_NATIVE_ELF_MACHINE_AMDGPU,
+      .os_abi = LOOM_NATIVE_ELF_OS_ABI_AMDGPU_HSA,
+      .abi_version = LOOM_NATIVE_ELF_ABI_VERSION_AMDGPU_HSA_V5,
+      .flags = LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1100,
+      .entry = 0,
+      .sections = sections,
+      .section_count = IREE_ARRAYSIZE(sections),
+      .segments = segments,
+      .segment_count = IREE_ARRAYSIZE(segments),
+  };
+
+  StreamPtr stream = CreateStream();
+  IREE_ASSERT_OK(loom_native_elf64le_write_file(&file, stream.get(),
+                                                iree_allocator_system()));
+  std::string bytes = StreamBytes(stream.get());
+
+  EXPECT_EQ(bytes.substr(0, 4), std::string("\x7f"
+                                            "ELF",
+                                            4));
+  EXPECT_EQ((uint8_t)bytes[7], LOOM_NATIVE_ELF_OS_ABI_AMDGPU_HSA);
+  EXPECT_EQ((uint8_t)bytes[8], LOOM_NATIVE_ELF_ABI_VERSION_AMDGPU_HSA_V5);
+  EXPECT_EQ(LoadLeU16(bytes, 18), LOOM_NATIVE_ELF_MACHINE_AMDGPU);
+  EXPECT_EQ(LoadLeU32(bytes, 48), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1100);
+  ASSERT_EQ(LoadLeU16(bytes, 56), 1u);
+  const size_t program_header_offset = (size_t)LoadLeU64(bytes, 32);
+  EXPECT_EQ(LoadLeU32(bytes, program_header_offset),
+            LOOM_NATIVE_ELF_PROGRAM_TYPE_NOTE);
+  const size_t note_offset =
+      (size_t)LoadLeU64(bytes, program_header_offset + 8);
+  const size_t note_size = (size_t)LoadLeU64(bytes, program_header_offset + 32);
+  ASSERT_LE(note_offset + note_size, bytes.size());
+  EXPECT_EQ(bytes.substr(note_offset, note_size), note);
 }
 
 TEST(AmdgpuMetadataTest, AppendsArgumentMetadata) {

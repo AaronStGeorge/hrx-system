@@ -25,4 +25,30 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    elf
+  HDRS
+    "elf.h"
+  SRCS
+    "elf.c"
+  DEPS
+    iree::base
+    iree::io::stream
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    elf_test
+  SRCS
+    "elf_test.cc"
+  DEPS
+    ::elf
+    iree::base
+    iree::io::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
