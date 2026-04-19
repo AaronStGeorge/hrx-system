@@ -11,20 +11,63 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+_LOW_DESCRIPTOR_GENERATOR_SRCS = [
+    "gen/__init__.py",
+    "gen/low_descriptors.py",
+    "target/__init__.py",
+    "target/low_descriptors.py",
+]
+
+_CHECKED_IN_LOW_DESCRIPTOR_SRCS = _LOW_DESCRIPTOR_GENERATOR_SRCS + [
+    "target/arch/__init__.py",
+    "target/arch/wasm/__init__.py",
+    "target/arch/wasm/descriptors.py",
+    "target/arch/x86/__init__.py",
+    "target/arch/x86/descriptors.py",
+    "target/arch/x86/packed_dot_data.py",
+    "target/descriptor_sets.py",
+    "target/emit/__init__.py",
+    "target/emit/ireevm/__init__.py",
+    "target/emit/ireevm/descriptors.py",
+    "target/test/__init__.py",
+    "target/test/descriptors.py",
+]
+
+_LOW_DESCRIPTOR_SHARD_GENERATOR_SRCS = [
+    "gen/low_descriptor_shard.py",
+    "target/descriptor_sets.py",
+] + _LOW_DESCRIPTOR_GENERATOR_SRCS
+
+_WASM_LOW_DESCRIPTOR_SHARD_SRCS = _LOW_DESCRIPTOR_SHARD_GENERATOR_SRCS + [
+    "target/arch/__init__.py",
+    "target/arch/wasm/__init__.py",
+    "target/arch/wasm/descriptors.py",
+]
+
 py_binary(
     name = "amdgpu_descriptors",
     srcs = [
         "gen/amdgpu_descriptors.py",
-    ] + [
-        "gen/__init__.py",
-        "gen/low_descriptors.py",
-        "target/__init__.py",
+    ] + _LOW_DESCRIPTOR_GENERATOR_SRCS + [
         "target/arch/__init__.py",
         "target/arch/amdgpu/__init__.py",
         "target/arch/amdgpu/descriptor_overlay.py",
         "target/arch/amdgpu/descriptors.py",
         "target/arch/amdgpu/isa_xml.py",
-        "target/low_descriptors.py",
     ],
     main = "gen/amdgpu_descriptors.py",
+)
+
+py_binary(
+    name = "low_descriptor_shard",
+    srcs = [
+        "gen/low_descriptor_shard.py",
+    ] + _CHECKED_IN_LOW_DESCRIPTOR_SRCS,
+    main = "gen/low_descriptor_shard.py",
+)
+
+py_binary(
+    name = "wasm_low_descriptor_shard",
+    srcs = _WASM_LOW_DESCRIPTOR_SHARD_SRCS,
+    main = "gen/low_descriptor_shard.py",
 )

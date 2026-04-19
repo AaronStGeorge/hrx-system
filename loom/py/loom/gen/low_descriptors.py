@@ -1358,25 +1358,9 @@ def write_descriptor_set_to_paths(
 
 def main() -> None:
     from loom.gen.x86_packed_dot_contract import write_x86_packed_dot_contract_data
-    from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
-    from loom.target.arch.x86.descriptors import (
-        X86_AVX512_CORE_DESCRIPTOR_SET,
-        X86_PACKED_DOT_DESCRIPTOR_SET,
-    )
-    from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
-    from loom.target.test.descriptors import (
-        TEST_LOW_ALT_DESCRIPTOR_SET,
-        TEST_LOW_CORE_DESCRIPTOR_SET,
-    )
+    from loom.target.descriptor_sets import iter_checked_in_c_descriptor_sets
 
-    descriptor_sets = (
-        IREEVM_CORE_DESCRIPTOR_SET,
-        WASM_CORE_SIMD128_DESCRIPTOR_SET,
-        X86_AVX512_CORE_DESCRIPTOR_SET,
-        X86_PACKED_DOT_DESCRIPTOR_SET,
-        TEST_LOW_CORE_DESCRIPTOR_SET,
-        TEST_LOW_ALT_DESCRIPTOR_SET,
-    )
+    descriptor_sets = tuple(iter_checked_in_c_descriptor_sets())
     for descriptor_set in descriptor_sets:
         write_descriptor_set(descriptor_set)
     write_x86_packed_dot_contract_data()
