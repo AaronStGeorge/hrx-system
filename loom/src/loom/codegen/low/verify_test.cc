@@ -800,7 +800,7 @@ struct FeatureTestTables {
   loom_low_reg_class_t reg_classes[2];
   loom_low_reg_class_alt_t reg_class_alts[2];
   loom_low_schedule_class_t schedule_classes[1];
-  uint64_t feature_mask_words[1];
+  uint64_t feature_mask_words[2];
   loom_low_descriptor_set_t set;
 };
 
@@ -931,6 +931,12 @@ void AddFeatureTestConstraint(FeatureTestTables* tables,
   tables->set.constraint_count = 1;
 }
 
+void MoveFeatureTestMaskToSecondTableRow(FeatureTestTables* tables) {
+  tables->feature_mask_words[1] = tables->feature_mask_words[0];
+  tables->feature_mask_words[0] = UINT64_C(0);
+  tables->descriptors[0].feature_mask_word_start = 1;
+}
+
 std::string FeatureTargetRecords(const char* feature_bits) {
   return std::string(
              "target.snapshot @test_snapshot {codegen_format = low_native, "
@@ -1030,6 +1036,41 @@ TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {
   EXPECT_EQ(collector.emissions[0].string_params[0], "add");
   EXPECT_EQ(collector.emissions[0].string_params[1], "test.add.i32");
   EXPECT_EQ(collector.emissions[0].string_params[2], "test.core");
+  ASSERT_GE(collector.emissions[0].u32_params.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].u32_params[0], 0u);
+  ASSERT_GE(collector.emissions[0].u64_params.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].u64_params[0], UINT64_C(0x4));
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, FeatureMaskTableRowKeepsLogicalFeatureWord) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  MoveFeatureTestMaskToSecondTableRow(&tables);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  std::string source =
+      FeatureTargetRecords("1") +
+      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
+      "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
+      "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
+      "  low.return %sum : reg<test.gpr x1>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
   ASSERT_GE(collector.emissions[0].u32_params.size(), 1u);
   EXPECT_EQ(collector.emissions[0].u32_params[0], 0u);
   ASSERT_GE(collector.emissions[0].u64_params.size(), 1u);

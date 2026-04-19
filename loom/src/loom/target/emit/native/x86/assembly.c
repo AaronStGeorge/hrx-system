@@ -34,6 +34,14 @@ static iree_status_t loom_x86_append_mnemonic(
   return iree_string_builder_append_string(context->builder, mnemonic);
 }
 
+static iree_status_t loom_x86_descriptor_mnemonic(
+    const loom_native_assembly_packet_context_t* context,
+    iree_string_view_t* out_mnemonic) {
+  return loom_native_assembly_descriptor_string(
+      context->schedule->target.descriptor_set,
+      context->packet->descriptor->mnemonic_string_offset, out_mnemonic);
+}
+
 static iree_status_t loom_x86_find_assignment(
     const loom_native_assembly_packet_context_t* context,
     loom_value_id_t value_id,
@@ -85,6 +93,14 @@ static iree_status_t loom_x86_append_assignment(
     }
     return iree_string_builder_append_cstring(
         context->builder, kX86Gpr64Names[assignment->location_base]);
+  }
+  if (iree_string_view_equal(register_class, IREE_SV("x86.xmm"))) {
+    return iree_string_builder_append_format(context->builder, "xmm%" PRIu32,
+                                             assignment->location_base);
+  }
+  if (iree_string_view_equal(register_class, IREE_SV("x86.ymm"))) {
+    return iree_string_builder_append_format(context->builder, "ymm%" PRIu32,
+                                             assignment->location_base);
   }
   if (iree_string_view_equal(register_class, IREE_SV("x86.zmm"))) {
     return iree_string_builder_append_format(context->builder, "zmm%" PRIu32,
@@ -252,6 +268,78 @@ static iree_status_t loom_x86_append_move_packet(
   return loom_x86_append_operand(context, 0);
 }
 
+static iree_status_t loom_x86_append_copy_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  (void)user_data;
+  const loom_op_t* op = context->packet->node->op;
+  const loom_low_allocation_assignment_t* source_assignment = NULL;
+  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
+      context, loom_low_copy_source(op), &source_assignment));
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
+      context, loom_low_copy_result(op), &result_assignment));
+  if (loom_x86_assignments_match(source_assignment, result_assignment)) {
+    return iree_ok_status();
+  }
+
+  iree_string_view_t source_register_class = loom_native_assembly_module_string(
+      context->allocation->module,
+      source_assignment->value_class.register_class_id);
+  iree_string_view_t result_register_class = loom_native_assembly_module_string(
+      context->allocation->module,
+      result_assignment->value_class.register_class_id);
+  if (!iree_string_view_equal(source_register_class, result_register_class)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "x86 assembly copy between register classes '%.*s' and '%.*s' is "
+        "unsupported",
+        (int)source_register_class.size, source_register_class.data,
+        (int)result_register_class.size, result_register_class.data);
+  }
+
+  if (iree_string_view_equal(result_register_class, IREE_SV("x86.xmm")) ||
+      iree_string_view_equal(result_register_class, IREE_SV("x86.ymm")) ||
+      iree_string_view_equal(result_register_class, IREE_SV("x86.zmm"))) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "vmovdqa32 "));
+  } else if (iree_string_view_equal(result_register_class,
+                                    IREE_SV("x86.gpr64"))) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "mov "));
+  } else if (iree_string_view_equal(result_register_class, IREE_SV("x86.k"))) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "kmovq "));
+  } else {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "x86 assembly copy register class '%.*s' is "
+                            "unsupported",
+                            (int)result_register_class.size,
+                            result_register_class.data);
+  }
+  IREE_RETURN_IF_ERROR(loom_x86_append_assignment(context, result_assignment));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, ", "));
+  return loom_x86_append_assignment(context, source_assignment);
+}
+
+static bool loom_x86_mnemonic_is_destructive_dot(iree_string_view_t mnemonic) {
+  return iree_string_view_equal(mnemonic, IREE_SV("vdpbf16ps")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vdpphps")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpbssd")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpbssds")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpbsud")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpbsuds")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpbusd")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpbusds")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpbuud")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpbuuds")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpwssd")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpwssds")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpwsud")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpwusd")) ||
+         iree_string_view_equal(mnemonic, IREE_SV("vpdpwuud"));
+}
+
 static iree_status_t loom_x86_append_descriptor_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
@@ -262,8 +350,9 @@ static iree_status_t loom_x86_append_descriptor_packet(
       iree_string_view_equal(key, IREE_SV("x86.avx512.kandq"))) {
     return loom_x86_append_binary_vector_packet(context);
   }
-  if (iree_string_view_equal(key, IREE_SV("x86.avx512.vpdpbusd.zmm")) ||
-      iree_string_view_equal(key, IREE_SV("x86.avx512.vdpbf16ps.zmm"))) {
+  iree_string_view_t mnemonic = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_mnemonic(context, &mnemonic));
+  if (loom_x86_mnemonic_is_destructive_dot(mnemonic)) {
     return loom_x86_append_dot_packet(context);
   }
   if (iree_string_view_equal(key, IREE_SV("x86.avx512.vmovdqu32.load.zmm"))) {
@@ -328,6 +417,11 @@ iree_status_t loom_x86_emit_assembly_fragment(
       .append_descriptor_packet =
           {
               .fn = loom_x86_append_descriptor_packet,
+              .user_data = NULL,
+          },
+      .append_copy_packet =
+          {
+              .fn = loom_x86_append_copy_packet,
               .user_data = NULL,
           },
       .append_return_packet =

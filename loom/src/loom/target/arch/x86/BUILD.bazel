@@ -252,10 +252,14 @@ loom_cc_library(
     srcs = ["lower.c"],
     hdrs = ["lower.h"],
     deps = [
+        ":packed_dot_contract",
+        ":packed_dot_vector",
+        "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target:low_legality",
         "//runtime/src/iree/base",
     ],
 )

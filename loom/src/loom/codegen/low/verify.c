@@ -1081,15 +1081,14 @@ static iree_status_t loom_low_verify_descriptor_features(
   const loom_low_resolved_target_t* target = function_state->target;
   const loom_low_descriptor_set_t* descriptor_set = target->descriptor_set;
   for (uint16_t i = 0; i < descriptor->feature_mask_word_count; ++i) {
-    const uint32_t word_index = descriptor->feature_mask_word_start + i;
+    const uint32_t feature_mask_row = descriptor->feature_mask_word_start + i;
     const uint64_t required_bits =
-        descriptor_set->feature_mask_words[word_index];
-    const uint64_t available_bits = word_index == 0 ? target->feature_bits : 0;
+        descriptor_set->feature_mask_words[feature_mask_row];
+    const uint64_t available_bits = i == 0 ? target->feature_bits : 0;
     const uint64_t missing_bits = required_bits & ~available_bits;
     if (missing_bits == 0) continue;
     IREE_RETURN_IF_ERROR(loom_low_verify_emit_missing_features(
-        function_state, op, opcode, opcode_attr_index, word_index,
-        missing_bits));
+        function_state, op, opcode, opcode_attr_index, i, missing_bits));
     if (loom_low_verify_should_stop(function_state->state)) {
       return iree_ok_status();
     }

@@ -13,18 +13,29 @@
 #define LOOM_TARGET_ARCH_X86_LOWER_H_
 
 #include "loom/codegen/low/lower.h"
+#include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Returns the AVX512 register lowering policy.
+// Returns the x86 register lowering policy.
 //
-// The initial policy maps vector<16xi32> values to ZMM registers and lowers
-// vector.addi/vector.muli to x86.avx512 vpaddd/vpmulld packets. Memory operands
-// and object-function ABI pinning are intentionally owned by later
+// The policy is selected by contract set. The AVX512 core contract maps
+// vector<16xi32> values to ZMM registers and lowers vector.addi/vector.muli to
+// vpaddd/vpmulld packets. The packed-dot contract maps supported static dot
+// vectors to XMM/YMM/ZMM registers and lowers target-legal vector.dot2f and
+// vector.dot4i ops through descriptor-selected packed-dot packets. Memory
+// operands and object-function ABI pinning are intentionally owned by later
 // low.resource/ABI work.
 const loom_low_lower_policy_t* loom_x86_low_lower_policy(void);
+
+// Returns the x86 source legality provider for target-low lowering.
+//
+// The provider accepts vector dot ops only when the selected target bundle uses
+// the x86 packed-dot descriptor contract and a descriptor is available for the
+// source shape, payload interpretation, and target feature bits.
+const loom_target_low_legality_provider_t* loom_x86_low_legality_provider(void);
 
 // Initializes a target-owned registry mapping x86 target-contract keys to
 // their source-to-low lowering policies.

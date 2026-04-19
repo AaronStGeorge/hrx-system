@@ -137,11 +137,11 @@ class X86AssemblyTest : public ::testing::Test {
   }
 
   void LowerSourceAndBuildSidecars(
-      const char* body, iree_arena_allocator_t* arena,
+      const char* preset_key, const char* body, iree_arena_allocator_t* arena,
       loom_low_packetization_t* out_packetization) {
-    std::string source =
-        "target.preset @x86_target {key = \"x86-avx512\", source = "
-        "@x86_source}\n";
+    std::string source = "target.preset @x86_target {key = \"";
+    source += preset_key;
+    source += "\", source = @x86_source}\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
@@ -162,12 +162,17 @@ class X86AssemblyTest : public ::testing::Test {
     const loom_low_lower_policy_t* policy = nullptr;
     IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup_for_bundle(
         &policy_registry, &bundle_storage.bundle, &policy));
+    const loom_target_low_legality_provider_t* legality_providers[] = {
+        loom_x86_low_legality_provider(),
+    };
     const loom_low_lower_options_t lower_options = {
         .target_ref = SymbolRef(module_, IREE_SV("x86_target")),
         .bundle = &bundle_storage.bundle,
         .descriptor_registry = &target_registry_.registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        .legality_providers = legality_providers,
+        .legality_provider_count = IREE_ARRAYSIZE(legality_providers),
         .policy = policy,
         .max_errors = 20,
     };
@@ -243,11 +248,41 @@ TEST_F(X86AssemblyTest, EmitsAvx512Fragment) {
   iree_arena_deinitialize(&sidecar_arena);
 }
 
+TEST_F(X86AssemblyTest, EmitsMaterializedAvx512Copy) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  BuildSidecars(
+      "low.func.def target(@x86_target) @x86_fragment(%lhs : "
+      "reg<x86.zmm>, %rhs : reg<x86.zmm>) {\n"
+      "  %copy = low.copy %lhs : reg<x86.zmm> -> reg<x86.zmm>\n"
+      "  %sum = low.op<x86.avx512.vpaddd.zmm>(%copy, %rhs) : "
+      "(reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>\n"
+      "  %second = low.op<x86.avx512.vpaddd.zmm>(%lhs, %sum) : "
+      "(reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>\n"
+      "  low.return\n"
+      "}\n",
+      &sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_x86_emit_assembly_fragment(
+      &packetization.schedule, &packetization.allocation, &builder));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+  EXPECT_NE(output.find("vmovdqa32 zmm"), std::string::npos);
+  EXPECT_NE(output.find("vpaddd zmm"), std::string::npos);
+  EXPECT_NE(output.find("ret"), std::string::npos);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
 TEST_F(X86AssemblyTest, EmitsAvx512FragmentFromSourceLowering) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
   LowerSourceAndBuildSidecars(
+      "x86-avx512",
       "func.def @x86_source(%lhs: vector<16xi32>, %rhs: "
       "vector<16xi32>) {\n"
       "  %sum = vector.addi %lhs, %rhs : vector<16xi32>\n"
@@ -265,6 +300,33 @@ TEST_F(X86AssemblyTest, EmitsAvx512FragmentFromSourceLowering) {
   EXPECT_NE(output.find(".Lbb0:"), std::string::npos);
   EXPECT_NE(output.find("vpaddd zmm"), std::string::npos);
   EXPECT_NE(output.find("vpmulld zmm"), std::string::npos);
+  EXPECT_NE(output.find("ret"), std::string::npos);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
+TEST_F(X86AssemblyTest, EmitsPackedDotFragmentFromSourceLowering) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  LowerSourceAndBuildSidecars(
+      "x86-packed-dot",
+      "func.def @x86_source(%lhs: vector<32xi8>, %rhs: vector<32xi8>, "
+      "%acc: vector<8xi32>) {\n"
+      "  %dot = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<32xi8>, "
+      "vector<32xi8>, vector<8xi32>\n"
+      "  func.return\n"
+      "}\n",
+      &sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_x86_emit_assembly_fragment(
+      &packetization.schedule, &packetization.allocation, &builder));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+  EXPECT_NE(output.find(".Lbb0:"), std::string::npos);
+  EXPECT_NE(output.find("vpdpbusd ymm"), std::string::npos);
   EXPECT_NE(output.find("ret"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
