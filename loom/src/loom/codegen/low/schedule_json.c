@@ -120,9 +120,9 @@ iree_status_t loom_low_schedule_format_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
       ",\"block_count\":%zu,\"node_count\":%zu,\"dependency_count\":%zu"
-      ",\"resource_use_count\":%zu",
+      ",\"resource_use_count\":%zu,\"resource_summary_count\":%zu",
       sidecar->block_count, sidecar->node_count, sidecar->dependency_count,
-      sidecar->resource_use_count));
+      sidecar->resource_use_count, sidecar->resource_summary_count));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"blocks\":["));
@@ -263,6 +263,38 @@ iree_status_t loom_low_schedule_format_json(
           resource_use->resource_flags, resource_use->capacity_per_cycle,
           resource_use->contention_group_id, resource_use->stage,
           resource_use->cycles, resource_use->units));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+  }
+
+  if (sidecar->resource_summary_count > 0) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"resource_summaries\":["));
+    for (iree_host_size_t i = 0; i < sidecar->resource_summary_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      const loom_low_schedule_resource_summary_t* summary =
+          &sidecar->resource_summaries[i];
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream, "{\"resource\":%" PRIu16 ",\"resource_name\":",
+          summary->resource_id));
+      IREE_RETURN_IF_ERROR(
+          loom_json_write_escaped_string(&stream, summary->resource_name));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream,
+          ",\"resource_kind\":%u,\"resource_kind_name\":"
+          "\"%s\",\"resource_flags\":%" PRIu16
+          ",\"capacity_per_cycle\":%" PRIu16 ",\"contention_group\":%" PRIu16
+          ",\"use_count\":%" PRIu32 ",\"total_occupied_cycles\":%" PRIu64
+          ",\"total_unit_cycles\":%" PRIu64 ",\"estimated_min_cycles\":%" PRIu64
+          ",\"peak_units_per_cycle\":%" PRIu16 "}",
+          (unsigned)summary->resource_kind,
+          loom_low_schedule_json_resource_kind(summary->resource_kind),
+          summary->resource_flags, summary->capacity_per_cycle,
+          summary->contention_group_id, summary->use_count,
+          summary->total_occupied_cycles, summary->total_unit_cycles,
+          summary->estimated_min_cycles, summary->peak_units_per_cycle));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }

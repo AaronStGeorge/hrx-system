@@ -243,6 +243,18 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/arch/amdgpu:low_registry",
 )
 
+iree_assert_no_dependency(
+    name = "loom_check_execute_no_amdgpu_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/tools/loom-check:execute",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_tool_no_amdgpu_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/tools/loom-check",
+)
+
 #===------------------------------------------------------------------------===#
 # AMDGPU low descriptors
 #===------------------------------------------------------------------------===#
@@ -260,6 +272,7 @@ loom_cc_test(
     deps = [
         ":gfx11_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:text_asm_roundtrip_test_util",
         "//loom/src/loom/codegen/low:text_asm_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -315,6 +328,7 @@ loom_cc_test(
     deps = [
         ":gfx950_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:text_asm_roundtrip_test_util",
         "//loom/src/loom/codegen/low:text_asm_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -331,7 +345,7 @@ loom_cc_library(
         ":gfx12_descriptors",
         ":gfx950_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/target:low_descriptor_registry_base",
+        "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
@@ -344,7 +358,19 @@ loom_cc_test(
         ":low_registry",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:requirements",
-        "//loom/src/loom/target:low_descriptor_registry_base",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "loom_check_test",
+    srcs = ["loom_check_test.cc"],
+    deps = [
+        ":low_registry",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//loom/src/loom/tools/loom-check:test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

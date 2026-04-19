@@ -73,7 +73,7 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "low_descriptor_registry_base",
+    name = "low_descriptor_registry",
     srcs = ["low_descriptor_registry.c"],
     hdrs = ["low_descriptor_registry.h"],
     deps = [
@@ -88,20 +88,12 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "low_descriptor_registry",
+    name = "low_descriptor_registry_core_test",
     srcs = ["low_descriptor_registry_core_test.c"],
-    hdrs = [
-        "low_descriptor_registry.h",
-        "low_descriptor_registry_core_test.h",
-    ],
+    hdrs = ["low_descriptor_registry_core_test.h"],
     deps = [
-        ":low_descriptor_registry_base",
-        ":preset_registry",
-        ":types",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:requirements",
+        ":low_descriptor_registry",
         "//loom/src/loom/target/test:low_registry",
-        "//runtime/src/iree/base",
     ],
 )
 
@@ -145,7 +137,7 @@ loom_cc_test(
     srcs = ["presets_test.cc"],
     deps = [
         ":ir_records",
-        ":low_descriptor_registry",
+        ":low_descriptor_registry_core_test",
         ":presets",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
@@ -161,7 +153,7 @@ loom_cc_test(
     name = "low_descriptor_registry_test",
     srcs = ["low_descriptor_registry_test.cc"],
     deps = [
-        ":low_descriptor_registry",
+        ":low_descriptor_registry_core_test",
         "//loom/src/loom/codegen/low:requirements",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

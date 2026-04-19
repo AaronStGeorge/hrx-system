@@ -92,7 +92,6 @@ loom_cc_library(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
     loom::src::loom::ops::target
-    loom::src::loom::ops::test
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
   PUBLIC
@@ -156,7 +155,6 @@ loom_cc_test(
     ::type_registry
     loom::src::loom::ops::func
     loom::src::loom::ops::index
-    loom::src::loom::ops::test
     iree::testing::gtest
     iree::testing::gtest_main
 )

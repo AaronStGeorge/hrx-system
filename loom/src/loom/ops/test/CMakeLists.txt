@@ -15,13 +15,16 @@ loom_cc_library(
     test
   HDRS
     "ops.h"
+    "registry.h"
   SRCS
     "builders.c"
     "canonicalize.c"
     "facts.c"
+    "registry.c"
     "tables.c"
     "verify.c"
   DEPS
+    iree::base
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir

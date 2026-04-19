@@ -17,9 +17,9 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/ops/op_registry.h"
 #include "loom/ops/target/ops.h"
 #include "loom/target/emit/ireevm/descriptors.h"
+#include "loom/testing/context.h"
 
 namespace loom {
 namespace {
@@ -74,7 +74,7 @@ class LowTargetBindingTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_op_registry_initialize_context(iree_allocator_system(),
+    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
                                                        &context_));
   }
 

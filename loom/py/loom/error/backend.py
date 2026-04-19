@@ -313,6 +313,35 @@ ERR_BACKEND_012 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_013: Schedule resource bottleneck estimate was recorded.
+ERR_BACKEND_013 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=13,
+    severity=Severity.REMARK,
+    summary="Schedule resource bottleneck estimate recorded.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' resource '{resource_name}' is a schedule "
+        "bottleneck: {estimated_min_cycles} estimated cycle(s) from "
+        "{total_unit_cycles} unit-cycle(s), {use_count} use(s), capacity "
+        "{capacity_per_cycle}/cycle, peak {peak_units_per_cycle}/cycle, "
+        "contention group {contention_group}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("resource_name", ParamKind.STRING),
+        ErrorParam("capacity_per_cycle", ParamKind.U32),
+        ErrorParam("contention_group", ParamKind.U32),
+        ErrorParam("use_count", ParamKind.U32),
+        ErrorParam("total_unit_cycles", ParamKind.U64),
+        ErrorParam("estimated_min_cycles", ParamKind.U64),
+        ErrorParam("peak_units_per_cycle", ParamKind.U32),
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_001,
     ERR_BACKEND_002,
@@ -326,4 +355,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_010,
     ERR_BACKEND_011,
     ERR_BACKEND_012,
+    ERR_BACKEND_013,
 )

@@ -26,7 +26,7 @@ loom_cc_library(
     hdrs = ["low_registry.h"],
     deps = [
         "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/target:low_descriptor_registry_base",
+        "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
         "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
         "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors",
@@ -40,8 +40,6 @@ loom_cc_library(
         "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
         "//loom/src/loom/target/emit/ireevm:descriptors",
         "//loom/src/loom/target/emit/ireevm:low_registry",
-        "//loom/src/loom/target/test:descriptors",
-        "//loom/src/loom/target/test:low_registry",
         "//runtime/src/iree/base",
     ],
 )
@@ -53,7 +51,7 @@ loom_cc_test(
         ":low_registry",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:requirements",
-        "//loom/src/loom/target:low_descriptor_registry_base",
+        "//loom/src/loom/target:low_descriptor_registry",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -4,7 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_assert_no_dependency",
+    "loom_cc_library",
+    "loom_cc_test",
+)
 
 package(
     default_visibility = ["//visibility:public"],
@@ -12,16 +17,58 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+#===------------------------------------------------------------------------===#
+# Layering checks
+#===------------------------------------------------------------------------===#
+
+iree_assert_no_dependency(
+    name = "production_op_registry_no_test_dialect_dep",
+    dependency = "//loom/src/loom/ops/test",
+    target = "//loom/src/loom/ops:op_registry",
+)
+
+iree_assert_no_dependency(
+    name = "text_parser_no_test_dialect_dep",
+    dependency = "//loom/src/loom/ops/test",
+    target = "//loom/src/loom/format/text:parser",
+)
+
+iree_assert_no_dependency(
+    name = "text_printer_no_test_dialect_dep",
+    dependency = "//loom/src/loom/ops/test",
+    target = "//loom/src/loom/format/text:printer",
+)
+
+iree_assert_no_dependency(
+    name = "bytecode_reader_no_test_dialect_dep",
+    dependency = "//loom/src/loom/ops/test",
+    target = "//loom/src/loom/format/bytecode:reader",
+)
+
+iree_assert_no_dependency(
+    name = "bytecode_writer_no_test_dialect_dep",
+    dependency = "//loom/src/loom/ops/test",
+    target = "//loom/src/loom/format/bytecode:writer",
+)
+
+#===------------------------------------------------------------------------===#
+# Synthetic test dialect
+#===------------------------------------------------------------------------===#
+
 loom_cc_library(
     name = "test",
     srcs = [
         "builders.c",
         "canonicalize.c",
         "facts.c",
+        "registry.c",
         "tables.c",
         "verify.c",
     ],
-    hdrs = ["ops.h"],
+    hdrs = [
+        "ops.h",
+        "registry.h",
+    ],
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
@@ -30,6 +77,7 @@ loom_cc_library(
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/transforms:rewriter",
         "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
     ],
 )
 

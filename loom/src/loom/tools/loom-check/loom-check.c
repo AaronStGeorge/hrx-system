@@ -24,6 +24,9 @@
 #include "iree/base/internal/arena.h"
 #include "iree/base/tooling/flags.h"
 #include "iree/io/file_contents.h"
+#include "loom/ops/op_registry.h"
+#include "loom/ops/test/registry.h"
+#include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/json_output.h"
@@ -101,6 +104,33 @@ IREE_FLAG_CALLBACK(loom_check_parse_json_flag, loom_check_print_json_flag,
                    &FLAG_json, json,
                    "Structured JSON output to stdout. Bare --json is the same\n"
                    "as --json=failures. Modes: failures, summary, all.");
+
+static iree_status_t loom_check_cli_register_context(void* user_data,
+                                                     loom_context_t* context) {
+  (void)user_data;
+  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
+  return loom_test_dialect_register(context);
+}
+
+static iree_status_t loom_check_cli_initialize_low_descriptor_registry(
+    void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
+  (void)user_data;
+  loom_target_core_test_low_descriptor_registry_initialize(out_registry);
+  return iree_ok_status();
+}
+
+static const loom_check_environment_t kLoomCheckEnvironment = {
+    .register_context =
+        {
+            .fn = loom_check_cli_register_context,
+            .user_data = NULL,
+        },
+    .initialize_low_descriptor_registry =
+        {
+            .fn = loom_check_cli_initialize_low_descriptor_registry,
+            .user_data = NULL,
+        },
+};
 
 //===----------------------------------------------------------------------===//
 // Outcome formatting
@@ -199,9 +229,10 @@ static iree_status_t loom_check_write_updates(
 // sections.
 static iree_status_t loom_check_process_file(
     iree_string_view_t filename, iree_string_view_t source, bool is_stdin,
-    loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    iree_allocator_t allocator, iree_host_size_t* pass_count,
-    iree_host_size_t* fail_count, iree_host_size_t* skip_count) {
+    const loom_check_environment_t* environment, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    iree_host_size_t* pass_count, iree_host_size_t* fail_count,
+    iree_host_size_t* skip_count) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(block_pool, &arena);
 
@@ -247,8 +278,9 @@ static iree_status_t loom_check_process_file(
 
     loom_check_result_initialize(allocator, &results[i]);
     ++initialized_result_count;
-    status = loom_check_execute_case(test_case, i, &report, filename, context,
-                                     block_pool, allocator, &results[i]);
+    status =
+        loom_check_execute_case(test_case, i, &report, filename, environment,
+                                context, block_pool, allocator, &results[i]);
     if (!iree_status_is_ok(status)) {
       // Infrastructure failure — bail.
       break;
@@ -351,10 +383,10 @@ static iree_status_t loom_check_process_file(
 // Reads a source from stdin or a file path, then processes it.
 // |path| is "-" or empty for stdin, otherwise a filesystem path.
 static iree_status_t loom_check_read_and_process(
-    iree_string_view_t path, loom_context_t* context,
-    iree_arena_block_pool_t* block_pool, iree_allocator_t host_allocator,
-    iree_host_size_t* pass_count, iree_host_size_t* fail_count,
-    iree_host_size_t* skip_count) {
+    iree_string_view_t path, const loom_check_environment_t* environment,
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    iree_allocator_t host_allocator, iree_host_size_t* pass_count,
+    iree_host_size_t* fail_count, iree_host_size_t* skip_count) {
   bool is_stdin = iree_string_view_is_empty(path) ||
                   iree_string_view_equal(path, iree_make_cstring_view("-"));
 
@@ -373,9 +405,9 @@ static iree_status_t loom_check_read_and_process(
     };
     iree_string_view_t filename =
         is_stdin ? iree_make_cstring_view("<stdin>") : path;
-    status = loom_check_process_file(filename, source, is_stdin, context,
-                                     block_pool, host_allocator, pass_count,
-                                     fail_count, skip_count);
+    status = loom_check_process_file(filename, source, is_stdin, environment,
+                                     context, block_pool, host_allocator,
+                                     pass_count, fail_count, skip_count);
   }
 
   iree_io_file_contents_free(contents);
@@ -453,7 +485,7 @@ int main(int argc, char** argv) {
   iree_arena_block_pool_t block_pool;
   iree_arena_block_pool_initialize(32 * 1024, host_allocator, &block_pool);
 
-  // Initialize context with all known dialects.
+  // Initialize context with the dialects selected by this loom-check binary.
   loom_context_t context;
   loom_context_initialize(host_allocator, &context);
   iree_status_t status = iree_ok_status();
@@ -465,7 +497,7 @@ int main(int argc, char** argv) {
         argc - 1);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_check_context_initialize(&context);
+    status = loom_check_context_initialize(&kLoomCheckEnvironment, &context);
   }
 
   iree_host_size_t pass_count = 0;
@@ -476,12 +508,12 @@ int main(int argc, char** argv) {
     if (argc < 2) {
       // No positional args: read from stdin.
       status = loom_check_read_and_process(
-          iree_string_view_empty(), &context, &block_pool, host_allocator,
-          &pass_count, &fail_count, &skip_count);
+          iree_string_view_empty(), &kLoomCheckEnvironment, &context,
+          &block_pool, host_allocator, &pass_count, &fail_count, &skip_count);
     } else {
       status = loom_check_read_and_process(
-          iree_make_cstring_view(argv[1]), &context, &block_pool,
-          host_allocator, &pass_count, &fail_count, &skip_count);
+          iree_make_cstring_view(argv[1]), &kLoomCheckEnvironment, &context,
+          &block_pool, host_allocator, &pass_count, &fail_count, &skip_count);
     }
   }
 

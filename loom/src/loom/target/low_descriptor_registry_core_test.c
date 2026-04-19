@@ -8,24 +8,24 @@
 
 #include "loom/target/test/low_registry.h"
 
-void loom_target_low_descriptor_registry_initialize(
+void loom_target_core_test_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry) {
   loom_test_low_descriptor_registry_initialize(out_registry);
 }
 
-iree_status_t loom_target_low_descriptor_set_lookup(
+iree_status_t loom_target_core_test_low_descriptor_set_lookup(
     iree_string_view_t key,
     const loom_low_descriptor_set_t** out_descriptor_set) {
   loom_target_low_descriptor_registry_t registry;
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
   return loom_low_descriptor_registry_lookup(&registry.registry, key,
                                              out_descriptor_set);
 }
 
-iree_status_t loom_target_low_bundle_lookup(
+iree_status_t loom_target_core_test_low_bundle_lookup(
     iree_string_view_t key, const loom_target_bundle_t** out_bundle) {
   loom_target_low_descriptor_registry_t registry;
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
   return loom_target_low_descriptor_registry_lookup_bundle(&registry, key,
                                                            out_bundle);
 }

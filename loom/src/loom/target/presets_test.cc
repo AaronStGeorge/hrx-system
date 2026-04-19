@@ -33,7 +33,7 @@ class TargetPresetsTest : public ::testing::Test {
                                      &block_pool_);
     IREE_ASSERT_OK(loom_op_registry_initialize_context(iree_allocator_system(),
                                                        &context_));
-    loom_target_low_descriptor_registry_initialize(&registry_);
+    loom_target_core_test_low_descriptor_registry_initialize(&registry_);
   }
 
   void TearDown() override {

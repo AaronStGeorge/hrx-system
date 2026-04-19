@@ -45,7 +45,7 @@ loom_cc_library(
     ::descriptors
     iree::base
     loom::src::loom::codegen::low::descriptors
-    loom::src::loom::target::low_descriptor_registry_base
+    loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::types
   PUBLIC
 )
@@ -59,6 +59,7 @@ loom_cc_test(
     ::alt_descriptors
     ::descriptors
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::text_asm_roundtrip_test_util
     iree::testing::gtest
     iree::testing::gtest_main
 )

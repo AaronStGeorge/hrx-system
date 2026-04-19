@@ -10,14 +10,20 @@
 #include <vector>
 
 #include "iree/base/internal/arena.h"
+#include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm.h"
 #include "loom/error/error_defs.h"
+#include "loom/format/bytecode/reader.h"
+#include "loom/format/bytecode/writer.h"
 #include "loom/format/text/parser.h"
+#include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/op_registry.h"
+#include "loom/ops/low/ops.h"
 #include "loom/target/emit/ireevm/descriptors.h"
+#include "loom/testing/context.h"
 
 namespace loom {
 namespace {
@@ -79,7 +85,7 @@ class LowDescriptorVerifyTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_op_registry_initialize_context(iree_allocator_system(),
+    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
                                                        &context_));
   }
 
@@ -89,8 +95,17 @@ class LowDescriptorVerifyTest : public ::testing::Test {
   }
 
   loom_module_t* ParseSource(const std::string& source) {
+    return ParseSource(source, nullptr);
+  }
+
+  loom_module_t* ParseSource(
+      const std::string& source,
+      const loom_text_low_asm_environment_t* low_asm_environment) {
     loom_text_parse_options_t parse_options = {};
     parse_options.max_errors = 20;
+    if (low_asm_environment) {
+      parse_options.low_asm_environment = *low_asm_environment;
+    }
 
     loom_module_t* module = nullptr;
     IREE_EXPECT_OK(
@@ -99,6 +114,64 @@ class LowDescriptorVerifyTest : public ::testing::Test {
                         &block_pool_, &parse_options, &module));
     EXPECT_NE(module, nullptr);
     return module;
+  }
+
+  iree_status_t PrintModule(const loom_module_t* module,
+                            const loom_text_print_options_t* print_options,
+                            std::string* out_text) {
+    out_text->clear();
+    iree_string_builder_t builder;
+    iree_string_builder_initialize(iree_allocator_system(), &builder);
+    iree_status_t status = loom_text_print_module_to_builder_with_options(
+        module, &builder, print_options);
+    if (iree_status_is_ok(status)) {
+      *out_text = std::string(iree_string_builder_buffer(&builder),
+                              iree_string_builder_size(&builder));
+    }
+    iree_string_builder_deinitialize(&builder);
+    return status;
+  }
+
+  iree_status_t WriteModule(const loom_module_t* module,
+                            std::vector<uint8_t>* out_bytes) {
+    iree_io_stream_t* stream = nullptr;
+    IREE_RETURN_IF_ERROR(iree_io_vec_stream_create(
+        IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_SEEKABLE |
+            IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_RESIZABLE,
+        4096, iree_allocator_system(), &stream));
+    iree_status_t status =
+        loom_bytecode_write_module(module, stream, nullptr, &block_pool_);
+
+    if (iree_status_is_ok(status)) {
+      iree_io_stream_pos_t length = iree_io_stream_length(stream);
+      out_bytes->resize((size_t)length);
+      status = iree_io_stream_seek(stream, IREE_IO_STREAM_SEEK_SET, 0);
+    }
+    if (iree_status_is_ok(status)) {
+      status = iree_io_stream_read(stream, out_bytes->size(), out_bytes->data(),
+                                   nullptr);
+    }
+    iree_io_stream_release(stream);
+    return status;
+  }
+
+  iree_status_t ReadModule(const std::vector<uint8_t>& bytes,
+                           loom_module_t** out_module) {
+    loom_bytecode_read_options_t options = {
+        .verify_module = false,
+        .verify_max_errors = 20,
+    };
+    loom_bytecode_read_result_t result = {};
+    IREE_RETURN_IF_ERROR(loom_bytecode_read_module(
+        iree_make_const_byte_span(bytes.data(), bytes.size()),
+        IREE_SV("low_descriptor_verify_test.loombc"), &context_, &block_pool_,
+        &options, &result, out_module, iree_allocator_system()));
+    if (result.error_count != 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "bytecode read emitted %u errors",
+                              result.error_count);
+    }
+    return iree_ok_status();
   }
 
   loom_low_verify_result_t VerifyModule(
@@ -125,6 +198,13 @@ class LowDescriptorVerifyTest : public ::testing::Test {
     };
   }
 
+  static loom_text_low_asm_environment_t LowAsmEnvironment(
+      const loom_low_descriptor_registry_t* registry) {
+    loom_text_low_asm_environment_t environment = {};
+    loom_low_descriptor_text_asm_environment_initialize(registry, &environment);
+    return environment;
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
 };
@@ -146,6 +226,123 @@ static const char kVmTargetRecords[] =
     "contract_feature_bits = 0}\n"
     "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
     "@vm_export, config = @vm_config}\n";
+
+TEST_F(LowDescriptorVerifyTest, LowFuncDefAsmBodyParsesAndPrintsByPolicy) {
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  loom_text_low_asm_environment_t environment = LowAsmEnvironment(&registry);
+  std::string source =
+      std::string(kVmTargetRecords) +
+      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "reg<vm.i32>) -> (reg<vm.i32>) asm<iree.vm.core> {\n"
+      "  %sum = vm.add.i32 %lhs, %rhs\n"
+      "  return %sum\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source, &environment);
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
+
+  loom_text_print_options_t canonical_print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+  };
+  std::string canonical_text;
+  IREE_ASSERT_OK(
+      PrintModule(module, &canonical_print_options, &canonical_text));
+  EXPECT_EQ(canonical_text.find("asm<iree.vm.core>"), std::string::npos);
+  EXPECT_NE(canonical_text.find("low.op<iree.vm.add.i32>"), std::string::npos);
+
+  loom_text_print_options_t missing_environment_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+      .low_asm_descriptor_set_key = IREE_SV("iree.vm.core"),
+  };
+  std::string missing_environment_text;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+                        PrintModule(module, &missing_environment_options,
+                                    &missing_environment_text));
+
+  loom_text_print_options_t asm_print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+      .low_asm_environment = environment,
+      .low_asm_descriptor_set_key = IREE_SV("iree.vm.core"),
+  };
+  std::string asm_text;
+  IREE_ASSERT_OK(PrintModule(module, &asm_print_options, &asm_text));
+  EXPECT_NE(asm_text.find("asm<iree.vm.core>"), std::string::npos);
+  EXPECT_NE(asm_text.find("vm.add.i32 %lhs, %rhs"), std::string::npos);
+  EXPECT_EQ(asm_text.find("low.op<iree.vm.add.i32>"), std::string::npos);
+
+  std::vector<uint8_t> bytecode;
+  IREE_ASSERT_OK(WriteModule(module, &bytecode));
+  loom_module_free(module);
+
+  loom_module_t* bytecode_module = nullptr;
+  IREE_ASSERT_OK(ReadModule(bytecode, &bytecode_module));
+  ASSERT_NE(bytecode_module, nullptr);
+
+  std::string bytecode_canonical_text;
+  IREE_ASSERT_OK(PrintModule(bytecode_module, &canonical_print_options,
+                             &bytecode_canonical_text));
+  EXPECT_NE(bytecode_canonical_text.find("low.op<iree.vm.add.i32>"),
+            std::string::npos);
+
+  std::string bytecode_asm_text;
+  IREE_ASSERT_OK(
+      PrintModule(bytecode_module, &asm_print_options, &bytecode_asm_text));
+  EXPECT_NE(bytecode_asm_text.find("asm<iree.vm.core>"), std::string::npos);
+  EXPECT_NE(bytecode_asm_text.find("vm.add.i32 %lhs, %rhs"), std::string::npos);
+
+  loom_module_free(bytecode_module);
+}
+
+TEST_F(LowDescriptorVerifyTest, AsmAuthoredPacketErrorsKeepSourceLocation) {
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  loom_text_low_asm_environment_t environment = LowAsmEnvironment(&registry);
+  std::string source =
+      std::string(kVmTargetRecords) +
+      "low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) "
+      "asm<iree.vm.core> {\n"
+      "  %c0 = vm.const.i32 2147483648\n"
+      "  return %c0\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source, &environment);
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 10));
+  ASSERT_NE(collector.emissions[0].op, nullptr);
+  EXPECT_TRUE(loom_low_const_isa(collector.emissions[0].op));
+
+  ASSERT_LT(collector.emissions[0].op->location, module->locations.count);
+  const loom_location_entry_t location =
+      module->locations.entries[collector.emissions[0].op->location];
+  ASSERT_EQ(location.kind, LOOM_LOCATION_FILE);
+  EXPECT_EQ(location.file.start_line, 6u);
+  EXPECT_EQ(location.file.start_col, 3u);
+
+  bool found_immediate_span = false;
+  for (uint16_t i = 0; i < location.file.field_span_count; ++i) {
+    const loom_location_field_span_t span = location.file.field_spans[i];
+    if (span.kind == LOOM_LOCATION_FIELD_ATTRIBUTE &&
+        span.index == loom_low_const_attrs_ATTR_INDEX) {
+      found_immediate_span = true;
+      EXPECT_EQ(span.start_line, 6u);
+      EXPECT_EQ(span.start_col, 22u);
+      EXPECT_EQ(span.end_line, 6u);
+      break;
+    }
+  }
+  EXPECT_TRUE(found_immediate_span);
+
+  loom_module_free(module);
+}
 
 TEST_F(LowDescriptorVerifyTest, ValidVmPacketsPass) {
   std::string source =

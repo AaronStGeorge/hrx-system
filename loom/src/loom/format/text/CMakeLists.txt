@@ -128,6 +128,7 @@ loom_cc_library(
   SRCS
     "printer.c"
   DEPS
+    ::low_asm
     iree::base
     iree::base::internal::arena
     iree::base::internal::unicode
@@ -143,13 +144,18 @@ loom_cc_test(
   SRCS
     "printer_test.cc"
   DEPS
+    ::parser
     ::printer
     iree::base::internal::arena
+    loom::src::loom::codegen::low::text_asm
     loom::src::loom::ir
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
+    loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
+    loom::src::loom::target::test::alt_descriptors
+    loom::src::loom::target::test::descriptors
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main

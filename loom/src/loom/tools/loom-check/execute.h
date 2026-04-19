@@ -18,9 +18,9 @@
 // diagnostics flow through loom_diagnostic_sink_t callbacks — but the
 // result aggregates them into a test-framework report.
 //
-// The execution engine does not own the loom_context_t or block pool.
-// A convenience function (loom_check_context_initialize) registers all
-// known dialects so callers don't duplicate the registration boilerplate.
+// The execution engine does not own the loom_context_t or block pool. A
+// loom_check_environment_t supplies the dialect registration and target-low
+// descriptor registry package selected by each test runner binary or embedding.
 
 #ifndef LOOM_TOOLS_LOOM_CHECK_EXECUTE_H_
 #define LOOM_TOOLS_LOOM_CHECK_EXECUTE_H_
@@ -29,6 +29,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/context.h"
+#include "loom/target/low_descriptor_registry.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/report.h"
 #include "loom/tools/loom-check/update.h"
@@ -119,6 +120,42 @@ typedef struct loom_check_diagnostic_capture_t {
   loom_check_result_t* result;
 } loom_check_diagnostic_capture_t;
 
+// Registers dialects into |context| before loom-check finalizes it.
+typedef iree_status_t (*loom_check_register_context_fn_t)(
+    void* user_data, loom_context_t* context);
+
+// Callback for dialect registration. The callback must not finalize the
+// context; loom-check finalizes it after registration succeeds.
+typedef struct loom_check_register_context_callback_t {
+  // Function that registers the dialect surface selected by this environment.
+  loom_check_register_context_fn_t fn;
+  // Opaque callback state forwarded to |fn|.
+  void* user_data;
+} loom_check_register_context_callback_t;
+
+// Initializes a linked target-low descriptor registry package.
+typedef iree_status_t (*loom_check_initialize_low_descriptor_registry_fn_t)(
+    void* user_data, loom_target_low_descriptor_registry_t* out_registry);
+
+// Callback for the descriptor registry package used by low asm parsing,
+// target preset expansion, descriptor-local verification, scheduling, and
+// allocation sidecar emission.
+typedef struct loom_check_initialize_low_descriptor_registry_callback_t {
+  // Function that initializes the selected linked target-low registry package.
+  loom_check_initialize_low_descriptor_registry_fn_t fn;
+  // Opaque callback state forwarded to |fn|.
+  void* user_data;
+} loom_check_initialize_low_descriptor_registry_callback_t;
+
+// Execution environment supplied by each loom-check binary or embedding.
+typedef struct loom_check_environment_t {
+  // Dialect registration callback for the IR surface accepted by this runner.
+  loom_check_register_context_callback_t register_context;
+  // Target-low registry callback for descriptor-backed low IR operations.
+  loom_check_initialize_low_descriptor_registry_callback_t
+      initialize_low_descriptor_registry;
+} loom_check_environment_t;
+
 //===----------------------------------------------------------------------===//
 // API
 //===----------------------------------------------------------------------===//
@@ -143,10 +180,16 @@ iree_status_t loom_check_result_record_diff(iree_string_view_t expected,
                                             iree_allocator_t allocator,
                                             loom_check_result_t* result);
 
-// Registers all dialects used by loom-check with the context and finalizes it.
+// Registers the dialects selected by |environment|, then finalizes the context.
 // The context must have been initialized with loom_context_initialize() before
 // calling this.
-iree_status_t loom_check_context_initialize(loom_context_t* context);
+iree_status_t loom_check_context_initialize(
+    const loom_check_environment_t* environment, loom_context_t* context);
+
+// Initializes the target-low descriptor registry selected by |environment|.
+iree_status_t loom_check_environment_initialize_low_descriptor_registry(
+    const loom_check_environment_t* environment,
+    loom_target_low_descriptor_registry_t* out_registry);
 
 // Executes a single test case: checks declared environment requirements,
 // dispatches to the mode-specific function, then applies XFAIL inversion to
@@ -160,8 +203,9 @@ iree_status_t loom_check_context_initialize(loom_context_t* context);
 iree_status_t loom_check_execute_case(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    iree_allocator_t allocator, loom_check_result_t* result);
+    const loom_check_environment_t* environment, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_check_result_t* result);
 
 // Strips comments from input, parses, prints, and compares against the
 // expected section. On mismatch, appends a unified diff to result->detail
@@ -180,8 +224,9 @@ iree_status_t loom_check_execute_roundtrip(const loom_check_case_t* test_case,
 iree_status_t loom_check_execute_verify(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    iree_allocator_t allocator, loom_check_result_t* result);
+    const loom_check_environment_t* environment, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_check_result_t* result);
 
 // Strips comments from input, parses, runs the pass pipeline specified
 // in test_case->pipeline, verifies the transformed module, prints the result,
@@ -190,8 +235,9 @@ iree_status_t loom_check_execute_verify(
 iree_status_t loom_check_execute_pass(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    iree_allocator_t allocator, loom_check_result_t* result);
+    const loom_check_environment_t* environment, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_check_result_t* result);
 
 // Strips comments from input, parses, converts to the format specified
 // in test_case->format_target (e.g. bytecode), converts back to text,
@@ -210,8 +256,9 @@ iree_status_t loom_check_execute_format(const loom_check_case_t* test_case,
 iree_status_t loom_check_execute_emit(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    iree_allocator_t allocator, loom_check_result_t* result);
+    const loom_check_environment_t* environment, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_check_result_t* result);
 
 #ifdef __cplusplus
 }

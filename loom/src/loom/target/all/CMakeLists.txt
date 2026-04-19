@@ -32,9 +32,7 @@ loom_cc_library(
     loom::src::loom::target::arch::x86::packed_dot_descriptors
     loom::src::loom::target::emit::ireevm::descriptors
     loom::src::loom::target::emit::ireevm::low_registry
-    loom::src::loom::target::low_descriptor_registry_base
-    loom::src::loom::target::test::descriptors
-    loom::src::loom::target::test::low_registry
+    loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::types
   PUBLIC
 )
@@ -48,7 +46,7 @@ loom_cc_test(
     ::low_registry
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::requirements
-    loom::src::loom::target::low_descriptor_registry_base
+    loom::src::loom::target::low_descriptor_registry
     iree::testing::gtest
     iree::testing::gtest_main
 )

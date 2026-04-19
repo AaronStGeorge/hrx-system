@@ -21,13 +21,25 @@
 //===----------------------------------------------------------------------===//
 
 typedef struct loom_print_context_t {
+  // Output stream receiving textual IR bytes.
   loom_output_stream_t* stream;
+  // Module whose string, type, value, and location tables are printed.
   const loom_module_t* module;
+  // Flag bitset controlling layout and optional annotations.
   loom_text_print_flags_t flags;
+  // Optional descriptor-backed environment for low asm region syntax.
+  loom_text_low_asm_environment_t low_asm_environment;
+  // Descriptor-set key selected for low asm region syntax.
+  iree_string_view_t low_asm_descriptor_set_key;
+  // True when the current logical line already contains a printed token.
   bool has_previous_token;
+  // True when the next token should be glued to the previous token.
   bool glue_next;
+  // Last byte emitted through the token spacing model.
   char last_char;
+  // Current indentation depth in logical two-space levels.
   uint16_t indent;
+  // Optional callback receiving semantic field byte ranges.
   loom_print_field_callback_t field_callback;
 } loom_print_context_t;
 
@@ -1422,6 +1434,458 @@ static iree_status_t loom_print_result_value_type(loom_print_context_t* ctx,
   return loom_output_stream_write_cstring(ctx->stream, "<unknown>");
 }
 
+static iree_status_t loom_print_low_asm_lookup_descriptor_set(
+    loom_print_context_t* ctx, const void** out_descriptor_set) {
+  *out_descriptor_set = NULL;
+  if (!loom_text_low_asm_environment_supports_printing(
+          &ctx->low_asm_environment)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "low asm region printing requires a descriptor-backed print "
+        "environment");
+  }
+  if (iree_string_view_is_empty(ctx->low_asm_descriptor_set_key)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low asm region printing requires a descriptor-set key");
+  }
+  return ctx->low_asm_environment.vtable->lookup_descriptor_set(
+      ctx->low_asm_environment.user_data, ctx->low_asm_descriptor_set_key,
+      out_descriptor_set);
+}
+
+static bool loom_print_low_asm_is_requested(loom_print_context_t* ctx) {
+  return !iree_string_view_is_empty(ctx->low_asm_descriptor_set_key);
+}
+
+static iree_status_t loom_print_low_asm_describe_operation(
+    loom_print_context_t* ctx, const void* descriptor_set, const loom_op_t* op,
+    loom_text_low_asm_statement_t* out_statement) {
+  return ctx->low_asm_environment.vtable->describe_operation(
+      ctx->low_asm_environment.user_data, descriptor_set, ctx->module, op,
+      out_statement);
+}
+
+static iree_status_t loom_print_low_asm_attr_name(
+    const loom_module_t* module, const loom_named_attr_t* attr,
+    iree_string_view_t* out_name) {
+  *out_name = iree_string_view_empty();
+  if (attr->name_id >= module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low asm immediate attribute name is out of range");
+  }
+  *out_name = module->strings.entries[attr->name_id];
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_find_immediate_attr(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement,
+    uint16_t immediate_index,
+    loom_text_low_asm_immediate_descriptor_t* out_immediate,
+    const loom_named_attr_t** out_attr) {
+  *out_immediate = (loom_text_low_asm_immediate_descriptor_t){0};
+  *out_attr = NULL;
+  IREE_RETURN_IF_ERROR(ctx->low_asm_environment.vtable->immediate_descriptor(
+      ctx->low_asm_environment.user_data, &statement->packet, immediate_index,
+      out_immediate));
+  for (iree_host_size_t i = 0; i < statement->attributes.count; ++i) {
+    iree_string_view_t attr_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_print_low_asm_attr_name(
+        ctx->module, &statement->attributes.entries[i], &attr_name));
+    if (iree_string_view_equal(attr_name, out_immediate->field_name)) {
+      *out_attr = &statement->attributes.entries[i];
+      return iree_ok_status();
+    }
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "low asm packet '%.*s' is missing immediate "
+      "attribute '%.*s'",
+      (int)statement->packet.opcode_key.size, statement->packet.opcode_key.data,
+      (int)out_immediate->field_name.size, out_immediate->field_name.data);
+}
+
+static iree_status_t loom_print_low_asm_validate_result_types(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  for (uint16_t i = 0; i < statement->result_count; ++i) {
+    loom_value_id_t result = statement->results[i];
+    if (result >= ctx->module->values.count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low asm packet '%.*s' result %u is out of "
+                              "range",
+                              (int)statement->packet.opcode_key.size,
+                              statement->packet.opcode_key.data, i);
+    }
+    bool annotation_required = false;
+    iree_string_view_t diagnostic_detail = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(
+        ctx->low_asm_environment.vtable->result_type_annotation_required(
+            ctx->low_asm_environment.user_data, &statement->packet,
+            statement->operands, statement->operand_count, i, ctx->module,
+            ctx->module->values.entries[result].type, &annotation_required,
+            &diagnostic_detail));
+    (void)annotation_required;
+    if (!iree_string_view_is_empty(diagnostic_detail)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low asm packet '%.*s' result %u cannot be "
+                              "printed: %.*s",
+                              (int)statement->packet.opcode_key.size,
+                              statement->packet.opcode_key.data, i,
+                              (int)diagnostic_detail.size,
+                              diagnostic_detail.data);
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_result_types_require_annotation(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement,
+    bool* out_required) {
+  *out_required = false;
+  for (uint16_t i = 0; i < statement->result_count; ++i) {
+    loom_value_id_t result = statement->results[i];
+    bool annotation_required = false;
+    iree_string_view_t diagnostic_detail = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(
+        ctx->low_asm_environment.vtable->result_type_annotation_required(
+            ctx->low_asm_environment.user_data, &statement->packet,
+            statement->operands, statement->operand_count, i, ctx->module,
+            ctx->module->values.entries[result].type, &annotation_required,
+            &diagnostic_detail));
+    if (!iree_string_view_is_empty(diagnostic_detail)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low asm packet '%.*s' result %u cannot be "
+                              "printed: %.*s",
+                              (int)statement->packet.opcode_key.size,
+                              statement->packet.opcode_key.data, i,
+                              (int)diagnostic_detail.size,
+                              diagnostic_detail.data);
+    }
+    *out_required |= annotation_required;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_validate_statement(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  switch (statement->kind) {
+    case LOOM_TEXT_LOW_ASM_STATEMENT_PACKET: {
+      if (statement->result_count != statement->packet.result_count ||
+          statement->operand_count != statement->packet.operand_count) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low asm packet '%.*s' statement shape does not match descriptor",
+            (int)statement->packet.opcode_key.size,
+            statement->packet.opcode_key.data);
+      }
+      if (statement->result_count > 0 && statement->results == NULL) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm packet results are missing");
+      }
+      if (statement->operand_count > 0 && statement->operands == NULL) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm packet operands are missing");
+      }
+      for (uint16_t i = 0; i < statement->operand_count; ++i) {
+        if (statement->operands[i] >= ctx->module->values.count) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm packet '%.*s' operand %u is out of "
+                                  "range",
+                                  (int)statement->packet.opcode_key.size,
+                                  statement->packet.opcode_key.data, i);
+        }
+      }
+      if (statement->attributes.count > 0 &&
+          statement->attributes.entries == NULL) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm packet immediates are missing");
+      }
+      if (statement->attributes.count != statement->packet.immediate_count) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low asm packet '%.*s' immediate count does not match descriptor",
+            (int)statement->packet.opcode_key.size,
+            statement->packet.opcode_key.data);
+      }
+      for (uint16_t i = 0; i < statement->packet.immediate_count; ++i) {
+        loom_text_low_asm_immediate_descriptor_t immediate = {0};
+        const loom_named_attr_t* attr = NULL;
+        IREE_RETURN_IF_ERROR(loom_print_low_asm_find_immediate_attr(
+            ctx, statement, i, &immediate, &attr));
+        (void)attr;
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_print_low_asm_validate_result_types(ctx, statement));
+      break;
+    }
+    case LOOM_TEXT_LOW_ASM_STATEMENT_RETURN: {
+      if (statement->operand_count > 0 && statement->operands == NULL) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm return values are missing");
+      }
+      for (uint16_t i = 0; i < statement->operand_count; ++i) {
+        if (statement->operands[i] >= ctx->module->values.count) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm return value %u is out of range", i);
+        }
+      }
+      break;
+    }
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown low asm statement kind %u",
+                              (uint32_t)statement->kind);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_region_preflight(
+    loom_print_context_t* ctx, const loom_region_t* region,
+    const void* descriptor_set, bool allow_entry_block_args) {
+  if (!region || region->block_count == 0) return iree_ok_status();
+  if (region->block_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low asm region printing supports single-block "
+                            "regions only");
+  }
+  const loom_block_t* block = loom_region_const_entry_block(region);
+  if (block->arg_count != 0 && !allow_entry_block_args) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low asm region printing does not support block "
+                            "arguments");
+  }
+  const loom_op_t* current_op = NULL;
+  loom_block_for_each_op(block, current_op) {
+    loom_text_low_asm_statement_t statement = {0};
+    IREE_RETURN_IF_ERROR(loom_print_low_asm_describe_operation(
+        ctx, descriptor_set, current_op, &statement));
+    IREE_RETURN_IF_ERROR(
+        loom_print_low_asm_validate_statement(ctx, &statement));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_result_list(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  for (uint16_t i = 0; i < statement->result_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
+    }
+    IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
+        ctx, statement->results[i],
+        loom_print_field_ref(LOOM_PRINT_FIELD_RESULT, i)));
+  }
+  if (statement->result_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "=", false));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_value_list(
+    loom_print_context_t* ctx, const loom_value_id_t* values,
+    uint16_t value_count, loom_print_field_kind_t field_kind) {
+  for (uint16_t i = 0; i < value_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
+    }
+    IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
+        ctx, values[i], loom_print_field_ref(field_kind, i)));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_named_immediates(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  iree_host_size_t start = ctx->stream->offset;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '{'));
+  for (uint16_t i = 0; i < statement->packet.immediate_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
+    }
+    loom_text_low_asm_immediate_descriptor_t immediate = {0};
+    const loom_named_attr_t* attr = NULL;
+    IREE_RETURN_IF_ERROR(loom_print_low_asm_find_immediate_attr(
+        ctx, statement, i, &immediate, &attr));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write(ctx->stream, immediate.spelling));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, " = "));
+    IREE_RETURN_IF_ERROR(
+        loom_print_attr(ctx->stream, &attr->value, ctx->module, NULL));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
+  loom_print_did_write(ctx);
+  if (statement->has_immediate_attribute_field) {
+    loom_print_report_field(
+        ctx,
+        loom_print_field_ref(LOOM_PRINT_FIELD_ATTR,
+                             statement->immediate_attribute_field_index),
+        start, ctx->stream->offset);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_positional_immediates(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  for (uint16_t i = 0; i < statement->packet.immediate_count; ++i) {
+    if (i > 0 || statement->operand_count > 0) {
+      IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
+    }
+    loom_text_low_asm_immediate_descriptor_t immediate = {0};
+    const loom_named_attr_t* attr = NULL;
+    IREE_RETURN_IF_ERROR(loom_print_low_asm_find_immediate_attr(
+        ctx, statement, i, &immediate, &attr));
+    IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+    iree_host_size_t start = ctx->stream->offset;
+    IREE_RETURN_IF_ERROR(
+        loom_print_attr(ctx->stream, &attr->value, ctx->module, NULL));
+    loom_print_did_write(ctx);
+    if (statement->has_immediate_attribute_field) {
+      loom_print_report_field(
+          ctx,
+          loom_print_field_ref(LOOM_PRINT_FIELD_ATTR,
+                               statement->immediate_attribute_field_index),
+          start, ctx->stream->offset);
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_immediates(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  if (statement->packet.immediate_count == 0) return iree_ok_status();
+  if (statement->packet.has_named_immediates) {
+    return loom_print_low_asm_named_immediates(ctx, statement);
+  }
+  return loom_print_low_asm_positional_immediates(ctx, statement);
+}
+
+static iree_status_t loom_print_low_asm_result_type_annotation(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  bool annotation_required = false;
+  IREE_RETURN_IF_ERROR(loom_print_low_asm_result_types_require_annotation(
+      ctx, statement, &annotation_required));
+  if (!annotation_required) return iree_ok_status();
+
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ":", false));
+  for (uint16_t i = 0; i < statement->result_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
+    }
+    IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+    IREE_RETURN_IF_ERROR(loom_text_print_type(
+        ctx->module->values.entries[statement->results[i]].type, ctx->module,
+        ctx->stream));
+    loom_print_did_write(ctx);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_packet(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  IREE_RETURN_IF_ERROR(loom_print_low_asm_result_list(ctx, statement));
+  IREE_RETURN_IF_ERROR(loom_print_emit(ctx, statement->packet.mnemonic, false));
+  IREE_RETURN_IF_ERROR(loom_print_low_asm_value_list(ctx, statement->operands,
+                                                     statement->operand_count,
+                                                     LOOM_PRINT_FIELD_OPERAND));
+  IREE_RETURN_IF_ERROR(loom_print_low_asm_immediates(ctx, statement));
+  IREE_RETURN_IF_ERROR(
+      loom_print_low_asm_result_type_annotation(ctx, statement));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_return(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "return", false));
+  return loom_print_low_asm_value_list(ctx, statement->operands,
+                                       statement->operand_count,
+                                       LOOM_PRINT_FIELD_OPERAND);
+}
+
+static iree_status_t loom_print_low_asm_statement(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  ctx->has_previous_token = false;
+  ctx->glue_next = false;
+  ctx->last_char = 0;
+
+  switch (statement->kind) {
+    case LOOM_TEXT_LOW_ASM_STATEMENT_PACKET: {
+      IREE_RETURN_IF_ERROR(loom_print_low_asm_packet(ctx, statement));
+      break;
+    }
+    case LOOM_TEXT_LOW_ASM_STATEMENT_RETURN: {
+      IREE_RETURN_IF_ERROR(loom_print_low_asm_return(ctx, statement));
+      break;
+    }
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown low asm statement kind %u",
+                              (uint32_t)statement->kind);
+  }
+
+  if (iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_LOCATIONS)) {
+    IREE_RETURN_IF_ERROR(
+        loom_print_location(ctx->stream, ctx->module, statement->location));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_region_body(
+    loom_print_context_t* ctx, const loom_region_t* region,
+    const void* descriptor_set) {
+  if (!region || region->block_count == 0) return iree_ok_status();
+  const loom_block_t* block = loom_region_const_entry_block(region);
+  const loom_op_t* current_op = NULL;
+  loom_block_for_each_op(block, current_op) {
+    IREE_RETURN_IF_ERROR(loom_print_op_comments(ctx, current_op));
+    IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+    loom_text_low_asm_statement_t statement = {0};
+    IREE_RETURN_IF_ERROR(loom_print_low_asm_describe_operation(
+        ctx, descriptor_set, current_op, &statement));
+    IREE_RETURN_IF_ERROR(loom_print_low_asm_statement(ctx, &statement));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '\n'));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_low_asm_region(
+    loom_print_context_t* ctx, const loom_region_t* region,
+    const loom_region_descriptor_t* region_descriptor,
+    bool allow_entry_block_args) {
+  (void)region_descriptor;
+  const void* descriptor_set = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_print_low_asm_lookup_descriptor_set(ctx, &descriptor_set));
+
+  if (!iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_SKIP_REGIONS)) {
+    IREE_RETURN_IF_ERROR(loom_print_low_asm_region_preflight(
+        ctx, region, descriptor_set, allow_entry_block_args));
+  }
+
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "asm", false));
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "<", true));
+  IREE_RETURN_IF_ERROR(
+      loom_print_emit(ctx, ctx->low_asm_descriptor_set_key, true));
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ">", true));
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  if (iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_SKIP_REGIONS)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(ctx->stream, "{ ... }"));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, "{\n"));
+    ++ctx->indent;
+    IREE_RETURN_IF_ERROR(
+        loom_print_low_asm_region_body(ctx, region, descriptor_set));
+    --ctx->indent;
+    IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
+  }
+  ctx->has_previous_token = true;
+  ctx->last_char = '}';
+  ctx->glue_next = false;
+  return iree_ok_status();
+}
+
 // Returns the signature argument IDs for a FuncArgs element. Bodyful
 // func-like ops use the entry block args; bodyless declarations store
 // signature args as op operands.
@@ -1510,7 +1974,8 @@ static iree_status_t loom_print_braced_region(
   return iree_ok_status();
 }
 
-static char loom_print_region_syntax_first_char(loom_region_syntax_t syntax) {
+static char loom_print_region_syntax_first_char(loom_print_context_t* ctx,
+                                                loom_region_syntax_t syntax) {
   switch (syntax) {
     case LOOM_REGION_SYNTAX_DEFAULT:
       return '{';
@@ -1518,6 +1983,8 @@ static char loom_print_region_syntax_first_char(loom_region_syntax_t syntax) {
       return 'd';
     case LOOM_REGION_SYNTAX_LOW_ASM:
       return 'a';
+    case LOOM_REGION_SYNTAX_LOW_ASM_OPTIONAL:
+      return loom_print_low_asm_is_requested(ctx) ? 'a' : '{';
     default:
       return '?';
   }
@@ -1526,7 +1993,7 @@ static char loom_print_region_syntax_first_char(loom_region_syntax_t syntax) {
 static iree_status_t loom_print_region_body_with_syntax(
     loom_print_context_t* ctx, const loom_region_t* region,
     const loom_region_descriptor_t* region_descriptor,
-    loom_region_syntax_t syntax) {
+    loom_region_syntax_t syntax, bool allow_entry_block_args) {
   switch (syntax) {
     case LOOM_REGION_SYNTAX_DEFAULT: {
       IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
@@ -1538,10 +2005,15 @@ static iree_status_t loom_print_region_body_with_syntax(
       break;
     }
     case LOOM_REGION_SYNTAX_LOW_ASM:
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "low asm region printing requires a descriptor-backed print "
-          "environment");
+      return loom_print_low_asm_region(ctx, region, region_descriptor,
+                                       allow_entry_block_args);
+    case LOOM_REGION_SYNTAX_LOW_ASM_OPTIONAL:
+      if (loom_print_low_asm_is_requested(ctx)) {
+        return loom_print_low_asm_region(ctx, region, region_descriptor,
+                                         allow_entry_block_args);
+      }
+      IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+      break;
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unsupported region syntax %u", (uint32_t)syntax);
@@ -1898,10 +2370,15 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         }
         loom_region_t* region = loom_op_regions(op)[element->field_index];
         loom_region_syntax_t syntax = (loom_region_syntax_t)element->data;
+        const bool region_args_declared_by_parent =
+            vtable->func_like &&
+            vtable->func_like->body_region_index == element->field_index;
         iree_host_size_t region_start = loom_print_next_token_start_offset(
-            ctx, /*glue=*/false, loom_print_region_syntax_first_char(syntax));
+            ctx, /*glue=*/false,
+            loom_print_region_syntax_first_char(ctx, syntax));
         IREE_RETURN_IF_ERROR(loom_print_region_body_with_syntax(
-            ctx, region, region_descriptor, syntax));
+            ctx, region, region_descriptor, syntax,
+            region_args_declared_by_parent));
         loom_print_report_field(
             ctx,
             loom_print_field_ref(LOOM_PRINT_FIELD_REGION, element->field_index),
@@ -2455,15 +2932,37 @@ static iree_status_t loom_print_encoding_aliases(loom_print_context_t* ctx,
 // Public API
 //===----------------------------------------------------------------------===//
 
-iree_status_t loom_text_print_module(const loom_module_t* module,
-                                     loom_output_stream_t* stream,
-                                     loom_text_print_flags_t flags) {
-  if (!module || !module->body) return iree_ok_status();
-  loom_print_context_t ctx = {
+static loom_print_context_t loom_print_context_make(
+    const loom_module_t* module, loom_output_stream_t* stream,
+    const loom_text_print_options_t* options) {
+  loom_text_print_flags_t flags =
+      options ? options->flags : LOOM_TEXT_PRINT_DEFAULT;
+  return (loom_print_context_t){
       .stream = stream,
       .module = module,
       .flags = flags,
+      .low_asm_environment = options ? options->low_asm_environment
+                                     : (loom_text_low_asm_environment_t){0},
+      .low_asm_descriptor_set_key = options
+                                        ? options->low_asm_descriptor_set_key
+                                        : iree_string_view_empty(),
   };
+}
+
+iree_status_t loom_text_print_module(const loom_module_t* module,
+                                     loom_output_stream_t* stream,
+                                     loom_text_print_flags_t flags) {
+  loom_text_print_options_t options = {
+      .flags = flags,
+  };
+  return loom_text_print_module_with_options(module, stream, &options);
+}
+
+iree_status_t loom_text_print_module_with_options(
+    const loom_module_t* module, loom_output_stream_t* stream,
+    const loom_text_print_options_t* options) {
+  if (!module || !module->body) return iree_ok_status();
+  loom_print_context_t ctx = loom_print_context_make(module, stream, options);
   IREE_RETURN_IF_ERROR(loom_print_encoding_aliases(&ctx, module));
   return loom_print_module_body(&ctx, module->body);
 }
@@ -2472,12 +2971,17 @@ iree_status_t loom_text_print_operation(const loom_module_t* module,
                                         const loom_op_t* op,
                                         loom_output_stream_t* stream,
                                         loom_text_print_flags_t flags) {
-  if (!module || !op) return iree_ok_status();
-  loom_print_context_t ctx = {
-      .stream = stream,
-      .module = module,
+  loom_text_print_options_t options = {
       .flags = flags,
   };
+  return loom_text_print_operation_with_options(module, op, stream, &options);
+}
+
+iree_status_t loom_text_print_operation_with_options(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_output_stream_t* stream, const loom_text_print_options_t* options) {
+  if (!module || !op) return iree_ok_status();
+  loom_print_context_t ctx = loom_print_context_make(module, stream, options);
   IREE_RETURN_IF_ERROR(loom_print_op_comments(&ctx, op));
   return loom_print_op(&ctx, op);
 }
@@ -2490,12 +2994,28 @@ iree_status_t loom_text_print_module_to_builder(const loom_module_t* module,
   return loom_text_print_module(module, &stream, flags);
 }
 
+iree_status_t loom_text_print_module_to_builder_with_options(
+    const loom_module_t* module, iree_string_builder_t* builder,
+    const loom_text_print_options_t* options) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(builder, &stream);
+  return loom_text_print_module_with_options(module, &stream, options);
+}
+
 iree_status_t loom_text_print_operation_to_builder(
     const loom_module_t* module, const loom_op_t* op,
     iree_string_builder_t* builder, loom_text_print_flags_t flags) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
   return loom_text_print_operation(module, op, &stream, flags);
+}
+
+iree_status_t loom_text_print_operation_to_builder_with_options(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_string_builder_t* builder, const loom_text_print_options_t* options) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(builder, &stream);
+  return loom_text_print_operation_with_options(module, op, &stream, options);
 }
 
 iree_status_t loom_text_print_operation_with_field_callback(

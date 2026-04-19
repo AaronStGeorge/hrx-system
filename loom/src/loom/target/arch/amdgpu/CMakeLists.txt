@@ -30,6 +30,7 @@ loom_cc_test(
   DEPS
     ::gfx11_descriptors
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::text_asm_roundtrip_test_util
     loom::src::loom::codegen::low::text_asm_test_util
     iree::testing::gtest
     iree::testing::gtest_main
@@ -103,6 +104,7 @@ loom_cc_test(
   DEPS
     ::gfx950_descriptors
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::text_asm_roundtrip_test_util
     loom::src::loom::codegen::low::text_asm_test_util
     iree::testing::gtest
     iree::testing::gtest_main
@@ -122,7 +124,7 @@ loom_cc_library(
     ::gfx950_descriptors
     iree::base
     loom::src::loom::codegen::low::descriptors
-    loom::src::loom::target::low_descriptor_registry_base
+    loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::types
   PUBLIC
 )
@@ -136,7 +138,20 @@ loom_cc_test(
     ::low_registry
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::requirements
-    loom::src::loom::target::low_descriptor_registry_base
+    loom::src::loom::target::low_descriptor_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    loom_check_test
+  SRCS
+    "loom_check_test.cc"
+  DEPS
+    ::low_registry
+    loom::src::loom::tools::loom-check::execute
+    loom::src::loom::tools::loom-check::test_util
     iree::testing::gtest
     iree::testing::gtest_main
 )

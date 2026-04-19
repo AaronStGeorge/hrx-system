@@ -3416,6 +3416,13 @@ iree_status_t loom_parse_region_with_syntax(
       return loom_parse_low_asm_braced_region(parser, region_descriptor,
                                               out_region);
     }
+    case LOOM_REGION_SYNTAX_LOW_ASM_OPTIONAL: {
+      if (loom_tokenizer_at_keyword(&parser->tokenizer, IREE_SV("asm"))) {
+        return loom_parse_low_asm_braced_region(parser, region_descriptor,
+                                                out_region);
+      }
+      return loom_parse_braced_region(parser, region_descriptor, out_region);
+    }
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unsupported region syntax %u", (uint32_t)syntax);

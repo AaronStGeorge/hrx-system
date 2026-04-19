@@ -10,11 +10,13 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/text_asm_test_util.h"
 
 namespace loom {
 namespace {
 
+using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 TEST(IreeVmDescriptorsTest, CoreDescriptorSetVerifies) {
@@ -87,6 +89,22 @@ TEST(IreeVmDescriptorsTest, LowAsmInfersScalarResultType) {
       &result_type, &diagnostic_detail));
   EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
   EXPECT_TRUE(harness.RegisterTypeEquals(result_type, IREE_SV("vm.i32"), 1));
+}
+
+TEST(IreeVmDescriptorsTest, LowAsmRegionRoundTrips) {
+  LowTextAsmRoundTripHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_ireevm_core_descriptor_set));
+
+  const char* source =
+      "test.low_asm_region asm<iree.vm.core> {\n"
+      "  %c0 = vm.const.i32 7\n"
+      "  %sum = vm.add.i32 %c0, %c0\n"
+      "  return %sum\n"
+      "}\n";
+  std::string printed;
+  IREE_ASSERT_OK(
+      harness.RoundTrip(IREE_SV(source), IREE_SV("iree.vm.core"), &printed));
+  EXPECT_EQ(printed, source);
 }
 
 TEST(IreeVmDescriptorsTest, ManifestNamesCallAndControlPackets) {

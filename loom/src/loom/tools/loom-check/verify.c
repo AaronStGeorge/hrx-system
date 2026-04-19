@@ -10,7 +10,6 @@
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
-#include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/target/presets.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
@@ -22,8 +21,9 @@
 iree_status_t loom_check_execute_verify(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    iree_allocator_t allocator, loom_check_result_t* result) {
+    const loom_check_environment_t* environment, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_check_result_t* result) {
   IREE_ASSERT_ARGUMENT(test_case);
   IREE_ASSERT_ARGUMENT(report);
   IREE_ASSERT_ARGUMENT(context);
@@ -53,7 +53,10 @@ iree_status_t loom_check_execute_verify(
   loom_module_t* module = NULL;
   iree_string_view_t stripped_view = iree_string_builder_view(&stripped_input);
   loom_target_low_descriptor_registry_t low_registry;
-  loom_target_low_descriptor_registry_initialize(&low_registry);
+  if (iree_status_is_ok(status)) {
+    status = loom_check_environment_initialize_low_descriptor_registry(
+        environment, &low_registry);
+  }
   if (iree_status_is_ok(status)) {
     loom_text_parse_options_t parse_options = {
         .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,

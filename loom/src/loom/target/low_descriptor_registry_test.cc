@@ -16,7 +16,7 @@ namespace {
 
 TEST(LowDescriptorRegistryTest, RegistryVerifiesSelectedTargetPackages) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   EXPECT_NE(registry.registry.descriptor_set_providers, nullptr);
   EXPECT_EQ(registry.registry.descriptor_set_provider_count, 1u);
@@ -26,7 +26,7 @@ TEST(LowDescriptorRegistryTest, RegistryVerifiesSelectedTargetPackages) {
 
 TEST(LowDescriptorRegistryTest, RegistrySatisfiesTargetLowFoundation) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   IREE_ASSERT_OK(loom_low_descriptor_registry_verify_requirements(
       &registry.registry,
@@ -35,8 +35,8 @@ TEST(LowDescriptorRegistryTest, RegistrySatisfiesTargetLowFoundation) {
 
 TEST(LowDescriptorRegistryTest, LooksUpRepresentativeDescriptorSets) {
   const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  IREE_ASSERT_OK(loom_target_low_descriptor_set_lookup(IREE_SV("test.low.core"),
-                                                       &descriptor_set));
+  IREE_ASSERT_OK(loom_target_core_test_low_descriptor_set_lookup(
+      IREE_SV("test.low.core"), &descriptor_set));
   ASSERT_NE(descriptor_set, nullptr);
 
   iree_string_view_t set_key = iree_string_view_empty();
@@ -47,7 +47,7 @@ TEST(LowDescriptorRegistryTest, LooksUpRepresentativeDescriptorSets) {
 
 TEST(LowDescriptorRegistryTest, LooksUpRepresentativeDescriptors) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   struct ExpectedDescriptor {
     // Descriptor-set key owning the representative descriptor.
@@ -67,7 +67,7 @@ TEST(LowDescriptorRegistryTest, LooksUpRepresentativeDescriptors) {
 
   for (const ExpectedDescriptor& expected : expected_descriptors) {
     const loom_low_descriptor_set_t* descriptor_set = nullptr;
-    IREE_ASSERT_OK(loom_target_low_descriptor_set_lookup(
+    IREE_ASSERT_OK(loom_target_core_test_low_descriptor_set_lookup(
         iree_make_cstring_view(expected.set_key), &descriptor_set));
     ASSERT_NE(descriptor_set, nullptr) << expected.set_key;
 
@@ -83,7 +83,7 @@ TEST(LowDescriptorRegistryTest, LooksUpRepresentativeDescriptors) {
 
 TEST(LowDescriptorRegistryTest, TargetBundlesSelectFoundationDescriptorSets) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   struct ExpectedBundle {
     // Target-low preset bundle key.
@@ -142,7 +142,7 @@ TEST(LowDescriptorRegistryTest, TargetBundlesSelectFoundationDescriptorSets) {
 
 TEST(LowDescriptorRegistryTest, FormatsRegistryManifestJson) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -167,7 +167,7 @@ TEST(LowDescriptorRegistryTest, FormatsRegistryManifestJson) {
 
 TEST(LowDescriptorRegistryTest, FormatManifestRejectsMissingBuilder) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   iree_status_t status =
       loom_target_low_descriptor_registry_format_manifest_json(
@@ -178,25 +178,27 @@ TEST(LowDescriptorRegistryTest, FormatManifestRejectsMissingBuilder) {
 
 TEST(LowDescriptorRegistryTest, MissingKeyReturnsNullDescriptorSet) {
   const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  IREE_ASSERT_OK(loom_target_low_descriptor_set_lookup(
+  IREE_ASSERT_OK(loom_target_core_test_low_descriptor_set_lookup(
       IREE_SV("target.missing"), &descriptor_set));
   EXPECT_EQ(descriptor_set, nullptr);
 }
 
 TEST(LowDescriptorRegistryTest, MissingBundleKeyFailsLoudly) {
   const loom_target_bundle_t* bundle = nullptr;
-  iree_status_t status = loom_target_low_bundle_lookup(IREE_SV(""), &bundle);
+  iree_status_t status =
+      loom_target_core_test_low_bundle_lookup(IREE_SV(""), &bundle);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(bundle, nullptr);
 
-  status = loom_target_low_bundle_lookup(IREE_SV("target.missing"), &bundle);
+  status = loom_target_core_test_low_bundle_lookup(IREE_SV("target.missing"),
+                                                   &bundle);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
   EXPECT_EQ(bundle, nullptr);
 }
 
 TEST(LowDescriptorRegistryTest, RegistryRejectsMissingBundleTable) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
   registry.target_bundles = nullptr;
 
   iree_status_t status = loom_target_low_descriptor_registry_verify(
@@ -212,7 +214,7 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsMissingBundleTable) {
 
 TEST(LowDescriptorRegistryTest, RegistryRejectsMismatchedDescriptorView) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
   registry.registry.descriptor_set_provider_count = 0;
 
   iree_status_t status = loom_target_low_descriptor_registry_verify(
@@ -222,7 +224,7 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsMismatchedDescriptorView) {
 
 TEST(LowDescriptorRegistryTest, RegistryRejectsDuplicateBundleKeys) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   const loom_target_bundle_t* bundle = nullptr;
   IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(
@@ -240,7 +242,7 @@ TEST(LowDescriptorRegistryTest, RegistryRejectsDuplicateBundleKeys) {
 
 TEST(LowDescriptorRegistryTest, BundleSelectionRequiresExplicitLinkedSet) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   const loom_target_config_t empty_config = {
       .name = IREE_SVL("empty"),
@@ -273,7 +275,7 @@ TEST(LowDescriptorRegistryTest, BundleSelectionRequiresExplicitLinkedSet) {
 
 TEST(LowDescriptorRegistryTest, RegistryRejectsBundleSelectingMissingSet) {
   loom_target_low_descriptor_registry_t registry = {};
-  loom_target_low_descriptor_registry_initialize(&registry);
+  loom_target_core_test_low_descriptor_registry_initialize(&registry);
 
   const loom_target_bundle_t* source_bundle = nullptr;
   IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(

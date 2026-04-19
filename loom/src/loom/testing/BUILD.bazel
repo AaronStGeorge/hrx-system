@@ -29,6 +29,7 @@ loom_cc_library(
     deps = [
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/test",
         "//runtime/src/iree/base",
     ],
 )

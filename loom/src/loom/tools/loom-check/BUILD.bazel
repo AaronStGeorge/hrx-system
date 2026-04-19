@@ -1,9 +1,31 @@
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_binary", "loom_cc_library", "loom_cc_test")
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_assert_no_dependency",
+    "loom_cc_binary",
+    "loom_cc_library",
+    "loom_cc_test",
+)
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+#===------------------------------------------------------------------------===#
+# Layering checks
+#===------------------------------------------------------------------------===#
+
+iree_assert_no_dependency(
+    name = "execute_no_test_dialect_dep",
+    dependency = "//loom/src/loom/ops/test",
+    target = "//loom/src/loom/tools/loom-check:execute",
+)
+
+iree_assert_no_dependency(
+    name = "execute_no_core_test_low_registry_dep",
+    dependency = "//loom/src/loom/target:low_descriptor_registry_core_test",
+    target = "//loom/src/loom/tools/loom-check:execute",
 )
 
 loom_cc_library(
@@ -55,7 +77,6 @@ loom_cc_library(
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:ir_records",
         "//loom/src/loom/target:low_descriptor_registry",
@@ -75,6 +96,22 @@ loom_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",
+    ],
+)
+
+loom_cc_library(
+    name = "test_util",
+    testonly = True,
+    srcs = ["test_util.cc"],
+    hdrs = ["test_util.h"],
+    deps = [
+        ":check",
+        ":execute",
+        ":report",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 
@@ -109,7 +146,9 @@ loom_cc_test(
         ":execute",
         ":report",
         "//loom/src/loom/ir",
+        "//loom/src/loom/target:low_descriptor_registry_core_test",
         "//loom/src/loom/target/emit/llvmir:core",
+        "//loom/src/loom/testing:context",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -180,6 +219,9 @@ loom_cc_binary(
         ":json_output",
         ":report",
         ":update",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/target:low_descriptor_registry_core_test",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

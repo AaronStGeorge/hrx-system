@@ -9,7 +9,6 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_registry.h"
-#include "loom/ops/test/ops.h"
 #include "loom/ops/type_registry.h"
 
 namespace loom {
@@ -22,16 +21,19 @@ namespace {
 TEST(OpRegistry, LookupKnownOps) {
   loom_op_kind_t kind = 0;
   EXPECT_TRUE(
-      loom_op_registry_lookup(iree_make_cstring_view("test.addi"), &kind));
-  EXPECT_EQ(kind, LOOM_OP_TEST_ADDI);
-
-  EXPECT_TRUE(
       loom_op_registry_lookup(iree_make_cstring_view("func.def"), &kind));
   EXPECT_EQ(kind, LOOM_OP_FUNC_DEF);
 
   EXPECT_TRUE(
       loom_op_registry_lookup(iree_make_cstring_view("index.constant"), &kind));
   EXPECT_EQ(kind, LOOM_OP_INDEX_CONSTANT);
+}
+
+TEST(OpRegistry, TestDialectIsNotInProductionRegistry) {
+  loom_op_kind_t kind = 0xFFFF;
+  EXPECT_FALSE(
+      loom_op_registry_lookup(iree_make_cstring_view("test.addi"), &kind));
+  EXPECT_EQ(kind, 0xFFFF);
 }
 
 TEST(OpRegistry, LookupUnknownReturnsNull) {
@@ -78,7 +80,7 @@ TEST(OpRegistry, AllEntriesValid) {
   }
 }
 
-TEST(OpRegistry, RegistersCompleteContextSurface) {
+TEST(OpRegistry, RegistersProductionContextSurface) {
   loom_context_t context;
   IREE_ASSERT_OK(
       loom_op_registry_initialize_context(iree_allocator_system(), &context));
@@ -91,6 +93,9 @@ TEST(OpRegistry, RegistersCompleteContextSurface) {
 
   EXPECT_NE(loom_context_lookup_encoding_vtable(
                 &context, iree_make_cstring_view("dense")),
+            nullptr);
+  EXPECT_EQ(loom_context_lookup_op_by_name(
+                &context, iree_make_cstring_view("test.addi"), &kind),
             nullptr);
 
   loom_context_deinitialize(&context);

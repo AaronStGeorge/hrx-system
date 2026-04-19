@@ -4915,5 +4915,72 @@
       }
     ],
     "fix_hint_template": "Check target package support, descriptor encoding hooks, relocation records, and artifact metadata for emitter '{emitter_name}'"
+  },
+  {
+    "error_id": "ERR_BACKEND_013",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 13,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Schedule resource bottleneck estimate recorded.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' resource '{resource_name}' is a schedule bottleneck: {estimated_min_cycles} estimated cycle(s) from {total_unit_cycles} unit-cycle(s), {use_count} use(s), capacity {capacity_per_cycle}/cycle, peak {peak_units_per_cycle}/cycle, contention group {contention_group}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "resource_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "capacity_per_cycle",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "contention_group",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "use_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "total_unit_cycles",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "estimated_min_cycles",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "peak_units_per_cycle",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
   }
 ]

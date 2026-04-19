@@ -119,7 +119,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
-    loom::src::loom::ops::op_registry
+    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )

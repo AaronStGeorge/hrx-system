@@ -10,11 +10,13 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/text_asm_test_util.h"
 
 namespace loom {
 namespace {
 
+using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 const loom_low_descriptor_t* LookupDescriptor(
@@ -148,6 +150,24 @@ TEST(AmdgpuDescriptorsTest, Gfx950LowAsmRequiresExplicitMfmaResultType) {
       &packet, /*operands=*/nullptr, /*operand_count=*/0, /*result_index=*/0,
       agpr_type, &diagnostic_detail));
   EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
+}
+
+TEST(AmdgpuDescriptorsTest, Gfx950LowAsmRegionRoundTrips) {
+  LowTextAsmRoundTripHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx950_core_descriptor_set));
+
+  const char* source =
+      "test.low_asm_region asm<amdgpu.gfx950.core> {\n"
+      "  %c0 = s_mov_b32 7\n"
+      "  %c1 = s_mov_b32 5\n"
+      "  %sum = s_add_u32 %c0, %c1\n"
+      "  s_waitcnt {vmcnt = 0, lgkmcnt = 0}\n"
+      "  return %sum\n"
+      "}\n";
+  std::string printed;
+  IREE_ASSERT_OK(harness.RoundTrip(IREE_SV(source),
+                                   IREE_SV("amdgpu.gfx950.core"), &printed));
+  EXPECT_EQ(printed, source);
 }
 
 TEST(AmdgpuDescriptorsTest, ManifestNamesScalarVectorMemoryAndMatrixPackets) {

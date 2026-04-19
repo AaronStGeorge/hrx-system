@@ -3375,6 +3375,37 @@ static const loom_error_def_t loom_err_backend_012 = {
     .param_count = 7,
 };
 
+static const loom_error_param_def_t loom_err_backend_013_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"resource_name", LOOM_PARAM_STRING},
+    {"capacity_per_cycle", LOOM_PARAM_U32},
+    {"contention_group", LOOM_PARAM_U32},
+    {"use_count", LOOM_PARAM_U32},
+    {"total_unit_cycles", LOOM_PARAM_U64},
+    {"estimated_min_cycles", LOOM_PARAM_U64},
+    {"peak_units_per_cycle", LOOM_PARAM_U32},
+};
+static const loom_error_def_t loom_err_backend_013 = {
+    .error_id = "ERR_BACKEND_013",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 13,
+    .summary = "Schedule resource bottleneck estimate recorded.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' resource '{resource_name}' is a schedule "
+        "bottleneck: {estimated_min_cycles} estimated cycle(s) from "
+        "{total_unit_cycles} unit-cycle(s), {use_count} use(s), capacity "
+        "{capacity_per_cycle}/cycle, peak {peak_units_per_cycle}/cycle, "
+        "contention group {contention_group}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_013_params,
+    .param_count = 11,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -3433,7 +3464,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_backend_002,   &loom_err_backend_003,   &loom_err_backend_004,
     &loom_err_backend_005,   &loom_err_backend_006,   &loom_err_backend_007,
     &loom_err_backend_008,   &loom_err_backend_009,   &loom_err_backend_010,
-    &loom_err_backend_011,   &loom_err_backend_012,
+    &loom_err_backend_011,   &loom_err_backend_012,   &loom_err_backend_013,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

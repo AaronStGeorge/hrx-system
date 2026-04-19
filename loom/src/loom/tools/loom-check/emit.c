@@ -25,7 +25,6 @@
 #include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/target/ir_records.h"
-#include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/target/presets.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
@@ -60,6 +59,8 @@ typedef struct loom_check_emit_request_t {
   iree_string_view_t analysis_symbol_name;
   // Low descriptor set used by descriptor-manifest dumps.
   const loom_low_descriptor_set_t* low_descriptor_set;
+  // Low descriptor-set key used by descriptor-manifest dumps.
+  iree_string_view_t low_descriptor_set_key;
   // Low allocation budget overrides parsed from the RUN line.
   loom_low_allocation_budget_t
       low_allocation_budgets[LOOM_CHECK_LOW_ALLOCATION_MAX_BUDGETS];
@@ -244,11 +245,18 @@ static iree_status_t loom_check_emit_parse_low_schedule_option(
   } else if (iree_string_view_equal(value, IREE_SV("pressure"))) {
     request->low_schedule_diagnostic_flags =
         LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS;
+  } else if (iree_string_view_equal(value, IREE_SV("resources"))) {
+    request->low_schedule_diagnostic_flags =
+        LOOM_LOW_SCHEDULE_DIAGNOSTIC_RESOURCE_BOTTLENECKS;
+  } else if (iree_string_view_equal(value, IREE_SV("all"))) {
+    request->low_schedule_diagnostic_flags =
+        LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS |
+        LOOM_LOW_SCHEDULE_DIAGNOSTIC_RESOURCE_BOTTLENECKS;
   } else {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "low-schedule-json option 'diagnostics' expected 'none' or "
-        "'pressure', got '%.*s'",
+        "low-schedule-json option 'diagnostics' expected 'none', 'pressure', "
+        "'resources', or 'all', got '%.*s'",
         (int)value.size, value.data);
   }
   request->has_low_schedule_diagnostics_option = true;
@@ -281,6 +289,7 @@ static iree_status_t loom_check_emit_parse_request(
       .target_bundle_symbol_name = iree_string_view_empty(),
       .analysis_symbol_name = iree_string_view_empty(),
       .low_descriptor_set = NULL,
+      .low_descriptor_set_key = iree_string_view_empty(),
       .low_allocation_budget_count = 0,
       .low_allocation_diagnostic_flags = 0,
       .has_low_allocation_diagnostics_option = false,
@@ -380,17 +389,13 @@ static iree_status_t loom_check_emit_parse_request(
                                     IREE_SV("low-descriptor-manifest")) ||
              iree_string_view_equal(target_name,
                                     IREE_SV("low-descriptor-json"))) {
-    const loom_low_descriptor_set_t* descriptor_set = NULL;
-    IREE_RETURN_IF_ERROR(
-        loom_target_low_descriptor_set_lookup(profile_name, &descriptor_set));
-    if (descriptor_set != NULL) {
-      out_request->format = LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST;
-      out_request->low_descriptor_set = descriptor_set;
-      return iree_ok_status();
+    if (iree_string_view_is_empty(profile_name)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor set key is required");
     }
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "unknown low descriptor set '%.*s'",
-                            (int)profile_name.size, profile_name.data);
+    out_request->format = LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST;
+    out_request->low_descriptor_set_key = profile_name;
+    return iree_ok_status();
   } else if (iree_string_view_equal(target_name,
                                     IREE_SV("target-low-registry-manifest")) ||
              iree_string_view_equal(target_name,
@@ -978,8 +983,9 @@ static iree_status_t loom_check_emit_write_low_allocation_json(
 iree_status_t loom_check_execute_emit(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
-    loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    iree_allocator_t allocator, loom_check_result_t* result) {
+    const loom_check_environment_t* environment, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_check_result_t* result) {
   iree_arena_allocator_t diagnostic_arena;
   iree_arena_initialize(block_pool, &diagnostic_arena);
   loom_check_diagnostic_collector_t diagnostic_collector = {
@@ -1000,12 +1006,26 @@ iree_status_t loom_check_execute_emit(
   }
   if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST ||
       request.format == LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST) {
+    loom_target_low_descriptor_registry_t registry = {0};
+    status = loom_check_environment_initialize_low_descriptor_registry(
+        environment, &registry);
     if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST) {
-      status = loom_low_descriptor_set_format_manifest_json(
-          request.low_descriptor_set, &result->actual_output);
-    } else {
-      loom_target_low_descriptor_registry_t registry;
-      loom_target_low_descriptor_registry_initialize(&registry);
+      if (iree_status_is_ok(status)) {
+        status = loom_low_descriptor_registry_lookup(
+            &registry.registry, request.low_descriptor_set_key,
+            &request.low_descriptor_set);
+      }
+      if (iree_status_is_ok(status) && request.low_descriptor_set == NULL) {
+        status = iree_make_status(IREE_STATUS_NOT_FOUND,
+                                  "unknown low descriptor set '%.*s'",
+                                  (int)request.low_descriptor_set_key.size,
+                                  request.low_descriptor_set_key.data);
+      }
+      if (iree_status_is_ok(status)) {
+        status = loom_low_descriptor_set_format_manifest_json(
+            request.low_descriptor_set, &result->actual_output);
+      }
+    } else if (iree_status_is_ok(status)) {
       status = loom_target_low_descriptor_registry_format_manifest_json(
           &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
           &result->actual_output);
@@ -1041,7 +1061,8 @@ iree_status_t loom_check_execute_emit(
 
   loom_module_t* module = NULL;
   loom_target_low_descriptor_registry_t low_registry = {0};
-  loom_target_low_descriptor_registry_initialize(&low_registry);
+  status = loom_check_environment_initialize_low_descriptor_registry(
+      environment, &low_registry);
   loom_text_parse_options_t parse_options = {
       .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
                           .user_data = &diagnostic_collector},
@@ -1050,8 +1071,10 @@ iree_status_t loom_check_execute_emit(
   loom_low_descriptor_text_asm_environment_initialize(
       &low_registry.registry, &parse_options.low_asm_environment);
   iree_string_view_t stripped_view = iree_string_builder_view(&stripped_input);
-  status = loom_text_parse(stripped_view, filename, context, block_pool,
-                           &parse_options, &module);
+  if (iree_status_is_ok(status)) {
+    status = loom_text_parse(stripped_view, filename, context, block_pool,
+                             &parse_options, &module);
+  }
   diagnostic_collector.module = module;
   if (!iree_status_is_ok(status)) {
     loom_module_free(module);

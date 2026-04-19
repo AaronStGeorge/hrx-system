@@ -10,11 +10,14 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/text_asm_test_util.h"
 
 namespace loom {
 namespace {
 
+using ::loom::testing::LowFuncAsmRoundTripHarness;
+using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 std::string ToString(const loom_low_descriptor_set_t* descriptor_set,
@@ -253,6 +256,54 @@ TEST(X86DescriptorsTest, Avx512LowAsmInfersTiedAccumulatorResultType) {
   std::string detail(diagnostic_detail.data, diagnostic_detail.size);
   EXPECT_NE(detail.find("tied operand type"), std::string::npos);
   EXPECT_NE(detail.find("reg<x86.zmm>"), std::string::npos);
+}
+
+TEST(X86DescriptorsTest, Avx512LowAsmRegionRoundTrips) {
+  LowTextAsmRoundTripHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_x86_avx512_core_descriptor_set));
+
+  const char* source =
+      "test.low_asm_region asm<x86.avx512.core> {\n"
+      "  jmp 7\n"
+      "}\n";
+  std::string printed;
+  IREE_ASSERT_OK(
+      harness.RoundTrip(IREE_SV(source), IREE_SV("x86.avx512.core"), &printed));
+  EXPECT_EQ(printed, source);
+}
+
+TEST(X86DescriptorsTest, Avx512LowFuncAsmRoundTripsTiedDotArguments) {
+  LowFuncAsmRoundTripHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_x86_avx512_core_descriptor_set));
+
+  const char* source =
+      "target.snapshot @x86_64 {codegen_format = low_native, target_triple = "
+      "\"x86_64-pc-linux-gnu\", data_layout = \"\", artifact_format = elf, "
+      "target_cpu = \"x86-64-v4\", target_features = \"+avx512vnni\", "
+      "default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = "
+      "64, memory_space_generic = 0, memory_space_global = 0, "
+      "memory_space_workgroup = 4294967295, memory_space_constant = 0, "
+      "memory_space_private = 4294967295, memory_space_host = 0, "
+      "memory_space_descriptor = 4294967295}\n"
+      "target.export @x86_export {export_symbol = \"dot\", abi = "
+      "object_function, linkage = default, hal_binding_alignment = 0, "
+      "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
+      "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
+      "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
+      "target.config @x86_config {contract_set_key = \"x86.avx512.core\", "
+      "contract_feature_bits = 9223372036854775807}\n"
+      "target.bundle @x86_target {snapshot = @x86_64, export_plan = "
+      "@x86_export, config = @x86_config}\n"
+      "low.func.def target(@x86_target) @dot(%acc : reg<x86.zmm>, %lhs : "
+      "reg<x86.zmm>, %rhs : reg<x86.zmm>) -> (reg<x86.zmm>) "
+      "asm<x86.avx512.core> {\n"
+      "  %out = vpdpbusd %acc, %lhs, %rhs\n"
+      "  return %out\n"
+      "}\n";
+  std::string printed;
+  IREE_ASSERT_OK(harness.RoundTripAndVerify(
+      IREE_SV(source), IREE_SV("x86.avx512.core"), &printed));
+  EXPECT_NE(printed.find("vpdpbusd %acc, %lhs, %rhs"), std::string::npos);
 }
 
 TEST(X86DescriptorsTest, ManifestNamesVectorMemoryAndDotPackets) {

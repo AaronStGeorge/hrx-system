@@ -80,7 +80,7 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    low_descriptor_registry_base
+    low_descriptor_registry
   HDRS
     "low_descriptor_registry.h"
   SRCS
@@ -98,19 +98,13 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    low_descriptor_registry
+    low_descriptor_registry_core_test
   HDRS
-    "low_descriptor_registry.h"
     "low_descriptor_registry_core_test.h"
   SRCS
     "low_descriptor_registry_core_test.c"
   DEPS
-    ::low_descriptor_registry_base
-    ::preset_registry
-    ::types
-    iree::base
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::requirements
+    ::low_descriptor_registry
     loom::src::loom::target::test::low_registry
   PUBLIC
 )
@@ -160,7 +154,7 @@ loom_cc_test(
     "presets_test.cc"
   DEPS
     ::ir_records
-    ::low_descriptor_registry
+    ::low_descriptor_registry_core_test
     ::presets
     iree::base::internal::arena
     loom::src::loom::format::text::parser
@@ -177,7 +171,7 @@ loom_cc_test(
   SRCS
     "low_descriptor_registry_test.cc"
   DEPS
-    ::low_descriptor_registry
+    ::low_descriptor_registry_core_test
     loom::src::loom::codegen::low::requirements
     iree::testing::gtest
     iree::testing::gtest_main

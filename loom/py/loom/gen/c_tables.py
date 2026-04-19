@@ -124,6 +124,7 @@ REGION_SYNTAX_MAP: dict[str, str] = {
     "": "LOOM_REGION_SYNTAX_DEFAULT",
     "test.do": "LOOM_REGION_SYNTAX_TEST_DO",
     "low.asm": "LOOM_REGION_SYNTAX_LOW_ASM",
+    "low.asm.optional": "LOOM_REGION_SYNTAX_LOW_ASM_OPTIONAL",
 }
 
 # Maps Python TypeConstraint enum to C constraint enum name.
@@ -2982,7 +2983,7 @@ def generate_op_registry(
     header.append("#endif")
     header.append("")
     header.append("// Entry in the sorted op registry. Each entry maps a dotted name")
-    header.append('// (e.g., "test.addi") to its op kind (enum value). The array is')
+    header.append('// (e.g., "func.def") to its op kind (enum value). The array is')
     header.append("// sorted lexicographically by name at code generation time so")
     header.append("// lookup is a binary search — no runtime sorting needed.")
     header.append("typedef struct loom_op_registry_entry_t {")
@@ -2990,26 +2991,26 @@ def generate_op_registry(
     header.append("  loom_op_kind_t kind;")
     header.append("} loom_op_registry_entry_t;")
     header.append("")
-    header.append("// Returns the number of entries in the global op registry.")
+    header.append("// Returns the number of entries in the production op registry.")
     header.append("iree_host_size_t loom_op_registry_count(void);")
     header.append("")
     header.append("// Returns the sorted registry array (for iteration/testing).")
     header.append("const loom_op_registry_entry_t* loom_op_registry_entries(void);")
     header.append("")
-    header.append('// Looks up an op kind by dotted name (e.g., "test.addi").')
+    header.append('// Looks up an op kind by dotted name (e.g., "func.def").')
     header.append("// Returns true and sets *out_kind on success, false if not found.")
     header.append("bool loom_op_registry_lookup(iree_string_view_t name,")
     header.append("                             loom_op_kind_t* out_kind);")
     header.append("")
-    header.append("// Registers all checked-in dialect vtables and built-in encoding families.")
+    header.append("// Registers production dialect vtables and built-in encoding families.")
     header.append("//")
     header.append("// The context must have been initialized and must not have been")
-    header.append("// finalized yet. This is the production/tooling registration path; tests")
-    header.append("// should use it instead of owning a separate dialect list.")
+    header.append("// finalized yet. The test dialect is intentionally not registered here;")
+    header.append("// developer tools and tests that need it must opt in explicitly.")
     header.append("iree_status_t loom_op_registry_register_all_dialects(")
     header.append("    loom_context_t* context);")
     header.append("")
-    header.append("// Initializes |out_context| with all checked-in dialects and encodings.")
+    header.append("// Initializes |out_context| with production dialects and encodings.")
     header.append("//")
     header.append("// On failure the partially initialized context is deinitialized before")
     header.append("// returning.")
@@ -3456,6 +3457,7 @@ def main() -> None:
         (target_ops, list(ALL_TARGET_OPS)),
         (low_ops, list(ALL_LOW_OPS)),
     ]
+    production_dialects = [(dialect, ops) for dialect, ops in dialects if dialect.name != "test"]
 
     output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "ops"
 
@@ -3482,7 +3484,7 @@ def main() -> None:
         print(f"  {dialect.name}: {len(ops)} ops in {rel}/")
 
     # Generate cross-dialect registries.
-    op_reg_h, op_reg_c = generate_op_registry(dialects)
+    op_reg_h, op_reg_c = generate_op_registry(production_dialects)
     all_types = [
         *ALL_BUILTIN_TYPES,
         *ALL_HAL_TYPES,
@@ -3507,8 +3509,10 @@ def main() -> None:
             f.write(content)
 
     total_ops = sum(len(ops) for _, ops in dialects)
+    op_registry_ops = sum(len(ops) for _, ops in production_dialects)
     total_types = len(all_types)
-    print(f"  op_registry: {total_ops} ops")
+    print(f"  op tables: {total_ops} ops")
+    print(f"  op_registry: {op_registry_ops} production ops")
     print(f"  type_registry: {total_types} types")
     print(f"  keywords: {len(KEYWORD_MAP)} keywords")
 

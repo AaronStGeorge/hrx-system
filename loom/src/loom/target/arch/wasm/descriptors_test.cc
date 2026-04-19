@@ -10,11 +10,14 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/text_asm_test_util.h"
 
 namespace loom {
 namespace {
 
+using ::loom::testing::LowFuncAsmRoundTripHarness;
+using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 TEST(WasmDescriptorsTest, CoreSimd128DescriptorSetVerifies) {
@@ -81,6 +84,63 @@ TEST(WasmDescriptorsTest, LowAsmInfersV128ResultType) {
       &result_type, &diagnostic_detail));
   EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
   EXPECT_TRUE(harness.RegisterTypeEquals(result_type, IREE_SV("wasm.v128"), 1));
+}
+
+TEST(WasmDescriptorsTest, LowAsmRegionRoundTrips) {
+  LowTextAsmRoundTripHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_wasm_core_simd128_descriptor_set));
+
+  const char* source =
+      "test.low_asm_region asm<wasm.core.simd128> {\n"
+      "  %addr = i32.const 16\n"
+      "  %lhs = v128.const 1, 2\n"
+      "  %rhs = v128.const 3, 4\n"
+      "  %sum = i32x4.add %lhs, %rhs\n"
+      "  %loaded = v128.load %addr\n"
+      "  v128.store %addr, %loaded\n"
+      "  return %sum\n"
+      "}\n";
+  std::string printed;
+  IREE_ASSERT_OK(harness.RoundTrip(IREE_SV(source),
+                                   IREE_SV("wasm.core.simd128"), &printed));
+  EXPECT_EQ(printed, source);
+}
+
+TEST(WasmDescriptorsTest, LowFuncAsmRoundTripsMemoryPacketsWithArguments) {
+  LowFuncAsmRoundTripHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_wasm_core_simd128_descriptor_set));
+
+  const char* source =
+      "target.snapshot @wasm32 {codegen_format = wasm, target_triple = "
+      "\"wasm32-unknown-unknown\", data_layout = \"\", artifact_format = "
+      "wasm_binary, target_cpu = \"generic\", target_features = "
+      "\"+simd128\", default_pointer_bitwidth = 32, index_bitwidth = 32, "
+      "offset_bitwidth = 32, memory_space_generic = 0, memory_space_global = "
+      "0, memory_space_workgroup = 4294967295, memory_space_constant = 0, "
+      "memory_space_private = 4294967295, memory_space_host = 4294967295, "
+      "memory_space_descriptor = 4294967295}\n"
+      "target.export @wasm_export {export_symbol = \"memory\", abi = "
+      "wasm_function, linkage = default, hal_binding_alignment = 0, "
+      "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
+      "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
+      "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
+      "target.config @wasm_config {contract_set_key = "
+      "\"wasm.core.simd128\", contract_feature_bits = 7}\n"
+      "target.bundle @wasm_target {snapshot = @wasm32, export_plan = "
+      "@wasm_export, config = @wasm_config}\n"
+      "low.func.def target(@wasm_target) @memory(%addr : reg<wasm.i32>, "
+      "%lhs : reg<wasm.v128>, %rhs : reg<wasm.v128>) -> (reg<wasm.v128>) "
+      "asm<wasm.core.simd128> {\n"
+      "  %loaded = v128.load %addr\n"
+      "  %sum = i32x4.add %lhs, %rhs\n"
+      "  v128.store %addr, %loaded\n"
+      "  return %sum\n"
+      "}\n";
+  std::string printed;
+  IREE_ASSERT_OK(harness.RoundTripAndVerify(
+      IREE_SV(source), IREE_SV("wasm.core.simd128"), &printed));
+  EXPECT_NE(printed.find("v128.load %addr"), std::string::npos);
+  EXPECT_NE(printed.find("v128.store %addr, %loaded"), std::string::npos);
 }
 
 TEST(WasmDescriptorsTest, ManifestNamesSimdAndMemoryPackets) {

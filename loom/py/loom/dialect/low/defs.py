@@ -310,7 +310,7 @@ low_func_def = Op(
         *_FUNC_MODIFIER_FORMAT,
         *_FUNC_TARGET_FORMAT,
         *_FUNC_SIGNATURE_FORMAT,
-        Region("body"),
+        Region("body", syntax="low.asm.optional"),
     ],
     examples=[
         "low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n  %sum = low.op<amdgpu.v_add_u32>(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> reg<amdgpu.vgpr x1>\n  low.return %sum : reg<amdgpu.vgpr x1>\n}",

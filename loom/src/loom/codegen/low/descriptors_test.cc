@@ -900,6 +900,16 @@ TEST(LowDescriptorsTest, RejectsUnsortedAsmForms) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
+TEST(LowDescriptorsTest, RejectsDuplicateAsmFormMnemonics) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+  tables.asm_forms[1].mnemonic_string_offset = TEST_STRING_OFFSET(mnemonic_add);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
 TEST(LowDescriptorsTest, RejectsAsmFormOperandWithResultRole) {
   TestTables tables;
   InitializeTestTables(&tables);

@@ -12,10 +12,37 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
+#include "loom/target/low_descriptor_registry_core_test.h"
+#include "loom/testing/context.h"
 #include "loom/tools/loom-check/check.h"
 
 namespace loom {
 namespace {
+
+iree_status_t RegisterTestContext(void* user_data, loom_context_t* context) {
+  (void)user_data;
+  return loom_testing_context_register_all_dialects(context);
+}
+
+iree_status_t InitializeTestLowDescriptorRegistry(
+    void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
+  (void)user_data;
+  loom_target_core_test_low_descriptor_registry_initialize(out_registry);
+  return iree_ok_status();
+}
+
+const loom_check_environment_t kExecuteTestEnvironment = {
+    .register_context =
+        {
+            .fn = RegisterTestContext,
+            .user_data = nullptr,
+        },
+    .initialize_low_descriptor_registry =
+        {
+            .fn = InitializeTestLowDescriptorRegistry,
+            .user_data = nullptr,
+        },
+};
 
 class ExecuteTest : public ::testing::Test {
  protected:
@@ -23,7 +50,8 @@ class ExecuteTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
-    IREE_ASSERT_OK(loom_check_context_initialize(&context_));
+    IREE_ASSERT_OK(
+        loom_check_context_initialize(&kExecuteTestEnvironment, &context_));
   }
 
   void TearDown() override {
@@ -56,7 +84,8 @@ class ExecuteTest : public ::testing::Test {
       result_initialized = true;
       status = loom_check_execute_case(
           &file.cases[0], 0, &report, iree_make_cstring_view("test.loom-test"),
-          &context_, &block_pool_, iree_allocator_system(), out_result);
+          &kExecuteTestEnvironment, &context_, &block_pool_,
+          iree_allocator_system(), out_result);
     }
     iree_arena_deinitialize(&arena);
     if (!iree_status_is_ok(status) && result_initialized) {

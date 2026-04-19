@@ -111,6 +111,18 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/test:low_registry",
 )
 
+iree_assert_no_dependency(
+    name = "target_low_descriptor_registry_no_test_low_registry_dep",
+    dependency = "//loom/src/loom/target/test:low_registry",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "all_low_registry_no_test_low_registry_dep",
+    dependency = "//loom/src/loom/target/test:low_registry",
+    target = "//loom/src/loom/target/all:low_registry",
+)
+
 #===------------------------------------------------------------------------===#
 # Backend-independent low test descriptors
 #===------------------------------------------------------------------------===#
@@ -136,7 +148,7 @@ loom_cc_library(
     deps = [
         ":descriptors",
         "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/target:low_descriptor_registry_base",
+        "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
@@ -149,6 +161,7 @@ loom_cc_test(
         ":alt_descriptors",
         ":descriptors",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:text_asm_roundtrip_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

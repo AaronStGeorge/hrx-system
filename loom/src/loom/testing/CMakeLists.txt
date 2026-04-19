@@ -33,6 +33,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
+    loom::src::loom::ops::test
   TESTONLY
   PUBLIC
 )

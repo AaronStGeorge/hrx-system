@@ -18,11 +18,8 @@
 #include "loom/target/arch/x86/packed_dot_descriptors.h"
 #include "loom/target/emit/ireevm/descriptors.h"
 #include "loom/target/emit/ireevm/low_registry.h"
-#include "loom/target/test/descriptors.h"
-#include "loom/target/test/low_registry.h"
 
 static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {
-    loom_test_low_core_descriptor_set,
     loom_ireevm_core_descriptor_set,
     loom_wasm_core_simd128_descriptor_set,
     loom_x86_avx512_core_descriptor_set,
@@ -34,7 +31,6 @@ static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {
 };
 
 static const loom_target_bundle_t* const kLowTargetBundles[] = {
-    &loom_test_low_target_bundle_core,
     &loom_ireevm_low_target_bundle_core,
     &loom_wasm_low_target_bundle_core_simd128,
     &loom_x86_low_target_bundle_avx512_core,

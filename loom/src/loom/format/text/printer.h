@@ -18,6 +18,7 @@
 #define LOOM_FORMAT_TEXT_PRINTER_H_
 
 #include "iree/base/api.h"
+#include "loom/format/text/low_asm.h"
 #include "loom/ir/ir.h"
 #include "loom/util/stream.h"
 
@@ -45,16 +46,36 @@ typedef uint32_t loom_text_print_flags_t;
 #define LOOM_TEXT_PRINT_DEFAULT \
   (LOOM_TEXT_PRINT_INDENT | LOOM_TEXT_PRINT_USE_ALIASES)
 
+// Options controlling canonical text printing.
+typedef struct loom_text_print_options_t {
+  // Flag bitset controlling layout and optional annotations.
+  loom_text_print_flags_t flags;
+  // Optional environment used to print low asm region syntax.
+  loom_text_low_asm_environment_t low_asm_environment;
+  // Descriptor-set key selected for low asm region syntax in this print.
+  iree_string_view_t low_asm_descriptor_set_key;
+} loom_text_print_options_t;
+
 // Prints a complete module to canonical text via the output stream.
 iree_status_t loom_text_print_module(const loom_module_t* module,
                                      loom_output_stream_t* stream,
                                      loom_text_print_flags_t flags);
+
+// Prints a complete module using explicit printer options.
+iree_status_t loom_text_print_module_with_options(
+    const loom_module_t* module, loom_output_stream_t* stream,
+    const loom_text_print_options_t* options);
 
 // Prints a single operation via the output stream.
 iree_status_t loom_text_print_operation(const loom_module_t* module,
                                         const loom_op_t* op,
                                         loom_output_stream_t* stream,
                                         loom_text_print_flags_t flags);
+
+// Prints a single operation using explicit printer options.
+iree_status_t loom_text_print_operation_with_options(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_output_stream_t* stream, const loom_text_print_options_t* options);
 
 // Prints a type in canonical form to the output stream.
 iree_status_t loom_text_print_type(loom_type_t type,
@@ -66,10 +87,20 @@ iree_status_t loom_text_print_module_to_builder(const loom_module_t* module,
                                                 iree_string_builder_t* builder,
                                                 loom_text_print_flags_t flags);
 
+// Convenience: print module to a builder using explicit printer options.
+iree_status_t loom_text_print_module_to_builder_with_options(
+    const loom_module_t* module, iree_string_builder_t* builder,
+    const loom_text_print_options_t* options);
+
 // Convenience: print single op to an iree_string_builder_t.
 iree_status_t loom_text_print_operation_to_builder(
     const loom_module_t* module, const loom_op_t* op,
     iree_string_builder_t* builder, loom_text_print_flags_t flags);
+
+// Convenience: print single op to a builder using explicit printer options.
+iree_status_t loom_text_print_operation_to_builder_with_options(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_string_builder_t* builder, const loom_text_print_options_t* options);
 
 //===----------------------------------------------------------------------===//
 // Field emission callback

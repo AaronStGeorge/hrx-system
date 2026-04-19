@@ -72,6 +72,33 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    text_asm_roundtrip_test_util
+  HDRS
+    "text_asm_roundtrip_test_util.h"
+  SRCS
+    "text_asm_roundtrip_test_util.cc"
+  DEPS
+    ::descriptors
+    ::text_asm
+    ::verify
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::format::bytecode::reader
+    loom::src::loom::format::bytecode::writer
+    loom::src::loom::format::text::low_asm
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::test
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_binding
   HDRS
     "target_binding.h"
@@ -282,9 +309,9 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::ops::op_registry
     loom::src::loom::ops::target
     loom::src::loom::target::emit::ireevm::descriptors
+    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -295,13 +322,19 @@ loom_cc_test(
   SRCS
     "verify_test.cc"
   DEPS
+    ::text_asm
     ::verify
     iree::base::internal::arena
+    iree::io::stream
     loom::src::loom::error::error_defs
+    loom::src::loom::format::bytecode::reader
+    loom::src::loom::format::bytecode::writer
     loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
     loom::src::loom::ir
-    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::low
     loom::src::loom::target::emit::ireevm::descriptors
+    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )

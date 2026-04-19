@@ -19,15 +19,14 @@ TEST(AllLowRegistryTest, VerifiesEveryLinkedTargetPackage) {
   loom_target_low_descriptor_registry_t registry = {};
   loom_all_low_descriptor_registry_initialize(&registry);
 
-  EXPECT_EQ(registry.registry.descriptor_set_provider_count, 9u);
-  EXPECT_EQ(registry.target_bundle_count, 9u);
+  EXPECT_EQ(registry.registry.descriptor_set_provider_count, 8u);
+  EXPECT_EQ(registry.target_bundle_count, 8u);
   IREE_ASSERT_OK(loom_target_low_descriptor_registry_verify(
       &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 
   const char* expected_bundle_keys[] = {
-      "test-low",     "iree-vm",        "wasm-simd128",
-      "x86-avx512",   "x86-packed-dot", "amdgpu-gfx950",
-      "amdgpu-gfx11", "amdgpu-gfx12",   "amdgpu-gfx1250",
+      "iree-vm",       "wasm-simd128", "x86-avx512",   "x86-packed-dot",
+      "amdgpu-gfx950", "amdgpu-gfx11", "amdgpu-gfx12", "amdgpu-gfx1250",
   };
   for (const char* expected_bundle_key : expected_bundle_keys) {
     const loom_target_bundle_t* bundle = nullptr;
@@ -43,6 +42,12 @@ TEST(AllLowRegistryTest, VerifiesEveryLinkedTargetPackage) {
         << expected_bundle_key;
     ASSERT_NE(descriptor_set, nullptr) << expected_bundle_key;
   }
+
+  const loom_target_bundle_t* test_bundle = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_NOT_FOUND,
+      loom_target_low_descriptor_registry_lookup_bundle(
+          &registry, iree_make_cstring_view("test-low"), &test_bundle));
 }
 
 TEST(AllLowRegistryTest, ManifestNamesRepresentativeTargets) {
@@ -58,7 +63,6 @@ TEST(AllLowRegistryTest, ManifestNamesRepresentativeTargets) {
                    iree_string_builder_size(&builder));
   iree_string_builder_deinitialize(&builder);
 
-  EXPECT_NE(json.find("\"key\":\"test.low.core\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"iree.vm.core\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"wasm.core.simd128\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.core\""), std::string::npos);
