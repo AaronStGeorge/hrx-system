@@ -98,12 +98,14 @@ iree_status_t loom_low_schedule_format_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
       ",\"block_count\":%zu,\"node_count\":%zu,\"dependency_count\":%zu"
+      ",\"candidate_decision_count\":%zu"
       ",\"resource_use_count\":%zu,\"hazard_use_count\":%zu"
       ",\"hazard_gap_count\":%zu"
       ",\"resource_summary_count\":%zu",
       sidecar->block_count, sidecar->node_count, sidecar->dependency_count,
-      sidecar->resource_use_count, sidecar->hazard_use_count,
-      sidecar->hazard_gap_count, sidecar->resource_summary_count));
+      sidecar->candidate_decision_count, sidecar->resource_use_count,
+      sidecar->hazard_use_count, sidecar->hazard_gap_count,
+      sidecar->resource_summary_count));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"blocks\":["));
@@ -210,6 +212,47 @@ iree_status_t loom_low_schedule_format_json(
           step->node_index, step->block_index, step->scheduled_ordinal,
           step->live_units_before, step->killed_live_units,
           step->produced_live_units, step->live_units_after));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+  }
+
+  if (sidecar->candidate_decision_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"candidate_decisions\":["));
+    for (iree_host_size_t i = 0; i < sidecar->candidate_decision_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      const loom_low_schedule_candidate_decision_t* decision =
+          &sidecar->candidate_decisions[i];
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream,
+          "{\"block\":%" PRIu32 ",\"scheduled_ordinal\":%" PRIu32
+          ",\"candidate_count\":%" PRIu32 ",\"chosen_node\":%" PRIu32
+          ",\"chosen_projected_live_units\":%" PRIu64
+          ",\"chosen_killed_live_units\":%" PRIu64
+          ",\"chosen_produced_live_units\":%" PRIu64 ",\"rejected_node\":",
+          decision->block_index, decision->scheduled_ordinal,
+          decision->ready_candidate_count, decision->chosen_node,
+          decision->chosen_projected_live_units,
+          decision->chosen_killed_live_units,
+          decision->chosen_produced_live_units));
+      if (decision->rejected_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+            &stream,
+            "null,\"rejected_projected_live_units\":null"
+            ",\"rejected_killed_live_units\":null"
+            ",\"rejected_produced_live_units\":null}"));
+      } else {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+            &stream,
+            "%" PRIu32 ",\"rejected_projected_live_units\":%" PRIu64
+            ",\"rejected_killed_live_units\":%" PRIu64
+            ",\"rejected_produced_live_units\":%" PRIu64 "}",
+            decision->rejected_node, decision->rejected_projected_live_units,
+            decision->rejected_killed_live_units,
+            decision->rejected_produced_live_units));
+      }
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }

@@ -41,6 +41,8 @@ typedef struct loom_low_schedule_build_state_t {
   uint32_t* scheduled_node_indices;
   // Pressure-model steps in scheduled order for pressure strategy runs.
   loom_low_schedule_pressure_step_t* pressure_steps;
+  // Pressure candidate decisions in scheduled order when requested.
+  loom_low_schedule_candidate_decision_t* candidate_decisions;
   // Descriptor resource uses in scheduled order.
   loom_low_schedule_resource_use_t* resource_uses;
   // Descriptor hazard rows in scheduled order.
@@ -62,6 +64,8 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t scheduled_node_count;
   // Number of populated pressure_steps entries.
   iree_host_size_t pressure_step_count;
+  // Number of populated candidate_decisions entries.
+  iree_host_size_t candidate_decision_count;
   // Number of populated resource_uses entries.
   iree_host_size_t resource_use_count;
   // Number of populated hazard_uses entries.
@@ -326,6 +330,72 @@ static iree_status_t loom_low_schedule_emit_pressure_diagnostics(
   for (iree_host_size_t i = 0; i < liveness->pressure_summary_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_schedule_emit_pressure_summary(
         state, liveness, &liveness->pressure_summaries[i]));
+  }
+  return iree_ok_status();
+}
+
+static iree_string_view_t loom_low_schedule_node_diagnostic_label(
+    const loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_node_t* node) {
+  if (node && !iree_string_view_is_empty(node->descriptor_key)) {
+    return node->descriptor_key;
+  }
+  if (node) {
+    return loom_op_name(state->module, node->op);
+  }
+  return IREE_SV("<unknown>");
+}
+
+static iree_status_t loom_low_schedule_emit_candidate_decision(
+    loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_candidate_decision_t* decision) {
+  if (decision->rejected_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
+    return iree_ok_status();
+  }
+  const loom_low_schedule_node_t* chosen_node = NULL;
+  if (decision->chosen_node < state->scheduled_node_count) {
+    chosen_node = &state->nodes[decision->chosen_node];
+  }
+  const loom_low_schedule_node_t* rejected_node = NULL;
+  if (decision->rejected_node < state->scheduled_node_count) {
+    rejected_node = &state->nodes[decision->rejected_node];
+  }
+  const loom_block_t* block = NULL;
+  if (decision->block_index < state->body->block_count) {
+    block = state->blocks[decision->block_index].block;
+  }
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(&state->target)),
+      loom_param_string(loom_low_diagnostic_export_name(&state->target)),
+      loom_param_string(loom_low_diagnostic_config_key(&state->target)),
+      loom_param_string(
+          loom_low_diagnostic_function_name(state->module, state->function_op)),
+      loom_param_string(loom_low_diagnostic_block_name(state->module, block)),
+      loom_param_u32(decision->scheduled_ordinal),
+      loom_param_u32(decision->ready_candidate_count),
+      loom_param_string(
+          loom_low_schedule_node_diagnostic_label(state, chosen_node)),
+      loom_param_string(
+          loom_low_schedule_node_diagnostic_label(state, rejected_node)),
+      loom_param_u64(decision->chosen_projected_live_units),
+      loom_param_u64(decision->chosen_killed_live_units),
+      loom_param_u64(decision->chosen_produced_live_units),
+      loom_param_u64(decision->rejected_projected_live_units),
+      loom_param_u64(decision->rejected_killed_live_units),
+      loom_param_u64(decision->rejected_produced_live_units),
+  };
+  const loom_op_t* origin_op =
+      chosen_node && chosen_node->op ? chosen_node->op : state->function_op;
+  return loom_low_schedule_emit(
+      state, origin_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 15),
+      params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_low_schedule_emit_candidate_decision_diagnostics(
+    loom_low_schedule_build_state_t* state) {
+  for (iree_host_size_t i = 0; i < state->candidate_decision_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_schedule_emit_candidate_decision(
+        state, &state->candidate_decisions[i]));
   }
   return iree_ok_status();
 }
@@ -604,6 +674,13 @@ static iree_status_t loom_low_schedule_initialize_storage(
       IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
           state->arena, node_count, sizeof(*state->pressure_steps),
           (void**)&state->pressure_steps));
+    }
+    if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE &&
+        iree_any_bit_set(state->options->diagnostic_flags,
+                         LOOM_LOW_SCHEDULE_DIAGNOSTIC_CANDIDATE_DECISIONS)) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          state->arena, node_count, sizeof(*state->candidate_decisions),
+          (void**)&state->candidate_decisions));
     }
   }
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -971,6 +1048,34 @@ static bool loom_low_schedule_candidate_score_less(
   return lhs.source_ordinal < rhs.source_ordinal;
 }
 
+static void loom_low_schedule_record_candidate_decision(
+    loom_low_schedule_build_state_t* state, uint32_t block_index,
+    uint32_t scheduled_ordinal, uint32_t ready_candidate_count,
+    uint32_t chosen_node, loom_low_schedule_candidate_score_t chosen_score,
+    uint32_t rejected_node,
+    loom_low_schedule_candidate_score_t rejected_score) {
+  if (!state->candidate_decisions) {
+    return;
+  }
+  if (rejected_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
+    return;
+  }
+  state->candidate_decisions[state->candidate_decision_count++] =
+      (loom_low_schedule_candidate_decision_t){
+          .block_index = block_index,
+          .scheduled_ordinal = scheduled_ordinal,
+          .ready_candidate_count = ready_candidate_count,
+          .chosen_node = chosen_node,
+          .rejected_node = rejected_node,
+          .chosen_projected_live_units = chosen_score.projected_live_units,
+          .chosen_killed_live_units = chosen_score.killed_live_units,
+          .chosen_produced_live_units = chosen_score.produced_live_units,
+          .rejected_projected_live_units = rejected_score.projected_live_units,
+          .rejected_killed_live_units = rejected_score.killed_live_units,
+          .rejected_produced_live_units = rejected_score.produced_live_units,
+      };
+}
+
 static iree_status_t loom_low_schedule_note_pressure_node_scheduled(
     loom_low_schedule_build_state_t* state,
     const loom_liveness_analysis_t* liveness,
@@ -1207,12 +1312,16 @@ static iree_status_t loom_low_schedule_note_min_distance_hazard(
 
 static void loom_low_schedule_compact_resource_summaries(
     loom_low_schedule_build_state_t* state) {
-  if (!state->resource_summaries) return;
+  if (!state->resource_summaries) {
+    return;
+  }
   iree_host_size_t write_index = 0;
   for (iree_host_size_t read_index = 0;
        read_index < state->target.descriptor_set->resource_count;
        ++read_index) {
-    if (state->resource_summaries[read_index].use_count == 0) continue;
+    if (state->resource_summaries[read_index].use_count == 0) {
+      continue;
+    }
     state->resource_summaries[write_index++] =
         state->resource_summaries[read_index];
   }
@@ -1326,8 +1435,9 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
       loom_low_schedule_allocate_pressure_state(state, &pressure_state));
   for (iree_host_size_t i = 0; i < state->dependency_count; ++i) {
     const loom_low_schedule_dependency_t* dependency = &state->dependencies[i];
-    if (dependency->consumer_node < node_count)
+    if (dependency->consumer_node < node_count) {
       ++indegrees[dependency->consumer_node];
+    }
   }
 
   for (iree_host_size_t block_index = 0; block_index < state->body->block_count;
@@ -1343,20 +1453,35 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
     while (scheduled_in_block < block_record->node_count) {
       uint32_t chosen_node = LOOM_LOW_SCHEDULE_NODE_NONE;
       loom_low_schedule_candidate_score_t chosen_score = {0};
+      uint32_t rejected_node = LOOM_LOW_SCHEDULE_NODE_NONE;
+      loom_low_schedule_candidate_score_t rejected_score = {0};
+      uint32_t ready_candidate_count = 0;
       for (uint32_t node_index = block_record->node_start;
            node_index < block_node_end; ++node_index) {
-        if (scheduled[node_index] || indegrees[node_index] != 0) continue;
+        if (scheduled[node_index] || indegrees[node_index] != 0) {
+          continue;
+        }
         if (!loom_low_schedule_uses_pressure_strategy(state)) {
           chosen_node = node_index;
           break;
         }
+        ++ready_candidate_count;
         loom_low_schedule_candidate_score_t score = {0};
         IREE_RETURN_IF_ERROR(loom_low_schedule_pressure_score_candidate(
             state, liveness, &pressure_state, node_index, &score));
         if (chosen_node == LOOM_LOW_SCHEDULE_NODE_NONE ||
             loom_low_schedule_candidate_score_less(score, chosen_score)) {
+          if (chosen_node != LOOM_LOW_SCHEDULE_NODE_NONE) {
+            rejected_node = chosen_node;
+            rejected_score = chosen_score;
+          }
           chosen_node = node_index;
           chosen_score = score;
+        } else if (rejected_node == LOOM_LOW_SCHEDULE_NODE_NONE ||
+                   loom_low_schedule_candidate_score_less(score,
+                                                          rejected_score)) {
+          rejected_node = node_index;
+          rejected_score = score;
         }
       }
       if (chosen_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
@@ -1370,6 +1495,10 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
       state->scheduled_node_indices[state->scheduled_node_count++] =
           chosen_node;
       if (loom_low_schedule_uses_pressure_strategy(state)) {
+        loom_low_schedule_record_candidate_decision(
+            state, block_index, state->nodes[chosen_node].scheduled_ordinal,
+            ready_candidate_count, chosen_node, chosen_score, rejected_node,
+            rejected_score);
         IREE_RETURN_IF_ERROR(loom_low_schedule_note_pressure_node_scheduled(
             state, liveness, &pressure_state, chosen_node, chosen_score));
       }
@@ -1380,7 +1509,9 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
            dependency_index < state->dependency_count; ++dependency_index) {
         const loom_low_schedule_dependency_t* dependency =
             &state->dependencies[dependency_index];
-        if (dependency->producer_node != chosen_node) continue;
+        if (dependency->producer_node != chosen_node) {
+          continue;
+        }
         if (dependency->consumer_node < node_count) {
           --indegrees[dependency->consumer_node];
         }
@@ -1454,6 +1585,11 @@ iree_status_t loom_low_schedule_function(
         loom_low_schedule_emit_pressure_diagnostics(&state, &liveness));
   }
   if (iree_any_bit_set(options->diagnostic_flags,
+                       LOOM_LOW_SCHEDULE_DIAGNOSTIC_CANDIDATE_DECISIONS)) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_schedule_emit_candidate_decision_diagnostics(&state));
+  }
+  if (iree_any_bit_set(options->diagnostic_flags,
                        LOOM_LOW_SCHEDULE_DIAGNOSTIC_RESOURCE_BOTTLENECKS)) {
     IREE_RETURN_IF_ERROR(loom_low_schedule_emit_resource_diagnostics(&state));
   }
@@ -1477,6 +1613,8 @@ iree_status_t loom_low_schedule_function(
       .scheduled_node_count = state.scheduled_node_count,
       .pressure_steps = state.pressure_steps,
       .pressure_step_count = state.pressure_step_count,
+      .candidate_decisions = state.candidate_decisions,
+      .candidate_decision_count = state.candidate_decision_count,
       .resource_uses = state.resource_uses,
       .resource_use_count = state.resource_use_count,
       .hazard_uses = state.hazard_uses,

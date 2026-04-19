@@ -5092,5 +5092,92 @@
         "kind_name": "U32"
       }
     ]
+  },
+  {
+    "error_id": "ERR_BACKEND_015",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 15,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Schedule candidate selection recorded.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' pressure scheduler chose '{chosen_packet}' over '{rejected_packet}' at block '{block_name}' ordinal {scheduled_ordinal}: {candidate_count} ready candidate(s), chosen projected/killed/produced {chosen_projected_live_units}/{chosen_killed_live_units}/{chosen_produced_live_units}, rejected projected/killed/produced {rejected_projected_live_units}/{rejected_killed_live_units}/{rejected_produced_live_units}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "block_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "scheduled_ordinal",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "candidate_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "chosen_packet",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "rejected_packet",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "chosen_projected_live_units",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "chosen_killed_live_units",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "chosen_produced_live_units",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "rejected_projected_live_units",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "rejected_killed_live_units",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "rejected_produced_live_units",
+        "kind": 5,
+        "kind_name": "U64"
+      }
+    ]
   }
 ]

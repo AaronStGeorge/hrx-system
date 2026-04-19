@@ -3461,6 +3461,44 @@ static const loom_error_def_t loom_err_backend_014 = {
     .param_count = 13,
 };
 
+static const loom_error_param_def_t loom_err_backend_015_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"block_name", LOOM_PARAM_STRING},
+    {"scheduled_ordinal", LOOM_PARAM_U32},
+    {"candidate_count", LOOM_PARAM_U32},
+    {"chosen_packet", LOOM_PARAM_STRING},
+    {"rejected_packet", LOOM_PARAM_STRING},
+    {"chosen_projected_live_units", LOOM_PARAM_U64},
+    {"chosen_killed_live_units", LOOM_PARAM_U64},
+    {"chosen_produced_live_units", LOOM_PARAM_U64},
+    {"rejected_projected_live_units", LOOM_PARAM_U64},
+    {"rejected_killed_live_units", LOOM_PARAM_U64},
+    {"rejected_produced_live_units", LOOM_PARAM_U64},
+};
+static const loom_error_def_t loom_err_backend_015 = {
+    .error_id = "ERR_BACKEND_015",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 15,
+    .summary = "Schedule candidate selection recorded.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' pressure scheduler chose '{chosen_packet}' over "
+        "'{rejected_packet}' at block '{block_name}' ordinal "
+        "{scheduled_ordinal}: {candidate_count} ready candidate(s), chosen "
+        "projected/killed/produced "
+        "{chosen_projected_live_units}/{chosen_killed_live_units}/"
+        "{chosen_produced_live_units}, rejected projected/killed/produced "
+        "{rejected_projected_live_units}/{rejected_killed_live_units}/"
+        "{rejected_produced_live_units}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_015_params,
+    .param_count = 15,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -3520,7 +3558,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_backend_004,   &loom_err_backend_005,   &loom_err_backend_006,
     &loom_err_backend_007,   &loom_err_backend_008,   &loom_err_backend_009,
     &loom_err_backend_010,   &loom_err_backend_011,   &loom_err_backend_012,
-    &loom_err_backend_013,   &loom_err_backend_014,
+    &loom_err_backend_013,   &loom_err_backend_014,   &loom_err_backend_015,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

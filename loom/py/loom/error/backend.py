@@ -373,6 +373,41 @@ ERR_BACKEND_014 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_015: Schedule candidate selection was recorded.
+ERR_BACKEND_015 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=15,
+    severity=Severity.REMARK,
+    summary="Schedule candidate selection recorded.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' pressure scheduler chose '{chosen_packet}' over "
+        "'{rejected_packet}' at block '{block_name}' ordinal "
+        "{scheduled_ordinal}: {candidate_count} ready candidate(s), chosen "
+        "projected/killed/produced {chosen_projected_live_units}/"
+        "{chosen_killed_live_units}/{chosen_produced_live_units}, rejected "
+        "projected/killed/produced {rejected_projected_live_units}/"
+        "{rejected_killed_live_units}/{rejected_produced_live_units}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("block_name", ParamKind.STRING),
+        ErrorParam("scheduled_ordinal", ParamKind.U32),
+        ErrorParam("candidate_count", ParamKind.U32),
+        ErrorParam("chosen_packet", ParamKind.STRING),
+        ErrorParam("rejected_packet", ParamKind.STRING),
+        ErrorParam("chosen_projected_live_units", ParamKind.U64),
+        ErrorParam("chosen_killed_live_units", ParamKind.U64),
+        ErrorParam("chosen_produced_live_units", ParamKind.U64),
+        ErrorParam("rejected_projected_live_units", ParamKind.U64),
+        ErrorParam("rejected_killed_live_units", ParamKind.U64),
+        ErrorParam("rejected_produced_live_units", ParamKind.U64),
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_001,
     ERR_BACKEND_002,
@@ -388,4 +423,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_012,
     ERR_BACKEND_013,
     ERR_BACKEND_014,
+    ERR_BACKEND_015,
 )

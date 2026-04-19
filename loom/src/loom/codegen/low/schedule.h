@@ -59,6 +59,8 @@ enum loom_low_schedule_diagnostic_bits_e {
   LOOM_LOW_SCHEDULE_DIAGNOSTIC_RESOURCE_BOTTLENECKS = 1u << 1,
   // Emits BACKEND/014 remarks for required delay/wait hazard gaps.
   LOOM_LOW_SCHEDULE_DIAGNOSTIC_HAZARD_GAPS = 1u << 2,
+  // Emits BACKEND/015 remarks for pressure-scheduler candidate choices.
+  LOOM_LOW_SCHEDULE_DIAGNOSTIC_CANDIDATE_DECISIONS = 1u << 3,
 };
 typedef uint32_t loom_low_schedule_diagnostic_flags_t;
 
@@ -138,6 +140,35 @@ typedef struct loom_low_schedule_pressure_step_t {
   // Aggregate register live units after scheduling the node.
   uint64_t live_units_after;
 } loom_low_schedule_pressure_step_t;
+
+// Pressure-strategy candidate decision recorded when a ready set has an
+// alternative to reject. This is intentionally compact: it captures the chosen
+// candidate and the best rejected alternative, which is enough to explain local
+// pressure tradeoffs without recording every ready-set member in large blocks.
+typedef struct loom_low_schedule_candidate_decision_t {
+  // Region block containing the decision.
+  uint32_t block_index;
+  // Scheduled ordinal within |block_index|.
+  uint32_t scheduled_ordinal;
+  // Number of dependency-ready candidates scored at this ordinal.
+  uint32_t ready_candidate_count;
+  // Chosen schedule node.
+  uint32_t chosen_node;
+  // Best rejected schedule node, or LOOM_LOW_SCHEDULE_NODE_NONE.
+  uint32_t rejected_node;
+  // Chosen aggregate live register units after scheduling the node.
+  uint64_t chosen_projected_live_units;
+  // Chosen live register units killed by scheduling the node.
+  uint64_t chosen_killed_live_units;
+  // Chosen live register units produced by scheduling the node.
+  uint64_t chosen_produced_live_units;
+  // Best rejected aggregate live register units after scheduling the node.
+  uint64_t rejected_projected_live_units;
+  // Best rejected live register units killed by scheduling the node.
+  uint64_t rejected_killed_live_units;
+  // Best rejected live register units produced by scheduling the node.
+  uint64_t rejected_produced_live_units;
+} loom_low_schedule_candidate_decision_t;
 
 // Descriptor resource use recorded in scheduled order. This is an issue-model
 // trace, not a cycle-accurate reservation table; target overlays can refine it
@@ -327,6 +358,12 @@ typedef struct loom_low_schedule_sidecar_t {
   const loom_low_schedule_pressure_step_t* pressure_steps;
   // Number of pressure-model steps.
   iree_host_size_t pressure_step_count;
+  // Pressure candidate decisions in scheduled order when requested by
+  // diagnostic flags. Empty for source-priority scheduling and ordinary
+  // pressure scheduling without candidate diagnostics.
+  const loom_low_schedule_candidate_decision_t* candidate_decisions;
+  // Number of pressure candidate decision records.
+  iree_host_size_t candidate_decision_count;
   // Descriptor resource uses in scheduled order. Empty when scheduled nodes do
   // not reference descriptor issue-use rows.
   const loom_low_schedule_resource_use_t* resource_uses;

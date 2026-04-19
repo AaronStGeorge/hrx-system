@@ -39,6 +39,8 @@
 //                           low-allocation-json @function
 //                           [diagnostics=...] [output=json|none]
 //                           [class=units...].
+//                           Low schedule diagnostics are one of none,
+//                           pressure, resources, hazards, candidates, or all.
 //   // REQUIRES: <name>[, <name>...]
 //                           Skip the case when external tools or target
 //                           backends are unavailable.
