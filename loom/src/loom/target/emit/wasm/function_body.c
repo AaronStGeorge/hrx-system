@@ -1,0 +1,879 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/target/emit/wasm/function_body.h"
+
+#include <inttypes.h>
+#include <string.h>
+
+#include "loom/codegen/low/packet.h"
+#include "loom/ir/module.h"
+#include "loom/ops/low/ops.h"
+#include "loom/ops/op_defs.h"
+#include "loom/target/arch/wasm/descriptors.h"
+
+enum {
+  LOOM_WASM_OPCODE_END = 0x0B,
+  LOOM_WASM_OPCODE_RETURN = 0x0F,
+  LOOM_WASM_OPCODE_LOCAL_GET = 0x20,
+  LOOM_WASM_OPCODE_LOCAL_SET = 0x21,
+  LOOM_WASM_OPCODE_I32_CONST = 0x41,
+  LOOM_WASM_OPCODE_I32_ADD = 0x6A,
+  LOOM_WASM_OPCODE_I32_SUB = 0x6B,
+  LOOM_WASM_OPCODE_I32_LT_U = 0x49,
+  LOOM_WASM_OPCODE_SIMD_PREFIX = 0xFD,
+};
+
+enum {
+  LOOM_WASM_SIMD_SUBOPCODE_V128_LOAD = 0x00,
+  LOOM_WASM_SIMD_SUBOPCODE_V128_STORE = 0x0B,
+  LOOM_WASM_SIMD_SUBOPCODE_V128_CONST = 0x0C,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_SPLAT = 0x11,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_ADD = 0xAE,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_MUL = 0xB5,
+};
+
+enum {
+  LOOM_WASM_ENCODING_V128_LOAD =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_V128_LOAD,
+  LOOM_WASM_ENCODING_V128_STORE =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_V128_STORE,
+  LOOM_WASM_ENCODING_V128_CONST =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_V128_CONST,
+  LOOM_WASM_ENCODING_I32X4_SPLAT = (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) |
+                                   LOOM_WASM_SIMD_SUBOPCODE_I32X4_SPLAT,
+  LOOM_WASM_ENCODING_I32X4_ADD =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_ADD,
+  LOOM_WASM_ENCODING_I32X4_MUL =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_MUL,
+};
+
+typedef enum loom_wasm_value_type_e {
+  LOOM_WASM_VALUE_TYPE_I32 = 0x7F,
+  LOOM_WASM_VALUE_TYPE_I64 = 0x7E,
+  LOOM_WASM_VALUE_TYPE_F32 = 0x7D,
+  LOOM_WASM_VALUE_TYPE_F64 = 0x7C,
+  LOOM_WASM_VALUE_TYPE_V128 = 0x7B,
+} loom_wasm_value_type_t;
+
+typedef struct loom_wasm_byte_writer_t {
+  // Allocator used for byte storage.
+  iree_allocator_t allocator;
+  // Mutable byte storage.
+  uint8_t* data;
+  // Number of initialized bytes in |data|.
+  iree_host_size_t length;
+  // Allocated byte capacity of |data|.
+  iree_host_size_t capacity;
+} loom_wasm_byte_writer_t;
+
+typedef struct loom_wasm_local_entry_t {
+  // Register-class string ID from allocation.value_class.
+  loom_string_id_t register_class_id;
+  // Class-local target-id assignment base from allocation.
+  uint32_t location_base;
+  // Wasm value type stored in this local.
+  loom_wasm_value_type_t value_type;
+  // Function-local Wasm index assigned by this emitter.
+  uint32_t local_index;
+} loom_wasm_local_entry_t;
+
+typedef struct loom_wasm_local_layout_t {
+  // Allocator used for local metadata arrays.
+  iree_allocator_t allocator;
+  // Map from class-local allocation target ids to Wasm local indices.
+  loom_wasm_local_entry_t* entries;
+  // Number of initialized map entries.
+  iree_host_size_t entry_count;
+  // Allocated map entry capacity.
+  iree_host_size_t entry_capacity;
+  // Wasm value types indexed by final Wasm local index.
+  loom_wasm_value_type_t* local_types;
+  // Number of Wasm locals including parameters.
+  iree_host_size_t local_type_count;
+  // Allocated local type capacity.
+  iree_host_size_t local_type_capacity;
+  // Number of ABI parameter locals at the start of |local_types|.
+  uint32_t parameter_count;
+} loom_wasm_local_layout_t;
+
+typedef struct loom_wasm_emit_state_t {
+  // Schedule sidecar being emitted.
+  const loom_low_schedule_sidecar_t* schedule;
+  // Allocation sidecar supplying class-local target ids.
+  const loom_low_allocation_sidecar_t* allocation;
+  // Derived Wasm local namespace layout.
+  loom_wasm_local_layout_t locals;
+  // Mutable body payload writer.
+  loom_wasm_byte_writer_t writer;
+} loom_wasm_emit_state_t;
+
+static iree_string_view_t loom_wasm_module_string(const loom_module_t* module,
+                                                  loom_string_id_t string_id) {
+  if (string_id == LOOM_STRING_ID_INVALID ||
+      string_id >= module->strings.count) {
+    return iree_string_view_empty();
+  }
+  return module->strings.entries[string_id];
+}
+
+static void loom_wasm_byte_writer_deinitialize(
+    loom_wasm_byte_writer_t* writer) {
+  iree_allocator_free(writer->allocator, writer->data);
+  *writer = (loom_wasm_byte_writer_t){0};
+}
+
+static iree_status_t loom_wasm_byte_writer_reserve(
+    loom_wasm_byte_writer_t* writer, iree_host_size_t additional_length) {
+  iree_host_size_t minimum_capacity = 0;
+  if (!iree_host_size_checked_add(writer->length, additional_length,
+                                  &minimum_capacity)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "Wasm function body length overflow");
+  }
+  if (minimum_capacity <= writer->capacity) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t doubled_capacity =
+      writer->capacity ? writer->capacity * 2 : 128;
+  if (doubled_capacity < writer->capacity ||
+      doubled_capacity < minimum_capacity) {
+    doubled_capacity = minimum_capacity;
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_realloc(
+      writer->allocator, doubled_capacity, (void**)&writer->data));
+  writer->capacity = doubled_capacity;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_write_u8(loom_wasm_byte_writer_t* writer,
+                                        uint8_t value) {
+  IREE_RETURN_IF_ERROR(loom_wasm_byte_writer_reserve(writer, 1));
+  writer->data[writer->length++] = value;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_write_bytes(loom_wasm_byte_writer_t* writer,
+                                           const uint8_t* data,
+                                           iree_host_size_t data_length) {
+  if (data_length == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_wasm_byte_writer_reserve(writer, data_length));
+  memcpy(writer->data + writer->length, data, data_length);
+  writer->length += data_length;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_write_u32_leb(loom_wasm_byte_writer_t* writer,
+                                             uint32_t value) {
+  do {
+    uint8_t byte = (uint8_t)(value & 0x7Fu);
+    value >>= 7;
+    if (value != 0) {
+      byte |= 0x80u;
+    }
+    IREE_RETURN_IF_ERROR(loom_wasm_write_u8(writer, byte));
+  } while (value != 0);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_write_i32_leb(loom_wasm_byte_writer_t* writer,
+                                             int32_t value) {
+  bool more = true;
+  while (more) {
+    uint8_t byte = (uint8_t)(value & 0x7F);
+    value >>= 7;
+    const bool sign_bit_set = (byte & 0x40u) != 0;
+    more = !((value == 0 && !sign_bit_set) || (value == -1 && sign_bit_set));
+    if (more) {
+      byte |= 0x80u;
+    }
+    IREE_RETURN_IF_ERROR(loom_wasm_write_u8(writer, byte));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_write_u64_le(loom_wasm_byte_writer_t* writer,
+                                            uint64_t value) {
+  uint8_t data[8] = {
+      (uint8_t)(value & 0xFFu),         (uint8_t)((value >> 8) & 0xFFu),
+      (uint8_t)((value >> 16) & 0xFFu), (uint8_t)((value >> 24) & 0xFFu),
+      (uint8_t)((value >> 32) & 0xFFu), (uint8_t)((value >> 40) & 0xFFu),
+      (uint8_t)((value >> 48) & 0xFFu), (uint8_t)(value >> 56),
+  };
+  return loom_wasm_write_bytes(writer, data, sizeof(data));
+}
+
+static iree_status_t loom_wasm_write_opcode(loom_wasm_byte_writer_t* writer,
+                                            uint32_t encoding_id) {
+  if (encoding_id <= UINT8_MAX) {
+    return loom_wasm_write_u8(writer, (uint8_t)encoding_id);
+  }
+  const uint32_t prefix = encoding_id >> 8;
+  const uint32_t subopcode = encoding_id & 0xFFu;
+  if (prefix != LOOM_WASM_OPCODE_SIMD_PREFIX) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "unsupported Wasm opcode prefix 0x%02" PRIx32,
+                            prefix);
+  }
+  IREE_RETURN_IF_ERROR(loom_wasm_write_u8(writer, (uint8_t)prefix));
+  return loom_wasm_write_u32_leb(writer, subopcode);
+}
+
+static void loom_wasm_local_layout_deinitialize(
+    loom_wasm_local_layout_t* layout) {
+  iree_allocator_free(layout->allocator, layout->entries);
+  iree_allocator_free(layout->allocator, layout->local_types);
+  *layout = (loom_wasm_local_layout_t){0};
+}
+
+static iree_status_t loom_wasm_local_layout_reserve_entries(
+    loom_wasm_local_layout_t* layout, iree_host_size_t minimum_capacity) {
+  if (minimum_capacity <= layout->entry_capacity) {
+    return iree_ok_status();
+  }
+  iree_host_size_t new_capacity =
+      layout->entry_capacity ? layout->entry_capacity * 2 : 16;
+  if (new_capacity < layout->entry_capacity ||
+      new_capacity < minimum_capacity) {
+    new_capacity = minimum_capacity;
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_realloc(
+      layout->allocator, new_capacity * sizeof(*layout->entries),
+      (void**)&layout->entries));
+  layout->entry_capacity = new_capacity;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_local_layout_reserve_types(
+    loom_wasm_local_layout_t* layout, iree_host_size_t minimum_capacity) {
+  if (minimum_capacity <= layout->local_type_capacity) {
+    return iree_ok_status();
+  }
+  iree_host_size_t new_capacity =
+      layout->local_type_capacity ? layout->local_type_capacity * 2 : 16;
+  if (new_capacity < layout->local_type_capacity ||
+      new_capacity < minimum_capacity) {
+    new_capacity = minimum_capacity;
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_realloc(
+      layout->allocator, new_capacity * sizeof(*layout->local_types),
+      (void**)&layout->local_types));
+  layout->local_type_capacity = new_capacity;
+  return iree_ok_status();
+}
+
+static loom_wasm_local_entry_t* loom_wasm_local_layout_find_entry(
+    loom_wasm_local_layout_t* layout, loom_string_id_t register_class_id,
+    uint32_t location_base) {
+  for (iree_host_size_t i = 0; i < layout->entry_count; ++i) {
+    loom_wasm_local_entry_t* entry = &layout->entries[i];
+    if (entry->register_class_id == register_class_id &&
+        entry->location_base == location_base) {
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+static iree_status_t loom_wasm_local_layout_append_type(
+    loom_wasm_local_layout_t* layout, loom_wasm_value_type_t value_type,
+    uint32_t* out_local_index) {
+  if (layout->local_type_count > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "Wasm local index exceeds u32");
+  }
+  IREE_RETURN_IF_ERROR(loom_wasm_local_layout_reserve_types(
+      layout, layout->local_type_count + 1));
+  *out_local_index = (uint32_t)layout->local_type_count;
+  layout->local_types[layout->local_type_count++] = value_type;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_local_layout_add_entry(
+    loom_wasm_local_layout_t* layout, loom_string_id_t register_class_id,
+    uint32_t location_base, loom_wasm_value_type_t value_type,
+    uint32_t local_index) {
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_local_layout_reserve_entries(layout, layout->entry_count + 1));
+  layout->entries[layout->entry_count++] = (loom_wasm_local_entry_t){
+      .register_class_id = register_class_id,
+      .location_base = location_base,
+      .value_type = value_type,
+      .local_index = local_index,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_register_class_to_value_type(
+    const loom_module_t* module, loom_string_id_t register_class_id,
+    loom_wasm_value_type_t* out_value_type) {
+  iree_string_view_t register_class =
+      loom_wasm_module_string(module, register_class_id);
+  if (iree_string_view_equal(register_class, IREE_SV("wasm.i32"))) {
+    *out_value_type = LOOM_WASM_VALUE_TYPE_I32;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(register_class, IREE_SV("wasm.i64"))) {
+    *out_value_type = LOOM_WASM_VALUE_TYPE_I64;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(register_class, IREE_SV("wasm.f32"))) {
+    *out_value_type = LOOM_WASM_VALUE_TYPE_F32;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(register_class, IREE_SV("wasm.f64"))) {
+    *out_value_type = LOOM_WASM_VALUE_TYPE_F64;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(register_class, IREE_SV("wasm.v128"))) {
+    *out_value_type = LOOM_WASM_VALUE_TYPE_V128;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                          "unsupported Wasm register class '%.*s'",
+                          (int)register_class.size, register_class.data);
+}
+
+static iree_status_t loom_wasm_validate_target_id_assignment(
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_assignment_t* assignment,
+    loom_wasm_value_type_t* out_value_type) {
+  if (assignment->location_kind != LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "Wasm value %u is not allocated to a target-local id",
+        (unsigned)assignment->value_id);
+  }
+  if (assignment->location_count != 1 || assignment->unit_count != 1) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "Wasm value %u uses a multi-unit target-id assignment",
+        (unsigned)assignment->value_id);
+  }
+  if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "Wasm value %u is not allocated as a register value",
+        (unsigned)assignment->value_id);
+  }
+  return loom_wasm_register_class_to_value_type(
+      allocation->module, assignment->value_class.register_class_id,
+      out_value_type);
+}
+
+static iree_status_t loom_wasm_lookup_assignment(
+    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id,
+    const loom_low_allocation_assignment_t** out_assignment,
+    loom_wasm_value_type_t* out_value_type) {
+  const loom_low_allocation_assignment_t* assignment =
+      loom_low_packet_find_assignment(allocation, value_id, NULL);
+  if (!assignment) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm value %u has no allocation",
+                            (unsigned)value_id);
+  }
+  IREE_RETURN_IF_ERROR(loom_wasm_validate_target_id_assignment(
+      allocation, assignment, out_value_type));
+  *out_assignment = assignment;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_local_layout_add_parameter(
+    const loom_low_allocation_sidecar_t* allocation,
+    loom_wasm_local_layout_t* layout, loom_value_id_t value_id,
+    uint32_t parameter_index) {
+  const loom_low_allocation_assignment_t* assignment = NULL;
+  loom_wasm_value_type_t value_type = 0;
+  IREE_RETURN_IF_ERROR(loom_wasm_lookup_assignment(allocation, value_id,
+                                                   &assignment, &value_type));
+  uint32_t local_index = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_local_layout_append_type(layout, value_type, &local_index));
+  if (local_index != parameter_index) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "Wasm parameter index overflow");
+  }
+
+  loom_wasm_local_entry_t* existing = loom_wasm_local_layout_find_entry(
+      layout, assignment->value_class.register_class_id,
+      assignment->location_base);
+  if (existing) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "Wasm parameters %u and %" PRIu32 " share allocator target id %" PRIu32
+        " for one register class",
+        existing->local_index, parameter_index, assignment->location_base);
+  }
+  return loom_wasm_local_layout_add_entry(
+      layout, assignment->value_class.register_class_id,
+      assignment->location_base, value_type, parameter_index);
+}
+
+static iree_status_t loom_wasm_local_layout_add_assignment(
+    const loom_low_allocation_sidecar_t* allocation,
+    loom_wasm_local_layout_t* layout,
+    const loom_low_allocation_assignment_t* assignment) {
+  loom_wasm_value_type_t value_type = 0;
+  IREE_RETURN_IF_ERROR(loom_wasm_validate_target_id_assignment(
+      allocation, assignment, &value_type));
+  loom_wasm_local_entry_t* existing = loom_wasm_local_layout_find_entry(
+      layout, assignment->value_class.register_class_id,
+      assignment->location_base);
+  if (existing) {
+    if (existing->value_type != value_type) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "Wasm target id %" PRIu32 " changes value type",
+                              assignment->location_base);
+    }
+    return iree_ok_status();
+  }
+
+  uint32_t local_index = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_local_layout_append_type(layout, value_type, &local_index));
+  return loom_wasm_local_layout_add_entry(
+      layout, assignment->value_class.register_class_id,
+      assignment->location_base, value_type, local_index);
+}
+
+static iree_status_t loom_wasm_build_local_layout(
+    const loom_low_allocation_sidecar_t* allocation, iree_allocator_t allocator,
+    loom_wasm_local_layout_t* out_layout) {
+  *out_layout = (loom_wasm_local_layout_t){
+      .allocator = allocator,
+  };
+
+  loom_func_like_t function = loom_func_like_cast(
+      allocation->module, (loom_op_t*)allocation->function_op);
+  if (!loom_func_like_isa(function)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm emission requires a func-like low function");
+  }
+
+  uint16_t parameter_count = 0;
+  const loom_value_id_t* parameter_ids =
+      loom_func_like_arg_ids(function, &parameter_count);
+  out_layout->parameter_count = parameter_count;
+  iree_status_t status = iree_ok_status();
+  for (uint32_t i = 0; i < parameter_count && iree_status_is_ok(status); ++i) {
+    status = loom_wasm_local_layout_add_parameter(allocation, out_layout,
+                                                  parameter_ids[i], i);
+  }
+  for (iree_host_size_t i = 0;
+       i < allocation->assignment_count && iree_status_is_ok(status); ++i) {
+    status = loom_wasm_local_layout_add_assignment(allocation, out_layout,
+                                                   &allocation->assignments[i]);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_wasm_local_layout_deinitialize(out_layout);
+  }
+  return status;
+}
+
+static iree_status_t loom_wasm_lookup_local(
+    loom_wasm_emit_state_t* state, loom_value_id_t value_id,
+    uint32_t* out_local_index, loom_wasm_value_type_t* out_value_type) {
+  const loom_low_allocation_assignment_t* assignment = NULL;
+  loom_wasm_value_type_t value_type = 0;
+  IREE_RETURN_IF_ERROR(loom_wasm_lookup_assignment(state->allocation, value_id,
+                                                   &assignment, &value_type));
+  loom_wasm_local_entry_t* entry = loom_wasm_local_layout_find_entry(
+      &state->locals, assignment->value_class.register_class_id,
+      assignment->location_base);
+  if (!entry) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm value %u has no local mapping",
+                            (unsigned)value_id);
+  }
+  *out_local_index = entry->local_index;
+  if (out_value_type) {
+    *out_value_type = entry->value_type;
+  }
+  return iree_ok_status();
+}
+
+static const loom_named_attr_t* loom_wasm_find_named_attr(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+    const loom_named_attr_t* attr = &attrs.entries[i];
+    if (iree_string_view_equal(loom_wasm_module_string(module, attr->name_id),
+                               name)) {
+      return attr;
+    }
+  }
+  return NULL;
+}
+
+static iree_status_t loom_wasm_read_i64_attr(const loom_module_t* module,
+                                             loom_named_attr_slice_t attrs,
+                                             iree_string_view_t name,
+                                             int64_t* out_value) {
+  const loom_named_attr_t* attr =
+      loom_wasm_find_named_attr(module, attrs, name);
+  if (!attr) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm emission missing required '%.*s' attribute",
+                            (int)name.size, name.data);
+  }
+  if (attr->value.kind != LOOM_ATTR_I64) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm attribute '%.*s' must be i64", (int)name.size,
+                            name.data);
+  }
+  *out_value = attr->value.i64;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_emit_local_get(loom_wasm_emit_state_t* state,
+                                              loom_value_id_t value_id) {
+  uint32_t local_index = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_lookup_local(state, value_id, &local_index, NULL));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_u8(&state->writer, LOOM_WASM_OPCODE_LOCAL_GET));
+  return loom_wasm_write_u32_leb(&state->writer, local_index);
+}
+
+static iree_status_t loom_wasm_emit_local_set(loom_wasm_emit_state_t* state,
+                                              loom_value_id_t value_id) {
+  uint32_t local_index = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_lookup_local(state, value_id, &local_index, NULL));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_u8(&state->writer, LOOM_WASM_OPCODE_LOCAL_SET));
+  return loom_wasm_write_u32_leb(&state->writer, local_index);
+}
+
+static iree_status_t loom_wasm_emit_memarg(loom_wasm_emit_state_t* state,
+                                           uint32_t alignment_exponent,
+                                           uint32_t offset) {
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_u32_leb(&state->writer, alignment_exponent));
+  return loom_wasm_write_u32_leb(&state->writer, offset);
+}
+
+static iree_status_t loom_wasm_emit_i32_const(
+    loom_wasm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  if (!loom_low_const_isa(op) || op->result_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "wasm.i32.const must be a unary low.const");
+  }
+  int64_t value = 0;
+  IREE_RETURN_IF_ERROR(loom_wasm_read_i64_attr(state->schedule->module,
+                                               loom_low_const_attrs(op),
+                                               IREE_SV("i32_value"), &value));
+  if (value < INT32_MIN || value > INT32_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "wasm.i32.const value is outside i32 range");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
+  IREE_RETURN_IF_ERROR(loom_wasm_write_i32_leb(&state->writer, (int32_t)value));
+  return loom_wasm_emit_local_set(state, loom_low_const_result(op));
+}
+
+static iree_status_t loom_wasm_emit_v128_const(
+    loom_wasm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  if (!loom_low_const_isa(op) || op->result_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "wasm.v128.const must be a unary low.const");
+  }
+  int64_t low_bits = 0;
+  int64_t high_bits = 0;
+  IREE_RETURN_IF_ERROR(loom_wasm_read_i64_attr(state->schedule->module,
+                                               loom_low_const_attrs(op),
+                                               IREE_SV("lo64"), &low_bits));
+  IREE_RETURN_IF_ERROR(loom_wasm_read_i64_attr(state->schedule->module,
+                                               loom_low_const_attrs(op),
+                                               IREE_SV("hi64"), &high_bits));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_u64_le(&state->writer, (uint64_t)low_bits));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_u64_le(&state->writer, (uint64_t)high_bits));
+  return loom_wasm_emit_local_set(state, loom_low_const_result(op));
+}
+
+static iree_status_t loom_wasm_emit_unary_stack_op(
+    loom_wasm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  if (!loom_low_op_isa(op) || op->operand_count != 1 || op->result_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm unary packet shape is invalid");
+  }
+  loom_value_slice_t operands = loom_low_op_operands(op);
+  loom_value_slice_t results = loom_low_op_results(op);
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[0]));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
+  return loom_wasm_emit_local_set(state, results.values[0]);
+}
+
+static iree_status_t loom_wasm_emit_binary_stack_op(
+    loom_wasm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  if (!loom_low_op_isa(op) || op->operand_count != 2 || op->result_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm binary packet shape is invalid");
+  }
+  loom_value_slice_t operands = loom_low_op_operands(op);
+  loom_value_slice_t results = loom_low_op_results(op);
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[0]));
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[1]));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
+  return loom_wasm_emit_local_set(state, results.values[0]);
+}
+
+static iree_status_t loom_wasm_emit_v128_load(
+    loom_wasm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  if (!loom_low_op_isa(op) || op->operand_count != 1 || op->result_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "wasm.v128.load packet shape is invalid");
+  }
+  loom_value_slice_t operands = loom_low_op_operands(op);
+  loom_value_slice_t results = loom_low_op_results(op);
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[0]));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_memarg(state, /*alignment_exponent=*/4,
+                                             /*offset=*/0));
+  return loom_wasm_emit_local_set(state, results.values[0]);
+}
+
+static iree_status_t loom_wasm_emit_v128_store(
+    loom_wasm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  if (!loom_low_op_isa(op) || op->operand_count != 2 || op->result_count != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "wasm.v128.store packet shape is invalid");
+  }
+  loom_value_slice_t operands = loom_low_op_operands(op);
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[0]));
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[1]));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
+  return loom_wasm_emit_memarg(state, /*alignment_exponent=*/4, /*offset=*/0);
+}
+
+static iree_status_t loom_wasm_emit_descriptor_packet(
+    loom_wasm_emit_state_t* state, const loom_low_packet_view_t* packet) {
+  switch (packet->descriptor->encoding_id) {
+    case LOOM_WASM_OPCODE_I32_CONST:
+      return loom_wasm_emit_i32_const(state, packet->node->op,
+                                      packet->descriptor);
+    case LOOM_WASM_ENCODING_V128_CONST:
+      return loom_wasm_emit_v128_const(state, packet->node->op,
+                                       packet->descriptor);
+    case LOOM_WASM_OPCODE_I32_ADD:
+    case LOOM_WASM_OPCODE_I32_SUB:
+    case LOOM_WASM_OPCODE_I32_LT_U:
+    case LOOM_WASM_ENCODING_I32X4_ADD:
+    case LOOM_WASM_ENCODING_I32X4_MUL:
+      return loom_wasm_emit_binary_stack_op(state, packet->node->op,
+                                            packet->descriptor);
+    case LOOM_WASM_ENCODING_I32X4_SPLAT:
+      return loom_wasm_emit_unary_stack_op(state, packet->node->op,
+                                           packet->descriptor);
+    case LOOM_WASM_ENCODING_V128_LOAD:
+      return loom_wasm_emit_v128_load(state, packet->node->op,
+                                      packet->descriptor);
+    case LOOM_WASM_ENCODING_V128_STORE:
+      return loom_wasm_emit_v128_store(state, packet->node->op,
+                                       packet->descriptor);
+    default: {
+      iree_string_view_t key = IREE_SV("<unknown>");
+      (void)loom_low_descriptor_set_string(
+          state->schedule->target.descriptor_set,
+          packet->descriptor->key_string_offset, &key);
+      return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                              "Wasm descriptor '%.*s' is unsupported",
+                              (int)key.size, key.data);
+    }
+  }
+}
+
+static iree_status_t loom_wasm_emit_low_copy(loom_wasm_emit_state_t* state,
+                                             const loom_op_t* op) {
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_emit_local_get(state, loom_low_copy_source(op)));
+  return loom_wasm_emit_local_set(state, loom_low_copy_result(op));
+}
+
+static iree_status_t loom_wasm_emit_low_return(loom_wasm_emit_state_t* state,
+                                               const loom_op_t* op) {
+  loom_value_slice_t values = loom_low_return_values(op);
+  for (iree_host_size_t i = 0; i < values.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, values.values[i]));
+  }
+  return loom_wasm_write_u8(&state->writer, LOOM_WASM_OPCODE_RETURN);
+}
+
+static iree_status_t loom_wasm_emit_structural_packet(
+    loom_wasm_emit_state_t* state, const loom_op_t* op) {
+  if (loom_low_copy_isa(op)) {
+    return loom_wasm_emit_low_copy(state, op);
+  }
+  if (loom_low_return_isa(op)) {
+    return loom_wasm_emit_low_return(state, op);
+  }
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "unsupported structural low op in Wasm function-body emission");
+}
+
+static iree_status_t loom_wasm_emit_packet(
+    loom_wasm_emit_state_t* state, const loom_low_packet_view_t* packet) {
+  if (packet->descriptor) {
+    return loom_wasm_emit_descriptor_packet(state, packet);
+  }
+  return loom_wasm_emit_structural_packet(state, packet->node->op);
+}
+
+static iree_status_t loom_wasm_emit_local_declarations(
+    loom_wasm_emit_state_t* state) {
+  uint32_t declaration_count = 0;
+  for (iree_host_size_t i = state->locals.parameter_count;
+       i < state->locals.local_type_count;) {
+    ++declaration_count;
+    loom_wasm_value_type_t value_type = state->locals.local_types[i++];
+    while (i < state->locals.local_type_count &&
+           state->locals.local_types[i] == value_type) {
+      ++i;
+    }
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_u32_leb(&state->writer, declaration_count));
+  for (iree_host_size_t i = state->locals.parameter_count;
+       i < state->locals.local_type_count;) {
+    loom_wasm_value_type_t value_type = state->locals.local_types[i++];
+    uint32_t run_length = 1;
+    while (i < state->locals.local_type_count &&
+           state->locals.local_types[i] == value_type) {
+      ++run_length;
+      ++i;
+    }
+    IREE_RETURN_IF_ERROR(loom_wasm_write_u32_leb(&state->writer, run_length));
+    IREE_RETURN_IF_ERROR(loom_wasm_write_u8(&state->writer, value_type));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_emit_function_body_payload(
+    loom_wasm_emit_state_t* state) {
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_declarations(state));
+  const loom_low_schedule_block_t* block = &state->schedule->blocks[0];
+  for (uint32_t i = 0; i < block->scheduled_node_count; ++i) {
+    iree_host_size_t packet_index =
+        (iree_host_size_t)block->scheduled_node_start + i;
+    loom_low_packet_view_t packet = {0};
+    IREE_RETURN_IF_ERROR(loom_low_packet_view_at(
+        state->schedule, state->allocation, packet_index, &packet));
+    IREE_RETURN_IF_ERROR(loom_wasm_emit_packet(state, &packet));
+  }
+  return loom_wasm_write_u8(&state->writer, LOOM_WASM_OPCODE_END);
+}
+
+static iree_status_t loom_wasm_validate_sidecars(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation) {
+  if (!schedule || !allocation) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "schedule and allocation sidecars are required");
+  }
+  IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
+  if (schedule->target.descriptor_set !=
+      loom_wasm_core_simd128_descriptor_set()) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm emission requires wasm.core.simd128");
+  }
+  if (schedule->block_count != 1) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "Wasm function-body emission currently requires one low block");
+  }
+  if (allocation->spill_count != 0 || allocation->spill_plan_count != 0) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "Wasm emission requires unspilled allocation sidecars");
+  }
+  return iree_ok_status();
+}
+
+void loom_wasm_function_body_deinitialize(loom_wasm_function_body_t* body,
+                                          iree_allocator_t allocator) {
+  if (!body) {
+    return;
+  }
+  iree_allocator_free(allocator, body->data);
+  *body = (loom_wasm_function_body_t){0};
+}
+
+iree_status_t loom_wasm_emit_function_body(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation, iree_allocator_t allocator,
+    loom_wasm_function_body_t* out_body) {
+  if (!out_body) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm function-body output is required");
+  }
+  *out_body = (loom_wasm_function_body_t){0};
+  IREE_RETURN_IF_ERROR(loom_wasm_validate_sidecars(schedule, allocation));
+
+  loom_wasm_emit_state_t state = {
+      .schedule = schedule,
+      .allocation = allocation,
+      .writer = {.allocator = allocator},
+  };
+  iree_status_t status =
+      loom_wasm_build_local_layout(allocation, allocator, &state.locals);
+  if (iree_status_is_ok(status)) {
+    status = loom_wasm_emit_function_body_payload(&state);
+  }
+
+  loom_wasm_byte_writer_t output_writer = {
+      .allocator = allocator,
+  };
+  if (iree_status_is_ok(status) && state.writer.length > UINT32_MAX) {
+    status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "Wasm function body exceeds u32 size");
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_wasm_write_u32_leb(&output_writer, (uint32_t)state.writer.length);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_wasm_write_bytes(&output_writer, state.writer.data,
+                                   state.writer.length);
+  }
+  if (iree_status_is_ok(status) && state.locals.local_type_count > UINT32_MAX) {
+    status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "Wasm local count exceeds u32");
+  }
+  if (iree_status_is_ok(status)) {
+    *out_body = (loom_wasm_function_body_t){
+        .data = output_writer.data,
+        .data_length = output_writer.length,
+        .body_length = state.writer.length,
+        .parameter_count = state.locals.parameter_count,
+        .local_count = (uint32_t)state.locals.local_type_count,
+    };
+    output_writer.data = NULL;
+  }
+
+  loom_wasm_byte_writer_deinitialize(&output_writer);
+  loom_wasm_byte_writer_deinitialize(&state.writer);
+  loom_wasm_local_layout_deinitialize(&state.locals);
+  return status;
+}
