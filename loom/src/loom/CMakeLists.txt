@@ -14,6 +14,8 @@ iree_setup_c_src_root(
   DEFAULT_INSTALL_COMPONENT IREEDevLibraries-Runtime
 )
 
+include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_low_descriptor.cmake")
+
 iree_add_all_subdirs()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

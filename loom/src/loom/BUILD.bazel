@@ -27,5 +27,7 @@ iree_setup_c_src_root(
   DEFAULT_EXPORT_SET Runtime
   DEFAULT_INSTALL_COMPONENT IREEDevLibraries-Runtime
 )
+
+include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_low_descriptor.cmake")
 """,
 )

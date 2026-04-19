@@ -7,80 +7,45 @@
 #                                                                              #
 # To disable autogeneration for this file entirely, delete this header.        #
 ################################################################################
-
-include(ExternalProject)
-
 set(_LOOM_AMDGPU_ISA_XML_SOURCE_DIR
-    "${PROJECT_BINARY_DIR}/_deps/amdgpu_isa_xml-src")
-ExternalProject_Add(loom_amdgpu_isa_xml
-  URL "https://gpuopen.com/download/AMD_GPU_MR_ISA_XML_2026_03_05.zip"
-  URL_HASH SHA256=1f17587abc9d0d355cf6f65bdba7496838b4e8313922769199689615c434965c
-  SOURCE_DIR "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}"
-  EXCLUDE_FROM_ALL TRUE
-  CONFIGURE_COMMAND ""
-  BUILD_COMMAND ""
-  INSTALL_COMMAND ""
-  UPDATE_COMMAND ""
+  "${PROJECT_BINARY_DIR}/_deps/amdgpu_isa_xml-src"
 )
-
-set(_LOOM_AMDGPU_DESCRIPTOR_GENERATOR_SRCS
-  "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptors.py"
-  "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
-  "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
-  "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
-  "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
-  "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+loom_low_descriptor_data_archive(
+  NAME
+    loom_amdgpu_isa_xml
+  SOURCE_DIR
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}"
+  URLS
+    "https://gpuopen.com/download/AMD_GPU_MR_ISA_XML_2026_03_05.zip"
+  SHA256
+    "1f17587abc9d0d355cf6f65bdba7496838b4e8313922769199689615c434965c"
 )
-
-function(loom_amdgpu_generate_descriptors target xml source header)
-  set(_source "${PROJECT_BINARY_DIR}/loom/src/loom/target/arch/amdgpu/${source}")
-  set(_header "${PROJECT_BINARY_DIR}/loom/src/loom/target/arch/amdgpu/${header}")
-  add_custom_command(
-    OUTPUT
-      "${_source}"
-      "${_header}"
-    COMMAND
-      "${Python3_EXECUTABLE}"
-      "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptors.py"
-      "--target=${target}"
-      "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/${xml}"
-      "--source=${_source}"
-      "--header=${_header}"
-    DEPENDS
-      loom_amdgpu_isa_xml
-      ${_LOOM_AMDGPU_DESCRIPTOR_GENERATOR_SRCS}
-    COMMENT
-      "Generating AMDGPU ${target} low descriptors"
-    VERBATIM
-  )
-  add_custom_target("loom_amdgpu_${target}_descriptors_gen"
-    DEPENDS
-      "${_source}"
-      "${_header}"
-  )
-endfunction()
-
-loom_amdgpu_generate_descriptors(
-  gfx11 amdgpu_isa_rdna3.xml gfx11_descriptors.c gfx11_descriptors.h)
-loom_amdgpu_generate_descriptors(
-  gfx12 amdgpu_isa_rdna4.xml gfx12_descriptors.c gfx12_descriptors.h)
-loom_amdgpu_generate_descriptors(
-  gfx1250 amdgpu_isa_rdna4.xml gfx1250_descriptors.c gfx1250_descriptors.h)
-loom_amdgpu_generate_descriptors(
-  gfx950 amdgpu_isa_cdna4.xml gfx950_descriptors.c gfx950_descriptors.h)
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
   NAME
     gfx11_descriptors
-  HDRS
-    "${PROJECT_BINARY_DIR}/loom/src/loom/target/arch/amdgpu/gfx11_descriptors.h"
-  SRCS
-    "${PROJECT_BINARY_DIR}/loom/src/loom/target/arch/amdgpu/gfx11_descriptors.c"
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptors.py"
+  SOURCE
+    "gfx11_descriptors.c"
+  HEADER
+    "gfx11_descriptors.h"
+  ARGS
+    "--target=gfx11"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
+    "loom_amdgpu_isa_xml"
   DEPS
     loom::src::loom::codegen::low::descriptors
-  PUBLIC
+  EXCLUDE_FROM_ALL
 )
 
 loom_cc_test(
@@ -97,16 +62,29 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
   NAME
     gfx12_descriptors
-  HDRS
-    "${PROJECT_BINARY_DIR}/loom/src/loom/target/arch/amdgpu/gfx12_descriptors.h"
-  SRCS
-    "${PROJECT_BINARY_DIR}/loom/src/loom/target/arch/amdgpu/gfx12_descriptors.c"
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptors.py"
+  SOURCE
+    "gfx12_descriptors.c"
+  HEADER
+    "gfx12_descriptors.h"
+  ARGS
+    "--target=gfx12"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+    "loom_amdgpu_isa_xml"
   DEPS
     loom::src::loom::codegen::low::descriptors
-  PUBLIC
+  EXCLUDE_FROM_ALL
 )
 
 loom_cc_test(
@@ -121,16 +99,29 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
   NAME
     gfx1250_descriptors
-  HDRS
-    "${PROJECT_BINARY_DIR}/loom/src/loom/target/arch/amdgpu/gfx1250_descriptors.h"
-  SRCS
-    "${PROJECT_BINARY_DIR}/loom/src/loom/target/arch/amdgpu/gfx1250_descriptors.c"
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptors.py"
+  SOURCE
+    "gfx1250_descriptors.c"
+  HEADER
+    "gfx1250_descriptors.h"
+  ARGS
+    "--target=gfx1250"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+    "loom_amdgpu_isa_xml"
   DEPS
     loom::src::loom::codegen::low::descriptors
-  PUBLIC
+  EXCLUDE_FROM_ALL
 )
 
 loom_cc_test(
@@ -145,16 +136,29 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
   NAME
     gfx950_descriptors
-  HDRS
-    "${PROJECT_BINARY_DIR}/loom/src/loom/target/arch/amdgpu/gfx950_descriptors.h"
-  SRCS
-    "${PROJECT_BINARY_DIR}/loom/src/loom/target/arch/amdgpu/gfx950_descriptors.c"
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptors.py"
+  SOURCE
+    "gfx950_descriptors.c"
+  HEADER
+    "gfx950_descriptors.h"
+  ARGS
+    "--target=gfx950"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
+    "loom_amdgpu_isa_xml"
   DEPS
     loom::src::loom::codegen::low::descriptors
-  PUBLIC
+  EXCLUDE_FROM_ALL
 )
 
 loom_cc_test(
@@ -234,30 +238,17 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-# Descriptor table generation is intentionally opt-in for CMake `all`.
-# The AMDGPU package stays visible, but the large fetched ISA dependency only
-# appears when an AMDGPU descriptor target or a dependent registry/test target
-# is requested explicitly.
-iree_cc_library_exclude_from_all(gfx11_descriptors TRUE)
-iree_cc_library_exclude_from_all(gfx12_descriptors TRUE)
-iree_cc_library_exclude_from_all(gfx1250_descriptors TRUE)
-iree_cc_library_exclude_from_all(gfx950_descriptors TRUE)
-iree_cc_library_exclude_from_all(low_registry TRUE)
-
-function(loom_amdgpu_exclude_test_from_all target)
-  iree_package_name(_PACKAGE_NAME)
-  set(_NAME "${_PACKAGE_NAME}_${target}")
-  if(TARGET "${_NAME}")
-    set_property(TARGET "${_NAME}" PROPERTY EXCLUDE_FROM_ALL TRUE)
-  endif()
-endfunction()
-
-loom_amdgpu_exclude_test_from_all(gfx11_descriptors_test)
-loom_amdgpu_exclude_test_from_all(gfx12_descriptors_test)
-loom_amdgpu_exclude_test_from_all(gfx1250_descriptors_test)
-loom_amdgpu_exclude_test_from_all(gfx950_descriptors_test)
-loom_amdgpu_exclude_test_from_all(low_registry_test)
-loom_amdgpu_exclude_test_from_all(loom_check_test)
+loom_low_descriptor_exclude_from_all(
+  CC_LIBRARIES
+    "low_registry"
+  TARGETS
+    "gfx11_descriptors_test"
+    "gfx1250_descriptors_test"
+    "gfx12_descriptors_test"
+    "gfx950_descriptors_test"
+    "loom_check_test"
+    "low_registry_test"
+)
 
 loom_cc_library(
   NAME
