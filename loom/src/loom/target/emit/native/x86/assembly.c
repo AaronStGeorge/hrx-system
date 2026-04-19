@@ -34,14 +34,6 @@ static iree_status_t loom_x86_append_mnemonic(
   return iree_string_builder_append_string(context->builder, mnemonic);
 }
 
-static iree_status_t loom_x86_descriptor_mnemonic(
-    const loom_native_assembly_packet_context_t* context,
-    iree_string_view_t* out_mnemonic) {
-  return loom_native_assembly_descriptor_string(
-      context->schedule->target.descriptor_set,
-      context->packet->descriptor->mnemonic_string_offset, out_mnemonic);
-}
-
 static iree_status_t loom_x86_find_assignment(
     const loom_native_assembly_packet_context_t* context,
     loom_value_id_t value_id,
@@ -199,7 +191,7 @@ static iree_status_t loom_x86_append_binary_vector_packet(
   return loom_x86_append_operand(context, 1);
 }
 
-static iree_status_t loom_x86_append_dot_packet(
+static iree_status_t loom_x86_append_tied_ternary_packet(
     const loom_native_assembly_packet_context_t* context) {
   const loom_op_t* op = context->packet->node->op;
   const loom_low_allocation_assignment_t* result_assignment = NULL;
@@ -211,7 +203,7 @@ static iree_status_t loom_x86_append_dot_packet(
   if (!loom_x86_assignments_match(result_assignment, accumulator_assignment)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "x86 dot result must share the accumulator physical register");
+        "x86 tied ternary result must share the accumulator physical register");
   }
   IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
@@ -223,6 +215,67 @@ static iree_status_t loom_x86_append_dot_packet(
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
   return loom_x86_append_operand(context, 2);
+}
+
+static iree_status_t loom_x86_descriptor_has_constraint(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, loom_low_constraint_kind_t kind,
+    uint16_t lhs_operand_index, uint16_t rhs_operand_index,
+    bool* out_has_constraint) {
+  *out_has_constraint = false;
+  if (descriptor->constraint_count == 0) {
+    return iree_ok_status();
+  }
+  if (descriptor->constraint_start > descriptor_set->constraint_count ||
+      descriptor->constraint_count >
+          descriptor_set->constraint_count - descriptor->constraint_start) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "x86 descriptor constraint range is out of range");
+  }
+  if (descriptor_set->constraints == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "x86 descriptor constraints table is missing");
+  }
+  for (uint16_t i = 0; i < descriptor->constraint_count; ++i) {
+    const loom_low_constraint_t* constraint =
+        &descriptor_set->constraints[descriptor->constraint_start + i];
+    if (constraint->kind == kind &&
+        constraint->lhs_operand_index == lhs_operand_index &&
+        constraint->rhs_operand_index == rhs_operand_index) {
+      *out_has_constraint = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_x86_descriptor_uses_tied_ternary_form(
+    const loom_native_assembly_packet_context_t* context,
+    bool* out_uses_tied_ternary_form) {
+  *out_uses_tied_ternary_form = false;
+  const loom_op_t* op = context->packet->node->op;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  if (descriptor->result_count != 1 || descriptor->operand_count != 4 ||
+      op->result_count != 1 || op->operand_count != 3) {
+    return iree_ok_status();
+  }
+  const uint16_t result_operand_index = 0;
+  const uint16_t accumulator_operand_index = descriptor->result_count;
+  bool is_tied = false;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_has_constraint(
+      descriptor_set, descriptor, LOOM_LOW_CONSTRAINT_KIND_TIED,
+      result_operand_index, accumulator_operand_index, &is_tied));
+  if (!is_tied) {
+    return iree_ok_status();
+  }
+  bool is_destructive = false;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_has_constraint(
+      descriptor_set, descriptor, LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE,
+      result_operand_index, accumulator_operand_index, &is_destructive));
+  *out_uses_tied_ternary_form = is_destructive;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_x86_append_load_packet(
@@ -322,24 +375,6 @@ static iree_status_t loom_x86_append_copy_packet(
   return loom_x86_append_assignment(context, source_assignment);
 }
 
-static bool loom_x86_mnemonic_is_destructive_dot(iree_string_view_t mnemonic) {
-  return iree_string_view_equal(mnemonic, IREE_SV("vdpbf16ps")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vdpphps")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpbssd")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpbssds")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpbsud")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpbsuds")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpbusd")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpbusds")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpbuud")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpbuuds")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpwssd")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpwssds")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpwsud")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpwusd")) ||
-         iree_string_view_equal(mnemonic, IREE_SV("vpdpwuud"));
-}
-
 static iree_status_t loom_x86_append_descriptor_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
@@ -350,10 +385,11 @@ static iree_status_t loom_x86_append_descriptor_packet(
       iree_string_view_equal(key, IREE_SV("x86.avx512.kandq"))) {
     return loom_x86_append_binary_vector_packet(context);
   }
-  iree_string_view_t mnemonic = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_x86_descriptor_mnemonic(context, &mnemonic));
-  if (loom_x86_mnemonic_is_destructive_dot(mnemonic)) {
-    return loom_x86_append_dot_packet(context);
+  bool uses_tied_ternary_form = false;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_uses_tied_ternary_form(
+      context, &uses_tied_ternary_form));
+  if (uses_tied_ternary_form) {
+    return loom_x86_append_tied_ternary_packet(context);
   }
   if (iree_string_view_equal(key, IREE_SV("x86.avx512.vmovdqu32.load.zmm"))) {
     return loom_x86_append_load_packet(context);
