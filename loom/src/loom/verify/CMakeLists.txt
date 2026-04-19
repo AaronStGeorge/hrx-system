@@ -15,13 +15,20 @@ loom_cc_library(
     verify
   HDRS
     "verify.h"
+    "verify_internal.h"
   SRCS
     "verify.c"
+    "verify_constraints.c"
+    "verify_diagnostics.c"
+    "verify_ownership.c"
+    "verify_state.c"
+    "verify_structure.c"
   DEPS
     iree::base
     iree::base::internal::arena
     iree::base::internal::unicode
     loom::src::loom::error::diagnostic
+    loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::error::renderer
     loom::src::loom::format::text::printer
