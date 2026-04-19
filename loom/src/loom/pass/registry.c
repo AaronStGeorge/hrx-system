@@ -214,6 +214,26 @@ static iree_status_t loom_pass_registry_verify_requirements(
   return iree_ok_status();
 }
 
+static iree_status_t loom_pass_registry_verify_statistics(
+    const loom_pass_descriptor_t* descriptor, const loom_pass_info_t* info) {
+  if (info->statistic_count > 0 && !info->statistic_defs) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass descriptor '%.*s' declares statistics without statistic defs",
+        (int)descriptor->key.size, descriptor->key.data);
+  }
+  for (uint16_t i = 0; i < info->statistic_count; ++i) {
+    const loom_pass_statistic_def_t* statistic = &info->statistic_defs[i];
+    if (iree_string_view_is_empty(statistic->name)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "pass descriptor '%.*s' statistic %u has no name",
+                              (int)descriptor->key.size, descriptor->key.data,
+                              (unsigned)i);
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_pass_registry_verify(const loom_pass_registry_t* registry) {
   if (!registry) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -249,6 +269,8 @@ iree_status_t loom_pass_registry_verify(const loom_pass_registry_t* registry) {
     }
     IREE_RETURN_IF_ERROR(
         loom_pass_registry_verify_option_schema(descriptor, info));
+    IREE_RETURN_IF_ERROR(
+        loom_pass_registry_verify_statistics(descriptor, info));
     IREE_RETURN_IF_ERROR(loom_pass_registry_verify_requirements(descriptor));
     if (iree_any_bit_set(
             descriptor->flags,

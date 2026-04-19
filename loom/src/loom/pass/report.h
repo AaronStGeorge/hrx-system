@@ -24,6 +24,7 @@ extern "C" {
 
 typedef struct loom_pass_descriptor_t loom_pass_descriptor_t;
 typedef struct loom_pass_program_instruction_t loom_pass_program_instruction_t;
+typedef struct loom_pass_registry_t loom_pass_registry_t;
 
 typedef struct loom_pass_report_statistic_t {
   // Descriptor-defined statistic key.
@@ -108,6 +109,11 @@ iree_status_t loom_pass_report_append_invocation(
 // Writes the report as stable JSON for tools and tests.
 iree_status_t loom_pass_report_format_json(const loom_pass_report_t* report,
                                            loom_output_stream_t* stream);
+
+// Writes registry descriptor and option-schema metadata as stable JSON for
+// pass reports and failure reproducers.
+iree_status_t loom_pass_report_format_registry_json(
+    const loom_pass_registry_t* registry, loom_output_stream_t* stream);
 
 #ifdef __cplusplus
 }  // extern "C"

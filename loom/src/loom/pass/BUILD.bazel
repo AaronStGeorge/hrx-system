@@ -169,6 +169,7 @@ loom_cc_test(
     deps = [
         ":manager",
         ":registry",
+        ":report",
         "//loom/src/loom/pass/test:registry",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

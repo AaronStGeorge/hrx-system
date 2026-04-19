@@ -6,9 +6,12 @@
 
 #include "loom/pass/registry.h"
 
+#include <string>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/pass/report.h"
 #include "loom/pass/test/registry.h"
 
 namespace loom {
@@ -21,8 +24,58 @@ static const loom_pass_descriptor_t* LookupTestPass(iree_string_view_t name) {
   return descriptor;
 }
 
+static const loom_pass_info_t* BrokenStatisticsPassInfo() {
+  static const loom_pass_info_t kInfo = {
+      .name = IREE_SVL("test.broken-statistics"),
+      .description = IREE_SVL("Synthetic pass with malformed statistics."),
+      .kind = LOOM_PASS_MODULE,
+      .statistic_count = 1,
+  };
+  return &kInfo;
+}
+
 TEST(PassRegistryCoreTest, SyntheticRegistryVerifies) {
   IREE_ASSERT_OK(loom_pass_registry_verify(loom_test_pass_registry()));
+}
+
+TEST(PassRegistryCoreTest, FormatsRegistryMetadataJson) {
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+
+  IREE_EXPECT_OK(loom_pass_report_format_registry_json(
+      loom_test_pass_registry(), &stream));
+
+  iree_string_view_t json = iree_string_builder_view(&builder);
+  std::string text(json.data, json.size);
+  EXPECT_NE(text.find("\"key\":\"test.options\""), std::string::npos);
+  EXPECT_NE(text.find("\"kind\":\"uint32\""), std::string::npos);
+  EXPECT_NE(text.find("\"minimum\":1"), std::string::npos);
+  EXPECT_NE(text.find("\"values\":[\"alpha\",\"beta\"]"), std::string::npos);
+  EXPECT_NE(text.find("\"required\":true"), std::string::npos);
+  EXPECT_NE(text.find("\"key\":\"test.unavailable\""), std::string::npos);
+  EXPECT_NE(text.find("\"available\":false"), std::string::npos);
+  EXPECT_NE(text.find("\"unavailable_reason\":\"disabled for test\""),
+            std::string::npos);
+  EXPECT_NE(text.find("\"requirements\":[{\"key\":\"target.bundle\""),
+            std::string::npos);
+
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST(PassRegistryCoreTest, RejectsMissingStatisticMetadata) {
+  loom_pass_descriptor_t descriptor =
+      *LookupTestPass(IREE_SV("test.module-noop"));
+  descriptor.key = IREE_SVL("test.broken-statistics");
+  descriptor.info = BrokenStatisticsPassInfo;
+  const loom_pass_registry_t registry = {
+      .descriptors = &descriptor,
+      .descriptor_count = 1,
+  };
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_registry_verify(&registry));
 }
 
 TEST(PassRegistryCoreTest, VerifiesRequirementMetadata) {

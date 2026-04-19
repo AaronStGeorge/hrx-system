@@ -28,6 +28,7 @@
 #include "loom/pass/tooling.h"
 #include "loom/target/all/low_registry.h"
 #include "loom/target/presets.h"
+#include "loom/util/json.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
 
@@ -390,9 +391,114 @@ static iree_status_t loom_opt_append_reproducer_run_line(
   return iree_string_builder_append_cstring(builder, " %s\n");
 }
 
+static iree_status_t loom_opt_format_pass_selection_json(
+    loom_output_stream_t* stream) {
+  iree_string_view_t pipeline_symbol =
+      iree_string_view_trim(iree_make_cstring_view(FLAG_pipeline));
+  if (!iree_string_view_is_empty(pipeline_symbol)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, "{\"kind\":\"pipeline\","));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, "\"pipeline\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(stream, pipeline_symbol));
+    return loom_output_stream_write_cstring(stream, "}");
+  }
+
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "{\"kind\":\"pass-list\","));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "\"passes\":["));
+  iree_flag_string_list_t passes = FLAG_pass_list();
+  for (iree_host_size_t i = 0; i < passes.count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, i == 0 ? "" : ","));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(stream, passes.values[i]));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]}"));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_opt_append_commented_block(
+    iree_string_builder_t* builder, iree_string_view_t text) {
+  bool at_line_start = true;
+  iree_host_size_t segment_start = 0;
+  for (iree_host_size_t i = 0; i < text.size; ++i) {
+    if (at_line_start) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "// "));
+      at_line_start = false;
+      segment_start = i;
+    }
+    if (text.data[i] != '\n') {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+        builder, iree_make_string_view(text.data + segment_start,
+                                       i - segment_start + 1)));
+    at_line_start = true;
+    segment_start = i + 1;
+  }
+  if (segment_start < text.size) {
+    if (at_line_start) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "// "));
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+        builder, iree_make_string_view(text.data + segment_start,
+                                       text.size - segment_start)));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_opt_append_reproducer_metadata(
+    iree_string_builder_t* builder, const loom_pass_registry_t* registry,
+    iree_status_code_t failure_status_code, iree_allocator_t allocator) {
+  iree_string_builder_t metadata_builder;
+  iree_string_builder_initialize(allocator, &metadata_builder);
+  loom_output_stream_t metadata_stream;
+  loom_output_stream_for_builder(&metadata_builder, &metadata_stream);
+
+  iree_status_t status = loom_output_stream_write_cstring(
+      &metadata_stream, "{\n  \"selection\": ");
+  if (iree_status_is_ok(status)) {
+    status = loom_opt_format_pass_selection_json(&metadata_stream);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_output_stream_write_cstring(&metadata_stream,
+                                              ",\n  \"failure_status\": ");
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_json_write_escaped_cstring(
+        &metadata_stream, iree_status_code_string(failure_status_code));
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_output_stream_write_cstring(&metadata_stream,
+                                              ",\n  \"registry\": ");
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_pass_report_format_registry_json(registry, &metadata_stream);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_output_stream_write_cstring(&metadata_stream, "}\n");
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_cstring(builder,
+                                                "// Pass failure metadata:\n");
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_opt_append_commented_block(
+        builder, iree_string_builder_view(&metadata_builder));
+  }
+
+  iree_string_builder_deinitialize(&metadata_builder);
+  return status;
+}
+
 static iree_status_t loom_opt_write_pass_reproducer(
     iree_string_view_t path, iree_string_view_t filename,
-    iree_string_view_t source, iree_allocator_t allocator) {
+    iree_string_view_t source, const loom_pass_registry_t* registry,
+    iree_status_code_t failure_status_code, iree_allocator_t allocator) {
   path = iree_string_view_trim(path);
   if (iree_string_view_is_empty(path)) {
     return iree_ok_status();
@@ -407,6 +513,10 @@ static iree_status_t loom_opt_write_pass_reproducer(
     status =
         iree_string_builder_append_format(&builder, "// Original input: %.*s\n",
                                           (int)filename.size, filename.data);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_opt_append_reproducer_metadata(
+        &builder, registry, failure_status_code, allocator);
   }
   if (iree_status_is_ok(status)) {
     status = loom_opt_append_reproducer_run_line(&builder);
@@ -770,9 +880,10 @@ int main(int argc, char** argv) {
   if (!metadata_only && pass_execution_started &&
       !iree_status_is_ok(pass_pipeline_status)) {
     status = iree_status_join(
-        status, loom_opt_write_pass_reproducer(
-                    iree_make_cstring_view(FLAG_pass_reproducer), filename,
-                    source, allocator));
+        status,
+        loom_opt_write_pass_reproducer(
+            iree_make_cstring_view(FLAG_pass_reproducer), filename, source,
+            pass_registry, iree_status_code(pass_pipeline_status), allocator));
   }
   if (!metadata_only && pass_report_initialized && pass_execution_started) {
     iree_status_t report_status =
@@ -784,9 +895,10 @@ int main(int argc, char** argv) {
     if (!iree_status_is_ok(status) && pass_execution_started &&
         iree_status_is_ok(pass_pipeline_status)) {
       status = iree_status_join(
-          status, loom_opt_write_pass_reproducer(
-                      iree_make_cstring_view(FLAG_pass_reproducer), filename,
-                      source, allocator));
+          status,
+          loom_opt_write_pass_reproducer(
+              iree_make_cstring_view(FLAG_pass_reproducer), filename, source,
+              pass_registry, iree_status_code(status), allocator));
     }
   }
   if (iree_status_is_ok(status) && !metadata_only) {

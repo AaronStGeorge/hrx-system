@@ -197,6 +197,7 @@ loom_cc_test(
   DEPS
     ::manager
     ::registry
+    ::report
     iree::base::internal::arena
     loom::src::loom::pass::test::registry
     iree::testing::gtest
