@@ -1,0 +1,30 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(
+    default_visibility = ["//visibility:public"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+py_binary(
+    name = "amdgpu_descriptors",
+    srcs = [
+        "gen/amdgpu_descriptors.py",
+    ] + [
+        "gen/__init__.py",
+        "gen/low_descriptors.py",
+        "target/__init__.py",
+        "target/arch/__init__.py",
+        "target/arch/amdgpu/__init__.py",
+        "target/arch/amdgpu/descriptor_overlay.py",
+        "target/arch/amdgpu/descriptors.py",
+        "target/arch/amdgpu/isa_xml.py",
+        "target/low_descriptors.py",
+    ],
+    main = "gen/amdgpu_descriptors.py",
+)

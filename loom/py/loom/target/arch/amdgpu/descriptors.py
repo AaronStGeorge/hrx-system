@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from loom.target.arch.amdgpu.descriptor_overlay import (
@@ -16,9 +17,9 @@ from loom.target.arch.amdgpu.descriptor_overlay import (
     AmdgpuOperandOverlay,
     materialize_amdgpu_descriptor_overlays,
 )
-from loom.target.arch.amdgpu.isa_snapshot import (
-    AmdgpuIsaSnapshot,
-    parse_amdgpu_isa_snapshot_json,
+from loom.target.arch.amdgpu.isa_xml import (
+    AmdgpuIsaFactSource,
+    parse_amdgpu_isa_xml_path,
 )
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
@@ -367,19 +368,6 @@ _IGNORE_GLOBAL_WRITE_MEMORY = AmdgpuImplicitOperandOverlay(
 )
 
 
-def _load_amdgpu_isa_snapshot(filename: str) -> AmdgpuIsaSnapshot:
-    path = Path(__file__).with_name(filename)
-    return parse_amdgpu_isa_snapshot_json(
-        path.read_text(encoding="utf-8"), source_name=str(path)
-    )
-
-
-_GFX950_ISA_SNAPSHOT = _load_amdgpu_isa_snapshot("gfx950_isa_snapshot.json")
-_GFX11_ISA_SNAPSHOT = _load_amdgpu_isa_snapshot("gfx11_isa_snapshot.json")
-_GFX12_ISA_SNAPSHOT = _load_amdgpu_isa_snapshot("gfx12_isa_snapshot.json")
-_GFX1250_ISA_SNAPSHOT = _load_amdgpu_isa_snapshot("gfx1250_isa_snapshot.json")
-
-
 def _s_add_u32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.s_add_u32",
@@ -632,86 +620,102 @@ def _s_wait_idle_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-_GFX950_CORE_OVERLAY_DESCRIPTORS = materialize_amdgpu_descriptor_overlays(
-    _GFX950_ISA_SNAPSHOT,
-    (
-        _s_add_u32_overlay(),
-        _v_add_u32_overlay("V_ADD_U32"),
-        _v_mul_lo_u32_overlay(),
-        _s_buffer_load_dword_overlay(),
-        _buffer_load_dword_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+def _gfx950_core_overlay_descriptors(
+    spec: AmdgpuIsaFactSource,
+) -> tuple[Descriptor, ...]:
+    return materialize_amdgpu_descriptor_overlays(
+        spec,
+        (
+            _s_add_u32_overlay(),
+            _v_add_u32_overlay("V_ADD_U32"),
+            _v_mul_lo_u32_overlay(),
+            _s_buffer_load_dword_overlay(),
+            _buffer_load_dword_overlay(
+                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            ),
+            _buffer_store_dword_overlay(
+                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            ),
+            _v_mfma_f32_16x16x16_f16_overlay(),
+            _s_waitcnt_overlay(),
         ),
-        _buffer_store_dword_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-        ),
-        _v_mfma_f32_16x16x16_f16_overlay(),
-        _s_waitcnt_overlay(),
-    ),
-)
+    )
 
-_GFX11_CORE_OVERLAY_DESCRIPTORS = materialize_amdgpu_descriptor_overlays(
-    _GFX11_ISA_SNAPSHOT,
-    (
-        _s_add_u32_overlay(),
-        _v_add_u32_overlay("V_ADD_NC_U32"),
-        _v_mul_lo_u32_overlay(),
-        _s_buffer_load_dword_overlay(),
-        _buffer_load_dword_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-        ),
-        _buffer_store_dword_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-        ),
-        _v_wmma_f32_16x16x16_f16_overlay(),
-        _s_waitcnt_overlay(),
-        _s_waitcnt_depctr_overlay(),
-        _s_wait_idle_overlay(),
-    ),
-)
 
-_GFX12_CORE_OVERLAY_DESCRIPTORS = materialize_amdgpu_descriptor_overlays(
-    _GFX12_ISA_SNAPSHOT,
-    (
-        _s_add_u32_overlay(),
-        _v_add_u32_overlay("V_ADD_NC_U32"),
-        _v_mul_lo_u32_overlay(),
-        _s_buffer_load_dword_overlay(),
-        _buffer_load_dword_overlay(
-            encoding_name="ENC_VBUFFER", resource_field_name="RSRC"
+def _gfx11_core_overlay_descriptors(
+    spec: AmdgpuIsaFactSource,
+) -> tuple[Descriptor, ...]:
+    return materialize_amdgpu_descriptor_overlays(
+        spec,
+        (
+            _s_add_u32_overlay(),
+            _v_add_u32_overlay("V_ADD_NC_U32"),
+            _v_mul_lo_u32_overlay(),
+            _s_buffer_load_dword_overlay(),
+            _buffer_load_dword_overlay(
+                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            ),
+            _buffer_store_dword_overlay(
+                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            ),
+            _v_wmma_f32_16x16x16_f16_overlay(),
+            _s_waitcnt_overlay(),
+            _s_waitcnt_depctr_overlay(),
+            _s_wait_idle_overlay(),
         ),
-        _buffer_store_dword_overlay(
-            encoding_name="ENC_VBUFFER", resource_field_name="RSRC"
-        ),
-        _v_wmma_f32_16x16x16_f16_overlay(),
-        _s_wait_loadcnt_overlay(),
-        _s_wait_storecnt_overlay(),
-        _s_wait_alu_overlay(),
-        _s_wait_idle_overlay(),
-    ),
-)
+    )
 
-_GFX1250_CORE_OVERLAY_DESCRIPTORS = materialize_amdgpu_descriptor_overlays(
-    _GFX1250_ISA_SNAPSHOT,
-    (
-        _s_add_u32_overlay(),
-        _v_add_u32_overlay("V_ADD_NC_U32"),
-        _v_mul_lo_u32_overlay(),
-        _s_buffer_load_dword_overlay(),
-        _buffer_load_dword_overlay(
-            encoding_name="ENC_VBUFFER", resource_field_name="RSRC"
-        ),
-        _buffer_store_dword_overlay(
-            encoding_name="ENC_VBUFFER", resource_field_name="RSRC"
-        ),
-        _s_wait_loadcnt_overlay(),
-        _s_wait_storecnt_overlay(),
-        _s_wait_alu_overlay(),
-        _s_wait_idle_overlay(),
-    ),
-)
 
-AMDGPU_GFX950_CORE_DESCRIPTOR_SET = DescriptorSet(
+def _gfx12_core_overlay_descriptors(
+    spec: AmdgpuIsaFactSource,
+) -> tuple[Descriptor, ...]:
+    return materialize_amdgpu_descriptor_overlays(
+        spec,
+        (
+            _s_add_u32_overlay(),
+            _v_add_u32_overlay("V_ADD_NC_U32"),
+            _v_mul_lo_u32_overlay(),
+            _s_buffer_load_dword_overlay(),
+            _buffer_load_dword_overlay(
+                encoding_name="ENC_VBUFFER", resource_field_name="RSRC"
+            ),
+            _buffer_store_dword_overlay(
+                encoding_name="ENC_VBUFFER", resource_field_name="RSRC"
+            ),
+            _v_wmma_f32_16x16x16_f16_overlay(),
+            _s_wait_loadcnt_overlay(),
+            _s_wait_storecnt_overlay(),
+            _s_wait_alu_overlay(),
+            _s_wait_idle_overlay(),
+        ),
+    )
+
+
+def _gfx1250_core_overlay_descriptors(
+    spec: AmdgpuIsaFactSource,
+) -> tuple[Descriptor, ...]:
+    return materialize_amdgpu_descriptor_overlays(
+        spec,
+        (
+            _s_add_u32_overlay(),
+            _v_add_u32_overlay("V_ADD_NC_U32"),
+            _v_mul_lo_u32_overlay(),
+            _s_buffer_load_dword_overlay(),
+            _buffer_load_dword_overlay(
+                encoding_name="ENC_VBUFFER", resource_field_name="RSRC"
+            ),
+            _buffer_store_dword_overlay(
+                encoding_name="ENC_VBUFFER", resource_field_name="RSRC"
+            ),
+            _s_wait_loadcnt_overlay(),
+            _s_wait_storecnt_overlay(),
+            _s_wait_alu_overlay(),
+            _s_wait_idle_overlay(),
+        ),
+    )
+
+
+_AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
     key="amdgpu.gfx950.core",
     target_key="amdgpu",
     feature_key="amdgpu.gfx950.v1",
@@ -827,11 +831,11 @@ AMDGPU_GFX950_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_SALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        *_GFX950_CORE_OVERLAY_DESCRIPTORS,
     ),
 )
 
-AMDGPU_GFX11_CORE_DESCRIPTOR_SET = DescriptorSet(
+
+_AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
     key="amdgpu.gfx11.core",
     target_key="amdgpu",
     feature_key="amdgpu.gfx11.v1",
@@ -958,11 +962,10 @@ AMDGPU_GFX11_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_SALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        *_GFX11_CORE_OVERLAY_DESCRIPTORS,
     ),
 )
 
-AMDGPU_GFX12_CORE_DESCRIPTOR_SET = DescriptorSet(
+_AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
     key="amdgpu.gfx12.core",
     target_key="amdgpu",
     feature_key="amdgpu.gfx12.v1",
@@ -1098,11 +1101,10 @@ AMDGPU_GFX12_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_SALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        *_GFX12_CORE_OVERLAY_DESCRIPTORS,
     ),
 )
 
-AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
+_AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
     key="amdgpu.gfx1250.core",
     target_key="amdgpu",
     feature_key="amdgpu.gfx1250.v1",
@@ -1255,7 +1257,6 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_SALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        *_GFX1250_CORE_OVERLAY_DESCRIPTORS,
         Descriptor(
             key="amdgpu.v_wmma_f32_16x16x32_f16",
             mnemonic="v_wmma_f32_16x16x32_f16",
@@ -1378,3 +1379,80 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
     ),
 )
+
+
+def _with_overlay_descriptors(
+    base: DescriptorSet,
+    overlay_descriptors: tuple[Descriptor, ...],
+) -> DescriptorSet:
+    return replace(
+        base,
+        descriptors=(
+            base.descriptors[0],
+            *overlay_descriptors,
+            *base.descriptors[1:],
+        ),
+    )
+
+
+def build_amdgpu_gfx950_core_descriptor_set(
+    xml_path: str | Path,
+) -> DescriptorSet:
+    spec = parse_amdgpu_isa_xml_path(xml_path)
+    return _with_overlay_descriptors(
+        _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE,
+        _gfx950_core_overlay_descriptors(spec),
+    )
+
+
+def build_amdgpu_gfx11_core_descriptor_set(
+    xml_path: str | Path,
+) -> DescriptorSet:
+    spec = parse_amdgpu_isa_xml_path(xml_path)
+    return _with_overlay_descriptors(
+        _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE,
+        _gfx11_core_overlay_descriptors(spec),
+    )
+
+
+def build_amdgpu_gfx12_core_descriptor_set(
+    xml_path: str | Path,
+) -> DescriptorSet:
+    spec = parse_amdgpu_isa_xml_path(xml_path)
+    return _with_overlay_descriptors(
+        _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE,
+        _gfx12_core_overlay_descriptors(spec),
+    )
+
+
+def build_amdgpu_gfx1250_core_descriptor_set(
+    xml_path: str | Path,
+) -> DescriptorSet:
+    spec = parse_amdgpu_isa_xml_path(xml_path)
+    return _with_overlay_descriptors(
+        _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE,
+        _gfx1250_core_overlay_descriptors(spec),
+    )
+
+
+AMDGPU_DESCRIPTOR_SET_BUILDERS = {
+    "gfx950": build_amdgpu_gfx950_core_descriptor_set,
+    "gfx11": build_amdgpu_gfx11_core_descriptor_set,
+    "gfx12": build_amdgpu_gfx12_core_descriptor_set,
+    "gfx1250": build_amdgpu_gfx1250_core_descriptor_set,
+}
+
+
+def build_amdgpu_core_descriptor_set(
+    target: str,
+    xml_path: str | Path,
+) -> DescriptorSet:
+    try:
+        builder = AMDGPU_DESCRIPTOR_SET_BUILDERS[target]
+    except KeyError as exc:
+        supported = ", ".join(sorted(AMDGPU_DESCRIPTOR_SET_BUILDERS))
+        raise ValueError(
+            f"unsupported AMDGPU descriptor target '{target}'; "
+            f"expected one of: {supported}"
+        ) from exc
+    return builder(xml_path)

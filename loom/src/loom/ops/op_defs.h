@@ -124,7 +124,7 @@ static inline loom_named_value_slice_t loom_make_named_value_slice(
 // printer has one switch statement with ~17 cases. Each op's format element
 // array is the instruction stream for that switch. Adding ops adds .rodata
 // format arrays, not .text code.
-typedef enum loom_format_kind_e {
+enum loom_format_kind_e {
   // Single operand reference: %name.
   LOOM_FORMAT_KIND_OPERAND_REF = 0,
   // Variadic operand references: %a, %b, %c.

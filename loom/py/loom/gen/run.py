@@ -7,7 +7,6 @@
 """Root-invocable runner for Loom generators.
 
 Usage:
-    python3 loom/py/loom/gen/run.py amdgpu_isa_snapshot --xml ... --out ...
     python3 loom/py/loom/gen/run.py builders
     python3 loom/py/loom/gen/run.py c_tables
     python3 loom/py/loom/gen/run.py low_descriptors
@@ -23,7 +22,6 @@ from pathlib import Path
 import bootstrap
 
 GENERATORS = {
-    "amdgpu_isa_snapshot": "loom.gen.amdgpu_isa_snapshot",
     "builders": "loom.gen.builders",
     "c_errors": "loom.gen.c_errors",
     "c_tables": "loom.gen.c_tables",
@@ -31,7 +29,7 @@ GENERATORS = {
     "textmate": "loom.gen.textmate",
 }
 
-ARGUMENT_GENERATORS = {"amdgpu_isa_snapshot"}
+ARGUMENT_GENERATORS: set[str] = set()
 
 
 def _usage() -> str:

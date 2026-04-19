@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeVar
 
-from loom.gen import bootstrap as _bootstrap
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
     LOW_DESCRIPTOR_SET_ABI_VERSION,
@@ -758,7 +757,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     )
 
 
-def _emit_header(compiled: _CompiledDescriptorSet) -> str:
+def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> str:
     spec = compiled.spec
     lines = [
         "// Copyright 2026 The IREE Authors",
@@ -786,7 +785,10 @@ def _emit_header(compiled: _CompiledDescriptorSet) -> str:
         "",
         f"#endif  // {spec.header_guard}",
     ]
-    return _clang_format_source("\n".join(lines) + "\n", spec.c_header_path)
+    source = "\n".join(lines) + "\n"
+    if not format_output:
+        return source
+    return _clang_format_source(source, spec.c_header_path)
 
 
 def _emit_string_table(compiled: _CompiledDescriptorSet, lines: list[str]) -> None:
@@ -851,7 +853,7 @@ def _emit_array(
     lines.append("")
 
 
-def _emit_source(compiled: _CompiledDescriptorSet) -> str:
+def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> str:
     spec = compiled.spec
     pool = compiled.string_pool
     lines = [
@@ -1239,7 +1241,10 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
     lines.append(f"const loom_low_descriptor_set_t* {spec.function_name}(void) {{")
     lines.append(f"  return &k{spec.c_table_prefix}Set;")
     lines.append("}")
-    return _clang_format_source("\n".join(lines) + "\n", spec.c_source_path)
+    source = "\n".join(lines) + "\n"
+    if not format_output:
+        return source
+    return _clang_format_source(source, spec.c_source_path)
 
 
 def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
@@ -1314,29 +1319,45 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
     return json.dumps(manifest, indent=2, sort_keys=True) + "\n"
 
 
-def generate_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist | None = None) -> GeneratedDescriptorSet:
+def generate_descriptor_set(
+    spec: DescriptorSet,
+    allowlist: DescriptorAllowlist | None = None,
+    *,
+    format_output: bool = True,
+) -> GeneratedDescriptorSet:
     compiled = _compile_descriptor_set(spec, allowlist)
     return GeneratedDescriptorSet(
-        header=_emit_header(compiled),
-        source=_emit_source(compiled),
+        header=_emit_header(compiled, format_output=format_output),
+        source=_emit_source(compiled, format_output=format_output),
         manifest_json=_emit_manifest_json(compiled),
     )
 
 
 def write_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist | None = None) -> None:
+    from loom.gen import bootstrap as _bootstrap
+
     generated = generate_descriptor_set(spec, allowlist)
     (_bootstrap.REPO_ROOT / spec.c_header_path).write_text(generated.header, encoding="utf-8")
     (_bootstrap.REPO_ROOT / spec.c_source_path).write_text(generated.source, encoding="utf-8")
 
 
+def write_descriptor_set_to_paths(
+    spec: DescriptorSet,
+    *,
+    header_path: Path,
+    source_path: Path,
+    allowlist: DescriptorAllowlist | None = None,
+    format_output: bool = False,
+) -> None:
+    generated = generate_descriptor_set(spec, allowlist, format_output=format_output)
+    header_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    header_path.write_text(generated.header, encoding="utf-8")
+    source_path.write_text(generated.source, encoding="utf-8")
+
+
 def main() -> None:
     from loom.gen.x86_packed_dot_contract import write_x86_packed_dot_contract_data
-    from loom.target.arch.amdgpu.descriptors import (
-        AMDGPU_GFX11_CORE_DESCRIPTOR_SET,
-        AMDGPU_GFX12_CORE_DESCRIPTOR_SET,
-        AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
-        AMDGPU_GFX1250_CORE_DESCRIPTOR_SET,
-    )
     from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
     from loom.target.arch.x86.descriptors import (
         X86_AVX512_CORE_DESCRIPTOR_SET,
@@ -1353,10 +1374,6 @@ def main() -> None:
         WASM_CORE_SIMD128_DESCRIPTOR_SET,
         X86_AVX512_CORE_DESCRIPTOR_SET,
         X86_PACKED_DOT_DESCRIPTOR_SET,
-        AMDGPU_GFX11_CORE_DESCRIPTOR_SET,
-        AMDGPU_GFX12_CORE_DESCRIPTOR_SET,
-        AMDGPU_GFX1250_CORE_DESCRIPTOR_SET,
-        AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
         TEST_LOW_CORE_DESCRIPTOR_SET,
         TEST_LOW_ALT_DESCRIPTOR_SET,
     )
