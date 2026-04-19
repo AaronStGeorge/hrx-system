@@ -29,6 +29,25 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    kernel_assembly
+  HDRS
+    "kernel_assembly.h"
+  SRCS
+    "kernel_assembly.c"
+  DEPS
+    ::assembly
+    iree::base
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::wait_packets
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     assembly_test
@@ -50,6 +69,27 @@ loom_cc_test(
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::arch::amdgpu::wait_plan
     loom::src::loom::target::ir_records
+    loom::src::loom::target::presets
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    kernel_assembly_test
+  SRCS
+    "kernel_assembly_test.cc"
+  DEPS
+    ::kernel_assembly
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::presets
     loom::src::loom::testing::context
     iree::testing::gtest

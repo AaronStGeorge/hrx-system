@@ -303,10 +303,8 @@ iree_status_t loom_target_ir_bundle_from_ops(
                                  IREE_SV("symbol"), &bundle_name));
   out_storage->bundle = (loom_target_bundle_t){
       .name = bundle_name,
-      .snapshot = &out_storage->snapshot,
-      .export_plan = &out_storage->export_plan,
-      .config = &out_storage->config,
   };
+  loom_target_ir_bundle_storage_rebind(out_storage);
   return iree_ok_status();
 }
 

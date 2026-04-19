@@ -31,6 +31,17 @@ typedef struct loom_target_ir_bundle_storage_t {
   loom_target_bundle_t bundle;
 } loom_target_ir_bundle_storage_t;
 
+// Rebinds |storage->bundle| to the records embedded in |storage|. Call this
+// after copying a storage object by value; the embedded bundle is a view and
+// its pointers must refer to the same enclosing storage object.
+static inline void loom_target_ir_bundle_storage_rebind(
+    loom_target_ir_bundle_storage_t* storage) {
+  IREE_ASSERT_ARGUMENT(storage);
+  storage->bundle.snapshot = &storage->snapshot;
+  storage->bundle.export_plan = &storage->export_plan;
+  storage->bundle.config = &storage->config;
+}
+
 // Converts a target.snapshot op into a target snapshot record. Borrowed strings
 // in |out_snapshot| point into |module|.
 iree_status_t loom_target_ir_snapshot_from_op(
