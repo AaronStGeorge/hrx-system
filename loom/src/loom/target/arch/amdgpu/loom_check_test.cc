@@ -51,17 +51,37 @@ constexpr const char* kAmdgpuGfx11MixedLowFunction =
     "low.func.def target(@gfx11_target) @gfx11_mix(%s0 : reg<amdgpu.sgpr>, "
     "%s1 : reg<amdgpu.sgpr>, %v0 : reg<amdgpu.vgpr>, "
     "%v1 : reg<amdgpu.vgpr>, %a : reg<amdgpu.vgpr x4>, "
-    "%b : reg<amdgpu.vgpr x4>, %acc : reg<amdgpu.vgpr x8>) -> "
+    "%b : reg<amdgpu.vgpr x4>, %acc : reg<amdgpu.vgpr x8>, "
+    "%resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, "
+    "%vaddr : reg<amdgpu.vgpr>) -> "
     "(reg<amdgpu.sgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr x8>) {\n"
     "  %s_sum = low.op<amdgpu.s_add_u32>(%s0, %s1) : "
     "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
     "  %v_sum = low.op<amdgpu.v_add_u32>(%v0, %v1) : "
     "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-    "  %matrix = low.op<amdgpu.v_wmma_f32_16x16x16_f16>(%a, %b, %acc) : "
+    "  %smem = low.op<amdgpu.s_buffer_load_dword>(%resource, %soffset) "
+    "{offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>) -> "
+    "reg<amdgpu.sgpr>\n"
+    "  %vmem = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, "
+    "%soffset) {offset = 4} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, "
+    "reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>\n"
+    "  %s_mix = low.op<amdgpu.s_add_u32>(%s_sum, %smem) : "
+    "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+    "  %v_mix = low.op<amdgpu.v_add_u32>(%v_sum, %vmem) : "
+    "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+    "  %matrix0 = low.op<amdgpu.v_wmma_f32_16x16x16_f16>(%a, %b, %acc) : "
     "(reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x8>) -> "
     "reg<amdgpu.vgpr x8>\n"
+    "  %matrix1 = low.op<amdgpu.v_wmma_f32_16x16x16_f16>(%a, %b, "
+    "%matrix0) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>, "
+    "reg<amdgpu.vgpr x8>) -> reg<amdgpu.vgpr x8>\n"
+    "  low.op<amdgpu.buffer_store_dword>(%v_mix, %resource, %vaddr, "
+    "%soffset) {offset = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
+    "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
     "  low.op<amdgpu.s_waitcnt>() {vmcnt = 0, lgkmcnt = 0} : ()\n"
-    "  low.return %s_sum, %v_sum, %matrix : reg<amdgpu.sgpr>, "
+    "  low.op<amdgpu.s_waitcnt_depctr>() {depctr = 0} : ()\n"
+    "  low.op<amdgpu.s_wait_idle>() : ()\n"
+    "  low.return %s_mix, %v_mix, %matrix1 : reg<amdgpu.sgpr>, "
     "reg<amdgpu.vgpr>, reg<amdgpu.vgpr x8>\n"
     "}\n";
 
@@ -88,6 +108,10 @@ TEST_F(AmdgpuLoomCheckTest, DescriptorManifestUsesGfx11RegistryPackage) {
             std::string::npos);
   EXPECT_NE(actual_output.find("\"key\":\"amdgpu.s_waitcnt\""),
             std::string::npos);
+  EXPECT_NE(actual_output.find("\"key\":\"amdgpu.s_waitcnt_depctr\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"key\":\"amdgpu.s_wait_idle\""),
+            std::string::npos);
   EXPECT_EQ(actual_output.find("\"test.low.core\""), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
@@ -112,21 +136,52 @@ TEST_F(AmdgpuLoomCheckTest, ScheduleJsonUsesGfx11ResourcesAndLiveness) {
             std::string::npos);
   EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.v_add_u32\""),
             std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.s_buffer_load_dword\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.buffer_load_dword\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.buffer_store_dword\""),
+            std::string::npos);
   EXPECT_NE(
       actual_output.find("\"descriptor\":\"amdgpu.v_wmma_f32_16x16x16_f16\""),
       std::string::npos);
   EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.s_waitcnt\""),
             std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.s_waitcnt_depctr\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.s_wait_idle\""),
+            std::string::npos);
   EXPECT_NE(actual_output.find("\"resource_name\":\"amdgpu.salu\""),
             std::string::npos);
   EXPECT_NE(actual_output.find("\"resource_name\":\"amdgpu.valu\""),
             std::string::npos);
+  EXPECT_NE(actual_output.find("\"resource_name\":\"amdgpu.smem\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"resource_name\":\"amdgpu.vmem.load\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"resource_name\":\"amdgpu.vmem.store\""),
+            std::string::npos);
   EXPECT_NE(actual_output.find("\"resource_name\":\"amdgpu.wmma\""),
             std::string::npos);
-  EXPECT_NE(actual_output.find("\"schedule_class\":\"amdgpu.wait\""),
+  EXPECT_NE(actual_output.find("\"schedule_class\":\"amdgpu.wait.memory\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"schedule_class\":\"amdgpu.wait.alu\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"schedule_class\":\"amdgpu.wait.idle\""),
             std::string::npos);
   EXPECT_NE(actual_output.find("\"resource_name\":\"amdgpu.control\""),
             std::string::npos);
+  EXPECT_NE(actual_output.find("\"scheduled_hazard_uses\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"kind_name\":\"wait_counter\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"kind_name\":\"min_distance\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"reference_kind_name\":\"counter\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"reference_kind_name\":\"resource\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"scheduled_hazard_gaps\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"required_delay\":1"), std::string::npos);
   EXPECT_NE(actual_output.find("\"register_class\":\"amdgpu.sgpr\""),
             std::string::npos);
   EXPECT_NE(actual_output.find("\"register_class\":\"amdgpu.vgpr\""),
@@ -137,7 +192,7 @@ TEST_F(AmdgpuLoomCheckTest, ScheduleJsonUsesGfx11ResourcesAndLiveness) {
 TEST_F(AmdgpuLoomCheckTest, AllocationJsonUsesGfx11PhysicalRegisterClasses) {
   loom_check_result_t result;
   std::string source =
-      "// RUN: emit low-allocation-json @gfx11_mix amdgpu.vgpr=8\n";
+      "// RUN: emit low-allocation-json @gfx11_mix amdgpu.vgpr=64\n";
   source += kAmdgpuGfx11MixedLowFunction;
   source += "// ----\n";
   IREE_ASSERT_OK(
@@ -165,7 +220,7 @@ TEST_F(AmdgpuLoomCheckTest, AllocationJsonUsesGfx11PhysicalRegisterClasses) {
 TEST_F(AmdgpuLoomCheckTest, PacketJsonUsesGfx11DescriptorsAndAllocation) {
   loom_check_result_t result;
   std::string source =
-      "// RUN: emit low-packet-json @gfx11_mix amdgpu.vgpr=8\n";
+      "// RUN: emit low-packet-json @gfx11_mix amdgpu.vgpr=64\n";
   source += kAmdgpuGfx11MixedLowFunction;
   source += "// ----\n";
   IREE_ASSERT_OK(
@@ -185,10 +240,20 @@ TEST_F(AmdgpuLoomCheckTest, PacketJsonUsesGfx11DescriptorsAndAllocation) {
             std::string::npos);
   EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.v_add_u32\""),
             std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.s_buffer_load_dword\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.buffer_load_dword\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.buffer_store_dword\""),
+            std::string::npos);
   EXPECT_NE(
       actual_output.find("\"descriptor\":\"amdgpu.v_wmma_f32_16x16x16_f16\""),
       std::string::npos);
   EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.s_waitcnt\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.s_waitcnt_depctr\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.s_wait_idle\""),
             std::string::npos);
   EXPECT_NE(actual_output.find("\"descriptor_ordinal\":"), std::string::npos);
   EXPECT_NE(actual_output.find("\"encoding_id\":"), std::string::npos);
@@ -196,6 +261,11 @@ TEST_F(AmdgpuLoomCheckTest, PacketJsonUsesGfx11DescriptorsAndAllocation) {
   EXPECT_NE(actual_output.find("\"name\":\"lgkmcnt\""), std::string::npos);
   EXPECT_NE(actual_output.find("\"kind\":\"unsigned\""), std::string::npos);
   EXPECT_NE(actual_output.find("\"value\":0"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"value\":4"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"value\":8"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"hazard_gap_count\":"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"hazard_gaps\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"required_delay\":1"), std::string::npos);
   EXPECT_NE(actual_output.find("\"kind\":\"physical_register\""),
             std::string::npos);
   EXPECT_NE(actual_output.find("\"type\":\"reg<amdgpu.vgpr x8>\""),

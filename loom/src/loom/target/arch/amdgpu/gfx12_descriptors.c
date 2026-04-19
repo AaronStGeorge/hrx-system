@@ -26,7 +26,10 @@ static const uint8_t kAmdgpuGfx12CoreStringData[] =
     LOOM_BSTRING_LITERAL("\x0b", "amdgpu.wmma")
     LOOM_BSTRING_LITERAL("\x0e", "amdgpu.control")
     LOOM_BSTRING_LITERAL("\x10", "amdgpu.smem.load")
-    LOOM_BSTRING_LITERAL("\x0b", "amdgpu.wait")
+    LOOM_BSTRING_LITERAL("\x10", "amdgpu.wait.load")
+    LOOM_BSTRING_LITERAL("\x11", "amdgpu.wait.store")
+    LOOM_BSTRING_LITERAL("\x0f", "amdgpu.wait.alu")
+    LOOM_BSTRING_LITERAL("\x10", "amdgpu.wait.idle")
     LOOM_BSTRING_LITERAL("\x10", "amdgpu.s_mov_b32")
     LOOM_BSTRING_LITERAL("\x09", "s_mov_b32")
     LOOM_BSTRING_LITERAL("\x11", "integer.const.u32")
@@ -106,11 +109,21 @@ enum {
   AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_smem_load =
       AMDGPU_GFX12_CORE_STRING_resource_amdgpu_control +
       sizeof("amdgpu.control"),
-  AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait =
+  AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_load =
       AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_smem_load +
       sizeof("amdgpu.smem.load"),
+  AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_store =
+      AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_load +
+      sizeof("amdgpu.wait.load"),
+  AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_alu =
+      AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_store +
+      sizeof("amdgpu.wait.store"),
+  AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_idle =
+      AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_alu +
+      sizeof("amdgpu.wait.alu"),
   AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_mov_b32 =
-      AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait + sizeof("amdgpu.wait"),
+      AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_idle +
+      sizeof("amdgpu.wait.idle"),
   AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_s_mov_b32 =
       AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_mov_b32 +
       sizeof("amdgpu.s_mov_b32"),
@@ -745,6 +758,135 @@ static const loom_low_issue_use_t kAmdgpuGfx12CoreIssueUses[] = {
         .units = 1,
         .stage = 0,
     },
+    {
+        .resource_id = 6,
+        .cycles = 1,
+        .units = 1,
+        .stage = 0,
+    },
+    {
+        .resource_id = 6,
+        .cycles = 1,
+        .units = 1,
+        .stage = 0,
+    },
+    {
+        .resource_id = 6,
+        .cycles = 1,
+        .units = 1,
+        .stage = 0,
+    },
+};
+
+static const loom_low_hazard_t kAmdgpuGfx12CoreHazards[] = {
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 3,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 1,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 1,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 2,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 3,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_MIN_DISTANCE,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE,
+        .reference_id = 5,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 2,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 1,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 2,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 3,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 1,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 2,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_WAIT_COUNTER,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER,
+        .reference_id = 3,
+        .producer_stage = 0,
+        .consumer_stage = 0,
+        .distance = 0,
+        .flags = 0,
+    },
 };
 
 static const loom_low_schedule_class_t kAmdgpuGfx12CoreScheduleClasses[] = {
@@ -768,7 +910,7 @@ static const loom_low_schedule_class_t kAmdgpuGfx12CoreScheduleClasses[] = {
         .issue_use_start = 1,
         .issue_use_count = 1,
         .hazard_start = 0,
-        .hazard_count = 0,
+        .hazard_count = 1,
         .flags = 0,
         .model_quality = LOOM_LOW_MODEL_QUALITY_ESTIMATED,
         .pressure_delta_start = 0,
@@ -781,8 +923,8 @@ static const loom_low_schedule_class_t kAmdgpuGfx12CoreScheduleClasses[] = {
         .latency_kind = LOOM_LOW_LATENCY_KIND_VARIABLE,
         .issue_use_start = 2,
         .issue_use_count = 1,
-        .hazard_start = 0,
-        .hazard_count = 0,
+        .hazard_start = 1,
+        .hazard_count = 1,
         .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD,
         .model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK,
         .pressure_delta_start = 0,
@@ -795,8 +937,8 @@ static const loom_low_schedule_class_t kAmdgpuGfx12CoreScheduleClasses[] = {
         .latency_kind = LOOM_LOW_LATENCY_KIND_VARIABLE,
         .issue_use_start = 3,
         .issue_use_count = 1,
-        .hazard_start = 0,
-        .hazard_count = 0,
+        .hazard_start = 2,
+        .hazard_count = 1,
         .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD,
         .model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK,
         .pressure_delta_start = 0,
@@ -809,8 +951,8 @@ static const loom_low_schedule_class_t kAmdgpuGfx12CoreScheduleClasses[] = {
         .latency_kind = LOOM_LOW_LATENCY_KIND_VARIABLE,
         .issue_use_start = 4,
         .issue_use_count = 1,
-        .hazard_start = 0,
-        .hazard_count = 0,
+        .hazard_start = 3,
+        .hazard_count = 1,
         .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE,
         .model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK,
         .pressure_delta_start = 0,
@@ -822,21 +964,63 @@ static const loom_low_schedule_class_t kAmdgpuGfx12CoreScheduleClasses[] = {
         .latency_kind = LOOM_LOW_LATENCY_KIND_ESTIMATE,
         .issue_use_start = 5,
         .issue_use_count = 1,
-        .hazard_start = 0,
-        .hazard_count = 0,
+        .hazard_start = 4,
+        .hazard_count = 2,
         .flags = 0,
         .model_quality = LOOM_LOW_MODEL_QUALITY_ESTIMATED,
         .pressure_delta_start = 0,
         .pressure_delta_count = 0,
     },
     {
-        .name_string_offset = AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait,
+        .name_string_offset =
+            AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_load,
         .latency_cycles = 1,
         .latency_kind = LOOM_LOW_LATENCY_KIND_VARIABLE,
         .issue_use_start = 6,
         .issue_use_count = 1,
-        .hazard_start = 0,
-        .hazard_count = 0,
+        .hazard_start = 6,
+        .hazard_count = 1,
+        .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL,
+        .model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK,
+        .pressure_delta_start = 0,
+        .pressure_delta_count = 0,
+    },
+    {
+        .name_string_offset =
+            AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_store,
+        .latency_cycles = 1,
+        .latency_kind = LOOM_LOW_LATENCY_KIND_VARIABLE,
+        .issue_use_start = 7,
+        .issue_use_count = 1,
+        .hazard_start = 7,
+        .hazard_count = 1,
+        .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL,
+        .model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK,
+        .pressure_delta_start = 0,
+        .pressure_delta_count = 0,
+    },
+    {
+        .name_string_offset = AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_alu,
+        .latency_cycles = 1,
+        .latency_kind = LOOM_LOW_LATENCY_KIND_VARIABLE,
+        .issue_use_start = 8,
+        .issue_use_count = 1,
+        .hazard_start = 8,
+        .hazard_count = 1,
+        .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL,
+        .model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK,
+        .pressure_delta_start = 0,
+        .pressure_delta_count = 0,
+    },
+    {
+        .name_string_offset =
+            AMDGPU_GFX12_CORE_STRING_schedule_amdgpu_wait_idle,
+        .latency_cycles = 1,
+        .latency_kind = LOOM_LOW_LATENCY_KIND_VARIABLE,
+        .issue_use_start = 9,
+        .issue_use_count = 1,
+        .hazard_start = 9,
+        .hazard_count = 3,
         .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL,
         .model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK,
         .pressure_delta_start = 0,
@@ -1040,7 +1224,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .effect_count = 1,
         .constraint_start = 0,
         .constraint_count = 0,
-        .schedule_class_id = 6,
+        .schedule_class_id = 7,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
     },
     {
@@ -1062,7 +1246,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .effect_count = 1,
         .constraint_start = 0,
         .constraint_count = 0,
-        .schedule_class_id = 6,
+        .schedule_class_id = 8,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
     },
     {
@@ -1084,7 +1268,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .effect_count = 1,
         .constraint_start = 0,
         .constraint_count = 0,
-        .schedule_class_id = 6,
+        .schedule_class_id = 9,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
     },
 };
@@ -1337,6 +1521,8 @@ static const loom_low_descriptor_set_t kAmdgpuGfx12CoreSet = {
     .issue_use_count = IREE_ARRAYSIZE(kAmdgpuGfx12CoreIssueUses),
     .resources = kAmdgpuGfx12CoreResources,
     .resource_count = IREE_ARRAYSIZE(kAmdgpuGfx12CoreResources),
+    .hazards = kAmdgpuGfx12CoreHazards,
+    .hazard_count = IREE_ARRAYSIZE(kAmdgpuGfx12CoreHazards),
     .asm_forms = kAmdgpuGfx12CoreAsmForms,
     .asm_form_count = IREE_ARRAYSIZE(kAmdgpuGfx12CoreAsmForms),
     .asm_operand_indices = kAmdgpuGfx12CoreAsmOperandIndices,

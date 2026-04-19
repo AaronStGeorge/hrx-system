@@ -119,6 +119,9 @@ def test_generate_amdgpu_gfx950_core_descriptor_set() -> None:
     assert manifest["table_counts"]["asm_forms"] >= 8
     assert manifest["table_counts"]["reg_classes"] == 3
     assert manifest["table_counts"]["resources"] >= 6
+    assert manifest["table_counts"]["hazards"] >= 1
+    assert "LOOM_LOW_HAZARD_KIND_WAIT_COUNTER" in generated.source
+    assert "LOOM_LOW_HAZARD_KIND_MIN_DISTANCE" in generated.source
     assert any(descriptor["key"] == "amdgpu.v_mfma_f32_16x16x16_f16" for descriptor in manifest["descriptors"])
 
 
@@ -144,6 +147,12 @@ def test_generate_amdgpu_gfx11_core_descriptor_set() -> None:
     assert manifest["table_counts"]["asm_forms"] >= 10
     assert manifest["table_counts"]["reg_classes"] == 2
     assert manifest["table_counts"]["resources"] >= 7
+    assert manifest["table_counts"]["hazards"] >= 1
+    assert "amdgpu.wait.memory" in generated.source
+    assert "amdgpu.wait.alu" in generated.source
+    assert "amdgpu.wait.idle" in generated.source
+    assert "LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER" in generated.source
+    assert "LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE" in generated.source
     assert any(descriptor["key"] == "amdgpu.v_wmma_f32_16x16x16_f16" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "amdgpu.s_waitcnt" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "amdgpu.s_waitcnt_depctr" for descriptor in manifest["descriptors"])
@@ -171,6 +180,11 @@ def test_generate_amdgpu_gfx12_core_descriptor_set() -> None:
     assert manifest["table_counts"]["asm_forms"] >= 10
     assert manifest["table_counts"]["reg_classes"] == 2
     assert manifest["table_counts"]["resources"] >= 6
+    assert manifest["table_counts"]["hazards"] >= 1
+    assert "amdgpu.wait.load" in generated.source
+    assert "amdgpu.wait.store" in generated.source
+    assert "amdgpu.wait.alu" in generated.source
+    assert "amdgpu.wait.idle" in generated.source
     assert any(descriptor["key"] == "amdgpu.v_wmma_f32_16x16x16_f16" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "amdgpu.s_wait_loadcnt" for descriptor in manifest["descriptors"])
 
@@ -198,6 +212,9 @@ def test_generate_amdgpu_gfx1250_core_descriptor_set() -> None:
     assert manifest["table_counts"]["asm_forms"] >= 14
     assert manifest["table_counts"]["reg_classes"] == 2
     assert manifest["table_counts"]["resources"] >= 8
+    assert manifest["table_counts"]["hazards"] >= 1
+    assert "LOOM_LOW_HAZARD_KIND_WAIT_COUNTER" in generated.source
+    assert "LOOM_LOW_HAZARD_KIND_MIN_DISTANCE" in generated.source
     assert any(descriptor["key"] == "amdgpu.v_wmma_scale16_f32_16x16x128_f8f6f4_f8_f8" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "amdgpu.v_swmmac_f32_16x16x64_f16" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "amdgpu.v_wmma_f32_16x16x32_f16" and "LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO" in descriptor["flags"] for descriptor in manifest["descriptors"])

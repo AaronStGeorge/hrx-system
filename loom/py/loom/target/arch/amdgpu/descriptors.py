@@ -32,6 +32,8 @@ from loom.target.low_descriptors import (
     Effect,
     EffectFlag,
     EffectKind,
+    Hazard,
+    HazardKind,
     Immediate,
     ImmediateKind,
     IssueUse,
@@ -74,11 +76,28 @@ _SCHEDULE_MFMA = "amdgpu.mfma"
 _SCHEDULE_WMMA = "amdgpu.wmma"
 _SCHEDULE_WMMA_SCALE = "amdgpu.wmma.scale"
 _SCHEDULE_SWMMAC = "amdgpu.swmmac"
-_SCHEDULE_WAIT = "amdgpu.wait"
+_SCHEDULE_WAIT_MEMORY = "amdgpu.wait.memory"
+_SCHEDULE_WAIT_LOAD = "amdgpu.wait.load"
+_SCHEDULE_WAIT_STORE = "amdgpu.wait.store"
+_SCHEDULE_WAIT_ALU = "amdgpu.wait.alu"
+_SCHEDULE_WAIT_IDLE = "amdgpu.wait.idle"
 
 _COUNTER_LOAD = 1
 _COUNTER_STORE = 2
 _COUNTER_ALU = 3
+
+_LOAD_COUNTER_HAZARD = Hazard(HazardKind.WAIT_COUNTER, counter_id=_COUNTER_LOAD)
+_STORE_COUNTER_HAZARD = Hazard(HazardKind.WAIT_COUNTER, counter_id=_COUNTER_STORE)
+_ALU_COUNTER_HAZARD = Hazard(HazardKind.WAIT_COUNTER, counter_id=_COUNTER_ALU)
+_MEMORY_WAIT_HAZARDS = (_LOAD_COUNTER_HAZARD, _STORE_COUNTER_HAZARD)
+_LOAD_WAIT_HAZARDS = (_LOAD_COUNTER_HAZARD,)
+_STORE_WAIT_HAZARDS = (_STORE_COUNTER_HAZARD,)
+_ALU_WAIT_HAZARDS = (_ALU_COUNTER_HAZARD,)
+_IDLE_WAIT_HAZARDS = (
+    _LOAD_COUNTER_HAZARD,
+    _STORE_COUNTER_HAZARD,
+    _ALU_COUNTER_HAZARD,
+)
 
 _SGPR_ALT = (RegClassAlt(_REG_SGPR),)
 _VGPR_ALT = (RegClassAlt(_REG_VGPR),)
@@ -92,6 +111,19 @@ _VGPR_AGPR_CONST_ALT = (
     RegClassAlt(_REG_AGPR),
     RegClassAlt(None, flags=(RegClassAltFlag.IMMEDIATE,)),
 )
+
+
+def _matrix_hazards(resource: str) -> tuple[Hazard, ...]:
+    return (
+        _ALU_COUNTER_HAZARD,
+        Hazard(
+            HazardKind.MIN_DISTANCE,
+            resource=resource,
+            producer_stage=0,
+            consumer_stage=0,
+            distance=2,
+        ),
+    )
 
 
 def _asm(
@@ -496,7 +528,7 @@ def _s_waitcnt_overlay() -> AmdgpuDescriptorOverlay:
         mnemonic="s_waitcnt",
         encoding_name="ENC_SOPP",
         semantic_tag="control.waitcnt",
-        schedule_class=_SCHEDULE_WAIT,
+        schedule_class=_SCHEDULE_WAIT_MEMORY,
         operands=(),
         immediate_fields=("SIMM16",),
         immediates=(_VMCNT_IMMEDIATE, _LGKMCNT_IMMEDIATE),
@@ -512,7 +544,7 @@ def _s_waitcnt_depctr_overlay() -> AmdgpuDescriptorOverlay:
         mnemonic="s_waitcnt_depctr",
         encoding_name="ENC_SOPP",
         semantic_tag="control.waitcnt.alu",
-        schedule_class=_SCHEDULE_WAIT,
+        schedule_class=_SCHEDULE_WAIT_ALU,
         operands=(),
         immediate_fields=("SIMM16",),
         immediates=(_DEPCTR_IMMEDIATE,),
@@ -528,7 +560,7 @@ def _s_wait_loadcnt_overlay() -> AmdgpuDescriptorOverlay:
         mnemonic="s_wait_loadcnt",
         encoding_name="ENC_SOPP",
         semantic_tag="control.waitcnt.load",
-        schedule_class=_SCHEDULE_WAIT,
+        schedule_class=_SCHEDULE_WAIT_LOAD,
         operands=(),
         immediate_fields=("SIMM16",),
         immediates=(_LOADCNT_IMMEDIATE,),
@@ -544,7 +576,7 @@ def _s_wait_storecnt_overlay() -> AmdgpuDescriptorOverlay:
         mnemonic="s_wait_storecnt",
         encoding_name="ENC_SOPP",
         semantic_tag="control.waitcnt.store",
-        schedule_class=_SCHEDULE_WAIT,
+        schedule_class=_SCHEDULE_WAIT_STORE,
         operands=(),
         immediate_fields=("SIMM16",),
         immediates=(_STORECNT_IMMEDIATE,),
@@ -560,7 +592,7 @@ def _s_wait_alu_overlay() -> AmdgpuDescriptorOverlay:
         mnemonic="s_wait_alu",
         encoding_name="ENC_SOPP",
         semantic_tag="control.waitcnt.alu",
-        schedule_class=_SCHEDULE_WAIT,
+        schedule_class=_SCHEDULE_WAIT_ALU,
         operands=(),
         immediate_fields=("SIMM16",),
         immediates=(_DEPCTR_IMMEDIATE,),
@@ -576,7 +608,7 @@ def _s_wait_idle_overlay() -> AmdgpuDescriptorOverlay:
         mnemonic="s_wait_idle",
         encoding_name="ENC_SOPP",
         semantic_tag="control.waitcnt.idle",
-        schedule_class=_SCHEDULE_WAIT,
+        schedule_class=_SCHEDULE_WAIT_IDLE,
         operands=(),
         effects=(_WAIT_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -715,6 +747,7 @@ AMDGPU_GFX950_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
+            hazards=_ALU_WAIT_HAZARDS,
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
@@ -722,6 +755,7 @@ AMDGPU_GFX950_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=8,
             issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -730,6 +764,7 @@ AMDGPU_GFX950_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=16,
             issue_uses=(IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -738,6 +773,7 @@ AMDGPU_GFX950_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=16,
             issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
+            hazards=_STORE_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_STORE,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -746,13 +782,15 @@ AMDGPU_GFX950_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=32,
             issue_uses=(IssueUse(_RESOURCE_MFMA, cycles=1, units=1),),
+            hazards=_matrix_hazards(_RESOURCE_MFMA),
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
-            _SCHEDULE_WAIT,
+            _SCHEDULE_WAIT_MEMORY,
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_MEMORY_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -822,6 +860,7 @@ AMDGPU_GFX11_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
+            hazards=_ALU_WAIT_HAZARDS,
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
@@ -829,6 +868,7 @@ AMDGPU_GFX11_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=8,
             issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -837,6 +877,7 @@ AMDGPU_GFX11_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=16,
             issue_uses=(IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -845,6 +886,7 @@ AMDGPU_GFX11_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=16,
             issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
+            hazards=_STORE_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_STORE,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -853,13 +895,33 @@ AMDGPU_GFX11_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=32,
             issue_uses=(IssueUse(_RESOURCE_WMMA, cycles=1, units=1),),
+            hazards=_matrix_hazards(_RESOURCE_WMMA),
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
-            _SCHEDULE_WAIT,
+            _SCHEDULE_WAIT_MEMORY,
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_MEMORY_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_ALU,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_ALU_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_IDLE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_IDLE_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -929,6 +991,7 @@ AMDGPU_GFX12_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
+            hazards=_ALU_WAIT_HAZARDS,
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
@@ -936,6 +999,7 @@ AMDGPU_GFX12_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=8,
             issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -944,6 +1008,7 @@ AMDGPU_GFX12_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=16,
             issue_uses=(IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -952,6 +1017,7 @@ AMDGPU_GFX12_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=16,
             issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
+            hazards=_STORE_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_STORE,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -960,13 +1026,42 @@ AMDGPU_GFX12_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=32,
             issue_uses=(IssueUse(_RESOURCE_WMMA, cycles=1, units=1),),
+            hazards=_matrix_hazards(_RESOURCE_WMMA),
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
-            _SCHEDULE_WAIT,
+            _SCHEDULE_WAIT_LOAD,
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_STORE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_STORE_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_ALU,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_ALU_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_IDLE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_IDLE_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -1037,6 +1132,7 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
+            hazards=_ALU_WAIT_HAZARDS,
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
@@ -1044,6 +1140,7 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=8,
             issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -1052,6 +1149,7 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=16,
             issue_uses=(IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -1060,6 +1158,7 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=16,
             issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
+            hazards=_STORE_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.MAY_STORE,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -1068,6 +1167,7 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=32,
             issue_uses=(IssueUse(_RESOURCE_WMMA, cycles=1, units=1),),
+            hazards=_matrix_hazards(_RESOURCE_WMMA),
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
@@ -1075,6 +1175,7 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=32,
             issue_uses=(IssueUse(_RESOURCE_WMMA, cycles=1, units=1),),
+            hazards=_matrix_hazards(_RESOURCE_WMMA),
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
@@ -1082,13 +1183,42 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=32,
             issue_uses=(IssueUse(_RESOURCE_SWMMAC, cycles=1, units=1),),
+            hazards=_matrix_hazards(_RESOURCE_SWMMAC),
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
-            _SCHEDULE_WAIT,
+            _SCHEDULE_WAIT_LOAD,
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_STORE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_STORE_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_ALU,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_ALU_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_IDLE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_IDLE_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
