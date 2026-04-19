@@ -142,6 +142,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
   PUBLIC
 )
 

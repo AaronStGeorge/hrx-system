@@ -136,9 +136,8 @@ class AmdgpuAssemblyTest : public ::testing::Test {
                                                out_packetization));
   }
 
-  void LowerSourceAndBuildSidecars(
-      const char* preset_key, const char* body, iree_arena_allocator_t* arena,
-      loom_low_packetization_t* out_packetization) {
+  void LowerSource(const char* preset_key, const char* body,
+                   loom_low_lower_result_t* out_lower_result) {
     std::string source = "target.preset @gfx_target {key = \"";
     source += preset_key;
     source += "\", source = @gfx_source}\n";
@@ -171,10 +170,16 @@ class AmdgpuAssemblyTest : public ::testing::Test {
         .policy = policy,
         .max_errors = 20,
     };
-    loom_low_lower_result_t lower_result = {};
     IREE_ASSERT_OK(loom_low_lower_function(module_,
                                            FindFirstSemanticFunction(module_),
-                                           &lower_options, &lower_result));
+                                           &lower_options, out_lower_result));
+  }
+
+  void LowerSourceAndBuildSidecars(
+      const char* preset_key, const char* body, iree_arena_allocator_t* arena,
+      loom_low_packetization_t* out_packetization) {
+    loom_low_lower_result_t lower_result = {};
+    LowerSource(preset_key, body, &lower_result);
     EXPECT_EQ(lower_result.error_count, 0u);
     ASSERT_NE(lower_result.low_func_op, nullptr);
     ASSERT_NE(lower_result.abi_adapter_op, nullptr);
@@ -204,10 +209,14 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     iree_arena_initialize(&block_pool_, &sidecar_arena);
     loom_low_packetization_t packetization = {};
     LowerSourceAndBuildSidecars(preset_key,
-                                "func.def @gfx_source(%lhs: i32, %rhs: i32) {\n"
+                                "func.def @gfx_source(%lhs: i32, %rhs: i32, "
+                                "%vlhs: vector<1xi32>, %vrhs: vector<1xi32>) "
+                                "{\n"
                                 "  %seven = scalar.constant 7 : i32\n"
                                 "  %biased = scalar.addi %lhs, %seven : i32\n"
                                 "  %sum = scalar.addi %biased, %rhs : i32\n"
+                                "  %vsum = vector.addi %vlhs, %vrhs : "
+                                "vector<1xi32>\n"
                                 "  func.return\n"
                                 "}\n",
                                 &sidecar_arena, &packetization);
@@ -221,9 +230,18 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     EXPECT_NE(output.find(".Lbb0:"), std::string::npos);
     EXPECT_NE(output.find("s_mov_b32 s"), std::string::npos);
     EXPECT_NE(output.find("s_add_u32 s"), std::string::npos);
+    EXPECT_NE(output.find("v_add_u32 v"), std::string::npos);
     EXPECT_NE(output.find("s_endpgm"), std::string::npos);
     iree_string_builder_deinitialize(&builder);
     iree_arena_deinitialize(&sidecar_arena);
+  }
+
+  void ExpectSourceLoweringRejects(const char* preset_key, const char* body) {
+    loom_low_lower_result_t lower_result = {};
+    LowerSource(preset_key, body, &lower_result);
+    EXPECT_GT(lower_result.error_count, 0u);
+    EXPECT_EQ(lower_result.low_func_op, nullptr);
+    EXPECT_EQ(lower_result.abi_adapter_op, nullptr);
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -306,6 +324,15 @@ TEST_F(AmdgpuAssemblyTest, EmitsFragmentsFromSourceLowering) {
     SCOPED_TRACE(preset_key);
     ExpectSourceLoweringEmitsFragment(preset_key);
   }
+}
+
+TEST_F(AmdgpuAssemblyTest, RejectsUnsupportedVectorSourceLowering) {
+  ExpectSourceLoweringRejects(
+      "amdgpu-gfx11",
+      "func.def @gfx_source(%lhs: vector<2xi32>, %rhs: vector<2xi32>) {\n"
+      "  %sum = vector.addi %lhs, %rhs : vector<2xi32>\n"
+      "  func.return\n"
+      "}\n");
 }
 
 }  // namespace

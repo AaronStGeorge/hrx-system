@@ -20,12 +20,13 @@
 extern "C" {
 #endif
 
-// Returns the AMDGPU scalar-register lowering policy.
+// Returns the AMDGPU scalar/VGPR lowering policy.
 //
 // The initial policy is intentionally narrow: it maps i32 scalar values to
-// SGPRs and lowers scalar.constant/scalar.addi to s_mov_b32/s_add_u32. Memory,
-// resource, and per-lane VGPR lowering require low.resource and lane-uniformity
-// facts and are not guessed here.
+// SGPRs, maps vector<1xi32> lane values to VGPRs, and lowers
+// scalar.constant/scalar.addi/vector.addi to descriptor-backed low packets.
+// Memory, resources, and wider vector packing require explicit low.resource and
+// lane layout contracts and are not guessed here.
 const loom_low_lower_policy_t* loom_amdgpu_low_lower_policy(void);
 
 // Initializes a target-owned registry mapping AMDGPU target-contract keys to

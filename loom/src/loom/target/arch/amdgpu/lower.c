@@ -11,10 +11,18 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/vector/ops.h"
 
 static bool loom_amdgpu_type_is_i32(loom_type_t type) {
   return loom_type_is_scalar(type) &&
          loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32;
+}
+
+static bool loom_amdgpu_type_is_vector_1xi32(loom_type_t type) {
+  return loom_type_is_vector(type) && loom_type_rank(type) == 1 &&
+         loom_type_is_all_static(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32 &&
+         loom_type_dim_static_size_at(type, 0) == 1;
 }
 
 static bool loom_amdgpu_value_is_i32(loom_low_lower_context_t* context,
@@ -23,14 +31,33 @@ static bool loom_amdgpu_value_is_i32(loom_low_lower_context_t* context,
       loom_module_value_type(loom_low_lower_context_module(context), value_id));
 }
 
-static iree_status_t loom_amdgpu_make_sgpr_type(
-    loom_low_lower_context_t* context, loom_type_t* out_type) {
+static bool loom_amdgpu_value_is_vector_1xi32(loom_low_lower_context_t* context,
+                                              loom_value_id_t value_id) {
+  return loom_amdgpu_type_is_vector_1xi32(
+      loom_module_value_type(loom_low_lower_context_module(context), value_id));
+}
+
+static iree_status_t loom_amdgpu_make_register_type(
+    loom_low_lower_context_t* context, iree_string_view_t register_class,
+    loom_type_t* out_type) {
   loom_string_id_t register_class_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(loom_low_lower_context_module(context),
-                                IREE_SV("amdgpu.sgpr"), &register_class_id));
+                                register_class, &register_class_id));
   *out_type = loom_type_register(register_class_id, 1);
   return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_make_sgpr_type(
+    loom_low_lower_context_t* context, loom_type_t* out_type) {
+  return loom_amdgpu_make_register_type(context, IREE_SV("amdgpu.sgpr"),
+                                        out_type);
+}
+
+static iree_status_t loom_amdgpu_make_vgpr_type(
+    loom_low_lower_context_t* context, loom_type_t* out_type) {
+  return loom_amdgpu_make_register_type(context, IREE_SV("amdgpu.vgpr"),
+                                        out_type);
 }
 
 static iree_status_t loom_amdgpu_map_type(void* user_data,
@@ -42,10 +69,13 @@ static iree_status_t loom_amdgpu_map_type(void* user_data,
   if (loom_amdgpu_type_is_i32(source_type)) {
     return loom_amdgpu_make_sgpr_type(context, out_low_type);
   }
+  if (loom_amdgpu_type_is_vector_1xi32(source_type)) {
+    return loom_amdgpu_make_vgpr_type(context, out_low_type);
+  }
   return loom_low_lower_emit_reject(
       context, source_op, IREE_SV("type"), IREE_SV("source"),
-      IREE_SV("AMDGPU SGPR lowering currently supports only i32 scalar "
-              "values"));
+      IREE_SV("AMDGPU lowering currently supports only i32 scalar values and "
+              "vector<1xi32> VGPR values"));
 }
 
 static bool loom_amdgpu_can_lower_constant(loom_low_lower_context_t* context,
@@ -68,6 +98,14 @@ static bool loom_amdgpu_can_lower_i32_binary(loom_low_lower_context_t* context,
          loom_amdgpu_value_is_i32(context, result);
 }
 
+static bool loom_amdgpu_can_lower_vector_1xi32_binary(
+    loom_low_lower_context_t* context, loom_value_id_t lhs, loom_value_id_t rhs,
+    loom_value_id_t result) {
+  return loom_amdgpu_value_is_vector_1xi32(context, lhs) &&
+         loom_amdgpu_value_is_vector_1xi32(context, rhs) &&
+         loom_amdgpu_value_is_vector_1xi32(context, result);
+}
+
 static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
                                               loom_low_lower_context_t* context,
                                               const loom_op_t* source_op,
@@ -81,6 +119,11 @@ static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
       *out_handled = loom_amdgpu_can_lower_i32_binary(
           context, loom_scalar_addi_lhs(source_op),
           loom_scalar_addi_rhs(source_op), loom_scalar_addi_result(source_op));
+      return iree_ok_status();
+    case LOOM_OP_VECTOR_ADDI:
+      *out_handled = loom_amdgpu_can_lower_vector_1xi32_binary(
+          context, loom_vector_addi_lhs(source_op),
+          loom_vector_addi_rhs(source_op), loom_vector_addi_result(source_op));
       return iree_ok_status();
     default:
       *out_handled = false;
@@ -142,22 +185,23 @@ static iree_status_t loom_amdgpu_lower_constant(
                                    loom_low_const_result(low_const));
 }
 
-static iree_status_t loom_amdgpu_lower_addi(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op) {
+static iree_status_t loom_amdgpu_lower_binary_op(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    iree_string_view_t opcode, loom_value_id_t source_lhs,
+    loom_value_id_t source_rhs, loom_value_id_t source_result) {
   loom_value_id_t low_operands[2] = {LOOM_VALUE_ID_INVALID,
                                      LOOM_VALUE_ID_INVALID};
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_scalar_addi_lhs(source_op), &low_operands[0]));
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_scalar_addi_rhs(source_op), &low_operands[1]));
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, source_lhs, &low_operands[0]));
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, source_rhs, &low_operands[1]));
 
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
-      context, source_op, loom_scalar_addi_result(source_op), &result_type));
+      context, source_op, source_result, &result_type));
 
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_intern(context, IREE_SV("amdgpu.s_add_u32"), &opcode_id));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_intern(context, opcode, &opcode_id));
   loom_op_t* low_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_op_build(
       loom_low_lower_context_builder(context), opcode_id, low_operands,
@@ -165,8 +209,24 @@ static iree_status_t loom_amdgpu_lower_addi(loom_low_lower_context_t* context,
       &result_type, 1, /*tied_results=*/NULL, /*tied_result_count=*/0,
       source_op->location, &low_op));
   return loom_low_lower_bind_value(
-      context, loom_scalar_addi_result(source_op),
+      context, source_result,
       loom_value_slice_get(loom_low_op_results(low_op), 0));
+}
+
+static iree_status_t loom_amdgpu_lower_addi(loom_low_lower_context_t* context,
+                                            const loom_op_t* source_op) {
+  return loom_amdgpu_lower_binary_op(
+      context, source_op, IREE_SV("amdgpu.s_add_u32"),
+      loom_scalar_addi_lhs(source_op), loom_scalar_addi_rhs(source_op),
+      loom_scalar_addi_result(source_op));
+}
+
+static iree_status_t loom_amdgpu_lower_vector_addi(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  return loom_amdgpu_lower_binary_op(
+      context, source_op, IREE_SV("amdgpu.v_add_u32"),
+      loom_vector_addi_lhs(source_op), loom_vector_addi_rhs(source_op),
+      loom_vector_addi_result(source_op));
 }
 
 static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
@@ -184,6 +244,8 @@ static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
       return loom_amdgpu_lower_constant(context, source_op);
     case LOOM_OP_SCALAR_ADDI:
       return loom_amdgpu_lower_addi(context, source_op);
+    case LOOM_OP_VECTOR_ADDI:
+      return loom_amdgpu_lower_vector_addi(context, source_op);
     default:
       return iree_ok_status();
   }
