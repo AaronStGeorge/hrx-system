@@ -292,6 +292,115 @@ static const loom_low_lower_policy_t kTestLowerPolicy = {
     .try_lower_op = {.fn = TestTryLowerOp, .user_data = nullptr},
 };
 
+static loom_low_lower_policy_registry_t MakeTestPolicyRegistry() {
+  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &kTestLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_t registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &registry, kEntries, IREE_ARRAYSIZE(kEntries));
+  return registry;
+}
+
+TEST(LowLowerPolicyRegistryTest, LooksUpPolicyByContractKey) {
+  loom_low_lower_policy_registry_t registry = MakeTestPolicyRegistry();
+  IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&registry));
+
+  const loom_low_lower_policy_t* policy = nullptr;
+  IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup(
+      &registry, IREE_SV("test.low.core"), &policy));
+  EXPECT_EQ(policy, &kTestLowerPolicy);
+}
+
+TEST(LowLowerPolicyRegistryTest, LooksUpPolicyForTargetBundle) {
+  loom_low_lower_policy_registry_t registry = MakeTestPolicyRegistry();
+  loom_target_config_t config = {};
+  config.contract_set_key = IREE_SV("test.low.core");
+  loom_target_bundle_t bundle = {};
+  bundle.name = IREE_SV("test-low");
+  bundle.config = &config;
+
+  const loom_low_lower_policy_t* policy = nullptr;
+  IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup_for_bundle(
+      &registry, &bundle, &policy));
+  EXPECT_EQ(policy, &kTestLowerPolicy);
+}
+
+TEST(LowLowerPolicyRegistryTest, RejectsMissingContractKey) {
+  loom_low_lower_policy_registry_t registry = MakeTestPolicyRegistry();
+
+  const loom_low_lower_policy_t* policy = nullptr;
+  iree_status_t status = loom_low_lower_policy_registry_lookup(
+      &registry, IREE_SV("missing-target"), &policy);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
+  EXPECT_EQ(policy, nullptr);
+}
+
+TEST(LowLowerPolicyRegistryTest, RejectsMalformedRegistries) {
+  loom_low_lower_policy_registry_t missing_entries = {};
+  missing_entries.entry_count = 1;
+  iree_status_t status =
+      loom_low_lower_policy_registry_verify(&missing_entries);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  const loom_low_lower_policy_registry_entry_t empty_key_entries[] = {
+      {
+          .contract_set_key = IREE_SVL(""),
+          .policy = &kTestLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_t empty_key_registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &empty_key_registry, empty_key_entries,
+      IREE_ARRAYSIZE(empty_key_entries));
+  status = loom_low_lower_policy_registry_verify(&empty_key_registry);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  const loom_low_lower_policy_t incomplete_policy = {
+      .name = IREE_SVL("incomplete"),
+  };
+  const loom_low_lower_policy_registry_entry_t incomplete_entries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &incomplete_policy,
+      },
+  };
+  loom_low_lower_policy_registry_t incomplete_registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &incomplete_registry, incomplete_entries,
+      IREE_ARRAYSIZE(incomplete_entries));
+  status = loom_low_lower_policy_registry_verify(&incomplete_registry);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowLowerPolicyRegistryTest, RejectsDuplicateContractKeys) {
+  const loom_low_lower_policy_registry_entry_t entries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &kTestLowerPolicy,
+      },
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &kTestLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_t registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &registry, entries, IREE_ARRAYSIZE(entries));
+
+  iree_status_t status = loom_low_lower_policy_registry_verify(&registry);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS, status);
+
+  const loom_low_lower_policy_t* policy = nullptr;
+  status = loom_low_lower_policy_registry_lookup(
+      &registry, IREE_SV("test.low.core"), &policy);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS, status);
+  EXPECT_EQ(policy, nullptr);
+}
+
 class LowLowerTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -300,6 +409,8 @@ class LowLowerTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
                                                        &context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
+    policy_registry_ = MakeTestPolicyRegistry();
+    IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
   }
 
   void TearDown() override {
@@ -372,13 +483,16 @@ class LowLowerTest : public ::testing::Test {
     IREE_CHECK_OK(loom_target_ir_bundle_from_symbol_name(
         module.get(), IREE_SV("test_target"), &bundle_storage));
 
+    const loom_low_lower_policy_t* policy = nullptr;
+    IREE_CHECK_OK(loom_low_lower_policy_registry_lookup_for_bundle(
+        &policy_registry_, &bundle_storage.bundle, &policy));
     const loom_low_lower_options_t options = {
         .target_ref = SymbolRef(module.get(), IREE_SV("test_target")),
         .bundle = &bundle_storage.bundle,
         .descriptor_registry = &registry_.registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        .policy = &kTestLowerPolicy,
+        .policy = policy,
         .emitter = collector->emitter(),
         .max_errors = 20,
     };
@@ -466,6 +580,7 @@ class LowLowerTest : public ::testing::Test {
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_target_low_descriptor_registry_t registry_ = {};
+  loom_low_lower_policy_registry_t policy_registry_ = {};
 };
 
 TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {

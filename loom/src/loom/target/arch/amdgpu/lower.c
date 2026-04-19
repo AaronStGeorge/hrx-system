@@ -199,3 +199,27 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
 const loom_low_lower_policy_t* loom_amdgpu_low_lower_policy(void) {
   return &kAmdgpuLowLowerPolicy;
 }
+
+void loom_amdgpu_low_lower_policy_registry_initialize(
+    loom_low_lower_policy_registry_t* out_registry) {
+  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
+      {
+          .contract_set_key = IREE_SVL("amdgpu.gfx950.core"),
+          .policy = &kAmdgpuLowLowerPolicy,
+      },
+      {
+          .contract_set_key = IREE_SVL("amdgpu.gfx11.core"),
+          .policy = &kAmdgpuLowLowerPolicy,
+      },
+      {
+          .contract_set_key = IREE_SVL("amdgpu.gfx12.core"),
+          .policy = &kAmdgpuLowLowerPolicy,
+      },
+      {
+          .contract_set_key = IREE_SVL("amdgpu.gfx1250.core"),
+          .policy = &kAmdgpuLowLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_initialize_from_entries(
+      out_registry, kEntries, IREE_ARRAYSIZE(kEntries));
+}

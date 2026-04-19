@@ -151,3 +151,15 @@ static const loom_low_lower_policy_t kX86LowLowerPolicy = {
 const loom_low_lower_policy_t* loom_x86_low_lower_policy(void) {
   return &kX86LowLowerPolicy;
 }
+
+void loom_x86_low_lower_policy_registry_initialize(
+    loom_low_lower_policy_registry_t* out_registry) {
+  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
+      {
+          .contract_set_key = IREE_SVL("x86.avx512.core"),
+          .policy = &kX86LowLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_initialize_from_entries(
+      out_registry, kEntries, IREE_ARRAYSIZE(kEntries));
+}

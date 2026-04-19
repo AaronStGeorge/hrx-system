@@ -157,13 +157,18 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     loom_target_ir_bundle_storage_t bundle_storage = {};
     IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
         module_, IREE_SV("gfx_target"), &bundle_storage));
+    loom_low_lower_policy_registry_t policy_registry = {};
+    loom_amdgpu_low_lower_policy_registry_initialize(&policy_registry);
+    const loom_low_lower_policy_t* policy = nullptr;
+    IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup_for_bundle(
+        &policy_registry, &bundle_storage.bundle, &policy));
     const loom_low_lower_options_t lower_options = {
         .target_ref = SymbolRef(module_, IREE_SV("gfx_target")),
         .bundle = &bundle_storage.bundle,
         .descriptor_registry = &target_registry_.registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        .policy = loom_amdgpu_low_lower_policy(),
+        .policy = policy,
         .max_errors = 20,
     };
     loom_low_lower_result_t lower_result = {};

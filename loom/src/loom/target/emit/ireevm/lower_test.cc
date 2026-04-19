@@ -209,13 +209,18 @@ class IreeVmLowerTest : public ::testing::Test {
     IREE_CHECK_OK(loom_target_ir_bundle_from_symbol_name(
         module.get(), IREE_SV("vm_target"), &bundle_storage));
 
+    loom_low_lower_policy_registry_t policy_registry = {};
+    loom_ireevm_low_lower_policy_registry_initialize(&policy_registry);
+    const loom_low_lower_policy_t* policy = nullptr;
+    IREE_CHECK_OK(loom_low_lower_policy_registry_lookup_for_bundle(
+        &policy_registry, &bundle_storage.bundle, &policy));
     const loom_low_lower_options_t options = {
         .target_ref = SymbolRef(module.get(), IREE_SV("vm_target")),
         .bundle = &bundle_storage.bundle,
         .descriptor_registry = &target_registry_.registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        .policy = loom_ireevm_low_lower_policy(),
+        .policy = policy,
         .emitter = collector->emitter(),
         .max_errors = 20,
     };

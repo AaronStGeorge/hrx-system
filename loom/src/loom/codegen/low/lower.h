@@ -75,6 +75,46 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_try_op_callback_t try_lower_op;
 } loom_low_lower_policy_t;
 
+typedef struct loom_low_lower_policy_registry_entry_t {
+  // Target contract-set key that selects |policy|.
+  iree_string_view_t contract_set_key;
+  // Borrowed lowering policy used for bundles naming |contract_set_key|.
+  const loom_low_lower_policy_t* policy;
+} loom_low_lower_policy_registry_entry_t;
+
+typedef struct loom_low_lower_policy_registry_t {
+  // Borrowed contract-set key to policy table linked into the target package.
+  const loom_low_lower_policy_registry_entry_t* entries;
+  // Number of rows in |entries|.
+  iree_host_size_t entry_count;
+} loom_low_lower_policy_registry_t;
+
+// Initializes |out_registry| from a target-owned entry table. The table is
+// borrowed and must outlive |out_registry|.
+void loom_low_lower_policy_registry_initialize_from_entries(
+    loom_low_lower_policy_registry_t* out_registry,
+    const loom_low_lower_policy_registry_entry_t* entries,
+    iree_host_size_t entry_count);
+
+// Verifies that |registry| is a well-formed contract-key to policy table.
+// Registry validation is an infrastructure contract: malformed registries
+// return status failures instead of user IR diagnostics.
+iree_status_t loom_low_lower_policy_registry_verify(
+    const loom_low_lower_policy_registry_t* registry);
+
+// Looks up the lowering policy for |contract_set_key|. Empty keys are rejected
+// and missing keys return NOT_FOUND so target package omissions fail loud.
+iree_status_t loom_low_lower_policy_registry_lookup(
+    const loom_low_lower_policy_registry_t* registry,
+    iree_string_view_t contract_set_key,
+    const loom_low_lower_policy_t** out_policy);
+
+// Looks up the lowering policy for |bundle|'s target-contract key.
+iree_status_t loom_low_lower_policy_registry_lookup_for_bundle(
+    const loom_low_lower_policy_registry_t* registry,
+    const loom_target_bundle_t* bundle,
+    const loom_low_lower_policy_t** out_policy);
+
 typedef struct loom_low_lower_options_t {
   // Module-local target.bundle symbol used by the emitted low.func.def.
   loom_symbol_ref_t target_ref;

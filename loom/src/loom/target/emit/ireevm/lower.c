@@ -255,3 +255,15 @@ static const loom_low_lower_policy_t kIreeVmLowLowerPolicy = {
 const loom_low_lower_policy_t* loom_ireevm_low_lower_policy(void) {
   return &kIreeVmLowLowerPolicy;
 }
+
+void loom_ireevm_low_lower_policy_registry_initialize(
+    loom_low_lower_policy_registry_t* out_registry) {
+  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
+      {
+          .contract_set_key = IREE_SVL("iree.vm.core"),
+          .policy = &kIreeVmLowLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_initialize_from_entries(
+      out_registry, kEntries, IREE_ARRAYSIZE(kEntries));
+}

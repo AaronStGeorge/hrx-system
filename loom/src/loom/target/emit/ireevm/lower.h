@@ -27,6 +27,11 @@ extern "C" {
 // diagnostic sink instead of producing partial low IR.
 const loom_low_lower_policy_t* loom_ireevm_low_lower_policy(void);
 
+// Initializes a target-owned registry mapping IREE VM target-contract keys to
+// their source-to-low lowering policies.
+void loom_ireevm_low_lower_policy_registry_initialize(
+    loom_low_lower_policy_registry_t* out_registry);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

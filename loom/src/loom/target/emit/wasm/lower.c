@@ -213,3 +213,15 @@ static const loom_low_lower_policy_t kWasmLowLowerPolicy = {
 const loom_low_lower_policy_t* loom_wasm_low_lower_policy(void) {
   return &kWasmLowLowerPolicy;
 }
+
+void loom_wasm_low_lower_policy_registry_initialize(
+    loom_low_lower_policy_registry_t* out_registry) {
+  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
+      {
+          .contract_set_key = IREE_SVL("wasm.core.simd128"),
+          .policy = &kWasmLowLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_initialize_from_entries(
+      out_registry, kEntries, IREE_ARRAYSIZE(kEntries));
+}
