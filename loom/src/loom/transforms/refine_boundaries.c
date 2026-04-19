@@ -20,6 +20,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/special_values.h"
+#include "loom/pass/registry.h"
 #include "loom/transforms/canonicalize.h"
 #include "loom/transforms/materialize.h"
 #include "loom/transforms/remap.h"
@@ -120,9 +121,28 @@ iree_status_t loom_refine_boundaries_create(loom_pass_t* pass,
   IREE_RETURN_IF_ERROR(iree_arena_allocate(pass->instance_arena,
                                            sizeof(*options), (void**)&options));
   memset(options, 0, sizeof(*options));
-  IREE_RETURN_IF_ERROR(
-      loom_pass_options_parse(pass->info->name, options_string,
-                              loom_refine_boundaries_parse_option, options));
+  if (pass->decoded_options) {
+    for (uint16_t i = 0; i < pass->decoded_options->option_count; ++i) {
+      const loom_pass_decoded_option_t* option =
+          &pass->decoded_options->options[i];
+      if (!option->present) {
+        continue;
+      }
+      if (iree_string_view_equal(option->schema->name,
+                                 IREE_SV("max-iterations"))) {
+        options->max_iterations = option->uint32_value;
+        continue;
+      }
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "unknown decoded option '%.*s' for pass 'refine-boundaries'",
+          (int)option->schema->name.size, option->schema->name.data);
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_pass_options_parse(pass->info->name, options_string,
+                                loom_refine_boundaries_parse_option, options));
+  }
   pass->state = options;
   return iree_ok_status();
 }

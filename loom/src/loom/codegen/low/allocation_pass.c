@@ -11,6 +11,7 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_materialization.h"
 #include "loom/ops/low/ops.h"
+#include "loom/pass/registry.h"
 
 typedef struct loom_low_materialize_allocation_pass_state_t {
   // Fixed register budget overrides parsed from the pass options.
@@ -209,9 +210,37 @@ iree_status_t loom_low_materialize_allocation_create(
       .pass = pass,
       .state = state,
   };
-  IREE_RETURN_IF_ERROR(loom_pass_options_parse(
-      pass->info->name, options, loom_low_materialize_allocation_parse_option,
-      &context));
+  if (pass->decoded_options) {
+    for (uint16_t i = 0; i < pass->decoded_options->option_count; ++i) {
+      const loom_pass_decoded_option_t* option =
+          &pass->decoded_options->options[i];
+      if (!option->present) {
+        continue;
+      }
+      if (iree_string_view_equal(option->schema->name, IREE_SV("budgets"))) {
+        IREE_RETURN_IF_ERROR(loom_low_materialize_allocation_parse_budgets(
+            option->string_value, &context));
+        continue;
+      }
+      if (iree_string_view_equal(option->schema->name,
+                                 IREE_SV("diagnostics"))) {
+        iree_string_view_t value =
+            option->schema->enum_values[option->enum_value_index].value;
+        IREE_RETURN_IF_ERROR(
+            loom_low_materialize_allocation_parse_diagnostics(value, &context));
+        continue;
+      }
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown decoded option '%.*s' for pass "
+                              "'low-materialize-allocation'",
+                              (int)option->schema->name.size,
+                              option->schema->name.data);
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(loom_pass_options_parse(
+        pass->info->name, options, loom_low_materialize_allocation_parse_option,
+        &context));
+  }
   pass->state = state;
   return iree_ok_status();
 }

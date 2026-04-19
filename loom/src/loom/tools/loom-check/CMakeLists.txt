@@ -67,8 +67,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::pass::builtin_registry
-    loom::src::loom::pass::manager
-    loom::src::loom::pass::registry
+    loom::src::loom::pass::tooling
     loom::src::loom::target::emit::llvmir::core
     loom::src::loom::target::emit::llvmir::legality
     loom::src::loom::target::emit::llvmir::lower

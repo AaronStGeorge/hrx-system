@@ -125,6 +125,25 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    tooling
+  HDRS
+    "tooling.h"
+  SRCS
+    "tooling.c"
+  DEPS
+    ::interpreter
+    ::program
+    ::registry
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::pass
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     builtin_registry
   HDRS
     "builtin_registry.h"
@@ -210,6 +229,23 @@ loom_cc_test(
     ::program
     iree::base
     loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::pass
+    loom::src::loom::ops::test
+    loom::src::loom::pass::test::registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    tooling_test
+  SRCS
+    "tooling_test.cc"
+  DEPS
+    ::tooling
+    iree::base
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::pass

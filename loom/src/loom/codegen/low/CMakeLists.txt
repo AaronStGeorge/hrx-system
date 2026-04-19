@@ -190,6 +190,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::pass::manager
+    loom::src::loom::pass::registry
   PUBLIC
 )
 

@@ -68,6 +68,7 @@ loom_cc_library(
     loom::src::loom::ops::special_values
     loom::src::loom::ops::vector
     loom::src::loom::pass::manager
+    loom::src::loom::pass::registry
     loom::src::loom::util::fact_table
     loom::src::loom::util::walk
   PUBLIC
@@ -390,6 +391,7 @@ loom_cc_library(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::special_values
     loom::src::loom::pass::manager
+    loom::src::loom::pass::registry
     loom::src::loom::util::fact_table
     loom::src::loom::util::walk
   PUBLIC

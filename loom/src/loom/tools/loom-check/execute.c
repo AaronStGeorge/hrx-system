@@ -16,8 +16,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/pass/builtin_registry.h"
-#include "loom/pass/manager.h"
-#include "loom/pass/registry.h"
+#include "loom/pass/tooling.h"
 #include "loom/target/presets.h"
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/diagnostics.h"
@@ -182,17 +181,18 @@ typedef struct loom_check_pass_pipeline_config_t {
   loom_low_materialize_allocation_pass_config_t* low_allocation_config;
 } loom_check_pass_pipeline_config_t;
 
-static iree_status_t loom_check_configure_pass_pipeline_entry(
-    void* user_data, const loom_pass_pipeline_descriptor_entry_t* entry,
+static iree_status_t loom_check_configure_pass_instruction(
+    void* user_data, const loom_pass_program_instruction_t* instruction,
     void** out_pass_user_data) {
   IREE_ASSERT_ARGUMENT(user_data);
-  IREE_ASSERT_ARGUMENT(entry);
+  IREE_ASSERT_ARGUMENT(instruction);
   IREE_ASSERT_ARGUMENT(out_pass_user_data);
 
   loom_check_pass_pipeline_config_t* config =
       (loom_check_pass_pipeline_config_t*)user_data;
   *out_pass_user_data = NULL;
-  if (iree_string_view_equal(entry->descriptor->key,
+  if (instruction->kind == LOOM_PASS_PROGRAM_INSTRUCTION_INVOKE &&
+      iree_string_view_equal(instruction->invoke.descriptor->key,
                              IREE_SV("low-materialize-allocation"))) {
     *out_pass_user_data = config->low_allocation_config;
   }
@@ -272,12 +272,6 @@ static iree_status_t loom_check_run_pipeline(
     const loom_low_descriptor_registry_t* low_descriptor_registry,
     loom_module_t* module) {
   const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
-  IREE_RETURN_IF_ERROR(loom_pass_registry_verify(pass_registry));
-
-  loom_pass_manager_t manager;
-  IREE_RETURN_IF_ERROR(loom_pass_manager_initialize(
-      block_pool, 0, iree_allocator_system(), &manager));
-  manager.diagnostic_emitter = diagnostic_emitter;
   loom_low_materialize_allocation_pass_config_t
       low_materialize_allocation_config = {
           .descriptor_registry = low_descriptor_registry,
@@ -285,18 +279,18 @@ static iree_status_t loom_check_run_pipeline(
   loom_check_pass_pipeline_config_t pipeline_config = {
       .low_allocation_config = &low_materialize_allocation_config,
   };
-  iree_status_t status = loom_pass_manager_add_pipeline(
-      &manager, pass_registry, pipeline,
-      (loom_pass_pipeline_configure_callback_t){
-          .fn = loom_check_configure_pass_pipeline_entry,
-          .user_data = &pipeline_config,
-      });
 
-  if (iree_status_is_ok(status)) {
-    status = loom_pass_manager_run(&manager, module);
-  }
-  loom_pass_manager_deinitialize(&manager);
-  return status;
+  loom_pass_tool_run_options_t options = {
+      .registry = pass_registry,
+      .block_pool = block_pool,
+      .diagnostic_emitter = diagnostic_emitter,
+      .configure =
+          {
+              .fn = loom_check_configure_pass_instruction,
+              .user_data = &pipeline_config,
+          },
+  };
+  return loom_pass_tool_run_flat_pipeline(module, pipeline, &options);
 }
 
 static iree_status_t loom_check_verify_pass_output(
