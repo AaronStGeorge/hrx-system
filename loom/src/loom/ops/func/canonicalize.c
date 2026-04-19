@@ -17,7 +17,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 
 static bool loom_func_like_is_pure(const loom_func_like_t func) {
   if (!loom_func_like_isa(func)) return false;

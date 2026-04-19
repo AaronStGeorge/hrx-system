@@ -12,8 +12,8 @@
 // and symbol policy, and this helper rewrites module-local IDs into the target
 // module's tables.
 
-#ifndef LOOM_TRANSFORMS_REMAP_H_
-#define LOOM_TRANSFORMS_REMAP_H_
+#ifndef LOOM_REWRITE_REMAP_H_
+#define LOOM_REWRITE_REMAP_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -184,4 +184,4 @@ iree_status_t loom_ir_remap_predicate_list(
 }
 #endif
 
-#endif  // LOOM_TRANSFORMS_REMAP_H_
+#endif  // LOOM_REWRITE_REMAP_H_

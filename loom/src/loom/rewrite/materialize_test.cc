@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/transforms/materialize.h"
+#include "loom/rewrite/materialize.h"
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
@@ -13,7 +13,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 
 namespace loom {
 namespace {

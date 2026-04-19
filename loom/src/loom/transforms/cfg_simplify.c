@@ -15,7 +15,7 @@
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/special_values.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 #include "loom/util/cfg_graph.h"
 #include "loom/util/dominance.h"
 #include "loom/util/fact_table.h"

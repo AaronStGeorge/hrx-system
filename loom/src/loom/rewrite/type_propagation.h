@@ -13,14 +13,14 @@
 // contradictory IR leaves the module unchanged; the verifier remains
 // responsible for structured user diagnostics.
 
-#ifndef LOOM_TRANSFORMS_TYPE_PROPAGATION_H_
-#define LOOM_TRANSFORMS_TYPE_PROPAGATION_H_
+#ifndef LOOM_REWRITE_TYPE_PROPAGATION_H_
+#define LOOM_REWRITE_TYPE_PROPAGATION_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/op_defs.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -93,4 +93,4 @@ iree_status_t loom_type_transfer_seed_static_structure_from_type(
 }
 #endif
 
-#endif  // LOOM_TRANSFORMS_TYPE_PROPAGATION_H_
+#endif  // LOOM_REWRITE_TYPE_PROPAGATION_H_

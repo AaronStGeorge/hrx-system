@@ -20,8 +20,8 @@
 #include "loom/ops/special_values.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/pass/registry.h"
-#include "loom/transforms/rewriter.h"
-#include "loom/transforms/type_propagation.h"
+#include "loom/rewrite/rewriter.h"
+#include "loom/rewrite/type_propagation.h"
 #include "loom/util/walk.h"
 
 static iree_status_t loom_canonicalize_replace_single_result_with_value(

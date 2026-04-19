@@ -17,13 +17,13 @@ loom_cc_library(
     srcs = ["branch_fusion.c"],
     hdrs = ["branch_fusion.h"],
     deps = [
-        ":materialize",
-        ":remap",
-        ":rewriter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/pass:manager",
+        "//loom/src/loom/rewrite:materialize",
+        "//loom/src/loom/rewrite:remap",
+        "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base",
     ],
 )
@@ -33,11 +33,11 @@ loom_cc_library(
     srcs = ["branch_sink.c"],
     hdrs = ["branch_sink.h"],
     deps = [
-        ":rewriter",
         "//loom/src/loom/analysis:motion",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/pass:manager",
+        "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base",
     ],
 )
@@ -47,8 +47,6 @@ loom_cc_library(
     srcs = ["canonicalize.c"],
     hdrs = ["canonicalize.h"],
     deps = [
-        ":rewriter",
-        ":type_propagation",
         "//loom/src/loom/analysis:condition_facts",
         "//loom/src/loom/analysis:symbolic_expr",
         "//loom/src/loom/ir",
@@ -61,6 +59,8 @@ loom_cc_library(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/pass:manager",
         "//loom/src/loom/pass:registry",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/rewrite:type_propagation",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:walk",
         "//runtime/src/iree/base",
@@ -72,13 +72,13 @@ loom_cc_test(
     srcs = ["canonicalize_test.cc"],
     deps = [
         ":canonicalize",
-        ":rewriter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/test",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/pass:manager",
+        "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -90,7 +90,6 @@ loom_cc_library(
     srcs = ["cfg_simplify.c"],
     hdrs = ["cfg_simplify.h"],
     deps = [
-        ":rewriter",
         "//loom/src/loom/analysis:condition_facts",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
@@ -98,44 +97,11 @@ loom_cc_library(
         "//loom/src/loom/ops:special_values",
         "//loom/src/loom/ops/cfg",
         "//loom/src/loom/pass:manager",
+        "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/util:cfg_graph",
         "//loom/src/loom/util:dominance",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "callable",
-    srcs = [
-        "callable.c",
-        "callable_outline.c",
-    ],
-    hdrs = ["callable.h"],
-    deps = [
-        ":materialize",
-        ":remap",
-        ":rewriter",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/func",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "callable_test",
-    srcs = ["callable_test.cc"],
-    deps = [
-        ":callable",
-        ":rewriter",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/test",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -156,11 +122,11 @@ loom_cc_test(
     srcs = ["cse_test.cc"],
     deps = [
         ":cse",
-        ":rewriter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/test",
         "//loom/src/loom/pass:manager",
+        "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -246,11 +212,11 @@ loom_cc_library(
     srcs = ["licm.c"],
     hdrs = ["licm.h"],
     deps = [
-        ":rewriter",
         "//loom/src/loom/analysis:motion",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/pass:manager",
+        "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base",
     ],
 )
@@ -260,70 +226,16 @@ loom_cc_library(
     srcs = ["loop_fusion.c"],
     hdrs = ["loop_fusion.h"],
     deps = [
-        ":materialize",
-        ":remap",
-        ":rewriter",
         "//loom/src/loom/analysis:loop_domain",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/pass:manager",
+        "//loom/src/loom/rewrite:materialize",
+        "//loom/src/loom/rewrite:remap",
+        "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "materialize",
-    srcs = ["materialize.c"],
-    hdrs = ["materialize.h"],
-    deps = [
-        ":remap",
-        ":rewriter",
-        "//loom/src/loom/analysis:availability",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_test(
-    name = "materialize_test",
-    srcs = ["materialize_test.cc"],
-    deps = [
-        ":materialize",
-        ":remap",
-        ":rewriter",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/test",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_library(
-    name = "remap",
-    srcs = ["remap.c"],
-    hdrs = ["remap.h"],
-    deps = [
-        "//loom/src/loom/ir",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_test(
-    name = "remap_test",
-    srcs = ["remap_test.cc"],
-    deps = [
-        ":remap",
-        "//loom/src/loom/ir",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -333,8 +245,6 @@ loom_cc_library(
     hdrs = ["refine_boundaries.h"],
     deps = [
         ":canonicalize",
-        ":materialize",
-        ":remap",
         "//loom/src/loom/analysis:scc",
         "//loom/src/loom/analysis:type_refinement",
         "//loom/src/loom/error:error_defs",
@@ -346,6 +256,8 @@ loom_cc_library(
         "//loom/src/loom/ops/func",
         "//loom/src/loom/pass:manager",
         "//loom/src/loom/pass:registry",
+        "//loom/src/loom/rewrite:materialize",
+        "//loom/src/loom/rewrite:remap",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:walk",
         "//runtime/src/iree/base",
@@ -370,27 +282,10 @@ loom_cc_test(
 )
 
 loom_cc_library(
-    name = "rewriter",
-    srcs = ["rewriter.c"],
-    hdrs = ["rewriter.h"],
-    deps = [
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ir:facts",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/util:fact_table",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_library(
     name = "scf_to_cfg",
     srcs = ["scf_to_cfg.c"],
     hdrs = ["scf_to_cfg.h"],
     deps = [
-        ":materialize",
-        ":remap",
-        ":rewriter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
@@ -398,6 +293,9 @@ loom_cc_library(
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/pass:manager",
+        "//loom/src/loom/rewrite:materialize",
+        "//loom/src/loom/rewrite:remap",
+        "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],
@@ -466,7 +364,6 @@ loom_cc_library(
         "vector_to_scalar_internal.h",
     ],
     deps = [
-        ":rewriter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
@@ -477,42 +374,9 @@ loom_cc_library(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/ops/view",
         "//loom/src/loom/pass:manager",
+        "//loom/src/loom/rewrite:rewriter",
         "//loom/src/loom/util:math",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "type_propagation",
-    srcs = ["type_propagation.c"],
-    hdrs = ["type_propagation.h"],
-    deps = [
-        ":rewriter",
-        "//loom/src/loom/analysis:type_refinement",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ir:type_refinement",
-        "//loom/src/loom/ops:op_defs",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_test(
-    name = "type_propagation_test",
-    srcs = ["type_propagation_test.cc"],
-    deps = [
-        ":rewriter",
-        ":type_propagation",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/encoding",
-        "//loom/src/loom/ops/scf",
-        "//loom/src/loom/ops/test",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/ops/view",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

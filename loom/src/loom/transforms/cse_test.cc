@@ -13,7 +13,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 
 namespace loom {
 namespace {

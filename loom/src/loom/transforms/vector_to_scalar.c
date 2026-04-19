@@ -17,7 +17,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 #include "loom/transforms/vector_to_scalar_internal.h"
 #include "loom/util/math.h"
 

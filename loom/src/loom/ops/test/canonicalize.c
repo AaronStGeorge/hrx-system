@@ -11,7 +11,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 
 // test.addi canonicalization: addi(x, 0) → x, addi(0, x) → x.
 iree_status_t loom_test_addi_canonicalize(loom_op_t* op,

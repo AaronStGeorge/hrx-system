@@ -11,12 +11,12 @@
 // inline, or how symbols should be imported. Callers bind source values in the
 // remap and provide symbol policy before asking this helper to materialize IR.
 
-#ifndef LOOM_TRANSFORMS_MATERIALIZE_H_
-#define LOOM_TRANSFORMS_MATERIALIZE_H_
+#ifndef LOOM_REWRITE_MATERIALIZE_H_
+#define LOOM_REWRITE_MATERIALIZE_H_
 
 #include "iree/base/api.h"
 #include "loom/ops/op_defs.h"
-#include "loom/transforms/remap.h"
+#include "loom/rewrite/remap.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -96,4 +96,4 @@ iree_status_t loom_ir_move_block_ops_before(
 }
 #endif
 
-#endif  // LOOM_TRANSFORMS_MATERIALIZE_H_
+#endif  // LOOM_REWRITE_MATERIALIZE_H_

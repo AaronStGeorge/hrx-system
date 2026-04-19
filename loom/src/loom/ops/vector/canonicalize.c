@@ -9,7 +9,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 #include "loom/util/fact_table.h"
 
 //===----------------------------------------------------------------------===//

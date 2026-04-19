@@ -10,13 +10,13 @@
 // operations. They do not decide inline profitability or import policy; callers
 // choose a call site and these helpers perform the checked mutation.
 
-#ifndef LOOM_TRANSFORMS_CALLABLE_H_
-#define LOOM_TRANSFORMS_CALLABLE_H_
+#ifndef LOOM_REWRITE_CALLABLE_H_
+#define LOOM_REWRITE_CALLABLE_H_
 
 #include "iree/base/api.h"
 #include "loom/ops/op_defs.h"
-#include "loom/transforms/remap.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/remap.h"
+#include "loom/rewrite/rewriter.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -109,4 +109,4 @@ iree_status_t loom_callable_outline_range(
 }
 #endif
 
-#endif  // LOOM_TRANSFORMS_CALLABLE_H_
+#endif  // LOOM_REWRITE_CALLABLE_H_

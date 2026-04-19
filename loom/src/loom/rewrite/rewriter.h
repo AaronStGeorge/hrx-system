@@ -28,8 +28,8 @@
 //   }
 //   loom_rewriter_deinitialize(&rewriter);
 
-#ifndef LOOM_TRANSFORMS_REWRITER_H_
-#define LOOM_TRANSFORMS_REWRITER_H_
+#ifndef LOOM_REWRITE_REWRITER_H_
+#define LOOM_REWRITE_REWRITER_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -298,4 +298,4 @@ iree_status_t loom_greedy_rewrite(iree_arena_allocator_t* arena,
 }
 #endif
 
-#endif  // LOOM_TRANSFORMS_REWRITER_H_
+#endif  // LOOM_REWRITE_REWRITER_H_

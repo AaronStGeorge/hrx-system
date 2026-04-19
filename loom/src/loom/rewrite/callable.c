@@ -4,11 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/transforms/callable.h"
+#include "loom/rewrite/callable.h"
 
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
-#include "loom/transforms/materialize.h"
+#include "loom/rewrite/materialize.h"
 
 static bool loom_callable_get_call_symbol_ref(const loom_op_t* call_op,
                                               loom_symbol_ref_t* out_ref) {

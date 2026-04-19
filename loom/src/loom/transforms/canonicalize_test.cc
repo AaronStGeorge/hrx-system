@@ -15,7 +15,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 
 namespace loom {
 namespace {

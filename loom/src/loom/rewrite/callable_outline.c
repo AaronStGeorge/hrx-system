@@ -10,8 +10,8 @@
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/func/ops.h"
-#include "loom/transforms/callable.h"
-#include "loom/transforms/materialize.h"
+#include "loom/rewrite/callable.h"
+#include "loom/rewrite/materialize.h"
 
 typedef struct loom_callable_outline_range_state_t {
   // Module containing both the source range and outlined callable.

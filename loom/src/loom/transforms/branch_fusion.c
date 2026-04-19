@@ -9,9 +9,9 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
-#include "loom/transforms/materialize.h"
-#include "loom/transforms/remap.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/materialize.h"
+#include "loom/rewrite/remap.h"
+#include "loom/rewrite/rewriter.h"
 
 //===----------------------------------------------------------------------===//
 // Statistics

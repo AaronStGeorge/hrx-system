@@ -12,7 +12,7 @@
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/scf/ops.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 #include "loom/util/math.h"
 
 //===----------------------------------------------------------------------===//

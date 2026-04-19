@@ -8,7 +8,7 @@
 #include "loom/ops/index/compare.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 #include "loom/util/math.h"
 
 //===----------------------------------------------------------------------===//

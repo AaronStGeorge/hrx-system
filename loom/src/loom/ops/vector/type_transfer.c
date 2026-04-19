@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/ops/vector/ops.h"
-#include "loom/transforms/type_propagation.h"
+#include "loom/rewrite/type_propagation.h"
 
 iree_status_t loom_vector_transpose_type_transfer(
     loom_type_transfer_context_t* context, const loom_module_t* module,

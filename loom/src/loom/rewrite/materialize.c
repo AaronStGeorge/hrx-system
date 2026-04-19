@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/transforms/materialize.h"
+#include "loom/rewrite/materialize.h"
 
 #include <string.h>
 
@@ -12,7 +12,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 
 static iree_status_t loom_ir_clone_value_name(loom_ir_remap_t* remap,
                                               loom_value_id_t source_value_id,

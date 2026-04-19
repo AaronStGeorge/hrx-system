@@ -21,9 +21,9 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/special_values.h"
 #include "loom/pass/registry.h"
+#include "loom/rewrite/materialize.h"
+#include "loom/rewrite/remap.h"
 #include "loom/transforms/canonicalize.h"
-#include "loom/transforms/materialize.h"
-#include "loom/transforms/remap.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/walk.h"
 

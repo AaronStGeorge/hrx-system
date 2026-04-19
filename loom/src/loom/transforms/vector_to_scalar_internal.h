@@ -16,7 +16,7 @@
 #include "loom/ir/types.h"
 #include "loom/ops/op_defs.h"
 #include "loom/pass/manager.h"
-#include "loom/transforms/rewriter.h"
+#include "loom/rewrite/rewriter.h"
 
 #ifdef __cplusplus
 extern "C" {
