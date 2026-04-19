@@ -87,6 +87,42 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/emit/native:elf",
 )
 
+iree_assert_no_dependency(
+    name = "contribution_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/native:contribution",
+)
+
+iree_assert_no_dependency(
+    name = "contribution_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/emit/native:contribution",
+)
+
+iree_assert_no_dependency(
+    name = "contribution_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/native:contribution",
+)
+
+iree_assert_no_dependency(
+    name = "contribution_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/emit/native:contribution",
+)
+
+iree_assert_no_dependency(
+    name = "contribution_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/native:contribution",
+)
+
+iree_assert_no_dependency(
+    name = "contribution_no_hal_amdgpu_dep",
+    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
+    target = "//loom/src/loom/target/emit/native:contribution",
+)
+
 #===------------------------------------------------------------------------===#
 # Native assembly fragments
 #===------------------------------------------------------------------------===#
@@ -113,12 +149,37 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "contribution",
+    srcs = ["contribution.c"],
+    hdrs = ["contribution.h"],
+    deps = [
+        ":elf",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_cc_test(
     name = "elf_test",
     srcs = ["elf_test.cc"],
     deps = [
         ":elf",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "contribution_test",
+    srcs = ["contribution_test.cc"],
+    deps = [
+        ":contribution",
+        ":elf",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
