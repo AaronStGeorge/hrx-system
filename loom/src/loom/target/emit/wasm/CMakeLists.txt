@@ -12,12 +12,39 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    binary_writer
+  HDRS
+    "binary_writer.h"
+  SRCS
+    "binary_writer.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    types
+  HDRS
+    "types.h"
+  SRCS
+    "types.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     function_body
   HDRS
     "function_body.h"
   SRCS
     "function_body.c"
   DEPS
+    ::binary_writer
+    ::types
     iree::base
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::descriptors
@@ -30,6 +57,28 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    module_binary
+  HDRS
+    "module_binary.h"
+  SRCS
+    "module_binary.c"
+  DEPS
+    ::binary_writer
+    ::function_body
+    ::types
+    iree::base
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     function_body_test
@@ -37,6 +86,27 @@ loom_cc_test(
     "function_body_test.cc"
   DEPS
     ::function_body
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::wasm::descriptors
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    module_binary_test
+  SRCS
+    "module_binary_test.cc"
+  DEPS
+    ::module_binary
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::descriptors

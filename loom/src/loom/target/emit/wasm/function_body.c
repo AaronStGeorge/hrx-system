@@ -7,13 +7,14 @@
 #include "loom/target/emit/wasm/function_body.h"
 
 #include <inttypes.h>
-#include <string.h>
 
 #include "loom/codegen/low/packet.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/emit/wasm/binary_writer.h"
+#include "loom/target/emit/wasm/types.h"
 
 enum {
   LOOM_WASM_OPCODE_END = 0x0B,
@@ -50,25 +51,6 @@ enum {
   LOOM_WASM_ENCODING_I32X4_MUL =
       (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_MUL,
 };
-
-typedef enum loom_wasm_value_type_e {
-  LOOM_WASM_VALUE_TYPE_I32 = 0x7F,
-  LOOM_WASM_VALUE_TYPE_I64 = 0x7E,
-  LOOM_WASM_VALUE_TYPE_F32 = 0x7D,
-  LOOM_WASM_VALUE_TYPE_F64 = 0x7C,
-  LOOM_WASM_VALUE_TYPE_V128 = 0x7B,
-} loom_wasm_value_type_t;
-
-typedef struct loom_wasm_byte_writer_t {
-  // Allocator used for byte storage.
-  iree_allocator_t allocator;
-  // Mutable byte storage.
-  uint8_t* data;
-  // Number of initialized bytes in |data|.
-  iree_host_size_t length;
-  // Allocated byte capacity of |data|.
-  iree_host_size_t capacity;
-} loom_wasm_byte_writer_t;
 
 typedef struct loom_wasm_local_entry_t {
   // Register-class string ID from allocation.value_class.
@@ -108,7 +90,7 @@ typedef struct loom_wasm_emit_state_t {
   // Derived Wasm local namespace layout.
   loom_wasm_local_layout_t locals;
   // Mutable body payload writer.
-  loom_wasm_byte_writer_t writer;
+  loom_wasm_binary_writer_t writer;
 } loom_wasm_emit_state_t;
 
 static iree_string_view_t loom_wasm_module_string(const loom_module_t* module,
@@ -120,99 +102,10 @@ static iree_string_view_t loom_wasm_module_string(const loom_module_t* module,
   return module->strings.entries[string_id];
 }
 
-static void loom_wasm_byte_writer_deinitialize(
-    loom_wasm_byte_writer_t* writer) {
-  iree_allocator_free(writer->allocator, writer->data);
-  *writer = (loom_wasm_byte_writer_t){0};
-}
-
-static iree_status_t loom_wasm_byte_writer_reserve(
-    loom_wasm_byte_writer_t* writer, iree_host_size_t additional_length) {
-  iree_host_size_t minimum_capacity = 0;
-  if (!iree_host_size_checked_add(writer->length, additional_length,
-                                  &minimum_capacity)) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "Wasm function body length overflow");
-  }
-  if (minimum_capacity <= writer->capacity) {
-    return iree_ok_status();
-  }
-
-  iree_host_size_t doubled_capacity =
-      writer->capacity ? writer->capacity * 2 : 128;
-  if (doubled_capacity < writer->capacity ||
-      doubled_capacity < minimum_capacity) {
-    doubled_capacity = minimum_capacity;
-  }
-  IREE_RETURN_IF_ERROR(iree_allocator_realloc(
-      writer->allocator, doubled_capacity, (void**)&writer->data));
-  writer->capacity = doubled_capacity;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_wasm_write_u8(loom_wasm_byte_writer_t* writer,
-                                        uint8_t value) {
-  IREE_RETURN_IF_ERROR(loom_wasm_byte_writer_reserve(writer, 1));
-  writer->data[writer->length++] = value;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_wasm_write_bytes(loom_wasm_byte_writer_t* writer,
-                                           const uint8_t* data,
-                                           iree_host_size_t data_length) {
-  if (data_length == 0) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(loom_wasm_byte_writer_reserve(writer, data_length));
-  memcpy(writer->data + writer->length, data, data_length);
-  writer->length += data_length;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_wasm_write_u32_leb(loom_wasm_byte_writer_t* writer,
-                                             uint32_t value) {
-  do {
-    uint8_t byte = (uint8_t)(value & 0x7Fu);
-    value >>= 7;
-    if (value != 0) {
-      byte |= 0x80u;
-    }
-    IREE_RETURN_IF_ERROR(loom_wasm_write_u8(writer, byte));
-  } while (value != 0);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_wasm_write_i32_leb(loom_wasm_byte_writer_t* writer,
-                                             int32_t value) {
-  bool more = true;
-  while (more) {
-    uint8_t byte = (uint8_t)(value & 0x7F);
-    value >>= 7;
-    const bool sign_bit_set = (byte & 0x40u) != 0;
-    more = !((value == 0 && !sign_bit_set) || (value == -1 && sign_bit_set));
-    if (more) {
-      byte |= 0x80u;
-    }
-    IREE_RETURN_IF_ERROR(loom_wasm_write_u8(writer, byte));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_wasm_write_u64_le(loom_wasm_byte_writer_t* writer,
-                                            uint64_t value) {
-  uint8_t data[8] = {
-      (uint8_t)(value & 0xFFu),         (uint8_t)((value >> 8) & 0xFFu),
-      (uint8_t)((value >> 16) & 0xFFu), (uint8_t)((value >> 24) & 0xFFu),
-      (uint8_t)((value >> 32) & 0xFFu), (uint8_t)((value >> 40) & 0xFFu),
-      (uint8_t)((value >> 48) & 0xFFu), (uint8_t)(value >> 56),
-  };
-  return loom_wasm_write_bytes(writer, data, sizeof(data));
-}
-
-static iree_status_t loom_wasm_write_opcode(loom_wasm_byte_writer_t* writer,
+static iree_status_t loom_wasm_write_opcode(loom_wasm_binary_writer_t* writer,
                                             uint32_t encoding_id) {
   if (encoding_id <= UINT8_MAX) {
-    return loom_wasm_write_u8(writer, (uint8_t)encoding_id);
+    return loom_wasm_binary_write_u8(writer, (uint8_t)encoding_id);
   }
   const uint32_t prefix = encoding_id >> 8;
   const uint32_t subopcode = encoding_id & 0xFFu;
@@ -221,8 +114,8 @@ static iree_status_t loom_wasm_write_opcode(loom_wasm_byte_writer_t* writer,
                             "unsupported Wasm opcode prefix 0x%02" PRIx32,
                             prefix);
   }
-  IREE_RETURN_IF_ERROR(loom_wasm_write_u8(writer, (uint8_t)prefix));
-  return loom_wasm_write_u32_leb(writer, subopcode);
+  IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u8(writer, (uint8_t)prefix));
+  return loom_wasm_binary_write_u32_leb(writer, subopcode);
 }
 
 static void loom_wasm_local_layout_deinitialize(
@@ -243,9 +136,14 @@ static iree_status_t loom_wasm_local_layout_reserve_entries(
       new_capacity < minimum_capacity) {
     new_capacity = minimum_capacity;
   }
-  IREE_RETURN_IF_ERROR(iree_allocator_realloc(
-      layout->allocator, new_capacity * sizeof(*layout->entries),
-      (void**)&layout->entries));
+  iree_host_size_t byte_length = 0;
+  if (!iree_host_size_checked_mul(new_capacity, sizeof(*layout->entries),
+                                  &byte_length)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "Wasm local entry table size overflow");
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_realloc(layout->allocator, byte_length,
+                                              (void**)&layout->entries));
   layout->entry_capacity = new_capacity;
   return iree_ok_status();
 }
@@ -261,9 +159,14 @@ static iree_status_t loom_wasm_local_layout_reserve_types(
       new_capacity < minimum_capacity) {
     new_capacity = minimum_capacity;
   }
-  IREE_RETURN_IF_ERROR(iree_allocator_realloc(
-      layout->allocator, new_capacity * sizeof(*layout->local_types),
-      (void**)&layout->local_types));
+  iree_host_size_t byte_length = 0;
+  if (!iree_host_size_checked_mul(new_capacity, sizeof(*layout->local_types),
+                                  &byte_length)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "Wasm local type table size overflow");
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_realloc(layout->allocator, byte_length,
+                                              (void**)&layout->local_types));
   layout->local_type_capacity = new_capacity;
   return iree_ok_status();
 }
@@ -310,36 +213,6 @@ static iree_status_t loom_wasm_local_layout_add_entry(
   return iree_ok_status();
 }
 
-static iree_status_t loom_wasm_register_class_to_value_type(
-    const loom_module_t* module, loom_string_id_t register_class_id,
-    loom_wasm_value_type_t* out_value_type) {
-  iree_string_view_t register_class =
-      loom_wasm_module_string(module, register_class_id);
-  if (iree_string_view_equal(register_class, IREE_SV("wasm.i32"))) {
-    *out_value_type = LOOM_WASM_VALUE_TYPE_I32;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(register_class, IREE_SV("wasm.i64"))) {
-    *out_value_type = LOOM_WASM_VALUE_TYPE_I64;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(register_class, IREE_SV("wasm.f32"))) {
-    *out_value_type = LOOM_WASM_VALUE_TYPE_F32;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(register_class, IREE_SV("wasm.f64"))) {
-    *out_value_type = LOOM_WASM_VALUE_TYPE_F64;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(register_class, IREE_SV("wasm.v128"))) {
-    *out_value_type = LOOM_WASM_VALUE_TYPE_V128;
-    return iree_ok_status();
-  }
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "unsupported Wasm register class '%.*s'",
-                          (int)register_class.size, register_class.data);
-}
-
 static iree_status_t loom_wasm_validate_target_id_assignment(
     const loom_low_allocation_sidecar_t* allocation,
     const loom_low_allocation_assignment_t* assignment,
@@ -362,7 +235,7 @@ static iree_status_t loom_wasm_validate_target_id_assignment(
         "Wasm value %u is not allocated as a register value",
         (unsigned)assignment->value_id);
   }
-  return loom_wasm_register_class_to_value_type(
+  return loom_wasm_value_type_from_register_class(
       allocation->module, assignment->value_class.register_class_id,
       out_value_type);
 }
@@ -537,8 +410,8 @@ static iree_status_t loom_wasm_emit_local_get(loom_wasm_emit_state_t* state,
   IREE_RETURN_IF_ERROR(
       loom_wasm_lookup_local(state, value_id, &local_index, NULL));
   IREE_RETURN_IF_ERROR(
-      loom_wasm_write_u8(&state->writer, LOOM_WASM_OPCODE_LOCAL_GET));
-  return loom_wasm_write_u32_leb(&state->writer, local_index);
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_LOCAL_GET));
+  return loom_wasm_binary_write_u32_leb(&state->writer, local_index);
 }
 
 static iree_status_t loom_wasm_emit_local_set(loom_wasm_emit_state_t* state,
@@ -547,16 +420,16 @@ static iree_status_t loom_wasm_emit_local_set(loom_wasm_emit_state_t* state,
   IREE_RETURN_IF_ERROR(
       loom_wasm_lookup_local(state, value_id, &local_index, NULL));
   IREE_RETURN_IF_ERROR(
-      loom_wasm_write_u8(&state->writer, LOOM_WASM_OPCODE_LOCAL_SET));
-  return loom_wasm_write_u32_leb(&state->writer, local_index);
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_LOCAL_SET));
+  return loom_wasm_binary_write_u32_leb(&state->writer, local_index);
 }
 
 static iree_status_t loom_wasm_emit_memarg(loom_wasm_emit_state_t* state,
                                            uint32_t alignment_exponent,
                                            uint32_t offset) {
   IREE_RETURN_IF_ERROR(
-      loom_wasm_write_u32_leb(&state->writer, alignment_exponent));
-  return loom_wasm_write_u32_leb(&state->writer, offset);
+      loom_wasm_binary_write_u32_leb(&state->writer, alignment_exponent));
+  return loom_wasm_binary_write_u32_leb(&state->writer, offset);
 }
 
 static iree_status_t loom_wasm_emit_i32_const(
@@ -576,7 +449,8 @@ static iree_status_t loom_wasm_emit_i32_const(
   }
   IREE_RETURN_IF_ERROR(
       loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
-  IREE_RETURN_IF_ERROR(loom_wasm_write_i32_leb(&state->writer, (int32_t)value));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_i32_leb(&state->writer, (int32_t)value));
   return loom_wasm_emit_local_set(state, loom_low_const_result(op));
 }
 
@@ -598,9 +472,9 @@ static iree_status_t loom_wasm_emit_v128_const(
   IREE_RETURN_IF_ERROR(
       loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
   IREE_RETURN_IF_ERROR(
-      loom_wasm_write_u64_le(&state->writer, (uint64_t)low_bits));
+      loom_wasm_binary_write_u64_le(&state->writer, (uint64_t)low_bits));
   IREE_RETURN_IF_ERROR(
-      loom_wasm_write_u64_le(&state->writer, (uint64_t)high_bits));
+      loom_wasm_binary_write_u64_le(&state->writer, (uint64_t)high_bits));
   return loom_wasm_emit_local_set(state, loom_low_const_result(op));
 }
 
@@ -717,7 +591,7 @@ static iree_status_t loom_wasm_emit_low_return(loom_wasm_emit_state_t* state,
   for (iree_host_size_t i = 0; i < values.count; ++i) {
     IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, values.values[i]));
   }
-  return loom_wasm_write_u8(&state->writer, LOOM_WASM_OPCODE_RETURN);
+  return loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_RETURN);
 }
 
 static iree_status_t loom_wasm_emit_structural_packet(
@@ -754,7 +628,7 @@ static iree_status_t loom_wasm_emit_local_declarations(
     }
   }
   IREE_RETURN_IF_ERROR(
-      loom_wasm_write_u32_leb(&state->writer, declaration_count));
+      loom_wasm_binary_write_u32_leb(&state->writer, declaration_count));
   for (iree_host_size_t i = state->locals.parameter_count;
        i < state->locals.local_type_count;) {
     loom_wasm_value_type_t value_type = state->locals.local_types[i++];
@@ -764,8 +638,9 @@ static iree_status_t loom_wasm_emit_local_declarations(
       ++run_length;
       ++i;
     }
-    IREE_RETURN_IF_ERROR(loom_wasm_write_u32_leb(&state->writer, run_length));
-    IREE_RETURN_IF_ERROR(loom_wasm_write_u8(&state->writer, value_type));
+    IREE_RETURN_IF_ERROR(
+        loom_wasm_binary_write_u32_leb(&state->writer, run_length));
+    IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u8(&state->writer, value_type));
   }
   return iree_ok_status();
 }
@@ -782,7 +657,7 @@ static iree_status_t loom_wasm_emit_function_body_payload(
         state->schedule, state->allocation, packet_index, &packet));
     IREE_RETURN_IF_ERROR(loom_wasm_emit_packet(state, &packet));
   }
-  return loom_wasm_write_u8(&state->writer, LOOM_WASM_OPCODE_END);
+  return loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_END);
 }
 
 static iree_status_t loom_wasm_validate_sidecars(
@@ -834,28 +709,27 @@ iree_status_t loom_wasm_emit_function_body(
   loom_wasm_emit_state_t state = {
       .schedule = schedule,
       .allocation = allocation,
-      .writer = {.allocator = allocator},
   };
+  loom_wasm_binary_writer_initialize(allocator, &state.writer);
   iree_status_t status =
       loom_wasm_build_local_layout(allocation, allocator, &state.locals);
   if (iree_status_is_ok(status)) {
     status = loom_wasm_emit_function_body_payload(&state);
   }
 
-  loom_wasm_byte_writer_t output_writer = {
-      .allocator = allocator,
-  };
+  loom_wasm_binary_writer_t output_writer;
+  loom_wasm_binary_writer_initialize(allocator, &output_writer);
   if (iree_status_is_ok(status) && state.writer.length > UINT32_MAX) {
     status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "Wasm function body exceeds u32 size");
   }
   if (iree_status_is_ok(status)) {
-    status =
-        loom_wasm_write_u32_leb(&output_writer, (uint32_t)state.writer.length);
+    status = loom_wasm_binary_write_u32_leb(&output_writer,
+                                            (uint32_t)state.writer.length);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_wasm_write_bytes(&output_writer, state.writer.data,
-                                   state.writer.length);
+    status = loom_wasm_binary_write_bytes(&output_writer, state.writer.data,
+                                          state.writer.length);
   }
   if (iree_status_is_ok(status) && state.locals.local_type_count > UINT32_MAX) {
     status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -872,8 +746,8 @@ iree_status_t loom_wasm_emit_function_body(
     output_writer.data = NULL;
   }
 
-  loom_wasm_byte_writer_deinitialize(&output_writer);
-  loom_wasm_byte_writer_deinitialize(&state.writer);
+  loom_wasm_binary_writer_deinitialize(&output_writer);
+  loom_wasm_binary_writer_deinitialize(&state.writer);
   loom_wasm_local_layout_deinitialize(&state.locals);
   return status;
 }
