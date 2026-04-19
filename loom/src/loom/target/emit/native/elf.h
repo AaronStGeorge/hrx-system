@@ -52,6 +52,7 @@ typedef enum loom_native_elf_abi_version_e {
 typedef enum loom_native_elf_program_type_e {
   LOOM_NATIVE_ELF_PROGRAM_TYPE_NULL = 0,
   LOOM_NATIVE_ELF_PROGRAM_TYPE_LOAD = 1,
+  LOOM_NATIVE_ELF_PROGRAM_TYPE_DYNAMIC = 2,
   LOOM_NATIVE_ELF_PROGRAM_TYPE_NOTE = 4,
 } loom_native_elf_program_type_t;
 
@@ -64,8 +65,12 @@ typedef enum loom_native_elf_program_flag_bits_e {
 typedef enum loom_native_elf_section_type_e {
   LOOM_NATIVE_ELF_SECTION_TYPE_NULL = 0,
   LOOM_NATIVE_ELF_SECTION_TYPE_PROGBITS = 1,
+  LOOM_NATIVE_ELF_SECTION_TYPE_SYMTAB = 2,
   LOOM_NATIVE_ELF_SECTION_TYPE_STRTAB = 3,
+  LOOM_NATIVE_ELF_SECTION_TYPE_HASH = 5,
+  LOOM_NATIVE_ELF_SECTION_TYPE_DYNAMIC = 6,
   LOOM_NATIVE_ELF_SECTION_TYPE_NOTE = 7,
+  LOOM_NATIVE_ELF_SECTION_TYPE_DYNSYM = 11,
 } loom_native_elf_section_type_t;
 
 typedef enum loom_native_elf_section_flag_bits_e {

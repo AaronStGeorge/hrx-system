@@ -207,6 +207,48 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
 )
 
+iree_assert_no_dependency(
+    name = "hsaco_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "hsaco_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "hsaco_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "hsaco_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "hsaco_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "hsaco_no_hal_amdgpu_dep",
+    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
+    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "hsaco_no_target_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
+)
+
 #===------------------------------------------------------------------------===#
 # AMDGPU native assembly fragments
 #===------------------------------------------------------------------------===#
@@ -278,6 +320,20 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target/arch/amdgpu:wait_packets",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "hsaco",
+    srcs = ["hsaco.c"],
+    hdrs = ["hsaco.h"],
+    deps = [
+        ":descriptor",
+        ":metadata",
+        "//loom/src/loom/target/emit/native:elf",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
     ],
 )
 
@@ -369,6 +425,22 @@ loom_cc_test(
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "hsaco_test",
+    srcs = ["hsaco_test.cc"],
+    deps = [
+        ":descriptor",
+        ":hsaco",
+        ":metadata",
+        "//loom/src/loom/target/emit/native:elf",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

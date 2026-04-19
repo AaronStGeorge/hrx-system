@@ -95,6 +95,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    hsaco
+  HDRS
+    "hsaco.h"
+  SRCS
+    "hsaco.c"
+  DEPS
+    ::descriptor
+    ::metadata
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::target::emit::native::elf
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     assembly_test
@@ -189,6 +206,23 @@ loom_cc_test(
     loom::src::loom::target::presets
     loom::src::loom::target::tool::llvm
     loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    hsaco_test
+  SRCS
+    "hsaco_test.cc"
+  DEPS
+    ::descriptor
+    ::hsaco
+    ::metadata
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::target::emit::native::elf
     iree::testing::gtest
     iree::testing::gtest_main
 )
