@@ -249,6 +249,108 @@ static iree_status_t loom_amdgpu_append_named_wait_packet(
       attr_name.data, value);
 }
 
+static iree_status_t loom_amdgpu_copy_mnemonic(
+    iree_string_view_t register_class, iree_string_view_t* out_mnemonic) {
+  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.sgpr"))) {
+    *out_mnemonic = IREE_SV("s_mov_b32");
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.vgpr"))) {
+    *out_mnemonic = IREE_SV("v_mov_b32");
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                          "AMDGPU assembly copy register class '%.*s' is "
+                          "unsupported",
+                          (int)register_class.size, register_class.data);
+}
+
+static iree_status_t loom_amdgpu_append_copy_element(
+    const loom_native_assembly_packet_context_t* context,
+    iree_string_view_t mnemonic,
+    const loom_low_allocation_assignment_t* result_assignment,
+    const loom_low_allocation_assignment_t* source_assignment,
+    uint32_t register_index) {
+  if (register_index != 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "\n  "));
+  }
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_string(context->builder, mnemonic));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  loom_low_allocation_assignment_t result_element = *result_assignment;
+  result_element.location_base += register_index;
+  result_element.location_count = 1;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_assignment(context, &result_element));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  loom_low_allocation_assignment_t source_element = *source_assignment;
+  source_element.location_base += register_index;
+  source_element.location_count = 1;
+  return loom_amdgpu_append_assignment(context, &source_element);
+}
+
+static iree_status_t loom_amdgpu_append_copy_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  (void)user_data;
+  const loom_op_t* op = context->packet->node->op;
+  const loom_low_allocation_assignment_t* source_assignment = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
+      context, loom_low_copy_source(op), &source_assignment));
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
+      context, loom_low_copy_result(op), &result_assignment));
+  if (loom_amdgpu_assignments_match(source_assignment, result_assignment)) {
+    return iree_ok_status();
+  }
+  if (source_assignment->location_kind !=
+          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+      result_assignment->location_kind !=
+          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU assembly copy requires physical register assignments");
+  }
+  if (source_assignment->location_count == 0 ||
+      source_assignment->location_count != result_assignment->location_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU assembly copy requires non-empty matching register ranges");
+  }
+  const uint32_t register_count = source_assignment->location_count;
+  const uint32_t last_register_offset = register_count - 1;
+  if (source_assignment->location_base > UINT32_MAX - last_register_offset ||
+      result_assignment->location_base > UINT32_MAX - last_register_offset) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU assembly copy register range exceeds uint32_t");
+  }
+
+  iree_string_view_t source_register_class = loom_native_assembly_module_string(
+      context->allocation->module,
+      source_assignment->value_class.register_class_id);
+  iree_string_view_t result_register_class = loom_native_assembly_module_string(
+      context->allocation->module,
+      result_assignment->value_class.register_class_id);
+  if (!iree_string_view_equal(source_register_class, result_register_class)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU assembly copy between register classes '%.*s' and '%.*s' is "
+        "unsupported",
+        (int)source_register_class.size, source_register_class.data,
+        (int)result_register_class.size, result_register_class.data);
+  }
+
+  iree_string_view_t mnemonic = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_copy_mnemonic(result_register_class, &mnemonic));
+  for (uint32_t i = 0; i < register_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_copy_element(
+        context, mnemonic, result_assignment, source_assignment, i));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_append_matrix_packet(
     const loom_native_assembly_packet_context_t* context) {
   const loom_op_t* op = context->packet->node->op;
@@ -347,6 +449,11 @@ iree_status_t loom_amdgpu_emit_assembly_fragment(
       .append_descriptor_packet =
           {
               .fn = loom_amdgpu_append_descriptor_packet,
+              .user_data = NULL,
+          },
+      .append_copy_packet =
+          {
+              .fn = loom_amdgpu_append_copy_packet,
               .user_data = NULL,
           },
       .append_return_packet =

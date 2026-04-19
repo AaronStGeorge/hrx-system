@@ -316,6 +316,48 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
   iree_arena_deinitialize(&sidecar_arena);
 }
 
+TEST_F(AmdgpuAssemblyTest, EmitsMaterializedCopies) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  BuildSidecars(
+      "low.func.def target(@gfx11_target) @gfx11_fragment(%s0 : "
+      "reg<amdgpu.sgpr>, %s1 : reg<amdgpu.sgpr>, %a : "
+      "reg<amdgpu.vgpr x4>, %b : reg<amdgpu.vgpr x4>, %acc : "
+      "reg<amdgpu.vgpr x8>) {\n"
+      "  %s_copy = low.copy %s0 : reg<amdgpu.sgpr> -> reg<amdgpu.sgpr>\n"
+      "  %s_sum = low.op<amdgpu.s_add_u32>(%s_copy, %s1) : "
+      "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  %s_second = low.op<amdgpu.s_add_u32>(%s0, %s_sum) : "
+      "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  %v_copy = low.copy %a : reg<amdgpu.vgpr x4> -> "
+      "reg<amdgpu.vgpr x4>\n"
+      "  %matrix0 = low.op<amdgpu.v_wmma_f32_16x16x16_f16>(%v_copy, "
+      "%b, %acc) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>, "
+      "reg<amdgpu.vgpr x8>) -> %acc as reg<amdgpu.vgpr x8>\n"
+      "  %matrix1 = low.op<amdgpu.v_wmma_f32_16x16x16_f16>(%a, %b, "
+      "%matrix0) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>, "
+      "reg<amdgpu.vgpr x8>) -> %matrix0 as reg<amdgpu.vgpr x8>\n"
+      "  low.return\n"
+      "}\n",
+      &sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_emit_assembly_fragment(
+      &packetization.schedule, &packetization.allocation, &builder));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+  EXPECT_NE(output.find("s_mov_b32 s"), std::string::npos);
+  const size_t first_v_mov = output.find("v_mov_b32 v");
+  EXPECT_NE(first_v_mov, std::string::npos);
+  EXPECT_NE(output.find("v_mov_b32 v", first_v_mov + 1), std::string::npos);
+  EXPECT_NE(output.find("v_wmma_f32_16x16x16_f16 v["), std::string::npos);
+  EXPECT_NE(output.find("s_endpgm"), std::string::npos);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
 TEST_F(AmdgpuAssemblyTest, EmitsFragmentsFromSourceLowering) {
   static constexpr const char* kPresetKeys[] = {
       "amdgpu-gfx950",
