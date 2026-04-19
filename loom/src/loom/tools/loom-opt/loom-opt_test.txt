@@ -1,13 +1,53 @@
 // RUN: ( loom-opt --list-passes ) | FileCheck --check-prefix=LIST %s
-// LIST: canonicalize{{[[:space:]]+}}func{{[[:space:]]+}}Apply op-specific canonicalization patterns.
-// LIST: low-materialize-allocation{{[[:space:]]+}}func{{[[:space:]]+}}Allocate target-low values and materialize spills.
-// LIST: symbol-dce{{[[:space:]]+}}module{{[[:space:]]+}}Remove unreachable private function and low ABI symbols.
+// LIST-DAG: branch-fusion{{[[:space:]]+}}func
+// LIST-DAG: branch-sink{{[[:space:]]+}}func
+// LIST-DAG: canonicalize{{[[:space:]]+}}func
+// LIST-DAG: cfg-simplify{{[[:space:]]+}}func
+// LIST-DAG: cse{{[[:space:]]+}}func
+// LIST-DAG: dce{{[[:space:]]+}}func
+// LIST-DAG: kernel-async-legality{{[[:space:]]+}}func
+// LIST-DAG: licm{{[[:space:]]+}}func
+// LIST-DAG: loop-fusion{{[[:space:]]+}}func
+// LIST-DAG: low-materialize-allocation{{[[:space:]]+}}func
+// LIST-DAG: normalize-kernel-resources{{[[:space:]]+}}func
+// LIST-DAG: refine-boundaries{{[[:space:]]+}}module
+// LIST-DAG: scf-to-cfg{{[[:space:]]+}}func
+// LIST-DAG: strip-hints{{[[:space:]]+}}func
+// LIST-DAG: symbol-dce{{[[:space:]]+}}module
+// LIST-DAG: vector-memory-footprint{{[[:space:]]+}}func
+// LIST-DAG: vector-to-scalar{{[[:space:]]+}}func
 
 // RUN: ( loom-opt --pass-help=canonicalize ) | FileCheck --check-prefix=HELP %s
 // HELP: canonicalize
 // HELP: kind: func
 // HELP: options:
 // HELP: max-iterations: uint32 [1..4294967295]
+
+// RUN: printf '%%s\n' \
+// RUN:   'func.def public @all_passes(%x: i32) -> (i32) {' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   | loom-opt \
+// RUN:       --pass=branch-fusion \
+// RUN:       --pass=branch-sink \
+// RUN:       --pass='canonicalize{max-iterations=2}' \
+// RUN:       --pass=cfg-simplify \
+// RUN:       --pass=cse \
+// RUN:       --pass=dce \
+// RUN:       --pass=kernel-async-legality \
+// RUN:       --pass=licm \
+// RUN:       --pass=loop-fusion \
+// RUN:       --pass=low-materialize-allocation \
+// RUN:       --pass=normalize-kernel-resources \
+// RUN:       --pass=refine-boundaries \
+// RUN:       --pass=scf-to-cfg \
+// RUN:       --pass=strip-hints \
+// RUN:       --pass=symbol-dce \
+// RUN:       --pass=vector-memory-footprint \
+// RUN:       --pass=vector-to-scalar \
+// RUN:   | FileCheck --check-prefix=ALL-PASSES %s
+// ALL-PASSES: func.def public @all_passes(%x: i32) -> (i32) {
+// ALL-PASSES: func.return %x : i32
 
 // RUN: printf '%%s\n' \
 // RUN:   'func.def @dce_single(%x: i32) -> (i32) {' \
