@@ -45,7 +45,7 @@ TEST(X86PackedDotDescriptorsTest, DescriptorSetVerifies) {
             descriptor_set->descriptor_count);
   EXPECT_EQ(descriptor_set->reg_class_count, 3u);
   EXPECT_EQ(descriptor_set->resource_count, 1u);
-  EXPECT_EQ(descriptor_set->schedule_class_count, 1u);
+  EXPECT_EQ(descriptor_set->schedule_class_count, 3u);
 }
 
 TEST(X86PackedDotDescriptorsTest, LowDescriptorsMirrorContractKeys) {
@@ -89,6 +89,12 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
       descriptor_set
           ->feature_mask_words[avx512_descriptor->feature_mask_word_start],
       LOOM_X86_FEATURE_AVX512_VNNI);
+  const loom_low_schedule_class_t* avx512_schedule =
+      &descriptor_set->schedule_classes[avx512_descriptor->schedule_class_id];
+  ASSERT_EQ(avx512_schedule->issue_use_count, 1u);
+  const loom_low_issue_use_t* avx512_issue_use =
+      &descriptor_set->issue_uses[avx512_schedule->issue_use_start];
+  EXPECT_EQ(avx512_issue_use->units, 4u);
 
   const loom_low_descriptor_t* saturating_descriptor = LookupDescriptor(
       descriptor_set, IREE_SV("x86.avx512-vnni.vpdpbusds.512"));
@@ -103,6 +109,12 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
   EXPECT_EQ(descriptor_set
                 ->feature_mask_words[int8_descriptor->feature_mask_word_start],
             LOOM_X86_FEATURE_AVX_VNNI_INT8);
+  const loom_low_schedule_class_t* int8_schedule =
+      &descriptor_set->schedule_classes[int8_descriptor->schedule_class_id];
+  ASSERT_EQ(int8_schedule->issue_use_count, 1u);
+  const loom_low_issue_use_t* int8_issue_use =
+      &descriptor_set->issue_uses[int8_schedule->issue_use_start];
+  EXPECT_EQ(int8_issue_use->units, 2u);
 
   const loom_low_descriptor_t* avx10_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx10.2.vdpphps.512"));
@@ -147,7 +159,11 @@ TEST(X86PackedDotDescriptorsTest, ManifestNamesPackedDotMetadata) {
   EXPECT_NE(json.find("\"key\":\"x86.avx512-bf16.vdpbf16ps.512\""),
             std::string::npos);
   EXPECT_NE(json.find("\"reg_class_name\":\"x86.zmm\""), std::string::npos);
-  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot\""),
+  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot.128\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot.256\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot.512\""),
             std::string::npos);
   EXPECT_NE(json.find("\"feature_mask_words\":[64]"), std::string::npos);
   EXPECT_NE(json.find("\"kind_name\":\"destructive\""), std::string::npos);

@@ -27,7 +27,8 @@ static const uint8_t kX86Avx512CoreStringData[] =
     LOOM_BSTRING_LITERAL("\x09", "x86.store")
     LOOM_BSTRING_LITERAL("\x0b", "x86.address")
     LOOM_BSTRING_LITERAL("\x0b", "x86.control")
-    LOOM_BSTRING_LITERAL("\x0e", "x86.vector.i32")
+    LOOM_BSTRING_LITERAL("\x12", "x86.vector.i32.512")
+    LOOM_BSTRING_LITERAL("\x12", "x86.vector.dot.512")
     LOOM_BSTRING_LITERAL("\x0f", "x86.memory.load")
     LOOM_BSTRING_LITERAL("\x10", "x86.memory.store")
     LOOM_BSTRING_LITERAL("\x15", "x86.avx512.vpaddd.zmm")
@@ -93,10 +94,14 @@ enum {
       X86_AVX512_CORE_STRING_resource_x86_store + sizeof("x86.store"),
   X86_AVX512_CORE_STRING_resource_x86_control =
       X86_AVX512_CORE_STRING_resource_x86_address + sizeof("x86.address"),
-  X86_AVX512_CORE_STRING_schedule_x86_vector_i32 =
+  X86_AVX512_CORE_STRING_schedule_x86_vector_i32_512 =
       X86_AVX512_CORE_STRING_resource_x86_control + sizeof("x86.control"),
+  X86_AVX512_CORE_STRING_schedule_x86_vector_dot_512 =
+      X86_AVX512_CORE_STRING_schedule_x86_vector_i32_512 +
+      sizeof("x86.vector.i32.512"),
   X86_AVX512_CORE_STRING_schedule_x86_memory_load =
-      X86_AVX512_CORE_STRING_schedule_x86_vector_i32 + sizeof("x86.vector.i32"),
+      X86_AVX512_CORE_STRING_schedule_x86_vector_dot_512 +
+      sizeof("x86.vector.dot.512"),
   X86_AVX512_CORE_STRING_schedule_x86_memory_store =
       X86_AVX512_CORE_STRING_schedule_x86_memory_load +
       sizeof("x86.memory.load"),
@@ -560,17 +565,17 @@ static const loom_low_resource_t kX86Avx512CoreResources[] = {
     },
     {
         .name_string_offset = X86_AVX512_CORE_STRING_resource_x86_vector,
-        .capacity_per_cycle = 1,
+        .capacity_per_cycle = 4,
         .flags = 0,
         .kind = LOOM_LOW_RESOURCE_KIND_VECTOR_ALU,
-        .contention_group_id = 0,
+        .contention_group_id = 1,
     },
     {
         .name_string_offset = X86_AVX512_CORE_STRING_resource_x86_vector_dot,
-        .capacity_per_cycle = 1,
+        .capacity_per_cycle = 4,
         .flags = 0,
         .kind = LOOM_LOW_RESOURCE_KIND_VECTOR_ALU,
-        .contention_group_id = 0,
+        .contention_group_id = 1,
     },
     {
         .name_string_offset = X86_AVX512_CORE_STRING_resource_x86_mask,
@@ -581,24 +586,24 @@ static const loom_low_resource_t kX86Avx512CoreResources[] = {
     },
     {
         .name_string_offset = X86_AVX512_CORE_STRING_resource_x86_load,
-        .capacity_per_cycle = 1,
+        .capacity_per_cycle = 4,
         .flags = 0,
         .kind = LOOM_LOW_RESOURCE_KIND_LOAD,
-        .contention_group_id = 0,
+        .contention_group_id = 2,
     },
     {
         .name_string_offset = X86_AVX512_CORE_STRING_resource_x86_store,
-        .capacity_per_cycle = 1,
+        .capacity_per_cycle = 4,
         .flags = 0,
         .kind = LOOM_LOW_RESOURCE_KIND_STORE,
-        .contention_group_id = 0,
+        .contention_group_id = 3,
     },
     {
         .name_string_offset = X86_AVX512_CORE_STRING_resource_x86_address,
         .capacity_per_cycle = 1,
         .flags = 0,
         .kind = LOOM_LOW_RESOURCE_KIND_ADDRESS,
-        .contention_group_id = 0,
+        .contention_group_id = 4,
     },
     {
         .name_string_offset = X86_AVX512_CORE_STRING_resource_x86_control,
@@ -619,13 +624,13 @@ static const loom_low_issue_use_t kX86Avx512CoreIssueUses[] = {
     {
         .resource_id = 1,
         .cycles = 1,
-        .units = 1,
+        .units = 4,
         .stage = 0,
     },
     {
         .resource_id = 2,
         .cycles = 1,
-        .units = 1,
+        .units = 4,
         .stage = 0,
     },
     {
@@ -643,7 +648,7 @@ static const loom_low_issue_use_t kX86Avx512CoreIssueUses[] = {
     {
         .resource_id = 4,
         .cycles = 1,
-        .units = 1,
+        .units = 4,
         .stage = 0,
     },
     {
@@ -655,7 +660,7 @@ static const loom_low_issue_use_t kX86Avx512CoreIssueUses[] = {
     {
         .resource_id = 5,
         .cycles = 1,
-        .units = 1,
+        .units = 4,
         .stage = 0,
     },
     {
@@ -681,7 +686,8 @@ static const loom_low_schedule_class_t kX86Avx512CoreScheduleClasses[] = {
         .pressure_delta_count = 0,
     },
     {
-        .name_string_offset = X86_AVX512_CORE_STRING_schedule_x86_vector_i32,
+        .name_string_offset =
+            X86_AVX512_CORE_STRING_schedule_x86_vector_i32_512,
         .latency_cycles = 1,
         .latency_kind = LOOM_LOW_LATENCY_KIND_ESTIMATE,
         .issue_use_start = 1,
@@ -694,7 +700,8 @@ static const loom_low_schedule_class_t kX86Avx512CoreScheduleClasses[] = {
         .pressure_delta_count = 0,
     },
     {
-        .name_string_offset = X86_AVX512_CORE_STRING_resource_x86_vector_dot,
+        .name_string_offset =
+            X86_AVX512_CORE_STRING_schedule_x86_vector_dot_512,
         .latency_cycles = 4,
         .latency_kind = LOOM_LOW_LATENCY_KIND_ESTIMATE,
         .issue_use_start = 2,

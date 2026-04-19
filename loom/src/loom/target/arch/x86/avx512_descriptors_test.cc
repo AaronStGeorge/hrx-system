@@ -148,6 +148,11 @@ TEST(X86DescriptorsTest, Avx512MemoryPacketsModelAddressAndDataResources) {
             LOOM_LOW_RESOURCE_KIND_ADDRESS);
   EXPECT_EQ(descriptor_set->resources[load_issue_uses[1].resource_id].kind,
             LOOM_LOW_RESOURCE_KIND_LOAD);
+  EXPECT_EQ(load_issue_uses[0].units, 1u);
+  EXPECT_EQ(load_issue_uses[1].units, 4u);
+  EXPECT_EQ(descriptor_set->resources[load_issue_uses[1].resource_id]
+                .capacity_per_cycle,
+            4u);
 
   const loom_low_descriptor_t* store_descriptor = LookupDescriptor(
       descriptor_set, IREE_SV("x86.avx512.vmovdqu32.store.zmm"));
@@ -192,6 +197,16 @@ TEST(X86DescriptorsTest, Avx512DotPacketsExposeDestructiveAccumulator) {
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vdpbf16ps.zmm"));
   ASSERT_NE(bf16_dot_descriptor, nullptr);
   EXPECT_EQ(bf16_dot_descriptor->constraint_count, 2u);
+
+  const loom_low_schedule_class_t* dot_schedule =
+      &descriptor_set->schedule_classes[dot_descriptor->schedule_class_id];
+  ASSERT_EQ(dot_schedule->issue_use_count, 1u);
+  const loom_low_issue_use_t* dot_issue_use =
+      &descriptor_set->issue_uses[dot_schedule->issue_use_start];
+  EXPECT_EQ(dot_issue_use->units, 4u);
+  EXPECT_EQ(
+      descriptor_set->resources[dot_issue_use->resource_id].capacity_per_cycle,
+      4u);
 }
 
 TEST(X86DescriptorsTest, Avx512AsmFormsNameUnambiguousPackets) {
@@ -328,7 +343,7 @@ TEST(X86DescriptorsTest, ManifestNamesVectorMemoryAndDotPackets) {
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.kandq\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.jmp\""), std::string::npos);
-  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot\""),
+  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot.512\""),
             std::string::npos);
   EXPECT_NE(json.find("\"resource_name\":\"x86.vector.dot\""),
             std::string::npos);

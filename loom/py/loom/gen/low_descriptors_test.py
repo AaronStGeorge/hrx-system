@@ -243,6 +243,8 @@ def test_generate_x86_avx512_core_descriptor_set() -> None:
     assert manifest["table_counts"]["asm_forms"] >= 6
     assert manifest["table_counts"]["reg_classes"] == 3
     assert manifest["table_counts"]["resources"] >= 7
+    assert "x86.vector.i32.512" in generated.source
+    assert "x86.vector.dot.512" in generated.source
     assert any(descriptor["key"] == "x86.avx512.vpdpbusd.zmm" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "x86.avx512.kandq" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "x86.avx512.jmp" for descriptor in manifest["descriptors"])
@@ -269,7 +271,11 @@ def test_generate_x86_packed_dot_descriptor_set() -> None:
     assert manifest["table_counts"]["descriptors"] >= 53
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["reg_classes"] == 3
+    assert manifest["table_counts"]["schedule_classes"] >= 3
     assert manifest["table_counts"]["feature_mask_words"] >= 53
+    assert "x86.vector.dot.128" in generated.source
+    assert "x86.vector.dot.256" in generated.source
+    assert "x86.vector.dot.512" in generated.source
     assert any(descriptor["key"] == "x86.avx10.2.vdpphps.512" for descriptor in manifest["descriptors"])
 
 

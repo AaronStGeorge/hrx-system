@@ -141,6 +141,14 @@ TEST_F(X86LoomCheckTest, ScheduleJsonUsesX86ResourcesAndLiveness) {
             std::string::npos);
   EXPECT_NE(actual_output.find("\"resource_name\":\"x86.store\""),
             std::string::npos);
+  EXPECT_NE(actual_output.find("\"schedule_class\":\"x86.vector.i32.512\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"schedule_class\":\"x86.vector.dot.512\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"capacity_per_cycle\":4"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"contention_group\":1"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"peak_units_per_cycle\":4"),
+            std::string::npos);
   EXPECT_NE(actual_output.find("\"register_class\":\"x86.zmm\""),
             std::string::npos);
   loom_check_result_deinitialize(&result);

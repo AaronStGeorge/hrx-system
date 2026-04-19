@@ -20,6 +20,9 @@ static const uint8_t kX86PackedDotCoreStringData[] =
     LOOM_BSTRING_LITERAL("\x07", "x86.ymm")
     LOOM_BSTRING_LITERAL("\x07", "x86.zmm")
     LOOM_BSTRING_LITERAL("\x0e", "x86.vector.dot")
+    LOOM_BSTRING_LITERAL("\x12", "x86.vector.dot.128")
+    LOOM_BSTRING_LITERAL("\x12", "x86.vector.dot.256")
+    LOOM_BSTRING_LITERAL("\x12", "x86.vector.dot.512")
     LOOM_BSTRING_LITERAL("\x1c", "x86.avx512-vnni.vpdpbusd.128")
     LOOM_BSTRING_LITERAL("\x08", "vpdpbusd")
     LOOM_BSTRING_LITERAL("\x0e", "dot.u8s8.i32x4")
@@ -155,9 +158,18 @@ enum {
       X86_PACKED_DOT_CORE_STRING_reg_x86_ymm + sizeof("x86.ymm"),
   X86_PACKED_DOT_CORE_STRING_resource_x86_vector_dot =
       X86_PACKED_DOT_CORE_STRING_reg_x86_zmm + sizeof("x86.zmm"),
-  X86_PACKED_DOT_CORE_STRING_descriptor_x86_avx512_vnni_vpdpbusd_128 =
+  X86_PACKED_DOT_CORE_STRING_schedule_x86_vector_dot_128 =
       X86_PACKED_DOT_CORE_STRING_resource_x86_vector_dot +
       sizeof("x86.vector.dot"),
+  X86_PACKED_DOT_CORE_STRING_schedule_x86_vector_dot_256 =
+      X86_PACKED_DOT_CORE_STRING_schedule_x86_vector_dot_128 +
+      sizeof("x86.vector.dot.128"),
+  X86_PACKED_DOT_CORE_STRING_schedule_x86_vector_dot_512 =
+      X86_PACKED_DOT_CORE_STRING_schedule_x86_vector_dot_256 +
+      sizeof("x86.vector.dot.256"),
+  X86_PACKED_DOT_CORE_STRING_descriptor_x86_avx512_vnni_vpdpbusd_128 =
+      X86_PACKED_DOT_CORE_STRING_schedule_x86_vector_dot_512 +
+      sizeof("x86.vector.dot.512"),
   X86_PACKED_DOT_CORE_STRING_mnemonic_x86_avx512_vnni_vpdpbusd_128 =
       X86_PACKED_DOT_CORE_STRING_descriptor_x86_avx512_vnni_vpdpbusd_128 +
       sizeof("x86.avx512-vnni.vpdpbusd.128"),
@@ -3537,10 +3549,10 @@ static const loom_low_resource_t kX86PackedDotCoreResources[] = {
     {
         .name_string_offset =
             X86_PACKED_DOT_CORE_STRING_resource_x86_vector_dot,
-        .capacity_per_cycle = 1,
+        .capacity_per_cycle = 4,
         .flags = 0,
         .kind = LOOM_LOW_RESOURCE_KIND_VECTOR_ALU,
-        .contention_group_id = 0,
+        .contention_group_id = 1,
     },
 };
 
@@ -3551,15 +3563,55 @@ static const loom_low_issue_use_t kX86PackedDotCoreIssueUses[] = {
         .units = 1,
         .stage = 0,
     },
+    {
+        .resource_id = 0,
+        .cycles = 1,
+        .units = 2,
+        .stage = 0,
+    },
+    {
+        .resource_id = 0,
+        .cycles = 1,
+        .units = 4,
+        .stage = 0,
+    },
 };
 
 static const loom_low_schedule_class_t kX86PackedDotCoreScheduleClasses[] = {
     {
         .name_string_offset =
-            X86_PACKED_DOT_CORE_STRING_resource_x86_vector_dot,
+            X86_PACKED_DOT_CORE_STRING_schedule_x86_vector_dot_128,
         .latency_cycles = 4,
         .latency_kind = LOOM_LOW_LATENCY_KIND_ESTIMATE,
         .issue_use_start = 0,
+        .issue_use_count = 1,
+        .hazard_start = 0,
+        .hazard_count = 0,
+        .flags = 0,
+        .model_quality = LOOM_LOW_MODEL_QUALITY_ESTIMATED,
+        .pressure_delta_start = 0,
+        .pressure_delta_count = 0,
+    },
+    {
+        .name_string_offset =
+            X86_PACKED_DOT_CORE_STRING_schedule_x86_vector_dot_256,
+        .latency_cycles = 4,
+        .latency_kind = LOOM_LOW_LATENCY_KIND_ESTIMATE,
+        .issue_use_start = 1,
+        .issue_use_count = 1,
+        .hazard_start = 0,
+        .hazard_count = 0,
+        .flags = 0,
+        .model_quality = LOOM_LOW_MODEL_QUALITY_ESTIMATED,
+        .pressure_delta_start = 0,
+        .pressure_delta_count = 0,
+    },
+    {
+        .name_string_offset =
+            X86_PACKED_DOT_CORE_STRING_schedule_x86_vector_dot_512,
+        .latency_cycles = 4,
+        .latency_kind = LOOM_LOW_LATENCY_KIND_ESTIMATE,
+        .issue_use_start = 2,
         .issue_use_count = 1,
         .hazard_start = 0,
         .hazard_count = 0,
@@ -3629,7 +3681,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 2,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -3651,7 +3703,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 4,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -3695,7 +3747,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 8,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -3717,7 +3769,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 10,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -3761,7 +3813,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 14,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -3783,7 +3835,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 16,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -3827,7 +3879,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 20,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -3849,7 +3901,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 22,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -3893,7 +3945,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 26,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -3937,7 +3989,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 30,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -3981,7 +4033,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 34,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4025,7 +4077,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 38,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4069,7 +4121,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 42,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4113,7 +4165,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 46,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4157,7 +4209,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 50,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4201,7 +4253,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 54,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4245,7 +4297,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 58,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4289,7 +4341,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 62,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4333,7 +4385,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 66,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4377,7 +4429,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 70,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4421,7 +4473,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 74,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4443,7 +4495,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 76,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4465,7 +4517,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 78,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4487,7 +4539,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 80,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4509,7 +4561,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 82,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4531,7 +4583,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 84,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4553,7 +4605,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 86,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4575,7 +4627,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 88,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4597,7 +4649,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 90,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4619,7 +4671,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 92,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4663,7 +4715,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 96,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4685,7 +4737,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 98,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4729,7 +4781,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 102,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 1,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
@@ -4751,7 +4803,7 @@ static const loom_low_descriptor_t kX86PackedDotCoreDescriptors[] = {
         .effect_count = 0,
         .constraint_start = 104,
         .constraint_count = 2,
-        .schedule_class_id = 0,
+        .schedule_class_id = 2,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
 };
