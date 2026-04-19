@@ -123,6 +123,48 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
 )
 
+iree_assert_no_dependency(
+    name = "descriptor_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
+)
+
+iree_assert_no_dependency(
+    name = "descriptor_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
+)
+
+iree_assert_no_dependency(
+    name = "descriptor_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
+)
+
+iree_assert_no_dependency(
+    name = "descriptor_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
+)
+
+iree_assert_no_dependency(
+    name = "descriptor_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
+)
+
+iree_assert_no_dependency(
+    name = "descriptor_no_hal_amdgpu_dep",
+    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
+    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
+)
+
+iree_assert_no_dependency(
+    name = "descriptor_no_target_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
+)
+
 #===------------------------------------------------------------------------===#
 # AMDGPU native assembly fragments
 #===------------------------------------------------------------------------===#
@@ -149,6 +191,16 @@ loom_cc_library(
     hdrs = ["metadata.h"],
     deps = [
         "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "descriptor",
+    srcs = ["descriptor.c"],
+    hdrs = ["descriptor.h"],
+    deps = [
+        ":metadata",
         "//runtime/src/iree/base",
     ],
 )
@@ -204,6 +256,18 @@ loom_cc_test(
         "//loom/src/loom/target/emit/native:elf",
         "//runtime/src/iree/base",
         "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "descriptor_test",
+    srcs = ["descriptor_test.cc"],
+    deps = [
+        ":descriptor",
+        ":metadata",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

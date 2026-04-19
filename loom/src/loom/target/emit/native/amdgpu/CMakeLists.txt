@@ -44,6 +44,19 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    descriptor
+  HDRS
+    "descriptor.h"
+  SRCS
+    "descriptor.c"
+  DEPS
+    ::metadata
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     kernel_assembly
   HDRS
     "kernel_assembly.h"
@@ -99,6 +112,19 @@ loom_cc_test(
     iree::base
     iree::io::stream
     loom::src::loom::target::emit::native::elf
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    descriptor_test
+  SRCS
+    "descriptor_test.cc"
+  DEPS
+    ::descriptor
+    ::metadata
+    iree::base
     iree::testing::gtest
     iree::testing::gtest_main
 )
