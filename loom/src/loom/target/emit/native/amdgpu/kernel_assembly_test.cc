@@ -19,10 +19,27 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/presets.h"
+#include "loom/target/tool/llvm.h"
 #include "loom/testing/context.h"
 
 namespace loom {
 namespace {
+
+std::string ToString(const loom_llvm_tool_output_t& output) {
+  return output.data ? std::string(output.data, output.length) : std::string();
+}
+
+bool IsToolUnavailable(iree_status_t status) {
+  return iree_status_is_not_found(status) ||
+         iree_status_is_unavailable(status) ||
+         iree_status_is_unimplemented(status);
+}
+
+bool VersionTextListsAmdgcnTarget(const std::string& version_text) {
+  return version_text.find("amdgcn") != std::string::npos ||
+         version_text.find("AMDGPU") != std::string::npos ||
+         version_text.find("AMD GCN") != std::string::npos;
+}
 
 class AmdgpuKernelAssemblyTest : public ::testing::Test {
  protected:
@@ -199,6 +216,41 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsKernelEnvelopeForGfx11) {
   EXPECT_NE(output.find("  .amdhsa_next_free_sgpr "), std::string::npos);
   EXPECT_EQ(output.find("  .amdhsa_next_free_sgpr 0\n"), std::string::npos);
   EXPECT_NE(output.find(".end_amdhsa_kernel\n"), std::string::npos);
+}
+
+TEST_F(AmdgpuKernelAssemblyTest, AssemblesKernelEnvelopeForGfx11WithLlvmMc) {
+  std::string assembly;
+  EmitKernelForPreset("amdgpu-gfx11", "gfx1100", &assembly);
+
+  loom_llvm_toolchain_t toolchain;
+  loom_llvm_toolchain_initialize_from_environment(&toolchain);
+
+  loom_llvm_tool_output_t version_text = {};
+  iree_status_t status =
+      loom_llvm_tool_query_version(&toolchain, LOOM_LLVM_TOOL_LLVM_MC,
+                                   iree_allocator_system(), &version_text);
+  if (IsToolUnavailable(status)) {
+    iree_status_ignore(status);
+    GTEST_SKIP() << "llvm-mc is unavailable in this test environment";
+  }
+  IREE_ASSERT_OK(status);
+
+  std::string version = ToString(version_text);
+  loom_llvm_tool_output_deinitialize(&version_text, iree_allocator_system());
+  if (!VersionTextListsAmdgcnTarget(version)) {
+    GTEST_SKIP() << "llvm-mc does not report amdgcn target support";
+  }
+
+  const iree_string_view_t arguments[] = {
+      IREE_SV("--triple=amdgcn-amd-amdhsa"),
+      IREE_SV("--mcpu=gfx1100"),
+  };
+  loom_llvm_tool_output_t object = {};
+  IREE_ASSERT_OK(loom_llvm_tool_assemble_native_object(
+      &toolchain, iree_make_string_view(assembly.data(), assembly.size()),
+      arguments, IREE_ARRAYSIZE(arguments), iree_allocator_system(), &object));
+  EXPECT_GT(object.length, 0u);
+  loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
 }
 
 TEST_F(AmdgpuKernelAssemblyTest, EmitsTargetIdsForCurrentAmdgpuPresets) {

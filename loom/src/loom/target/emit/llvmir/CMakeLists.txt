@@ -23,7 +23,6 @@ loom_cc_library(
     "llvmir.h"
     "module.h"
     "text_writer.h"
-    "tool.h"
     "verify.h"
   SRCS
     "bitcode_record_writer.c"
@@ -33,14 +32,11 @@ loom_cc_library(
     "intrinsics_builtin.c"
     "module.c"
     "text_writer.c"
-    "tool.c"
     "types.h"
     "verify.c"
   DEPS
     iree::base
     iree::base::internal::arena
-    iree::base::internal::path
-    iree::io::file_handle
     iree::io::stream
     loom::src::loom::util::stream
   PUBLIC
@@ -341,6 +337,7 @@ loom_cc_test(
     ::test_modules
     iree::io::file_handle
     iree::io::stream
+    loom::src::loom::target::tool::llvm
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main

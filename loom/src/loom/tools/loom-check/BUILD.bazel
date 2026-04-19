@@ -91,6 +91,7 @@ loom_cc_library(
         "//loom/src/loom/target/emit/llvmir:lower",
         "//loom/src/loom/target/emit/llvmir:target_env",
         "//loom/src/loom/target/emit/llvmir:target_registry",
+        "//loom/src/loom/target/tool:llvm",
         "//loom/src/loom/testing:diff",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",

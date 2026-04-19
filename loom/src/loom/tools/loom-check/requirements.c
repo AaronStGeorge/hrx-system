@@ -7,7 +7,7 @@
 #include "loom/tools/loom-check/requirements.h"
 
 #include "loom/target/emit/llvmir/target_registry.h"
-#include "loom/target/emit/llvmir/tool.h"
+#include "loom/target/tool/llvm.h"
 
 static bool loom_check_case_has_requirement(const loom_check_case_t* test_case,
                                             iree_string_view_t requirement) {
@@ -49,20 +49,21 @@ static bool loom_check_requirement_name_is_known(
          iree_string_view_equal(requirement, IREE_SV("llvm-dis")) ||
          iree_string_view_equal(requirement, IREE_SV("opt")) ||
          iree_string_view_equal(requirement, IREE_SV("llc")) ||
+         iree_string_view_equal(requirement, IREE_SV("llvm-mc")) ||
          loom_llvmir_target_registry_llc_requirement_provider(
              &target_registry, requirement, NULL) ||
          iree_string_view_equal(requirement,
                                 IREE_SV("loom-check-test-unavailable"));
 }
 
-static iree_status_t loom_check_query_llvm_tool(
-    loom_llvmir_tool_kind_t tool_kind, iree_allocator_t allocator) {
-  loom_llvmir_toolchain_t toolchain;
-  loom_llvmir_toolchain_initialize_from_environment(&toolchain);
-  loom_llvmir_tool_output_t version_text = {0};
-  iree_status_t status = loom_llvmir_tool_query_version(
-      &toolchain, tool_kind, allocator, &version_text);
-  loom_llvmir_tool_output_deinitialize(&version_text, allocator);
+static iree_status_t loom_check_query_llvm_tool(loom_llvm_tool_kind_t tool_kind,
+                                                iree_allocator_t allocator) {
+  loom_llvm_toolchain_t toolchain;
+  loom_llvm_toolchain_initialize_from_environment(&toolchain);
+  loom_llvm_tool_output_t version_text = {0};
+  iree_status_t status = loom_llvm_tool_query_version(&toolchain, tool_kind,
+                                                      allocator, &version_text);
+  loom_llvm_tool_output_deinitialize(&version_text, allocator);
   return status;
 }
 
@@ -70,11 +71,11 @@ static iree_status_t loom_check_query_llc_provider(
     iree_string_view_t requirement,
     const loom_llvmir_target_profile_provider_t* provider,
     iree_allocator_t allocator) {
-  loom_llvmir_toolchain_t toolchain;
-  loom_llvmir_toolchain_initialize_from_environment(&toolchain);
-  loom_llvmir_tool_output_t version_text = {0};
-  iree_status_t status = loom_llvmir_tool_query_version(
-      &toolchain, LOOM_LLVMIR_TOOL_LLC, allocator, &version_text);
+  loom_llvm_toolchain_t toolchain;
+  loom_llvm_toolchain_initialize_from_environment(&toolchain);
+  loom_llvm_tool_output_t version_text = {0};
+  iree_status_t status = loom_llvm_tool_query_version(
+      &toolchain, LOOM_LLVM_TOOL_LLC, allocator, &version_text);
 
   if (iree_status_is_ok(status)) {
     iree_string_view_t version =
@@ -89,23 +90,26 @@ static iree_status_t loom_check_query_llc_provider(
     }
   }
 
-  loom_llvmir_tool_output_deinitialize(&version_text, allocator);
+  loom_llvm_tool_output_deinitialize(&version_text, allocator);
   return status;
 }
 
 static iree_status_t loom_check_query_requirement(
     iree_string_view_t requirement, iree_allocator_t allocator) {
   if (iree_string_view_equal(requirement, IREE_SV("llvm-as"))) {
-    return loom_check_query_llvm_tool(LOOM_LLVMIR_TOOL_LLVM_AS, allocator);
+    return loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLVM_AS, allocator);
   }
   if (iree_string_view_equal(requirement, IREE_SV("llvm-dis"))) {
-    return loom_check_query_llvm_tool(LOOM_LLVMIR_TOOL_LLVM_DIS, allocator);
+    return loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLVM_DIS, allocator);
   }
   if (iree_string_view_equal(requirement, IREE_SV("opt"))) {
-    return loom_check_query_llvm_tool(LOOM_LLVMIR_TOOL_OPT, allocator);
+    return loom_check_query_llvm_tool(LOOM_LLVM_TOOL_OPT, allocator);
   }
   if (iree_string_view_equal(requirement, IREE_SV("llc"))) {
-    return loom_check_query_llvm_tool(LOOM_LLVMIR_TOOL_LLC, allocator);
+    return loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLC, allocator);
+  }
+  if (iree_string_view_equal(requirement, IREE_SV("llvm-mc"))) {
+    return loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLVM_MC, allocator);
   }
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
@@ -125,7 +129,7 @@ static iree_status_t loom_check_query_requirement(
 static iree_status_t loom_check_append_supported_requirement_names(
     loom_check_result_t* result) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
-      &result->detail, "llvm-as, llvm-dis, opt, llc"));
+      &result->detail, "llvm-as, llvm-dis, opt, llc, llvm-mc"));
 
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);

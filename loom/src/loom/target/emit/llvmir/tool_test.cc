@@ -4,13 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/llvmir/tool.h"
-
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <string>
 #include <utility>
+
+#include "loom/target/tool/llvm.h"
 
 #if defined(IREE_PLATFORM_WINDOWS)
 #if !defined(WIN32_LEAN_AND_MEAN)
@@ -47,7 +47,7 @@ std::string ToString(iree_string_view_t value) {
   return std::string(value.data, value.size);
 }
 
-std::string ToString(const loom_llvmir_tool_output_t& output) {
+std::string ToString(const loom_llvm_tool_output_t& output) {
   return output.data ? std::string(output.data, output.length) : std::string();
 }
 
@@ -87,7 +87,7 @@ uint32_t ProcessId() {
 
 std::string TempPath(const char* suffix) {
   static uint32_t counter = 0;
-  return std::string(TempDirectory()) + "/loom_llvmir_tool_test_" +
+  return std::string(TempDirectory()) + "/loom_llvm_tool_test_" +
          std::to_string(ProcessId()) + "_" + std::to_string(counter++) + suffix;
 }
 
@@ -172,18 +172,18 @@ iree_status_t ReadTempFile(const std::string& path,
                                     out_contents);
 }
 
-loom_llvmir_toolchain_t ToolchainFromEnvironment() {
-  loom_llvmir_toolchain_t toolchain;
-  loom_llvmir_toolchain_initialize_from_environment(&toolchain);
+loom_llvm_toolchain_t ToolchainFromEnvironment() {
+  loom_llvm_toolchain_t toolchain;
+  loom_llvm_toolchain_initialize_from_environment(&toolchain);
   return toolchain;
 }
 
 TEST(LlvmIrToolTest, QueriesVersion) {
-  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
-  loom_llvmir_tool_output_t version_text = {};
+  loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvm_tool_output_t version_text = {};
   iree_status_t status =
-      loom_llvmir_tool_query_version(&toolchain, LOOM_LLVMIR_TOOL_LLVM_DIS,
-                                     iree_allocator_system(), &version_text);
+      loom_llvm_tool_query_version(&toolchain, LOOM_LLVM_TOOL_LLVM_DIS,
+                                   iree_allocator_system(), &version_text);
   if (IsToolUnavailable(status)) {
     iree_status_ignore(status);
     GTEST_SKIP() << "llvm-dis is unavailable in this test environment";
@@ -192,7 +192,7 @@ TEST(LlvmIrToolTest, QueriesVersion) {
 
   std::string version = ToString(version_text);
   EXPECT_NE(version.find("LLVM"), std::string::npos);
-  loom_llvmir_tool_output_deinitialize(&version_text, iree_allocator_system());
+  loom_llvm_tool_output_deinitialize(&version_text, iree_allocator_system());
 }
 
 TEST(LlvmIrToolTest, AssemblesTextAndVerifiesBitcode) {
@@ -202,8 +202,8 @@ TEST(LlvmIrToolTest, AssemblesTextAndVerifiesBitcode) {
   TempFile bitcode_file(TempPath(".bc"));
   IREE_ASSERT_OK(WriteTempFile(input_file.path(), text));
 
-  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
-  iree_status_t status = loom_llvmir_tool_assemble_text_file(
+  loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
+  iree_status_t status = loom_llvm_tool_assemble_ir_text_file(
       &toolchain, StringView(input_file.path()),
       StringView(bitcode_file.path()), iree_allocator_system());
   if (IsToolUnavailable(status)) {
@@ -212,7 +212,7 @@ TEST(LlvmIrToolTest, AssemblesTextAndVerifiesBitcode) {
   }
   IREE_ASSERT_OK(status);
 
-  status = loom_llvmir_tool_verify_bitcode_file(
+  status = loom_llvm_tool_verify_bitcode_file(
       &toolchain, StringView(bitcode_file.path()), iree_allocator_system());
   if (IsToolUnavailable(status)) {
     iree_status_ignore(status);
@@ -228,9 +228,9 @@ TEST(LlvmIrToolTest, DisassemblesBitcode) {
   TempFile bitcode_file(TempPath(".bc"));
   IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
 
-  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
-  loom_llvmir_tool_output_t text = {};
-  iree_status_t status = loom_llvmir_tool_disassemble_bitcode_file(
+  loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvm_tool_output_t text = {};
+  iree_status_t status = loom_llvm_tool_disassemble_bitcode_file(
       &toolchain, StringView(bitcode_file.path()), iree_allocator_system(),
       &text);
   if (IsToolUnavailable(status)) {
@@ -242,7 +242,7 @@ TEST(LlvmIrToolTest, DisassemblesBitcode) {
   std::string disassembly = ToString(text);
   EXPECT_NE(disassembly.find("define dso_local void @vadd4_object"),
             std::string::npos);
-  loom_llvmir_tool_output_deinitialize(&text, iree_allocator_system());
+  loom_llvm_tool_output_deinitialize(&text, iree_allocator_system());
 }
 
 TEST(LlvmIrToolTest, DisassemblesBitcodeBytes) {
@@ -250,9 +250,9 @@ TEST(LlvmIrToolTest, DisassemblesBitcodeBytes) {
   IREE_ASSERT_OK(
       BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &bitcode));
 
-  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
-  loom_llvmir_tool_output_t text = {};
-  iree_status_t status = loom_llvmir_tool_disassemble_bitcode(
+  loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvm_tool_output_t text = {};
+  iree_status_t status = loom_llvm_tool_disassemble_bitcode(
       &toolchain, iree_make_const_byte_span(bitcode.data(), bitcode.size()),
       iree_allocator_system(), &text);
   if (IsToolUnavailable(status)) {
@@ -264,7 +264,7 @@ TEST(LlvmIrToolTest, DisassemblesBitcodeBytes) {
   std::string disassembly = ToString(text);
   EXPECT_NE(disassembly.find("define dso_local void @vadd4_object"),
             std::string::npos);
-  loom_llvmir_tool_output_deinitialize(&text, iree_allocator_system());
+  loom_llvm_tool_output_deinitialize(&text, iree_allocator_system());
 }
 
 TEST(LlvmIrToolTest, DisassemblesAndVerifiesCastsBitcode) {
@@ -273,9 +273,9 @@ TEST(LlvmIrToolTest, DisassemblesAndVerifiesCastsBitcode) {
   TempFile bitcode_file(TempPath(".bc"));
   IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
 
-  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
-  loom_llvmir_tool_output_t text = {};
-  iree_status_t status = loom_llvmir_tool_disassemble_bitcode_file(
+  loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvm_tool_output_t text = {};
+  iree_status_t status = loom_llvm_tool_disassemble_bitcode_file(
       &toolchain, StringView(bitcode_file.path()), iree_allocator_system(),
       &text);
   if (IsToolUnavailable(status)) {
@@ -288,9 +288,9 @@ TEST(LlvmIrToolTest, DisassemblesAndVerifiesCastsBitcode) {
   EXPECT_NE(disassembly.find("ptrtoaddr ptr %pointer to i64"),
             std::string::npos)
       << disassembly;
-  loom_llvmir_tool_output_deinitialize(&text, iree_allocator_system());
+  loom_llvm_tool_output_deinitialize(&text, iree_allocator_system());
 
-  status = loom_llvmir_tool_verify_bitcode_file(
+  status = loom_llvm_tool_verify_bitcode_file(
       &toolchain, StringView(bitcode_file.path()), iree_allocator_system());
   if (IsToolUnavailable(status)) {
     iree_status_ignore(status);
@@ -307,8 +307,8 @@ TEST(LlvmIrToolTest, CompilesX86Object) {
   TempFile object_file(TempPath(".o"));
   IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
 
-  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
-  iree_status_t status = loom_llvmir_tool_compile_object_file(
+  loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
+  iree_status_t status = loom_llvm_tool_compile_object_file(
       &toolchain, StringView(bitcode_file.path()),
       StringView(object_file.path()), NULL, 0, iree_allocator_system());
   if (IsToolUnavailable(status)) {
@@ -328,9 +328,9 @@ TEST(LlvmIrToolTest, CompilesX86ObjectBytes) {
   IREE_ASSERT_OK(
       BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &bitcode));
 
-  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
-  loom_llvmir_tool_output_t object = {};
-  iree_status_t status = loom_llvmir_tool_compile_object(
+  loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvm_tool_output_t object = {};
+  iree_status_t status = loom_llvm_tool_compile_object(
       &toolchain, iree_make_const_byte_span(bitcode.data(), bitcode.size()),
       NULL, 0, iree_allocator_system(), &object);
   if (IsToolUnavailable(status)) {
@@ -340,7 +340,7 @@ TEST(LlvmIrToolTest, CompilesX86ObjectBytes) {
   IREE_ASSERT_OK(status);
 
   EXPECT_GT(object.length, 0u);
-  loom_llvmir_tool_output_deinitialize(&object, iree_allocator_system());
+  loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
 }
 
 TEST(LlvmIrToolTest, CompilesX86Assembly) {
@@ -351,8 +351,8 @@ TEST(LlvmIrToolTest, CompilesX86Assembly) {
   TempFile assembly_file(TempPath(".s"));
   IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
 
-  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
-  iree_status_t status = loom_llvmir_tool_compile_assembly_file(
+  loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
+  iree_status_t status = loom_llvm_tool_compile_assembly_file(
       &toolchain, StringView(bitcode_file.path()),
       StringView(assembly_file.path()), NULL, 0, iree_allocator_system());
   if (IsToolUnavailable(status)) {
@@ -374,9 +374,9 @@ TEST(LlvmIrToolTest, CompilesX86AssemblyBytes) {
   IREE_ASSERT_OK(
       BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &bitcode));
 
-  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
-  loom_llvmir_tool_output_t assembly = {};
-  iree_status_t status = loom_llvmir_tool_compile_assembly(
+  loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvm_tool_output_t assembly = {};
+  iree_status_t status = loom_llvm_tool_compile_assembly(
       &toolchain, iree_make_const_byte_span(bitcode.data(), bitcode.size()),
       NULL, 0, iree_allocator_system(), &assembly);
   if (IsToolUnavailable(status)) {
@@ -388,21 +388,21 @@ TEST(LlvmIrToolTest, CompilesX86AssemblyBytes) {
   std::string assembly_text = ToString(assembly);
   EXPECT_NE(assembly_text.find("vadd4_object"), std::string::npos)
       << assembly_text;
-  loom_llvmir_tool_output_deinitialize(&assembly, iree_allocator_system());
+  loom_llvm_tool_output_deinitialize(&assembly, iree_allocator_system());
 }
 
 TEST(LlvmIrToolTest, CompilesAmdgpuObjectWhenTargetIsRegistered) {
-  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
-  loom_llvmir_tool_output_t version_text = {};
-  iree_status_t status = loom_llvmir_tool_query_version(
-      &toolchain, LOOM_LLVMIR_TOOL_LLC, iree_allocator_system(), &version_text);
+  loom_llvm_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvm_tool_output_t version_text = {};
+  iree_status_t status = loom_llvm_tool_query_version(
+      &toolchain, LOOM_LLVM_TOOL_LLC, iree_allocator_system(), &version_text);
   if (IsToolUnavailable(status)) {
     iree_status_ignore(status);
     GTEST_SKIP() << "llc is unavailable in this test environment";
   }
   IREE_ASSERT_OK(status);
   std::string version = ToString(version_text);
-  loom_llvmir_tool_output_deinitialize(&version_text, iree_allocator_system());
+  loom_llvm_tool_output_deinitialize(&version_text, iree_allocator_system());
   if (version.find("amdgcn") == std::string::npos &&
       version.find("AMDGPU") == std::string::npos) {
     GTEST_SKIP() << "installed llc does not advertise an AMDGPU target";
@@ -419,7 +419,7 @@ TEST(LlvmIrToolTest, CompilesAmdgpuObjectWhenTargetIsRegistered) {
       IREE_SV("-mtriple=amdgcn-amd-amdhsa"),
       IREE_SV("-mcpu=gfx1100"),
   };
-  status = loom_llvmir_tool_compile_object_file(
+  status = loom_llvm_tool_compile_object_file(
       &toolchain, StringView(bitcode_file.path()),
       StringView(object_file.path()), extra_arguments,
       IREE_ARRAYSIZE(extra_arguments), iree_allocator_system());

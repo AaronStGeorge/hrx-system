@@ -17,7 +17,6 @@
 #include "loom/target/emit/llvmir/intrinsics_builtin.h"
 #include "loom/target/emit/llvmir/module.h"
 #include "loom/target/emit/llvmir/text_writer.h"
-#include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"
 
 #endif  // LOOM_TARGET_LLVMIR_LLVMIR_H_

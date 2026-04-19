@@ -12,10 +12,7 @@
 iree_status_t loom_llvmir_target_env_module_config(
     const loom_llvmir_target_env_t* target_env, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config) {
-  if (out_config == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM target config output is required");
-  }
+  IREE_ASSERT_ARGUMENT(out_config);
   *out_config = (loom_llvmir_target_config_t){0};
   if (target_env == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -129,10 +126,7 @@ static iree_status_t loom_llvmir_validate_hal_kernel_export_plan(
 iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
     const loom_target_bundle_t* bundle,
     loom_llvmir_target_profile_storage_t* out_storage) {
-  if (out_storage == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM target profile storage output is required");
-  }
+  IREE_ASSERT_ARGUMENT(out_storage);
   *out_storage = (loom_llvmir_target_profile_storage_t){0};
   if (bundle == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -248,10 +242,7 @@ static iree_status_t loom_llvmir_target_profile_append_llc_argument(
 iree_status_t loom_llvmir_target_profile_llc_arguments(
     const loom_llvmir_target_profile_t* profile,
     loom_llvmir_target_profile_llc_arguments_t* out_arguments) {
-  if (out_arguments == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM llc argument output is required");
-  }
+  IREE_ASSERT_ARGUMENT(out_arguments);
   *out_arguments = (loom_llvmir_target_profile_llc_arguments_t){0};
   if (profile == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -273,10 +264,7 @@ iree_status_t loom_llvmir_target_profile_llc_arguments(
 iree_status_t loom_llvmir_target_profile_kernel_binding_attrs(
     const loom_llvmir_target_profile_t* profile, loom_llvmir_attr_t* attrs,
     iree_host_size_t attr_capacity, iree_host_size_t* out_attr_count) {
-  if (out_attr_count == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM binding attr count output is required");
-  }
+  IREE_ASSERT_ARGUMENT(out_attr_count);
   *out_attr_count = 0;
   if (profile == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

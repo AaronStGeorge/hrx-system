@@ -24,10 +24,10 @@
 #include "loom/target/emit/llvmir/lower.h"
 #include "loom/target/emit/llvmir/target_registry.h"
 #include "loom/target/emit/llvmir/text_writer.h"
-#include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/target/ir_records.h"
 #include "loom/target/presets.h"
+#include "loom/target/tool/llvm.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/util/stream.h"
@@ -796,11 +796,11 @@ static iree_status_t loom_check_emit_write_llvmir_bitcode_disassembly(
   iree_status_t status = loom_check_emit_write_llvmir_bitcode_bytes(
       lowered_module, allocator, &bitcode);
 
-  loom_llvmir_tool_output_t disassembly = {0};
+  loom_llvm_tool_output_t disassembly = {0};
   if (iree_status_is_ok(status)) {
-    loom_llvmir_toolchain_t toolchain;
-    loom_llvmir_toolchain_initialize_from_environment(&toolchain);
-    status = loom_llvmir_tool_disassemble_bitcode(
+    loom_llvm_toolchain_t toolchain;
+    loom_llvm_toolchain_initialize_from_environment(&toolchain);
+    status = loom_llvm_tool_disassemble_bitcode(
         &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
         allocator, &disassembly);
   }
@@ -810,7 +810,7 @@ static iree_status_t loom_check_emit_write_llvmir_bitcode_disassembly(
         &result->actual_output);
   }
 
-  loom_llvmir_tool_output_deinitialize(&disassembly, allocator);
+  loom_llvm_tool_output_deinitialize(&disassembly, allocator);
   loom_check_emit_byte_buffer_deinitialize(&bitcode, allocator);
   return status;
 }
@@ -823,14 +823,14 @@ static iree_status_t loom_check_emit_write_llvmir_object(
   iree_status_t status = loom_check_emit_write_llvmir_bitcode_bytes(
       lowered_module, allocator, &bitcode);
 
-  loom_llvmir_tool_output_t object = {0};
+  loom_llvm_tool_output_t object = {0};
   if (iree_status_is_ok(status)) {
-    loom_llvmir_toolchain_t toolchain;
-    loom_llvmir_toolchain_initialize_from_environment(&toolchain);
+    loom_llvm_toolchain_t toolchain;
+    loom_llvm_toolchain_initialize_from_environment(&toolchain);
     loom_llvmir_target_profile_llc_arguments_t llc_arguments = {0};
     status = loom_llvmir_target_profile_llc_arguments(profile, &llc_arguments);
     if (iree_status_is_ok(status)) {
-      status = loom_llvmir_tool_compile_object(
+      status = loom_llvm_tool_compile_object(
           &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
           llc_arguments.values, llc_arguments.count, allocator, &object);
     }
@@ -845,7 +845,7 @@ static iree_status_t loom_check_emit_write_llvmir_object(
         (int)profile->name.size, profile->name.data);
   }
 
-  loom_llvmir_tool_output_deinitialize(&object, allocator);
+  loom_llvm_tool_output_deinitialize(&object, allocator);
   loom_check_emit_byte_buffer_deinitialize(&bitcode, allocator);
   return status;
 }
@@ -920,14 +920,14 @@ static iree_status_t loom_check_emit_write_llvmir_assembly_mnemonics(
   iree_status_t status = loom_check_emit_write_llvmir_bitcode_bytes(
       lowered_module, allocator, &bitcode);
 
-  loom_llvmir_tool_output_t assembly = {0};
+  loom_llvm_tool_output_t assembly = {0};
   if (iree_status_is_ok(status)) {
-    loom_llvmir_toolchain_t toolchain;
-    loom_llvmir_toolchain_initialize_from_environment(&toolchain);
+    loom_llvm_toolchain_t toolchain;
+    loom_llvm_toolchain_initialize_from_environment(&toolchain);
     loom_llvmir_target_profile_llc_arguments_t llc_arguments = {0};
     status = loom_llvmir_target_profile_llc_arguments(profile, &llc_arguments);
     if (iree_status_is_ok(status)) {
-      status = loom_llvmir_tool_compile_assembly(
+      status = loom_llvm_tool_compile_assembly(
           &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
           llc_arguments.values, llc_arguments.count, allocator, &assembly);
     }
@@ -938,7 +938,7 @@ static iree_status_t loom_check_emit_write_llvmir_assembly_mnemonics(
         &result->actual_output);
   }
 
-  loom_llvmir_tool_output_deinitialize(&assembly, allocator);
+  loom_llvm_tool_output_deinitialize(&assembly, allocator);
   loom_check_emit_byte_buffer_deinitialize(&bitcode, allocator);
   return status;
 }

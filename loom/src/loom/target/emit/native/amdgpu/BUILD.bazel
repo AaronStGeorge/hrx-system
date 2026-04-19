@@ -75,6 +75,12 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/emit/native/amdgpu:kernel_assembly",
 )
 
+iree_assert_no_dependency(
+    name = "kernel_assembly_no_target_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_assembly",
+)
+
 #===------------------------------------------------------------------------===#
 # AMDGPU native assembly fragments
 #===------------------------------------------------------------------------===#
@@ -149,6 +155,7 @@ loom_cc_test(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:presets",
         "//loom/src/loom/target/arch/amdgpu:low_registry",
+        "//loom/src/loom/target/tool:llvm",
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

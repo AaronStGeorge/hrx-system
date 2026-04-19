@@ -77,6 +77,7 @@ loom_cc_library(
     loom::src::loom::target::ir_records
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::presets
+    loom::src::loom::target::tool::llvm
     loom::src::loom::target::types
     loom::src::loom::testing::diff
     loom::src::loom::util::json

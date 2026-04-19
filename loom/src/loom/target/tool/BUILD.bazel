@@ -1,0 +1,67 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_assert_no_dependency",
+    "loom_cc_library",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+#===------------------------------------------------------------------------===#
+# Layering checks
+#===------------------------------------------------------------------------===#
+
+iree_assert_no_dependency(
+    name = "llvm_no_llvmir_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:core",
+    target = "//loom/src/loom/target/tool:llvm",
+)
+
+iree_assert_no_dependency(
+    name = "llvm_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/tool:llvm",
+)
+
+iree_assert_no_dependency(
+    name = "llvm_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/tool:llvm",
+)
+
+iree_assert_no_dependency(
+    name = "llvm_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/tool:llvm",
+)
+
+iree_assert_no_dependency(
+    name = "llvm_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/tool:llvm",
+)
+
+#===------------------------------------------------------------------------===#
+# External tool runners
+#===------------------------------------------------------------------------===#
+
+loom_cc_library(
+    name = "llvm",
+    srcs = ["llvm.c"],
+    hdrs = ["llvm.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:path",
+        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/io:stream",
+    ],
+)
