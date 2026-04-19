@@ -216,6 +216,17 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsKernelEnvelopeForGfx11) {
   EXPECT_NE(output.find("  .amdhsa_next_free_sgpr "), std::string::npos);
   EXPECT_EQ(output.find("  .amdhsa_next_free_sgpr 0\n"), std::string::npos);
   EXPECT_NE(output.find(".end_amdhsa_kernel\n"), std::string::npos);
+  EXPECT_NE(output.find(".amdgpu_metadata\n"), std::string::npos);
+  EXPECT_NE(output.find("  amdhsa.target: "
+                        "'amdgcn-amd-amdhsa--gfx1100'\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("  amdhsa.kernels:\n"), std::string::npos);
+  EXPECT_NE(output.find("    - .name: 'loom_kernel'\n"), std::string::npos);
+  EXPECT_NE(output.find("      .symbol: 'loom_kernel.kd'\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("      .wavefront_size: 32\n"), std::string::npos);
+  EXPECT_NE(output.find("      .args: []\n"), std::string::npos);
+  EXPECT_NE(output.find(".end_amdgpu_metadata\n"), std::string::npos);
 }
 
 TEST_F(AmdgpuKernelAssemblyTest, AssemblesKernelEnvelopeForGfx11WithLlvmMc) {
@@ -328,17 +339,21 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsTargetIdsForCurrentAmdgpuPresets) {
   struct Case {
     const char* preset_key;
     const char* target_cpu;
+    uint32_t wavefront_size;
   };
   const Case cases[] = {
-      {"amdgpu-gfx950", "gfx950"},
-      {"amdgpu-gfx11", "gfx1100"},
-      {"amdgpu-gfx12", "gfx1200"},
-      {"amdgpu-gfx1250", "gfx1250"},
+      {"amdgpu-gfx950", "gfx950", 64},
+      {"amdgpu-gfx11", "gfx1100", 32},
+      {"amdgpu-gfx12", "gfx1200", 32},
+      {"amdgpu-gfx1250", "gfx1250", 32},
   };
   for (const Case& test_case : cases) {
     SCOPED_TRACE(test_case.preset_key);
     std::string output;
     EmitKernelForPreset(test_case.preset_key, test_case.target_cpu, &output);
+    EXPECT_NE(output.find(std::string("      .wavefront_size: ") +
+                          std::to_string(test_case.wavefront_size) + "\n"),
+              std::string::npos);
   }
 }
 

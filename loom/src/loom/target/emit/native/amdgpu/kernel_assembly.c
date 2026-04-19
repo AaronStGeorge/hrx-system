@@ -11,6 +11,7 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/emit/native/amdgpu/assembly.h"
+#include "loom/target/emit/native/amdgpu/metadata.h"
 
 #define LOOM_AMDGPU_KERNEL_ASSEMBLY_CODE_OBJECT_VERSION 5u
 
@@ -278,8 +279,27 @@ static iree_status_t loom_amdgpu_kernel_assembly_collect_register_usage(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_kernel_assembly_wavefront_size(
+    iree_string_view_t target_cpu, uint32_t* out_wavefront_size) {
+  IREE_ASSERT_ARGUMENT(out_wavefront_size);
+  *out_wavefront_size = 0;
+  if (iree_string_view_starts_with(target_cpu, IREE_SV("gfx9"))) {
+    *out_wavefront_size = 64;
+    return iree_ok_status();
+  }
+  if (iree_string_view_starts_with(target_cpu, IREE_SV("gfx11")) ||
+      iree_string_view_starts_with(target_cpu, IREE_SV("gfx12"))) {
+    *out_wavefront_size = 32;
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "AMDGPU kernel assembly has no wavefront-size rule for target CPU '%.*s'",
+      (int)target_cpu.size, target_cpu.data);
+}
+
 static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
-    iree_string_view_t symbol,
+    const loom_low_resolved_target_t* target, iree_string_view_t symbol,
     const loom_amdgpu_kernel_assembly_register_usage_t* register_usage,
     iree_string_builder_t* builder) {
   IREE_RETURN_IF_ERROR(
@@ -301,7 +321,59 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder, "  .amdhsa_next_free_sgpr %" PRIu32 "\n",
       register_usage->next_free_sgpr));
-  return iree_string_builder_append_cstring(builder, ".end_amdhsa_kernel\n");
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, ".end_amdhsa_kernel\n"));
+
+  iree_string_builder_t target_id_builder;
+  iree_string_builder_initialize(iree_allocator_system(), &target_id_builder);
+  iree_string_builder_t descriptor_symbol_builder;
+  iree_string_builder_initialize(iree_allocator_system(),
+                                 &descriptor_symbol_builder);
+
+  const loom_target_snapshot_t* snapshot = &target->bundle_storage.snapshot;
+  const loom_target_hal_kernel_abi_t* hal_kernel =
+      &target->bundle_storage.export_plan.hal_kernel;
+  uint32_t wavefront_size = 0;
+  iree_status_t status = iree_string_builder_append_format(
+      &target_id_builder, "%.*s--%.*s", (int)snapshot->target_triple.size,
+      snapshot->target_triple.data, (int)snapshot->target_cpu.size,
+      snapshot->target_cpu.data);
+  if (iree_status_is_ok(status)) {
+    status = loom_amdgpu_kernel_assembly_wavefront_size(snapshot->target_cpu,
+                                                        &wavefront_size);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_format(
+        &descriptor_symbol_builder, "%.*s.kd", (int)symbol.size, symbol.data);
+  }
+  if (iree_status_is_ok(status)) {
+    loom_amdgpu_metadata_kernel_t kernel = {
+        .name = symbol,
+        .descriptor_symbol =
+            iree_string_builder_view(&descriptor_symbol_builder),
+        .kernarg_segment_size = 0,
+        .kernarg_segment_alignment = 8,
+        .wavefront_size = wavefront_size,
+        .group_segment_fixed_size = 0,
+        .private_segment_fixed_size = 0,
+        .sgpr_count = register_usage->next_free_sgpr,
+        .vgpr_count = register_usage->next_free_vgpr,
+        .max_flat_workgroup_size = hal_kernel->flat_workgroup_size_max,
+        .required_workgroup_size = hal_kernel->required_workgroup_size,
+        .has_required_workgroup_size = true,
+        .arguments = NULL,
+        .argument_count = 0,
+    };
+    loom_amdgpu_code_object_metadata_t metadata = {
+        .target = iree_string_builder_view(&target_id_builder),
+        .kernels = &kernel,
+        .kernel_count = 1,
+    };
+    status = loom_amdgpu_metadata_append_assembly(&metadata, builder);
+  }
+  iree_string_builder_deinitialize(&descriptor_symbol_builder);
+  iree_string_builder_deinitialize(&target_id_builder);
+  return status;
 }
 
 static iree_status_t loom_amdgpu_kernel_assembly_emit(
@@ -361,8 +433,8 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
       ".Lfunc_end0:\n"
       ".size %.*s, .Lfunc_end0-%.*s\n",
       (int)symbol.size, symbol.data, (int)symbol.size, symbol.data));
-  return loom_amdgpu_kernel_assembly_append_metadata(symbol, &register_usage,
-                                                     builder);
+  return loom_amdgpu_kernel_assembly_append_metadata(&schedule->target, symbol,
+                                                     &register_usage, builder);
 }
 
 iree_status_t loom_amdgpu_emit_kernel_assembly(

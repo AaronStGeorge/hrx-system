@@ -1,0 +1,192 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/target/emit/native/amdgpu/metadata.h"
+
+#include <string>
+
+#include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+
+namespace loom {
+namespace {
+
+std::string BuilderString(const iree_string_builder_t& builder) {
+  iree_string_view_t view = iree_string_builder_view(&builder);
+  return std::string(view.data, view.size);
+}
+
+bool Contains(const std::string& value, const char* substring) {
+  return value.find(substring) != std::string::npos;
+}
+
+loom_amdgpu_metadata_kernel_t MinimalKernel() {
+  return {
+      .name = IREE_SV("loom_kernel"),
+      .descriptor_symbol = IREE_SV("loom_kernel.kd"),
+      .kernarg_segment_size = 0,
+      .kernarg_segment_alignment = 8,
+      .wavefront_size = 32,
+      .group_segment_fixed_size = 0,
+      .private_segment_fixed_size = 0,
+      .sgpr_count = 3,
+      .vgpr_count = 0,
+      .max_flat_workgroup_size = 64,
+      .required_workgroup_size = {.x = 64, .y = 1, .z = 1},
+      .has_required_workgroup_size = true,
+      .arguments = nullptr,
+      .argument_count = 0,
+  };
+}
+
+loom_amdgpu_code_object_metadata_t MetadataForKernel(
+    const loom_amdgpu_metadata_kernel_t* kernel) {
+  return {
+      .target = IREE_SV("amdgcn-amd-amdhsa--gfx1100"),
+      .kernels = kernel,
+      .kernel_count = 1,
+  };
+}
+
+TEST(AmdgpuMetadataTest, AppendsAssemblyMetadataForNoArgumentKernel) {
+  loom_amdgpu_metadata_kernel_t kernel = MinimalKernel();
+  loom_amdgpu_code_object_metadata_t metadata = MetadataForKernel(&kernel);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_metadata_append_assembly(&metadata, &builder));
+  std::string text = BuilderString(builder);
+  iree_string_builder_deinitialize(&builder);
+
+  EXPECT_TRUE(Contains(text, ".amdgpu_metadata\n")) << text;
+  EXPECT_TRUE(Contains(text, "  amdhsa.version:\n")) << text;
+  EXPECT_TRUE(Contains(text, "    - 1\n    - 2\n")) << text;
+  EXPECT_TRUE(Contains(text, "  amdhsa.target: 'amdgcn-amd-amdhsa--gfx1100'\n"))
+      << text;
+  EXPECT_TRUE(Contains(text, "  amdhsa.kernels:\n")) << text;
+  EXPECT_TRUE(Contains(text, "    - .name: 'loom_kernel'\n")) << text;
+  EXPECT_TRUE(Contains(text, "      .symbol: 'loom_kernel.kd'\n")) << text;
+  EXPECT_TRUE(Contains(text, "      .kernarg_segment_size: 0\n")) << text;
+  EXPECT_TRUE(Contains(text, "      .kernarg_segment_align: 8\n")) << text;
+  EXPECT_TRUE(Contains(text, "      .wavefront_size: 32\n")) << text;
+  EXPECT_TRUE(Contains(text, "      .sgpr_count: 3\n")) << text;
+  EXPECT_TRUE(Contains(text, "      .vgpr_count: 0\n")) << text;
+  EXPECT_TRUE(Contains(text, "      .max_flat_workgroup_size: 64\n")) << text;
+  EXPECT_TRUE(Contains(text, "      .reqd_workgroup_size:\n")) << text;
+  EXPECT_TRUE(Contains(text, "      .args: []\n")) << text;
+  EXPECT_TRUE(Contains(text, ".end_amdgpu_metadata\n")) << text;
+}
+
+TEST(AmdgpuMetadataTest, AppendsMsgpackMetadataForNoArgumentKernel) {
+  loom_amdgpu_metadata_kernel_t kernel = MinimalKernel();
+  loom_amdgpu_code_object_metadata_t metadata = MetadataForKernel(&kernel);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_metadata_append_msgpack(&metadata, &builder));
+  std::string bytes = BuilderString(builder);
+  iree_string_builder_deinitialize(&builder);
+
+  ASSERT_GT(bytes.size(), 0u);
+  EXPECT_TRUE(Contains(bytes, "amdhsa.version"));
+  EXPECT_TRUE(Contains(bytes, "amdhsa.target"));
+  EXPECT_TRUE(Contains(bytes, "amdhsa.kernels"));
+  EXPECT_TRUE(Contains(bytes, "amdgcn-amd-amdhsa--gfx1100"));
+  EXPECT_TRUE(Contains(bytes, "loom_kernel"));
+  EXPECT_TRUE(Contains(bytes, "loom_kernel.kd"));
+  EXPECT_TRUE(Contains(bytes, ".wavefront_size"));
+  EXPECT_TRUE(Contains(bytes, ".args"));
+  EXPECT_FALSE(Contains(bytes, ".amdgpu_metadata"));
+}
+
+TEST(AmdgpuMetadataTest, AppendsArgumentMetadata) {
+  const loom_amdgpu_metadata_argument_t arguments[] = {
+      {
+          .name = IREE_SV("lhs"),
+          .offset = 0,
+          .size = 8,
+          .alignment = 8,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_GLOBAL_BUFFER,
+          .address_space = IREE_SV("global"),
+          .access = IREE_SV("read_write"),
+          .actual_access = IREE_SV("read_only"),
+      },
+      {
+          .name = IREE_SV("scale"),
+          .offset = 8,
+          .size = 4,
+          .alignment = 4,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_BY_VALUE,
+      },
+  };
+  loom_amdgpu_metadata_kernel_t kernel = MinimalKernel();
+  kernel.kernarg_segment_size = 12;
+  kernel.arguments = arguments;
+  kernel.argument_count = IREE_ARRAYSIZE(arguments);
+  loom_amdgpu_code_object_metadata_t metadata = MetadataForKernel(&kernel);
+
+  iree_string_builder_t text_builder;
+  iree_string_builder_initialize(iree_allocator_system(), &text_builder);
+  IREE_ASSERT_OK(
+      loom_amdgpu_metadata_append_assembly(&metadata, &text_builder));
+  std::string text = BuilderString(text_builder);
+  iree_string_builder_deinitialize(&text_builder);
+
+  EXPECT_TRUE(Contains(text, "      .args:\n")) << text;
+  EXPECT_TRUE(Contains(text, "        - .name: 'lhs'\n")) << text;
+  EXPECT_TRUE(Contains(text, "          .value_kind: global_buffer\n")) << text;
+  EXPECT_TRUE(Contains(text, "          .address_space: global\n")) << text;
+  EXPECT_TRUE(Contains(text, "          .access: read_write\n")) << text;
+  EXPECT_TRUE(Contains(text, "          .actual_access: read_only\n")) << text;
+  EXPECT_TRUE(Contains(text, "        - .name: 'scale'\n")) << text;
+  EXPECT_TRUE(Contains(text, "          .value_kind: by_value\n")) << text;
+
+  iree_string_builder_t msgpack_builder;
+  iree_string_builder_initialize(iree_allocator_system(), &msgpack_builder);
+  IREE_ASSERT_OK(
+      loom_amdgpu_metadata_append_msgpack(&metadata, &msgpack_builder));
+  std::string bytes = BuilderString(msgpack_builder);
+  iree_string_builder_deinitialize(&msgpack_builder);
+
+  EXPECT_TRUE(Contains(bytes, "lhs"));
+  EXPECT_TRUE(Contains(bytes, "global_buffer"));
+  EXPECT_TRUE(Contains(bytes, "read_write"));
+  EXPECT_TRUE(Contains(bytes, "read_only"));
+  EXPECT_TRUE(Contains(bytes, "scale"));
+  EXPECT_TRUE(Contains(bytes, "by_value"));
+}
+
+TEST(AmdgpuMetadataTest, RejectsInvalidArgumentRange) {
+  const loom_amdgpu_metadata_argument_t arguments[] = {
+      {
+          .offset = 0,
+          .size = 8,
+          .alignment = 8,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_GLOBAL_BUFFER,
+      },
+      {
+          .offset = 4,
+          .size = 4,
+          .alignment = 4,
+          .kind = LOOM_AMDGPU_METADATA_ARGUMENT_BY_VALUE,
+      },
+  };
+  loom_amdgpu_metadata_kernel_t kernel = MinimalKernel();
+  kernel.kernarg_segment_size = 8;
+  kernel.arguments = arguments;
+  kernel.argument_count = IREE_ARRAYSIZE(arguments);
+  loom_amdgpu_code_object_metadata_t metadata = MetadataForKernel(&kernel);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  iree_status_t status =
+      loom_amdgpu_metadata_append_msgpack(&metadata, &builder);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  iree_string_builder_deinitialize(&builder);
+}
+
+}  // namespace
+}  // namespace loom

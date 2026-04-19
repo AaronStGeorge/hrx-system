@@ -31,6 +31,19 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    metadata
+  HDRS
+    "metadata.h"
+  SRCS
+    "metadata.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     kernel_assembly
   HDRS
     "kernel_assembly.h"
@@ -38,6 +51,7 @@ loom_cc_library(
     "kernel_assembly.c"
   DEPS
     ::assembly
+    ::metadata
     iree::base
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::packet
@@ -71,6 +85,18 @@ loom_cc_test(
     loom::src::loom::target::ir_records
     loom::src::loom::target::presets
     loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    metadata_test
+  SRCS
+    "metadata_test.cc"
+  DEPS
+    ::metadata
+    iree::base
     iree::testing::gtest
     iree::testing::gtest_main
 )

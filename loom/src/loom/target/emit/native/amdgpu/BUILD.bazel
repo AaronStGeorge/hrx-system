@@ -81,6 +81,48 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/emit/native/amdgpu:kernel_assembly",
 )
 
+iree_assert_no_dependency(
+    name = "metadata_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
+)
+
+iree_assert_no_dependency(
+    name = "metadata_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
+)
+
+iree_assert_no_dependency(
+    name = "metadata_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
+)
+
+iree_assert_no_dependency(
+    name = "metadata_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
+)
+
+iree_assert_no_dependency(
+    name = "metadata_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
+)
+
+iree_assert_no_dependency(
+    name = "metadata_no_hal_amdgpu_dep",
+    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
+    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
+)
+
+iree_assert_no_dependency(
+    name = "metadata_no_target_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
+)
+
 #===------------------------------------------------------------------------===#
 # AMDGPU native assembly fragments
 #===------------------------------------------------------------------------===#
@@ -102,11 +144,22 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "metadata",
+    srcs = ["metadata.c"],
+    hdrs = ["metadata.h"],
+    deps = [
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "kernel_assembly",
     srcs = ["kernel_assembly.c"],
     hdrs = ["kernel_assembly.h"],
     deps = [
         ":assembly",
+        ":metadata",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/codegen/low:schedule",
@@ -138,6 +191,17 @@ loom_cc_test(
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "metadata_test",
+    srcs = ["metadata_test.cc"],
+    deps = [
+        ":metadata",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
