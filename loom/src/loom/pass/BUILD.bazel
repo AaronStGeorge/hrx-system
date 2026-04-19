@@ -77,6 +77,21 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "program",
+    srcs = ["program.c"],
+    hdrs = ["program.h"],
+    deps = [
+        ":invocation",
+        ":registry",
+        ":verify",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/pass",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "builtin_registry",
     srcs = ["builtin_registry.c"],
     hdrs = ["builtin_registry.h"],
@@ -142,6 +157,21 @@ loom_cc_test(
         "//loom/src/loom/pass/test:registry",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "program_test",
+    srcs = ["program_test.cc"],
+    deps = [
+        ":program",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/pass/test:registry",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
