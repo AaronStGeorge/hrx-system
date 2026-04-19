@@ -90,6 +90,17 @@ class PassToolingTest : public ::testing::Test {
   std::vector<loom_module_t*> modules_;
 };
 
+static void ExpectTraceEvent(const loom_test_pass_trace_t& trace,
+                             iree_host_size_t event_index,
+                             iree_string_view_t pass_name,
+                             iree_string_view_t symbol_name) {
+  ASSERT_LT(event_index, trace.event_count);
+  EXPECT_TRUE(
+      iree_string_view_equal(trace.events[event_index].pass_name, pass_name));
+  EXPECT_TRUE(iree_string_view_equal(trace.events[event_index].symbol_name,
+                                     symbol_name));
+}
+
 TEST_F(PassToolingTest, RunsNamedModulePipeline) {
   loom_module_t* module =
       Parse(IREE_SV("pass.pipeline<module> @cleanup pipeline {\n"
@@ -160,6 +171,52 @@ TEST_F(PassToolingTest, RunsFlatPipelineWithDescriptorOptions) {
   EXPECT_EQ(trace.decoded_options_mode_index, 1u);
   EXPECT_TRUE(iree_string_view_equal(trace.decoded_options_string_value,
                                      IREE_SV("flat")));
+}
+
+TEST_F(PassToolingTest, GroupsAdjacentFlatFunctionPassesPerFunction) {
+  loom_module_t* module =
+      Parse(IREE_SV("test.func @first() {\n"
+                    "  test.yield\n"
+                    "}\n"
+                    "test.func @second() {\n"
+                    "  test.yield\n"
+                    "}\n"));
+  ASSERT_NE(module, nullptr);
+
+  loom_test_pass_trace_t trace = {};
+  loom_pass_tool_run_options_t options = ToolOptions(&trace);
+  IREE_ASSERT_OK(loom_pass_tool_run_flat_pipeline(
+      module, IREE_SV("test.noop,test.mark-changed"), &options));
+
+  ASSERT_EQ(trace.event_count, 4u);
+  ExpectTraceEvent(trace, 0, IREE_SV("test.noop"), IREE_SV("first"));
+  ExpectTraceEvent(trace, 1, IREE_SV("test.mark-changed"), IREE_SV("first"));
+  ExpectTraceEvent(trace, 2, IREE_SV("test.noop"), IREE_SV("second"));
+  ExpectTraceEvent(trace, 3, IREE_SV("test.mark-changed"), IREE_SV("second"));
+}
+
+TEST_F(PassToolingTest, FlatModulePassesSeparateFunctionPassGroups) {
+  loom_module_t* module =
+      Parse(IREE_SV("test.func @first() {\n"
+                    "  test.yield\n"
+                    "}\n"
+                    "test.func @second() {\n"
+                    "  test.yield\n"
+                    "}\n"));
+  ASSERT_NE(module, nullptr);
+
+  loom_test_pass_trace_t trace = {};
+  loom_pass_tool_run_options_t options = ToolOptions(&trace);
+  IREE_ASSERT_OK(loom_pass_tool_run_flat_pipeline(
+      module, IREE_SV("test.noop,test.module-noop,test.mark-changed"),
+      &options));
+
+  ASSERT_EQ(trace.event_count, 5u);
+  ExpectTraceEvent(trace, 0, IREE_SV("test.noop"), IREE_SV("first"));
+  ExpectTraceEvent(trace, 1, IREE_SV("test.noop"), IREE_SV("second"));
+  ExpectTraceEvent(trace, 2, IREE_SV("test.module-noop"), IREE_SV("<module>"));
+  ExpectTraceEvent(trace, 3, IREE_SV("test.mark-changed"), IREE_SV("first"));
+  ExpectTraceEvent(trace, 4, IREE_SV("test.mark-changed"), IREE_SV("second"));
 }
 
 TEST_F(PassToolingTest, RejectsUnknownFlatPipelinePass) {

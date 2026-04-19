@@ -305,74 +305,116 @@ static iree_status_t loom_pass_tool_build_flat_run(
                              LOOM_LOCATION_UNKNOWN, &run_op);
 }
 
-static iree_status_t loom_pass_tool_build_flat_function_run(
-    loom_builder_t* builder, const loom_pass_descriptor_t* descriptor,
-    iree_string_view_t options) {
-  loom_op_t* for_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_pass_for_build(builder, LOOM_PASS_ANCHOR_FUNC,
-                                           LOOM_LOCATION_UNKNOWN, &for_op));
-  loom_builder_ip_t saved =
-      loom_builder_enter_region(builder, for_op, loom_pass_for_body(for_op));
-  iree_status_t status =
-      loom_pass_tool_build_flat_run(builder, descriptor, options);
-  if (iree_status_is_ok(status)) {
-    loom_op_t* yield_op = NULL;
-    status = loom_pass_yield_build(builder, LOOM_LOCATION_UNKNOWN, &yield_op);
+typedef struct loom_pass_tool_flat_function_group_t {
+  // Builder receiving synthetic pass pipeline operations.
+  loom_builder_t* builder;
+  // Saved insertion point outside the open pass.for body.
+  loom_builder_ip_t saved_insertion_point;
+  // True when builder currently inserts into a pass.for<func> body.
+  bool is_open;
+} loom_pass_tool_flat_function_group_t;
+
+static iree_status_t loom_pass_tool_flat_function_group_open(
+    loom_pass_tool_flat_function_group_t* group) {
+  if (group->is_open) {
+    return iree_ok_status();
   }
-  loom_builder_restore(builder, saved);
+  loom_op_t* for_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_pass_for_build(
+      group->builder, LOOM_PASS_ANCHOR_FUNC, LOOM_LOCATION_UNKNOWN, &for_op));
+  group->saved_insertion_point = loom_builder_enter_region(
+      group->builder, for_op, loom_pass_for_body(for_op));
+  group->is_open = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_pass_tool_flat_function_group_close(
+    loom_pass_tool_flat_function_group_t* group) {
+  if (!group->is_open) {
+    return iree_ok_status();
+  }
+  loom_op_t* yield_op = NULL;
+  iree_status_t status =
+      loom_pass_yield_build(group->builder, LOOM_LOCATION_UNKNOWN, &yield_op);
+  loom_builder_restore(group->builder, group->saved_insertion_point);
+  group->is_open = false;
   return status;
+}
+
+static iree_status_t loom_pass_tool_flat_function_group_append_run(
+    loom_pass_tool_flat_function_group_t* group,
+    const loom_pass_descriptor_t* descriptor, iree_string_view_t options) {
+  IREE_RETURN_IF_ERROR(loom_pass_tool_flat_function_group_open(group));
+  return loom_pass_tool_build_flat_run(group->builder, descriptor, options);
 }
 
 static iree_status_t loom_pass_tool_build_flat_pipeline_body(
     loom_builder_t* builder, const loom_pass_registry_t* registry,
     iree_string_view_t pipeline) {
+  loom_pass_tool_flat_function_group_t function_group = {
+      .builder = builder,
+  };
   iree_string_view_t remaining = pipeline;
   iree_host_size_t pipeline_index = 0;
-  while (true) {
+  iree_status_t status = iree_ok_status();
+  while (iree_status_is_ok(status)) {
     loom_pass_pipeline_entry_spec_t spec = {0};
     bool has_entry = false;
-    IREE_RETURN_IF_ERROR(
-        loom_pass_pipeline_consume_entry(&remaining, &spec, &has_entry));
+    status = loom_pass_pipeline_consume_entry(&remaining, &spec, &has_entry);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
     if (!has_entry) {
       break;
     }
 
     const loom_pass_descriptor_t* descriptor = NULL;
-    IREE_RETURN_IF_ERROR(
-        loom_pass_registry_lookup(registry, spec.name, &descriptor));
+    status = loom_pass_registry_lookup(registry, spec.name, &descriptor);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
     if (!descriptor) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "unknown pass '%.*s' at pipeline entry %zu",
-                              (int)spec.name.size, spec.name.data,
-                              pipeline_index);
+      status =
+          iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                           "unknown pass '%.*s' at pipeline entry %zu",
+                           (int)spec.name.size, spec.name.data, pipeline_index);
+      break;
     }
     if (!loom_pass_descriptor_is_available(descriptor)) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "pass '%.*s' is unavailable: %.*s",
-                              (int)descriptor->key.size, descriptor->key.data,
-                              (int)descriptor->unavailable_reason.size,
-                              descriptor->unavailable_reason.data);
+      status = iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                                "pass '%.*s' is unavailable: %.*s",
+                                (int)descriptor->key.size, descriptor->key.data,
+                                (int)descriptor->unavailable_reason.size,
+                                descriptor->unavailable_reason.data);
+      break;
     }
     const loom_pass_info_t* info = descriptor->info();
     if (!info) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "pass descriptor '%.*s' returned no info",
-                              (int)descriptor->key.size, descriptor->key.data);
+      status =
+          iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                           "pass descriptor '%.*s' returned no info",
+                           (int)descriptor->key.size, descriptor->key.data);
+      break;
     }
     if (info->kind == LOOM_PASS_MODULE) {
-      IREE_RETURN_IF_ERROR(
-          loom_pass_tool_build_flat_run(builder, descriptor, spec.options));
+      status = loom_pass_tool_flat_function_group_close(&function_group);
+      if (iree_status_is_ok(status)) {
+        status =
+            loom_pass_tool_build_flat_run(builder, descriptor, spec.options);
+      }
     } else if (info->kind == LOOM_PASS_FUNCTION) {
-      IREE_RETURN_IF_ERROR(loom_pass_tool_build_flat_function_run(
-          builder, descriptor, spec.options));
+      status = loom_pass_tool_flat_function_group_append_run(
+          &function_group, descriptor, spec.options);
     } else {
-      return iree_make_status(
+      status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT, "pass '%.*s' has unknown kind %d",
           (int)descriptor->key.size, descriptor->key.data, (int)info->kind);
+      break;
     }
     ++pipeline_index;
   }
-  return iree_ok_status();
+  return iree_status_join(
+      status, loom_pass_tool_flat_function_group_close(&function_group));
 }
 
 static iree_status_t loom_pass_tool_build_synthetic_pipeline(

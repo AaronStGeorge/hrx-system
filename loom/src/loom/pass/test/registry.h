@@ -21,6 +21,16 @@
 extern "C" {
 #endif
 
+#define LOOM_TEST_PASS_TRACE_EVENT_CAPACITY 64
+
+// One synthetic pass callback invocation captured by loom_test_pass_trace_t.
+typedef struct loom_test_pass_trace_event_t {
+  // Descriptor key of the pass callback that ran.
+  iree_string_view_t pass_name;
+  // Current module or function symbol name for the callback.
+  iree_string_view_t symbol_name;
+} loom_test_pass_trace_event_t;
+
 // Optional per-entry user data consumed by the synthetic test passes.
 typedef struct loom_test_pass_trace_t {
   // Number of times test.module-noop ran.
@@ -41,6 +51,10 @@ typedef struct loom_test_pass_trace_t {
   iree_string_view_t decoded_options_string_value;
   // Number of times test.fail ran before returning its intentional failure.
   int fail_invocation_count;
+  // Number of populated entries in events.
+  iree_host_size_t event_count;
+  // Bounded chronological callback trace.
+  loom_test_pass_trace_event_t events[LOOM_TEST_PASS_TRACE_EVENT_CAPACITY];
 } loom_test_pass_trace_t;
 
 // Returns a registry containing only synthetic test pass descriptors.

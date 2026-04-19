@@ -127,18 +127,19 @@
 // RUN:   'func.def @schema_repro(%x: i32) -> (i32) {' \
 // RUN:   '  func.return %x : i32' \
 // RUN:   '}' \
-// RUN:   | loom-opt --pass='canonicalize{max-iterations=0}' \
+// RUN:   | loom-opt --pass='canonicalize{max-iterations=0}' --pass=dce \
 // RUN:       --pass-reproducer=%t.schema-pass.repro \
 // RUN:       --output=%t.unused > %t.schema-pass.err 2>&1; test $? -ne 0
 // RUN: FileCheck --check-prefix=SCHEMA-PASS-REPRO %s < %t.schema-pass.repro
 // RUN: loom-opt --pipeline=@__command_line %t.schema-pass.repro > %t.schema-pass.rerun.err 2>&1; test $? -ne 0
 // RUN: FileCheck --check-prefix=SCHEMA-PASS-AGAIN %s < %t.schema-pass.rerun.err
-// SCHEMA-PASS-REPRO: //   "selection": {"kind":"pass-list","passes":["canonicalize{max-iterations=0}"]}
+// SCHEMA-PASS-REPRO: //   "selection": {"kind":"pass-list","passes":["canonicalize{max-iterations=0}","dce"]}
 // SCHEMA-PASS-REPRO: //   "failure_status": "INVALID_ARGUMENT"
 // SCHEMA-PASS-REPRO: {"name":"max-iterations","kind":"uint32","required":false,"minimum":1,"maximum":4294967295}
 // SCHEMA-PASS-REPRO: // R{{UN}}: loom-opt --verify=true --pipeline='@__command_line' %s
 // SCHEMA-PASS-REPRO: pass.for<func> pipeline {
 // SCHEMA-PASS-REPRO: pass.run<canonicalize> {max-iterations=0}
+// SCHEMA-PASS-REPRO-NEXT: pass.run<dce>
 // SCHEMA-PASS-REPRO: pass.yield
 // SCHEMA-PASS-AGAIN: max-iterations
 

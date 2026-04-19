@@ -429,6 +429,25 @@ static iree_status_t loom_opt_append_reproducer_pass_run(
   return iree_string_builder_append_cstring(builder, "\n");
 }
 
+static iree_status_t loom_opt_reproducer_function_group_open(
+    iree_string_builder_t* builder, bool* in_function_group) {
+  if (*in_function_group) {
+    return iree_ok_status();
+  }
+  *in_function_group = true;
+  return iree_string_builder_append_cstring(builder,
+                                            "  pass.for<func> pipeline {\n");
+}
+
+static iree_status_t loom_opt_reproducer_function_group_close(
+    iree_string_builder_t* builder, bool* in_function_group) {
+  if (!*in_function_group) {
+    return iree_ok_status();
+  }
+  *in_function_group = false;
+  return iree_string_builder_append_cstring(builder, "    pass.yield\n  }\n");
+}
+
 static iree_status_t loom_opt_build_reproducer_synthetic_pipeline(
     iree_string_builder_t* builder, const loom_pass_registry_t* registry,
     bool* out_use_synthetic_pipeline, iree_allocator_t allocator) {
@@ -452,6 +471,7 @@ static iree_status_t loom_opt_build_reproducer_synthetic_pipeline(
   }
 
   iree_string_view_t remaining = iree_string_builder_view(&pass_list_builder);
+  bool in_function_group = false;
   while (iree_status_is_ok(status)) {
     loom_pass_pipeline_entry_spec_t spec = {0};
     bool has_entry = false;
@@ -468,22 +488,24 @@ static iree_status_t loom_opt_build_reproducer_synthetic_pipeline(
     if (!iree_status_is_ok(status)) break;
     const loom_pass_info_t* info = descriptor ? descriptor->info() : NULL;
     if (info && info->kind == LOOM_PASS_FUNCTION) {
-      status = iree_string_builder_append_cstring(
-          &pipeline_builder, "  pass.for<func> pipeline {\n");
+      status = loom_opt_reproducer_function_group_open(&pipeline_builder,
+                                                       &in_function_group);
       if (iree_status_is_ok(status)) {
         status = loom_opt_append_reproducer_pass_run(&pipeline_builder,
                                                      IREE_SV("    "), &spec);
       }
-      if (iree_status_is_ok(status)) {
-        status = iree_string_builder_append_cstring(&pipeline_builder,
-                                                    "    pass.yield\n  }\n");
-      }
     } else {
-      status = loom_opt_append_reproducer_pass_run(&pipeline_builder,
-                                                   IREE_SV("  "), &spec);
+      status = loom_opt_reproducer_function_group_close(&pipeline_builder,
+                                                        &in_function_group);
+      if (iree_status_is_ok(status)) {
+        status = loom_opt_append_reproducer_pass_run(&pipeline_builder,
+                                                     IREE_SV("  "), &spec);
+      }
     }
   }
 
+  status = iree_status_join(status, loom_opt_reproducer_function_group_close(
+                                        &pipeline_builder, &in_function_group));
   if (iree_status_is_ok(status) &&
       iree_string_builder_size(&pipeline_builder)) {
     status = iree_string_builder_append_cstring(&pipeline_builder,

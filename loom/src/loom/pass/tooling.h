@@ -54,8 +54,8 @@ iree_status_t loom_pass_tool_run_pipeline_symbol(
 // Parses a shallow comma-separated pass list such as
 // `canonicalize{max-iterations=20},dce`, converts it into a synthetic
 // module-root pass.pipeline backed by descriptor options, and executes it.
-// Function passes are wrapped in one pass.for<func> per entry so the execution
-// order matches the legacy flat pass manager.
+// Adjacent function passes are grouped in one pass.for<func> so all grouped
+// passes run on the current function before advancing to the next function.
 iree_status_t loom_pass_tool_run_flat_pipeline(
     loom_module_t* module, iree_string_view_t pipeline,
     const loom_pass_tool_run_options_t* options);

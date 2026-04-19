@@ -35,6 +35,7 @@ loom_cc_library(
     srcs = ["registry.c"],
     hdrs = ["registry.h"],
     deps = [
+        "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:types",
         "//runtime/src/iree/base",

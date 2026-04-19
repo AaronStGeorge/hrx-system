@@ -19,6 +19,7 @@ loom_cc_library(
     "registry.c"
   DEPS
     iree::base
+    loom::src::loom::ops::op_defs
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
   TESTONLY

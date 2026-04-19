@@ -8,14 +8,49 @@
 
 #include <stdint.h>
 
+#include "loom/ops/op_defs.h"
+
 static loom_test_pass_trace_t* loom_test_pass_trace(loom_pass_t* pass) {
   return (loom_test_pass_trace_t*)pass->user_data;
+}
+
+static iree_string_view_t loom_test_pass_function_name(
+    const loom_module_t* module, loom_func_like_t function) {
+  loom_symbol_ref_t symbol_ref = loom_func_like_callee(function);
+  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+      symbol_ref.symbol_id >= module->symbols.count) {
+    return IREE_SV("<none>");
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->name_id >= module->strings.count) {
+    return IREE_SV("<none>");
+  }
+  return module->strings.entries[symbol->name_id];
+}
+
+static iree_status_t loom_test_pass_trace_record(
+    loom_test_pass_trace_t* trace, iree_string_view_t pass_name,
+    iree_string_view_t symbol_name) {
+  if (!trace) {
+    return iree_ok_status();
+  }
+  if (trace->event_count >= LOOM_TEST_PASS_TRACE_EVENT_CAPACITY) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "test pass trace capacity exceeded");
+  }
+  trace->events[trace->event_count++] = (loom_test_pass_trace_event_t){
+      .pass_name = pass_name,
+      .symbol_name = symbol_name,
+  };
+  return iree_ok_status();
 }
 
 static iree_status_t loom_test_module_noop_run(loom_pass_t* pass,
                                                loom_module_t* module) {
   (void)module;
   loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(
+      trace, IREE_SV("test.module-noop"), IREE_SV("<module>")));
   if (trace) ++trace->module_noop_invocation_count;
   if (pass->statistics) loom_pass_statistic_add(pass, 0, 1);
   return iree_ok_status();
@@ -24,9 +59,10 @@ static iree_status_t loom_test_module_noop_run(loom_pass_t* pass,
 static iree_status_t loom_test_noop_run(loom_pass_t* pass,
                                         loom_module_t* module,
                                         loom_func_like_t function) {
-  (void)module;
-  (void)function;
   loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(
+      trace, IREE_SV("test.noop"),
+      loom_test_pass_function_name(module, function)));
   if (trace) ++trace->noop_invocation_count;
   if (pass->statistics) loom_pass_statistic_add(pass, 0, 1);
   return iree_ok_status();
@@ -35,9 +71,10 @@ static iree_status_t loom_test_noop_run(loom_pass_t* pass,
 static iree_status_t loom_test_mark_changed_run(loom_pass_t* pass,
                                                 loom_module_t* module,
                                                 loom_func_like_t function) {
-  (void)module;
-  (void)function;
   loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(
+      trace, IREE_SV("test.mark-changed"),
+      loom_test_pass_function_name(module, function)));
   if (trace) ++trace->mark_changed_invocation_count;
   loom_pass_mark_changed(pass);
   if (pass->statistics) {
@@ -75,9 +112,10 @@ static iree_status_t loom_test_options_create(loom_pass_t* pass,
 static iree_status_t loom_test_options_run(loom_pass_t* pass,
                                            loom_module_t* module,
                                            loom_func_like_t function) {
-  (void)module;
-  (void)function;
   loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(
+      trace, IREE_SV("test.options"),
+      loom_test_pass_function_name(module, function)));
   if (trace) ++trace->options_invocation_count;
   if (pass->statistics) loom_pass_statistic_add(pass, 0, 1);
   return iree_ok_status();
@@ -112,6 +150,8 @@ static iree_status_t loom_test_fail_run(loom_pass_t* pass,
                                         loom_module_t* module) {
   (void)module;
   loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  IREE_RETURN_IF_ERROR(loom_test_pass_trace_record(trace, IREE_SV("test.fail"),
+                                                   IREE_SV("<module>")));
   if (trace) ++trace->fail_invocation_count;
   if (pass->statistics) loom_pass_statistic_add(pass, 0, 1);
   return iree_make_status(IREE_STATUS_INTERNAL,
