@@ -4,12 +4,55 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_benchmark", "loom_cc_fuzz", "loom_cc_library", "loom_cc_test")
+load("//loom/build_tools/bazel:build_defs.bzl", "iree_assert_no_dependency", "loom_cc_fuzz", "loom_cc_library", "loom_cc_test")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_benchmark")
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+#===------------------------------------------------------------------------===#
+# Layering checks
+#===------------------------------------------------------------------------===#
+
+iree_assert_no_dependency(
+    name = "parser_no_low_descriptor_dep",
+    dependency = "//loom/src/loom/codegen/low:descriptors",
+    target = "//loom/src/loom/format/text:parser",
+)
+
+iree_assert_no_dependency(
+    name = "parser_no_low_ops_dep",
+    dependency = "//loom/src/loom/ops/low",
+    target = "//loom/src/loom/format/text:parser",
+)
+
+iree_assert_no_dependency(
+    name = "parser_no_low_text_asm_dep",
+    dependency = "//loom/src/loom/codegen/low:text_asm",
+    target = "//loom/src/loom/format/text:parser",
+)
+
+iree_assert_no_dependency(
+    name = "printer_no_low_text_asm_dep",
+    dependency = "//loom/src/loom/codegen/low:text_asm",
+    target = "//loom/src/loom/format/text:printer",
+)
+
+#===------------------------------------------------------------------------===#
+# Text parser/printer
+#===------------------------------------------------------------------------===#
+
+loom_cc_library(
+    name = "low_asm",
+    hdrs = ["low_asm.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+    ],
 )
 
 loom_cc_library(
@@ -24,6 +67,7 @@ loom_cc_library(
         "parser_internal.h",
     ],
     deps = [
+        ":low_asm",
         ":tokenizer",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:error_defs",
@@ -43,6 +87,7 @@ loom_cc_test(
     deps = [
         ":parser",
         ":printer",
+        "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
@@ -50,7 +95,10 @@ loom_cc_test(
         "//loom/src/loom/ops/cfg",
         "//loom/src/loom/ops/encoding",
         "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/test",
+        "//loom/src/loom/target/test:alt_descriptors",
+        "//loom/src/loom/target/test:descriptors",
         "//loom/src/loom/testing:diagnostic_matchers",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base/internal:arena",

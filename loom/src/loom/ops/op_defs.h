@@ -233,6 +233,8 @@ typedef enum loom_region_syntax_e {
   LOOM_REGION_SYNTAX_DEFAULT = 0,
   // Test-only alternate region syntax: do { block+ }.
   LOOM_REGION_SYNTAX_TEST_DO = 1,
+  // Descriptor-backed target-low assembly syntax: asm<descriptor.set> { ... }.
+  LOOM_REGION_SYNTAX_LOW_ASM = 2,
 } loom_region_syntax_t;
 
 #define LOOM_FORMAT_REGION_TABLE_DATA(keys_attr_index, default_region_index) \

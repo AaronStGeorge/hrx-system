@@ -1454,6 +1454,27 @@ test_region_syntax = Op(
 )
 
 # ============================================================================
+# test.low_asm_region — descriptor-backed low asm parser surface
+# ============================================================================
+
+test_low_asm_region = Op(
+    "test.low_asm_region",
+    group=test_ops,
+    doc="Test op whose body uses descriptor-backed target-low assembly syntax while preserving ordinary region storage.",
+    regions=[
+        RegionDef(
+            "body",
+            doc="Body parsed through the target-low asm region syntax.",
+            single_block=True,
+        )
+    ],
+    format=[Region("body", syntax="low.asm")],
+    examples=[
+        "test.low_asm_region asm<test.low.core> {\n  return\n}",
+    ],
+)
+
+# ============================================================================
 # Registry: all test ops in declaration order
 # ============================================================================
 
@@ -1518,4 +1539,5 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_view_root_min_alignment,
     test_fact_view_element_bytes,
     test_region_syntax,
+    test_low_asm_region,
 )

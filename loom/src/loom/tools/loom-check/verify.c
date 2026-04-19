@@ -6,6 +6,7 @@
 
 #include "loom/transforms/verify.h"
 
+#include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
@@ -51,12 +52,16 @@ iree_status_t loom_check_execute_verify(
   // Parse errors are emitted as diagnostics (not status failures).
   loom_module_t* module = NULL;
   iree_string_view_t stripped_view = iree_string_builder_view(&stripped_input);
+  loom_target_low_descriptor_registry_t low_registry;
+  loom_target_low_descriptor_registry_initialize(&low_registry);
   if (iree_status_is_ok(status)) {
     loom_text_parse_options_t parse_options = {
         .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
                             .user_data = &collector},
         .max_errors = 100,
     };
+    loom_low_descriptor_text_asm_environment_initialize(
+        &low_registry.registry, &parse_options.low_asm_environment);
     status = loom_text_parse(stripped_view, filename, context, block_pool,
                              &parse_options, &module);
     collector.module = module;
@@ -66,8 +71,6 @@ iree_status_t loom_check_execute_verify(
   // additional diagnostics. The source resolver uses the stripped input
   // so verifier diagnostics get the same line numbers as parse diagnostics.
   if (iree_status_is_ok(status) && module) {
-    loom_target_low_descriptor_registry_t low_registry;
-    loom_target_low_descriptor_registry_initialize(&low_registry);
     const loom_target_preset_registry_t preset_registry =
         loom_target_low_descriptor_registry_presets(&low_registry);
     iree_host_size_t expanded_preset_count = 0;

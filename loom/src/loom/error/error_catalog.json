@@ -2785,6 +2785,23 @@
     "fix_hint_template": "Each block label must be unique within its region"
   },
   {
+    "error_id": "ERR_PARSE_034",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 34,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid low asm syntax.",
+    "message_template": "invalid low asm syntax: {detail}",
+    "params": [
+      {
+        "name": "detail",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
     "error_id": "ERR_BYTECODE_001",
     "domain": 8,
     "domain_name": "BYTECODE",

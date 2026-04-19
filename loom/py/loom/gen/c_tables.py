@@ -123,6 +123,7 @@ KEYWORD_MAP: dict[str, str] = {
 REGION_SYNTAX_MAP: dict[str, str] = {
     "": "LOOM_REGION_SYNTAX_DEFAULT",
     "test.do": "LOOM_REGION_SYNTAX_TEST_DO",
+    "low.asm": "LOOM_REGION_SYNTAX_LOW_ASM",
 }
 
 # Maps Python TypeConstraint enum to C constraint enum name.

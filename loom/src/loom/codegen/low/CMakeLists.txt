@@ -38,6 +38,22 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    text_asm
+  HDRS
+    "text_asm.h"
+  SRCS
+    "text_asm.c"
+  DEPS
+    ::descriptors
+    iree::base
+    loom::src::loom::format::text::low_asm
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_binding
   HDRS
     "target_binding.h"

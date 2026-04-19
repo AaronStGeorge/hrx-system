@@ -388,6 +388,16 @@ ERR_PARSE_033 = ErrorDef(
     fix_hint="Each block label must be unique within its region",
 )
 
+# ERR_PARSE_034: Invalid low asm syntax.
+ERR_PARSE_034 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=34,
+    severity=Severity.ERROR,
+    summary="Invalid low asm syntax.",
+    message="invalid low asm syntax: {detail}",
+    params=(ErrorParam("detail", ParamKind.STRING),),
+)
+
 ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_001,
     ERR_PARSE_002,
@@ -422,4 +432,5 @@ ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_031,
     ERR_PARSE_032,
     ERR_PARSE_033,
+    ERR_PARSE_034,
 )

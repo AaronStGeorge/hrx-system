@@ -10,6 +10,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/error/diagnostic.h"
+#include "loom/format/text/low_asm.h"
 #include "loom/ir/ir.h"
 
 #ifdef __cplusplus
@@ -26,6 +27,11 @@ typedef struct loom_text_parse_options_t {
   // Default: 20. When the limit is reached, ERR_PARSE_012 is emitted
   // and parsing halts.
   uint32_t max_errors;
+
+  // Optional environment used by low.asm region syntax. The environment is
+  // parse-time context only: parsed IR contains canonical low ops with
+  // descriptor keys, not a persistent reference to the selected set.
+  loom_text_low_asm_environment_t low_asm_environment;
 } loom_text_parse_options_t;
 
 // Parses loom IR text into an in-memory module.

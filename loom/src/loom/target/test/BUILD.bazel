@@ -28,9 +28,21 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "alt_descriptors_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/test:alt_descriptors",
+)
+
+iree_assert_no_dependency(
     name = "descriptors_no_amdgpu_arch_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
     target = "//loom/src/loom/target/test:descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "alt_descriptors_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/test:alt_descriptors",
 )
 
 iree_assert_no_dependency(
@@ -40,15 +52,33 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "alt_descriptors_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/test:alt_descriptors",
+)
+
+iree_assert_no_dependency(
     name = "descriptors_no_ireevm_emit_dep",
     dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
     target = "//loom/src/loom/target/test:descriptors",
 )
 
 iree_assert_no_dependency(
+    name = "alt_descriptors_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/test:alt_descriptors",
+)
+
+iree_assert_no_dependency(
     name = "descriptors_no_llvmir_emit_dep",
     dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
     target = "//loom/src/loom/target/test:descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "alt_descriptors_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/test:alt_descriptors",
 )
 
 iree_assert_no_dependency(
@@ -93,6 +123,13 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "alt_descriptors",
+    srcs = ["alt_descriptors.c"],
+    hdrs = ["alt_descriptors.h"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
+loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
@@ -109,6 +146,7 @@ loom_cc_test(
     name = "descriptors_test",
     srcs = ["descriptors_test.cc"],
     deps = [
+        ":alt_descriptors",
         ":descriptors",
         "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/testing:gtest",

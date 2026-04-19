@@ -1516,6 +1516,8 @@ static char loom_print_region_syntax_first_char(loom_region_syntax_t syntax) {
       return '{';
     case LOOM_REGION_SYNTAX_TEST_DO:
       return 'd';
+    case LOOM_REGION_SYNTAX_LOW_ASM:
+      return 'a';
     default:
       return '?';
   }
@@ -1535,6 +1537,11 @@ static iree_status_t loom_print_region_body_with_syntax(
       IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
       break;
     }
+    case LOOM_REGION_SYNTAX_LOW_ASM:
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "low asm region printing requires a descriptor-backed print "
+          "environment");
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unsupported region syntax %u", (uint32_t)syntax);

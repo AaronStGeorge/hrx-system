@@ -14,6 +14,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/error/diagnostic.h"
+#include "loom/format/text/low_asm.h"
 #include "loom/format/text/tokenizer.h"
 #include "loom/ir/ir.h"
 #include "loom/ir/module.h"
@@ -337,6 +338,11 @@ typedef struct loom_parser_t {
   loom_alias_table_t aliases;
   loom_symbol_map_t symbol_lookup;
   loom_diagnostic_sink_t diagnostic_sink;
+
+  // Parse-time environment for low.asm regions. Empty means the syntax is
+  // recognized but emits a structured parse error when encountered.
+  loom_text_low_asm_environment_t low_asm_environment;
+
   uint32_t error_count;
   uint32_t max_errors;
   iree_string_view_t filename;

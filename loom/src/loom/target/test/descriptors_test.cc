@@ -10,6 +10,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/test/alt_descriptors.h"
 
 namespace loom {
 namespace {
@@ -46,6 +47,22 @@ TEST(TestLowDescriptorsTest, CoreDescriptorSetVerifies) {
   EXPECT_GE(descriptor_set->reg_class_count, 4u);
   EXPECT_GE(descriptor_set->schedule_class_count, 7u);
   EXPECT_GE(descriptor_set->resource_count, 7u);
+}
+
+TEST(TestLowDescriptorsTest, AltDescriptorSetVerifies) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_test_low_alt_descriptor_set();
+  ASSERT_NE(descriptor_set, nullptr);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(descriptor_set));
+
+  EXPECT_EQ(ToString(descriptor_set, descriptor_set->key_string_offset),
+            "test.low.alt");
+  EXPECT_EQ(descriptor_set->descriptor_ref_count,
+            descriptor_set->descriptor_count);
+  EXPECT_GE(descriptor_set->descriptor_count, 2u);
+  EXPECT_GE(descriptor_set->reg_class_count, 1u);
+  EXPECT_GE(descriptor_set->schedule_class_count, 2u);
+  EXPECT_GE(descriptor_set->resource_count, 1u);
 }
 
 TEST(TestLowDescriptorsTest, StableKeysCoverGenericLowBehaviors) {

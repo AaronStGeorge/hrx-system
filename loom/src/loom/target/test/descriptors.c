@@ -69,7 +69,8 @@ static const uint8_t kTestLowCoreStringData[] =
     LOOM_BSTRING_LITERAL("\x0f", "test.return.i32")
     LOOM_BSTRING_LITERAL("\x12", "control.return.i32")
     LOOM_BSTRING_LITERAL("\x10", "test.return.void")
-    LOOM_BSTRING_LITERAL("\x13", "control.return.void");
+    LOOM_BSTRING_LITERAL("\x13", "control.return.void")
+    LOOM_BSTRING_LITERAL("\x06", "callee");
 // clang-format on
 
 enum {
@@ -201,8 +202,12 @@ enum {
   TEST_LOW_CORE_STRING_semantic_test_return_void =
       TEST_LOW_CORE_STRING_descriptor_test_return_void +
       sizeof("test.return.void"),
-  TEST_LOW_CORE_STRING_END = TEST_LOW_CORE_STRING_semantic_test_return_void +
-                             sizeof("control.return.void"),
+  TEST_LOW_CORE_STRING_asm_immediate_test_call_i32_0_callee_ordinal =
+      TEST_LOW_CORE_STRING_semantic_test_return_void +
+      sizeof("control.return.void"),
+  TEST_LOW_CORE_STRING_END =
+      TEST_LOW_CORE_STRING_asm_immediate_test_call_i32_0_callee_ordinal +
+      sizeof("callee"),
 };
 
 static_assert(TEST_LOW_CORE_STRING_END == sizeof(kTestLowCoreStringData) - 1,
@@ -1176,7 +1181,8 @@ static const loom_low_asm_immediate_t kTestLowCoreAsmImmediates[] = {
     },
     {
         .immediate_index = 0,
-        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+        .name_string_offset =
+            TEST_LOW_CORE_STRING_asm_immediate_test_call_i32_0_callee_ordinal,
     },
     {
         .immediate_index = 0,

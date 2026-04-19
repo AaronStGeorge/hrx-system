@@ -78,7 +78,8 @@ enum {
   LOOM_OP_TEST_FACT_VIEW_ROOT_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 57),
   LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 58),
   LOOM_OP_TEST_REGION_SYNTAX = LOOM_OP_KIND(LOOM_DIALECT_TEST, 59),
-  LOOM_OP_TEST_COUNT_ = 60,
+  LOOM_OP_TEST_LOW_ASM_REGION = LOOM_OP_KIND(LOOM_DIALECT_TEST, 60),
+  LOOM_OP_TEST_COUNT_ = 61,
 };
 
 // Function visibility. Absent (0) means private.
@@ -1087,6 +1088,17 @@ iree_status_t loom_test_fact_view_element_bytes_facts(
 LOOM_DEFINE_ISA(loom_test_region_syntax_isa, LOOM_OP_TEST_REGION_SYNTAX)
 LOOM_DEFINE_REGION(loom_test_region_syntax_body, 0)
 iree_status_t loom_test_region_syntax_build(
+    loom_builder_t* builder,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_LOW_ASM_REGION: Test op whose body uses descriptor-backed target-low assembly syntax while preserving ordinary region storage.
+// test.low_asm_region asm<test.low.core> {
+//   return
+// }
+LOOM_DEFINE_ISA(loom_test_low_asm_region_isa, LOOM_OP_TEST_LOW_ASM_REGION)
+LOOM_DEFINE_REGION(loom_test_low_asm_region_body, 0)
+iree_status_t loom_test_low_asm_region_build(
     loom_builder_t* builder,
     loom_location_id_t location,
     loom_op_t** out_op);

@@ -24,6 +24,18 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    alt_descriptors
+  HDRS
+    "alt_descriptors.h"
+  SRCS
+    "alt_descriptors.c"
+  DEPS
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_registry
   HDRS
     "low_registry.h"
@@ -44,6 +56,7 @@ loom_cc_test(
   SRCS
     "descriptors_test.cc"
   DEPS
+    ::alt_descriptors
     ::descriptors
     loom::src::loom::codegen::low::descriptors
     iree::testing::gtest

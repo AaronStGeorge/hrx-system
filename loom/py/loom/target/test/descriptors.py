@@ -70,13 +70,18 @@ def _asm(
     *,
     results: tuple[str, ...] = (),
     operands: tuple[str, ...] = (),
-    immediates: tuple[str, ...] = (),
+    immediates: tuple[str | AsmImmediate, ...] = (),
 ) -> tuple[AsmForm, ...]:
     return (
         AsmForm(
             results=results,
             operands=operands,
-            immediates=tuple(AsmImmediate(field_name) for field_name in immediates),
+            immediates=tuple(
+                immediate
+                if isinstance(immediate, AsmImmediate)
+                else AsmImmediate(immediate)
+                for immediate in immediates
+            ),
         ),
     )
 
@@ -368,7 +373,9 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             operands=(_i32_result(), _i32_operand("arg0")),
             immediates=(_CALLEE_IMMEDIATE,),
             asm_forms=_asm(
-                results=("dst",), operands=("arg0",), immediates=("callee_ordinal",)
+                results=("dst",),
+                operands=("arg0",),
+                immediates=(AsmImmediate("callee_ordinal", name="callee"),),
             ),
             effects=(_CALL_EFFECT,),
             schedule_class=_SCHEDULE_CALL,
@@ -417,6 +424,64 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
+        ),
+    ),
+)
+
+
+TEST_LOW_ALT_DESCRIPTOR_SET = DescriptorSet(
+    key="test.low.alt",
+    target_key="test.low",
+    feature_key="test.low.v1.alt",
+    c_header_path=Path("loom/src/loom/target/test/alt_descriptors.h"),
+    c_source_path=Path("loom/src/loom/target/test/alt_descriptors.c"),
+    header_guard="LOOM_TARGET_TEST_ALT_DESCRIPTORS_H_",
+    public_header="loom/target/test/alt_descriptors.h",
+    function_name="loom_test_low_alt_descriptor_set",
+    c_table_prefix="TestLowAlt",
+    c_enum_prefix="TEST_LOW_ALT",
+    generator_version=1,
+    reg_classes=(
+        RegClass(
+            _REG_I32, 32, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+    ),
+    resources=(
+        Resource(_RESOURCE_SCALAR, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
+    ),
+    schedule_classes=(
+        ScheduleClass(
+            _SCHEDULE_CONST,
+            latency_kind=LatencyKind.EXACT,
+            model_quality=ModelQuality.EXACT,
+        ),
+        ScheduleClass(
+            _SCHEDULE_SCALAR_ALU,
+            latency_kind=LatencyKind.EXACT,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_SCALAR, cycles=1, units=1),),
+            model_quality=ModelQuality.EXACT,
+        ),
+    ),
+    descriptors=(
+        Descriptor(
+            key="test.alt.const.i32",
+            mnemonic="test.alt.const.i32",
+            semantic_tag="test.alt.integer.const.i32",
+            operands=(_i32_result(),),
+            immediates=(_I32_VALUE_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
+            schedule_class=_SCHEDULE_CONST,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.alt.neg.i32",
+            mnemonic="test.alt.neg.i32",
+            semantic_tag="test.alt.integer.neg.i32",
+            operands=(_i32_result(), _i32_operand("value")),
+            asm_forms=_asm(results=("dst",), operands=("value",)),
+            schedule_class=_SCHEDULE_SCALAR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
     ),
 )

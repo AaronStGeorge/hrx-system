@@ -853,3 +853,18 @@ class TestBuilders:
         if body is not None:
             _regions.append(body)
         self._b.build("test.region_syntax", _operands, attributes=_attributes, regions=_regions)
+
+    def low_asm_region(self, *, body: Region | None = None) -> None:
+        """Test op whose body uses descriptor-backed target-low assembly syntax while preserving ordinary region storage.
+
+        Example::
+            test.low_asm_region asm<test.low.core> {
+              return
+            }
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if body is not None:
+            _regions.append(body)
+        self._b.build("test.low_asm_region", _operands, attributes=_attributes, regions=_regions)

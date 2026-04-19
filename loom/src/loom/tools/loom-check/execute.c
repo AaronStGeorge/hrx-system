@@ -7,6 +7,7 @@
 #include "loom/tools/loom-check/execute.h"
 
 #include "loom/codegen/low/allocation_pass.h"
+#include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/diagnostic.h"
 #include "loom/error/json_sink.h"
@@ -362,6 +363,10 @@ iree_status_t loom_check_execute_pass(
                           .user_data = &diagnostic_collector},
       .max_errors = 20,
   };
+  loom_target_low_descriptor_registry_t low_registry;
+  loom_target_low_descriptor_registry_initialize(&low_registry);
+  loom_low_descriptor_text_asm_environment_initialize(
+      &low_registry.registry, &parse_options.low_asm_environment);
   iree_status_t status = loom_text_parse(test_case->input, filename, context,
                                          block_pool, &parse_options, &module);
   diagnostic_collector.module = module;
@@ -386,8 +391,6 @@ iree_status_t loom_check_execute_pass(
     return status;
   }
 
-  loom_target_low_descriptor_registry_t low_registry;
-  loom_target_low_descriptor_registry_initialize(&low_registry);
   const loom_target_preset_registry_t preset_registry =
       loom_target_low_descriptor_registry_presets(&low_registry);
   iree_host_size_t expanded_preset_count = 0;

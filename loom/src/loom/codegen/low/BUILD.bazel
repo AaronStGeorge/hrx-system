@@ -70,6 +70,36 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "text_asm_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/codegen/low:text_asm",
+)
+
+iree_assert_no_dependency(
+    name = "text_asm_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/codegen/low:text_asm",
+)
+
+iree_assert_no_dependency(
+    name = "text_asm_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/codegen/low:text_asm",
+)
+
+iree_assert_no_dependency(
+    name = "text_asm_no_test_low_registry_dep",
+    dependency = "//loom/src/loom/target/test:low_registry",
+    target = "//loom/src/loom/codegen/low:text_asm",
+)
+
+iree_assert_no_dependency(
+    name = "text_asm_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/codegen/low:text_asm",
+)
+
+iree_assert_no_dependency(
     name = "allocation_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/codegen/low:allocation",
@@ -215,6 +245,19 @@ loom_cc_library(
     hdrs = ["requirements.h"],
     deps = [
         ":descriptors",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "text_asm",
+    srcs = ["text_asm.c"],
+    hdrs = ["text_asm.h"],
+    deps = [
+        ":descriptors",
+        "//loom/src/loom/format/text:low_asm",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
     ],
 )

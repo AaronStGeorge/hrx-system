@@ -12,6 +12,18 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    low_asm
+  HDRS
+    "low_asm.h"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     parser
   HDRS
     "parser.h"
@@ -21,6 +33,7 @@ loom_cc_library(
     "parser_format.c"
     "parser_types.c"
   DEPS
+    ::low_asm
     ::tokenizer
     iree::base
     iree::base::internal::arena
@@ -43,14 +56,18 @@ loom_cc_test(
     ::parser
     ::printer
     iree::base::internal::arena
+    loom::src::loom::codegen::low::text_asm
     loom::src::loom::error::diagnostic
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::cfg
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
+    loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
+    loom::src::loom::target::test::alt_descriptors
+    loom::src::loom::target::test::descriptors
     loom::src::loom::testing::diagnostic_matchers
     loom::src::loom::util::stream
     iree::testing::gtest
