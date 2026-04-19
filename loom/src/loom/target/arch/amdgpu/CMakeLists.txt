@@ -257,6 +257,25 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    wait_packets
+  HDRS
+    "wait_packets.h"
+  SRCS
+    "wait_packets.c"
+  DEPS
+    ::wait_plan
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     wait_plan_test
@@ -265,6 +284,29 @@ loom_cc_test(
   DEPS
     ::low_registry
     ::wait_plan
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::codegen::low::text_asm
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_registry
+    loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::target::presets
+    loom::src::loom::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    wait_packets_test
+  SRCS
+    "wait_packets_test.cc"
+  DEPS
+    ::low_registry
+    ::wait_packets
     iree::base::internal::arena
     loom::src::loom::codegen::low::schedule
     loom::src::loom::codegen::low::text_asm
@@ -290,6 +332,7 @@ loom_low_descriptor_exclude_from_all(
     "gfx950_descriptors_test"
     "loom_check_test"
     "low_registry_test"
+    "wait_packets_test"
     "wait_plan_test"
 )
 

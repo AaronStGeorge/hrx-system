@@ -36,6 +36,17 @@ enum loom_amdgpu_wait_counter_e {
   LOOM_AMDGPU_WAIT_COUNTER_ALU = 3,
 };
 
+// Bit masks for AMDGPU wait counters. These are descriptor-overlay ids, not
+// native instruction bit encodings.
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_LOAD ((uint32_t)1u << 0)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_STORE ((uint32_t)1u << 1)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_ALU ((uint32_t)1u << 2)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_MEMORY \
+  (LOOM_AMDGPU_WAIT_COUNTER_MASK_LOAD | LOOM_AMDGPU_WAIT_COUNTER_MASK_STORE)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_ALL                                     \
+  (LOOM_AMDGPU_WAIT_COUNTER_MASK_LOAD | LOOM_AMDGPU_WAIT_COUNTER_MASK_STORE | \
+   LOOM_AMDGPU_WAIT_COUNTER_MASK_ALU)
+
 typedef enum loom_amdgpu_wait_plan_action_kind_e {
   // Unknown or uninitialized action kind.
   LOOM_AMDGPU_WAIT_PLAN_ACTION_UNKNOWN = 0,
@@ -93,6 +104,10 @@ typedef struct loom_amdgpu_wait_plan_t {
 
 // Returns the stable diagnostic spelling for an AMDGPU wait counter id.
 iree_string_view_t loom_amdgpu_wait_counter_name(uint16_t counter_id);
+
+// Returns the bit mask for one AMDGPU wait counter id.
+iree_status_t loom_amdgpu_wait_counter_mask(uint16_t counter_id,
+                                            uint32_t* out_mask);
 
 // Returns the stable diagnostic spelling for a wait-plan action kind.
 iree_string_view_t loom_amdgpu_wait_plan_action_kind_name(

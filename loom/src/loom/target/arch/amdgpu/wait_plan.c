@@ -15,9 +15,6 @@
 #include "loom/util/stream.h"
 
 #define LOOM_AMDGPU_WAIT_COUNTER_COUNT 3
-#define LOOM_AMDGPU_WAIT_COUNTER_MASK_LOAD (1u << 0)
-#define LOOM_AMDGPU_WAIT_COUNTER_MASK_STORE (1u << 1)
-#define LOOM_AMDGPU_WAIT_COUNTER_MASK_ALU (1u << 2)
 
 typedef struct loom_amdgpu_wait_node_state_t {
   // Counters observed on WAIT_COUNTER hazard rows for this node.
@@ -116,8 +113,9 @@ iree_string_view_t loom_amdgpu_wait_plan_reason_name(
   }
 }
 
-static iree_status_t loom_amdgpu_wait_counter_mask(uint16_t counter_id,
-                                                   uint32_t* out_mask) {
+iree_status_t loom_amdgpu_wait_counter_mask(uint16_t counter_id,
+                                            uint32_t* out_mask) {
+  IREE_ASSERT_ARGUMENT(out_mask);
   switch (counter_id) {
     case LOOM_AMDGPU_WAIT_COUNTER_LOAD:
       *out_mask = LOOM_AMDGPU_WAIT_COUNTER_MASK_LOAD;
@@ -573,9 +571,10 @@ static iree_status_t loom_amdgpu_wait_plan_build_actions(
 iree_status_t loom_amdgpu_wait_plan_build(
     const loom_low_schedule_sidecar_t* schedule, iree_arena_allocator_t* arena,
     loom_amdgpu_wait_plan_t* out_plan) {
-  if (!schedule || !arena || !out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  if (!schedule || !arena) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "schedule, arena, and output plan are required");
+                            "schedule and arena are required");
   }
   *out_plan = (loom_amdgpu_wait_plan_t){0};
   loom_amdgpu_wait_plan_builder_t builder = {
@@ -617,9 +616,10 @@ static iree_string_view_t loom_amdgpu_wait_plan_json_function_name(
 
 iree_status_t loom_amdgpu_wait_plan_format_json(
     const loom_amdgpu_wait_plan_t* plan, iree_string_builder_t* builder) {
-  if (!plan || !plan->schedule || !builder) {
+  IREE_ASSERT_ARGUMENT(builder);
+  if (!plan || !plan->schedule) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "wait plan and builder are required");
+                            "wait plan with schedule is required");
   }
   loom_output_stream_t stream;
   loom_output_stream_for_builder(builder, &stream);
