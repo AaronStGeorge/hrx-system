@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "iree/base/internal/arena.h"
 #include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -28,6 +29,28 @@ bool Contains(const std::string& value, const char* substring) {
 
 using StreamPtr =
     std::unique_ptr<iree_io_stream_t, void (*)(iree_io_stream_t*)>;
+
+class TestArena {
+ public:
+  TestArena() {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    iree_arena_initialize(&block_pool_, &arena_);
+  }
+
+  ~TestArena() {
+    iree_arena_deinitialize(&arena_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  iree_arena_allocator_t* arena() { return &arena_; }
+
+ private:
+  // Block pool backing the test arena.
+  iree_arena_block_pool_t block_pool_ = {0};
+  // Arena receiving transient ELF writer storage.
+  iree_arena_allocator_t arena_ = {0};
+};
 
 StreamPtr CreateStream() {
   iree_io_stream_t* stream = nullptr;
@@ -233,8 +256,9 @@ TEST(AmdgpuMetadataTest, WritesElfEnvelopeContainingMetadataNote) {
   };
 
   StreamPtr stream = CreateStream();
-  IREE_ASSERT_OK(loom_native_elf64le_write_file(&file, stream.get(),
-                                                iree_allocator_system()));
+  TestArena arena;
+  IREE_ASSERT_OK(
+      loom_native_elf64le_write_file(&file, stream.get(), arena.arena()));
   std::string bytes = StreamBytes(stream.get());
 
   EXPECT_EQ(bytes.substr(0, 4), std::string("\x7f"

@@ -15,6 +15,7 @@
 #define LOOM_TARGET_EMIT_NATIVE_ELF_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "iree/io/stream.h"
 
 #ifdef __cplusplus
@@ -149,10 +150,12 @@ typedef struct loom_native_elf64le_file_t {
 // The writer emits bytes sequentially. It computes all layout metadata before
 // writing and does not patch or seek backward, making it suitable for ordinary
 // output streams. Temporary layout and `.shstrtab` storage use
-// |host_allocator|.
+// |scratch_arena|, which must remain live until this call returns. On failure
+// the arena may contain abandoned transient allocations that will be reclaimed
+// by the next arena reset.
 iree_status_t loom_native_elf64le_write_file(
     const loom_native_elf64le_file_t* file, iree_io_stream_t* stream,
-    iree_allocator_t host_allocator);
+    iree_arena_allocator_t* scratch_arena);
 
 #ifdef __cplusplus
 }  // extern "C"

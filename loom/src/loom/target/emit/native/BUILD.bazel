@@ -145,6 +145,7 @@ loom_cc_library(
     hdrs = ["elf.h"],
     deps = [
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",
     ],
 )
@@ -166,6 +167,7 @@ loom_cc_test(
     deps = [
         ":elf",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

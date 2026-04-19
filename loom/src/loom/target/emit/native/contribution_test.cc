@@ -148,8 +148,8 @@ TEST(NativeContributionTest, AssemblesAlignedSectionsAndWritesElf) {
       .section_count = assembly.section_count,
   };
   StreamPtr stream = CreateStream();
-  IREE_ASSERT_OK(loom_native_elf64le_write_file(&file, stream.get(),
-                                                iree_allocator_system()));
+  IREE_ASSERT_OK(
+      loom_native_elf64le_write_file(&file, stream.get(), arena.arena()));
   const std::string elf_bytes = StreamBytes(stream.get());
   ASSERT_EQ(LoadLeU16(elf_bytes, 60), 4u);
   const size_t section_header_offset = (size_t)LoadLeU64(elf_bytes, 40);

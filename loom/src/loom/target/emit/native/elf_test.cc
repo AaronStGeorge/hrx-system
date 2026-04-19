@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "iree/base/internal/arena.h"
 #include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -18,6 +19,28 @@ namespace {
 
 using StreamPtr =
     std::unique_ptr<iree_io_stream_t, void (*)(iree_io_stream_t*)>;
+
+class TestArena {
+ public:
+  TestArena() {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    iree_arena_initialize(&block_pool_, &arena_);
+  }
+
+  ~TestArena() {
+    iree_arena_deinitialize(&arena_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  iree_arena_allocator_t* arena() { return &arena_; }
+
+ private:
+  // Block pool backing the test arena.
+  iree_arena_block_pool_t block_pool_ = {0};
+  // Arena receiving transient ELF writer storage.
+  iree_arena_allocator_t arena_ = {0};
+};
 
 StreamPtr CreateStream() {
   iree_io_stream_t* stream = nullptr;
@@ -100,8 +123,9 @@ TEST(NativeElfTest, WritesAmdgpuNoteElfEnvelope) {
   };
 
   StreamPtr stream = CreateStream();
-  IREE_ASSERT_OK(loom_native_elf64le_write_file(&file, stream.get(),
-                                                iree_allocator_system()));
+  TestArena arena;
+  IREE_ASSERT_OK(
+      loom_native_elf64le_write_file(&file, stream.get(), arena.arena()));
   const std::string bytes = StreamBytes(stream.get());
   const size_t note_offset = 120;
   const size_t string_table_offset = note_offset + note.size();
@@ -188,9 +212,10 @@ TEST(NativeElfTest, RejectsInvalidSectionAlignment) {
   };
 
   StreamPtr stream = CreateStream();
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_native_elf64le_write_file(
-                            &file, stream.get(), iree_allocator_system()));
+  TestArena arena;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_native_elf64le_write_file(&file, stream.get(), arena.arena()));
 }
 
 TEST(NativeElfTest, RejectsInvalidSegmentRange) {
@@ -217,9 +242,10 @@ TEST(NativeElfTest, RejectsInvalidSegmentRange) {
   };
 
   StreamPtr stream = CreateStream();
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
-                        loom_native_elf64le_write_file(
-                            &file, stream.get(), iree_allocator_system()));
+  TestArena arena;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
+      loom_native_elf64le_write_file(&file, stream.get(), arena.arena()));
 }
 
 }  // namespace

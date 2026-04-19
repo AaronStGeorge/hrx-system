@@ -110,6 +110,7 @@ loom_cc_test(
   DEPS
     ::metadata
     iree::base
+    iree::base::internal::arena
     iree::io::stream
     loom::src::loom::target::emit::native::elf
     iree::testing::gtest

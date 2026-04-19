@@ -34,6 +34,7 @@ loom_cc_library(
     "elf.c"
   DEPS
     iree::base
+    iree::base::internal::arena
     iree::io::stream
   PUBLIC
 )
@@ -60,6 +61,7 @@ loom_cc_test(
   DEPS
     ::elf
     iree::base
+    iree::base::internal::arena
     iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main

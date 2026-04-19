@@ -7,6 +7,7 @@
 #include "loom/target/emit/native/elf.h"
 
 #include <inttypes.h>
+#include <string.h>
 
 //===----------------------------------------------------------------------===//
 // ELF64LE layout constants
@@ -47,6 +48,8 @@ typedef struct loom_native_elf64le_layout_t {
   loom_native_elf64le_section_layout_t* sections;
   // Number of entries in |sections|.
   iree_host_size_t section_count;
+  // Arena-backed section-name string table bytes.
+  iree_string_view_t string_table;
   // Byte offset of the ELF program-header table, or zero when absent.
   uint64_t program_header_offset;
   // Byte offset of the ELF section-header table.
@@ -179,25 +182,62 @@ static iree_status_t loom_native_elf64le_validate_file(
   return iree_ok_status();
 }
 
-static iree_status_t loom_native_elf64le_append_name(
-    iree_string_builder_t* string_table, iree_string_view_t name,
-    uint32_t* out_name_offset) {
-  IREE_ASSERT_ARGUMENT(out_name_offset);
-  const iree_host_size_t offset = iree_string_builder_size(string_table);
-  if (offset > UINT32_MAX) {
+static iree_status_t loom_native_elf64le_measure_name(
+    iree_host_size_t* inout_size, iree_string_view_t name) {
+  IREE_ASSERT_ARGUMENT(inout_size);
+  iree_host_size_t entry_size = 0;
+  if (!iree_host_size_checked_add(name.size, 1u, &entry_size) ||
+      !iree_host_size_checked_add(*inout_size, entry_size, inout_size)) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "ELF section-name string table is too large");
   }
-  *out_name_offset = (uint32_t)offset;
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(string_table, name));
-  const char zero = 0;
-  return iree_string_builder_append_string(string_table,
-                                           iree_make_string_view(&zero, 1));
+  if (*inout_size > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "ELF section-name string table is too large");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_native_elf64le_measure_string_table(
+    const loom_native_elf64le_file_t* file, iree_host_size_t* out_size) {
+  IREE_ASSERT_ARGUMENT(out_size);
+  iree_host_size_t size = 1u;
+  for (iree_host_size_t i = 0; i < file->section_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_native_elf64le_measure_name(&size, file->sections[i].name));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_native_elf64le_measure_name(&size, IREE_SV(".shstrtab")));
+  *out_size = size;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_native_elf64le_append_name(
+    iree_byte_span_t string_table, iree_host_size_t* inout_offset,
+    iree_string_view_t name, uint32_t* out_name_offset) {
+  IREE_ASSERT_ARGUMENT(inout_offset);
+  IREE_ASSERT_ARGUMENT(out_name_offset);
+  if (*inout_offset > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "ELF section-name string table is too large");
+  }
+  if (*inout_offset > string_table.data_length ||
+      name.size >= string_table.data_length - *inout_offset) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "ELF section-name string table overflow");
+  }
+  *out_name_offset = (uint32_t)*inout_offset;
+  memcpy(string_table.data + *inout_offset, name.data, name.size);
+  *inout_offset += name.size;
+  string_table.data[*inout_offset] = 0;
+  *inout_offset += 1u;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_native_elf64le_build_layout(
-    const loom_native_elf64le_file_t* file, iree_string_builder_t* string_table,
-    loom_native_elf64le_layout_t* out_layout, iree_allocator_t host_allocator) {
+    const loom_native_elf64le_file_t* file,
+    loom_native_elf64le_layout_t* out_layout,
+    iree_arena_allocator_t* scratch_arena) {
   IREE_ASSERT_ARGUMENT(out_layout);
   *out_layout = (loom_native_elf64le_layout_t){0};
 
@@ -208,24 +248,36 @@ static iree_status_t loom_native_elf64le_build_layout(
   }
 
   loom_native_elf64le_section_layout_t* sections = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-      host_allocator, section_count, sizeof(*sections), (void**)&sections));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      scratch_arena, section_count, sizeof(*sections), (void**)&sections));
+  memset(sections, 0, section_count * sizeof(*sections));
+
+  iree_host_size_t string_table_size = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_native_elf64le_measure_string_table(file, &string_table_size));
+  uint8_t* string_table_data = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(scratch_arena, string_table_size,
+                                           (void**)&string_table_data));
+  memset(string_table_data, 0, string_table_size);
+  const iree_byte_span_t string_table =
+      iree_make_byte_span(string_table_data, string_table_size);
 
   iree_status_t status = iree_ok_status();
   out_layout->sections = sections;
   out_layout->section_count = section_count;
+  out_layout->string_table = iree_make_string_view(
+      (const char*)string_table.data, string_table.data_length);
 
-  const char zero = 0;
-  status = iree_string_builder_append_string(string_table,
-                                             iree_make_string_view(&zero, 1));
+  iree_host_size_t string_table_offset = 1u;
   for (iree_host_size_t i = 0;
        i < file->section_count && iree_status_is_ok(status); ++i) {
-    status = loom_native_elf64le_append_name(
-        string_table, file->sections[i].name, &sections[i + 1].name_offset);
+    status = loom_native_elf64le_append_name(string_table, &string_table_offset,
+                                             file->sections[i].name,
+                                             &sections[i + 1].name_offset);
   }
   if (iree_status_is_ok(status)) {
     status = loom_native_elf64le_append_name(
-        string_table, IREE_SV(".shstrtab"),
+        string_table, &string_table_offset, IREE_SV(".shstrtab"),
         &sections[section_count - 1].name_offset);
   }
 
@@ -273,7 +325,7 @@ static iree_status_t loom_native_elf64le_build_layout(
         &sections[section_count - 1];
     string_table_layout->alignment = 1u;
     string_table_layout->file_offset = offset;
-    string_table_layout->file_size = iree_string_builder_size(string_table);
+    string_table_layout->file_size = string_table.data_length;
     if (!loom_native_elf64le_checked_add_uint64(
             offset, string_table_layout->file_size, &offset)) {
       status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -290,7 +342,6 @@ static iree_status_t loom_native_elf64le_build_layout(
   }
 
   if (!iree_status_is_ok(status)) {
-    iree_allocator_free(host_allocator, sections);
     *out_layout = (loom_native_elf64le_layout_t){0};
   }
   return status;
@@ -519,22 +570,19 @@ static iree_status_t loom_native_elf64le_write_section_headers(
 
 iree_status_t loom_native_elf64le_write_file(
     const loom_native_elf64le_file_t* file, iree_io_stream_t* stream,
-    iree_allocator_t host_allocator) {
+    iree_arena_allocator_t* scratch_arena) {
+  IREE_ASSERT_ARGUMENT(scratch_arena);
   if (stream == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "ELF output stream is required");
   }
   IREE_RETURN_IF_ERROR(loom_native_elf64le_validate_file(file));
 
-  iree_string_builder_t string_table;
-  iree_string_builder_initialize(host_allocator, &string_table);
   loom_native_elf64le_layout_t layout = {0};
-  iree_status_t status = loom_native_elf64le_build_layout(
-      file, &string_table, &layout, host_allocator);
+  iree_status_t status =
+      loom_native_elf64le_build_layout(file, &layout, scratch_arena);
 
-  iree_string_view_t string_table_view = iree_string_view_empty();
   if (iree_status_is_ok(status)) {
-    string_table_view = iree_string_builder_view(&string_table);
     status = loom_native_elf64le_write_header(file, &layout, stream);
   }
   if (iree_status_is_ok(status)) {
@@ -542,13 +590,11 @@ iree_status_t loom_native_elf64le_write_file(
   }
   if (iree_status_is_ok(status)) {
     status = loom_native_elf64le_write_section_contents(
-        file, &layout, string_table_view, stream);
+        file, &layout, layout.string_table, stream);
   }
   if (iree_status_is_ok(status)) {
     status = loom_native_elf64le_write_section_headers(file, &layout, stream);
   }
 
-  iree_allocator_free(host_allocator, layout.sections);
-  iree_string_builder_deinitialize(&string_table);
   return status;
 }
