@@ -98,6 +98,36 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    low_legality
+  HDRS
+    "low_legality.h"
+  SRCS
+    "low_legality.c"
+  DEPS
+    ::low_descriptor_registry
+    ::types
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::cfg
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::target
+    loom::src::loom::ops::vector
+    loom::src::loom::ops::view
+    loom::src::loom::util::walk
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_descriptor_registry_core_test
   HDRS
     "low_descriptor_registry_core_test.h"
@@ -173,6 +203,25 @@ loom_cc_test(
   DEPS
     ::low_descriptor_registry_core_test
     loom::src::loom::codegen::low::requirements
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    low_legality_test
+  SRCS
+    "low_legality_test.cc"
+  DEPS
+    ::low_legality
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::vector
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )

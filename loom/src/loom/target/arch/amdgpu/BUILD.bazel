@@ -124,6 +124,12 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "target_low_legality_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target:low_legality",
+)
+
+iree_assert_no_dependency(
     name = "gfx950_descriptors_no_wasm_arch_dep",
     dependency = "//loom/src/loom/target/arch/wasm:descriptors",
     target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
