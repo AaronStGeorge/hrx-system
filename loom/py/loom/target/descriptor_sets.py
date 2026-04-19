@@ -41,6 +41,7 @@ DESCRIPTOR_SET_REGISTRATIONS = (
         module_name="loom.target.emit.ireevm.descriptors",
         symbol_name="IREEVM_CORE_DESCRIPTOR_SET",
         aliases=("ireevm_core",),
+        generates_checked_in_c=False,
     ),
     DescriptorSetRegistration(
         key="wasm.core.simd128",
@@ -68,12 +69,14 @@ DESCRIPTOR_SET_REGISTRATIONS = (
         module_name="loom.target.test.descriptors",
         symbol_name="TEST_LOW_CORE_DESCRIPTOR_SET",
         aliases=("test_low_core",),
+        generates_checked_in_c=False,
     ),
     DescriptorSetRegistration(
         key="test.low.alt",
         module_name="loom.target.test.descriptors",
         symbol_name="TEST_LOW_ALT_DESCRIPTOR_SET",
         aliases=("test_low_alt",),
+        generates_checked_in_c=False,
     ),
 )
 

@@ -10,16 +10,24 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
   NAME
     descriptors
-  HDRS
-    "descriptors.h"
-  SRCS
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptor_shard.py"
+  SOURCE
     "descriptors.c"
+  HEADER
+    "descriptors.h"
+  ARGS
+    "--descriptor-set=ireevm_core"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/descriptor_sets.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/emit/ireevm/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     loom::src::loom::codegen::low::descriptors
-  PUBLIC
 )
 
 loom_cc_library(

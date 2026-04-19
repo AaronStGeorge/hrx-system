@@ -10,6 +10,7 @@ load(
     "loom_cc_library",
     "loom_cc_test",
 )
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_low_descriptor_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -127,17 +128,35 @@ iree_assert_no_dependency(
 # Backend-independent low test descriptors
 #===------------------------------------------------------------------------===#
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
     name = "descriptors",
-    srcs = ["descriptors.c"],
-    hdrs = ["descriptors.h"],
+    args = ["--descriptor-set=test_low_core"],
+    cmake_generator = "//loom/py/loom:gen/low_descriptor_shard.py",
+    cmake_generator_deps = [
+        "//loom/py/loom:gen/low_descriptors.py",
+        "//loom/py/loom:target/descriptor_sets.py",
+        "//loom/py/loom:target/low_descriptors.py",
+        "//loom/py/loom:target/test/descriptors.py",
+    ],
+    generator = "//loom/py/loom:test_low_descriptor_shard",
+    header = "descriptors.h",
+    source = "descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
     name = "alt_descriptors",
-    srcs = ["alt_descriptors.c"],
-    hdrs = ["alt_descriptors.h"],
+    args = ["--descriptor-set=test_low_alt"],
+    cmake_generator = "//loom/py/loom:gen/low_descriptor_shard.py",
+    cmake_generator_deps = [
+        "//loom/py/loom:gen/low_descriptors.py",
+        "//loom/py/loom:target/descriptor_sets.py",
+        "//loom/py/loom:target/low_descriptors.py",
+        "//loom/py/loom:target/test/descriptors.py",
+    ],
+    generator = "//loom/py/loom:test_low_descriptor_shard",
+    header = "alt_descriptors.h",
+    source = "alt_descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 

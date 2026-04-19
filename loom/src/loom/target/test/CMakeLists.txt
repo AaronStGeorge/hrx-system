@@ -10,28 +10,44 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
   NAME
     descriptors
-  HDRS
-    "descriptors.h"
-  SRCS
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptor_shard.py"
+  SOURCE
     "descriptors.c"
+  HEADER
+    "descriptors.h"
+  ARGS
+    "--descriptor-set=test_low_core"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/descriptor_sets.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/test/descriptors.py"
   DEPS
     loom::src::loom::codegen::low::descriptors
-  PUBLIC
 )
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
   NAME
     alt_descriptors
-  HDRS
-    "alt_descriptors.h"
-  SRCS
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptor_shard.py"
+  SOURCE
     "alt_descriptors.c"
+  HEADER
+    "alt_descriptors.h"
+  ARGS
+    "--descriptor-set=test_low_alt"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/descriptor_sets.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/test/descriptors.py"
   DEPS
     loom::src::loom::codegen::low::descriptors
-  PUBLIC
 )
 
 loom_cc_library(
