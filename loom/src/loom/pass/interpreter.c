@@ -45,6 +45,13 @@ typedef struct loom_pass_interpreter_state_t {
   const loom_pass_interpreter_options_t* options;
 } loom_pass_interpreter_state_t;
 
+typedef struct loom_pass_interpreter_diagnostic_counter_t {
+  // Caller-provided emitter that receives pass diagnostics.
+  iree_diagnostic_emitter_t target;
+  // Number of diagnostics emitted by the current pass invocation.
+  iree_host_size_t emission_count;
+} loom_pass_interpreter_diagnostic_counter_t;
+
 typedef struct loom_pass_interpreter_symbol_snapshot_entry_t {
   // Symbol entry captured before entering a pass.for body.
   loom_symbol_t* symbol;
@@ -110,6 +117,14 @@ static iree_string_view_t loom_pass_interpreter_source_symbol_name(
   return module->strings.entries[symbol->name_id];
 }
 
+static iree_status_t loom_pass_interpreter_count_diagnostic(
+    void* user_data, const loom_diagnostic_emission_t* emission) {
+  loom_pass_interpreter_diagnostic_counter_t* counter =
+      (loom_pass_interpreter_diagnostic_counter_t*)user_data;
+  ++counter->emission_count;
+  return iree_diagnostic_emit(counter->target, emission);
+}
+
 static iree_string_view_t loom_pass_interpreter_pipeline_name(
     const loom_pass_interpreter_state_t* state,
     const loom_pass_program_instruction_t* instruction) {
@@ -125,6 +140,7 @@ static iree_string_view_t loom_pass_interpreter_pipeline_name(
 static iree_status_t loom_pass_interpreter_make_pass(
     loom_pass_interpreter_state_t* state,
     const loom_pass_program_instruction_t* instruction,
+    iree_diagnostic_emitter_t diagnostic_emitter,
     iree_arena_allocator_t* instance_arena, loom_pass_t* out_pass) {
   const loom_pass_program_invoke_t* invoke = &instruction->invoke;
   void* pass_user_data = NULL;
@@ -138,7 +154,7 @@ static iree_status_t loom_pass_interpreter_make_pass(
       .instance_arena = instance_arena,
       .arena = instance_arena,
       .decoded_options = invoke->decoded_options,
-      .diagnostic_emitter = state->options->diagnostic_emitter,
+      .diagnostic_emitter = diagnostic_emitter,
       .user_data = pass_user_data,
   };
   if (invoke->info->statistic_count == 0) {
@@ -264,9 +280,21 @@ static iree_status_t loom_pass_interpreter_invoke(
   iree_arena_allocator_t instance_arena;
   iree_arena_initialize(state->options->block_pool, &instance_arena);
 
+  loom_pass_interpreter_diagnostic_counter_t diagnostic_counter = {
+      .target = state->options->diagnostic_emitter,
+  };
+  iree_diagnostic_emitter_t pass_diagnostic_emitter =
+      state->options->diagnostic_emitter;
+  if (state->options->diagnostic_emitter.fn) {
+    pass_diagnostic_emitter = (iree_diagnostic_emitter_t){
+        .fn = loom_pass_interpreter_count_diagnostic,
+        .user_data = &diagnostic_counter,
+    };
+  }
+
   loom_pass_t pass = {0};
   iree_status_t status = loom_pass_interpreter_make_pass(
-      state, instruction, &instance_arena, &pass);
+      state, instruction, pass_diagnostic_emitter, &instance_arena, &pass);
 
   bool created = false;
   if (iree_status_is_ok(status) && invoke->descriptor->create) {
@@ -317,9 +345,11 @@ static iree_status_t loom_pass_interpreter_invoke(
 
   iree_arena_deinitialize(&instance_arena);
   if (!iree_status_is_ok(pass_status)) {
-    pass_status = iree_status_join(
-        pass_status, loom_pass_interpreter_emit_failure_diagnostic(
-                         state, frame, instruction));
+    if (diagnostic_counter.emission_count == 0) {
+      pass_status = iree_status_join(
+          pass_status, loom_pass_interpreter_emit_failure_diagnostic(
+                           state, frame, instruction));
+    }
     pass_status = iree_status_join(pass_status, report_status);
     iree_string_view_t symbol_name =
         loom_pass_interpreter_symbol_name(state, frame);
