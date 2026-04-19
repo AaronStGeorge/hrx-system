@@ -43,6 +43,18 @@ std::string ToString(const iree_string_builder_t& builder) {
                      iree_string_builder_size(&builder));
 }
 
+std::string TargetPreamble(const char* target_symbol, const char* preset_key,
+                           const char* function_symbol) {
+  std::string source = "target.preset @";
+  source += target_symbol;
+  source += " {key = \"";
+  source += preset_key;
+  source += "\", source = @";
+  source += function_symbol;
+  source += "}\n\n";
+  return source;
+}
+
 class AmdgpuWaitPlanTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -154,13 +166,9 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
   bool context_initialized_ = false;
 };
 
-constexpr const char* kGfx11TargetPreamble =
-    "target.preset @gfx11_target {key = \"amdgpu-gfx11\", source = "
-    "@gfx11_func}\n"
-    "\n";
-
 TEST_F(AmdgpuWaitPlanTest, PlansLoadUseAndRecordsExplicitWaits) {
-  std::string source = kGfx11TargetPreamble;
+  std::string source =
+      TargetPreamble("gfx11_target", "amdgpu-gfx11", "gfx11_func");
   source += R"(
 low.func.def target(@gfx11_target) @gfx11_func(%s0 : reg<amdgpu.sgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>, %v0 : reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.vgpr>) {
   %smem = low.op<amdgpu.s_buffer_load_dword>(%resource, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
@@ -231,8 +239,130 @@ low.func.def target(@gfx11_target) @gfx11_func(%s0 : reg<amdgpu.sgpr>, %resource
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuWaitPlanTest, PlansCombinedWaitcntForGfx950) {
+  std::string source =
+      TargetPreamble("gfx950_target", "amdgpu-gfx950", "gfx950_func");
+  source += R"(
+low.func.def target(@gfx950_target) @gfx950_func(%s0 : reg<amdgpu.sgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>, %v0 : reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.vgpr>) {
+  %smem = low.op<amdgpu.s_buffer_load_dword>(%resource, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %vmem = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %s_mix = low.op<amdgpu.s_add_u32>(%s0, %smem) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %v_mix = low.op<amdgpu.v_add_u32>(%v0, %vmem) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_dword>(%v_mix, %resource, %vaddr, %soffset) {offset = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.op<amdgpu.s_waitcnt>() {vmcnt = 0, lgkmcnt = 0} : ()
+  low.return %s_mix, %v_mix : reg<amdgpu.sgpr>, reg<amdgpu.vgpr>
+}
+)";
+
+  ModulePtr module;
+  IREE_ASSERT_OK(ParseAndVerify(
+      iree_make_string_view(source.data(), source.size()), &module));
+  const loom_op_t* low_function = FirstLowFunction(module.get());
+  ASSERT_NE(low_function, nullptr);
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_amdgpu_wait_plan_t plan = {};
+  IREE_ASSERT_OK(
+      BuildWaitPlan(module.get(), low_function, &arena, &schedule, &plan));
+
+  bool saw_planned_load_use = false;
+  bool saw_explicit_store_wait = false;
+  for (iree_host_size_t i = 0; i < plan.action_count; ++i) {
+    const loom_amdgpu_wait_plan_action_t& action = plan.actions[i];
+    if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
+        action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LOAD &&
+        action.outstanding_before == 2) {
+      saw_planned_load_use = true;
+    }
+    if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT &&
+        action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_EXPLICIT_PACKET &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_STORE &&
+        action.outstanding_before == 1) {
+      saw_explicit_store_wait = true;
+    }
+  }
+  EXPECT_TRUE(saw_planned_load_use);
+  EXPECT_TRUE(saw_explicit_store_wait);
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuWaitPlanTest, PlansSplitWaitcntForGfx12AndGfx1250) {
+  const char* preset_keys[] = {
+      "amdgpu-gfx12",
+      "amdgpu-gfx1250",
+  };
+  for (const char* preset_key : preset_keys) {
+    std::string source = TargetPreamble("target", preset_key, "func");
+    source += R"(
+low.func.def target(@target) @func(%resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>, %v0 : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %vmem = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %v_mix = low.op<amdgpu.v_add_u32>(%v0, %vmem) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_dword>(%v_mix, %resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.op<amdgpu.s_wait_loadcnt>() {loadcnt = 0} : ()
+  low.op<amdgpu.s_wait_storecnt>() {storecnt = 0} : ()
+  low.op<amdgpu.s_wait_alu>() {depctr = 0} : ()
+  low.return %v_mix : reg<amdgpu.vgpr>
+}
+)";
+
+    ModulePtr module;
+    IREE_ASSERT_OK(ParseAndVerify(
+        iree_make_string_view(source.data(), source.size()), &module))
+        << preset_key;
+    const loom_op_t* low_function = FirstLowFunction(module.get());
+    ASSERT_NE(low_function, nullptr) << preset_key;
+
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool_, &arena);
+    loom_low_schedule_sidecar_t schedule = {};
+    loom_amdgpu_wait_plan_t plan = {};
+    IREE_ASSERT_OK(
+        BuildWaitPlan(module.get(), low_function, &arena, &schedule, &plan))
+        << preset_key;
+
+    bool saw_planned_load_use = false;
+    bool saw_explicit_load_wait = false;
+    bool saw_explicit_store_wait = false;
+    bool saw_explicit_alu_wait = false;
+    for (iree_host_size_t i = 0; i < plan.action_count; ++i) {
+      const loom_amdgpu_wait_plan_action_t& action = plan.actions[i];
+      if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
+          action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE &&
+          action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LOAD &&
+          action.outstanding_before == 1) {
+        saw_planned_load_use = true;
+      }
+      if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT &&
+          action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_EXPLICIT_PACKET &&
+          action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LOAD) {
+        saw_explicit_load_wait = true;
+      }
+      if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT &&
+          action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_EXPLICIT_PACKET &&
+          action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_STORE &&
+          action.outstanding_before == 1) {
+        saw_explicit_store_wait = true;
+      }
+      if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT &&
+          action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_EXPLICIT_PACKET &&
+          action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_ALU) {
+        saw_explicit_alu_wait = true;
+      }
+    }
+    EXPECT_TRUE(saw_planned_load_use) << preset_key;
+    EXPECT_TRUE(saw_explicit_load_wait) << preset_key;
+    EXPECT_TRUE(saw_explicit_store_wait) << preset_key;
+    EXPECT_TRUE(saw_explicit_alu_wait) << preset_key;
+    iree_arena_deinitialize(&arena);
+  }
+}
+
 TEST_F(AmdgpuWaitPlanTest, PlansStoreDrainAtBlockExit) {
-  std::string source = kGfx11TargetPreamble;
+  std::string source =
+      TargetPreamble("gfx11_target", "amdgpu-gfx11", "gfx11_func");
   source += R"(
 low.func.def target(@gfx11_target) @gfx11_func(%value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
