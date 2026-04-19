@@ -1654,6 +1654,10 @@ static iree_status_t loom_refine_boundaries_run_function(
           constants_materialized);
     }
   }
+  if (replacements_applied > 0 || constants_materialized > 0 ||
+      canonicalize_result.changed) {
+    loom_pass_mark_changed(pass);
+  }
 
   const loom_value_fact_table_t* function_facts =
       loom_canonicalizer_fact_table(canonicalizer);
@@ -1662,6 +1666,9 @@ static iree_status_t loom_refine_boundaries_run_function(
   IREE_RETURN_IF_ERROR(loom_refine_boundaries_refine_function_signature(
       pass, graph->module, function_facts, function_info,
       signature_type_changed_count));
+  if (signature_type_changes_before != *signature_type_changed_count) {
+    loom_pass_mark_changed(pass);
+  }
   if (signature_type_changes_before == *signature_type_changed_count) {
     IREE_RETURN_IF_ERROR(loom_refine_boundaries_function_cache_update(
         graph->module, cache, function_info, seed_facts, seed_replacements,
@@ -3037,6 +3044,7 @@ iree_status_t loom_refine_boundaries_run_with_options(
       if (!iree_status_is_ok(status)) break;
       signature_type_changed_count += call_result_type_changed_count;
       if (signature_type_changed_count > 0) {
+        loom_pass_mark_changed(pass);
         if (pass->statistics) {
           loom_pass_statistic_add(
               pass,
@@ -3053,6 +3061,7 @@ iree_status_t loom_refine_boundaries_run_with_options(
           module, &graph, &iteration_arena, &walk_arena, &specialization_count);
       if (!iree_status_is_ok(status)) break;
       if (specialization_count > 0) {
+        loom_pass_mark_changed(pass);
         if (pass->statistics) {
           loom_pass_statistic_add(
               pass,
@@ -3071,6 +3080,7 @@ iree_status_t loom_refine_boundaries_run_with_options(
           &pruned_result_count);
       if (!iree_status_is_ok(status)) break;
       if (pruned_argument_count > 0 || pruned_result_count > 0) {
+        loom_pass_mark_changed(pass);
         if (pass->statistics) {
           if (pruned_argument_count > 0) {
             loom_pass_statistic_add(

@@ -256,5 +256,9 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
                           result.spill_count);
   loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_RELOADS,
                           result.reload_count);
+  if (result.slot_count > 0 || result.spill_count > 0 ||
+      result.reload_count > 0) {
+    loom_pass_mark_changed(pass);
+  }
   return iree_ok_status();
 }

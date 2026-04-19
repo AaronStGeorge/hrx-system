@@ -123,23 +123,6 @@ static iree_status_t loom_pass_interpreter_make_pass(
   return iree_ok_status();
 }
 
-static bool loom_pass_interpreter_statistics_changed(const loom_pass_t* pass) {
-  if (!pass->statistics || !pass->info->statistic_defs) {
-    return false;
-  }
-  for (uint16_t i = 0; i < pass->info->statistic_count; ++i) {
-    if (pass->statistics[i] == 0) {
-      continue;
-    }
-    iree_string_view_t name = pass->info->statistic_defs[i].name;
-    if (iree_string_view_equal(name, IREE_SV("changes")) ||
-        iree_string_view_equal(name, IREE_SV("changed"))) {
-      return true;
-    }
-  }
-  return false;
-}
-
 static iree_status_t loom_pass_interpreter_invoke_module(
     loom_pass_interpreter_state_t* state,
     const loom_pass_program_instruction_t* instruction, loom_pass_t* pass,
@@ -155,8 +138,8 @@ static iree_status_t loom_pass_interpreter_invoke_module(
   loom_pass_interpreter_epoch_t after =
       loom_pass_interpreter_epoch(state->module);
   if (iree_status_is_ok(status)) {
+    *out_changed |= pass->changed;
     *out_changed |= loom_pass_interpreter_epoch_changed(before, after);
-    *out_changed |= loom_pass_interpreter_statistics_changed(pass);
   }
   return status;
 }
@@ -192,8 +175,8 @@ static iree_status_t loom_pass_interpreter_invoke_function(
   pass->arena = pass->instance_arena;
   iree_arena_deinitialize(&function_arena);
   if (iree_status_is_ok(status)) {
+    *out_changed |= pass->changed;
     *out_changed |= loom_pass_interpreter_epoch_changed(before, after);
-    *out_changed |= loom_pass_interpreter_statistics_changed(pass);
   }
   return status;
 }

@@ -90,6 +90,7 @@ static iree_status_t loom_vector_to_scalar_replace_one_result(
       state->rewriter, state->op, &replacement, 1, state->value_checkpoint));
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
       state->rewriter, state->op, &replacement, 1));
+  loom_pass_mark_changed(state->pass);
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass, LOOM_VECTOR_TO_SCALAR_STAT_OPS_LOWERED,
                             1);
@@ -105,6 +106,7 @@ static iree_status_t loom_vector_to_scalar_replace_results(
       state->value_checkpoint));
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
       state->rewriter, state->op, replacements, replacement_count));
+  loom_pass_mark_changed(state->pass);
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass, LOOM_VECTOR_TO_SCALAR_STAT_OPS_LOWERED,
                             1);
@@ -115,6 +117,7 @@ static iree_status_t loom_vector_to_scalar_replace_results(
 static iree_status_t loom_vector_to_scalar_erase_lowered_op(
     loom_vector_to_scalar_state_t* state) {
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, state->op));
+  loom_pass_mark_changed(state->pass);
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass, LOOM_VECTOR_TO_SCALAR_STAT_OPS_LOWERED,
                             1);
@@ -517,7 +520,11 @@ iree_status_t loom_vector_to_scalar_run(loom_pass_t* pass,
     if (!op) break;
     bool erased = false;
     status = loom_rewriter_erase_if_dead(&rewriter, op, &erased);
-    if (!iree_status_is_ok(status) || erased) continue;
+    if (!iree_status_is_ok(status)) continue;
+    if (erased) {
+      loom_pass_mark_changed(pass);
+      continue;
+    }
     status = loom_vector_to_scalar_lower_op(pass, &rewriter, op);
   }
   loom_rewriter_deinitialize(&rewriter);

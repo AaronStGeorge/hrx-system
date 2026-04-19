@@ -564,6 +564,7 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
         if (!iree_status_is_ok(status)) break;
         status = loom_op_erase(module, op);
         if (!iree_status_is_ok(status)) break;
+        loom_pass_mark_changed(pass);
         if (pass->statistics) {
           loom_pass_statistic_add(pass, LOOM_CSE_STAT_EXPRESSIONS_ELIMINATED,
                                   1);

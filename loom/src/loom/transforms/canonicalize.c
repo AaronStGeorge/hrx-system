@@ -1429,9 +1429,14 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
   iree_status_t status = loom_canonicalizer_run_function(
       &canonicalizer, function,
       (const loom_canonicalizer_options_t*)pass->state, &result);
-  if (iree_status_is_ok(status) && pass->statistics) {
-    loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED,
-                            result.ops_modified);
+  if (iree_status_is_ok(status)) {
+    if (result.changed) {
+      loom_pass_mark_changed(pass);
+    }
+    if (pass->statistics) {
+      loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED,
+                              result.ops_modified);
+    }
   }
   loom_canonicalizer_deinitialize(&canonicalizer);
   return status;

@@ -344,6 +344,7 @@ static iree_status_t loom_symbol_dce_erase_unreachable_symbols(
 
   for (iree_host_size_t i = 0; i < erasure_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_op_erase(state->module, erasures[i].op));
+    loom_pass_mark_changed(state->pass);
     loom_pass_statistic_add(state->pass,
                             LOOM_SYMBOL_DCE_STAT_SYMBOLS_ELIMINATED, 1);
     if (erasures[i].is_function_like) {

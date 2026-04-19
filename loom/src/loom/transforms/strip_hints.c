@@ -111,6 +111,7 @@ iree_status_t loom_strip_hints_run(loom_pass_t* pass, loom_module_t* module,
         loom_trait_flags_t traits = loom_op_effective_traits(module, op);
         if (iree_any_bit_set(traits, LOOM_TRAIT_HINT)) {
           IREE_RETURN_IF_ERROR(loom_op_erase(module, op));
+          loom_pass_mark_changed(pass);
           if (pass->statistics) {
             loom_pass_statistic_add(pass, LOOM_STRIP_HINTS_STAT_HINTS_STRIPPED,
                                     1);

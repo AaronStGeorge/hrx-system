@@ -39,6 +39,7 @@ static iree_status_t loom_test_mark_changed_run(loom_pass_t* pass,
   (void)function;
   loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
   if (trace) ++trace->mark_changed_invocation_count;
+  loom_pass_mark_changed(pass);
   if (pass->statistics) {
     loom_pass_statistic_add(pass, 0, 1);
     loom_pass_statistic_add(pass, 1, 1);
@@ -123,7 +124,8 @@ static const loom_pass_statistic_def_t kInvocationStatisticDefs[] = {
 
 static const loom_pass_statistic_def_t kMarkChangedStatisticDefs[] = {
     {IREE_SVL("invocations"), IREE_SVL("Number of pass invocations.")},
-    {IREE_SVL("changes"), IREE_SVL("Number of deterministic test changes.")},
+    {IREE_SVL("synthetic-events"),
+     IREE_SVL("Number of deterministic test events.")},
 };
 
 static const loom_pass_option_def_t kTestOptionsOptionDefs[] = {

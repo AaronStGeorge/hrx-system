@@ -2523,6 +2523,7 @@ iree_status_t loom_cfg_simplify_run(loom_pass_t* pass, loom_module_t* module,
   iree_status_t status = loom_cfg_simplify_region_stack_initialize(
       pass->arena, &state.region_stack);
   bool changed = true;
+  bool any_changed = false;
   while (iree_status_is_ok(status) && changed) {
     changed = false;
     iree_arena_reset(&analysis_arena);
@@ -2547,8 +2548,12 @@ iree_status_t loom_cfg_simplify_run(loom_pass_t* pass, loom_module_t* module,
     state.dominance = &dominance;
     status =
         loom_cfg_simplify_process_function_once(&state, function, &changed);
+    any_changed |= changed;
   }
 
+  if (iree_status_is_ok(status) && any_changed) {
+    loom_pass_mark_changed(pass);
+  }
   loom_rewriter_deinitialize(&rewriter);
   iree_arena_deinitialize(&analysis_arena);
   return status;

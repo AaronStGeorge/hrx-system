@@ -132,5 +132,8 @@ iree_status_t loom_normalize_kernel_resources_run(loom_pass_t* pass,
     loom_pass_statistic_add(pass,
                             LOOM_KERNEL_RESOURCES_STAT_FUNCTIONS_NORMALIZED, 1);
   }
+  if (changed_function) {
+    loom_pass_mark_changed(pass);
+  }
   return iree_ok_status();
 }

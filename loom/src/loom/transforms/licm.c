@@ -236,11 +236,16 @@ iree_status_t loom_licm_run(loom_pass_t* pass, loom_module_t* module,
   }
 
   bool changed = true;
+  bool any_changed = false;
   while (iree_status_is_ok(status) && changed) {
     changed = false;
     status = loom_licm_process_function_once(&context, function, &changed);
+    any_changed |= changed;
   }
 
+  if (iree_status_is_ok(status) && any_changed) {
+    loom_pass_mark_changed(pass);
+  }
   loom_rewriter_deinitialize(&rewriter);
   return status;
 }

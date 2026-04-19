@@ -157,6 +157,8 @@ struct loom_pass_t {
   // Per-instance state from create(). The pass owns this memory (typically
   // allocated from |instance_arena|).
   void* state;
+  // Set by pass callbacks when they mutate IR or semantic module state.
+  bool changed;
   // Immutable descriptor-decoded options for pass.run-backed invocation.
   const loom_pass_decoded_options_t* decoded_options;
   // Optional structured diagnostic emitter. Legality passes use this for
@@ -172,6 +174,11 @@ static inline void loom_pass_statistic_add(loom_pass_t* pass,
                                            uint16_t statistic_index,
                                            int64_t delta) {
   pass->statistics[statistic_index] += delta;
+}
+
+// Records that the current pass invocation changed IR or semantic module state.
+static inline void loom_pass_mark_changed(loom_pass_t* pass) {
+  pass->changed = true;
 }
 
 //===----------------------------------------------------------------------===//
