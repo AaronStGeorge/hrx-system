@@ -16,8 +16,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/string_builder.h"
-#include "loom/codegen/low/allocation.h"
-#include "loom/codegen/low/schedule.h"
+#include "loom/codegen/low/packet.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,6 +38,10 @@ typedef struct loom_low_packet_asm_format_value_callback_t {
 
 // Options controlling scheduled packet assembly text emission.
 typedef struct loom_low_packet_asm_options_t {
+  // Optional selected asm-form sidecar. When present, descriptor-backed packets
+  // use explicit per-packet form choices and fall back to descriptor canonical
+  // forms for entries set to LOOM_LOW_ASM_FORM_ORDINAL_NONE.
+  const loom_low_packet_asm_form_sidecar_t* selected_asm_forms;
   // Target-owned value formatter for physical registers, target IDs, and spill
   // locations. The callback is required because core low has no target register
   // spelling contract.

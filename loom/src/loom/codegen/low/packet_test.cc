@@ -14,6 +14,7 @@ namespace {
 
 struct PacketTestState {
   loom_low_descriptor_t descriptors[2] = {};
+  loom_low_asm_form_t asm_forms[2] = {};
   loom_low_descriptor_set_t descriptor_set = {};
   loom_module_t module = {};
   loom_op_t function_op = {};
@@ -21,14 +22,25 @@ struct PacketTestState {
   loom_low_schedule_block_t blocks[1] = {};
   loom_low_schedule_node_t nodes[2] = {};
   uint32_t scheduled_node_indices[2] = {};
+  uint32_t selected_asm_form_ordinals[2] = {};
   loom_low_allocation_assignment_t assignments[2] = {};
   loom_low_schedule_sidecar_t schedule = {};
+  loom_low_packet_asm_form_sidecar_t asm_form_sidecar = {};
   loom_low_allocation_sidecar_t allocation = {};
 };
 
 void InitializePacketTestState(PacketTestState* state) {
+  state->descriptors[0].canonical_asm_form_ordinal =
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  state->descriptors[1].canonical_asm_form_ordinal = 0;
+
+  state->asm_forms[0].descriptor_ordinal = 1;
+  state->asm_forms[1].descriptor_ordinal = 0;
+
   state->descriptor_set.descriptors = state->descriptors;
   state->descriptor_set.descriptor_count = IREE_ARRAYSIZE(state->descriptors);
+  state->descriptor_set.asm_forms = state->asm_forms;
+  state->descriptor_set.asm_form_count = IREE_ARRAYSIZE(state->asm_forms);
 
   state->blocks[0].block = &state->block;
   state->blocks[0].node_start = 0;
@@ -53,6 +65,9 @@ void InitializePacketTestState(PacketTestState* state) {
   state->scheduled_node_indices[0] = 1;
   state->scheduled_node_indices[1] = 0;
 
+  state->selected_asm_form_ordinals[0] = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  state->selected_asm_form_ordinals[1] = 0;
+
   state->assignments[0].value_id = 7;
   state->assignments[0].location_kind = LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
   state->assignments[0].location_base = 3;
@@ -72,6 +87,13 @@ void InitializePacketTestState(PacketTestState* state) {
   state->schedule.scheduled_node_indices = state->scheduled_node_indices;
   state->schedule.scheduled_node_count =
       IREE_ARRAYSIZE(state->scheduled_node_indices);
+
+  state->asm_form_sidecar.module = &state->module;
+  state->asm_form_sidecar.function_op = &state->function_op;
+  state->asm_form_sidecar.target.descriptor_set = &state->descriptor_set;
+  state->asm_form_sidecar.asm_form_ordinals = state->selected_asm_form_ordinals;
+  state->asm_form_sidecar.asm_form_ordinal_count =
+      IREE_ARRAYSIZE(state->selected_asm_form_ordinals);
 
   state->allocation.module = &state->module;
   state->allocation.function_op = &state->function_op;
@@ -105,6 +127,72 @@ TEST(LowPacketTest, ViewsScheduledPackets) {
   EXPECT_EQ(packet.node_index, 0u);
   EXPECT_EQ(packet.node, &state.nodes[0]);
   EXPECT_EQ(packet.descriptor, &state.descriptors[1]);
+}
+
+TEST(LowPacketTest, ValidatesSelectedAsmForms) {
+  PacketTestState state;
+  InitializePacketTestState(&state);
+
+  IREE_EXPECT_OK(loom_low_packet_validate_asm_form_sidecar(
+      &state.schedule, &state.asm_form_sidecar));
+
+  loom_low_packet_view_t packet;
+  IREE_ASSERT_OK(
+      loom_low_packet_view_at(&state.schedule, &state.allocation, 1, &packet));
+
+  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_packet_lookup_asm_form(
+      &state.schedule, &state.asm_form_sidecar, &packet, &asm_form_ordinal));
+  EXPECT_EQ(asm_form_ordinal, 0u);
+}
+
+TEST(LowPacketTest, FallsBackToCanonicalAsmForm) {
+  PacketTestState state;
+  InitializePacketTestState(&state);
+  state.selected_asm_form_ordinals[1] = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+
+  loom_low_packet_view_t packet;
+  IREE_ASSERT_OK(
+      loom_low_packet_view_at(&state.schedule, &state.allocation, 1, &packet));
+
+  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_packet_lookup_asm_form(
+      &state.schedule, &state.asm_form_sidecar, &packet, &asm_form_ordinal));
+  EXPECT_EQ(asm_form_ordinal, 0u);
+  asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_packet_lookup_asm_form(
+      &state.schedule, /*asm_forms=*/nullptr, &packet, &asm_form_ordinal));
+  EXPECT_EQ(asm_form_ordinal, 0u);
+}
+
+TEST(LowPacketTest, RejectsSelectedAsmFormCountMismatch) {
+  PacketTestState state;
+  InitializePacketTestState(&state);
+  state.asm_form_sidecar.asm_form_ordinal_count = 1;
+
+  iree_status_t status = loom_low_packet_validate_asm_form_sidecar(
+      &state.schedule, &state.asm_form_sidecar);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowPacketTest, RejectsSelectedAsmFormForStructuralPacket) {
+  PacketTestState state;
+  InitializePacketTestState(&state);
+  state.selected_asm_form_ordinals[0] = 0;
+
+  iree_status_t status = loom_low_packet_validate_asm_form_sidecar(
+      &state.schedule, &state.asm_form_sidecar);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowPacketTest, RejectsSelectedAsmFormDescriptorMismatch) {
+  PacketTestState state;
+  InitializePacketTestState(&state);
+  state.selected_asm_form_ordinals[1] = 1;
+
+  iree_status_t status = loom_low_packet_validate_asm_form_sidecar(
+      &state.schedule, &state.asm_form_sidecar);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowPacketTest, RejectsMismatchedSidecars) {

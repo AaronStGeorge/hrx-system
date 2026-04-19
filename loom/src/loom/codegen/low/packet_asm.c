@@ -18,6 +18,8 @@ typedef struct loom_low_packet_asm_state_t {
   const loom_low_schedule_sidecar_t* schedule;
   // Allocation sidecar supplying locations for SSA values.
   const loom_low_allocation_sidecar_t* allocation;
+  // Optional per-packet selected asm-form sidecar.
+  const loom_low_packet_asm_form_sidecar_t* selected_asm_forms;
   // Formatter options supplied by the caller.
   const loom_low_packet_asm_options_t* options;
   // Text destination.
@@ -252,8 +254,8 @@ static iree_status_t loom_low_packet_asm_append_descriptor_packet(
   const loom_low_descriptor_set_t* descriptor_set =
       state->schedule->target.descriptor_set;
   uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_lookup_canonical_asm_form(
-      descriptor_set, packet->node->descriptor_ordinal, &asm_form_ordinal));
+  IREE_RETURN_IF_ERROR(loom_low_packet_lookup_asm_form(
+      state->schedule, state->selected_asm_forms, packet, &asm_form_ordinal));
   const loom_low_asm_form_t* asm_form =
       loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
   if (asm_form == NULL) {
@@ -400,10 +402,15 @@ iree_status_t loom_low_packet_asm_format(
                             "low packet asm output builder is required");
   }
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
+  if (options->selected_asm_forms != NULL) {
+    IREE_RETURN_IF_ERROR(loom_low_packet_validate_asm_form_sidecar(
+        schedule, options->selected_asm_forms));
+  }
 
   loom_low_packet_asm_state_t state = {
       .schedule = schedule,
       .allocation = allocation,
+      .selected_asm_forms = options->selected_asm_forms,
       .options = options,
       .builder = builder,
   };

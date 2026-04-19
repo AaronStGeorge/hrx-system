@@ -9,6 +9,7 @@
 #include <inttypes.h>
 
 #include <string>
+#include <vector>
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
@@ -133,6 +134,33 @@ iree_status_t FormatNamedAllocatedValue(
   return iree_string_builder_append_format(builder, "v%" PRIu32, value_id);
 }
 
+loom_low_packet_asm_form_sidecar_t MakeCanonicalAsmFormSidecar(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation,
+    std::vector<uint32_t>* selected_asm_forms) {
+  selected_asm_forms->assign(schedule->scheduled_node_count,
+                             LOOM_LOW_ASM_FORM_ORDINAL_NONE);
+  for (iree_host_size_t i = 0; i < schedule->scheduled_node_count; ++i) {
+    loom_low_packet_view_t packet = {};
+    IREE_EXPECT_OK(loom_low_packet_view_at(schedule, allocation, i, &packet));
+    if (packet.descriptor == nullptr) {
+      continue;
+    }
+    uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+    IREE_EXPECT_OK(loom_low_descriptor_set_lookup_canonical_asm_form(
+        schedule->target.descriptor_set, packet.node->descriptor_ordinal,
+        &asm_form_ordinal));
+    (*selected_asm_forms)[i] = asm_form_ordinal;
+  }
+  return loom_low_packet_asm_form_sidecar_t{
+      .module = schedule->module,
+      .function_op = schedule->function_op,
+      .target = schedule->target,
+      .asm_form_ordinals = selected_asm_forms->data(),
+      .asm_form_ordinal_count = selected_asm_forms->size(),
+  };
+}
+
 TEST_F(LowPacketAsmTest, FormatsScheduledPacketsWithCanonicalAsmForms) {
   ParseAndVerify(
       "low.func.def target(@test_target) @packet_asm(%lhs : reg<test.i32>, "
@@ -160,7 +188,13 @@ TEST_F(LowPacketAsmTest, FormatsScheduledPacketsWithCanonicalAsmForms) {
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
+  std::vector<uint32_t> selected_asm_form_ordinals;
+  loom_low_packet_asm_form_sidecar_t selected_asm_forms =
+      MakeCanonicalAsmFormSidecar(&packetization.schedule,
+                                  &packetization.allocation,
+                                  &selected_asm_form_ordinals);
   loom_low_packet_asm_options_t asm_options = {
+      .selected_asm_forms = &selected_asm_forms,
       .format_value =
           {
               .fn = FormatNamedAllocatedValue,
@@ -254,6 +288,52 @@ TEST_F(LowPacketAsmTest, RejectsMissingValueFormatter) {
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   loom_low_packet_asm_options_t asm_options = {};
+  iree_status_t status = loom_low_packet_asm_format(&packetization.schedule,
+                                                    &packetization.allocation,
+                                                    &asm_options, &builder);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
+TEST_F(LowPacketAsmTest, RejectsInvalidSelectedAsmForms) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @packet_asm() {\n"
+      "  low.return\n"
+      "}\n");
+  const loom_op_t* low_function = FindFirstLowFunction(module_);
+  ASSERT_NE(low_function, nullptr);
+
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  loom_low_packetization_options_t packetization_options = {
+      .descriptor_registry = &target_registry_.registry,
+  };
+  IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
+                                             &packetization_options,
+                                             &sidecar_arena, &packetization));
+
+  const uint32_t selected_asm_form_ordinals[1] = {
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE,
+  };
+  loom_low_packet_asm_form_sidecar_t selected_asm_forms = {
+      .module = packetization.schedule.module,
+      .function_op = packetization.schedule.function_op,
+      .target = packetization.schedule.target,
+      .asm_form_ordinals = selected_asm_form_ordinals,
+      .asm_form_ordinal_count = 0,
+  };
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_low_packet_asm_options_t asm_options = {
+      .selected_asm_forms = &selected_asm_forms,
+      .format_value =
+          {
+              .fn = FormatNamedAllocatedValue,
+              .user_data = nullptr,
+          },
+  };
   iree_status_t status = loom_low_packet_asm_format(&packetization.schedule,
                                                     &packetization.allocation,
                                                     &asm_options, &builder);

@@ -38,12 +38,35 @@ typedef struct loom_low_packet_view_t {
   const loom_low_descriptor_t* descriptor;
 } loom_low_packet_view_t;
 
+// Optional selected asm-form sidecar for scheduled packets. Target legality or
+// target emitters populate this sidecar when descriptor-backed packets have
+// multiple legal asm forms. Entries are indexed by packet ordinal; structural
+// packets and descriptor packets that should use their unique canonical form
+// use LOOM_LOW_ASM_FORM_ORDINAL_NONE.
+typedef struct loom_low_packet_asm_form_sidecar_t {
+  // Module containing the packetized low function.
+  const loom_module_t* module;
+  // low.func.def operation packetized by this sidecar.
+  const loom_op_t* function_op;
+  // Resolved target context selected by |function_op|.
+  loom_low_resolved_target_t target;
+  // Selected asm-form ordinals indexed by scheduled packet ordinal.
+  const uint32_t* asm_form_ordinals;
+  // Number of records in |asm_form_ordinals|.
+  iree_host_size_t asm_form_ordinal_count;
+} loom_low_packet_asm_form_sidecar_t;
+
 // Verifies that |schedule| and |allocation| describe the same low function and
 // target descriptor set. This is an emitter contract check, not target
 // legality.
 iree_status_t loom_low_packet_validate_sidecars(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation);
+
+// Verifies that |asm_forms| describes selected asm forms for |schedule|.
+iree_status_t loom_low_packet_validate_asm_form_sidecar(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_packet_asm_form_sidecar_t* asm_forms);
 
 // Returns the number of scheduled packets in |schedule|. NULL schedules have no
 // packets.
@@ -60,6 +83,14 @@ iree_status_t loom_low_packet_view_at(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
     iree_host_size_t packet_index, loom_low_packet_view_t* out_packet);
+
+// Resolves the asm form for |packet|. A selected asm-form sidecar overrides the
+// descriptor canonical form when it names a valid form for the packet's
+// descriptor; otherwise the descriptor must have a unique canonical form.
+iree_status_t loom_low_packet_lookup_asm_form(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_packet_asm_form_sidecar_t* asm_forms,
+    const loom_low_packet_view_t* packet, uint32_t* out_asm_form_ordinal);
 
 // Finds the allocation assignment for |value_id|. Returns NULL when the value
 // has no assignment. |out_assignment_index| is optional.
