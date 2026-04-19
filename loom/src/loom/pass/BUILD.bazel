@@ -45,6 +45,19 @@ loom_cc_library(
     hdrs = ["registry.h"],
     deps = [
         ":manager",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "invocation",
+    srcs = ["invocation.c"],
+    hdrs = ["invocation.h"],
+    deps = [
+        ":registry",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/pass",
         "//runtime/src/iree/base",
     ],
 )
@@ -81,6 +94,22 @@ loom_cc_test(
     deps = [
         ":manager",
         ":registry",
+        "//loom/src/loom/pass/test:registry",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "invocation_test",
+    srcs = ["invocation_test.cc"],
+    deps = [
+        ":invocation",
+        ":registry",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/pass",
         "//loom/src/loom/pass/test:registry",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

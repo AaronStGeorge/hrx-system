@@ -51,6 +51,22 @@ loom_cc_library(
   DEPS
     ::manager
     iree::base
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    invocation
+  HDRS
+    "invocation.h"
+  SRCS
+    "invocation.c"
+  DEPS
+    ::registry
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::pass
   PUBLIC
 )
 
@@ -92,6 +108,23 @@ loom_cc_test(
     ::manager
     ::registry
     iree::base::internal::arena
+    loom::src::loom::pass::test::registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    invocation_test
+  SRCS
+    "invocation_test.cc"
+  DEPS
+    ::invocation
+    ::registry
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::pass
     loom::src::loom::pass::test::registry
     iree::testing::gtest
     iree::testing::gtest_main

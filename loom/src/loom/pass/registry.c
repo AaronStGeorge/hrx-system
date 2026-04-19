@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "loom/ir/module.h"
+
 static bool loom_pass_descriptor_key_matches_info(
     const loom_pass_descriptor_t* descriptor) {
   if (!descriptor->info) return false;
@@ -665,6 +667,219 @@ iree_status_t loom_pass_descriptor_decode_options(
     status = loom_pass_options_parse(info->name, trimmed_options,
                                      loom_pass_option_schema_decode_assignment,
                                      &context);
+  }
+  if (iree_status_is_ok(status) && decoded_options) {
+    status = loom_pass_option_schema_validate_decoded_required(descriptor,
+                                                               decoded_options);
+  }
+  if (iree_status_is_ok(status)) {
+    *out_options = (loom_pass_decoded_options_t){
+        .descriptor = descriptor,
+        .options = decoded_options,
+        .option_count = descriptor->option_schema_count,
+    };
+  }
+  return status;
+}
+
+typedef struct loom_pass_attr_option_decode_context_t {
+  // Module that owns option key and string value IDs.
+  const loom_module_t* module;
+  // Arena that owns decoded option storage.
+  iree_arena_allocator_t* arena;
+  // Descriptor whose option schema is being applied.
+  const loom_pass_descriptor_t* descriptor;
+  // Mutable decoded options indexed by descriptor option schema order.
+  loom_pass_decoded_option_t* decoded_options;
+} loom_pass_attr_option_decode_context_t;
+
+static iree_status_t loom_pass_attr_option_string_from_id(
+    const loom_module_t* module, loom_string_id_t string_id, const char* label,
+    iree_string_view_t* out_string) {
+  if (!module || !out_string || string_id >= module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "invalid %s string id", label);
+  }
+  *out_string = module->strings.entries[string_id];
+  return iree_ok_status();
+}
+
+static iree_status_t loom_pass_attr_option_copy_string(
+    iree_arena_allocator_t* arena, iree_string_view_t source,
+    iree_string_view_t* out_string) {
+  if (source.size == 0) {
+    *out_string = source;
+    return iree_ok_status();
+  }
+  char* target_data = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(arena, source.size, (void**)&target_data));
+  memcpy(target_data, source.data, source.size);
+  *out_string = iree_make_string_view(target_data, source.size);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_pass_attr_option_decode_uint32(
+    const loom_pass_descriptor_t* descriptor,
+    const loom_pass_option_schema_t* schema, const loom_attribute_t* value_attr,
+    uint32_t* out_value) {
+  if (value_attr->kind != LOOM_ATTR_I64) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass '%.*s' option '%.*s' must be an integer attribute",
+        (int)descriptor->key.size, descriptor->key.data, (int)schema->name.size,
+        schema->name.data);
+  }
+  if (value_attr->i64 < 0 || value_attr->i64 > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pass '%.*s' option '%.*s' value %" PRId64
+                            " cannot be represented as uint32",
+                            (int)descriptor->key.size, descriptor->key.data,
+                            (int)schema->name.size, schema->name.data,
+                            value_attr->i64);
+  }
+  uint32_t value = (uint32_t)value_attr->i64;
+  if (value < schema->minimum_uint32 || value > schema->maximum_uint32) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass '%.*s' option '%.*s' must be in range %" PRIu32 "..%" PRIu32,
+        (int)descriptor->key.size, descriptor->key.data, (int)schema->name.size,
+        schema->name.data, schema->minimum_uint32, schema->maximum_uint32);
+  }
+  *out_value = value;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_pass_attr_option_decode_string(
+    const loom_pass_attr_option_decode_context_t* context,
+    const loom_pass_option_schema_t* schema, const loom_attribute_t* value_attr,
+    iree_string_view_t* out_value) {
+  if (value_attr->kind != LOOM_ATTR_STRING) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass '%.*s' option '%.*s' must be a string attribute",
+        (int)context->descriptor->key.size, context->descriptor->key.data,
+        (int)schema->name.size, schema->name.data);
+  }
+  iree_string_view_t source = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_pass_attr_option_string_from_id(
+      context->module, value_attr->string_id, "pass option value", &source));
+  return loom_pass_attr_option_copy_string(context->arena, source, out_value);
+}
+
+static iree_status_t loom_pass_attr_option_decode_assignment(
+    loom_pass_attr_option_decode_context_t* context,
+    const loom_named_attr_t* option_attr) {
+  const loom_pass_descriptor_t* descriptor = context->descriptor;
+  iree_string_view_t option_name = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_pass_attr_option_string_from_id(
+      context->module, option_attr->name_id, "pass option name", &option_name));
+
+  uint16_t schema_index = 0;
+  const loom_pass_option_schema_t* schema =
+      loom_pass_descriptor_find_option_schema(descriptor, option_name,
+                                              &schema_index);
+  if (!schema) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown option '%.*s' for pass '%.*s'",
+                            (int)option_name.size, option_name.data,
+                            (int)descriptor->key.size, descriptor->key.data);
+  }
+
+  loom_pass_decoded_option_t* decoded = &context->decoded_options[schema_index];
+  if (decoded->present) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "duplicate option '%.*s' for pass '%.*s'",
+                            (int)option_name.size, option_name.data,
+                            (int)descriptor->key.size, descriptor->key.data);
+  }
+  decoded->present = true;
+
+  switch (schema->kind) {
+    case LOOM_PASS_OPTION_SCHEMA_STRING:
+      return loom_pass_attr_option_decode_string(
+          context, schema, &option_attr->value, &decoded->string_value);
+    case LOOM_PASS_OPTION_SCHEMA_UINT32:
+      return loom_pass_attr_option_decode_uint32(
+          descriptor, schema, &option_attr->value, &decoded->uint32_value);
+    case LOOM_PASS_OPTION_SCHEMA_ENUM: {
+      iree_string_view_t enum_value = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(loom_pass_attr_option_decode_string(
+          context, schema, &option_attr->value, &enum_value));
+      if (loom_pass_option_schema_find_enum_value(schema, enum_value,
+                                                  &decoded->enum_value_index)) {
+        return iree_ok_status();
+      }
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass '%.*s' option '%.*s' has invalid enum value '%.*s'",
+          (int)descriptor->key.size, descriptor->key.data,
+          (int)schema->name.size, schema->name.data, (int)enum_value.size,
+          enum_value.data);
+    }
+    default:
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass '%.*s' option '%.*s' has unknown schema kind %d",
+          (int)descriptor->key.size, descriptor->key.data,
+          (int)schema->name.size, schema->name.data, (int)schema->kind);
+  }
+}
+
+iree_status_t loom_pass_descriptor_decode_attr_options(
+    const loom_pass_descriptor_t* descriptor, const loom_module_t* module,
+    loom_named_attr_slice_t options, iree_arena_allocator_t* arena,
+    loom_pass_decoded_options_t* out_options) {
+  if (!descriptor || !descriptor->info || !module || !arena || !out_options) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass descriptor, module, arena, and output options are required");
+  }
+  memset(out_options, 0, sizeof(*out_options));
+  const loom_pass_info_t* info = descriptor->info();
+  if (!info) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pass descriptor '%.*s' returned no info",
+                            (int)descriptor->key.size, descriptor->key.data);
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_pass_registry_verify_option_schema(descriptor, info));
+  if (options.count > 0 && descriptor->option_schema_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pass '%.*s' does not accept options",
+                            (int)descriptor->key.size, descriptor->key.data);
+  }
+  if (options.count > 0 && !options.entries) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pass '%.*s' option entries are required",
+                            (int)descriptor->key.size, descriptor->key.data);
+  }
+
+  loom_pass_decoded_option_t* decoded_options = NULL;
+  iree_status_t status = iree_ok_status();
+  if (descriptor->option_schema_count > 0) {
+    status = iree_arena_allocate_array(arena, descriptor->option_schema_count,
+                                       sizeof(*decoded_options),
+                                       (void**)&decoded_options);
+    if (iree_status_is_ok(status)) {
+      memset(decoded_options, 0,
+             descriptor->option_schema_count * sizeof(*decoded_options));
+      for (uint16_t i = 0; i < descriptor->option_schema_count; ++i) {
+        decoded_options[i].schema = &descriptor->option_schema[i];
+      }
+    }
+  }
+
+  loom_pass_attr_option_decode_context_t context = {
+      .module = module,
+      .arena = arena,
+      .descriptor = descriptor,
+      .decoded_options = decoded_options,
+  };
+  for (iree_host_size_t i = 0; i < options.count && iree_status_is_ok(status);
+       ++i) {
+    status =
+        loom_pass_attr_option_decode_assignment(&context, &options.entries[i]);
   }
   if (iree_status_is_ok(status) && decoded_options) {
     status = loom_pass_option_schema_validate_decoded_required(descriptor,

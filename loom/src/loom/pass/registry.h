@@ -194,6 +194,14 @@ iree_status_t loom_pass_descriptor_decode_options(
     const loom_pass_descriptor_t* descriptor, iree_string_view_t options,
     iree_arena_allocator_t* arena, loom_pass_decoded_options_t* out_options);
 
+// Decodes a pass.run option attribute dictionary against |descriptor|'s schema
+// into immutable arena-owned storage. String and enum values reference interned
+// strings owned by |module|.
+iree_status_t loom_pass_descriptor_decode_attr_options(
+    const loom_pass_descriptor_t* descriptor, const loom_module_t* module,
+    loom_named_attr_slice_t options, iree_arena_allocator_t* arena,
+    loom_pass_decoded_options_t* out_options);
+
 // Adds |descriptor| to |manager| with caller-owned option text and borrowed
 // per-entry user data.
 iree_status_t loom_pass_manager_add_descriptor(
