@@ -22,7 +22,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scf
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::materialize
     loom::src::loom::rewrite::remap
     loom::src::loom::rewrite::rewriter
@@ -41,7 +41,7 @@ loom_cc_library(
     loom::src::loom::analysis::motion
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::rewriter
   PUBLIC
 )
@@ -65,8 +65,9 @@ loom_cc_library(
     loom::src::loom::ops::scf
     loom::src::loom::ops::special_values
     loom::src::loom::ops::vector
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::rewriter
     loom::src::loom::rewrite::type_propagation
     loom::src::loom::util::fact_table
@@ -87,7 +88,7 @@ loom_cc_test(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::rewriter
     iree::testing::gtest
     iree::testing::gtest_main
@@ -108,7 +109,7 @@ loom_cc_library(
     loom::src::loom::ops::cfg
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::special_values
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::rewriter
     loom::src::loom::util::cfg_graph
     loom::src::loom::util::dominance
@@ -127,7 +128,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
   PUBLIC
 )
 
@@ -142,7 +143,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::rewriter
     iree::testing::gtest
     iree::testing::gtest_main
@@ -159,7 +160,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
   PUBLIC
 )
 
@@ -174,7 +175,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -192,7 +193,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::kernel
     loom::src::loom::ops::op_defs
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
   PUBLIC
 )
 
@@ -210,7 +211,7 @@ loom_cc_test(
     loom::src::loom::ops::func
     loom::src::loom::ops::kernel
     loom::src::loom::ops::test
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -229,7 +230,7 @@ loom_cc_library(
     loom::src::loom::ops::func
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
   PUBLIC
 )
 
@@ -245,7 +246,7 @@ loom_cc_library(
     loom::src::loom::analysis::motion
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::rewriter
   PUBLIC
 )
@@ -264,7 +265,7 @@ loom_cc_library(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::materialize
     loom::src::loom::rewrite::remap
     loom::src::loom::rewrite::rewriter
@@ -290,8 +291,9 @@ loom_cc_library(
     loom::src::loom::ops::func
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::special_values
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::materialize
     loom::src::loom::rewrite::remap
     loom::src::loom::util::fact_table
@@ -312,7 +314,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::index
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -332,7 +334,7 @@ loom_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scf
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::materialize
     loom::src::loom::rewrite::remap
     loom::src::loom::rewrite::rewriter
@@ -351,7 +353,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
   PUBLIC
 )
 
@@ -367,7 +369,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
   PUBLIC
 )
 
@@ -419,7 +421,7 @@ loom_cc_library(
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     loom::src::loom::rewrite::rewriter
     loom::src::loom::util::math
   PUBLIC
@@ -439,7 +441,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::vector
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     loom::src::loom::util::fact_table
   PUBLIC
 )
@@ -466,7 +468,7 @@ loom_cc_test(
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -489,7 +491,7 @@ loom_cc_test(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::types
     iree::testing::gtest
     iree::testing::gtest_main
 )

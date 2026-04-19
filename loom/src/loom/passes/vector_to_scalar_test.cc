@@ -22,7 +22,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/pass/manager.h"
+#include "loom/pass/types.h"
 
 namespace loom {
 namespace {

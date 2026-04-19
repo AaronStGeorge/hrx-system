@@ -15,7 +15,7 @@
 #define LOOM_PASS_REPORT_H_
 
 #include "iree/base/api.h"
-#include "loom/pass/manager.h"
+#include "loom/pass/types.h"
 #include "loom/util/stream.h"
 
 #ifdef __cplusplus

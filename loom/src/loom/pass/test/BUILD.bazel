@@ -35,8 +35,8 @@ loom_cc_library(
     srcs = ["registry.c"],
     hdrs = ["registry.h"],
     deps = [
-        "//loom/src/loom/pass:manager",
         "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:types",
         "//runtime/src/iree/base",
     ],
 )
@@ -47,8 +47,10 @@ loom_cc_test(
     deps = [
         ":registry",
         "//loom/src/loom/ir",
-        "//loom/src/loom/pass:manager",
+        "//loom/src/loom/ops/pass",
         "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:tooling",
+        "//loom/src/loom/pass:types",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

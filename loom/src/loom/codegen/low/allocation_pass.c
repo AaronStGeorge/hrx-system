@@ -11,6 +11,7 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_materialization.h"
 #include "loom/ops/low/ops.h"
+#include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 
 typedef struct loom_low_materialize_allocation_pass_state_t {

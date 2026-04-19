@@ -23,6 +23,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
 #include "loom/pass/builtin_registry.h"
+#include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/report.h"
 #include "loom/pass/tooling.h"

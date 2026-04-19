@@ -277,147 +277,18 @@ TEST(PassRegistryCoreTest, RejectsOptionsForDescriptorWithoutCreateCallback) {
       LookupTestPass(IREE_SV("test.module-noop"));
   ASSERT_NE(descriptor, nullptr);
 
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &block_pool);
-  loom_pass_manager_t manager;
-  IREE_ASSERT_OK(loom_pass_manager_initialize(
-      &block_pool, 0, iree_allocator_system(), &manager));
-
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_pass_manager_add_descriptor(
-                            &manager, descriptor, IREE_SV("unknown=1"),
-                            /*user_data=*/nullptr));
-
-  loom_pass_manager_deinitialize(&manager);
-  iree_arena_block_pool_deinitialize(&block_pool);
-}
-
-TEST(PassRegistryCoreTest, AddPipelineResolvesDescriptors) {
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &block_pool);
-  loom_pass_manager_t manager;
-  IREE_ASSERT_OK(loom_pass_manager_initialize(
-      &block_pool, 0, iree_allocator_system(), &manager));
-
-  loom_pass_pipeline_configure_callback_t no_config = {};
-  IREE_ASSERT_OK(loom_pass_manager_add_pipeline(
-      &manager, loom_test_pass_registry(),
-      IREE_SV("test.options{count=2},test.module-noop"), no_config));
-
-  ASSERT_EQ(manager.count, 2u);
-  EXPECT_TRUE(iree_string_view_equal(manager.entries[0].info->name,
-                                     IREE_SV("test.options")));
-  EXPECT_TRUE(
-      iree_string_view_equal(manager.entries[0].options, IREE_SV("count=2")));
-  EXPECT_TRUE(iree_string_view_equal(manager.entries[1].info->name,
-                                     IREE_SV("test.module-noop")));
-
-  loom_pass_manager_deinitialize(&manager);
-  iree_arena_block_pool_deinitialize(&block_pool);
-}
-
-typedef struct test_pipeline_config_t {
-  // User data pointer to attach to matching pipeline entries.
-  void* entry_user_data;
-} test_pipeline_config_t;
-
-static iree_status_t configure_test_pipeline_entry(
-    void* user_data, const loom_pass_pipeline_descriptor_entry_t* entry,
-    void** out_pass_user_data) {
-  test_pipeline_config_t* config = (test_pipeline_config_t*)user_data;
-  *out_pass_user_data = nullptr;
-  if (iree_string_view_equal(entry->descriptor->key,
-                             IREE_SV("test.module-noop"))) {
-    *out_pass_user_data = config->entry_user_data;
-  }
-  return iree_ok_status();
-}
-
-TEST(PassRegistryCoreTest, AddPipelineAppliesConfigureCallback) {
-  int sentinel = 0;
-  test_pipeline_config_t config = {
-      .entry_user_data = &sentinel,
-  };
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &block_pool);
-  loom_pass_manager_t manager;
-  IREE_ASSERT_OK(loom_pass_manager_initialize(
-      &block_pool, 0, iree_allocator_system(), &manager));
-
-  IREE_ASSERT_OK(loom_pass_manager_add_pipeline(
-      &manager, loom_test_pass_registry(), IREE_SV("test.module-noop"),
-      (loom_pass_pipeline_configure_callback_t){
-          .fn = configure_test_pipeline_entry,
-          .user_data = &config,
-      }));
-
-  ASSERT_EQ(manager.count, 1u);
-  EXPECT_EQ(manager.entries[0].user_data, &sentinel);
-
-  loom_pass_manager_deinitialize(&manager);
-  iree_arena_block_pool_deinitialize(&block_pool);
-}
-
-TEST(PassRegistryCoreTest, AddPipelineRejectsUnknownPass) {
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &block_pool);
-  loom_pass_manager_t manager;
-  IREE_ASSERT_OK(loom_pass_manager_initialize(
-      &block_pool, 0, iree_allocator_system(), &manager));
-
-  loom_pass_pipeline_configure_callback_t no_config = {};
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_pass_manager_add_pipeline(
-                            &manager, loom_test_pass_registry(),
-                            IREE_SV("definitely-not-a-pass"), no_config));
-
-  loom_pass_manager_deinitialize(&manager);
-  iree_arena_block_pool_deinitialize(&block_pool);
-}
-
-TEST(PassRegistryCoreTest, AddPipelineRollsBackOnFailure) {
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &block_pool);
-  loom_pass_manager_t manager;
-  IREE_ASSERT_OK(loom_pass_manager_initialize(
-      &block_pool, 0, iree_allocator_system(), &manager));
-
-  loom_pass_pipeline_configure_callback_t no_config = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      loom_pass_manager_add_pipeline(
-          &manager, loom_test_pass_registry(),
-          IREE_SV("test.module-noop,definitely-not-a-pass"), no_config));
-  EXPECT_EQ(manager.count, 0u);
-
-  loom_pass_manager_deinitialize(&manager);
-  iree_arena_block_pool_deinitialize(&block_pool);
+      loom_pass_descriptor_validate_options(descriptor, IREE_SV("unknown=1")));
 }
 
-TEST(PassRegistryCoreTest, UnavailableDescriptorCannotBeAdded) {
+TEST(PassRegistryCoreTest, UnavailableDescriptorKeepsAvailabilityMetadata) {
   const loom_pass_descriptor_t* descriptor =
       LookupTestPass(IREE_SV("test.unavailable"));
   ASSERT_NE(descriptor, nullptr);
-
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &block_pool);
-  loom_pass_manager_t manager;
-  IREE_ASSERT_OK(loom_pass_manager_initialize(
-      &block_pool, 0, iree_allocator_system(), &manager));
-
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
-                        loom_pass_manager_add_descriptor(
-                            &manager, descriptor, iree_string_view_empty(),
-                            /*user_data=*/nullptr));
-
-  loom_pass_manager_deinitialize(&manager);
-  iree_arena_block_pool_deinitialize(&block_pool);
+  EXPECT_FALSE(loom_pass_descriptor_is_available(descriptor));
+  EXPECT_TRUE(iree_string_view_equal(descriptor->unavailable_reason,
+                                     IREE_SV("disabled for test")));
 }
 
 }  // namespace

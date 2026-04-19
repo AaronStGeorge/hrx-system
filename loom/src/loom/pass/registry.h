@@ -7,15 +7,14 @@
 // Pass descriptor registry core.
 //
 // The registry is the shared dispatch surface between pass-pipeline tools and
-// pass implementations. The pass manager remains a small execution engine;
-// registries decide which pass descriptors are available to a given pipeline
-// compiler, tool, or compiler configuration.
+// pass implementations. The verifier and program compiler resolve pass.run keys
+// through registries before the interpreter executes descriptor callbacks.
 
 #ifndef LOOM_PASS_REGISTRY_H_
 #define LOOM_PASS_REGISTRY_H_
 
 #include "iree/base/api.h"
-#include "loom/pass/manager.h"
+#include "loom/pass/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -146,30 +145,6 @@ typedef struct loom_pass_registry_t {
   iree_host_size_t descriptor_count;
 } loom_pass_registry_t;
 
-// Resolved descriptor entry from a textual pass pipeline.
-typedef struct loom_pass_pipeline_descriptor_entry_t {
-  // Parsed textual pipeline entry.
-  loom_pass_pipeline_entry_spec_t spec;
-  // Resolved pass descriptor.
-  const loom_pass_descriptor_t* descriptor;
-  // Zero-based index in the textual pipeline.
-  iree_host_size_t pipeline_index;
-} loom_pass_pipeline_descriptor_entry_t;
-
-// Provides optional per-entry user data while loading a textual pipeline.
-typedef iree_status_t (*loom_pass_pipeline_configure_fn_t)(
-    void* user_data, const loom_pass_pipeline_descriptor_entry_t* entry,
-    void** out_pass_user_data);
-
-// Callback invoked for each resolved pipeline entry while loading a textual
-// pass pipeline.
-typedef struct loom_pass_pipeline_configure_callback_t {
-  // Optional configure function.
-  loom_pass_pipeline_configure_fn_t fn;
-  // Opaque caller data passed to |fn|.
-  void* user_data;
-} loom_pass_pipeline_configure_callback_t;
-
 // Verifies registry ordering, key uniqueness, and descriptor shape.
 iree_status_t loom_pass_registry_verify(const loom_pass_registry_t* registry);
 
@@ -201,20 +176,6 @@ iree_status_t loom_pass_descriptor_decode_attr_options(
     const loom_pass_descriptor_t* descriptor, const loom_module_t* module,
     loom_named_attr_slice_t options, iree_arena_allocator_t* arena,
     loom_pass_decoded_options_t* out_options);
-
-// Adds |descriptor| to |manager| with caller-owned option text and borrowed
-// per-entry user data.
-iree_status_t loom_pass_manager_add_descriptor(
-    loom_pass_manager_t* manager, const loom_pass_descriptor_t* descriptor,
-    iree_string_view_t options, void* user_data);
-
-// Parses |pipeline|, resolves descriptors through |registry|, and appends the
-// resulting pass entries to |manager|. |configure| may attach per-entry user
-// data after descriptor lookup and before validation/addition.
-iree_status_t loom_pass_manager_add_pipeline(
-    loom_pass_manager_t* manager, const loom_pass_registry_t* registry,
-    iree_string_view_t pipeline,
-    loom_pass_pipeline_configure_callback_t configure);
 
 #ifdef __cplusplus
 }  // extern "C"

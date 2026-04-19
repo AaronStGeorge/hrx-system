@@ -20,6 +20,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/special_values.h"
+#include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/passes/canonicalize.h"
 #include "loom/rewrite/materialize.h"

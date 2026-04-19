@@ -15,7 +15,7 @@
 #define LOOM_PASSES_KERNEL_ASYNC_LEGALITY_H_
 
 #include "iree/base/api.h"
-#include "loom/pass/manager.h"
+#include "loom/pass/types.h"
 
 #ifdef __cplusplus
 extern "C" {

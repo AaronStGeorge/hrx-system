@@ -7,7 +7,7 @@
 #ifndef LOOM_PASSES_STRIP_HINTS_H_
 #define LOOM_PASSES_STRIP_HINTS_H_
 
-#include "loom/pass/manager.h"
+#include "loom/pass/types.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -15,7 +15,7 @@
 #include "iree/base/api.h"
 #include "loom/ir/types.h"
 #include "loom/ops/op_defs.h"
-#include "loom/pass/manager.h"
+#include "loom/pass/types.h"
 #include "loom/rewrite/rewriter.h"
 
 #ifdef __cplusplus

@@ -19,8 +19,8 @@ loom_cc_library(
     "registry.c"
   DEPS
     iree::base
-    loom::src::loom::pass::manager
     loom::src::loom::pass::registry
+    loom::src::loom::pass::types
   TESTONLY
   PUBLIC
 )
@@ -34,8 +34,10 @@ loom_cc_test(
     ::registry
     iree::base::internal::arena
     loom::src::loom::ir
-    loom::src::loom::pass::manager
+    loom::src::loom::ops::pass
     loom::src::loom::pass::registry
+    loom::src::loom::pass::tooling
+    loom::src::loom::pass::types
     iree::testing::gtest
     iree::testing::gtest_main
 )

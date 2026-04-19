@@ -19,6 +19,7 @@
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/special_values.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/rewrite/type_propagation.h"

@@ -16,7 +16,7 @@
 
 #include "iree/base/api.h"
 #include "loom/ir/ir.h"
-#include "loom/pass/manager.h"
+#include "loom/pass/types.h"
 
 #ifdef __cplusplus
 extern "C" {

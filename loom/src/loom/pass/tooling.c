@@ -12,6 +12,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/pass/ops.h"
+#include "loom/pass/pipeline.h"
 #include "loom/pass/program.h"
 #include "loom/pass/registry.h"
 

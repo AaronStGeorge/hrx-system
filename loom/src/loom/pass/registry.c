@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "loom/ir/module.h"
+#include "loom/pass/pipeline.h"
 
 static bool loom_pass_descriptor_key_matches_info(
     const loom_pass_descriptor_t* descriptor) {
@@ -913,94 +914,6 @@ iree_status_t loom_pass_descriptor_decode_attr_options(
         .options = decoded_options,
         .option_count = descriptor->option_schema_count,
     };
-  }
-  return status;
-}
-
-iree_status_t loom_pass_manager_add_descriptor(
-    loom_pass_manager_t* manager, const loom_pass_descriptor_t* descriptor,
-    iree_string_view_t options, void* user_data) {
-  if (!manager || !descriptor || !descriptor->info) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "pass manager and descriptor with pass info are required");
-  }
-  const loom_pass_info_t* info = descriptor->info();
-  if (!info) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "pass descriptor '%.*s' returned no info",
-                            (int)descriptor->key.size, descriptor->key.data);
-  }
-  if (!loom_pass_descriptor_is_available(descriptor)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "pass '%.*s' is unavailable: %.*s",
-                            (int)descriptor->key.size, descriptor->key.data,
-                            (int)descriptor->unavailable_reason.size,
-                            descriptor->unavailable_reason.data);
-  }
-  IREE_RETURN_IF_ERROR(
-      loom_pass_descriptor_validate_options(descriptor, options));
-  if (info->kind == LOOM_PASS_MODULE) {
-    return loom_pass_manager_add_module_pass(
-        manager, info, descriptor->module_run, descriptor->create,
-        descriptor->destroy, options, user_data);
-  }
-  if (info->kind == LOOM_PASS_FUNCTION) {
-    return loom_pass_manager_add_function_pass(
-        manager, info, descriptor->function_run, descriptor->create,
-        descriptor->destroy, options, user_data);
-  }
-  return iree_make_status(
-      IREE_STATUS_INVALID_ARGUMENT, "pass '%.*s' has unknown kind %d",
-      (int)descriptor->key.size, descriptor->key.data, (int)info->kind);
-}
-
-iree_status_t loom_pass_manager_add_pipeline(
-    loom_pass_manager_t* manager, const loom_pass_registry_t* registry,
-    iree_string_view_t pipeline,
-    loom_pass_pipeline_configure_callback_t configure) {
-  if (!manager || !registry) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "pass manager and registry are required");
-  }
-  IREE_RETURN_IF_ERROR(loom_pass_registry_verify(registry));
-
-  iree_host_size_t initial_manager_count = manager->count;
-  iree_string_view_t remaining = pipeline;
-  iree_host_size_t pipeline_index = 0;
-  iree_status_t status = iree_ok_status();
-  while (iree_status_is_ok(status)) {
-    loom_pass_pipeline_entry_spec_t spec = {0};
-    bool has_entry = false;
-    status = loom_pass_pipeline_consume_entry(&remaining, &spec, &has_entry);
-    if (!iree_status_is_ok(status) || !has_entry) break;
-
-    const loom_pass_descriptor_t* descriptor = NULL;
-    status = loom_pass_registry_lookup(registry, spec.name, &descriptor);
-    if (iree_status_is_ok(status) && !descriptor) {
-      status =
-          iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                           "unknown pass '%.*s' at pipeline entry %zu",
-                           (int)spec.name.size, spec.name.data, pipeline_index);
-    }
-
-    void* pass_user_data = NULL;
-    if (iree_status_is_ok(status) && configure.fn) {
-      const loom_pass_pipeline_descriptor_entry_t entry = {
-          .spec = spec,
-          .descriptor = descriptor,
-          .pipeline_index = pipeline_index,
-      };
-      status = configure.fn(configure.user_data, &entry, &pass_user_data);
-    }
-    if (iree_status_is_ok(status)) {
-      status = loom_pass_manager_add_descriptor(manager, descriptor,
-                                                spec.options, pass_user_data);
-    }
-    if (iree_status_is_ok(status)) ++pipeline_index;
-  }
-  if (!iree_status_is_ok(status)) {
-    manager->count = initial_manager_count;
   }
   return status;
 }

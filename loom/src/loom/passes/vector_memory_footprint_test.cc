@@ -6,6 +6,8 @@
 
 #include "loom/passes/vector_memory_footprint.h"
 
+#include <string.h>
+
 #include <string>
 
 #include "iree/base/internal/arena.h"
@@ -27,7 +29,7 @@
 #include "loom/ops/test/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
-#include "loom/pass/manager.h"
+#include "loom/pass/types.h"
 
 namespace loom {
 namespace {
@@ -111,7 +113,7 @@ class VectorMemoryFootprintTest : public ::testing::Test {
   }
 
   iree_status_t RunPipeline(const char* source) {
-    loom_module_t* module = NULL;
+    loom_module_t* module = nullptr;
     loom_text_parse_options_t parse_options = {};
     iree_status_t status = loom_text_parse(
         iree_make_cstring_view(source), IREE_SV("vector_memory_footprint.loom"),
@@ -125,23 +127,45 @@ class VectorMemoryFootprintTest : public ::testing::Test {
                               "parser did not produce a module");
     }
 
-    loom_pass_manager_t manager;
-    bool manager_initialized = false;
-    status = loom_pass_manager_initialize(&block_pool_, 0,
-                                          iree_allocator_system(), &manager);
-    if (iree_status_is_ok(status)) {
-      manager_initialized = true;
+    iree_arena_allocator_t instance_arena;
+    iree_arena_initialize(&block_pool_, &instance_arena);
+    iree_arena_allocator_t function_arena;
+    iree_arena_initialize(&block_pool_, &function_arena);
+
+    const loom_pass_info_t* info = loom_vector_memory_footprint_pass_info();
+    loom_pass_t pass = {};
+    pass.info = info;
+    pass.function_run = loom_vector_memory_footprint_run;
+    pass.instance_arena = &instance_arena;
+    pass.arena = &function_arena;
+    if (info->statistic_count > 0) {
+      iree_host_size_t statistics_size =
+          (iree_host_size_t)info->statistic_count * sizeof(*pass.statistics);
+      status = iree_arena_allocate(&instance_arena, statistics_size,
+                                   (void**)&pass.statistics);
+      if (iree_status_is_ok(status)) {
+        memset(pass.statistics, 0, statistics_size);
+      }
     }
     if (iree_status_is_ok(status)) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_vector_memory_footprint_pass_info(),
-          loom_vector_memory_footprint_run, NULL, NULL,
-          iree_string_view_empty(), NULL);
+      for (iree_host_size_t i = 0;
+           i < module->symbols.count && iree_status_is_ok(status); ++i) {
+        loom_symbol_t* symbol = &module->symbols.entries[i];
+        if (!loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE)) {
+          continue;
+        }
+        loom_func_like_t function =
+            loom_func_like_cast(module, symbol->defining_op);
+        if (!loom_func_like_body(function)) {
+          continue;
+        }
+        iree_arena_reset(&function_arena);
+        status = loom_vector_memory_footprint_run(&pass, module, function);
+      }
     }
-    if (iree_status_is_ok(status)) {
-      status = loom_pass_manager_run(&manager, module);
-    }
-    if (manager_initialized) loom_pass_manager_deinitialize(&manager);
+    pass.arena = pass.instance_arena;
+    iree_arena_deinitialize(&function_arena);
+    iree_arena_deinitialize(&instance_arena);
     loom_module_free(module);
     return status;
   }
@@ -192,7 +216,7 @@ class VectorMemoryFootprintTest : public ::testing::Test {
     return status;
   }
 
-  // Block pool shared by parser, module allocation, and pass manager arenas.
+  // Block pool shared by parser, module allocation, and pass execution arenas.
   iree_arena_block_pool_t block_pool_;
 
   // Context with the full Loom dialect set needed by production text IR.

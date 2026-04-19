@@ -12,31 +12,36 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
-    manager
+    types
   HDRS
-    "manager.h"
-  SRCS
-    "manager.c"
+    "types.h"
   DEPS
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::emitter
     loom::src::loom::ir
-    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    pipeline
+  HDRS
+    "pipeline.h"
+  SRCS
+    "pipeline.c"
+  DEPS
+    iree::base
   PUBLIC
 )
 
 loom_cc_test(
   NAME
-    manager_test
+    pipeline_test
   SRCS
-    "manager_test.cc"
+    "pipeline_test.cc"
   DEPS
-    ::manager
-    iree::base::internal::arena
-    loom::src::loom::ir
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::test
+    ::pipeline
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -49,7 +54,8 @@ loom_cc_library(
   SRCS
     "registry.c"
   DEPS
-    ::manager
+    ::pipeline
+    ::types
     iree::base
     loom::src::loom::ir
   PUBLIC
@@ -113,9 +119,9 @@ loom_cc_library(
   SRCS
     "report.c"
   DEPS
-    ::manager
     ::program
     ::registry
+    ::types
     iree::base
     loom::src::loom::util::json
     loom::src::loom::util::stream
@@ -150,6 +156,7 @@ loom_cc_library(
     "tooling.c"
   DEPS
     ::interpreter
+    ::pipeline
     ::program
     ::registry
     iree::base
@@ -195,7 +202,6 @@ loom_cc_test(
   SRCS
     "registry_test.cc"
   DEPS
-    ::manager
     ::registry
     ::report
     iree::base::internal::arena

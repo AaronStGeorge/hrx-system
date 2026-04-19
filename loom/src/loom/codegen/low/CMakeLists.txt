@@ -189,8 +189,9 @@ loom_cc_library(
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::pass::manager
+    loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
+    loom::src::loom::pass::types
   PUBLIC
 )
 
