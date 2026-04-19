@@ -12,6 +12,8 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "iree/vm/api.h"
+#include "iree/vm/bytecode/module.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule.h"
 #include "loom/codegen/low/verify.h"
@@ -20,6 +22,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/emit/ireevm/descriptors.h"
+#include "loom/target/emit/ireevm/module_archive.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -58,6 +61,64 @@ struct BytecodeOwner {
   }
 
   loom_ireevm_function_bytecode_t bytecode = {};
+};
+
+struct ModuleArchiveOwner {
+  ~ModuleArchiveOwner() {
+    loom_ireevm_module_archive_deinitialize(&archive, iree_allocator_system());
+  }
+
+  loom_ireevm_module_archive_t archive = {};
+};
+
+struct VmInstanceOwner {
+  ~VmInstanceOwner() {
+    if (instance) {
+      iree_vm_instance_release(instance);
+    }
+  }
+
+  iree_vm_instance_t* instance = nullptr;
+};
+
+struct VmModuleOwner {
+  ~VmModuleOwner() {
+    if (module) {
+      iree_vm_module_release(module);
+    }
+  }
+
+  iree_vm_module_t* module = nullptr;
+};
+
+struct VmContextOwner {
+  ~VmContextOwner() {
+    if (context) {
+      iree_vm_context_release(context);
+    }
+  }
+
+  iree_vm_context_t* context = nullptr;
+};
+
+struct VmListOwner {
+  ~VmListOwner() {
+    if (list) {
+      iree_vm_list_release(list);
+    }
+  }
+
+  iree_vm_list_t* list = nullptr;
+};
+
+struct StringBuilderOwner {
+  StringBuilderOwner() {
+    iree_string_builder_initialize(iree_allocator_system(), &builder);
+  }
+
+  ~StringBuilderOwner() { iree_string_builder_deinitialize(&builder); }
+
+  iree_string_builder_t builder = {};
 };
 
 class IreeVmFunctionBytecodeTest : public ::testing::Test {
@@ -257,6 +318,96 @@ TEST_F(IreeVmFunctionBytecodeTest, EmitsBranchRemapList) {
   EXPECT_EQ(ReadLeU16(&bytecode.data[10]), 1u);
   EXPECT_EQ(bytecode.data[12], kVmOpcodeBlock);
   EXPECT_EQ(bytecode.data[13], kVmOpcodeReturn);
+}
+
+TEST_F(IreeVmFunctionBytecodeTest, EmitsLoadableExecutableVmModuleArchive) {
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_allocation_sidecar_t allocation = {};
+  BuildSidecars(
+      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "reg<vm.i32>) -> (reg<vm.i32>) {\n"
+      "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : "
+      "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
+      "  low.return %sum : reg<vm.i32>\n"
+      "}\n",
+      &schedule, &allocation);
+
+  BytecodeOwner bytecode_owner;
+  loom_ireevm_function_bytecode_t& bytecode = bytecode_owner.bytecode;
+  IREE_ASSERT_OK(loom_ireevm_emit_function_bytecode(
+      &schedule, &allocation, iree_allocator_system(), &bytecode));
+
+  const loom_ireevm_module_archive_function_t functions[] = {
+      {
+          .export_name = IREE_SV("add"),
+          .calling_convention = IREE_SV("0ii_i"),
+          .bytecode = &bytecode,
+      },
+      {
+          .export_name = IREE_SV("add_alt"),
+          .calling_convention = IREE_SV("0ii_i"),
+          .bytecode = &bytecode,
+      },
+  };
+  ModuleArchiveOwner archive_owner;
+  loom_ireevm_module_archive_t& archive = archive_owner.archive;
+  IREE_ASSERT_OK(loom_ireevm_emit_module_archive(
+      IREE_SV("loom_test"), functions, IREE_ARRAYSIZE(functions),
+      iree_allocator_system(), &archive));
+  ASSERT_GT(archive.data_length, 16u);
+
+  VmInstanceOwner instance_owner;
+  IREE_ASSERT_OK(iree_vm_instance_create(IREE_VM_TYPE_CAPACITY_DEFAULT,
+                                         iree_allocator_system(),
+                                         &instance_owner.instance));
+  VmModuleOwner module_owner;
+  IREE_ASSERT_OK(iree_vm_bytecode_module_create(
+      instance_owner.instance, IREE_VM_BYTECODE_MODULE_FLAG_NONE,
+      iree_make_const_byte_span(archive.data, archive.data_length),
+      iree_allocator_null(), iree_allocator_system(), &module_owner.module));
+
+  StringBuilderOwner disassembly;
+  IREE_ASSERT_OK(iree_vm_bytecode_module_disassemble_function(
+      module_owner.module, 1, &disassembly.builder));
+  const std::string disassembly_string(disassembly.builder.buffer,
+                                       disassembly.builder.size);
+  EXPECT_NE(disassembly_string.find("vm.add.i32"), std::string::npos);
+  EXPECT_NE(disassembly_string.find("vm.return"), std::string::npos);
+
+  VmContextOwner context_owner;
+  iree_vm_module_t* modules[] = {module_owner.module};
+  IREE_ASSERT_OK(iree_vm_context_create_with_modules(
+      instance_owner.instance, IREE_VM_CONTEXT_FLAG_NONE,
+      IREE_ARRAYSIZE(modules), modules, iree_allocator_system(),
+      &context_owner.context));
+
+  iree_vm_function_t function = {};
+  IREE_ASSERT_OK(iree_vm_module_lookup_function_by_name(
+      module_owner.module, IREE_VM_FUNCTION_LINKAGE_EXPORT, IREE_SV("add_alt"),
+      &function));
+
+  VmListOwner input_list;
+  IREE_ASSERT_OK(iree_vm_list_create(iree_vm_make_undefined_type_def(), 2,
+                                     iree_allocator_system(),
+                                     &input_list.list));
+  IREE_ASSERT_OK(iree_vm_list_resize(input_list.list, 2));
+  iree_vm_value_t lhs = iree_vm_value_make_i32(20);
+  iree_vm_value_t rhs = iree_vm_value_make_i32(22);
+  IREE_ASSERT_OK(iree_vm_list_set_value(input_list.list, 0, &lhs));
+  IREE_ASSERT_OK(iree_vm_list_set_value(input_list.list, 1, &rhs));
+
+  VmListOwner output_list;
+  IREE_ASSERT_OK(iree_vm_list_create(iree_vm_make_undefined_type_def(), 1,
+                                     iree_allocator_system(),
+                                     &output_list.list));
+  IREE_ASSERT_OK(iree_vm_invoke(
+      context_owner.context, function, IREE_VM_INVOCATION_FLAG_NONE, nullptr,
+      input_list.list, output_list.list, iree_allocator_system()));
+  ASSERT_EQ(iree_vm_list_size(output_list.list), 1u);
+  iree_vm_value_t result = {};
+  IREE_ASSERT_OK(iree_vm_list_get_value(output_list.list, 0, &result));
+  EXPECT_EQ(result.type, IREE_VM_VALUE_TYPE_I32);
+  EXPECT_EQ(result.i32, 42);
 }
 
 }  // namespace

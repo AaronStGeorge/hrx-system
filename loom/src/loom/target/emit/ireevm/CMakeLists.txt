@@ -57,6 +57,22 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    module_archive
+  HDRS
+    "module_archive.h"
+  SRCS
+    "module_archive.c"
+  DEPS
+    ::function_bytecode
+    iree::base
+    iree::base::internal::flatcc::building
+    iree::schemas::bytecode_module_def_c_fbs
+    iree::vm::bytecode::utils
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     descriptors_test
@@ -79,6 +95,7 @@ loom_cc_test(
   DEPS
     ::descriptors
     ::function_bytecode
+    ::module_archive
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
@@ -90,6 +107,8 @@ loom_cc_test(
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::vm
+    iree::vm::bytecode::module
 )
 
 loom_cc_test(
