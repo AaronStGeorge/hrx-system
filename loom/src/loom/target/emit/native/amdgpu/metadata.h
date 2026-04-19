@@ -104,6 +104,16 @@ iree_status_t loom_amdgpu_metadata_append_msgpack(
     const loom_amdgpu_code_object_metadata_t* metadata,
     iree_string_builder_t* builder);
 
+// Appends one complete AMDGPU ELF note record containing MessagePack metadata.
+//
+// The returned bytes are not a complete ELF file, section, or program segment.
+// Direct object emitters can place the record in a SHT_NOTE section and expose
+// the same bytes through a PT_NOTE segment. The note name is `AMDGPU` and the
+// note type is NT_AMDGPU_METADATA.
+iree_status_t loom_amdgpu_metadata_append_elf_note(
+    const loom_amdgpu_code_object_metadata_t* metadata,
+    iree_string_builder_t* builder);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

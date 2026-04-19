@@ -23,6 +23,15 @@ bool Contains(const std::string& value, const char* substring) {
   return value.find(substring) != std::string::npos;
 }
 
+uint32_t LoadLeU32(const std::string& bytes, size_t offset) {
+  return ((uint32_t)(uint8_t)bytes[offset + 0]) |
+         ((uint32_t)(uint8_t)bytes[offset + 1] << 8) |
+         ((uint32_t)(uint8_t)bytes[offset + 2] << 16) |
+         ((uint32_t)(uint8_t)bytes[offset + 3] << 24);
+}
+
+size_t Align4(size_t value) { return (value + 3u) & ~3u; }
+
 loom_amdgpu_metadata_kernel_t MinimalKernel() {
   return {
       .name = IREE_SV("loom_kernel"),
@@ -100,6 +109,46 @@ TEST(AmdgpuMetadataTest, AppendsMsgpackMetadataForNoArgumentKernel) {
   EXPECT_TRUE(Contains(bytes, ".wavefront_size"));
   EXPECT_TRUE(Contains(bytes, ".args"));
   EXPECT_FALSE(Contains(bytes, ".amdgpu_metadata"));
+}
+
+TEST(AmdgpuMetadataTest, AppendsElfNoteMetadata) {
+  loom_amdgpu_metadata_kernel_t kernel = MinimalKernel();
+  loom_amdgpu_code_object_metadata_t metadata = MetadataForKernel(&kernel);
+
+  iree_string_builder_t payload_builder;
+  iree_string_builder_initialize(iree_allocator_system(), &payload_builder);
+  IREE_ASSERT_OK(
+      loom_amdgpu_metadata_append_msgpack(&metadata, &payload_builder));
+  std::string payload = BuilderString(payload_builder);
+  iree_string_builder_deinitialize(&payload_builder);
+
+  iree_string_builder_t note_builder;
+  iree_string_builder_initialize(iree_allocator_system(), &note_builder);
+  IREE_ASSERT_OK(
+      loom_amdgpu_metadata_append_elf_note(&metadata, &note_builder));
+  std::string note = BuilderString(note_builder);
+  iree_string_builder_deinitialize(&note_builder);
+
+  const char note_name[] = {'A', 'M', 'D', 'G', 'P', 'U', '\0'};
+  constexpr size_t kHeaderSize = 12;
+  const size_t name_size = sizeof(note_name);
+  const size_t desc_offset = Align4(kHeaderSize + name_size);
+  const size_t note_size = Align4(desc_offset + payload.size());
+  ASSERT_EQ(note.size(), note_size);
+  ASSERT_GE(note.size(), desc_offset + payload.size());
+
+  EXPECT_EQ(LoadLeU32(note, 0), name_size);
+  EXPECT_EQ(LoadLeU32(note, 4), payload.size());
+  EXPECT_EQ(LoadLeU32(note, 8), 32u);
+  EXPECT_EQ(note.substr(kHeaderSize, name_size),
+            std::string(note_name, name_size));
+  for (size_t i = kHeaderSize + name_size; i < desc_offset; ++i) {
+    EXPECT_EQ((uint8_t)note[i], 0u);
+  }
+  EXPECT_EQ(note.substr(desc_offset, payload.size()), payload);
+  for (size_t i = desc_offset + payload.size(); i < note_size; ++i) {
+    EXPECT_EQ((uint8_t)note[i], 0u);
+  }
 }
 
 TEST(AmdgpuMetadataTest, AppendsArgumentMetadata) {
