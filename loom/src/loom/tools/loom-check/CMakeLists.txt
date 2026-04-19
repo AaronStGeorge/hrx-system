@@ -51,6 +51,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation_json
     loom::src::loom::codegen::low::allocation_pass
     loom::src::loom::codegen::low::packet_json
+    loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::schedule
     loom::src::loom::codegen::low::schedule_json
     loom::src::loom::codegen::low::target_binding

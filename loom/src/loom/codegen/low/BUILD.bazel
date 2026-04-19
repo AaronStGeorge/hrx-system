@@ -166,6 +166,42 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "packetization_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/codegen/low:packetization",
+)
+
+iree_assert_no_dependency(
+    name = "packetization_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/codegen/low:packetization",
+)
+
+iree_assert_no_dependency(
+    name = "packetization_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/codegen/low:packetization",
+)
+
+iree_assert_no_dependency(
+    name = "packetization_no_target_registry_dep",
+    dependency = "//loom/src/loom/target:low_descriptor_registry",
+    target = "//loom/src/loom/codegen/low:packetization",
+)
+
+iree_assert_no_dependency(
+    name = "packetization_no_test_low_registry_dep",
+    dependency = "//loom/src/loom/target/test:low_registry",
+    target = "//loom/src/loom/codegen/low:packetization",
+)
+
+iree_assert_no_dependency(
+    name = "packetization_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/codegen/low:packetization",
+)
+
+iree_assert_no_dependency(
     name = "packet_json_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/codegen/low:packet_json",
@@ -522,6 +558,22 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "packetization",
+    srcs = ["packetization.c"],
+    hdrs = ["packetization.h"],
+    deps = [
+        ":allocation",
+        ":packet",
+        ":schedule",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "packet_json",
     srcs = ["packet_json.c"],
     hdrs = ["packet_json.h"],
@@ -572,6 +624,24 @@ loom_cc_test(
     srcs = ["packet_test.cc"],
     deps = [
         ":packet",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "packetization_test",
+    srcs = ["packetization_test.cc"],
+    deps = [
+        ":packet",
+        ":packetization",
+        ":verify",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

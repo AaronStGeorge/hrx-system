@@ -14,7 +14,7 @@
 #include "iree/testing/status_matchers.h"
 #include "iree/vm/api.h"
 #include "iree/vm/bytecode/module.h"
-#include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/schedule.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
@@ -214,17 +214,15 @@ class IreeVmFunctionBytecodeTest : public ::testing::Test {
     iree_arena_initialize(&block_pool_, &sidecar_arena_);
     sidecar_arena_initialized_ = true;
 
-    loom_low_schedule_options_t schedule_options = {
+    loom_low_packetization_options_t packetization_options = {
         .descriptor_registry = &registry_,
     };
-    IREE_ASSERT_OK(loom_low_schedule_function(
-        module_, low_func, &schedule_options, &sidecar_arena_, out_schedule));
-    loom_low_allocation_options_t allocation_options = {
-        .descriptor_registry = &registry_,
-    };
-    IREE_ASSERT_OK(loom_low_allocate_function(module_, low_func,
-                                              &allocation_options,
-                                              &sidecar_arena_, out_allocation));
+    loom_low_packetization_t packetization = {};
+    IREE_ASSERT_OK(
+        loom_low_packetize_function(module_, low_func, &packetization_options,
+                                    &sidecar_arena_, &packetization));
+    *out_schedule = packetization.schedule;
+    *out_allocation = packetization.allocation;
   }
 
   void ReleaseSidecars() {

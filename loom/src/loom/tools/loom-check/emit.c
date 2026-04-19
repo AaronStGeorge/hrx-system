@@ -10,6 +10,7 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_json.h"
 #include "loom/codegen/low/packet_json.h"
+#include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/schedule.h"
 #include "loom/codegen/low/schedule_json.h"
 #include "loom/codegen/low/text_asm.h"
@@ -1059,29 +1060,22 @@ static iree_status_t loom_check_emit_write_low_packet_json(
   const loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(
       loom_check_emit_find_low_func_def(module, symbol_name, &low_function));
-  loom_low_schedule_options_t schedule_options = {
+  loom_low_packetization_options_t packetization_options = {
       .descriptor_registry = descriptor_registry,
+      .schedule_strategy = strategy,
+      .allocation_budgets = budgets,
+      .allocation_budget_count = budget_count,
       .emitter = emitter,
-      .diagnostic_flags = 0,
-      .strategy = strategy,
   };
-  loom_low_schedule_sidecar_t schedule = {0};
-  IREE_RETURN_IF_ERROR(loom_low_schedule_function(
-      module, low_function, &schedule_options, analysis_arena, &schedule));
-  loom_low_allocation_options_t allocation_options = {
-      .descriptor_registry = descriptor_registry,
-      .budgets = budgets,
-      .budget_count = budget_count,
-      .emitter = emitter,
-      .diagnostic_flags = 0,
-  };
-  loom_low_allocation_sidecar_t allocation = {0};
-  IREE_RETURN_IF_ERROR(loom_low_allocate_function(
-      module, low_function, &allocation_options, analysis_arena, &allocation));
+  loom_low_packetization_t packetization = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_packetize_function(module, low_function, &packetization_options,
+                                  analysis_arena, &packetization));
   if (suppress_output) {
     return iree_ok_status();
   }
-  return loom_low_packet_format_json(&schedule, &allocation,
+  return loom_low_packet_format_json(&packetization.schedule,
+                                     &packetization.allocation,
                                      &result->actual_output);
 }
 

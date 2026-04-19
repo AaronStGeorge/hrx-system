@@ -98,7 +98,7 @@ loom_cc_test(
     ::module_archive
     iree::base
     iree::base::internal::arena
-    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::schedule
     loom::src::loom::codegen::low::verify
     loom::src::loom::format::text::parser
