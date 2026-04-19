@@ -24,6 +24,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::emit::native::assembly
   PUBLIC
 )
@@ -46,6 +47,8 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::arch::amdgpu::lower
+    loom::src::loom::target::arch::amdgpu::wait_packets
+    loom::src::loom::target::arch::amdgpu::wait_plan
     loom::src::loom::target::ir_records
     loom::src::loom::target::presets
     loom::src::loom::testing::context

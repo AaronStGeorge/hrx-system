@@ -21,6 +21,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
+#include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/ir_records.h"
 #include "loom/target/presets.h"
 #include "loom/testing/context.h"
@@ -97,11 +98,17 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     return loom_symbol_ref_t{.module_id = 0, .symbol_id = symbol_id};
   }
 
-  void BuildSidecars(const char* body, iree_arena_allocator_t* arena,
-                     loom_low_packetization_t* out_packetization) {
-    std::string source =
-        "target.preset @gfx11_target {key = \"amdgpu-gfx11\", source = "
-        "@gfx11_fragment}\n";
+  void BuildSidecarsForPreset(const char* preset_key, const char* target_symbol,
+                              const char* function_symbol, const char* body,
+                              iree_arena_allocator_t* arena,
+                              loom_low_packetization_t* out_packetization) {
+    std::string source = "target.preset @";
+    source += target_symbol;
+    source += " {key = \"";
+    source += preset_key;
+    source += "\", source = @";
+    source += function_symbol;
+    source += "}\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
@@ -134,6 +141,12 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
                                                &packetization_options, arena,
                                                out_packetization));
+  }
+
+  void BuildSidecars(const char* body, iree_arena_allocator_t* arena,
+                     loom_low_packetization_t* out_packetization) {
+    BuildSidecarsForPreset("amdgpu-gfx11", "gfx11_target", "gfx11_fragment",
+                           body, arena, out_packetization);
   }
 
   void LowerSource(const char* preset_key, const char* body,
@@ -314,6 +327,82 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
   EXPECT_NE(output.find("s_endpgm"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
+}
+
+TEST_F(AmdgpuAssemblyTest, EmitsPlannedWaitPackets) {
+  struct Case {
+    const char* preset_key;
+    const char* load_wait;
+    const char* store_wait;
+  };
+  const Case cases[] = {
+      {"amdgpu-gfx950", "s_waitcnt vmcnt(0) lgkmcnt(0)",
+       "s_waitcnt vmcnt(0) lgkmcnt(0)"},
+      {"amdgpu-gfx11", "s_waitcnt vmcnt(0) lgkmcnt(0)",
+       "s_waitcnt vmcnt(0) lgkmcnt(0)"},
+      {"amdgpu-gfx12", "s_wait_loadcnt loadcnt(0)",
+       "s_wait_storecnt storecnt(0)"},
+      {"amdgpu-gfx1250", "s_wait_loadcnt loadcnt(0)",
+       "s_wait_storecnt storecnt(0)"},
+  };
+  for (const Case& test_case : cases) {
+    SCOPED_TRACE(test_case.preset_key);
+    iree_arena_allocator_t sidecar_arena;
+    iree_arena_initialize(&block_pool_, &sidecar_arena);
+    loom_low_packetization_t packetization = {};
+    BuildSidecarsForPreset(
+        test_case.preset_key, "gfx_target", "wait_fragment",
+        "low.func.def target(@gfx_target) @wait_fragment(%value : "
+        "reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, "
+        "%soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) {\n"
+        "  %loaded = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, "
+        "%soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, "
+        "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>\n"
+        "  low.op<amdgpu.buffer_store_dword>(%loaded, %resource, %vaddr, "
+        "%soffset) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
+        "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+        "  low.return\n"
+        "}\n",
+        &sidecar_arena, &packetization);
+
+    iree_string_builder_t raw_builder;
+    iree_string_builder_initialize(iree_allocator_system(), &raw_builder);
+    IREE_ASSERT_OK(loom_amdgpu_emit_assembly_fragment(
+        &packetization.schedule, &packetization.allocation, &raw_builder));
+    const std::string raw_output(iree_string_builder_view(&raw_builder).data,
+                                 iree_string_builder_view(&raw_builder).size);
+    EXPECT_EQ(raw_output.find("s_wait"), std::string::npos);
+    iree_string_builder_deinitialize(&raw_builder);
+
+    loom_amdgpu_wait_plan_t wait_plan = {};
+    IREE_ASSERT_OK(loom_amdgpu_wait_plan_build(&packetization.schedule,
+                                               &sidecar_arena, &wait_plan));
+    loom_amdgpu_wait_packet_plan_t wait_packets = {};
+    IREE_ASSERT_OK(loom_amdgpu_wait_packet_plan_build(
+        &wait_plan, &sidecar_arena, &wait_packets));
+    ASSERT_EQ(wait_packets.packet_count, 2u);
+
+    iree_string_builder_t builder;
+    iree_string_builder_initialize(iree_allocator_system(), &builder);
+    IREE_ASSERT_OK(loom_amdgpu_emit_assembly_fragment_with_wait_packets(
+        &packetization.schedule, &packetization.allocation, &wait_packets,
+        &builder));
+    const std::string output(iree_string_builder_view(&builder).data,
+                             iree_string_builder_view(&builder).size);
+    const size_t load_wait = output.find(test_case.load_wait);
+    const size_t store = output.find("buffer_store_dword");
+    const size_t store_wait = output.find(test_case.store_wait, store);
+    const size_t endpgm = output.find("s_endpgm");
+    EXPECT_NE(load_wait, std::string::npos);
+    EXPECT_NE(store, std::string::npos);
+    EXPECT_NE(store_wait, std::string::npos);
+    EXPECT_NE(endpgm, std::string::npos);
+    EXPECT_LT(load_wait, store);
+    EXPECT_LT(store, store_wait);
+    EXPECT_LT(store_wait, endpgm);
+    iree_string_builder_deinitialize(&builder);
+    iree_arena_deinitialize(&sidecar_arena);
+  }
 }
 
 TEST_F(AmdgpuAssemblyTest, EmitsMaterializedCopies) {

@@ -22,11 +22,7 @@ iree_string_view_t loom_native_assembly_module_string(
 iree_status_t loom_native_assembly_descriptor_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string) {
-  if (out_string == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "native assembly descriptor string output is "
-                            "required");
-  }
+  IREE_ASSERT_ARGUMENT(out_string);
   *out_string = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
       descriptor_set, string_offset, out_string));
@@ -54,11 +50,7 @@ iree_status_t loom_native_assembly_read_i64_attr(const loom_module_t* module,
                                                  loom_named_attr_slice_t attrs,
                                                  iree_string_view_t name,
                                                  int64_t* out_value) {
-  if (out_value == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "native assembly integer attribute output is "
-                            "required");
-  }
+  IREE_ASSERT_ARGUMENT(out_value);
   const loom_named_attr_t* attr =
       loom_native_assembly_find_attr(module, attrs, name);
   if (attr == NULL) {
@@ -174,6 +166,10 @@ iree_status_t loom_native_assembly_format_fragment(
           .packet = &packet,
           .builder = builder,
       };
+      if (options->append_before_packet.fn != NULL) {
+        IREE_RETURN_IF_ERROR(options->append_before_packet.fn(
+            options->append_before_packet.user_data, &context));
+      }
       IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "  "));
       IREE_RETURN_IF_ERROR(
           loom_native_assembly_append_packet(options, &context));

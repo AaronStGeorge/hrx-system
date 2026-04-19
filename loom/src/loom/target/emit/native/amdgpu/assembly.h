@@ -13,6 +13,7 @@
 #include "iree/base/string_builder.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule.h"
+#include "loom/target/arch/amdgpu/wait_packets.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,6 +26,15 @@ extern "C" {
 iree_status_t loom_amdgpu_emit_assembly_fragment(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
+    iree_string_builder_t* builder);
+
+// Emits an AMDGPU assembly fragment with planned wait packets inserted before
+// their scheduled packet insertion points. |wait_packets| must be derived from
+// |schedule| and remain alive for the duration of emission.
+iree_status_t loom_amdgpu_emit_assembly_fragment_with_wait_packets(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_amdgpu_wait_packet_plan_t* wait_packets,
     iree_string_builder_t* builder);
 
 #ifdef __cplusplus
