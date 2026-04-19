@@ -72,10 +72,9 @@ TEST(PassTestRegistryTest, ValidatesRequiredOptions) {
 
   IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
       descriptor, IREE_SV("required=value")));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_pass_descriptor_validate_options(descriptor,
-                                            iree_string_view_empty()));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_descriptor_validate_options(
+                            descriptor, iree_string_view_empty()));
 }
 
 TEST(PassTestRegistryTest, DecodesOptions) {
@@ -180,10 +179,10 @@ TEST(PassTestRegistryTest, UnavailablePassIsKnownButCannotBeAdded) {
   IREE_ASSERT_OK(loom_pass_manager_initialize(
       &block_pool, 0, iree_allocator_system(), &manager));
 
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
-                        loom_pass_manager_add_descriptor(
-                            &manager, descriptor, iree_string_view_empty(),
-                            nullptr));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_pass_manager_add_descriptor(&manager, descriptor,
+                                       iree_string_view_empty(), nullptr));
 
   loom_pass_manager_deinitialize(&manager);
   iree_arena_block_pool_deinitialize(&block_pool);

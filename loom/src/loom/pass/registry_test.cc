@@ -250,8 +250,8 @@ TEST(PassRegistryCoreTest, AddPipelineResolvesDescriptors) {
 
   loom_pass_pipeline_configure_callback_t no_config = {};
   IREE_ASSERT_OK(loom_pass_manager_add_pipeline(
-      &manager, loom_test_pass_registry(), IREE_SV("test.options{count=2},test.module-noop"),
-      no_config));
+      &manager, loom_test_pass_registry(),
+      IREE_SV("test.options{count=2},test.module-noop"), no_config));
 
   ASSERT_EQ(manager.count, 2u);
   EXPECT_TRUE(iree_string_view_equal(manager.entries[0].info->name,
@@ -275,7 +275,8 @@ static iree_status_t configure_test_pipeline_entry(
     void** out_pass_user_data) {
   test_pipeline_config_t* config = (test_pipeline_config_t*)user_data;
   *out_pass_user_data = nullptr;
-  if (iree_string_view_equal(entry->descriptor->key, IREE_SV("test.module-noop"))) {
+  if (iree_string_view_equal(entry->descriptor->key,
+                             IREE_SV("test.module-noop"))) {
     *out_pass_user_data = config->entry_user_data;
   }
   return iree_ok_status();

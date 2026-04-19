@@ -92,6 +92,7 @@ loom_cc_test(
     ::manager
     ::registry
     iree::base::internal::arena
+    loom::src::loom::pass::test::registry
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -107,3 +108,5 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
 )
+
+### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
