@@ -170,22 +170,22 @@ loom_cc_library(
   DEPS
     ::registry
     loom::src::loom::codegen::low::allocation_pass
-    loom::src::loom::transforms::branch_fusion
-    loom::src::loom::transforms::branch_sink
-    loom::src::loom::transforms::canonicalize
-    loom::src::loom::transforms::cfg_simplify
-    loom::src::loom::transforms::cse
-    loom::src::loom::transforms::dce
-    loom::src::loom::transforms::kernel_async_legality
-    loom::src::loom::transforms::kernel_resources
-    loom::src::loom::transforms::licm
-    loom::src::loom::transforms::loop_fusion
-    loom::src::loom::transforms::refine_boundaries
-    loom::src::loom::transforms::scf_to_cfg
-    loom::src::loom::transforms::strip_hints
-    loom::src::loom::transforms::symbol_dce
-    loom::src::loom::transforms::vector_memory_footprint
-    loom::src::loom::transforms::vector_to_scalar
+    loom::src::loom::passes::branch_fusion
+    loom::src::loom::passes::branch_sink
+    loom::src::loom::passes::canonicalize
+    loom::src::loom::passes::cfg_simplify
+    loom::src::loom::passes::cse
+    loom::src::loom::passes::dce
+    loom::src::loom::passes::kernel_async_legality
+    loom::src::loom::passes::kernel_resources
+    loom::src::loom::passes::licm
+    loom::src::loom::passes::loop_fusion
+    loom::src::loom::passes::refine_boundaries
+    loom::src::loom::passes::scf_to_cfg
+    loom::src::loom::passes::strip_hints
+    loom::src::loom::passes::symbol_dce
+    loom::src::loom::passes::vector_memory_footprint
+    loom::src::loom::passes::vector_to_scalar
   PUBLIC
 )
 

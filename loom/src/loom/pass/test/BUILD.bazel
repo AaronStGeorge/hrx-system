@@ -25,7 +25,7 @@ iree_assert_no_dependency(
 
 iree_assert_no_dependency(
     name = "registry_no_concrete_pass_dep",
-    dependency = "//loom/src/loom/transforms:canonicalize",
+    dependency = "//loom/src/loom/passes:canonicalize",
     target = "//loom/src/loom/pass/test:registry",
 )
 

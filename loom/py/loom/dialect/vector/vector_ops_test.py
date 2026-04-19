@@ -57,15 +57,15 @@ VECTOR_TO_SCALAR_REGISTER_AGGREGATE_MARKERS = {
 }
 
 VECTOR_TO_SCALAR_SOURCE_FILES = (
-    "loom/src/loom/transforms/vector_to_scalar.c",
-    "loom/src/loom/transforms/vector_to_scalar_aggregates.c",
-    "loom/src/loom/transforms/vector_to_scalar_descriptors.c",
-    "loom/src/loom/transforms/vector_to_scalar_lanes.c",
-    "loom/src/loom/transforms/vector_to_scalar_quantized.c",
-    "loom/src/loom/transforms/vector_to_scalar_reductions.c",
-    "loom/src/loom/transforms/vector_to_scalar_structural.c",
-    "loom/src/loom/transforms/vector_to_scalar_tables.c",
-    "loom/src/loom/transforms/vector_to_scalar_terms.c",
+    "loom/src/loom/passes/vector_to_scalar.c",
+    "loom/src/loom/passes/vector_to_scalar_aggregates.c",
+    "loom/src/loom/passes/vector_to_scalar_descriptors.c",
+    "loom/src/loom/passes/vector_to_scalar_lanes.c",
+    "loom/src/loom/passes/vector_to_scalar_quantized.c",
+    "loom/src/loom/passes/vector_to_scalar_reductions.c",
+    "loom/src/loom/passes/vector_to_scalar_structural.c",
+    "loom/src/loom/passes/vector_to_scalar_tables.c",
+    "loom/src/loom/passes/vector_to_scalar_terms.c",
 )
 
 
@@ -101,7 +101,7 @@ def _vector_to_scalar_all_sources() -> str:
 
 
 def _vector_to_scalar_descriptor_table_source() -> str:
-    source = _read_repo_file("loom/src/loom/transforms/vector_to_scalar_descriptors.c")
+    source = _read_repo_file("loom/src/loom/passes/vector_to_scalar_descriptors.c")
     table_start = source.index("kVectorToScalarDescriptors[]")
     table_end = source.index("\n};", table_start)
     return source[table_start:table_end]
