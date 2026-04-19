@@ -457,7 +457,7 @@ int main(int argc, char** argv) {
       "    // REQUIRES: <name>[, ...] Skip when external tools are missing.\n"
       "    // XFAIL: <reason>       Mark as expected failure.\n"
       "    Known REQUIRES names: llvm-as, llvm-dis, opt, llc, llvm-mc,\n"
-      "    and provider-specific llc-<target> names.\n"
+      "    llvm-objdump, and provider-specific llc-<target> names.\n"
       "\n"
       "  Annotations (verify mode):\n"
       "    // ERROR: DOMAIN/CODE \"substring\"\n"

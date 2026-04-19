@@ -26,6 +26,7 @@ typedef enum loom_llvm_tool_kind_e {
   LOOM_LLVM_TOOL_OPT = 2,
   LOOM_LLVM_TOOL_LLC = 3,
   LOOM_LLVM_TOOL_LLVM_MC = 4,
+  LOOM_LLVM_TOOL_LLVM_OBJDUMP = 5,
 } loom_llvm_tool_kind_t;
 
 typedef struct loom_llvm_toolchain_t {
@@ -161,6 +162,25 @@ iree_status_t loom_llvm_tool_assemble_native_object(
     const iree_string_view_t* extra_arguments,
     iree_host_size_t extra_argument_count, iree_allocator_t allocator,
     loom_llvm_tool_output_t* out_object);
+
+// Runs `llvm-objdump <extra_arguments> <input_path>` and returns stdout text.
+//
+// |extra_arguments| are inserted before the input path and may include
+// disassembly flags such as `--disassemble` and target-specific flags such as
+// `--mcpu=gfx1100`.
+iree_status_t loom_llvm_tool_disassemble_object_file(
+    const loom_llvm_toolchain_t* toolchain, iree_string_view_t input_path,
+    const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator,
+    loom_llvm_tool_output_t* out_text);
+
+// Writes |object| to a temporary file, runs `llvm-objdump`, and returns stdout
+// text.
+iree_status_t loom_llvm_tool_disassemble_object(
+    const loom_llvm_toolchain_t* toolchain, iree_const_byte_span_t object,
+    const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator,
+    loom_llvm_tool_output_t* out_text);
 
 #ifdef __cplusplus
 }

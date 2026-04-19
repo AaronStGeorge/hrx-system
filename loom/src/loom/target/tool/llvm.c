@@ -88,6 +88,12 @@ iree_string_view_t loom_llvm_tool_name(loom_llvm_tool_kind_t tool_kind) {
 #else
       return IREE_SV("llvm-mc");
 #endif
+    case LOOM_LLVM_TOOL_LLVM_OBJDUMP:
+#if defined(IREE_PLATFORM_WINDOWS)
+      return IREE_SV("llvm-objdump.exe");
+#else
+      return IREE_SV("llvm-objdump");
+#endif
   }
   return iree_string_view_empty();
 }
@@ -1135,4 +1141,91 @@ iree_status_t loom_llvm_tool_assemble_native_object(
       IREE_SV("-filetype=obj"),
       IREE_SV("assembling native target assembly to an object file"),
       extra_arguments, extra_argument_count, allocator, out_object);
+}
+
+static iree_status_t loom_llvm_tool_run_file_to_stdout(
+    const loom_llvm_toolchain_t* toolchain, loom_llvm_tool_kind_t tool_kind,
+    iree_string_view_t input_path, iree_string_view_t action,
+    const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator,
+    loom_llvm_tool_output_t* out_text) {
+  IREE_ASSERT_ARGUMENT(out_text);
+  *out_text = (loom_llvm_tool_output_t){0};
+  if (extra_arguments == NULL && extra_argument_count != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "extra LLVM tool arguments are required");
+  }
+
+  iree_host_size_t argument_count = 0;
+  if (!iree_host_size_checked_add(extra_argument_count, 1, &argument_count)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "LLVM tool argument count overflow");
+  }
+  iree_host_size_t argument_size = 0;
+  if (!iree_host_size_checked_mul(argument_count, sizeof(iree_string_view_t),
+                                  &argument_size)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "LLVM tool argument allocation overflow");
+  }
+
+  iree_string_view_t* arguments = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(allocator, argument_size, (void**)&arguments));
+  for (iree_host_size_t i = 0; i < extra_argument_count; ++i) {
+    arguments[i] = extra_arguments[i];
+  }
+  arguments[extra_argument_count] = input_path;
+
+  loom_llvm_tool_result_t result = {0};
+  iree_status_t status = loom_llvm_tool_run(toolchain, tool_kind, arguments,
+                                            argument_count, allocator, &result);
+  if (iree_status_is_ok(status)) {
+    if (loom_llvm_tool_result_succeeded(&result)) {
+      *out_text = result.stdout_text;
+      result.stdout_text = (loom_llvm_tool_output_t){0};
+    } else {
+      status = loom_llvm_tool_checked_status(tool_kind, &result, action);
+    }
+  }
+  loom_llvm_tool_result_deinitialize(&result, allocator);
+  iree_allocator_free(allocator, arguments);
+  return status;
+}
+
+iree_status_t loom_llvm_tool_disassemble_object_file(
+    const loom_llvm_toolchain_t* toolchain, iree_string_view_t input_path,
+    const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator,
+    loom_llvm_tool_output_t* out_text) {
+  return loom_llvm_tool_run_file_to_stdout(
+      toolchain, LOOM_LLVM_TOOL_LLVM_OBJDUMP, input_path,
+      IREE_SV("disassembling native object file"), extra_arguments,
+      extra_argument_count, allocator, out_text);
+}
+
+iree_status_t loom_llvm_tool_disassemble_object(
+    const loom_llvm_toolchain_t* toolchain, iree_const_byte_span_t object,
+    const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator,
+    loom_llvm_tool_output_t* out_text) {
+  IREE_ASSERT_ARGUMENT(out_text);
+  *out_text = (loom_llvm_tool_output_t){0};
+  if (object.data == NULL && object.data_length != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM object data is required");
+  }
+
+  loom_llvm_temp_file_t input_file = {0};
+  iree_status_t status = loom_llvm_temp_file_allocate("obj", &input_file);
+  if (iree_status_is_ok(status)) {
+    status = iree_io_file_contents_write(loom_llvm_temp_file_path(&input_file),
+                                         object, allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_llvm_tool_disassemble_object_file(
+        toolchain, loom_llvm_temp_file_path(&input_file), extra_arguments,
+        extra_argument_count, allocator, out_text);
+  }
+  loom_llvm_temp_file_deinitialize(&input_file);
+  return status;
 }

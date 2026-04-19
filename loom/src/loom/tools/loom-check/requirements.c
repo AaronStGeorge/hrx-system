@@ -50,6 +50,7 @@ static bool loom_check_requirement_name_is_known(
          iree_string_view_equal(requirement, IREE_SV("opt")) ||
          iree_string_view_equal(requirement, IREE_SV("llc")) ||
          iree_string_view_equal(requirement, IREE_SV("llvm-mc")) ||
+         iree_string_view_equal(requirement, IREE_SV("llvm-objdump")) ||
          loom_llvmir_target_registry_llc_requirement_provider(
              &target_registry, requirement, NULL) ||
          iree_string_view_equal(requirement,
@@ -111,6 +112,9 @@ static iree_status_t loom_check_query_requirement(
   if (iree_string_view_equal(requirement, IREE_SV("llvm-mc"))) {
     return loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLVM_MC, allocator);
   }
+  if (iree_string_view_equal(requirement, IREE_SV("llvm-objdump"))) {
+    return loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLVM_OBJDUMP, allocator);
+  }
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
   const loom_llvmir_target_profile_provider_t* provider = NULL;
@@ -129,7 +133,7 @@ static iree_status_t loom_check_query_requirement(
 static iree_status_t loom_check_append_supported_requirement_names(
     loom_check_result_t* result) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
-      &result->detail, "llvm-as, llvm-dis, opt, llc, llvm-mc"));
+      &result->detail, "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump"));
 
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
