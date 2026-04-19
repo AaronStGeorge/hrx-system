@@ -37,6 +37,7 @@ constexpr uint8_t kWasmSectionFunction = 3;
 constexpr uint8_t kWasmSectionExport = 7;
 constexpr uint8_t kWasmSectionCode = 10;
 constexpr uint8_t kWasmTypeI32 = 0x7F;
+constexpr uint8_t kWasmTypeV128 = 0x7B;
 constexpr uint8_t kWasmFunctionType = 0x60;
 constexpr uint8_t kWasmExportFunction = 0;
 constexpr uint8_t kWasmOpcodeReturn = 0x0F;
@@ -44,6 +45,10 @@ constexpr uint8_t kWasmOpcodeI32Const = 0x41;
 constexpr uint8_t kWasmOpcodeI32Add = 0x6A;
 constexpr uint8_t kWasmOpcodeI32Sub = 0x6B;
 constexpr uint8_t kWasmOpcodeEnd = 0x0B;
+constexpr uint8_t kWasmOpcodeSimdPrefix = 0xFD;
+constexpr uint8_t kWasmSimdI32x4AddLeb0 = 0xAE;
+constexpr uint8_t kWasmSimdI32x4MulLeb0 = 0xB5;
+constexpr uint8_t kWasmSimdI32x4Leb1 = 0x01;
 
 struct CollectedEmission {
   const loom_error_def_t* error = nullptr;
@@ -170,6 +175,12 @@ class WasmReader {
 static bool ByteVectorContains(const std::vector<uint8_t>& bytes,
                                uint8_t value) {
   return std::find(bytes.begin(), bytes.end(), value) != bytes.end();
+}
+
+static bool ByteVectorContainsSubsequence(const std::vector<uint8_t>& bytes,
+                                          const std::vector<uint8_t>& needle) {
+  return std::search(bytes.begin(), bytes.end(), needle.begin(),
+                     needle.end()) != bytes.end();
 }
 
 class WasmLowerTest : public ::testing::Test {
@@ -381,6 +392,119 @@ TEST_F(WasmLowerTest, LowersSemanticFunctionAndEmitsWasmModule) {
   EXPECT_TRUE(ByteVectorContains(body, kWasmOpcodeI32Sub));
   EXPECT_TRUE(ByteVectorContains(body, kWasmOpcodeReturn));
   EXPECT_EQ(body.back(), kWasmOpcodeEnd);
+}
+
+TEST_F(WasmLowerTest, LowersSemanticSimdFunctionAndEmitsWasmModule) {
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseExpandAndLower(
+      "target.preset @wasm_target {key = \"wasm-simd128\", source = @simd}\n"
+      "func.def @simd(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> "
+      "(vector<4xi32>) {\n"
+      "  %sum = vector.addi %lhs, %rhs : vector<4xi32>\n"
+      "  %product = vector.muli %sum, %rhs : vector<4xi32>\n"
+      "  func.return %product : vector<4xi32>\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  ASSERT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+  VerifyLowModule(module.get());
+
+  loom_low_packetization_t packetization = {};
+  Packetize(module.get(), lower_result.low_func_op, &packetization);
+
+  WasmModuleOwner owner;
+  IREE_ASSERT_OK(loom_wasm_emit_single_function_module(
+      &packetization.schedule, &packetization.allocation, IREE_SV("simd"),
+      iree_allocator_system(), &owner.module));
+
+  EXPECT_GT(owner.module.data_length, 8u);
+  EXPECT_FALSE(owner.module.has_memory);
+
+  WasmReader reader(owner.module.data, owner.module.data_length);
+  ExpectWasmHeader(&reader);
+
+  WasmReader type_section;
+  reader.ReadSection(kWasmSectionType, &type_section);
+  EXPECT_EQ(type_section.ReadU32Leb(), 1u);
+  type_section.ExpectU8(kWasmFunctionType);
+  EXPECT_EQ(type_section.ReadU32Leb(), 2u);
+  type_section.ExpectU8(kWasmTypeV128);
+  type_section.ExpectU8(kWasmTypeV128);
+  EXPECT_EQ(type_section.ReadU32Leb(), 1u);
+  type_section.ExpectU8(kWasmTypeV128);
+  type_section.ExpectConsumed();
+
+  WasmReader function_section;
+  reader.ReadSection(kWasmSectionFunction, &function_section);
+  EXPECT_EQ(function_section.ReadU32Leb(), 1u);
+  EXPECT_EQ(function_section.ReadU32Leb(), 0u);
+  function_section.ExpectConsumed();
+
+  WasmReader export_section;
+  reader.ReadSection(kWasmSectionExport, &export_section);
+  EXPECT_EQ(export_section.ReadU32Leb(), 1u);
+  EXPECT_EQ(export_section.ReadName(), "simd");
+  export_section.ExpectU8(kWasmExportFunction);
+  EXPECT_EQ(export_section.ReadU32Leb(), 0u);
+  export_section.ExpectConsumed();
+
+  WasmReader code_section;
+  reader.ReadSection(kWasmSectionCode, &code_section);
+  const std::vector<uint8_t> body = code_section.ReadCodeBodyBytes();
+  code_section.ExpectConsumed();
+  reader.ExpectConsumed();
+
+  ASSERT_FALSE(body.empty());
+  EXPECT_TRUE(ByteVectorContainsSubsequence(
+      body,
+      {kWasmOpcodeSimdPrefix, kWasmSimdI32x4AddLeb0, kWasmSimdI32x4Leb1}));
+  EXPECT_TRUE(ByteVectorContainsSubsequence(
+      body,
+      {kWasmOpcodeSimdPrefix, kWasmSimdI32x4MulLeb0, kWasmSimdI32x4Leb1}));
+  EXPECT_TRUE(ByteVectorContains(body, kWasmOpcodeReturn));
+  EXPECT_EQ(body.back(), kWasmOpcodeEnd);
+}
+
+TEST_F(WasmLowerTest, UnsupportedVectorShapeEmitsDiagnosticAndNoLowFunction) {
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseExpandAndLower(
+      "target.preset @wasm_target {key = \"wasm-simd128\", source = @wide}\n"
+      "func.def @wide(%lhs: vector<8xi32>, %rhs: vector<8xi32>) -> "
+      "(vector<8xi32>) {\n"
+      "  %sum = vector.addi %lhs, %rhs : vector<8xi32>\n"
+      "  func.return %sum : vector<8xi32>\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_GT(lower_result.error_count, 0u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_EQ(lower_result.low_func_op, nullptr);
+  EXPECT_FALSE(loom_symbol_ref_is_valid(lower_result.low_func_ref));
+  ASSERT_FALSE(lower_collector.emissions.empty());
+  bool saw_type_rejection = false;
+  for (const CollectedEmission& emission : lower_collector.emissions) {
+    EXPECT_EQ(emission.error,
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1));
+    ASSERT_EQ(emission.string_params.size(), 7u);
+    EXPECT_EQ(emission.string_params[0], "wasm_target");
+    EXPECT_EQ(emission.string_params[3], "wide");
+    if (emission.string_params[4] == "type" &&
+        emission.string_params[6].find("vector<4xi32>") != std::string::npos) {
+      saw_type_rejection = true;
+    }
+  }
+  EXPECT_TRUE(saw_type_rejection);
+
+  loom_string_id_t low_name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module.get(), IREE_SV("wide__low"),
+                                           &low_name_id));
+  EXPECT_EQ(loom_module_find_symbol(module.get(), low_name_id),
+            LOOM_SYMBOL_ID_INVALID);
 }
 
 TEST_F(WasmLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {
