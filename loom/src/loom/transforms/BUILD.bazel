@@ -18,12 +18,12 @@ loom_cc_library(
     hdrs = ["branch_fusion.h"],
     deps = [
         ":materialize",
-        ":pass",
         ":remap",
         ":rewriter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/scf",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
     ],
 )
@@ -33,11 +33,11 @@ loom_cc_library(
     srcs = ["branch_sink.c"],
     hdrs = ["branch_sink.h"],
     deps = [
-        ":pass",
         ":rewriter",
         "//loom/src/loom/analysis:motion",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
     ],
 )
@@ -47,7 +47,6 @@ loom_cc_library(
     srcs = ["canonicalize.c"],
     hdrs = ["canonicalize.h"],
     deps = [
-        ":pass",
         ":rewriter",
         ":type_propagation",
         "//loom/src/loom/analysis:condition_facts",
@@ -60,6 +59,7 @@ loom_cc_library(
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/pass:manager",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:walk",
         "//runtime/src/iree/base",
@@ -71,13 +71,13 @@ loom_cc_test(
     srcs = ["canonicalize_test.cc"],
     deps = [
         ":canonicalize",
-        ":pass",
         ":rewriter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/test",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -89,7 +89,6 @@ loom_cc_library(
     srcs = ["cfg_simplify.c"],
     hdrs = ["cfg_simplify.h"],
     deps = [
-        ":pass",
         ":rewriter",
         "//loom/src/loom/analysis:condition_facts",
         "//loom/src/loom/ir",
@@ -97,6 +96,7 @@ loom_cc_library(
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops:special_values",
         "//loom/src/loom/ops/cfg",
+        "//loom/src/loom/pass:manager",
         "//loom/src/loom/util:cfg_graph",
         "//loom/src/loom/util:dominance",
         "//loom/src/loom/util:fact_table",
@@ -143,9 +143,9 @@ loom_cc_library(
     srcs = ["cse.c"],
     hdrs = ["cse.h"],
     deps = [
-        ":pass",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
     ],
 )
@@ -155,11 +155,11 @@ loom_cc_test(
     srcs = ["cse_test.cc"],
     deps = [
         ":cse",
-        ":pass",
         ":rewriter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/test",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -171,9 +171,9 @@ loom_cc_library(
     srcs = ["dce.c"],
     hdrs = ["dce.h"],
     deps = [
-        ":pass",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
     ],
 )
@@ -183,10 +183,10 @@ loom_cc_test(
     srcs = ["dce_test.cc"],
     deps = [
         ":dce",
-        ":pass",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/test",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -198,11 +198,11 @@ loom_cc_library(
     srcs = ["kernel_async_legality.c"],
     hdrs = ["kernel_async_legality.h"],
     deps = [
-        ":pass",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
     ],
 )
@@ -212,13 +212,13 @@ loom_cc_test(
     srcs = ["kernel_async_legality_test.cc"],
     deps = [
         ":kernel_async_legality",
-        ":pass",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/kernel",
         "//loom/src/loom/ops/test",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -230,12 +230,12 @@ loom_cc_library(
     srcs = ["kernel_resources.c"],
     hdrs = ["kernel_resources.h"],
     deps = [
-        ":pass",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/index",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
     ],
 )
@@ -245,11 +245,11 @@ loom_cc_library(
     srcs = ["licm.c"],
     hdrs = ["licm.h"],
     deps = [
-        ":pass",
         ":rewriter",
         "//loom/src/loom/analysis:motion",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
     ],
 )
@@ -260,7 +260,6 @@ loom_cc_library(
     hdrs = ["loop_fusion.h"],
     deps = [
         ":materialize",
-        ":pass",
         ":remap",
         ":rewriter",
         "//loom/src/loom/analysis:loop_domain",
@@ -268,6 +267,7 @@ loom_cc_library(
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
     ],
 )
@@ -304,72 +304,6 @@ loom_cc_test(
 )
 
 loom_cc_library(
-    name = "pass",
-    srcs = ["pass.c"],
-    hdrs = ["pass.h"],
-    deps = [
-        "//loom/src/loom/error:emitter",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_test(
-    name = "pass_test",
-    srcs = ["pass_test.cc"],
-    deps = [
-        ":pass",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/test",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_library(
-    name = "pass_registry",
-    srcs = ["pass_registry.c"],
-    hdrs = ["pass_registry.h"],
-    deps = [
-        ":branch_fusion",
-        ":branch_sink",
-        ":canonicalize",
-        ":cfg_simplify",
-        ":cse",
-        ":dce",
-        ":kernel_async_legality",
-        ":kernel_resources",
-        ":licm",
-        ":loop_fusion",
-        ":pass",
-        ":refine_boundaries",
-        ":scf_to_cfg",
-        ":strip_hints",
-        ":symbol_dce",
-        ":vector_memory_footprint",
-        ":vector_to_scalar",
-        "//loom/src/loom/codegen/low:allocation_pass",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "pass_registry_test",
-    srcs = ["pass_registry_test.cc"],
-    deps = [
-        ":dce",
-        ":pass_registry",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_library(
     name = "remap",
     srcs = ["remap.c"],
     hdrs = ["remap.h"],
@@ -399,7 +333,6 @@ loom_cc_library(
     deps = [
         ":canonicalize",
         ":materialize",
-        ":pass",
         ":remap",
         "//loom/src/loom/analysis:scc",
         "//loom/src/loom/analysis:type_refinement",
@@ -410,6 +343,7 @@ loom_cc_library(
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops:special_values",
         "//loom/src/loom/ops/func",
+        "//loom/src/loom/pass:manager",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:walk",
         "//runtime/src/iree/base",
@@ -420,13 +354,13 @@ loom_cc_test(
     name = "refine_boundaries_test",
     srcs = ["refine_boundaries_test.cc"],
     deps = [
-        ":pass",
         ":refine_boundaries",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/index",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -453,7 +387,6 @@ loom_cc_library(
     hdrs = ["scf_to_cfg.h"],
     deps = [
         ":materialize",
-        ":pass",
         ":remap",
         ":rewriter",
         "//loom/src/loom/error:error_defs",
@@ -462,6 +395,7 @@ loom_cc_library(
         "//loom/src/loom/ops/cfg",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scf",
+        "//loom/src/loom/pass:manager",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],
@@ -472,9 +406,9 @@ loom_cc_library(
     srcs = ["strip_hints.c"],
     hdrs = ["strip_hints.h"],
     deps = [
-        ":pass",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
     ],
 )
@@ -484,10 +418,10 @@ loom_cc_library(
     srcs = ["symbol_dce.c"],
     hdrs = ["symbol_dce.h"],
     deps = [
-        ":pass",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/low",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
     ],
 )
@@ -530,7 +464,6 @@ loom_cc_library(
         "vector_to_scalar_internal.h",
     ],
     deps = [
-        ":pass",
         ":rewriter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
@@ -541,6 +474,7 @@ loom_cc_library(
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/ops/view",
+        "//loom/src/loom/pass:manager",
         "//loom/src/loom/util:math",
         "//runtime/src/iree/base",
     ],
@@ -585,12 +519,12 @@ loom_cc_library(
     srcs = ["vector_memory_footprint.c"],
     hdrs = ["vector_memory_footprint.h"],
     deps = [
-        ":pass",
         "//loom/src/loom/analysis:symbolic_expr",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/pass:manager",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],
@@ -600,7 +534,6 @@ loom_cc_test(
     name = "vector_memory_footprint_test",
     srcs = ["vector_memory_footprint_test.cc"],
     deps = [
-        ":pass",
         ":vector_memory_footprint",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
@@ -616,6 +549,7 @@ loom_cc_test(
         "//loom/src/loom/ops/test",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/ops/view",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -626,7 +560,6 @@ loom_cc_test(
     name = "vector_to_scalar_test",
     srcs = ["vector_to_scalar_test.cc"],
     deps = [
-        ":pass",
         ":vector_to_scalar",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
@@ -638,6 +571,7 @@ loom_cc_test(
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

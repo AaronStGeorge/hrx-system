@@ -1821,7 +1821,7 @@ class Parser:
                             parsed, op_decl, operand_field, names_field
                         )
 
-                case RegionFmt(field=name):
+                case RegionFmt(field=name, syntax=syntax):
                     implicit_terminator_decl = self._implicit_terminator_decl(op_decl)
                     implicit_arg_ids = (
                         parsed.implicit_values if parsed.implicit_values else None
@@ -1831,7 +1831,8 @@ class Parser:
                     binding_types = parsed.attributes.pop("_binding_arg_types", None)
                     # Func arg IDs (from FuncArgs) become the entry block's args.
                     pre_arg_ids = parsed.func_arg_ids if parsed.func_arg_ids else None
-                    region = self._parse_region(
+                    region = self._parse_region_with_syntax(
+                        syntax,
                         implicit_terminator_decl=implicit_terminator_decl,
                         implicit_arg_ids=implicit_arg_ids,
                         block_arg_names=binding_names,
@@ -1922,7 +1923,10 @@ class Parser:
                 case OpRef(field=name):
                     if tok.at(TokenKind.LANGLE):
                         tok.next()
-                        op_name_tok = tok.expect(TokenKind.OP_NAME)
+                        if tok.at(TokenKind.OP_NAME) or tok.at(TokenKind.BARE_IDENT):
+                            op_name_tok = tok.next()
+                        else:
+                            op_name_tok = tok.expect(TokenKind.OP_NAME)
                         tok.expect(TokenKind.RANGLE)
                         parsed.attributes[name] = op_name_tok.text
 
@@ -2478,6 +2482,46 @@ class Parser:
 
     # --- Region ---
 
+    def _parse_region_with_syntax(
+        self,
+        syntax: str,
+        *,
+        implicit_terminator_decl: Op | None = None,
+        implicit_arg_ids: dict[str, int] | None = None,
+        block_arg_names: list[str] | None = None,
+        block_arg_types: list[Type] | None = None,
+        pre_arg_ids: list[int] | None = None,
+    ) -> Region:
+        """Parse a region using the selected declarative surface syntax."""
+        tok = self._tokenizer
+        if syntax == "test.do":
+            _expect_keyword(tok, "do")
+            return self._parse_region(
+                implicit_terminator_decl=implicit_terminator_decl,
+                implicit_arg_ids=implicit_arg_ids,
+                block_arg_names=block_arg_names,
+                block_arg_types=block_arg_types,
+                pre_arg_ids=pre_arg_ids,
+            )
+        if syntax == "pipeline" and tok.at(TokenKind.BARE_IDENT, "pipeline"):
+            if implicit_arg_ids or block_arg_names or block_arg_types or pre_arg_ids:
+                raise ParseError(
+                    "pipeline region syntax does not support entry block arguments",
+                    tok.peek().location,
+                    tok._filename,
+                )
+            tok.next()
+            return self._parse_pipeline_region(
+                implicit_terminator_decl=implicit_terminator_decl
+            )
+        return self._parse_region(
+            implicit_terminator_decl=implicit_terminator_decl,
+            implicit_arg_ids=implicit_arg_ids,
+            block_arg_names=block_arg_names,
+            block_arg_types=block_arg_types,
+            pre_arg_ids=pre_arg_ids,
+        )
+
     def _implicit_terminator_decl(self, op_decl: Op) -> Op | None:
         """Returns the validated implicit terminator declaration for op_decl."""
         terminator_name = _implicit_terminator_name(op_decl)
@@ -2577,6 +2621,229 @@ class Parser:
         tok.expect(TokenKind.RBRACE)
         self._scope = parent_scope
         return Region(blocks=blocks)
+
+    def _parse_pipeline_region(self, *, implicit_terminator_decl: Op | None) -> Region:
+        """Parse `pipeline { ... }` sugar into canonical pass.* ops."""
+        tok = self._tokenizer
+        tok.expect(TokenKind.LBRACE)
+        parent_scope = self._scope
+        self._scope = parent_scope.push()
+
+        ops: list[Operation] = []
+        while not tok.at(TokenKind.RBRACE):
+            if tok.at(TokenKind.EOF):
+                tok.expect(TokenKind.RBRACE)
+            if tok.at(TokenKind.BLOCK_LABEL):
+                label = tok.peek()
+                raise ParseError(
+                    "pipeline syntax does not support block labels",
+                    label.location,
+                    tok._filename,
+                )
+            ops.append(self._parse_pipeline_statement(implicit_terminator_decl))
+
+        if implicit_terminator_decl is not None:
+            has_terminator = False
+            if ops:
+                final_op_decl = self._op_registry.get(ops[-1].name)
+                has_terminator = (
+                    final_op_decl is not None and final_op_decl.is_terminator
+                )
+            if not has_terminator:
+                ops.append(Operation(name=implicit_terminator_decl.name))
+
+        tok.collect_pending_comments()
+        tok.expect(TokenKind.RBRACE)
+        self._scope = parent_scope
+        return Region(blocks=[Block(ops=ops)])
+
+    def _parse_pipeline_statement(
+        self, implicit_terminator_decl: Op | None
+    ) -> Operation:
+        """Parse one friendly pipeline statement into a canonical pass op."""
+        tok = self._tokenizer
+        start_token = tok.peek()
+        comments = tuple(tok.collect_pending_comments())
+        start_loc = start_token.location
+
+        if tok.at(TokenKind.BARE_IDENT, "for"):
+            tok.next()
+            anchor = self._parse_pipeline_name("pass anchor").text
+            body = self._parse_pipeline_nested_region(implicit_terminator_decl)
+            return self._pipeline_operation(
+                "pass.for",
+                {"anchor": anchor},
+                [body],
+                comments,
+                start_loc,
+            )
+
+        if tok.at(TokenKind.BARE_IDENT, "where"):
+            tok.next()
+            predicate = self._parse_pipeline_name("pass predicate").text
+            attrs = self._parse_pipeline_attr_parens()
+            body = self._parse_pipeline_nested_region(implicit_terminator_decl)
+            where_attributes: dict[str, Any] = {"predicate": predicate}
+            if attrs:
+                where_attributes["attrs"] = attrs
+            return self._pipeline_operation(
+                "pass.where",
+                where_attributes,
+                [body],
+                comments,
+                start_loc,
+            )
+
+        if tok.at(TokenKind.BARE_IDENT, "repeat"):
+            tok.next()
+            mode_token = self._parse_pipeline_name("repeat mode")
+            mode = mode_token.text
+            if mode not in ("fixed", "until_converged"):
+                raise ParseError(
+                    f"invalid repeat mode '{mode}', expected fixed or until_converged",
+                    mode_token.location,
+                    tok._filename,
+                )
+            attrs = self._parse_pipeline_attr_parens()
+            repeat_attributes: dict[str, Any] = {"mode": mode}
+            for key, value in attrs.items():
+                if key not in ("count", "max_iterations"):
+                    raise ParseError(
+                        f"unknown repeat option '{key}'",
+                        start_loc,
+                        tok._filename,
+                    )
+                if not isinstance(value, int) or isinstance(value, bool):
+                    raise ParseError(
+                        f"repeat option '{key}' must be an integer",
+                        start_loc,
+                        tok._filename,
+                    )
+                repeat_attributes[key] = value
+            body = self._parse_pipeline_nested_region(implicit_terminator_decl)
+            return self._pipeline_operation(
+                "pass.repeat",
+                repeat_attributes,
+                [body],
+                comments,
+                start_loc,
+            )
+
+        if tok.at(TokenKind.BARE_IDENT, "call"):
+            tok.next()
+            callee = tok.expect(TokenKind.SYMBOL).text
+            return self._pipeline_operation(
+                "pass.call",
+                {"callee": callee},
+                [],
+                comments,
+                start_loc,
+            )
+
+        if tok.at(TokenKind.BARE_IDENT, "fail"):
+            tok.next()
+            message = tok.expect(TokenKind.STRING).text
+            return self._pipeline_operation(
+                "pass.fail",
+                {"message": message},
+                [],
+                comments,
+                start_loc,
+            )
+
+        if tok.at(TokenKind.BARE_IDENT, "halt"):
+            tok.next()
+            message = tok.expect(TokenKind.STRING).text
+            return self._pipeline_operation(
+                "pass.halt",
+                {"message": message},
+                [],
+                comments,
+                start_loc,
+            )
+
+        key = self._parse_pipeline_name("pass name").text
+        options = self._parse_pipeline_attr_parens()
+        run_attributes: dict[str, Any] = {"key": key}
+        if options:
+            run_attributes["options"] = options
+        return self._pipeline_operation(
+            "pass.run",
+            run_attributes,
+            [],
+            comments,
+            start_loc,
+        )
+
+    def _parse_pipeline_nested_region(
+        self, implicit_terminator_decl: Op | None
+    ) -> Region:
+        return self._parse_pipeline_region(
+            implicit_terminator_decl=implicit_terminator_decl
+        )
+
+    def _parse_pipeline_name(self, expected: str) -> Token:
+        tok = self._tokenizer
+        if tok.at(TokenKind.BARE_IDENT) or tok.at(TokenKind.OP_NAME):
+            return tok.next()
+        peek = tok.peek()
+        raise ParseError(
+            f"expected {expected}, got {peek.kind.name} {peek.text!r}",
+            peek.location,
+            tok._filename,
+        )
+
+    def _parse_pipeline_attr_parens(self) -> CanonicalAttrDict:
+        tok = self._tokenizer
+        if not tok.at(TokenKind.LPAREN):
+            return CanonicalAttrDict()
+        tok.expect(TokenKind.LPAREN)
+        entries: list[tuple[str, Any]] = []
+        seen_keys: set[str] = set()
+        while not tok.at(TokenKind.RPAREN):
+            if entries:
+                tok.expect(TokenKind.COMMA)
+            key_tok = tok.expect(TokenKind.BARE_IDENT)
+            if key_tok.text in seen_keys:
+                raise ParseError(
+                    f"duplicate pipeline option '{key_tok.text}'",
+                    key_tok.location,
+                    tok._filename,
+                )
+            seen_keys.add(key_tok.text)
+            tok.expect(TokenKind.EQUALS)
+            value = self._parse_attr_value(None, attr_dict_nesting_depth=1)
+            entries.append((key_tok.text, value))
+        tok.expect(TokenKind.RPAREN)
+        return CanonicalAttrDict(entries)
+
+    def _pipeline_operation(
+        self,
+        name: str,
+        attributes: Mapping[str, Any],
+        regions: list[Region],
+        comments: tuple[str, ...],
+        start_loc: SourceLocation,
+    ) -> Operation:
+        end_loc = self._tokenizer.current_location()
+        location_id = self._module.add_location(
+            FileLocation(
+                source_id=0,
+                start_line=start_loc.line,
+                start_col=start_loc.column,
+                end_line=end_loc.line,
+                end_col=end_loc.column,
+            )
+        )
+        op = Operation(
+            name=name,
+            attributes=attributes,
+            regions=regions,
+            location_id=location_id,
+            comments=comments,
+        )
+        self._validate_operation(op, start_loc)
+        return op
 
     def _parse_block(
         self,

@@ -1348,10 +1348,31 @@ static iree_status_t loom_bytecode_validate_record_symbol_op(
         (unsigned)op->kind);
   }
   if (op->operand_count != 0 || op->result_count != 0 ||
-      op->region_count != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "record symbol op kind 0x%04x must be attr-only",
-                            (unsigned)op->kind);
+      op->tied_result_count != 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "record symbol op kind 0x%04x must not have operands, results, or "
+        "tied results",
+        (unsigned)op->kind);
+  }
+  if (vtable->region_count > 1 ||
+      iree_any_bit_set(vtable->vtable_flags, LOOM_OP_VTABLE_VARIADIC_REGIONS)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "record symbol op kind 0x%04x must declare at most one fixed region",
+        (unsigned)op->kind);
+  }
+  if (op->region_count != vtable->region_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "record symbol op kind 0x%04x region count does not match its vtable",
+        (unsigned)op->kind);
+  }
+  if (op->region_count == 1 && !loom_op_regions(op)[0]) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "record symbol op kind 0x%04x must have a materialized body region",
+        (unsigned)op->kind);
   }
   if (loom_bytecode_find_symbol_attr_index(vtable) == LOOM_ATTR_INDEX_NONE) {
     return iree_make_status(
@@ -1387,6 +1408,11 @@ static iree_status_t loom_bytecode_number_record(
         numbering, key_name, &unused_id));
     IREE_RETURN_IF_ERROR(
         loom_bytecode_number_attr_value(numbering, attrs[i], descriptor));
+  }
+
+  if (op->region_count == 1) {
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_number_region(numbering, loom_op_regions(op)[0], 0));
   }
 
   return iree_ok_status();
@@ -1715,12 +1741,21 @@ static iree_status_t loom_bytecode_count_serialized_bodies(
     bool is_global =
         loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_GLOBAL) ||
         bytecode_kind == LOOM_SYMBOL_GLOBAL;
+    bool is_record =
+        loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_RECORD) ||
+        bytecode_kind == LOOM_SYMBOL_RECORD;
     if (!is_function_like || !symbol->defining_op) {
       if (is_global && symbol->defining_op) {
         loom_bytecode_global_value_list_t local_values = {0};
         IREE_RETURN_IF_ERROR(loom_bytecode_collect_global_values(
             numbering->arena, module, symbol->defining_op, &local_values));
         counts->value_count += local_values.count;
+      } else if (is_record && symbol->defining_op &&
+                 symbol->defining_op->region_count == 1) {
+        loom_region_t* body = loom_op_regions(symbol->defining_op)[0];
+        if (body) {
+          loom_bytecode_count_region_tree(body, counts);
+        }
       }
       continue;
     }
@@ -2438,24 +2473,51 @@ static iree_status_t loom_bytecode_write_ir_section(
     bool is_function_like =
         loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE) ||
         loom_symbol_kind_is_function_like(bytecode_kind);
-    if (!is_function_like || !symbol->defining_op) {
-      ir_offsets[symbol_index].offset = 0;
-      ir_offsets[symbol_index].length = 0;
-      continue;
-    }
-    loom_func_like_t func_like =
-        loom_func_like_cast(module, symbol->defining_op);
-    loom_region_t* body = loom_func_like_body(func_like);
-    if (!loom_func_like_isa(func_like) || !body) {
+    bool is_record =
+        loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_RECORD) ||
+        bytecode_kind == LOOM_SYMBOL_RECORD;
+    if (!symbol->defining_op) {
       ir_offsets[symbol_index].offset = 0;
       ir_offsets[symbol_index].length = 0;
       continue;
     }
 
-    // Intern function signature (matching Python walk order).
-    IREE_RETURN_IF_ERROR(loom_bytecode_number_function(numbering, func_like));
+    loom_region_t* body = NULL;
+    if (is_function_like) {
+      loom_func_like_t func_like =
+          loom_func_like_cast(module, symbol->defining_op);
+      if (!loom_func_like_isa(func_like)) {
+        ir_offsets[symbol_index].offset = 0;
+        ir_offsets[symbol_index].length = 0;
+        continue;
+      }
+      body = loom_func_like_body(func_like);
+      if (!body) {
+        ir_offsets[symbol_index].offset = 0;
+        ir_offsets[symbol_index].length = 0;
+        continue;
+      }
 
-    // Reset value numbering for this function.
+      // Intern function signature and body (matching Python walk order).
+      IREE_RETURN_IF_ERROR(loom_bytecode_number_function(numbering, func_like));
+    } else if (is_record && symbol->defining_op->region_count == 1) {
+      body = loom_op_regions(symbol->defining_op)[0];
+      if (!body) {
+        ir_offsets[symbol_index].offset = 0;
+        ir_offsets[symbol_index].length = 0;
+        continue;
+      }
+
+      // Intern record metadata and body (matching Python walk order).
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_number_record(numbering, symbol->defining_op));
+    } else {
+      ir_offsets[symbol_index].offset = 0;
+      ir_offsets[symbol_index].length = 0;
+      continue;
+    }
+
+    // Reset value numbering for this serialized body.
     if (value_numbering.map) {
       memset(value_numbering.map, 0xFF,
              value_numbering.capacity * sizeof(uint32_t));
@@ -2468,7 +2530,7 @@ static iree_status_t loom_bytecode_write_ir_section(
     loom_bytecode_body_counts_t body_counts = {0};
     loom_bytecode_count_region_tree(body, &body_counts);
 
-    // Write the function body summary and root region.
+    // Write the body summary and root region.
     iree_host_size_t body_start = page_writer->total_written;
     IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
         page_writer, body_counts.value_count));
@@ -2766,7 +2828,8 @@ static iree_status_t loom_bytecode_write_global_metadata(
 
 static iree_status_t loom_bytecode_write_record_metadata(
     iree_string_builder_t* builder, loom_bytecode_numbering_t* numbering,
-    const loom_module_t* module, const loom_op_t* op) {
+    const loom_module_t* module, const loom_op_t* op,
+    loom_bytecode_ir_offset_t ir_offset) {
   IREE_RETURN_IF_ERROR(loom_bytecode_validate_record_symbol_op(module, op));
   IREE_RETURN_IF_ERROR(loom_bytecode_number_record(numbering, op));
 
@@ -2810,6 +2873,13 @@ static iree_status_t loom_bytecode_write_record_metadata(
     IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, key_writer_id));
     IREE_RETURN_IF_ERROR(loom_bytecode_emit_attr_value(builder, numbering, NULL,
                                                        attrs[i], descriptor));
+  }
+
+  bool has_body = ir_offset.length > 0;
+  IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, has_body ? 1 : 0));
+  if (has_body) {
+    IREE_RETURN_IF_ERROR(loom_bytecode_emit_u64_le(builder, ir_offset.offset));
+    IREE_RETURN_IF_ERROR(loom_bytecode_emit_u32_le(builder, ir_offset.length));
   }
 
   return iree_ok_status();
@@ -3042,7 +3112,8 @@ static iree_status_t loom_bytecode_write_symbols_section(
           &signature_numbering));
     } else if (has_record_metadata && symbol->defining_op) {
       IREE_RETURN_IF_ERROR(loom_bytecode_write_record_metadata(
-          builder, numbering, module, symbol->defining_op));
+          builder, numbering, module, symbol->defining_op,
+          ir_offsets[symbol_index]));
     }
   }
 

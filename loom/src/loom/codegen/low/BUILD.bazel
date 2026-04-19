@@ -376,7 +376,7 @@ loom_cc_library(
         ":descriptors",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/transforms:pass",
+        "//loom/src/loom/pass:manager",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],

@@ -15,7 +15,7 @@
 #ifndef LOOM_TRANSFORMS_REFINE_BOUNDARIES_H_
 #define LOOM_TRANSFORMS_REFINE_BOUNDARIES_H_
 
-#include "loom/transforms/pass.h"
+#include "loom/pass/manager.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -47,11 +47,12 @@ static inline bool loom_is_ident_start(char c) {
 }
 
 static inline bool loom_is_ident_continue(char c) {
-  return loom_is_ident_start(c) || (c >= '0' && c <= '9') || c == '.';
+  return loom_is_ident_start(c) || (c >= '0' && c <= '9') || c == '.' ||
+         c == '-';
 }
 
 static inline bool loom_is_ident_continue_no_dot(char c) {
-  return loom_is_ident_start(c) || (c >= '0' && c <= '9');
+  return loom_is_ident_start(c) || (c >= '0' && c <= '9') || c == '-';
 }
 
 static inline bool loom_is_digit(char c) { return c >= '0' && c <= '9'; }

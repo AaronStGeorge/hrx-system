@@ -7,7 +7,7 @@
 #ifndef LOOM_TRANSFORMS_BRANCH_SINK_H_
 #define LOOM_TRANSFORMS_BRANCH_SINK_H_
 
-#include "loom/transforms/pass.h"
+#include "loom/pass/manager.h"
 
 #ifdef __cplusplus
 extern "C" {

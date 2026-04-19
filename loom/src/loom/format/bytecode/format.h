@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 11
+#define LOOM_BYTECODE_FORMAT_VERSION 12
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -593,10 +593,10 @@ typedef enum loom_bytecode_section_kind_e {
 //
 //   For RECORD symbols:
 //     [def_op_table_index_plus1: varint]
-//                         0 is invalid. N > 0 means the defining attr-only
-//                         record op name is OPS[N - 1]. The op must define a
-//                         RECORD symbol and have no operands, results, or
-//                         regions.
+//                         0 is invalid. N > 0 means the defining record op
+//                         name is OPS[N - 1]. The op must define a RECORD
+//                         symbol and have no operands or results. It may have
+//                         one fixed body region.
 //     [comment_count: varint]
 //     For each leading comment attached to the symbol op:
 //       [comment_length: varint]
@@ -607,6 +607,10 @@ typedef enum loom_bytecode_section_kind_e {
 //       [key_id: varint]
 //       [value_kind: byte]
 //       [value_data: ...]
+//     [has_body: byte]
+//     (if has_body:
+//       [ir_offset: u64]    (from IR section start)
+//       [ir_length: u32])
 
 // ==========================================================================
 // IR section

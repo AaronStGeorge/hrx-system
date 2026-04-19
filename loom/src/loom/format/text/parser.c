@@ -1320,7 +1320,7 @@ iree_status_t loom_parser_add_pending_block_arg(loom_parser_t* parser,
 
 // Clears the active pending-arg list while retaining arena-backed storage for
 // reuse by later REGION elements.
-static void loom_parser_pending_block_args_clear(
+void loom_parser_pending_block_args_clear(
     loom_parser_pending_block_args_t* pending_block_args) {
   pending_block_args->count = 0;
 }
@@ -3106,7 +3106,7 @@ static bool loom_parser_block_has_explicit_terminator(
          iree_any_bit_set(last_vtable->traits, LOOM_TRAIT_TERMINATOR);
 }
 
-static iree_status_t loom_parser_append_implicit_terminator(
+iree_status_t loom_parser_append_implicit_terminator(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_block_t* block) {
   IREE_ASSERT_ARGUMENT(region_descriptor);
@@ -3135,8 +3135,8 @@ static iree_status_t loom_parser_append_implicit_terminator(
   return loom_builder_finalize_op(&parser->builder, terminator);
 }
 
-static iree_status_t loom_parser_seed_region_entry_block(
-    loom_parser_t* parser, loom_region_t* region) {
+iree_status_t loom_parser_seed_region_entry_block(loom_parser_t* parser,
+                                                  loom_region_t* region) {
   if (parser->pending_block_args.count > 0) {
     loom_block_t* entry_block = loom_region_entry_block(region);
     for (uint16_t i = 0; i < parser->pending_block_args.count; ++i) {
@@ -3420,6 +3420,13 @@ iree_status_t loom_parse_region_with_syntax(
       if (loom_tokenizer_at_keyword(&parser->tokenizer, IREE_SV("asm"))) {
         return loom_parse_low_asm_braced_region(parser, region_descriptor,
                                                 out_region);
+      }
+      return loom_parse_braced_region(parser, region_descriptor, out_region);
+    }
+    case LOOM_REGION_SYNTAX_PIPELINE: {
+      if (loom_tokenizer_at_keyword(&parser->tokenizer, IREE_SV("pipeline"))) {
+        return loom_parse_pipeline_prefixed_region(parser, region_descriptor,
+                                                   out_region);
       }
       return loom_parse_braced_region(parser, region_descriptor, out_region);
     }

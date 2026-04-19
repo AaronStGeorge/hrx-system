@@ -4,18 +4,18 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Pass descriptor registry.
+// Pass descriptor registry core.
 //
 // The registry is the shared dispatch surface between pass-pipeline tools and
-// concrete pass implementations. The pass manager remains a small execution
-// engine; registries decide which pass descriptors are linked into a given tool
-// or compiler build.
+// pass implementations. The pass manager remains a small execution engine;
+// registries decide which pass descriptors are available to a given pipeline
+// compiler, tool, or compiler configuration.
 
-#ifndef LOOM_TRANSFORMS_PASS_REGISTRY_H_
-#define LOOM_TRANSFORMS_PASS_REGISTRY_H_
+#ifndef LOOM_PASS_REGISTRY_H_
+#define LOOM_PASS_REGISTRY_H_
 
 #include "iree/base/api.h"
-#include "loom/transforms/pass.h"
+#include "loom/pass/manager.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -170,10 +170,6 @@ typedef struct loom_pass_pipeline_configure_callback_t {
   void* user_data;
 } loom_pass_pipeline_configure_callback_t;
 
-// Returns the builtin registry containing the pass implementations linked into
-// the standard Loom compiler/tool build.
-const loom_pass_registry_t* loom_pass_builtin_registry(void);
-
 // Verifies registry ordering, key uniqueness, and descriptor shape.
 iree_status_t loom_pass_registry_verify(const loom_pass_registry_t* registry);
 
@@ -216,4 +212,4 @@ iree_status_t loom_pass_manager_add_pipeline(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TRANSFORMS_PASS_REGISTRY_H_
+#endif  // LOOM_PASS_REGISTRY_H_

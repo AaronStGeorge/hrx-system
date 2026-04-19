@@ -19,13 +19,13 @@ loom_cc_library(
     "branch_fusion.c"
   DEPS
     ::materialize
-    ::pass
     ::remap
     ::rewriter
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scf
+    loom::src::loom::pass::manager
   PUBLIC
 )
 
@@ -37,12 +37,12 @@ loom_cc_library(
   SRCS
     "branch_sink.c"
   DEPS
-    ::pass
     ::rewriter
     iree::base
     loom::src::loom::analysis::motion
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::pass::manager
   PUBLIC
 )
 
@@ -54,7 +54,6 @@ loom_cc_library(
   SRCS
     "canonicalize.c"
   DEPS
-    ::pass
     ::rewriter
     ::type_propagation
     iree::base
@@ -68,6 +67,7 @@ loom_cc_library(
     loom::src::loom::ops::scf
     loom::src::loom::ops::special_values
     loom::src::loom::ops::vector
+    loom::src::loom::pass::manager
     loom::src::loom::util::fact_table
     loom::src::loom::util::walk
   PUBLIC
@@ -80,7 +80,6 @@ loom_cc_test(
     "canonicalize_test.cc"
   DEPS
     ::canonicalize
-    ::pass
     ::rewriter
     iree::base::internal::arena
     loom::src::loom::ir
@@ -88,6 +87,7 @@ loom_cc_test(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
+    loom::src::loom::pass::manager
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -100,7 +100,6 @@ loom_cc_library(
   SRCS
     "cfg_simplify.c"
   DEPS
-    ::pass
     ::rewriter
     iree::base
     loom::src::loom::analysis::condition_facts
@@ -109,6 +108,7 @@ loom_cc_library(
     loom::src::loom::ops::cfg
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::special_values
+    loom::src::loom::pass::manager
     loom::src::loom::util::cfg_graph
     loom::src::loom::util::dominance
     loom::src::loom::util::fact_table
@@ -159,10 +159,10 @@ loom_cc_library(
   SRCS
     "cse.c"
   DEPS
-    ::pass
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::pass::manager
   PUBLIC
 )
 
@@ -173,12 +173,12 @@ loom_cc_test(
     "cse_test.cc"
   DEPS
     ::cse
-    ::pass
     ::rewriter
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
+    loom::src::loom::pass::manager
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -191,10 +191,10 @@ loom_cc_library(
   SRCS
     "dce.c"
   DEPS
-    ::pass
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::pass::manager
   PUBLIC
 )
 
@@ -205,11 +205,11 @@ loom_cc_test(
     "dce_test.cc"
   DEPS
     ::dce
-    ::pass
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
+    loom::src::loom::pass::manager
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -222,12 +222,12 @@ loom_cc_library(
   SRCS
     "kernel_async_legality.c"
   DEPS
-    ::pass
     iree::base
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::kernel
     loom::src::loom::ops::op_defs
+    loom::src::loom::pass::manager
   PUBLIC
 )
 
@@ -238,7 +238,6 @@ loom_cc_test(
     "kernel_async_legality_test.cc"
   DEPS
     ::kernel_async_legality
-    ::pass
     iree::base::internal::arena
     loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
@@ -246,6 +245,7 @@ loom_cc_test(
     loom::src::loom::ops::func
     loom::src::loom::ops::kernel
     loom::src::loom::ops::test
+    loom::src::loom::pass::manager
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -258,13 +258,13 @@ loom_cc_library(
   SRCS
     "kernel_resources.c"
   DEPS
-    ::pass
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::buffer
     loom::src::loom::ops::func
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
+    loom::src::loom::pass::manager
   PUBLIC
 )
 
@@ -276,12 +276,12 @@ loom_cc_library(
   SRCS
     "licm.c"
   DEPS
-    ::pass
     ::rewriter
     iree::base
     loom::src::loom::analysis::motion
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::pass::manager
   PUBLIC
 )
 
@@ -294,7 +294,6 @@ loom_cc_library(
     "loop_fusion.c"
   DEPS
     ::materialize
-    ::pass
     ::remap
     ::rewriter
     iree::base
@@ -303,6 +302,7 @@ loom_cc_library(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
+    loom::src::loom::pass::manager
   PUBLIC
 )
 
@@ -337,80 +337,6 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_library(
-  NAME
-    pass
-  HDRS
-    "pass.h"
-  SRCS
-    "pass.c"
-  DEPS
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::error::emitter
-    loom::src::loom::ir
-    loom::src::loom::ops::op_defs
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    pass_test
-  SRCS
-    "pass_test.cc"
-  DEPS
-    ::pass
-    iree::base::internal::arena
-    loom::src::loom::ir
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::test
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_library(
-  NAME
-    pass_registry
-  HDRS
-    "pass_registry.h"
-  SRCS
-    "pass_registry.c"
-  DEPS
-    ::branch_fusion
-    ::branch_sink
-    ::canonicalize
-    ::cfg_simplify
-    ::cse
-    ::dce
-    ::kernel_async_legality
-    ::kernel_resources
-    ::licm
-    ::loop_fusion
-    ::pass
-    ::refine_boundaries
-    ::scf_to_cfg
-    ::strip_hints
-    ::symbol_dce
-    ::vector_memory_footprint
-    ::vector_to_scalar
-    iree::base
-    loom::src::loom::codegen::low::allocation_pass
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    pass_registry_test
-  SRCS
-    "pass_registry_test.cc"
-  DEPS
-    ::dce
-    ::pass_registry
-    iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -452,7 +378,6 @@ loom_cc_library(
   DEPS
     ::canonicalize
     ::materialize
-    ::pass
     ::remap
     iree::base
     loom::src::loom::analysis::scc
@@ -464,6 +389,7 @@ loom_cc_library(
     loom::src::loom::ops::func
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::special_values
+    loom::src::loom::pass::manager
     loom::src::loom::util::fact_table
     loom::src::loom::util::walk
   PUBLIC
@@ -475,7 +401,6 @@ loom_cc_test(
   SRCS
     "refine_boundaries_test.cc"
   DEPS
-    ::pass
     ::refine_boundaries
     iree::base::internal::arena
     loom::src::loom::error::error_defs
@@ -483,6 +408,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::index
+    loom::src::loom::pass::manager
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -513,7 +439,6 @@ loom_cc_library(
     "scf_to_cfg.c"
   DEPS
     ::materialize
-    ::pass
     ::remap
     ::rewriter
     iree::base
@@ -523,6 +448,7 @@ loom_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scf
+    loom::src::loom::pass::manager
     loom::src::loom::util::fact_table
   PUBLIC
 )
@@ -535,10 +461,10 @@ loom_cc_library(
   SRCS
     "strip_hints.c"
   DEPS
-    ::pass
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::pass::manager
   PUBLIC
 )
 
@@ -550,11 +476,11 @@ loom_cc_library(
   SRCS
     "symbol_dce.c"
   DEPS
-    ::pass
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
+    loom::src::loom::pass::manager
   PUBLIC
 )
 
@@ -596,7 +522,6 @@ loom_cc_library(
     "vector_to_scalar_terms.c"
     "vector_to_scalar_transforms.c"
   DEPS
-    ::pass
     ::rewriter
     iree::base
     loom::src::loom::error::error_defs
@@ -608,6 +533,7 @@ loom_cc_library(
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
+    loom::src::loom::pass::manager
     loom::src::loom::util::math
   PUBLIC
 )
@@ -658,13 +584,13 @@ loom_cc_library(
   SRCS
     "vector_memory_footprint.c"
   DEPS
-    ::pass
     iree::base
     loom::src::loom::analysis::symbolic_expr
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::vector
+    loom::src::loom::pass::manager
     loom::src::loom::util::fact_table
   PUBLIC
 )
@@ -675,7 +601,6 @@ loom_cc_test(
   SRCS
     "vector_memory_footprint_test.cc"
   DEPS
-    ::pass
     ::vector_memory_footprint
     iree::base::internal::arena
     loom::src::loom::error::error_defs
@@ -692,6 +617,7 @@ loom_cc_test(
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
+    loom::src::loom::pass::manager
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -702,7 +628,6 @@ loom_cc_test(
   SRCS
     "vector_to_scalar_test.cc"
   DEPS
-    ::pass
     ::vector_to_scalar
     iree::base::internal::arena
     loom::src::loom::error::error_defs
@@ -715,6 +640,7 @@ loom_cc_test(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
+    loom::src::loom::pass::manager
     iree::testing::gtest
     iree::testing::gtest_main
 )

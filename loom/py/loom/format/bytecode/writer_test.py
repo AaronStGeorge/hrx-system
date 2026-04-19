@@ -27,6 +27,7 @@ from loom.dialect.globals import ALL_GLOBAL_OPS
 from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES
 from loom.dialect.low import ALL_LOW_OPS
+from loom.dialect.pass_ import ALL_PASS_OPS
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.target import ALL_TARGET_OPS
 from loom.dialect.test import ALL_TEST_OPS
@@ -142,6 +143,7 @@ def _text_parser(
     include_vector: bool = False,
     include_kernel: bool = False,
     include_low: bool = False,
+    include_pass: bool = False,
 ) -> Parser:
     parser = Parser()
     ops = list(ALL_FUNC_OPS) + list(ALL_CFG_OPS) + list(ALL_TEST_OPS)
@@ -163,6 +165,8 @@ def _text_parser(
         )
     if include_low:
         _append_unique(ops, ALL_LOW_OPS)
+    if include_pass:
+        _append_unique(ops, ALL_PASS_OPS)
     parser.register_ops(ops)
     types = list(ALL_BUILTIN_TYPES)
     if include_kernel:
@@ -178,6 +182,7 @@ def _text_printer(
     include_vector: bool = False,
     include_kernel: bool = False,
     include_low: bool = False,
+    include_pass: bool = False,
 ) -> Printer:
     printer = Printer()
     ops = list(ALL_FUNC_OPS) + list(ALL_CFG_OPS) + list(ALL_TEST_OPS)
@@ -199,6 +204,8 @@ def _text_printer(
         )
     if include_low:
         _append_unique(ops, ALL_LOW_OPS)
+    if include_pass:
+        _append_unique(ops, ALL_PASS_OPS)
     printer.register_ops(ops)
     types = list(ALL_BUILTIN_TYPES)
     if include_kernel:

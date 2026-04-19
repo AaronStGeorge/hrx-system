@@ -995,45 +995,86 @@ class BytecodeReader:
                 )
                 module.add_symbol(symbol)
             elif kind == SymbolKind.RECORD.value:
-                op_table_index_plus1, offset = decode_varint(sym_data, offset)
-                if op_table_index_plus1 == 0:
-                    raise BytecodeError(
-                        "record symbol op_table_index_plus1 must be nonzero"
-                    )
-                op_table_index = op_table_index_plus1 - 1
-                if op_table_index >= len(self._ops):
-                    raise BytecodeError(
-                        "record symbol op_table_index_plus1 references OPS "
-                        f"entry {op_table_index} but only {len(self._ops)} exist"
-                    )
-                op_name = self._ops[op_table_index]
-                op_comments, offset = self._read_comment_list(sym_data, offset)
-
-                attr_count, offset = decode_varint(sym_data, offset)
-                op_attrs, offset = self._read_op_attr_entries(
-                    sym_data, offset, attr_count, module, None, op_name
+                offset = self._read_record_symbol_payload(
+                    sym_data,
+                    offset,
+                    ir_data,
+                    module,
+                    name,
+                    flags,
+                    source_module,
+                    source_symbol,
                 )
-                symbol_field = self._symbol_field_for_op(op_name)
-                op_attrs = {symbol_field: name, **op_attrs}
-
-                op = Operation(
-                    name=op_name,
-                    operands=[],
-                    results=[],
-                    attributes=op_attrs,
-                    comments=op_comments,
-                )
-                symbol = Symbol(
-                    name=name,
-                    kind=SymbolKind.RECORD,
-                    flags=flags,
-                    op=op,
-                    source_module=source_module,
-                    source_symbol=source_symbol,
-                )
-                module.add_symbol(symbol)
             else:
                 raise BytecodeError(f"unsupported symbol kind: {kind}")
+
+    def _read_record_symbol_payload(
+        self,
+        sym_data: bytes,
+        offset: int,
+        ir_data: bytes,
+        module: Module,
+        name: str,
+        flags: int,
+        source_module: str,
+        source_symbol: str,
+    ) -> int:
+        """Read one RECORD symbol payload and append it to ``module``."""
+        op_table_index_plus1, offset = decode_varint(sym_data, offset)
+        if op_table_index_plus1 == 0:
+            raise BytecodeError("record symbol op_table_index_plus1 must be nonzero")
+        op_table_index = op_table_index_plus1 - 1
+        if op_table_index >= len(self._ops):
+            raise BytecodeError(
+                "record symbol op_table_index_plus1 references OPS "
+                f"entry {op_table_index} but only {len(self._ops)} exist"
+            )
+        op_name = self._ops[op_table_index]
+        op_comments, offset = self._read_comment_list(sym_data, offset)
+
+        attr_count, offset = decode_varint(sym_data, offset)
+        op_attrs, offset = self._read_op_attr_entries(
+            sym_data, offset, attr_count, module, None, op_name
+        )
+        symbol_field = self._symbol_field_for_op(op_name)
+        op_attrs = {symbol_field: name, **op_attrs}
+
+        has_body = sym_data[offset]
+        offset += 1
+        if has_body > 1:
+            raise BytecodeError(f"invalid record has_body value: {has_body}")
+        record_body: Region | None = None
+        if has_body:
+            if offset + 12 > len(sym_data):
+                raise BytecodeError("record body reference is truncated")
+            ir_offset = struct.unpack_from("<Q", sym_data, offset)[0]
+            offset += 8
+            ir_length = struct.unpack_from("<I", sym_data, offset)[0]
+            offset += 4
+            if ir_offset + ir_length > len(ir_data):
+                raise BytecodeError("record body range extends past IR section")
+            record_body = self._read_function_body(
+                ir_data[ir_offset : ir_offset + ir_length], module
+            )
+
+        op = Operation(
+            name=op_name,
+            operands=[],
+            results=[],
+            attributes=op_attrs,
+            regions=[record_body] if record_body is not None else [],
+            comments=op_comments,
+        )
+        symbol = Symbol(
+            name=name,
+            kind=SymbolKind.RECORD,
+            flags=flags,
+            op=op,
+            source_module=source_module,
+            source_symbol=source_symbol,
+        )
+        module.add_symbol(symbol)
+        return offset
 
     def _shared_func_metadata_attr_keys(self, op_name: str) -> frozenset[str]:
         """Return func-like attrs encoded by fixed symbol metadata fields."""

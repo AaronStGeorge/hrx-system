@@ -10,7 +10,7 @@
 #define LOOM_TRANSFORMS_CFG_SIMPLIFY_H_
 
 #include "iree/base/api.h"
-#include "loom/transforms/pass.h"
+#include "loom/pass/manager.h"
 
 #ifdef __cplusplus
 extern "C" {

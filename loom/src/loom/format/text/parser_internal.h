@@ -4,8 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Internal types and declarations shared across the parser's
-// implementation files (parser.c, parser_types.c, parser_format.c).
+// Internal types and declarations shared across the parser implementation.
 // Not a public API — do not include from outside this library.
 
 #ifndef LOOM_FORMAT_TEXT_PARSER_INTERNAL_H_
@@ -480,6 +479,22 @@ void loom_parser_sync_to_newline(loom_parser_t* parser);
 // Handles nested brace depth.
 void loom_parser_sync_to_brace(loom_parser_t* parser);
 
+// Clears parser-owned region entry block arguments queued by FUNC_ARGS,
+// BINDING_LIST, or implicit region operands.
+void loom_parser_pending_block_args_clear(
+    loom_parser_pending_block_args_t* pending);
+
+// Defines pending region entry block arguments in the current child scope and
+// attaches them to |region|'s entry block.
+iree_status_t loom_parser_seed_region_entry_block(loom_parser_t* parser,
+                                                  loom_region_t* region);
+
+// Appends |region_descriptor|'s implicit terminator to |block| when the block
+// does not already end in an explicit terminator.
+iree_status_t loom_parser_append_implicit_terminator(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_block_t* block);
+
 //===----------------------------------------------------------------------===//
 // Op accumulator
 //===----------------------------------------------------------------------===//
@@ -722,6 +737,12 @@ iree_status_t loom_parse_region(
 iree_status_t loom_parse_region_with_syntax(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_region_syntax_t syntax, loom_region_t** out_region);
+
+// Parses the pass pipeline friendly region syntax:
+// `pipeline { canonicalize(options...) ... }`.
+iree_status_t loom_parse_pipeline_prefixed_region(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_t** out_region);
 
 // Emits ERR_PARSE_009 for a result arity mismatch on |vtable| at
 // |op_name_token|.

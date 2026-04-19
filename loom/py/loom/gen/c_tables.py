@@ -125,6 +125,7 @@ REGION_SYNTAX_MAP: dict[str, str] = {
     "test.do": "LOOM_REGION_SYNTAX_TEST_DO",
     "low.asm": "LOOM_REGION_SYNTAX_LOW_ASM",
     "low.asm.optional": "LOOM_REGION_SYNTAX_LOW_ASM_OPTIONAL",
+    "pipeline": "LOOM_REGION_SYNTAX_PIPELINE",
 }
 
 # Maps Python TypeConstraint enum to C constraint enum name.
@@ -3431,6 +3432,7 @@ def main() -> None:
     from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES, kernel_ops
     from loom.dialect.llvmir import ALL_LLVMIR_OPS, llvmir_ops
     from loom.dialect.low import ALL_LOW_OPS, low_ops
+    from loom.dialect.pass_ import ALL_PASS_OPS, pass_ops
     from loom.dialect.pool import ALL_POOL_OPS, pool_ops
     from loom.dialect.scalar import ALL_SCALAR_OPS, scalar_ops
     from loom.dialect.scf import ALL_SCF_OPS, scf_ops
@@ -3456,6 +3458,7 @@ def main() -> None:
         (llvmir_ops, list(ALL_LLVMIR_OPS)),
         (target_ops, list(ALL_TARGET_OPS)),
         (low_ops, list(ALL_LOW_OPS)),
+        (pass_ops, list(ALL_PASS_OPS)),
     ]
     production_dialects = [(dialect, ops) for dialect, ops in dialects if dialect.name != "test"]
 

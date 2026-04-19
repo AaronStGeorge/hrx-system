@@ -74,6 +74,7 @@ from loom.fields import (
 from loom.ir import (
     Block,
     BufferType,
+    CanonicalAttrDict,
     DialectType,
     DynamicDim,
     DynamicEncoding,
@@ -508,6 +509,48 @@ def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
     return str(value)
 
 
+def _is_pipeline_printable_name(value: Any, *, allow_dot: bool) -> bool:
+    """Returns true when value can be printed as a pipeline syntax identifier."""
+    if not isinstance(value, str) or not value:
+        return False
+    first = value[0]
+    if not (first.isascii() and (first.isalpha() or first in "_$")):
+        return False
+    for character in value[1:]:
+        if not character.isascii():
+            return False
+        if (
+            character.isalnum()
+            or character in "_$-"
+            or (allow_dot and character == ".")
+        ):
+            continue
+        return False
+    return True
+
+
+def _is_pipeline_printable_attr_value(value: Any) -> bool:
+    if isinstance(value, bool | int | float | str):
+        return True
+    if isinstance(value, list | tuple):
+        return all(_is_pipeline_printable_attr_value(item) for item in value)
+    if isinstance(value, Mapping):
+        return _is_pipeline_printable_attr_dict(value)
+    if isinstance(value, (*_IR_TYPE_CLASSES, EncodingInstance)):
+        return True
+    return False
+
+
+def _is_pipeline_printable_attr_dict(value: Mapping[str, Any] | None) -> bool:
+    if value is None:
+        return True
+    return all(
+        _is_pipeline_printable_name(key, allow_dot=False)
+        and _is_pipeline_printable_attr_value(item)
+        for key, item in value.items()
+    )
+
+
 def _format_float(value: float) -> str:
     """Format a float with enough precision to round-trip."""
     if math.isnan(value):
@@ -759,6 +802,231 @@ class Printer:
             if not block.ops[i].is_dead:
                 return i
         return -1
+
+    def _can_print_pipeline_region(
+        self,
+        region: Region,
+        module: Module,
+        implicit_terminator_name: str | None,
+    ) -> bool:
+        """Returns true when the region has an exact friendly pipeline spelling."""
+        if self._print_locations:
+            return False
+        if len(region.blocks) != 1:
+            return False
+        block = region.blocks[0]
+        if block.label or block.arg_ids or block.comments:
+            return False
+
+        final_live_op_index = self._printable_final_op_index(block)
+        if implicit_terminator_name is None or final_live_op_index < 0:
+            return False
+        if not self._should_elide_implicit_terminator(
+            block.ops[final_live_op_index], implicit_terminator_name
+        ):
+            return False
+        for i, op in enumerate(block.ops):
+            if op.is_dead:
+                continue
+            if i == final_live_op_index and self._should_elide_implicit_terminator(
+                op, implicit_terminator_name
+            ):
+                continue
+            if op.name == "pass.yield":
+                return False
+            if not self._can_print_pipeline_statement(
+                op, module, implicit_terminator_name
+            ):
+                return False
+        return True
+
+    def _can_print_pipeline_statement(
+        self,
+        op: Operation,
+        module: Module,
+        implicit_terminator_name: str | None,
+    ) -> bool:
+        match op.name:
+            case "pass.run":
+                options = op.attributes.get("options")
+                return _is_pipeline_printable_name(
+                    op.attributes.get("key"), allow_dot=True
+                ) and (
+                    "options" not in op.attributes
+                    or (
+                        isinstance(options, Mapping)
+                        and _is_pipeline_printable_attr_dict(options)
+                    )
+                )
+            case "pass.for":
+                return (
+                    op.attributes.get("anchor") in ("module", "func")
+                    and len(op.regions) == 1
+                    and self._can_print_pipeline_region(
+                        op.regions[0], module, implicit_terminator_name
+                    )
+                )
+            case "pass.where":
+                attrs = op.attributes.get("attrs")
+                return (
+                    _is_pipeline_printable_name(
+                        op.attributes.get("predicate"), allow_dot=True
+                    )
+                    and (
+                        "attrs" not in op.attributes
+                        or (
+                            isinstance(attrs, Mapping)
+                            and _is_pipeline_printable_attr_dict(attrs)
+                        )
+                    )
+                    and len(op.regions) == 1
+                    and self._can_print_pipeline_region(
+                        op.regions[0], module, implicit_terminator_name
+                    )
+                )
+            case "pass.repeat":
+                attrs = op.attributes
+                return (
+                    attrs.get("mode") in ("fixed", "until_converged")
+                    and all(key in ("mode", "count", "max_iterations") for key in attrs)
+                    and (
+                        "count" not in attrs
+                        or (
+                            isinstance(attrs.get("count"), int)
+                            and not isinstance(attrs.get("count"), bool)
+                        )
+                    )
+                    and (
+                        "max_iterations" not in attrs
+                        or (
+                            isinstance(attrs.get("max_iterations"), int)
+                            and not isinstance(attrs.get("max_iterations"), bool)
+                        )
+                    )
+                    and len(op.regions) == 1
+                    and self._can_print_pipeline_region(
+                        op.regions[0], module, implicit_terminator_name
+                    )
+                )
+            case "pass.call":
+                return _is_pipeline_printable_name(
+                    op.attributes.get("callee"), allow_dot=False
+                )
+            case "pass.fail" | "pass.halt":
+                return isinstance(op.attributes.get("message"), str)
+            case _:
+                return False
+
+    def _print_pipeline_region_body(
+        self,
+        region: Region,
+        module: Module,
+        *,
+        implicit_terminator_name: str | None,
+    ) -> None:
+        if not region.blocks:
+            return
+        block = region.blocks[0]
+        final_live_op_index = self._printable_final_op_index(block)
+        for i, op in enumerate(block.ops):
+            if op.is_dead:
+                continue
+            if i == final_live_op_index and self._should_elide_implicit_terminator(
+                op, implicit_terminator_name
+            ):
+                continue
+            self._print_pipeline_statement(
+                op,
+                module,
+                implicit_terminator_name=implicit_terminator_name,
+            )
+
+    def _print_pipeline_statement(
+        self,
+        op: Operation,
+        module: Module,
+        *,
+        implicit_terminator_name: str | None,
+    ) -> None:
+        self._emit_comments(op.comments)
+        match op.name:
+            case "pass.run":
+                key = cast(str, op.attributes["key"])
+                options = op.attributes.get("options")
+                suffix = (
+                    self._format_pipeline_attr_parens(cast(Mapping[str, Any], options))
+                    if isinstance(options, Mapping)
+                    else ""
+                )
+                self._emit(f"{key}{suffix}")
+            case "pass.for":
+                anchor = cast(str, op.attributes["anchor"])
+                self._emit(f"for {anchor} {{")
+                self._indent += 1
+                self._print_pipeline_region_body(
+                    op.regions[0],
+                    module,
+                    implicit_terminator_name=implicit_terminator_name,
+                )
+                self._indent -= 1
+                self._emit("}")
+            case "pass.where":
+                predicate = cast(str, op.attributes["predicate"])
+                attrs = op.attributes.get("attrs")
+                suffix = (
+                    self._format_pipeline_attr_parens(cast(Mapping[str, Any], attrs))
+                    if isinstance(attrs, Mapping)
+                    else ""
+                )
+                self._emit(f"where {predicate}{suffix} {{")
+                self._indent += 1
+                self._print_pipeline_region_body(
+                    op.regions[0],
+                    module,
+                    implicit_terminator_name=implicit_terminator_name,
+                )
+                self._indent -= 1
+                self._emit("}")
+            case "pass.repeat":
+                mode = cast(str, op.attributes["mode"])
+                repeat_attrs: list[tuple[str, Any]] = []
+                if "count" in op.attributes:
+                    repeat_attrs.append(("count", op.attributes["count"]))
+                if "max_iterations" in op.attributes:
+                    repeat_attrs.append(
+                        ("max_iterations", op.attributes["max_iterations"])
+                    )
+                suffix = self._format_pipeline_attr_parens(
+                    CanonicalAttrDict(repeat_attrs)
+                )
+                self._emit(f"repeat {mode}{suffix} {{")
+                self._indent += 1
+                self._print_pipeline_region_body(
+                    op.regions[0],
+                    module,
+                    implicit_terminator_name=implicit_terminator_name,
+                )
+                self._indent -= 1
+                self._emit("}")
+            case "pass.call":
+                callee = cast(str, op.attributes["callee"])
+                self._emit(f"call @{callee}")
+            case "pass.fail":
+                message = _format_string_literal(cast(str, op.attributes["message"]))
+                self._emit(f"fail {message}")
+            case "pass.halt":
+                message = _format_string_literal(cast(str, op.attributes["message"]))
+                self._emit(f"halt {message}")
+            case _:
+                self._print_op(op, module)
+
+    def _format_pipeline_attr_parens(self, attrs: Mapping[str, Any]) -> str:
+        if not attrs:
+            return ""
+        body = ", ".join(
+            f"{key} = {_format_attr_value(value)}" for key, value in attrs.items()
+        )
+        return f"({body})"
 
     def _should_elide_implicit_terminator(
         self,
@@ -1057,12 +1325,48 @@ class Printer:
                     if operand_dict_str:
                         stream.emit(operand_dict_str)
 
-                case RegionFmt(field=name):
+                case RegionFmt(field=name, syntax=syntax):
                     region = fields.region(name)
                     implicit_terminator_name = _implicit_terminator_name(op_decl)
                     if not print_regions:
                         # Declaration mode: placeholder braces.
-                        stream.emit("{ ... }")
+                        if syntax == "pipeline":
+                            stream.emit("pipeline { ... }")
+                        elif syntax == "test.do":
+                            stream.emit("do { ... }")
+                        else:
+                            stream.emit("{ ... }")
+                    elif (
+                        syntax == "pipeline"
+                        and region is not None
+                        and (
+                            self._can_print_pipeline_region(
+                                region, module, implicit_terminator_name
+                            )
+                        )
+                    ):
+                        self._emit(stream.join() + " pipeline {")
+                        self._indent += 1
+                        self._print_pipeline_region_body(
+                            region,
+                            module,
+                            implicit_terminator_name=implicit_terminator_name,
+                        )
+                        self._indent -= 1
+                        stream = TokenStream()
+                        stream.emit("}")
+                    elif syntax == "test.do":
+                        self._emit(stream.join() + " do {")
+                        if region is not None:
+                            self._indent += 1
+                            self._print_region_body(
+                                region,
+                                module,
+                                implicit_terminator_name=implicit_terminator_name,
+                            )
+                            self._indent -= 1
+                        stream = TokenStream()
+                        stream.emit("}")
                     else:
                         # Flush current tokens + " {" as a line.
                         self._emit(stream.join() + " {")

@@ -18,7 +18,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/test/ops.h"
-#include "loom/transforms/pass.h"
+#include "loom/pass/manager.h"
 
 namespace loom {
 namespace {

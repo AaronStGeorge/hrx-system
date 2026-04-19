@@ -7,7 +7,7 @@
 #ifndef LOOM_TRANSFORMS_CANONICALIZE_H_
 #define LOOM_TRANSFORMS_CANONICALIZE_H_
 
-#include "loom/transforms/pass.h"
+#include "loom/pass/manager.h"
 #include "loom/util/fact_table.h"
 
 #ifdef __cplusplus

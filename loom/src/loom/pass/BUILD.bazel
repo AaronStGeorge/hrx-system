@@ -1,0 +1,100 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "manager",
+    srcs = ["manager.c"],
+    hdrs = ["manager.h"],
+    deps = [
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "manager_test",
+    srcs = ["manager_test.cc"],
+    deps = [
+        ":manager",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "registry",
+    srcs = ["registry.c"],
+    hdrs = ["registry.h"],
+    deps = [
+        ":manager",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "builtin_registry",
+    srcs = ["builtin_registry.c"],
+    hdrs = ["builtin_registry.h"],
+    deps = [
+        ":registry",
+        "//loom/src/loom/codegen/low:allocation_pass",
+        "//loom/src/loom/transforms:branch_fusion",
+        "//loom/src/loom/transforms:branch_sink",
+        "//loom/src/loom/transforms:canonicalize",
+        "//loom/src/loom/transforms:cfg_simplify",
+        "//loom/src/loom/transforms:cse",
+        "//loom/src/loom/transforms:dce",
+        "//loom/src/loom/transforms:kernel_async_legality",
+        "//loom/src/loom/transforms:kernel_resources",
+        "//loom/src/loom/transforms:licm",
+        "//loom/src/loom/transforms:loop_fusion",
+        "//loom/src/loom/transforms:refine_boundaries",
+        "//loom/src/loom/transforms:scf_to_cfg",
+        "//loom/src/loom/transforms:strip_hints",
+        "//loom/src/loom/transforms:symbol_dce",
+        "//loom/src/loom/transforms:vector_memory_footprint",
+        "//loom/src/loom/transforms:vector_to_scalar",
+    ],
+)
+
+loom_cc_test(
+    name = "registry_test",
+    srcs = ["registry_test.cc"],
+    deps = [
+        ":manager",
+        ":registry",
+        "//loom/src/loom/pass/test:registry",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "builtin_registry_test",
+    srcs = ["builtin_registry_test.cc"],
+    deps = [
+        ":builtin_registry",
+        ":registry",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

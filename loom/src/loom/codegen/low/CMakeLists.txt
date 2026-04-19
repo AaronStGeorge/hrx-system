@@ -189,7 +189,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::transforms::pass
+    loom::src::loom::pass::manager
   PUBLIC
 )
 

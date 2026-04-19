@@ -792,7 +792,7 @@ static iree_status_t loom_parse_format_flags(loom_parser_t* parser,
   return iree_ok_status();
 }
 
-// Parses an op reference: <op.name>.
+// Parses an op or descriptor key reference: <op.name> or <descriptor-key>.
 static iree_status_t loom_parse_format_op_ref(
     loom_parser_t* parser, const loom_format_element_t* element,
     loom_parsed_op_t* parsed) {
@@ -801,8 +801,13 @@ static iree_status_t loom_parse_format_op_ref(
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'<'"));
   }
-  loom_token_t name_token = loom_token_none();
-  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_OP_NAME, &name_token);
+  loom_token_t name_token = loom_tokenizer_peek(&parser->tokenizer);
+  if (name_token.kind != LOOM_TOKEN_OP_NAME &&
+      name_token.kind != LOOM_TOKEN_BARE_IDENT) {
+    return loom_parser_emit_unexpected_token(parser, name_token,
+                                             IREE_SV("identifier"));
+  }
+  name_token = loom_tokenizer_next(&parser->tokenizer);
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'>'"));

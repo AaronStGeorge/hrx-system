@@ -60,6 +60,7 @@ loom_cc_library(
     srcs = [
         "parser.c",
         "parser_format.c",
+        "parser_pipeline.c",
         "parser_types.c",
     ],
     hdrs = [

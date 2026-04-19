@@ -31,8 +31,8 @@
 // manager writes the pre-pass IR and the remaining pipeline to a temp
 // file, printing the path in the error status.
 
-#ifndef LOOM_TRANSFORMS_PASS_H_
-#define LOOM_TRANSFORMS_PASS_H_
+#ifndef LOOM_PASS_MANAGER_H_
+#define LOOM_PASS_MANAGER_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -251,4 +251,4 @@ void loom_pass_manager_deinitialize(loom_pass_manager_t* manager);
 }
 #endif
 
-#endif  // LOOM_TRANSFORMS_PASS_H_
+#endif  // LOOM_PASS_MANAGER_H_

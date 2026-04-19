@@ -237,6 +237,9 @@ typedef enum loom_region_syntax_e {
   LOOM_REGION_SYNTAX_LOW_ASM = 2,
   // Canonical braced region by default, with optional target-low asm syntax.
   LOOM_REGION_SYNTAX_LOW_ASM_OPTIONAL = 3,
+  // Pass pipeline syntax. Currently canonical braced form; the friendly
+  // parser/printer selects the same in-memory pass.* operations.
+  LOOM_REGION_SYNTAX_PIPELINE = 4,
 } loom_region_syntax_t;
 
 #define LOOM_FORMAT_REGION_TABLE_DATA(keys_attr_index, default_region_index) \

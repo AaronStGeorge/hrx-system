@@ -65,6 +65,9 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
+    loom::src::loom::pass::builtin_registry
+    loom::src::loom::pass::manager
+    loom::src::loom::pass::registry
     loom::src::loom::target::emit::llvmir::core
     loom::src::loom::target::emit::llvmir::legality
     loom::src::loom::target::emit::llvmir::lower
@@ -75,8 +78,6 @@ loom_cc_library(
     loom::src::loom::target::presets
     loom::src::loom::target::types
     loom::src::loom::testing::diff
-    loom::src::loom::transforms::pass
-    loom::src::loom::transforms::pass_registry
     loom::src::loom::transforms::verify
     loom::src::loom::util::json
     loom::src::loom::util::stream

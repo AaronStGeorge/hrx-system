@@ -16,7 +16,7 @@
 #define LOOM_TRANSFORMS_VECTOR_TO_SCALAR_H_
 
 #include "iree/base/api.h"
-#include "loom/transforms/pass.h"
+#include "loom/pass/manager.h"
 
 #ifdef __cplusplus
 extern "C" {

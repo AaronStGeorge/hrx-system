@@ -149,7 +149,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 11
+FORMAT_VERSION = 12
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -392,7 +392,7 @@ class BytecodeWriter:
             self._number_attr_value(value, self._attr_def_for_op_attr(op.name, key))
 
     def _number_record_op(self, op: Operation) -> None:
-        """Number all entities in an attr-only record symbol-defining op."""
+        """Number all entities in a record symbol-defining op."""
         symbol_field = self._symbol_field_for_op(op)
         self._ctx.intern_op(op.name)
         self._ctx.intern_string(op.name)
@@ -402,6 +402,13 @@ class BytecodeWriter:
                 continue
             self._ctx.intern_string(key)
             self._number_attr_value(value, self._attr_def_for_op_attr(op.name, key))
+        if len(op.regions) > 1:
+            raise ValueError(
+                f"record symbol op {op.name!r} has {len(op.regions)} regions; "
+                "bytecode record symbols support at most one body region"
+            )
+        if op.regions:
+            self._number_region(op.regions[0])
 
     def _symbol_field_for_op(self, op: Operation) -> str:
         """Return the generated symbol identity attr field for ``op``."""
@@ -1379,10 +1386,11 @@ class BytecodeWriter:
             elif symbol.kind == SymbolKind.RECORD and symbol.op is not None:
                 op = symbol.op
                 symbol_field = self._symbol_field_for_op(op)
-                if op.operands or op.results or op.regions:
+                if op.operands or op.results or len(op.regions) > 1:
                     raise ValueError(
                         f"record symbol {symbol.name!r} must be defined by an "
-                        "attr-only top-level op"
+                        "operandless/resultless top-level op with at most one "
+                        "body region"
                     )
 
                 buf.write_varint(self._ctx.ops[op.name] + 1)
@@ -1401,6 +1409,18 @@ class BytecodeWriter:
                         value,
                         attr_def=self._attr_def_for_op_attr(op.name, key),
                     )
+                has_body = bool(op.regions)
+                buf.write_u8(1 if has_body else 0)
+                if has_body:
+                    try:
+                        ir_offset, ir_length = ir_offsets[symbol_index]
+                    except KeyError as exc:
+                        raise ValueError(
+                            f"record symbol {symbol.name!r} has a body region "
+                            "but no serialized IR offset"
+                        ) from exc
+                    buf.write_u64_le(ir_offset)
+                    buf.write_u32_le(ir_length)
             else:
                 raise ValueError(
                     f"symbol {symbol.name!r} of kind {symbol.kind.name} "

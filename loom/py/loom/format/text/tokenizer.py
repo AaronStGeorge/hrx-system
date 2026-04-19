@@ -14,6 +14,7 @@ regex. The scanner handles all disambiguation:
   - '#' letter → HASH_ATTR, '#' digit is invalid
   - '-' '>' → ARROW, '-' digit → negative number
   - identifier '.' identifier → OP_NAME, bare identifier → BARE_IDENT
+  - '-' may continue identifiers for descriptor keys such as pass names
   - 'tile' before '<' → BARE_IDENT (type keyword), 'tile' before '.' → OP_NAME
 
 Comments (//) are collected separately and not emitted as tokens.
@@ -137,15 +138,21 @@ def _is_ident_start(character: str) -> bool:
 
 
 def _is_ident_continue(character: str) -> bool:
-    """Characters that can continue an identifier: [a-zA-Z0-9_$.]."""
+    """Characters that can continue an identifier: [a-zA-Z0-9_$.-]."""
     return (
-        character.isalnum() or character == "_" or character == "$" or character == "."
+        character.isalnum()
+        or character == "_"
+        or character == "$"
+        or character == "."
+        or character == "-"
     )
 
 
 def _is_ident_continue_no_dot(character: str) -> bool:
     """Identifier continuation without dot (for bare identifiers)."""
-    return character.isalnum() or character == "_" or character == "$"
+    return (
+        character.isalnum() or character == "_" or character == "$" or character == "-"
+    )
 
 
 _JSON_ESCAPE_CHARS: dict[str, str] = {

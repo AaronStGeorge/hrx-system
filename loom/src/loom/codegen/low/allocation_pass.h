@@ -12,7 +12,7 @@
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/ir/ir.h"
-#include "loom/transforms/pass.h"
+#include "loom/pass/manager.h"
 
 #ifdef __cplusplus
 extern "C" {

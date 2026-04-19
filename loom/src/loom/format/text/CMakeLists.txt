@@ -31,6 +31,7 @@ loom_cc_library(
   SRCS
     "parser.c"
     "parser_format.c"
+    "parser_pipeline.c"
     "parser_types.c"
   DEPS
     ::low_asm

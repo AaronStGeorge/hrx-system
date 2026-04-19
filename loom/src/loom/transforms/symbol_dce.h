@@ -7,7 +7,7 @@
 #ifndef LOOM_TRANSFORMS_SYMBOL_DCE_H_
 #define LOOM_TRANSFORMS_SYMBOL_DCE_H_
 
-#include "loom/transforms/pass.h"
+#include "loom/pass/manager.h"
 
 #ifdef __cplusplus
 extern "C" {
