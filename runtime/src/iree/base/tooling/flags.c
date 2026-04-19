@@ -115,12 +115,30 @@ int iree_flag_register(const char* file, int line, iree_flag_type_t type,
   return flag_ordinal;
 }
 
+static bool iree_flag_name_char_equal(char lhs, char rhs) {
+  return lhs == rhs || (lhs == '_' && rhs == '-') || (lhs == '-' && rhs == '_');
+}
+
+static bool iree_flag_name_equal(iree_string_view_t registered_name,
+                                 iree_string_view_t query_name) {
+  if (registered_name.size != query_name.size) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < registered_name.size; ++i) {
+    if (!iree_flag_name_char_equal(registered_name.data[i],
+                                   query_name.data[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // Returns the flag registration with the given |name| or NULL if not found.
 static iree_flag_t* iree_flag_lookup(iree_string_view_t name) {
   iree_flag_registry_t* registry = &iree_flag_registry;
   for (int i = 0; i < registry->flag_count; ++i) {
     iree_flag_t* flag = &registry->flags[i];
-    if (iree_string_view_equal(flag->name, name)) {
+    if (iree_flag_name_equal(flag->name, name)) {
       return flag;
     }
   }

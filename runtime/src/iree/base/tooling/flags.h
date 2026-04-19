@@ -173,6 +173,9 @@ int iree_flag_register(const char* file, int line, iree_flag_type_t type,
 // value can be specified on the command line with --name:
 //   --foo
 //   --foo=true
+// Registered underscores can also be spelled as hyphens on command lines and
+// in flagfiles:
+//   --my-flag=true  // parses as the registered my_flag flag.
 //
 // See iree_flag_type_t for the types supported and how they are parsed.
 #define IREE_FLAG(type, name, default_value, description)                      \
