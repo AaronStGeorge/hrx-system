@@ -871,6 +871,8 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
       FEATURE_STRING_OFFSET(mnemonic_add);
   tables->descriptors[0].semantic_tag_string_offset =
       FEATURE_STRING_OFFSET(semantic_add);
+  tables->descriptors[0].canonical_asm_form_ordinal =
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE;
   tables->descriptors[0].feature_mask_word_count = 1;
   tables->descriptors[0].operand_count = 4;
   tables->descriptors[0].result_count = 1;

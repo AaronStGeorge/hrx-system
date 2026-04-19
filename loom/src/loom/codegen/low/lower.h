@@ -1,0 +1,179 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Source-to-target-low lowering foundation.
+//
+// This layer owns the target-independent mechanics of lowering a verified
+// source function into a low.func.def: target legality gating, function/block
+// cloning, source-to-low SSA value mapping, source location preservation, and
+// structural CFG terminators. Target packages provide descriptor choices and
+// type mappings through callbacks so this library never links concrete backend
+// descriptor tables.
+
+#ifndef LOOM_CODEGEN_LOW_LOWER_H_
+#define LOOM_CODEGEN_LOW_LOWER_H_
+
+#include "iree/base/api.h"
+#include "loom/codegen/low/descriptors.h"
+#include "loom/error/emitter.h"
+#include "loom/ir/ir.h"
+#include "loom/ops/op_defs.h"
+#include "loom/target/low_legality.h"
+#include "loom/target/types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct loom_low_lower_context_t loom_low_lower_context_t;
+
+typedef iree_status_t (*loom_low_lower_map_type_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_type_t source_type,
+    loom_type_t* out_low_type);
+
+typedef struct loom_low_lower_map_type_callback_t {
+  // Callback invoked to map one source value type to a low register type.
+  loom_low_lower_map_type_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_map_type_callback_t;
+
+typedef iree_status_t (*loom_low_lower_can_lower_op_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, bool* out_handled);
+
+typedef struct loom_low_lower_can_lower_op_callback_t {
+  // Callback invoked during preflight to prove |source_op| has a lowering.
+  loom_low_lower_can_lower_op_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_can_lower_op_callback_t;
+
+typedef iree_status_t (*loom_low_lower_try_op_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, bool* out_handled);
+
+typedef struct loom_low_lower_try_op_callback_t {
+  // Callback invoked during emission to lower one non-structural source op.
+  loom_low_lower_try_op_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_try_op_callback_t;
+
+typedef struct loom_low_lower_policy_t {
+  // Stable policy name used in diagnostics and status messages.
+  iree_string_view_t name;
+  // Maps source semantic types to target-low register types.
+  loom_low_lower_map_type_callback_t map_type;
+  // Preflights a non-structural source op without mutating IR.
+  loom_low_lower_can_lower_op_callback_t can_lower_op;
+  // Emits target-low ops for a preflighted non-structural source op.
+  loom_low_lower_try_op_callback_t try_lower_op;
+} loom_low_lower_policy_t;
+
+typedef struct loom_low_lower_options_t {
+  // Module-local target.bundle symbol used by the emitted low.func.def.
+  loom_symbol_ref_t target_ref;
+  // Target bundle selected for this lowering attempt.
+  const loom_target_bundle_t* bundle;
+  // Low descriptor registry linked into the current compiler binary.
+  const loom_low_descriptor_registry_t* descriptor_registry;
+  // Descriptor payload requirements needed by the consumer after lowering.
+  loom_low_descriptor_requirement_flags_t descriptor_requirements;
+  // Optional target-specific legality providers forwarded to source legality.
+  const loom_target_low_legality_provider_t* const* legality_providers;
+  // Number of provider pointers in |legality_providers|.
+  iree_host_size_t legality_provider_count;
+  // Target lowering policy for descriptor and type choices.
+  const loom_low_lower_policy_t* policy;
+  // Optional suffix appended to the source function symbol. Empty uses "__low".
+  iree_string_view_t low_function_suffix;
+  // Structured diagnostic emitter for user legality and lowering failures.
+  iree_diagnostic_emitter_t emitter;
+  // Maximum number of errors to emit before aborting. Zero means no limit.
+  uint32_t max_errors;
+} loom_low_lower_options_t;
+
+typedef struct loom_low_lower_result_t {
+  // Number of error diagnostics emitted.
+  uint32_t error_count;
+  // Number of remark diagnostics emitted by legality providers.
+  uint32_t remark_count;
+  // Descriptor set selected by |options.bundle|.
+  const loom_low_descriptor_set_t* descriptor_set;
+  // Emitted low.func.def op, or NULL when user diagnostics prevented emission.
+  loom_op_t* low_func_op;
+  // Module-local symbol reference for |low_func_op|.
+  loom_symbol_ref_t low_func_ref;
+} loom_low_lower_result_t;
+
+// Lowers one func.def-like source function into a sibling low.func.def.
+//
+// User IR failures are emitted through |options->emitter| and counted in
+// |out_result|. The function returns OK in that case and does not emit a
+// low.func.def. Infrastructure failures such as malformed options, invalid
+// target symbols, or a policy that violates the lowering contract are returned
+// as status failures.
+iree_status_t loom_low_lower_function(loom_module_t* module,
+                                      loom_func_like_t source_function,
+                                      const loom_low_lower_options_t* options,
+                                      loom_low_lower_result_t* out_result);
+
+// Returns the module being mutated by the current lowering.
+loom_module_t* loom_low_lower_context_module(loom_low_lower_context_t* context);
+
+// Returns the builder positioned in the current low block. Only valid while a
+// try_lower_op callback is emitting; preflight callbacks must not mutate IR.
+loom_builder_t* loom_low_lower_context_builder(
+    loom_low_lower_context_t* context);
+
+// Returns the source function being lowered.
+loom_func_like_t loom_low_lower_context_source_function(
+    const loom_low_lower_context_t* context);
+
+// Returns the emitted low.func.def op, or NULL during preflight.
+loom_op_t* loom_low_lower_context_low_function(
+    const loom_low_lower_context_t* context);
+
+// Returns the selected target bundle.
+const loom_target_bundle_t* loom_low_lower_context_bundle(
+    const loom_low_lower_context_t* context);
+
+// Returns the selected descriptor set.
+const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
+    const loom_low_lower_context_t* context);
+
+// Maps |source_type| through the active policy. A policy that rejects a user
+// type emits a diagnostic and returns loom_type_none() in |out_low_type|.
+iree_status_t loom_low_lower_map_type(loom_low_lower_context_t* context,
+                                      const loom_op_t* source_op,
+                                      loom_type_t source_type,
+                                      loom_type_t* out_low_type);
+
+// Looks up the low SSA value already bound to |source_value_id|.
+iree_status_t loom_low_lower_lookup_value(loom_low_lower_context_t* context,
+                                          loom_value_id_t source_value_id,
+                                          loom_value_id_t* out_low_value_id);
+
+// Binds one source SSA value to the corresponding low SSA value. The source
+// value's display name is copied when available.
+iree_status_t loom_low_lower_bind_value(loom_low_lower_context_t* context,
+                                        loom_value_id_t source_value_id,
+                                        loom_value_id_t low_value_id);
+
+// Emits ERR_BACKEND_001 for an unsupported source-to-low lowering subject.
+iree_status_t loom_low_lower_emit_reject(loom_low_lower_context_t* context,
+                                         const loom_op_t* source_op,
+                                         iree_string_view_t subject_kind,
+                                         iree_string_view_t subject_name,
+                                         iree_string_view_t reason);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // LOOM_CODEGEN_LOW_LOWER_H_

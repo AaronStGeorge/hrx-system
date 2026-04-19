@@ -335,6 +335,31 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    lower
+  HDRS
+    "lower.h"
+  SRCS
+    "lower.c"
+  DEPS
+    ::descriptors
+    ::requirements
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::cfg
+    loom::src::loom::ops::func
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::target
+    loom::src::loom::target::low_legality
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     verify
   HDRS
     "verify.h"
@@ -351,6 +376,36 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::util::walk
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    lower_test
+  SRCS
+    "lower_test.cc"
+  DEPS
+    ::lower
+    ::text_asm
+    ::verify
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::bytecode::reader
+    loom::src::loom::format::bytecode::writer
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::cfg
+    loom::src::loom::ops::func
+    loom::src::loom::ops::low
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
+    loom::src::loom::target::ir_records
+    loom::src::loom::target::presets
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

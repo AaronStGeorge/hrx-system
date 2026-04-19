@@ -274,6 +274,42 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "lower_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/codegen/low:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/codegen/low:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/codegen/low:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/codegen/low:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_test_low_registry_dep",
+    dependency = "//loom/src/loom/target/test:low_registry",
+    target = "//loom/src/loom/codegen/low:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/codegen/low:lower",
+)
+
+iree_assert_no_dependency(
     name = "allocation_pass_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/codegen/low:allocation_pass",
@@ -646,6 +682,28 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "lower",
+    srcs = ["lower.c"],
+    hdrs = ["lower.h"],
+    deps = [
+        ":descriptors",
+        ":requirements",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/cfg",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "verify",
     srcs = ["verify.c"],
     hdrs = ["verify.h"],
@@ -659,6 +717,35 @@ loom_cc_library(
         "//loom/src/loom/util:walk",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "lower_test",
+    srcs = ["lower_test.cc"],
+    deps = [
+        ":lower",
+        ":text_asm",
+        ":verify",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/format/bytecode:reader",
+        "//loom/src/loom/format/bytecode:writer",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/cfg",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target:ir_records",
+        "//loom/src/loom/target:presets",
+        "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
