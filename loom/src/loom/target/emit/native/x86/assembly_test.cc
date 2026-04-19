@@ -11,13 +11,17 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/x86/low_registry.h"
+#include "loom/target/arch/x86/lower.h"
+#include "loom/target/ir_records.h"
 #include "loom/target/presets.h"
 #include "loom/testing/context.h"
 
@@ -35,12 +39,16 @@ class X86AssemblyTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    if (module_) {
+    ResetModule();
+    loom_context_deinitialize(&context_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  void ResetModule() {
+    if (module_ != nullptr) {
       loom_module_free(module_);
       module_ = nullptr;
     }
-    loom_context_deinitialize(&context_);
-    iree_arena_block_pool_deinitialize(&block_pool_);
   }
 
   loom_module_t* ParseSource(const std::string& source) {
@@ -67,12 +75,35 @@ class X86AssemblyTest : public ::testing::Test {
     return nullptr;
   }
 
+  loom_func_like_t FindFirstSemanticFunction(loom_module_t* module) {
+    loom_block_t* block = loom_module_block(module);
+    loom_op_t* op = nullptr;
+    loom_block_for_each_op(block, op) {
+      loom_func_like_t function = loom_func_like_cast(module, op);
+      if (loom_func_like_isa(function) && !loom_low_func_def_isa(op)) {
+        return function;
+      }
+    }
+    return (loom_func_like_t){0};
+  }
+
+  loom_symbol_ref_t SymbolRef(loom_module_t* module,
+                              iree_string_view_t symbol_name) {
+    loom_string_id_t symbol_name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_module_intern_string(module, symbol_name, &symbol_name_id));
+    uint16_t symbol_id = loom_module_find_symbol(module, symbol_name_id);
+    IREE_ASSERT(symbol_id != LOOM_SYMBOL_ID_INVALID);
+    return loom_symbol_ref_t{.module_id = 0, .symbol_id = symbol_id};
+  }
+
   void BuildSidecars(const char* body, iree_arena_allocator_t* arena,
                      loom_low_packetization_t* out_packetization) {
     std::string source =
         "target.preset @x86_target {key = \"x86-avx512\", source = "
         "@x86_fragment}\n";
     source += body;
+    ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
 
@@ -105,6 +136,64 @@ class X86AssemblyTest : public ::testing::Test {
                                                out_packetization));
   }
 
+  void LowerSourceAndBuildSidecars(
+      const char* body, iree_arena_allocator_t* arena,
+      loom_low_packetization_t* out_packetization) {
+    std::string source =
+        "target.preset @x86_target {key = \"x86-avx512\", source = "
+        "@x86_source}\n";
+    source += body;
+    ResetModule();
+    module_ = ParseSource(source);
+    ASSERT_NE(module_, nullptr);
+
+    const loom_target_preset_registry_t preset_registry =
+        loom_target_low_descriptor_registry_presets(&target_registry_);
+    iree_host_size_t expanded_preset_count = 0;
+    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
+                                              &expanded_preset_count));
+    EXPECT_EQ(expanded_preset_count, 1u);
+
+    loom_target_ir_bundle_storage_t bundle_storage = {};
+    IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
+        module_, IREE_SV("x86_target"), &bundle_storage));
+    const loom_low_lower_options_t lower_options = {
+        .target_ref = SymbolRef(module_, IREE_SV("x86_target")),
+        .bundle = &bundle_storage.bundle,
+        .descriptor_registry = &target_registry_.registry,
+        .descriptor_requirements =
+            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        .policy = loom_x86_low_lower_policy(),
+        .max_errors = 20,
+    };
+    loom_low_lower_result_t lower_result = {};
+    IREE_ASSERT_OK(loom_low_lower_function(module_,
+                                           FindFirstSemanticFunction(module_),
+                                           &lower_options, &lower_result));
+    EXPECT_EQ(lower_result.error_count, 0u);
+    ASSERT_NE(lower_result.low_func_op, nullptr);
+    ASSERT_NE(lower_result.abi_adapter_op, nullptr);
+
+    loom_low_verify_options_t verify_options = {
+        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
+        .descriptor_registry = &target_registry_.registry,
+        .descriptor_requirements =
+            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        .max_errors = 20,
+    };
+    loom_low_verify_result_t verify_result = {};
+    IREE_ASSERT_OK(
+        loom_low_verify_module(module_, &verify_options, &verify_result));
+    EXPECT_EQ(verify_result.error_count, 0u);
+
+    loom_low_packetization_options_t packetization_options = {
+        .descriptor_registry = &target_registry_.registry,
+    };
+    IREE_ASSERT_OK(loom_low_packetize_function(
+        module_, lower_result.low_func_op, &packetization_options, arena,
+        out_packetization));
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
@@ -124,7 +213,8 @@ TEST_F(X86AssemblyTest, EmitsAvx512Fragment) {
       "  %sum = low.op<x86.avx512.vpaddd.zmm>(%loaded, %lhs) : "
       "(reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>\n"
       "  %dot = low.op<x86.avx512.vpdpbusd.zmm>(%acc, %sum, %rhs) : "
-      "(reg<x86.zmm>, reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>\n"
+      "(reg<x86.zmm>, reg<x86.zmm>, reg<x86.zmm>) -> %acc as "
+      "reg<x86.zmm>\n"
       "  low.op<x86.avx512.vmovdqu32.store.zmm>(%dot, %base) "
       "{disp32 = 64} : (reg<x86.zmm>, reg<x86.gpr64>)\n"
       "  low.return\n"
@@ -143,6 +233,31 @@ TEST_F(X86AssemblyTest, EmitsAvx512Fragment) {
   EXPECT_NE(output.find("vpaddd zmm"), std::string::npos);
   EXPECT_NE(output.find("vpdpbusd zmm"), std::string::npos);
   EXPECT_NE(output.find("vmovdqu32 [rax + 64], zmm"), std::string::npos);
+  EXPECT_NE(output.find("ret"), std::string::npos);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
+TEST_F(X86AssemblyTest, EmitsAvx512FragmentFromSourceLowering) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  LowerSourceAndBuildSidecars(
+      "func.def @x86_source(%lhs: vector<16xi32>, %rhs: "
+      "vector<16xi32>) {\n"
+      "  %sum = vector.addi %lhs, %rhs : vector<16xi32>\n"
+      "  func.return\n"
+      "}\n",
+      &sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_x86_emit_assembly_fragment(
+      &packetization.schedule, &packetization.allocation, &builder));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+  EXPECT_NE(output.find(".Lbb0:"), std::string::npos);
+  EXPECT_NE(output.find("vpaddd zmm"), std::string::npos);
   EXPECT_NE(output.find("ret"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);

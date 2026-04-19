@@ -380,6 +380,24 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
+    allocation_test
+  SRCS
+    "allocation_test.cc"
+  DEPS
+    ::allocation
+    ::verify
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     lower_test
   SRCS
     "lower_test.cc"

@@ -130,6 +130,12 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "lower_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/x86:low_registry",
+    target = "//loom/src/loom/target/arch/x86:lower",
+)
+
+iree_assert_no_dependency(
     name = "packed_dot_descriptors_no_ireevm_emit_dep",
     dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
     target = "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
@@ -237,6 +243,19 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "lower",
+    srcs = ["lower.c"],
+    hdrs = ["lower.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/vector",
         "//runtime/src/iree/base",
     ],
 )

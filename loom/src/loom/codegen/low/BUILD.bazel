@@ -721,6 +721,23 @@ loom_cc_library(
 )
 
 loom_cc_test(
+    name = "allocation_test",
+    srcs = ["allocation_test.cc"],
+    deps = [
+        ":allocation",
+        ":verify",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "lower_test",
     srcs = ["lower_test.cc"],
     deps = [
