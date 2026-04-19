@@ -199,6 +199,15 @@ static iree_status_t loom_check_configure_pass_instruction(
   return iree_ok_status();
 }
 
+static bool loom_check_pass_requirement_is_satisfied(
+    void* user_data, iree_string_view_t requirement) {
+  loom_check_pass_pipeline_config_t* config =
+      (loom_check_pass_pipeline_config_t*)user_data;
+  return config &&
+         loom_low_materialize_allocation_pass_config_satisfies_requirement(
+             config->low_allocation_config, requirement);
+}
+
 iree_status_t loom_check_execute_case(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
@@ -282,6 +291,11 @@ static iree_status_t loom_check_run_pipeline(
 
   loom_pass_tool_run_options_t options = {
       .registry = pass_registry,
+      .requirement_provider =
+          {
+              .callback = loom_check_pass_requirement_is_satisfied,
+              .user_data = &pipeline_config,
+          },
       .block_pool = block_pool,
       .diagnostic_emitter = diagnostic_emitter,
       .configure =

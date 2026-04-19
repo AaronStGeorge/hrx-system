@@ -319,6 +319,15 @@ static iree_status_t loom_opt_configure_pass_instruction(
   return iree_ok_status();
 }
 
+static bool loom_opt_pass_requirement_is_satisfied(
+    void* user_data, iree_string_view_t requirement) {
+  loom_opt_pass_pipeline_config_t* config =
+      (loom_opt_pass_pipeline_config_t*)user_data;
+  return config &&
+         loom_low_materialize_allocation_pass_config_satisfies_requirement(
+             config->low_allocation_config, requirement);
+}
+
 static iree_status_t loom_opt_join_pass_list(iree_flag_string_list_t passes,
                                              iree_string_builder_t* builder) {
   for (iree_host_size_t i = 0; i < passes.count; ++i) {
@@ -743,6 +752,11 @@ static iree_status_t loom_opt_run_passes(
   };
   loom_pass_tool_run_options_t run_options = {
       .registry = loom_pass_builtin_registry(),
+      .requirement_provider =
+          {
+              .callback = loom_opt_pass_requirement_is_satisfied,
+              .user_data = &pipeline_config,
+          },
       .block_pool = block_pool,
       .diagnostic_emitter = {.fn = loom_opt_diagnostic_emitter_emit,
                              .user_data = &pass_emitter},

@@ -56,6 +56,17 @@ static const loom_pass_option_schema_t kLowMaterializeAllocationOptionSchema[] =
         },
 };
 
+static const loom_pass_requirement_def_t
+    kLowMaterializeAllocationRequirements[] = {
+        {
+            .key = IREE_SVL(
+                LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
+            .description =
+                IREE_SVL("Requires an injected target-low descriptor "
+                         "registry."),
+        },
+};
+
 static const loom_pass_option_schema_t kRefineBoundariesOptionSchema[] = {
     {
         .name = IREE_SVL("max-iterations"),
@@ -122,6 +133,9 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .option_schema = kLowMaterializeAllocationOptionSchema,
         .option_schema_count =
             IREE_ARRAYSIZE(kLowMaterializeAllocationOptionSchema),
+        .requirement_defs = kLowMaterializeAllocationRequirements,
+        .requirement_count =
+            IREE_ARRAYSIZE(kLowMaterializeAllocationRequirements),
     },
     {
         .key = IREE_SVL("normalize-kernel-resources"),

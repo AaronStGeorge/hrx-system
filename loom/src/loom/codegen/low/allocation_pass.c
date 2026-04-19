@@ -68,6 +68,17 @@ const loom_pass_info_t* loom_low_materialize_allocation_pass_info(void) {
   return &loom_low_materialize_allocation_pass_info_storage;
 }
 
+bool loom_low_materialize_allocation_pass_config_satisfies_requirement(
+    const loom_low_materialize_allocation_pass_config_t* config,
+    iree_string_view_t requirement) {
+  if (iree_string_view_equal(
+          requirement,
+          IREE_SV(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY))) {
+    return config && config->descriptor_registry;
+  }
+  return false;
+}
+
 static iree_status_t loom_low_materialize_allocation_count_budgets(
     iree_string_view_t text, iree_host_size_t* out_count) {
   iree_host_size_t count = 0;
@@ -249,7 +260,9 @@ iree_status_t loom_low_materialize_allocation_create(
 iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
                                                   loom_module_t* module,
                                                   loom_func_like_t function) {
-  if (!loom_low_func_def_isa(function.op)) return iree_ok_status();
+  if (!loom_low_func_def_isa(function.op)) {
+    return iree_ok_status();
+  }
 
   loom_low_materialize_allocation_pass_state_t* state =
       (loom_low_materialize_allocation_pass_state_t*)pass->state;

@@ -89,6 +89,10 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
   const loom_pass_descriptor_t* allocation =
       LookupBuiltinPass(IREE_SV("low-materialize-allocation"));
   ASSERT_NE(allocation, nullptr);
+  ASSERT_EQ(allocation->requirement_count, 1u);
+  EXPECT_TRUE(
+      iree_string_view_equal(allocation->requirement_defs[0].key,
+                             IREE_SV("target.low-descriptor-registry")));
   IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
       allocation, IREE_SV("diagnostics=spills")));
   IREE_ASSERT_OK(loom_pass_descriptor_validate_options(

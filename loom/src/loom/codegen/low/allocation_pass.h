@@ -18,12 +18,23 @@
 extern "C" {
 #endif
 
+// Pass requirement satisfied when the driver has selected and injected a
+// target-low descriptor registry for low-codegen passes.
+#define LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY \
+  "target.low-descriptor-registry"
+
 const loom_pass_info_t* loom_low_materialize_allocation_pass_info(void);
 
 typedef struct loom_low_materialize_allocation_pass_config_t {
   // Selected target-low descriptor registry used to interpret low ops.
   const loom_low_descriptor_registry_t* descriptor_registry;
 } loom_low_materialize_allocation_pass_config_t;
+
+// Returns true if |config| satisfies a requirement declared by the allocation
+// pass descriptor.
+bool loom_low_materialize_allocation_pass_config_satisfies_requirement(
+    const loom_low_materialize_allocation_pass_config_t* config,
+    iree_string_view_t requirement);
 
 iree_status_t loom_low_materialize_allocation_create(
     loom_pass_t* pass, iree_string_view_t options);
