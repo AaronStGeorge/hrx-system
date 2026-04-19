@@ -33,6 +33,8 @@ from loom.target.low_descriptors import (
     DescriptorFlag,
     EnumDomain,
     EnumValue,
+    Hazard,
+    HazardKind,
     ImmediateKind,
     OperandRole,
 )
@@ -263,6 +265,90 @@ def test_generate_test_low_core_descriptor_set() -> None:
     assert manifest["table_counts"]["asm_forms"] >= 13
     assert any(descriptor["key"] == "test.spv.op_iadd.i32" for descriptor in manifest["descriptors"])
     assert any(form["mnemonic"] == "OpIAdd" for form in manifest["asm_forms"])
+
+
+def test_generator_resolves_symbolic_hazard_resources() -> None:
+    schedule_classes = tuple(
+        replace(
+            schedule_class,
+            hazards=(
+                Hazard(
+                    HazardKind.MIN_DISTANCE,
+                    resource="test.scalar",
+                    producer_stage=0,
+                    consumer_stage=1,
+                    distance=2,
+                ),
+            ),
+        )
+        if schedule_class.name == "test.scalar.alu"
+        else schedule_class
+        for schedule_class in TEST_LOW_CORE_DESCRIPTOR_SET.schedule_classes
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        schedule_classes=schedule_classes,
+    )
+
+    generated = generate_descriptor_set(
+        descriptor_set,
+        DescriptorAllowlist(keys=("test.add.i32",)),
+    )
+    manifest = json.loads(generated.manifest_json)
+
+    assert manifest["table_counts"]["hazards"] == 1
+    assert ".reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE" in generated.source
+    assert ".reference_id = 0" in generated.source
+
+
+def test_generator_rejects_unknown_hazard_resource() -> None:
+    schedule_classes = tuple(
+        replace(
+            schedule_class,
+            hazards=(Hazard(HazardKind.MIN_DISTANCE, resource="missing"),),
+        )
+        if schedule_class.name == "test.scalar.alu"
+        else schedule_class
+        for schedule_class in TEST_LOW_CORE_DESCRIPTOR_SET.schedule_classes
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        schedule_classes=schedule_classes,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=("schedule class 'test.scalar.alu' hazard references unknown resource 'missing'"),
+    ):
+        generate_descriptor_set(
+            descriptor_set,
+            DescriptorAllowlist(keys=("test.add.i32",)),
+        )
+
+
+def test_generator_rejects_ambiguous_hazard_reference() -> None:
+    schedule_classes = tuple(
+        replace(
+            schedule_class,
+            hazards=(Hazard(HazardKind.MIN_DISTANCE, resource="test.scalar", counter_id=0),),
+        )
+        if schedule_class.name == "test.scalar.alu"
+        else schedule_class
+        for schedule_class in TEST_LOW_CORE_DESCRIPTOR_SET.schedule_classes
+    )
+    descriptor_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        schedule_classes=schedule_classes,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=("schedule class 'test.scalar.alu' hazard must reference exactly one resource, counter, or target id"),
+    ):
+        generate_descriptor_set(
+            descriptor_set,
+            DescriptorAllowlist(keys=("test.add.i32",)),
+        )
 
 
 def test_allowlist_accepts_semantic_tags() -> None:

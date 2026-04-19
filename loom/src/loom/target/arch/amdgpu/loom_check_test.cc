@@ -162,5 +162,47 @@ TEST_F(AmdgpuLoomCheckTest, AllocationJsonUsesGfx11PhysicalRegisterClasses) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(AmdgpuLoomCheckTest, PacketJsonUsesGfx11DescriptorsAndAllocation) {
+  loom_check_result_t result;
+  std::string source =
+      "// RUN: emit low-packet-json @gfx11_mix amdgpu.vgpr=8\n";
+  source += kAmdgpuGfx11MixedLowFunction;
+  source += "// ----\n";
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("amdgpu_low.loom-test"), &result));
+
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"format\":\"loom.low.packet.v0\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"function\":\"gfx11_mix\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor_set\":\"amdgpu.gfx11.core\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.s_add_u32\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.v_add_u32\""),
+            std::string::npos);
+  EXPECT_NE(
+      actual_output.find("\"descriptor\":\"amdgpu.v_wmma_f32_16x16x16_f16\""),
+      std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"amdgpu.s_waitcnt\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor_ordinal\":"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"encoding_id\":"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"name\":\"vmcnt\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"name\":\"lgkmcnt\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"kind\":\"unsigned\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"value\":0"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"kind\":\"physical_register\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"type\":\"reg<amdgpu.vgpr x8>\""),
+            std::string::npos);
+  EXPECT_EQ(actual_output.find("\"test.low.core\""), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 }  // namespace
 }  // namespace loom

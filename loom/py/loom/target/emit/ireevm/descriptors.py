@@ -120,8 +120,18 @@ _CALLEE_IMMEDIATE = Immediate(
     ImmediateKind.ORDINAL,
     flags=(ImmediateFlag.SYMBOLIC,),
     bit_width=32,
-    unsigned_max=(2**32) - 1,
+    unsigned_max=(2**31) - 1,
 )
+
+# VM bytecode opcodes from runtime/src/iree/vm/bytecode/utils/generated/op_table.h.
+_OP_CONST_I32 = 0x0D
+_OP_ADD_I32 = 0x22
+_OP_SUB_I32 = 0x23
+_OP_CMP_EQ_I32 = 0x49
+_OP_BRANCH = 0x56
+_OP_COND_BRANCH = 0x57
+_OP_CALL = 0x58
+_OP_RETURN = 0x5A
 
 _CONTROL_EFFECT = Effect(
     EffectKind.CONTROL,
@@ -215,6 +225,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             immediates=(_I32_VALUE_IMMEDIATE,),
             asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
             schedule_class=_SCHEDULE_CONST,
+            encoding_id=_OP_CONST_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
@@ -224,6 +235,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_ALU_I32,
+            encoding_id=_OP_ADD_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
@@ -233,6 +245,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_ALU_I32,
+            encoding_id=_OP_SUB_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
@@ -242,6 +255,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_ALU_I32,
+            encoding_id=_OP_CMP_EQ_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
@@ -253,6 +267,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             asm_forms=_asm(immediates=("target_block",)),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
+            encoding_id=_OP_BRANCH,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
         ),
         Descriptor(
@@ -266,6 +281,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             ),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
+            encoding_id=_OP_COND_BRANCH,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
         ),
         Descriptor(
@@ -279,6 +295,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             ),
             effects=(_CALL_EFFECT,),
             schedule_class=_SCHEDULE_CALL,
+            encoding_id=_OP_CALL,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
         ),
         Descriptor(
@@ -289,6 +306,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             asm_forms=_asm(operands=("value",)),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
+            encoding_id=_OP_RETURN,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
         ),
         Descriptor(
@@ -299,6 +317,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             asm_forms=_asm(),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
+            encoding_id=_OP_RETURN,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
         ),
     ),

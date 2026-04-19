@@ -100,22 +100,6 @@ static const char* loom_low_allocation_json_location_kind_name(
   }
 }
 
-static const char* loom_low_allocation_json_spill_slot_space_name(
-    uint8_t space) {
-  switch (space) {
-    case LOOM_LOW_SPILL_SLOT_SPACE_STACK:
-      return "stack";
-    case LOOM_LOW_SPILL_SLOT_SPACE_SCRATCH:
-      return "scratch";
-    case LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE:
-      return "private";
-    case LOOM_LOW_SPILL_SLOT_SPACE_LDS:
-      return "lds";
-    default:
-      return "unknown";
-  }
-}
-
 static const char* loom_low_allocation_json_remark_kind_name(
     loom_low_allocation_remark_kind_t kind) {
   switch (kind) {
@@ -266,9 +250,8 @@ static iree_status_t loom_low_allocation_json_write_spill_plan(
       "{\"index\":%zu,\"assignment\":%" PRIu32 ",\"slot\":%" PRIu32
       ",\"space\":",
       index, spill_plan->assignment_index, spill_plan->slot_index));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
-      stream,
-      loom_low_allocation_json_spill_slot_space_name(spill_plan->slot_space)));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, loom_low_spill_slot_space_name(spill_plan->slot_space)));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"value\":"));
   IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_value(
       sidecar, spill_plan->value_id, stream));

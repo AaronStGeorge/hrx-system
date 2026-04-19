@@ -60,7 +60,7 @@ static iree_status_t loom_low_allocation_emit_materialized_spill(
 }
 
 static iree_status_t loom_low_allocation_map_slot_space(
-    uint8_t slot_space, uint8_t* out_low_space) {
+    loom_low_spill_slot_space_t slot_space, uint8_t* out_low_space) {
   switch (slot_space) {
     case LOOM_LOW_SPILL_SLOT_SPACE_STACK:
       *out_low_space = LOOM_LOW_SLOT_SPACE_STACK;

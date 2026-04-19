@@ -36,6 +36,7 @@ from loom.target.low_descriptors import (
     EnumDomain,
     EnumValue,
     Hazard,
+    HazardReferenceKind,
     Immediate,
     ImmediateKind,
     IssueUse,
@@ -213,6 +214,35 @@ def _hex_u64_literal(value: int) -> str:
 
 def _encoding_id_expr(value: int) -> str:
     return "LOOM_LOW_ID_NONE" if value == LOW_DESCRIPTOR_ENCODING_ID_NONE else str(value)
+
+
+def _hazard_reference_kind(hazard: Hazard) -> HazardReferenceKind:
+    if hazard.resource is not None:
+        return HazardReferenceKind.RESOURCE
+    if hazard.counter_id is not None:
+        return HazardReferenceKind.COUNTER
+    if hazard.target_id is not None:
+        return HazardReferenceKind.TARGET
+    raise ValueError("hazard has no reference")
+
+
+def _hazard_reference_id(hazard: Hazard, resource_ids: dict[str, int]) -> int:
+    if hazard.resource is not None:
+        return resource_ids[hazard.resource]
+    if hazard.counter_id is not None:
+        return hazard.counter_id
+    if hazard.target_id is not None:
+        return hazard.target_id
+    raise ValueError("hazard has no reference")
+
+
+def _validate_u16(value: int, description: str) -> None:
+    if value < 0 or value > 0xFFFF:
+        raise ValueError(f"{description} does not fit u16")
+
+
+def _hazard_reference_count(hazard: Hazard) -> int:
+    return sum(reference is not None for reference in (hazard.resource, hazard.counter_id, hazard.target_id))
 
 
 def _clang_format_source(source: str, assume_filename: Path) -> str:
@@ -484,6 +514,35 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
             if issue_use.resource not in resource_inputs:
                 raise ValueError(f"schedule class '{schedule_name}' references unknown resource '{issue_use.resource}'")
             used_resource_names.add(issue_use.resource)
+        for hazard in schedule_class.hazards:
+            if _hazard_reference_count(hazard) != 1:
+                raise ValueError(f"schedule class '{schedule_name}' hazard must reference exactly one resource, counter, or target id")
+            if hazard.resource is not None:
+                if hazard.resource not in resource_inputs:
+                    raise ValueError(f"schedule class '{schedule_name}' hazard references unknown resource '{hazard.resource}'")
+                used_resource_names.add(hazard.resource)
+            if hazard.counter_id is not None:
+                _validate_u16(
+                    hazard.counter_id,
+                    f"schedule class '{schedule_name}' hazard counter id",
+                )
+            if hazard.target_id is not None:
+                _validate_u16(
+                    hazard.target_id,
+                    f"schedule class '{schedule_name}' hazard target id",
+                )
+            _validate_u16(
+                hazard.producer_stage,
+                f"schedule class '{schedule_name}' hazard producer stage",
+            )
+            _validate_u16(
+                hazard.consumer_stage,
+                f"schedule class '{schedule_name}' hazard consumer stage",
+            )
+            _validate_u16(
+                hazard.distance,
+                f"schedule class '{schedule_name}' hazard distance",
+            )
         for pressure_delta in schedule_class.pressure_deltas:
             if pressure_delta.reg_class not in reg_class_inputs:
                 raise ValueError(f"schedule class '{schedule_name}' references unknown pressure register class '{pressure_delta.reg_class}'")
@@ -963,7 +1022,8 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
         [
             [
                 f".kind = {hazard.kind.c_name},",
-                f".resource_or_counter_id = {hazard.resource_or_counter_id},",
+                f".reference_kind = {_hazard_reference_kind(hazard).c_name},",
+                f".reference_id = {_hazard_reference_id(hazard, compiled.resource_ids)},",
                 f".producer_stage = {hazard.producer_stage},",
                 f".consumer_stage = {hazard.consumer_stage},",
                 f".distance = {hazard.distance},",

@@ -76,6 +76,30 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "function_bytecode_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/ireevm:function_bytecode",
+)
+
+iree_assert_no_dependency(
+    name = "function_bytecode_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/emit/ireevm:function_bytecode",
+)
+
+iree_assert_no_dependency(
+    name = "function_bytecode_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/ireevm:function_bytecode",
+)
+
+iree_assert_no_dependency(
+    name = "function_bytecode_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/ireevm:function_bytecode",
+)
+
+iree_assert_no_dependency(
     name = "loom_check_execute_no_ireevm_low_registry_dep",
     dependency = "//loom/src/loom/target/emit/ireevm:low_registry",
     target = "//loom/src/loom/tools/loom-check:execute",
@@ -111,6 +135,22 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "function_bytecode",
+    srcs = ["function_bytecode.c"],
+    hdrs = ["function_bytecode.h"],
+    deps = [
+        ":descriptors",
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low:schedule",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_cc_test(
     name = "descriptors_test",
     srcs = ["descriptors_test.cc"],
@@ -119,6 +159,26 @@ loom_cc_test(
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:text_asm_roundtrip_test_util",
         "//loom/src/loom/codegen/low:text_asm_test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "function_bytecode_test",
+    srcs = ["function_bytecode_test.cc"],
+    deps = [
+        ":descriptors",
+        ":function_bytecode",
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:schedule",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -57,6 +57,8 @@ enum loom_low_schedule_diagnostic_bits_e {
   LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS = 1u << 0,
   // Emits BACKEND/013 remarks for resources tied at the schedule bottleneck.
   LOOM_LOW_SCHEDULE_DIAGNOSTIC_RESOURCE_BOTTLENECKS = 1u << 1,
+  // Emits BACKEND/014 remarks for required delay/wait hazard gaps.
+  LOOM_LOW_SCHEDULE_DIAGNOSTIC_HAZARD_GAPS = 1u << 2,
 };
 typedef uint32_t loom_low_schedule_diagnostic_flags_t;
 
@@ -99,6 +101,8 @@ typedef struct loom_low_schedule_node_t {
   loom_low_model_quality_t model_quality;
   // Number of issue-resource rows consumed by the schedule class.
   uint16_t issue_use_count;
+  // Number of hazard rows attached to the schedule class.
+  uint16_t hazard_count;
   // Number of descriptor effect rows.
   uint16_t effect_count;
 } loom_low_schedule_node_t;
@@ -166,6 +170,77 @@ typedef struct loom_low_schedule_resource_use_t {
   // Number of resource units consumed per cycle.
   uint16_t units;
 } loom_low_schedule_resource_use_t;
+
+// Descriptor hazard row recorded in scheduled order. These rows are passive
+// facts: target overlays consume them to insert waits, enforce distances, or
+// record richer backend diagnostics.
+typedef struct loom_low_schedule_hazard_use_t {
+  // Scheduled node carrying the hazard row.
+  uint32_t node_index;
+  // Region block containing |node_index|.
+  uint32_t block_index;
+  // Scheduled ordinal within |block_index|.
+  uint32_t scheduled_ordinal;
+  // Hazard row ordinal within the node's schedule class.
+  uint16_t hazard_ordinal;
+  // Hazard kind used by schedule policy and verification.
+  loom_low_hazard_kind_t kind;
+  // Interpretation of reference_id.
+  loom_low_hazard_reference_kind_t reference_kind;
+  // Resource, counter, or target-owned hazard identifier.
+  uint16_t reference_id;
+  // Borrowed stable resource name when reference_kind is RESOURCE.
+  iree_string_view_t resource_name;
+  // Producer pipeline stage participating in the hazard.
+  uint16_t producer_stage;
+  // Consumer pipeline stage participating in the hazard.
+  uint16_t consumer_stage;
+  // Required distance or target-owned hazard value.
+  uint16_t distance;
+  // Hazard flags for target-owned refinements.
+  loom_low_hazard_flags_t hazard_flags;
+} loom_low_schedule_hazard_use_t;
+
+// Minimum-distance hazard gap recorded after scheduling. These rows identify
+// where the chosen order needs an abstract delay/wait before final emission.
+// They are not inserted operations; target overlays decide whether a gap
+// becomes a wait packet, a delay packet, or a diagnostic.
+typedef struct loom_low_schedule_hazard_gap_t {
+  // Producer node carrying the previous hazard row.
+  uint32_t producer_node;
+  // Consumer node carrying the hazard row that requires additional distance.
+  uint32_t consumer_node;
+  // Region block containing both nodes.
+  uint32_t block_index;
+  // Scheduled ordinal of the producer node within |block_index|.
+  uint32_t producer_scheduled_ordinal;
+  // Scheduled ordinal of the consumer node within |block_index|.
+  uint32_t consumer_scheduled_ordinal;
+  // Hazard row ordinal within the producer node's schedule class.
+  uint16_t producer_hazard_ordinal;
+  // Hazard row ordinal within the consumer node's schedule class.
+  uint16_t consumer_hazard_ordinal;
+  // Hazard kind that produced this gap.
+  loom_low_hazard_kind_t kind;
+  // Interpretation of reference_id.
+  loom_low_hazard_reference_kind_t reference_kind;
+  // Resource, counter, or target-owned hazard identifier.
+  uint16_t reference_id;
+  // Borrowed stable resource name when reference_kind is RESOURCE.
+  iree_string_view_t resource_name;
+  // Producer pipeline stage participating in the hazard.
+  uint16_t producer_stage;
+  // Consumer pipeline stage participating in the hazard.
+  uint16_t consumer_stage;
+  // Required minimum distance in abstract issue slots.
+  uint16_t required_distance;
+  // Actual scheduled distance in abstract issue slots.
+  uint32_t actual_distance;
+  // Additional abstract issue slots needed before the consumer.
+  uint16_t required_delay;
+  // Hazard flags for target-owned refinements.
+  loom_low_hazard_flags_t hazard_flags;
+} loom_low_schedule_hazard_gap_t;
 
 // Aggregate descriptor resource pressure for one target resource. Summaries are
 // emitted in resource-id order and only include resources used by the schedule.
@@ -257,6 +332,15 @@ typedef struct loom_low_schedule_sidecar_t {
   const loom_low_schedule_resource_use_t* resource_uses;
   // Number of resource-use records.
   iree_host_size_t resource_use_count;
+  // Descriptor hazards in scheduled order. Empty when scheduled nodes do not
+  // reference descriptor hazard rows.
+  const loom_low_schedule_hazard_use_t* hazard_uses;
+  // Number of hazard-use records.
+  iree_host_size_t hazard_use_count;
+  // Minimum-distance hazard gaps in scheduled order.
+  const loom_low_schedule_hazard_gap_t* hazard_gaps;
+  // Number of minimum-distance hazard gaps.
+  iree_host_size_t hazard_gap_count;
   // Per-resource aggregate schedule pressure in resource-id order.
   const loom_low_schedule_resource_summary_t* resource_summaries;
   // Number of resource summary records.

@@ -63,28 +63,6 @@ static const char* loom_low_schedule_json_dependency_kind(
   }
 }
 
-static const char* loom_low_schedule_json_resource_kind(
-    loom_low_resource_kind_t kind) {
-  switch (kind) {
-    case LOOM_LOW_RESOURCE_KIND_SCALAR_ALU:
-      return "scalar_alu";
-    case LOOM_LOW_RESOURCE_KIND_VECTOR_ALU:
-      return "vector_alu";
-    case LOOM_LOW_RESOURCE_KIND_MATRIX:
-      return "matrix";
-    case LOOM_LOW_RESOURCE_KIND_LOAD:
-      return "load";
-    case LOOM_LOW_RESOURCE_KIND_STORE:
-      return "store";
-    case LOOM_LOW_RESOURCE_KIND_CONTROL:
-      return "control";
-    case LOOM_LOW_RESOURCE_KIND_ADDRESS:
-      return "address";
-    default:
-      return "unknown";
-  }
-}
-
 static iree_status_t loom_low_schedule_json_write_nullable_string(
     loom_output_stream_t* stream, iree_string_view_t value) {
   if (iree_string_view_is_empty(value)) {
@@ -120,9 +98,12 @@ iree_status_t loom_low_schedule_format_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
       ",\"block_count\":%zu,\"node_count\":%zu,\"dependency_count\":%zu"
-      ",\"resource_use_count\":%zu,\"resource_summary_count\":%zu",
+      ",\"resource_use_count\":%zu,\"hazard_use_count\":%zu"
+      ",\"hazard_gap_count\":%zu"
+      ",\"resource_summary_count\":%zu",
       sidecar->block_count, sidecar->node_count, sidecar->dependency_count,
-      sidecar->resource_use_count, sidecar->resource_summary_count));
+      sidecar->resource_use_count, sidecar->hazard_use_count,
+      sidecar->hazard_gap_count, sidecar->resource_summary_count));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"blocks\":["));
@@ -169,8 +150,9 @@ iree_status_t loom_low_schedule_format_json(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         &stream,
         ",\"latency_cycles\":%" PRIu16 ",\"issue_use_count\":%" PRIu16
-        ",\"effect_count\":%" PRIu16 "}",
-        node->latency_cycles, node->issue_use_count, node->effect_count));
+        ",\"hazard_count\":%" PRIu16 ",\"effect_count\":%" PRIu16 "}",
+        node->latency_cycles, node->issue_use_count, node->hazard_count,
+        node->effect_count));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
 
@@ -251,18 +233,102 @@ iree_status_t loom_low_schedule_format_json(
           resource_use->resource_id));
       IREE_RETURN_IF_ERROR(
           loom_json_write_escaped_string(&stream, resource_use->resource_name));
+      iree_string_view_t resource_kind_name =
+          loom_low_resource_kind_name(resource_use->resource_kind);
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
           &stream,
           ",\"resource_kind\":%u,\"resource_kind_name\":"
-          "\"%s\",\"resource_flags\":%" PRIu16
+          "\"%.*s\",\"resource_flags\":%" PRIu16
           ",\"capacity_per_cycle\":%" PRIu16 ",\"contention_group\":%" PRIu16
           ",\"stage\":%" PRIu16 ",\"cycles\":%" PRIu16 ",\"units\":%" PRIu16
           "}",
-          (unsigned)resource_use->resource_kind,
-          loom_low_schedule_json_resource_kind(resource_use->resource_kind),
-          resource_use->resource_flags, resource_use->capacity_per_cycle,
-          resource_use->contention_group_id, resource_use->stage,
-          resource_use->cycles, resource_use->units));
+          (unsigned)resource_use->resource_kind, (int)resource_kind_name.size,
+          resource_kind_name.data, resource_use->resource_flags,
+          resource_use->capacity_per_cycle, resource_use->contention_group_id,
+          resource_use->stage, resource_use->cycles, resource_use->units));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+  }
+
+  if (sidecar->hazard_use_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"scheduled_hazard_uses\":["));
+    for (iree_host_size_t i = 0; i < sidecar->hazard_use_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      const loom_low_schedule_hazard_use_t* hazard_use =
+          &sidecar->hazard_uses[i];
+      iree_string_view_t hazard_kind_name =
+          loom_low_hazard_kind_name(hazard_use->kind);
+      iree_string_view_t reference_kind_name =
+          loom_low_hazard_reference_kind_name(hazard_use->reference_kind);
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream,
+          "{\"node\":%" PRIu32 ",\"block\":%" PRIu32
+          ",\"scheduled_ordinal\":%" PRIu32 ",\"hazard_ordinal\":%" PRIu16
+          ",\"kind\":%u,\"kind_name\":\"%.*s\",\"reference_kind\":%u"
+          ",\"reference_kind_name\":\"%.*s\",\"reference\":%" PRIu16
+          ",\"resource_name\":",
+          hazard_use->node_index, hazard_use->block_index,
+          hazard_use->scheduled_ordinal, hazard_use->hazard_ordinal,
+          (unsigned)hazard_use->kind, (int)hazard_kind_name.size,
+          hazard_kind_name.data, (unsigned)hazard_use->reference_kind,
+          (int)reference_kind_name.size, reference_kind_name.data,
+          hazard_use->reference_id));
+      IREE_RETURN_IF_ERROR(loom_low_schedule_json_write_nullable_string(
+          &stream, hazard_use->resource_name));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream,
+          ",\"producer_stage\":%" PRIu16 ",\"consumer_stage\":%" PRIu16
+          ",\"distance\":%" PRIu16 ",\"hazard_flags\":%" PRIu16 "}",
+          hazard_use->producer_stage, hazard_use->consumer_stage,
+          hazard_use->distance, hazard_use->hazard_flags));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+  }
+
+  if (sidecar->hazard_gap_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"scheduled_hazard_gaps\":["));
+    for (iree_host_size_t i = 0; i < sidecar->hazard_gap_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      const loom_low_schedule_hazard_gap_t* hazard_gap =
+          &sidecar->hazard_gaps[i];
+      iree_string_view_t hazard_kind_name =
+          loom_low_hazard_kind_name(hazard_gap->kind);
+      iree_string_view_t reference_kind_name =
+          loom_low_hazard_reference_kind_name(hazard_gap->reference_kind);
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream,
+          "{\"producer_node\":%" PRIu32 ",\"consumer_node\":%" PRIu32
+          ",\"block\":%" PRIu32 ",\"producer_scheduled_ordinal\":%" PRIu32
+          ",\"consumer_scheduled_ordinal\":%" PRIu32
+          ",\"producer_hazard_ordinal\":%" PRIu16
+          ",\"consumer_hazard_ordinal\":%" PRIu16
+          ",\"kind\":%u,\"kind_name\":\"%.*s\",\"reference_kind\":%u"
+          ",\"reference_kind_name\":\"%.*s\",\"reference\":%" PRIu16
+          ",\"resource_name\":",
+          hazard_gap->producer_node, hazard_gap->consumer_node,
+          hazard_gap->block_index, hazard_gap->producer_scheduled_ordinal,
+          hazard_gap->consumer_scheduled_ordinal,
+          hazard_gap->producer_hazard_ordinal,
+          hazard_gap->consumer_hazard_ordinal, (unsigned)hazard_gap->kind,
+          (int)hazard_kind_name.size, hazard_kind_name.data,
+          (unsigned)hazard_gap->reference_kind, (int)reference_kind_name.size,
+          reference_kind_name.data, hazard_gap->reference_id));
+      IREE_RETURN_IF_ERROR(loom_low_schedule_json_write_nullable_string(
+          &stream, hazard_gap->resource_name));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream,
+          ",\"producer_stage\":%" PRIu16 ",\"consumer_stage\":%" PRIu16
+          ",\"required_distance\":%" PRIu16 ",\"actual_distance\":%" PRIu32
+          ",\"required_delay\":%" PRIu16 ",\"hazard_flags\":%" PRIu16 "}",
+          hazard_gap->producer_stage, hazard_gap->consumer_stage,
+          hazard_gap->required_distance, hazard_gap->actual_distance,
+          hazard_gap->required_delay, hazard_gap->hazard_flags));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }
@@ -281,20 +347,22 @@ iree_status_t loom_low_schedule_format_json(
           summary->resource_id));
       IREE_RETURN_IF_ERROR(
           loom_json_write_escaped_string(&stream, summary->resource_name));
+      iree_string_view_t resource_kind_name =
+          loom_low_resource_kind_name(summary->resource_kind);
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
           &stream,
           ",\"resource_kind\":%u,\"resource_kind_name\":"
-          "\"%s\",\"resource_flags\":%" PRIu16
+          "\"%.*s\",\"resource_flags\":%" PRIu16
           ",\"capacity_per_cycle\":%" PRIu16 ",\"contention_group\":%" PRIu16
           ",\"use_count\":%" PRIu32 ",\"total_occupied_cycles\":%" PRIu64
           ",\"total_unit_cycles\":%" PRIu64 ",\"estimated_min_cycles\":%" PRIu64
           ",\"peak_units_per_cycle\":%" PRIu16 "}",
-          (unsigned)summary->resource_kind,
-          loom_low_schedule_json_resource_kind(summary->resource_kind),
-          summary->resource_flags, summary->capacity_per_cycle,
-          summary->contention_group_id, summary->use_count,
-          summary->total_occupied_cycles, summary->total_unit_cycles,
-          summary->estimated_min_cycles, summary->peak_units_per_cycle));
+          (unsigned)summary->resource_kind, (int)resource_kind_name.size,
+          resource_kind_name.data, summary->resource_flags,
+          summary->capacity_per_cycle, summary->contention_group_id,
+          summary->use_count, summary->total_occupied_cycles,
+          summary->total_unit_cycles, summary->estimated_min_cycles,
+          summary->peak_units_per_cycle));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }

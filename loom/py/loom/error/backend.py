@@ -342,6 +342,37 @@ ERR_BACKEND_013 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_014: Schedule hazard gap requires downstream materialization.
+ERR_BACKEND_014 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=14,
+    severity=Severity.REMARK,
+    summary="Schedule hazard gap requires materialization.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' descriptor '{descriptor_key}' has unresolved "
+        "{hazard_kind} hazard on {reference_kind} '{reference_name}': "
+        "requires distance {required_distance}, schedule distance "
+        "{actual_distance}, and delay/wait {required_delay} cycle(s) between "
+        "packet {producer_packet} and packet {consumer_packet}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("descriptor_key", ParamKind.STRING),
+        ErrorParam("hazard_kind", ParamKind.STRING),
+        ErrorParam("reference_kind", ParamKind.STRING),
+        ErrorParam("reference_name", ParamKind.STRING),
+        ErrorParam("required_distance", ParamKind.U32),
+        ErrorParam("actual_distance", ParamKind.U32),
+        ErrorParam("required_delay", ParamKind.U32),
+        ErrorParam("producer_packet", ParamKind.U32),
+        ErrorParam("consumer_packet", ParamKind.U32),
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_001,
     ERR_BACKEND_002,
@@ -356,4 +387,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_011,
     ERR_BACKEND_012,
     ERR_BACKEND_013,
+    ERR_BACKEND_014,
 )

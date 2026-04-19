@@ -162,7 +162,8 @@ void InitializeTestTables(TestTables* tables) {
   tables->issue_uses[0].units = 1;
 
   tables->hazards[0].kind = LOOM_LOW_HAZARD_KIND_MIN_DISTANCE;
-  tables->hazards[0].resource_or_counter_id = 0;
+  tables->hazards[0].reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE;
+  tables->hazards[0].reference_id = 0;
   tables->hazards[0].producer_stage = 1;
   tables->hazards[0].consumer_stage = 3;
   tables->hazards[0].distance = 2;
@@ -322,6 +323,219 @@ const loom_low_descriptor_set_t* ProvideTestDescriptorSet(void) {
 
 const loom_low_descriptor_set_t* ProvideNullDescriptorSet(void) {
   return nullptr;
+}
+
+std::string StringViewToString(iree_string_view_t value) {
+  return std::string(value.data, value.size);
+}
+
+TEST(LowDescriptorsTest, EnumNamesAreStableDiagnosticSpellings) {
+  EXPECT_EQ(StringViewToString(
+                loom_low_operand_role_name(LOOM_LOW_OPERAND_ROLE_UNKNOWN)),
+            "unknown");
+  EXPECT_EQ(StringViewToString(
+                loom_low_operand_role_name(LOOM_LOW_OPERAND_ROLE_RESULT)),
+            "result");
+  EXPECT_EQ(StringViewToString(
+                loom_low_operand_role_name(LOOM_LOW_OPERAND_ROLE_OPERAND)),
+            "operand");
+  EXPECT_EQ(StringViewToString(loom_low_operand_role_name(
+                LOOM_LOW_OPERAND_ROLE_OPERAND_RESULT)),
+            "operand_result");
+  EXPECT_EQ(StringViewToString(
+                loom_low_operand_role_name(LOOM_LOW_OPERAND_ROLE_PREDICATE)),
+            "predicate");
+  EXPECT_EQ(StringViewToString(
+                loom_low_operand_role_name(LOOM_LOW_OPERAND_ROLE_RESOURCE)),
+            "resource");
+  EXPECT_EQ(StringViewToString(
+                loom_low_operand_role_name(LOOM_LOW_OPERAND_ROLE_IMPLICIT)),
+            "implicit");
+
+  EXPECT_EQ(StringViewToString(
+                loom_low_immediate_kind_name(LOOM_LOW_IMMEDIATE_KIND_UNKNOWN)),
+            "unknown");
+  EXPECT_EQ(StringViewToString(
+                loom_low_immediate_kind_name(LOOM_LOW_IMMEDIATE_KIND_SIGNED)),
+            "signed");
+  EXPECT_EQ(StringViewToString(
+                loom_low_immediate_kind_name(LOOM_LOW_IMMEDIATE_KIND_UNSIGNED)),
+            "unsigned");
+  EXPECT_EQ(StringViewToString(
+                loom_low_immediate_kind_name(LOOM_LOW_IMMEDIATE_KIND_ORDINAL)),
+            "ordinal");
+  EXPECT_EQ(StringViewToString(
+                loom_low_immediate_kind_name(LOOM_LOW_IMMEDIATE_KIND_ENUM)),
+            "enum");
+
+  EXPECT_EQ(StringViewToString(
+                loom_low_effect_kind_name(LOOM_LOW_EFFECT_KIND_UNKNOWN)),
+            "unknown");
+  EXPECT_EQ(
+      StringViewToString(loom_low_effect_kind_name(LOOM_LOW_EFFECT_KIND_READ)),
+      "read");
+  EXPECT_EQ(
+      StringViewToString(loom_low_effect_kind_name(LOOM_LOW_EFFECT_KIND_WRITE)),
+      "write");
+  EXPECT_EQ(
+      StringViewToString(loom_low_effect_kind_name(LOOM_LOW_EFFECT_KIND_CALL)),
+      "call");
+  EXPECT_EQ(StringViewToString(
+                loom_low_effect_kind_name(LOOM_LOW_EFFECT_KIND_BARRIER)),
+            "barrier");
+  EXPECT_EQ(StringViewToString(
+                loom_low_effect_kind_name(LOOM_LOW_EFFECT_KIND_COUNTER)),
+            "counter");
+  EXPECT_EQ(StringViewToString(
+                loom_low_effect_kind_name(LOOM_LOW_EFFECT_KIND_CONVERGENT)),
+            "convergent");
+  EXPECT_EQ(StringViewToString(
+                loom_low_effect_kind_name(LOOM_LOW_EFFECT_KIND_CONTROL)),
+            "control");
+
+  EXPECT_EQ(StringViewToString(
+                loom_low_memory_space_name(LOOM_LOW_MEMORY_SPACE_NONE)),
+            "none");
+  EXPECT_EQ(StringViewToString(
+                loom_low_memory_space_name(LOOM_LOW_MEMORY_SPACE_GENERIC)),
+            "generic");
+  EXPECT_EQ(StringViewToString(
+                loom_low_memory_space_name(LOOM_LOW_MEMORY_SPACE_GLOBAL)),
+            "global");
+  EXPECT_EQ(StringViewToString(
+                loom_low_memory_space_name(LOOM_LOW_MEMORY_SPACE_WORKGROUP)),
+            "workgroup");
+  EXPECT_EQ(StringViewToString(
+                loom_low_memory_space_name(LOOM_LOW_MEMORY_SPACE_STACK)),
+            "stack");
+  EXPECT_EQ(StringViewToString(
+                loom_low_memory_space_name(LOOM_LOW_MEMORY_SPACE_VM_REF)),
+            "vm_ref");
+  EXPECT_EQ(StringViewToString(
+                loom_low_memory_space_name(LOOM_LOW_MEMORY_SPACE_WASM_MEMORY)),
+            "wasm_memory");
+
+  EXPECT_EQ(StringViewToString(loom_low_spill_slot_space_name(
+                LOOM_LOW_SPILL_SLOT_SPACE_STACK)),
+            "stack");
+  EXPECT_EQ(StringViewToString(loom_low_spill_slot_space_name(
+                LOOM_LOW_SPILL_SLOT_SPACE_SCRATCH)),
+            "scratch");
+  EXPECT_EQ(StringViewToString(loom_low_spill_slot_space_name(
+                LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE)),
+            "private");
+  EXPECT_EQ(StringViewToString(
+                loom_low_spill_slot_space_name(LOOM_LOW_SPILL_SLOT_SPACE_LDS)),
+            "lds");
+  EXPECT_TRUE(
+      loom_low_spill_slot_space_is_valid(LOOM_LOW_SPILL_SLOT_SPACE_STACK));
+  EXPECT_FALSE(loom_low_spill_slot_space_is_valid(
+      static_cast<loom_low_spill_slot_space_t>(99)));
+
+  EXPECT_EQ(StringViewToString(loom_low_constraint_kind_name(
+                LOOM_LOW_CONSTRAINT_KIND_UNKNOWN)),
+            "unknown");
+  EXPECT_EQ(StringViewToString(
+                loom_low_constraint_kind_name(LOOM_LOW_CONSTRAINT_KIND_TIED)),
+            "tied");
+  EXPECT_EQ(StringViewToString(loom_low_constraint_kind_name(
+                LOOM_LOW_CONSTRAINT_KIND_COMMUTABLE)),
+            "commutable");
+  EXPECT_EQ(StringViewToString(loom_low_constraint_kind_name(
+                LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE)),
+            "destructive");
+  EXPECT_EQ(StringViewToString(loom_low_constraint_kind_name(
+                LOOM_LOW_CONSTRAINT_KIND_EARLY_CLOBBER)),
+            "early_clobber");
+  EXPECT_EQ(StringViewToString(loom_low_constraint_kind_name(
+                LOOM_LOW_CONSTRAINT_KIND_REMATERIALIZABLE)),
+            "rematerializable");
+  EXPECT_EQ(StringViewToString(loom_low_constraint_kind_name(
+                LOOM_LOW_CONSTRAINT_KIND_FOLDABLE)),
+            "foldable");
+
+  EXPECT_EQ(StringViewToString(
+                loom_low_latency_kind_name(LOOM_LOW_LATENCY_KIND_UNKNOWN)),
+            "unknown");
+  EXPECT_EQ(StringViewToString(
+                loom_low_latency_kind_name(LOOM_LOW_LATENCY_KIND_EXACT)),
+            "exact");
+  EXPECT_EQ(StringViewToString(
+                loom_low_latency_kind_name(LOOM_LOW_LATENCY_KIND_ESTIMATE)),
+            "estimate");
+  EXPECT_EQ(StringViewToString(
+                loom_low_latency_kind_name(LOOM_LOW_LATENCY_KIND_VARIABLE)),
+            "variable");
+
+  EXPECT_EQ(StringViewToString(
+                loom_low_model_quality_name(LOOM_LOW_MODEL_QUALITY_UNKNOWN)),
+            "unknown");
+  EXPECT_EQ(StringViewToString(
+                loom_low_model_quality_name(LOOM_LOW_MODEL_QUALITY_EXACT)),
+            "exact");
+  EXPECT_EQ(StringViewToString(
+                loom_low_model_quality_name(LOOM_LOW_MODEL_QUALITY_CALIBRATED)),
+            "calibrated");
+  EXPECT_EQ(StringViewToString(
+                loom_low_model_quality_name(LOOM_LOW_MODEL_QUALITY_ESTIMATED)),
+            "estimated");
+  EXPECT_EQ(StringViewToString(
+                loom_low_model_quality_name(LOOM_LOW_MODEL_QUALITY_FALLBACK)),
+            "fallback");
+
+  EXPECT_EQ(StringViewToString(
+                loom_low_resource_kind_name(LOOM_LOW_RESOURCE_KIND_UNKNOWN)),
+            "unknown");
+  EXPECT_EQ(StringViewToString(
+                loom_low_resource_kind_name(LOOM_LOW_RESOURCE_KIND_SCALAR_ALU)),
+            "scalar_alu");
+  EXPECT_EQ(StringViewToString(
+                loom_low_resource_kind_name(LOOM_LOW_RESOURCE_KIND_VECTOR_ALU)),
+            "vector_alu");
+  EXPECT_EQ(StringViewToString(
+                loom_low_resource_kind_name(LOOM_LOW_RESOURCE_KIND_MATRIX)),
+            "matrix");
+  EXPECT_EQ(StringViewToString(
+                loom_low_resource_kind_name(LOOM_LOW_RESOURCE_KIND_LOAD)),
+            "load");
+  EXPECT_EQ(StringViewToString(
+                loom_low_resource_kind_name(LOOM_LOW_RESOURCE_KIND_STORE)),
+            "store");
+  EXPECT_EQ(StringViewToString(
+                loom_low_resource_kind_name(LOOM_LOW_RESOURCE_KIND_CONTROL)),
+            "control");
+  EXPECT_EQ(StringViewToString(
+                loom_low_resource_kind_name(LOOM_LOW_RESOURCE_KIND_ADDRESS)),
+            "address");
+
+  EXPECT_EQ(StringViewToString(
+                loom_low_hazard_kind_name(LOOM_LOW_HAZARD_KIND_UNKNOWN)),
+            "unknown");
+  EXPECT_EQ(StringViewToString(
+                loom_low_hazard_kind_name(LOOM_LOW_HAZARD_KIND_MIN_DISTANCE)),
+            "min_distance");
+  EXPECT_EQ(StringViewToString(
+                loom_low_hazard_kind_name(LOOM_LOW_HAZARD_KIND_WAIT_COUNTER)),
+            "wait_counter");
+  EXPECT_EQ(StringViewToString(
+                loom_low_hazard_kind_name(LOOM_LOW_HAZARD_KIND_BYPASS)),
+            "bypass");
+  EXPECT_EQ(StringViewToString(
+                loom_low_hazard_kind_name(LOOM_LOW_HAZARD_KIND_FUSION)),
+            "fusion");
+
+  EXPECT_EQ(StringViewToString(loom_low_hazard_reference_kind_name(
+                LOOM_LOW_HAZARD_REFERENCE_KIND_UNKNOWN)),
+            "unknown");
+  EXPECT_EQ(StringViewToString(loom_low_hazard_reference_kind_name(
+                LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE)),
+            "resource");
+  EXPECT_EQ(StringViewToString(loom_low_hazard_reference_kind_name(
+                LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER)),
+            "counter");
+  EXPECT_EQ(StringViewToString(loom_low_hazard_reference_kind_name(
+                LOOM_LOW_HAZARD_REFERENCE_KIND_TARGET)),
+            "target");
 }
 
 TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
@@ -733,6 +947,27 @@ TEST(LowDescriptorsTest, RejectsInvalidHazardKind) {
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsInvalidHazardReferenceKind) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.hazards[0].reference_kind =
+      static_cast<loom_low_hazard_reference_kind_t>(99);
+  tables.set.hazard_count = 1;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsOutOfRangeHazardResource) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.hazards[0].reference_id = 1;
+  tables.set.hazard_count = 1;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE, status);
 }
 
 TEST(LowDescriptorsTest, AcceptsSideEffectingReadEffect) {
@@ -1225,7 +1460,9 @@ TEST(LowDescriptorsTest, FormatsManifestJson) {
   EXPECT_NE(json.find("\"hazard_rows\":[{\"index\":0,\"kind\":1,"
                       "\"kind_name\":\"min_distance\""),
             std::string::npos);
-  EXPECT_NE(json.find("\"resource_or_counter\":0,\"producer_stage\":1,"
+  EXPECT_NE(json.find("\"reference_kind\":1,\"reference_kind_name\":"
+                      "\"resource\",\"reference\":0,"
+                      "\"reference_name\":\"test.alu\",\"producer_stage\":1,"
                       "\"consumer_stage\":3,\"distance\":2"),
             std::string::npos);
   EXPECT_NE(json.find("\"pressure_delta_rows\":[{\"index\":0,\"reg_class\":0,"

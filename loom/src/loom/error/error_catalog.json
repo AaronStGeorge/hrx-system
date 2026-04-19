@@ -4982,5 +4982,82 @@
         "kind_name": "U32"
       }
     ]
+  },
+  {
+    "error_id": "ERR_BACKEND_014",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 14,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Schedule hazard gap requires materialization.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' descriptor '{descriptor_key}' has unresolved {hazard_kind} hazard on {reference_kind} '{reference_name}': requires distance {required_distance}, schedule distance {actual_distance}, and delay/wait {required_delay} cycle(s) between packet {producer_packet} and packet {consumer_packet}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "descriptor_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "hazard_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reference_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reference_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "required_distance",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_distance",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "required_delay",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "producer_packet",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "consumer_packet",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
   }
 ]

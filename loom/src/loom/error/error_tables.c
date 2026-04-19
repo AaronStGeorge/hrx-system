@@ -3406,6 +3406,39 @@ static const loom_error_def_t loom_err_backend_013 = {
     .param_count = 11,
 };
 
+static const loom_error_param_def_t loom_err_backend_014_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"descriptor_key", LOOM_PARAM_STRING},
+    {"hazard_kind", LOOM_PARAM_STRING},
+    {"reference_kind", LOOM_PARAM_STRING},
+    {"reference_name", LOOM_PARAM_STRING},
+    {"required_distance", LOOM_PARAM_U32},
+    {"actual_distance", LOOM_PARAM_U32},
+    {"required_delay", LOOM_PARAM_U32},
+    {"producer_packet", LOOM_PARAM_U32},
+    {"consumer_packet", LOOM_PARAM_U32},
+};
+static const loom_error_def_t loom_err_backend_014 = {
+    .error_id = "ERR_BACKEND_014",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 14,
+    .summary = "Schedule hazard gap requires materialization.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' descriptor '{descriptor_key}' has unresolved "
+        "{hazard_kind} hazard on {reference_kind} '{reference_name}': requires "
+        "distance {required_distance}, schedule distance {actual_distance}, "
+        "and delay/wait {required_delay} cycle(s) between packet "
+        "{producer_packet} and packet {consumer_packet}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_014_params,
+    .param_count = 13,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -3465,6 +3498,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_backend_005,   &loom_err_backend_006,   &loom_err_backend_007,
     &loom_err_backend_008,   &loom_err_backend_009,   &loom_err_backend_010,
     &loom_err_backend_011,   &loom_err_backend_012,   &loom_err_backend_013,
+    &loom_err_backend_014,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

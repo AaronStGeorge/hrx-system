@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 7
+LOW_DESCRIPTOR_SET_ABI_VERSION = 8
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 
@@ -140,6 +140,12 @@ class HazardKind(CEnum):
     FUSION = "LOOM_LOW_HAZARD_KIND_FUSION"
 
 
+class HazardReferenceKind(CEnum):
+    RESOURCE = "LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE"
+    COUNTER = "LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER"
+    TARGET = "LOOM_LOW_HAZARD_REFERENCE_KIND_TARGET"
+
+
 class DescriptorFlag(CEnum):
     SIDE_EFFECTING = "LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING"
     TERMINATOR = "LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR"
@@ -259,7 +265,9 @@ class Resource:
 @dataclass(frozen=True, slots=True)
 class Hazard:
     kind: HazardKind
-    resource_or_counter_id: int
+    resource: str | None = None
+    counter_id: int | None = None
+    target_id: int | None = None
     producer_stage: int = 0
     consumer_stage: int = 0
     distance: int = 0

@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 7u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 8u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -268,6 +268,17 @@ typedef enum loom_low_hazard_kind_e {
   LOOM_LOW_HAZARD_KIND_FUSION = 4,
 } loom_low_hazard_kind_t;
 
+typedef enum loom_low_hazard_reference_kind_e {
+  // Unknown or uninitialized hazard reference kind.
+  LOOM_LOW_HAZARD_REFERENCE_KIND_UNKNOWN = 0,
+  // Hazard reference id names a resource table row.
+  LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE = 1,
+  // Hazard reference id names a target counter.
+  LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER = 2,
+  // Hazard reference id is target-owned and interpreted by an overlay.
+  LOOM_LOW_HAZARD_REFERENCE_KIND_TARGET = 3,
+} loom_low_hazard_reference_kind_t;
+
 // Bitset of hazard flags.
 typedef uint16_t loom_low_hazard_flags_t;
 
@@ -427,8 +438,10 @@ typedef struct loom_low_resource_t {
 typedef struct loom_low_hazard_t {
   // Hazard kind used by schedule policy and verification.
   loom_low_hazard_kind_t kind;
+  // Interpretation of reference_id.
+  loom_low_hazard_reference_kind_t reference_kind;
   // Resource, counter, or target-owned hazard identifier.
-  uint16_t resource_or_counter_id;
+  uint16_t reference_id;
   // Producer pipeline stage participating in the hazard.
   uint16_t producer_stage;
   // Consumer pipeline stage participating in the hazard.
@@ -693,6 +706,47 @@ const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(
 // bounds.
 const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(
     const loom_low_descriptor_set_t* descriptor_set, uint32_t asm_form_ordinal);
+
+// Returns the stable diagnostic spelling for an operand role.
+iree_string_view_t loom_low_operand_role_name(loom_low_operand_role_t role);
+
+// Returns the stable diagnostic spelling for an immediate kind.
+iree_string_view_t loom_low_immediate_kind_name(loom_low_immediate_kind_t kind);
+
+// Returns the stable diagnostic spelling for an effect kind.
+iree_string_view_t loom_low_effect_kind_name(loom_low_effect_kind_t kind);
+
+// Returns the stable diagnostic spelling for a memory space.
+iree_string_view_t loom_low_memory_space_name(
+    loom_low_memory_space_t memory_space);
+
+// Returns the stable diagnostic spelling for a spill slot space.
+iree_string_view_t loom_low_spill_slot_space_name(
+    loom_low_spill_slot_space_t space);
+
+// Returns true if |space| is a known spill slot space.
+bool loom_low_spill_slot_space_is_valid(loom_low_spill_slot_space_t space);
+
+// Returns the stable diagnostic spelling for a constraint kind.
+iree_string_view_t loom_low_constraint_kind_name(
+    loom_low_constraint_kind_t kind);
+
+// Returns the stable diagnostic spelling for a latency kind.
+iree_string_view_t loom_low_latency_kind_name(loom_low_latency_kind_t kind);
+
+// Returns the stable diagnostic spelling for a model-quality kind.
+iree_string_view_t loom_low_model_quality_name(
+    loom_low_model_quality_t quality);
+
+// Returns the stable diagnostic spelling for a scheduler resource kind.
+iree_string_view_t loom_low_resource_kind_name(loom_low_resource_kind_t kind);
+
+// Returns the stable diagnostic spelling for a scheduler hazard kind.
+iree_string_view_t loom_low_hazard_kind_name(loom_low_hazard_kind_t kind);
+
+// Returns the stable diagnostic spelling for a scheduler hazard reference kind.
+iree_string_view_t loom_low_hazard_reference_kind_name(
+    loom_low_hazard_reference_kind_t kind);
 
 // Resolves a symbolic descriptor key to an ordinal in |descriptor_set|.
 iree_status_t loom_low_descriptor_set_lookup_descriptor(

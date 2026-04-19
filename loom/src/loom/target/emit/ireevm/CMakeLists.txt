@@ -38,6 +38,25 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    function_bytecode
+  HDRS
+    "function_bytecode.h"
+  SRCS
+    "function_bytecode.c"
+  DEPS
+    ::descriptors
+    iree::base
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     descriptors_test
@@ -48,6 +67,27 @@ loom_cc_test(
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::text_asm_roundtrip_test_util
     loom::src::loom::codegen::low::text_asm_test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    function_bytecode_test
+  SRCS
+    "function_bytecode_test.cc"
+  DEPS
+    ::descriptors
+    ::function_bytecode
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )

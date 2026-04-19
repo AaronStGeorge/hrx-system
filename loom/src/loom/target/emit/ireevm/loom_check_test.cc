@@ -143,5 +143,39 @@ TEST_F(IreeVmLoomCheckTest, AllocationJsonUsesVmRegisterClasses) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(IreeVmLoomCheckTest, PacketJsonUsesVmDescriptorsAndAllocation) {
+  loom_check_result_t result;
+  std::string source = "// RUN: emit low-packet-json @vm_mix vm.i32=2\n";
+  source += kVmMixedLowFunction;
+  source += "// ----\n";
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("ireevm_low.loom-test"), &result));
+
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"format\":\"loom.low.packet.v0\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"function\":\"vm_mix\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor_set\":\"iree.vm.core\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"iree.vm.add.i32\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"iree.vm.call.import.i32\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor_ordinal\":"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"encoding_id\":"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"name\":\"i32_value\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"kind\":\"signed\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"bit_width\":32"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"value\":7"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"kind\":\"spill_slot\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"successors\":[{\"index\":0,\"block\":1},"
+                               "{\"index\":1,\"block\":2}]"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 }  // namespace
 }  // namespace loom

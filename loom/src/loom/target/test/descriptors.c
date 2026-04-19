@@ -809,6 +809,18 @@ static const loom_low_issue_use_t kTestLowCoreIssueUses[] = {
     },
 };
 
+static const loom_low_hazard_t kTestLowCoreHazards[] = {
+    {
+        .kind = LOOM_LOW_HAZARD_KIND_MIN_DISTANCE,
+        .reference_kind = LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE,
+        .reference_id = 3,
+        .producer_stage = 1,
+        .consumer_stage = 1,
+        .distance = 2,
+        .flags = 0,
+    },
+};
+
 static const loom_low_schedule_class_t kTestLowCoreScheduleClasses[] = {
     {
         .name_string_offset = TEST_LOW_CORE_STRING_schedule_test_const,
@@ -856,7 +868,7 @@ static const loom_low_schedule_class_t kTestLowCoreScheduleClasses[] = {
         .issue_use_start = 2,
         .issue_use_count = 2,
         .hazard_start = 0,
-        .hazard_count = 0,
+        .hazard_count = 1,
         .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD,
         .model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK,
         .pressure_delta_start = 0,
@@ -868,7 +880,7 @@ static const loom_low_schedule_class_t kTestLowCoreScheduleClasses[] = {
         .latency_kind = LOOM_LOW_LATENCY_KIND_VARIABLE,
         .issue_use_start = 4,
         .issue_use_count = 2,
-        .hazard_start = 0,
+        .hazard_start = 1,
         .hazard_count = 0,
         .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE,
         .model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK,
@@ -881,7 +893,7 @@ static const loom_low_schedule_class_t kTestLowCoreScheduleClasses[] = {
         .latency_kind = LOOM_LOW_LATENCY_KIND_VARIABLE,
         .issue_use_start = 6,
         .issue_use_count = 1,
-        .hazard_start = 0,
+        .hazard_start = 1,
         .hazard_count = 0,
         .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_CALL,
         .model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK,
@@ -894,7 +906,7 @@ static const loom_low_schedule_class_t kTestLowCoreScheduleClasses[] = {
         .latency_kind = LOOM_LOW_LATENCY_KIND_EXACT,
         .issue_use_start = 7,
         .issue_use_count = 1,
-        .hazard_start = 0,
+        .hazard_start = 1,
         .hazard_count = 0,
         .flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL,
         .model_quality = LOOM_LOW_MODEL_QUALITY_EXACT,
@@ -1509,6 +1521,8 @@ static const loom_low_descriptor_set_t kTestLowCoreSet = {
     .issue_use_count = IREE_ARRAYSIZE(kTestLowCoreIssueUses),
     .resources = kTestLowCoreResources,
     .resource_count = IREE_ARRAYSIZE(kTestLowCoreResources),
+    .hazards = kTestLowCoreHazards,
+    .hazard_count = IREE_ARRAYSIZE(kTestLowCoreHazards),
     .asm_forms = kTestLowCoreAsmForms,
     .asm_form_count = IREE_ARRAYSIZE(kTestLowCoreAsmForms),
     .asm_operand_indices = kTestLowCoreAsmOperandIndices,

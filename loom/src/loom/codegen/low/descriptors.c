@@ -579,7 +579,7 @@ static bool loom_low_memory_space_is_valid(loom_low_memory_space_t space) {
   }
 }
 
-static bool loom_low_spill_slot_space_is_valid(uint8_t space) {
+bool loom_low_spill_slot_space_is_valid(loom_low_spill_slot_space_t space) {
   switch (space) {
     case LOOM_LOW_SPILL_SLOT_SPACE_STACK:
     case LOOM_LOW_SPILL_SLOT_SPACE_SCRATCH:
@@ -649,6 +649,18 @@ static bool loom_low_hazard_kind_is_valid(loom_low_hazard_kind_t kind) {
     case LOOM_LOW_HAZARD_KIND_WAIT_COUNTER:
     case LOOM_LOW_HAZARD_KIND_BYPASS:
     case LOOM_LOW_HAZARD_KIND_FUSION:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_low_hazard_reference_kind_is_valid(
+    loom_low_hazard_reference_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE:
+    case LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER:
+    case LOOM_LOW_HAZARD_REFERENCE_KIND_TARGET:
       return true;
     default:
       return false;
@@ -1039,7 +1051,8 @@ static iree_status_t loom_low_verify_reg_class(
                             " has zero allocation-unit width",
                             reg_class_index);
   }
-  if (!loom_low_spill_slot_space_is_valid(reg_class->spill_slot_space)) {
+  if (!loom_low_spill_slot_space_is_valid(
+          (loom_low_spill_slot_space_t)reg_class->spill_slot_space)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "low register class %" PRIu32 " has unknown spill slot space %u",
@@ -1266,8 +1279,9 @@ static iree_status_t loom_low_verify_constraint(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_verify_hazard(uint32_t hazard_index,
-                                            const loom_low_hazard_t* hazard) {
+static iree_status_t loom_low_verify_hazard(
+    const loom_low_descriptor_set_t* descriptor_set, uint32_t hazard_index) {
+  const loom_low_hazard_t* hazard = &descriptor_set->hazards[hazard_index];
   if (hazard->kind == LOOM_LOW_HAZARD_KIND_UNKNOWN) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low hazard %" PRIu32 " has unknown kind",
@@ -1277,6 +1291,25 @@ static iree_status_t loom_low_verify_hazard(uint32_t hazard_index,
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low hazard %" PRIu32 " has invalid kind %u",
                             hazard_index, (unsigned)hazard->kind);
+  }
+  if (hazard->reference_kind == LOOM_LOW_HAZARD_REFERENCE_KIND_UNKNOWN) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low hazard %" PRIu32 " has unknown reference kind",
+                            hazard_index);
+  }
+  if (!loom_low_hazard_reference_kind_is_valid(hazard->reference_kind)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low hazard %" PRIu32
+                            " has invalid reference kind %u",
+                            hazard_index, (unsigned)hazard->reference_kind);
+  }
+  if (hazard->reference_kind == LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE &&
+      hazard->reference_id >= descriptor_set->resource_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "low hazard %" PRIu32 " references resource %" PRIu16
+        " but only %" PRIu32 " resources exist",
+        hazard_index, hazard->reference_id, descriptor_set->resource_count);
   }
   return iree_ok_status();
 }
@@ -1355,8 +1388,7 @@ static iree_status_t loom_low_descriptor_set_append_string_field(
   return loom_low_append_json_string(builder, value);
 }
 
-static iree_string_view_t loom_low_operand_role_name(
-    loom_low_operand_role_t role) {
+iree_string_view_t loom_low_operand_role_name(loom_low_operand_role_t role) {
   switch (role) {
     case LOOM_LOW_OPERAND_ROLE_RESULT:
       return IREE_SV("result");
@@ -1375,7 +1407,7 @@ static iree_string_view_t loom_low_operand_role_name(
   }
 }
 
-static iree_string_view_t loom_low_immediate_kind_name(
+iree_string_view_t loom_low_immediate_kind_name(
     loom_low_immediate_kind_t kind) {
   switch (kind) {
     case LOOM_LOW_IMMEDIATE_KIND_SIGNED:
@@ -1391,8 +1423,7 @@ static iree_string_view_t loom_low_immediate_kind_name(
   }
 }
 
-static iree_string_view_t loom_low_effect_kind_name(
-    loom_low_effect_kind_t kind) {
+iree_string_view_t loom_low_effect_kind_name(loom_low_effect_kind_t kind) {
   switch (kind) {
     case LOOM_LOW_EFFECT_KIND_READ:
       return IREE_SV("read");
@@ -1413,7 +1444,7 @@ static iree_string_view_t loom_low_effect_kind_name(
   }
 }
 
-static iree_string_view_t loom_low_memory_space_name(
+iree_string_view_t loom_low_memory_space_name(
     loom_low_memory_space_t memory_space) {
   switch (memory_space) {
     case LOOM_LOW_MEMORY_SPACE_NONE:
@@ -1435,7 +1466,8 @@ static iree_string_view_t loom_low_memory_space_name(
   }
 }
 
-static iree_string_view_t loom_low_spill_slot_space_name(uint8_t space) {
+iree_string_view_t loom_low_spill_slot_space_name(
+    loom_low_spill_slot_space_t space) {
   switch (space) {
     case LOOM_LOW_SPILL_SLOT_SPACE_STACK:
       return IREE_SV("stack");
@@ -1450,7 +1482,7 @@ static iree_string_view_t loom_low_spill_slot_space_name(uint8_t space) {
   }
 }
 
-static iree_string_view_t loom_low_constraint_kind_name(
+iree_string_view_t loom_low_constraint_kind_name(
     loom_low_constraint_kind_t kind) {
   switch (kind) {
     case LOOM_LOW_CONSTRAINT_KIND_TIED:
@@ -1470,8 +1502,7 @@ static iree_string_view_t loom_low_constraint_kind_name(
   }
 }
 
-static iree_string_view_t loom_low_latency_kind_name(
-    loom_low_latency_kind_t kind) {
+iree_string_view_t loom_low_latency_kind_name(loom_low_latency_kind_t kind) {
   switch (kind) {
     case LOOM_LOW_LATENCY_KIND_EXACT:
       return IREE_SV("exact");
@@ -1484,7 +1515,7 @@ static iree_string_view_t loom_low_latency_kind_name(
   }
 }
 
-static iree_string_view_t loom_low_model_quality_name(
+iree_string_view_t loom_low_model_quality_name(
     loom_low_model_quality_t quality) {
   switch (quality) {
     case LOOM_LOW_MODEL_QUALITY_EXACT:
@@ -1500,8 +1531,7 @@ static iree_string_view_t loom_low_model_quality_name(
   }
 }
 
-static iree_string_view_t loom_low_resource_kind_name(
-    loom_low_resource_kind_t kind) {
+iree_string_view_t loom_low_resource_kind_name(loom_low_resource_kind_t kind) {
   switch (kind) {
     case LOOM_LOW_RESOURCE_KIND_SCALAR_ALU:
       return IREE_SV("scalar_alu");
@@ -1522,8 +1552,7 @@ static iree_string_view_t loom_low_resource_kind_name(
   }
 }
 
-static iree_string_view_t loom_low_hazard_kind_name(
-    loom_low_hazard_kind_t kind) {
+iree_string_view_t loom_low_hazard_kind_name(loom_low_hazard_kind_t kind) {
   switch (kind) {
     case LOOM_LOW_HAZARD_KIND_MIN_DISTANCE:
       return IREE_SV("min_distance");
@@ -1533,6 +1562,20 @@ static iree_string_view_t loom_low_hazard_kind_name(
       return IREE_SV("bypass");
     case LOOM_LOW_HAZARD_KIND_FUSION:
       return IREE_SV("fusion");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+iree_string_view_t loom_low_hazard_reference_kind_name(
+    loom_low_hazard_reference_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE:
+      return IREE_SV("resource");
+    case LOOM_LOW_HAZARD_REFERENCE_KIND_COUNTER:
+      return IREE_SV("counter");
+    case LOOM_LOW_HAZARD_REFERENCE_KIND_TARGET:
+      return IREE_SV("target");
     default:
       return IREE_SV("unknown");
   }
@@ -1637,6 +1680,24 @@ static iree_status_t loom_low_append_resource_ref(
       descriptor_set->resources[resource_id].name_string_offset);
 }
 
+static iree_status_t loom_low_append_hazard_reference(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, const loom_low_hazard_t* hazard) {
+  IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+      builder, "reference_kind", "reference_kind_name", hazard->reference_kind,
+      loom_low_hazard_reference_kind_name(hazard->reference_kind)));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder,
+      ",\"reference\":%" PRIu16 ",\"reference_name\":", hazard->reference_id));
+  if (hazard->reference_kind == LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE &&
+      hazard->reference_id < descriptor_set->resource_count) {
+    return loom_low_descriptor_set_append_string_value(
+        descriptor_set, builder,
+        descriptor_set->resources[hazard->reference_id].name_string_offset);
+  }
+  return loom_low_append_json_string(builder, IREE_SV(""));
+}
+
 static iree_status_t loom_low_append_reg_class_ref(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_builder_t* builder, uint16_t reg_class_id) {
@@ -1680,7 +1741,8 @@ static iree_status_t loom_low_append_manifest_reg_classes(
     IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
         builder, "spill_slot_space", "spill_slot_space_name",
         reg_class->spill_slot_space,
-        loom_low_spill_slot_space_name(reg_class->spill_slot_space)));
+        loom_low_spill_slot_space_name(
+            (loom_low_spill_slot_space_t)reg_class->spill_slot_space)));
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "}"));
   }
   return iree_string_builder_append_cstring(builder, "]");
@@ -1751,13 +1813,15 @@ static iree_status_t loom_low_append_manifest_hazard_rows(
     IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
         builder, "kind", "kind_name", hazard->kind,
         loom_low_hazard_kind_name(hazard->kind)));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    IREE_RETURN_IF_ERROR(
+        loom_low_append_hazard_reference(descriptor_set, builder, hazard));
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder,
-        ",\"resource_or_counter\":%" PRIu16 ",\"producer_stage\":%" PRIu16
-        ",\"consumer_stage\":%" PRIu16 ",\"distance\":%" PRIu16
-        ",\"flags\":%" PRIu16 "}",
-        hazard->resource_or_counter_id, hazard->producer_stage,
-        hazard->consumer_stage, hazard->distance, hazard->flags));
+        ",\"producer_stage\":%" PRIu16 ",\"consumer_stage\":%" PRIu16
+        ",\"distance\":%" PRIu16 ",\"flags\":%" PRIu16 "}",
+        hazard->producer_stage, hazard->consumer_stage, hazard->distance,
+        hazard->flags));
   }
   return iree_string_builder_append_cstring(builder, "]");
 }
@@ -2147,8 +2211,7 @@ iree_status_t loom_low_descriptor_set_verify(
     IREE_RETURN_IF_ERROR(loom_low_verify_resource(descriptor_set, i));
   }
   for (uint32_t i = 0; i < descriptor_set->hazard_count; ++i) {
-    IREE_RETURN_IF_ERROR(
-        loom_low_verify_hazard(i, &descriptor_set->hazards[i]));
+    IREE_RETURN_IF_ERROR(loom_low_verify_hazard(descriptor_set, i));
   }
   for (uint32_t i = 0; i < descriptor_set->pressure_delta_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_verify_pressure_delta(descriptor_set, i));

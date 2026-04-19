@@ -144,5 +144,37 @@ TEST_F(WasmLoomCheckTest, AllocationJsonUsesWasmRegisterClasses) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(WasmLoomCheckTest, PacketJsonUsesWasmDescriptorsAndAllocation) {
+  loom_check_result_t result;
+  std::string source = "// RUN: emit low-packet-json @wasm_mix\n";
+  source += kWasmMixedLowFunction;
+  source += "// ----\n";
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("wasm_low.loom-test"), &result));
+
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"format\":\"loom.low.packet.v0\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"function\":\"wasm_mix\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor_set\":\"wasm.core.simd128\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"wasm.v128.load\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"wasm.i32x4.add\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"wasm.v128.store\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"wasm.i32x4.mul\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"kind\":\"target_id\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"type\":\"reg<wasm.v128>\""),
+            std::string::npos);
+  EXPECT_EQ(actual_output.find("\"test.low.core\""), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 }  // namespace
 }  // namespace loom

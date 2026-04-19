@@ -9,6 +9,7 @@
 #include "loom/analysis/liveness_json.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_json.h"
+#include "loom/codegen/low/packet_json.h"
 #include "loom/codegen/low/schedule.h"
 #include "loom/codegen/low/schedule_json.h"
 #include "loom/codegen/low/text_asm.h"
@@ -42,6 +43,7 @@ typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST = 7,
   LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST = 8,
   LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON = 9,
+  LOOM_CHECK_EMIT_LOW_PACKET_JSON = 10,
 } loom_check_emit_format_t;
 
 #define LOOM_CHECK_LOW_ALLOCATION_MAX_BUDGETS 8
@@ -248,15 +250,19 @@ static iree_status_t loom_check_emit_parse_low_schedule_option(
   } else if (iree_string_view_equal(value, IREE_SV("resources"))) {
     request->low_schedule_diagnostic_flags =
         LOOM_LOW_SCHEDULE_DIAGNOSTIC_RESOURCE_BOTTLENECKS;
+  } else if (iree_string_view_equal(value, IREE_SV("hazards"))) {
+    request->low_schedule_diagnostic_flags =
+        LOOM_LOW_SCHEDULE_DIAGNOSTIC_HAZARD_GAPS;
   } else if (iree_string_view_equal(value, IREE_SV("all"))) {
     request->low_schedule_diagnostic_flags =
         LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS |
-        LOOM_LOW_SCHEDULE_DIAGNOSTIC_RESOURCE_BOTTLENECKS;
+        LOOM_LOW_SCHEDULE_DIAGNOSTIC_RESOURCE_BOTTLENECKS |
+        LOOM_LOW_SCHEDULE_DIAGNOSTIC_HAZARD_GAPS;
   } else {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "low-schedule-json option 'diagnostics' expected 'none', 'pressure', "
-        "'resources', or 'all', got '%.*s'",
+        "'resources', 'hazards', or 'all', got '%.*s'",
         (int)value.size, value.data);
   }
   request->has_low_schedule_diagnostics_option = true;
@@ -274,6 +280,56 @@ static iree_status_t loom_check_emit_parse_low_schedule_options(
     if (!iree_string_view_is_empty(token)) {
       IREE_RETURN_IF_ERROR(
           loom_check_emit_parse_low_schedule_option(token, request));
+    }
+    text = iree_string_view_trim(remaining);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_emit_parse_low_packet_option(
+    iree_string_view_t token, loom_check_emit_request_t* request) {
+  iree_string_view_t name = iree_string_view_empty();
+  iree_string_view_t value = iree_string_view_empty();
+  iree_string_view_split(token, '=', &name, &value);
+  name = iree_string_view_trim(name);
+  value = iree_string_view_trim(value);
+  if (iree_string_view_equal(name, IREE_SV("output"))) {
+    return loom_check_emit_parse_output_option(value, request);
+  }
+  if (iree_string_view_equal(name, IREE_SV("strategy"))) {
+    if (request->has_low_schedule_strategy_option) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "duplicate low-packet-json option 'strategy'");
+    }
+    if (iree_string_view_equal(value, IREE_SV("source"))) {
+      request->low_schedule_strategy =
+          LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY;
+    } else if (iree_string_view_equal(value, IREE_SV("pressure"))) {
+      request->low_schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE;
+    } else {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low-packet-json option 'strategy' expected 'source' or 'pressure', "
+          "got '%.*s'",
+          (int)value.size, value.data);
+    }
+    request->has_low_schedule_strategy_option = true;
+    return iree_ok_status();
+  }
+  return loom_check_emit_parse_low_allocation_budget(token, request);
+}
+
+static iree_status_t loom_check_emit_parse_low_packet_options(
+    iree_string_view_t text, loom_check_emit_request_t* request) {
+  text = iree_string_view_trim(text);
+  while (!iree_string_view_is_empty(text)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t remaining = iree_string_view_empty();
+    iree_string_view_split(text, ' ', &token, &remaining);
+    token = iree_string_view_trim(token);
+    if (!iree_string_view_is_empty(token)) {
+      IREE_RETURN_IF_ERROR(
+          loom_check_emit_parse_low_packet_option(token, request));
     }
     text = iree_string_view_trim(remaining);
   }
@@ -384,6 +440,28 @@ static iree_status_t loom_check_emit_parse_request(
     IREE_RETURN_IF_ERROR(
         loom_check_emit_parse_low_allocation_options(option_text, out_request));
     out_request->format = LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON;
+    return iree_ok_status();
+  } else if (iree_string_view_equal(target_name, IREE_SV("low-packet-json")) ||
+             iree_string_view_equal(target_name, IREE_SV("low-packet"))) {
+    iree_string_view_t symbol_name = iree_string_view_empty();
+    iree_string_view_t option_text = iree_string_view_empty();
+    iree_string_view_split(profile_name, ' ', &symbol_name, &option_text);
+    symbol_name = iree_string_view_trim(symbol_name);
+    option_text = iree_string_view_trim(option_text);
+    if (!iree_string_view_starts_with(symbol_name, IREE_SV("@"))) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low-packet-json requires a low function symbol "
+                              "name");
+    }
+    out_request->analysis_symbol_name =
+        iree_string_view_substr(symbol_name, 1, IREE_HOST_SIZE_MAX);
+    if (iree_string_view_is_empty(out_request->analysis_symbol_name)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low function symbol name is required");
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_check_emit_parse_low_packet_options(option_text, out_request));
+    out_request->format = LOOM_CHECK_EMIT_LOW_PACKET_JSON;
     return iree_ok_status();
   } else if (iree_string_view_equal(target_name,
                                     IREE_SV("low-descriptor-manifest")) ||
@@ -952,7 +1030,9 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
   loom_low_schedule_sidecar_t sidecar = {0};
   IREE_RETURN_IF_ERROR(loom_low_schedule_function(
       module, low_function, &options, analysis_arena, &sidecar));
-  if (suppress_output) return iree_ok_status();
+  if (suppress_output) {
+    return iree_ok_status();
+  }
   return loom_low_schedule_format_json(&sidecar, &result->actual_output);
 }
 
@@ -976,8 +1056,46 @@ static iree_status_t loom_check_emit_write_low_allocation_json(
   loom_low_allocation_sidecar_t sidecar = {0};
   IREE_RETURN_IF_ERROR(loom_low_allocate_function(
       module, low_function, &options, analysis_arena, &sidecar));
-  if (suppress_output) return iree_ok_status();
+  if (suppress_output) {
+    return iree_ok_status();
+  }
   return loom_low_allocation_format_json(&sidecar, &result->actual_output);
+}
+
+static iree_status_t loom_check_emit_write_low_packet_json(
+    const loom_module_t* module, iree_string_view_t symbol_name,
+    const loom_low_descriptor_registry_t* descriptor_registry,
+    loom_low_schedule_strategy_t strategy,
+    const loom_low_allocation_budget_t* budgets, iree_host_size_t budget_count,
+    iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* analysis_arena,
+    bool suppress_output, loom_check_result_t* result) {
+  const loom_op_t* low_function = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_check_emit_find_low_func_def(module, symbol_name, &low_function));
+  loom_low_schedule_options_t schedule_options = {
+      .descriptor_registry = descriptor_registry,
+      .emitter = emitter,
+      .diagnostic_flags = 0,
+      .strategy = strategy,
+  };
+  loom_low_schedule_sidecar_t schedule = {0};
+  IREE_RETURN_IF_ERROR(loom_low_schedule_function(
+      module, low_function, &schedule_options, analysis_arena, &schedule));
+  loom_low_allocation_options_t allocation_options = {
+      .descriptor_registry = descriptor_registry,
+      .budgets = budgets,
+      .budget_count = budget_count,
+      .emitter = emitter,
+      .diagnostic_flags = 0,
+  };
+  loom_low_allocation_sidecar_t allocation = {0};
+  IREE_RETURN_IF_ERROR(loom_low_allocate_function(
+      module, low_function, &allocation_options, analysis_arena, &allocation));
+  if (suppress_output) {
+    return iree_ok_status();
+  }
+  return loom_low_packet_format_json(&schedule, &allocation,
+                                     &result->actual_output);
 }
 
 iree_status_t loom_check_execute_emit(
@@ -1109,7 +1227,8 @@ iree_status_t loom_check_execute_emit(
 
   if (request.format == LOOM_CHECK_EMIT_LIVENESS_JSON ||
       request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON ||
-      request.format == LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON) {
+      request.format == LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON ||
+      request.format == LOOM_CHECK_EMIT_LOW_PACKET_JSON) {
     loom_source_entry_t source_entry = {0};
     loom_source_table_resolver_t resolver_data = {0};
     status = loom_check_source_resolver_for_case(
@@ -1145,7 +1264,8 @@ iree_status_t loom_check_execute_emit(
     }
     iree_host_size_t low_diagnostic_count = 0;
     if (request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON ||
-        request.format == LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON) {
+        request.format == LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON ||
+        request.format == LOOM_CHECK_EMIT_LOW_PACKET_JSON) {
       loom_check_diagnostic_emitter_capture_t low_diagnostic_capture = {
           .diagnostic_collector = &diagnostic_collector,
           .module = module,
@@ -1201,11 +1321,21 @@ iree_status_t loom_check_execute_emit(
                 .user_data = &pass_diagnostic_capture,
             },
             request.suppress_output, &diagnostic_arena, result);
-      } else {
+      } else if (request.format == LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON) {
         status = loom_check_emit_write_low_allocation_json(
             module, request.analysis_symbol_name, &low_registry.registry,
             request.low_allocation_budgets, request.low_allocation_budget_count,
             request.low_allocation_diagnostic_flags,
+            (iree_diagnostic_emitter_t){
+                .fn = loom_check_diagnostic_emitter_capture_emit,
+                .user_data = &pass_diagnostic_capture,
+            },
+            &diagnostic_arena, request.suppress_output, result);
+      } else {
+        status = loom_check_emit_write_low_packet_json(
+            module, request.analysis_symbol_name, &low_registry.registry,
+            request.low_schedule_strategy, request.low_allocation_budgets,
+            request.low_allocation_budget_count,
             (iree_diagnostic_emitter_t){
                 .fn = loom_check_diagnostic_emitter_capture_emit,
                 .user_data = &pass_diagnostic_capture,
@@ -1370,6 +1500,11 @@ iree_status_t loom_check_execute_emit(
         status = iree_make_status(
             IREE_STATUS_INTERNAL,
             "low allocation JSON emit should bypass LLVMIR lowering");
+        break;
+      case LOOM_CHECK_EMIT_LOW_PACKET_JSON:
+        status = iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "low packet JSON emit should bypass LLVMIR lowering");
         break;
       case LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST:
         status = iree_make_status(

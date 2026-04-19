@@ -59,7 +59,7 @@ typedef struct loom_low_allocation_class_capacity_t {
   // Number of bits in one allocation unit.
   uint16_t alloc_unit_bits;
   // Storage space used when this class spills.
-  uint8_t spill_slot_space;
+  loom_low_spill_slot_space_t spill_slot_space;
   // True when |max_units| is a hard allocation budget.
   bool is_bounded;
 } loom_low_allocation_class_capacity_t;
@@ -108,18 +108,6 @@ static bool loom_low_allocation_location_kind_is_known(
     case LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER:
     case LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID:
     case LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT:
-      return true;
-    default:
-      return false;
-  }
-}
-
-static bool loom_low_allocation_spill_slot_space_is_known(uint8_t space) {
-  switch (space) {
-    case LOOM_LOW_SPILL_SLOT_SPACE_STACK:
-    case LOOM_LOW_SPILL_SLOT_SPACE_SCRATCH:
-    case LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE:
-    case LOOM_LOW_SPILL_SLOT_SPACE_LDS:
       return true;
     default:
       return false;
@@ -304,7 +292,8 @@ static iree_status_t loom_low_allocation_class_capacity(
         .location_kind = loom_low_allocation_reg_class_location_kind(reg_class),
         .max_units = budget_units,
         .alloc_unit_bits = reg_class->alloc_unit_bits,
-        .spill_slot_space = reg_class->spill_slot_space,
+        .spill_slot_space =
+            (loom_low_spill_slot_space_t)reg_class->spill_slot_space,
         .is_bounded = true,
     };
     return iree_ok_status();
@@ -315,7 +304,8 @@ static iree_status_t loom_low_allocation_class_capacity(
         .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
         .max_units = reg_class->physical_count,
         .alloc_unit_bits = reg_class->alloc_unit_bits,
-        .spill_slot_space = reg_class->spill_slot_space,
+        .spill_slot_space =
+            (loom_low_spill_slot_space_t)reg_class->spill_slot_space,
         .is_bounded = true,
     };
     return iree_ok_status();
@@ -325,7 +315,8 @@ static iree_status_t loom_low_allocation_class_capacity(
       .location_kind = LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
       .max_units = UINT32_MAX,
       .alloc_unit_bits = reg_class->alloc_unit_bits,
-      .spill_slot_space = reg_class->spill_slot_space,
+      .spill_slot_space =
+          (loom_low_spill_slot_space_t)reg_class->spill_slot_space,
       .is_bounded = false,
   };
   return iree_ok_status();
@@ -483,7 +474,7 @@ static iree_status_t loom_low_allocation_spill_plan_layout(
 
 static iree_status_t loom_low_allocation_record_spill_plan(
     loom_low_allocation_build_state_t* state, uint32_t assignment_index,
-    uint16_t alloc_unit_bits, uint8_t spill_slot_space) {
+    uint16_t alloc_unit_bits, loom_low_spill_slot_space_t spill_slot_space) {
   const loom_low_allocation_assignment_t* assignment =
       &state->assignments[assignment_index];
   uint32_t byte_size = 0;
@@ -799,7 +790,7 @@ static iree_status_t loom_low_allocation_verify_spill_plan(
         "allocation spill plan %zu does not match referenced assignment",
         spill_plan_index);
   }
-  if (!loom_low_allocation_spill_slot_space_is_known(spill_plan->slot_space)) {
+  if (!loom_low_spill_slot_space_is_valid(spill_plan->slot_space)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "allocation spill plan %zu has unknown spill slot space %u",

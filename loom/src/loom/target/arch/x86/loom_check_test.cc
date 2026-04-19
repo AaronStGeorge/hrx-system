@@ -174,5 +174,47 @@ TEST_F(X86LoomCheckTest, AllocationJsonUsesX86PhysicalRegisterClasses) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(X86LoomCheckTest, PacketJsonUsesX86DescriptorsAndAllocation) {
+  loom_check_result_t result;
+  std::string source = "// RUN: emit low-packet-json @x86_mix x86.zmm=2\n";
+  source += kX86MixedLowFunction;
+  source += "// ----\n";
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("x86_low.loom-test"), &result));
+
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u)
+      << harness_.DetailString(result) << "\n"
+      << harness_.DiagnosticJsonString(result);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"format\":\"loom.low.packet.v0\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"function\":\"x86_mix\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor_set\":\"x86.avx512.core\""),
+            std::string::npos);
+  EXPECT_NE(
+      actual_output.find("\"descriptor\":\"x86.avx512.vmovdqu32.load.zmm\""),
+      std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"x86.avx512.vpaddd.zmm\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"x86.avx512.vpdpbusd.zmm\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor\":\"x86.avx512.vmovdqu32.store."
+                               "zmm\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor_ordinal\":"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"encoding_id\":"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"name\":\"disp32\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"kind\":\"signed\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"bit_width\":32"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"value\":64"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"kind\":\"physical_register\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"type\":\"reg<x86.zmm>\""), std::string::npos);
+  EXPECT_EQ(actual_output.find("\"test.low.core\""), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 }  // namespace
 }  // namespace loom

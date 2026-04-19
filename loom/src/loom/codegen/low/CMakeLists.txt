@@ -257,6 +257,44 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    packet
+  HDRS
+    "packet.h"
+  SRCS
+    "packet.c"
+  DEPS
+    ::allocation
+    ::descriptors
+    ::schedule
+    iree::base
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    packet_json
+  HDRS
+    "packet_json.h"
+  SRCS
+    "packet_json.c"
+  DEPS
+    ::allocation
+    ::descriptors
+    ::packet
+    ::schedule
+    iree::base
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     verify
   HDRS
     "verify.h"
@@ -282,6 +320,17 @@ loom_cc_test(
     "descriptors_test.cc"
   DEPS
     ::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    packet_test
+  SRCS
+    "packet_test.cc"
+  DEPS
+    ::packet
     iree::testing::gtest
     iree::testing::gtest_main
 )

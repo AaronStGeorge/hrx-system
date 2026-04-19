@@ -21,6 +21,8 @@ from loom.target.low_descriptors import (
     Effect,
     EffectFlag,
     EffectKind,
+    Hazard,
+    HazardKind,
     Immediate,
     ImmediateFlag,
     ImmediateKind,
@@ -270,6 +272,15 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             issue_uses=(
                 IssueUse(_RESOURCE_ADDRESS, cycles=1, units=1, stage=0),
                 IssueUse(_RESOURCE_LOAD, cycles=1, units=1, stage=1),
+            ),
+            hazards=(
+                Hazard(
+                    HazardKind.MIN_DISTANCE,
+                    resource=_RESOURCE_LOAD,
+                    producer_stage=1,
+                    consumer_stage=1,
+                    distance=2,
+                ),
             ),
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
