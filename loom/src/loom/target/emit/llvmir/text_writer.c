@@ -619,6 +619,8 @@ static const char* loom_llvmir_cast_op_spelling(loom_llvmir_cast_op_t op) {
       return "bitcast";
     case LOOM_LLVMIR_CAST_ADDRESS_SPACE_CAST:
       return "addrspacecast";
+    case LOOM_LLVMIR_CAST_PTR_TO_ADDR:
+      return "ptrtoaddr";
     default:
       return NULL;
   }

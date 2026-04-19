@@ -111,6 +111,8 @@ typedef enum loom_llvmir_cast_op_e {
   LOOM_LLVMIR_CAST_INT_TO_PTR = 10,
   LOOM_LLVMIR_CAST_BITCAST = 11,
   LOOM_LLVMIR_CAST_ADDRESS_SPACE_CAST = 12,
+  // Extracts address bits without capturing pointer provenance.
+  LOOM_LLVMIR_CAST_PTR_TO_ADDR = 13,
 } loom_llvmir_cast_op_t;
 
 typedef enum loom_llvmir_memory_flag_bits_e {

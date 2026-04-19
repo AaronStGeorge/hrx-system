@@ -1611,6 +1611,9 @@ static iree_status_t loom_llvmir_bitcode_cast_op(loom_llvmir_cast_op_t op,
     case LOOM_LLVMIR_CAST_ADDRESS_SPACE_CAST:
       *out_op = LOOM_LLVMIR_BITCODE_CAST_ADDRESS_SPACE_CAST;
       return iree_ok_status();
+    case LOOM_LLVMIR_CAST_PTR_TO_ADDR:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_PTR_TO_ADDR;
+      return iree_ok_status();
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown LLVM cast op");

@@ -54,6 +54,7 @@ iree_status_t loom_llvmir_declare_amdgcn_make_buffer_rsrc(
   loom_llvmir_type_id_t base_ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i16_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
       module, result_address_space, &result_ptr_type));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
@@ -62,6 +63,8 @@ iree_status_t loom_llvmir_declare_amdgcn_make_buffer_rsrc(
       loom_llvmir_module_get_integer_type(module, 16, &i16_type));
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 64, &i64_type));
 
   char name_buffer[64];
   int name_length = snprintf(name_buffer, sizeof(name_buffer),
@@ -97,7 +100,7 @@ iree_status_t loom_llvmir_declare_amdgcn_make_buffer_rsrc(
   loom_llvmir_parameter_desc_t stride_param = {.type_id = i16_type};
   IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
       *out_function, &stride_param, &ignored));
-  loom_llvmir_parameter_desc_t records_param = {.type_id = i32_type};
+  loom_llvmir_parameter_desc_t records_param = {.type_id = i64_type};
   IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
       *out_function, &records_param, &ignored));
   loom_llvmir_parameter_desc_t flags_param = {.type_id = i32_type};

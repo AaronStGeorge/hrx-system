@@ -203,6 +203,7 @@ typedef enum loom_llvmir_bitcode_cast_op_e {
   LOOM_LLVMIR_BITCODE_CAST_INT_TO_PTR = 10,
   LOOM_LLVMIR_BITCODE_CAST_BITCAST = 11,
   LOOM_LLVMIR_BITCODE_CAST_ADDRESS_SPACE_CAST = 12,
+  LOOM_LLVMIR_BITCODE_CAST_PTR_TO_ADDR = 13,
 } loom_llvmir_bitcode_cast_op_t;
 
 typedef enum loom_llvmir_bitcode_icmp_predicate_e {

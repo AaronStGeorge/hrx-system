@@ -115,6 +115,18 @@ static bool loom_llvmir_verify_type_is_pointer_like(
   return scalar_type && scalar_type->kind == LOOM_LLVMIR_TYPE_POINTER;
 }
 
+static bool loom_llvmir_verify_type_pointer_address_space(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type,
+    uint32_t* out_address_space) {
+  const loom_llvmir_type_t* scalar_type =
+      loom_llvmir_verify_scalar_type(module, type);
+  if (!scalar_type || scalar_type->kind != LOOM_LLVMIR_TYPE_POINTER) {
+    return false;
+  }
+  *out_address_space = scalar_type->address_space;
+  return true;
+}
+
 static bool loom_llvmir_verify_type_is_float_like(
     const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
   const loom_llvmir_type_t* scalar_type =
@@ -236,6 +248,154 @@ static bool loom_llvmir_verify_type_is_integer_or_pointer_like(
       loom_llvmir_verify_scalar_type(module, type);
   return element_type && (element_type->kind == LOOM_LLVMIR_TYPE_INTEGER ||
                           element_type->kind == LOOM_LLVMIR_TYPE_POINTER);
+}
+
+static bool loom_llvmir_verify_parse_data_layout_uint32_field(
+    iree_string_view_t* inout_text, bool required, uint32_t* out_value,
+    bool* out_present) {
+  *out_present = false;
+  *out_value = 0;
+  if (iree_string_view_is_empty(*inout_text)) {
+    return !required;
+  }
+
+  iree_string_view_t field = iree_string_view_empty();
+  iree_string_view_t remaining = iree_string_view_empty();
+  if (iree_string_view_split(*inout_text, ':', &field, &remaining) < 0) {
+    field = *inout_text;
+    remaining = iree_string_view_empty();
+  }
+  if (iree_string_view_is_empty(field) ||
+      !iree_string_view_atoi_uint32(field, out_value)) {
+    return false;
+  }
+  *inout_text = remaining;
+  *out_present = true;
+  return true;
+}
+
+static bool loom_llvmir_verify_parse_data_layout_pointer_entry(
+    iree_string_view_t token, uint32_t* out_address_space,
+    uint32_t* out_address_bit_width) {
+  if (!iree_string_view_consume_prefix_char(&token, 'p')) {
+    return false;
+  }
+
+  uint32_t address_space = 0;
+  if (!iree_string_view_consume_prefix_char(&token, ':')) {
+    iree_string_view_t address_space_text = iree_string_view_empty();
+    iree_string_view_t fields = iree_string_view_empty();
+    if (iree_string_view_split(token, ':', &address_space_text, &fields) < 0 ||
+        iree_string_view_is_empty(address_space_text) ||
+        !iree_string_view_atoi_uint32(address_space_text, &address_space)) {
+      return false;
+    }
+    token = fields;
+  }
+
+  uint32_t pointer_bit_width = 0;
+  bool present = false;
+  if (!loom_llvmir_verify_parse_data_layout_uint32_field(
+          &token, /*required=*/true, &pointer_bit_width, &present)) {
+    return false;
+  }
+
+  uint32_t abi_alignment = 0;
+  if (!loom_llvmir_verify_parse_data_layout_uint32_field(
+          &token, /*required=*/true, &abi_alignment, &present)) {
+    return false;
+  }
+
+  uint32_t preferred_alignment = 0;
+  if (!loom_llvmir_verify_parse_data_layout_uint32_field(
+          &token, /*required=*/false, &preferred_alignment, &present)) {
+    return false;
+  }
+
+  uint32_t address_bit_width = pointer_bit_width;
+  uint32_t parsed_address_bit_width = 0;
+  if (!loom_llvmir_verify_parse_data_layout_uint32_field(
+          &token, /*required=*/false, &parsed_address_bit_width, &present)) {
+    return false;
+  }
+  if (present) {
+    address_bit_width = parsed_address_bit_width;
+  }
+  if (!iree_string_view_is_empty(token)) {
+    return false;
+  }
+
+  *out_address_space = address_space;
+  *out_address_bit_width = address_bit_width;
+  return true;
+}
+
+static bool loom_llvmir_verify_pointer_address_bit_width(
+    const loom_llvmir_module_t* module, uint32_t address_space,
+    uint32_t* out_address_bit_width) {
+  uint32_t default_address_bit_width =
+      module->target_config.default_pointer_bitwidth;
+  if (default_address_bit_width == 0) {
+    default_address_bit_width = 64;
+  }
+  *out_address_bit_width = default_address_bit_width;
+
+  iree_string_view_t remaining = module->target_config.data_layout;
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t suffix = iree_string_view_empty();
+    if (iree_string_view_split(remaining, '-', &token, &suffix) < 0) {
+      token = remaining;
+      suffix = iree_string_view_empty();
+    }
+    remaining = suffix;
+
+    if (!iree_string_view_starts_with_char(token, 'p')) {
+      continue;
+    }
+
+    uint32_t entry_address_space = 0;
+    uint32_t entry_address_bit_width = 0;
+    if (!loom_llvmir_verify_parse_data_layout_pointer_entry(
+            token, &entry_address_space, &entry_address_bit_width)) {
+      return false;
+    }
+    if (entry_address_space == 0) {
+      default_address_bit_width = entry_address_bit_width;
+      *out_address_bit_width = default_address_bit_width;
+    }
+    if (entry_address_space == address_space) {
+      *out_address_bit_width = entry_address_bit_width;
+      return true;
+    }
+  }
+
+  *out_address_bit_width = default_address_bit_width;
+  return true;
+}
+
+static bool loom_llvmir_verify_ptrtoaddr(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* source_type,
+    const loom_llvmir_type_t* result_type) {
+  if (!loom_llvmir_verify_type_is_pointer_like(module, source_type) ||
+      !loom_llvmir_verify_type_is_int_like(module, result_type) ||
+      !loom_llvmir_verify_same_vector_shape(source_type, result_type)) {
+    return false;
+  }
+
+  uint32_t address_space = 0;
+  if (!loom_llvmir_verify_type_pointer_address_space(module, source_type,
+                                                     &address_space)) {
+    return false;
+  }
+  uint32_t expected_bit_width = 0;
+  if (!loom_llvmir_verify_pointer_address_bit_width(module, address_space,
+                                                    &expected_bit_width)) {
+    return false;
+  }
+  return expected_bit_width != 0 &&
+         loom_llvmir_verify_type_scalar_bit_width(module, result_type) ==
+             expected_bit_width;
 }
 
 static bool loom_llvmir_verify_icmp_predicate(
@@ -513,6 +673,8 @@ static bool loom_llvmir_verify_cast_is_valid(
       return loom_llvmir_verify_type_is_pointer_like(module, source_type) &&
              loom_llvmir_verify_type_is_int_like(module, result_type) &&
              loom_llvmir_verify_same_vector_shape(source_type, result_type);
+    case LOOM_LLVMIR_CAST_PTR_TO_ADDR:
+      return loom_llvmir_verify_ptrtoaddr(module, source_type, result_type);
     case LOOM_LLVMIR_CAST_INT_TO_PTR:
       return loom_llvmir_verify_type_is_int_like(module, source_type) &&
              loom_llvmir_verify_type_is_pointer_like(module, result_type) &&

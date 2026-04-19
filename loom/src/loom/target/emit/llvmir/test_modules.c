@@ -1523,6 +1523,15 @@ static iree_status_t loom_llvmir_test_populate_casts(
   IREE_RETURN_IF_ERROR(
       loom_llvmir_build_cast(entry,
                              &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("ptr_to_addr"),
+                                 .result_type = i64_type,
+                                 .op = LOOM_LLVMIR_CAST_PTR_TO_ADDR,
+                                 .value = pointer,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
                                  .result_name = IREE_SV("int_to_ptr"),
                                  .result_type = ptr_type,
                                  .op = LOOM_LLVMIR_CAST_INT_TO_PTR,
@@ -1615,6 +1624,7 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i16_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t v1f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t global_ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -1624,6 +1634,8 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
       loom_llvmir_module_get_integer_type(module, 16, &i16_type));
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 64, &i64_type));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_get_float_type(
       module, LOOM_LLVMIR_FLOAT_F32, &f32_type));
   IREE_RETURN_IF_ERROR(
@@ -1702,7 +1714,7 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
       module, i16_type, 0, &stride_zero));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
-      module, i32_type, profile->amdgpu_hal.required_workgroup_size.x,
+      module, i64_type, profile->amdgpu_hal.required_workgroup_size.x,
       &records));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
       module, i32_type, profile->amdgpu_hal.buffer_resource_flags, &flags));
@@ -2029,6 +2041,7 @@ static const char kCastsText[] =
     "  %fp_to_unsigned = fptoui float %scalar to i32\n"
     "  %fp_to_signed = fptosi float %scalar to i32\n"
     "  %ptr_to_int = ptrtoint ptr %pointer to i64\n"
+    "  %ptr_to_addr = ptrtoaddr ptr %pointer to i64\n"
     "  %int_to_ptr = inttoptr i64 %wide to ptr\n"
     "  %bits = bitcast float %scalar to i32\n"
     "  %global_pointer = addrspacecast ptr %pointer to ptr addrspace(1)\n"
@@ -2057,13 +2070,13 @@ static const char kAmdgpuIntrinsicsText[] =
     "@llvm.amdgcn.workitem.id.x()\n"
     "  %x.rsrc = call ptr addrspace(7) "
     "@llvm.amdgcn.make.buffer.rsrc.p7.p1(ptr addrspace(1) %x, i16 0, "
-    "i32 64, i32 159744)\n"
+    "i64 64, i32 159744)\n"
     "  %y.rsrc = call ptr addrspace(7) "
     "@llvm.amdgcn.make.buffer.rsrc.p7.p1(ptr addrspace(1) %y, i16 0, "
-    "i32 64, i32 159744)\n"
+    "i64 64, i32 159744)\n"
     "  %z.rsrc = call ptr addrspace(7) "
     "@llvm.amdgcn.make.buffer.rsrc.p7.p1(ptr addrspace(1) %z, i16 0, "
-    "i32 64, i32 159744)\n"
+    "i64 64, i32 159744)\n"
     "  %x.ptr = getelementptr float, ptr addrspace(7) %x.rsrc, i32 "
     "%tid\n"
     "  %y.ptr = getelementptr float, ptr addrspace(7) %y.rsrc, i32 "
@@ -2083,7 +2096,7 @@ static const char kAmdgpuIntrinsicsText[] =
     "declare i32 @llvm.amdgcn.workitem.id.x()\n"
     "\n"
     "declare ptr addrspace(7) @llvm.amdgcn.make.buffer.rsrc.p7.p1("
-    "ptr addrspace(1) readnone, i16, i32, i32)\n"
+    "ptr addrspace(1) readnone, i16, i64, i32)\n"
     "\n"
     "attributes #0 = { alwaysinline "
     "\"amdgpu-flat-work-group-size\"=\"64,64\" "

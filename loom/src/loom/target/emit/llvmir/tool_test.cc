@@ -267,6 +267,38 @@ TEST(LlvmIrToolTest, DisassemblesBitcodeBytes) {
   loom_llvmir_tool_output_deinitialize(&text, iree_allocator_system());
 }
 
+TEST(LlvmIrToolTest, DisassemblesAndVerifiesCastsBitcode) {
+  std::string bitcode;
+  IREE_ASSERT_OK(BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_CASTS, &bitcode));
+  TempFile bitcode_file(TempPath(".bc"));
+  IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
+
+  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvmir_tool_output_t text = {};
+  iree_status_t status = loom_llvmir_tool_disassemble_bitcode_file(
+      &toolchain, StringView(bitcode_file.path()), iree_allocator_system(),
+      &text);
+  if (IsToolUnavailable(status)) {
+    iree_status_ignore(status);
+    GTEST_SKIP() << "llvm-dis is unavailable in this test environment";
+  }
+  IREE_ASSERT_OK(status);
+
+  std::string disassembly = ToString(text);
+  EXPECT_NE(disassembly.find("ptrtoaddr ptr %pointer to i64"),
+            std::string::npos)
+      << disassembly;
+  loom_llvmir_tool_output_deinitialize(&text, iree_allocator_system());
+
+  status = loom_llvmir_tool_verify_bitcode_file(
+      &toolchain, StringView(bitcode_file.path()), iree_allocator_system());
+  if (IsToolUnavailable(status)) {
+    iree_status_ignore(status);
+    GTEST_SKIP() << "opt is unavailable in this test environment";
+  }
+  IREE_ASSERT_OK(status);
+}
+
 TEST(LlvmIrToolTest, CompilesX86Object) {
   std::string bitcode;
   IREE_ASSERT_OK(
