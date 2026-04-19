@@ -45,6 +45,8 @@ typedef struct loom_low_schedule_build_state_t {
   loom_low_schedule_candidate_decision_t* candidate_decisions;
   // Descriptor resource uses in scheduled order.
   loom_low_schedule_resource_use_t* resource_uses;
+  // Descriptor effects in scheduled order.
+  loom_low_schedule_effect_use_t* effect_uses;
   // Descriptor hazard rows in scheduled order.
   loom_low_schedule_hazard_use_t* hazard_uses;
   // Minimum-distance hazard gaps in scheduled order.
@@ -70,6 +72,8 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t candidate_decision_count;
   // Number of populated resource_uses entries.
   iree_host_size_t resource_use_count;
+  // Number of populated effect_uses entries.
+  iree_host_size_t effect_use_count;
   // Number of populated hazard_uses entries.
   iree_host_size_t hazard_use_count;
   // Number of populated hazard_gaps entries.
@@ -82,6 +86,8 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t resource_summary_count;
   // Allocated resource-use record capacity.
   iree_host_size_t resource_use_capacity;
+  // Allocated effect-use record capacity.
+  iree_host_size_t effect_use_capacity;
   // Allocated hazard-use record capacity.
   iree_host_size_t hazard_use_capacity;
   // Allocated hazard-gap record capacity.
@@ -736,9 +742,10 @@ static iree_status_t loom_low_schedule_initialize_storage(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_schedule_initialize_model_uses(
+static iree_status_t loom_low_schedule_initialize_descriptor_sidecars(
     loom_low_schedule_build_state_t* state, iree_host_size_t node_count) {
   iree_host_size_t resource_use_capacity = 0;
+  iree_host_size_t effect_use_capacity = 0;
   iree_host_size_t hazard_use_capacity = 0;
   for (iree_host_size_t node_index = 0; node_index < node_count; ++node_index) {
     if (!iree_host_size_checked_add(resource_use_capacity,
@@ -747,6 +754,13 @@ static iree_status_t loom_low_schedule_initialize_model_uses(
       return iree_make_status(
           IREE_STATUS_OUT_OF_RANGE,
           "low schedule resource-use capacity exceeds host size");
+    }
+    if (!iree_host_size_checked_add(effect_use_capacity,
+                                    state->nodes[node_index].effect_count,
+                                    &effect_use_capacity)) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "low schedule effect-use capacity exceeds host size");
     }
     if (!iree_host_size_checked_add(hazard_use_capacity,
                                     state->nodes[node_index].hazard_count,
@@ -804,6 +818,12 @@ static iree_status_t loom_low_schedule_initialize_model_uses(
           .contention_group_id = resource->contention_group_id,
       };
     }
+  }
+  if (effect_use_capacity != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->arena, effect_use_capacity, sizeof(*state->effect_uses),
+        (void**)&state->effect_uses));
+    state->effect_use_capacity = effect_use_capacity;
   }
   if (hazard_use_capacity != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -1232,6 +1252,18 @@ static iree_status_t loom_low_schedule_append_resource_use(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_schedule_append_effect_use(
+    loom_low_schedule_build_state_t* state,
+    loom_low_schedule_effect_use_t effect_use) {
+  if (state->effect_use_count >= state->effect_use_capacity) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low schedule exceeded precomputed effect-use capacity");
+  }
+  state->effect_uses[state->effect_use_count++] = effect_use;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_schedule_append_hazard_use(
     loom_low_schedule_build_state_t* state,
     loom_low_schedule_hazard_use_t hazard_use) {
@@ -1401,7 +1433,7 @@ static void loom_low_schedule_compact_model_summaries(
   state->model_summary_count = write_index;
 }
 
-static iree_status_t loom_low_schedule_note_model_uses_for_node(
+static iree_status_t loom_low_schedule_note_descriptor_rows_for_node(
     loom_low_schedule_build_state_t* state, uint32_t node_index) {
   const loom_low_schedule_node_t* node = &state->nodes[node_index];
   if (node->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
@@ -1416,6 +1448,17 @@ static iree_status_t loom_low_schedule_note_model_uses_for_node(
   }
   const loom_low_schedule_class_t* schedule_class =
       &state->target.descriptor_set->schedule_classes[node->schedule_class_id];
+  const loom_low_descriptor_t* descriptor = NULL;
+  if (node->descriptor_ordinal != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    descriptor = loom_low_descriptor_set_descriptor_at(
+        state->target.descriptor_set, node->descriptor_ordinal);
+    if (!descriptor) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low schedule node references invalid "
+                              "descriptor ordinal %" PRIu32,
+                              node->descriptor_ordinal);
+    }
+  }
   if (state->model_summaries) {
     loom_low_schedule_model_summary_t* model_summary =
         &state->model_summaries[node->schedule_class_id];
@@ -1440,6 +1483,25 @@ static iree_status_t loom_low_schedule_note_model_uses_for_node(
       };
     }
     ++model_summary->use_count;
+  }
+  if (descriptor) {
+    for (uint16_t i = 0; i < descriptor->effect_count; ++i) {
+      const loom_low_effect_t* effect =
+          &state->target.descriptor_set->effects[descriptor->effect_start + i];
+      IREE_RETURN_IF_ERROR(loom_low_schedule_append_effect_use(
+          state, (loom_low_schedule_effect_use_t){
+                     .node_index = node_index,
+                     .block_index = node->block_index,
+                     .scheduled_ordinal = node->scheduled_ordinal,
+                     .effect_ordinal = i,
+                     .kind = effect->kind,
+                     .memory_space = effect->memory_space,
+                     .scope_id = effect->scope_id,
+                     .effect_flags = effect->flags,
+                     .counter_id = effect->counter_id,
+                     .width_bits = effect->width_bits,
+                 }));
+    }
   }
   for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
     const loom_low_issue_use_t* issue_use =
@@ -1601,7 +1663,7 @@ static iree_status_t loom_low_schedule_run_list_scheduler(
             state, liveness, &pressure_state, chosen_node, chosen_score));
       }
       IREE_RETURN_IF_ERROR(
-          loom_low_schedule_note_model_uses_for_node(state, chosen_node));
+          loom_low_schedule_note_descriptor_rows_for_node(state, chosen_node));
 
       for (iree_host_size_t dependency_index = 0;
            dependency_index < state->dependency_count; ++dependency_index) {
@@ -1669,7 +1731,7 @@ iree_status_t loom_low_schedule_function(
       loom_low_schedule_initialize_storage(&state, node_count));
   IREE_RETURN_IF_ERROR(loom_low_schedule_fill_nodes(&state));
   IREE_RETURN_IF_ERROR(
-      loom_low_schedule_initialize_model_uses(&state, node_count));
+      loom_low_schedule_initialize_descriptor_sidecars(&state, node_count));
   IREE_RETURN_IF_ERROR(loom_low_schedule_build_dependencies(&state));
   loom_liveness_analysis_t liveness = {0};
   IREE_RETURN_IF_ERROR(
@@ -1720,6 +1782,8 @@ iree_status_t loom_low_schedule_function(
       .candidate_decision_count = state.candidate_decision_count,
       .resource_uses = state.resource_uses,
       .resource_use_count = state.resource_use_count,
+      .effect_uses = state.effect_uses,
+      .effect_use_count = state.effect_use_count,
       .hazard_uses = state.hazard_uses,
       .hazard_use_count = state.hazard_use_count,
       .hazard_gaps = state.hazard_gaps,

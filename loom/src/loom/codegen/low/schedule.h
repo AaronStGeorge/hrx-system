@@ -204,6 +204,32 @@ typedef struct loom_low_schedule_resource_use_t {
   uint16_t units;
 } loom_low_schedule_resource_use_t;
 
+// Descriptor effect row recorded in scheduled order. Effects describe memory,
+// counter, call, barrier, and control visibility used by dependency
+// construction and target-owned policies such as AMDGPU waitcnt planning.
+typedef struct loom_low_schedule_effect_use_t {
+  // Scheduled node carrying the effect row.
+  uint32_t node_index;
+  // Region block containing |node_index|.
+  uint32_t block_index;
+  // Scheduled ordinal within |block_index|.
+  uint32_t scheduled_ordinal;
+  // Effect row ordinal within the node's descriptor.
+  uint16_t effect_ordinal;
+  // Effect kind used by dependency and legality construction.
+  loom_low_effect_kind_t kind;
+  // Memory space or external resource touched by the effect.
+  loom_low_memory_space_t memory_space;
+  // Target-owned scope identifier for ordering and visibility.
+  uint16_t scope_id;
+  // Effect flags used by scheduling and verification.
+  loom_low_effect_flags_t effect_flags;
+  // Target counter identifier for counter effects.
+  uint16_t counter_id;
+  // Access width in bits, or zero when not width-specific.
+  uint16_t width_bits;
+} loom_low_schedule_effect_use_t;
+
 // Descriptor hazard row recorded in scheduled order. These rows are passive
 // facts: target overlays consume them to insert waits, enforce distances, or
 // record richer backend diagnostics.
@@ -396,6 +422,10 @@ typedef struct loom_low_schedule_sidecar_t {
   const loom_low_schedule_resource_use_t* resource_uses;
   // Number of resource-use records.
   iree_host_size_t resource_use_count;
+  // Descriptor effects in scheduled order.
+  const loom_low_schedule_effect_use_t* effect_uses;
+  // Number of effect-use records.
+  iree_host_size_t effect_use_count;
   // Descriptor hazards in scheduled order. Empty when scheduled nodes do not
   // reference descriptor hazard rows.
   const loom_low_schedule_hazard_use_t* hazard_uses;

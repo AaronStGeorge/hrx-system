@@ -99,13 +99,15 @@ iree_status_t loom_low_schedule_format_json(
       &stream,
       ",\"block_count\":%zu,\"node_count\":%zu,\"dependency_count\":%zu"
       ",\"candidate_decision_count\":%zu"
-      ",\"resource_use_count\":%zu,\"hazard_use_count\":%zu"
+      ",\"resource_use_count\":%zu,\"effect_use_count\":%zu"
+      ",\"hazard_use_count\":%zu"
       ",\"hazard_gap_count\":%zu"
       ",\"model_summary_count\":%zu,\"resource_summary_count\":%zu",
       sidecar->block_count, sidecar->node_count, sidecar->dependency_count,
       sidecar->candidate_decision_count, sidecar->resource_use_count,
-      sidecar->hazard_use_count, sidecar->hazard_gap_count,
-      sidecar->model_summary_count, sidecar->resource_summary_count));
+      sidecar->effect_use_count, sidecar->hazard_use_count,
+      sidecar->hazard_gap_count, sidecar->model_summary_count,
+      sidecar->resource_summary_count));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"blocks\":["));
@@ -299,6 +301,38 @@ iree_status_t loom_low_schedule_format_json(
           resource_kind_name.data, resource_use->resource_flags,
           resource_use->capacity_per_cycle, resource_use->contention_group_id,
           resource_use->stage, resource_use->cycles, resource_use->units));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+  }
+
+  if (sidecar->effect_use_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"scheduled_effect_uses\":["));
+    for (iree_host_size_t i = 0; i < sidecar->effect_use_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      const loom_low_schedule_effect_use_t* effect_use =
+          &sidecar->effect_uses[i];
+      iree_string_view_t effect_kind_name =
+          loom_low_effect_kind_name(effect_use->kind);
+      iree_string_view_t memory_space_name =
+          loom_low_memory_space_name(effect_use->memory_space);
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream,
+          "{\"node\":%" PRIu32 ",\"block\":%" PRIu32
+          ",\"scheduled_ordinal\":%" PRIu32 ",\"effect_ordinal\":%" PRIu16
+          ",\"kind\":%u,\"kind_name\":\"%.*s\",\"memory_space\":%u"
+          ",\"memory_space_name\":\"%.*s\",\"scope\":%" PRIu16
+          ",\"effect_flags\":%" PRIu16 ",\"counter\":%" PRIu16
+          ",\"width_bits\":%" PRIu16 "}",
+          effect_use->node_index, effect_use->block_index,
+          effect_use->scheduled_ordinal, effect_use->effect_ordinal,
+          (unsigned)effect_use->kind, (int)effect_kind_name.size,
+          effect_kind_name.data, (unsigned)effect_use->memory_space,
+          (int)memory_space_name.size, memory_space_name.data,
+          effect_use->scope_id, effect_use->effect_flags,
+          effect_use->counter_id, effect_use->width_bits));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }
