@@ -228,6 +228,10 @@ static iree_string_view_t loom_low_abi_value_conversion_name(
       return IREE_SV("scalar_to_register");
     case LOOM_LOW_CONVERSION_REGISTER_TO_SCALAR:
       return IREE_SV("register_to_scalar");
+    case LOOM_LOW_CONVERSION_VALUE_TO_REGISTER:
+      return IREE_SV("value_to_register");
+    case LOOM_LOW_CONVERSION_REGISTER_TO_VALUE:
+      return IREE_SV("register_to_value");
     default:
       return IREE_SV("unknown");
   }
@@ -1357,6 +1361,46 @@ static iree_status_t loom_low_verify_abi_entry_conversion_shape(
           entry->index,
           IREE_SV("register_to_scalar requires a register ABI type and scalar "
                   "semantic type"),
+          emitter);
+    case LOOM_LOW_CONVERSION_VALUE_TO_REGISTER:
+      if (field_kind != LOOM_LOW_ABI_FIELD_OPERAND) {
+        return loom_low_emit_abi_entry_error(
+            module, op, entry->adapter, adapter_op,
+            loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
+            entry->index,
+            IREE_SV("value_to_register is only valid for operand entries"),
+            emitter);
+      }
+      if (!loom_type_is_register(entry->semantic_type) &&
+          loom_type_is_register(entry->abi_type)) {
+        return iree_ok_status();
+      }
+      return loom_low_emit_abi_entry_error(
+          module, op, entry->adapter, adapter_op,
+          loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
+          entry->index,
+          IREE_SV("value_to_register requires a non-register semantic type and "
+                  "register ABI type"),
+          emitter);
+    case LOOM_LOW_CONVERSION_REGISTER_TO_VALUE:
+      if (field_kind != LOOM_LOW_ABI_FIELD_RESULT) {
+        return loom_low_emit_abi_entry_error(
+            module, op, entry->adapter, adapter_op,
+            loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
+            entry->index,
+            IREE_SV("register_to_value is only valid for result entries"),
+            emitter);
+      }
+      if (!loom_type_is_register(entry->semantic_type) &&
+          loom_type_is_register(entry->abi_type)) {
+        return iree_ok_status();
+      }
+      return loom_low_emit_abi_entry_error(
+          module, op, entry->adapter, adapter_op,
+          loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
+          entry->index,
+          IREE_SV("register_to_value requires a register ABI type and "
+                  "non-register semantic type"),
           emitter);
     default:
       return loom_low_emit_abi_entry_error(

@@ -118,6 +118,16 @@ LowAbiValueConversion = EnumDef(
             2,
             doc="A callee register ABI slot is unpacked into a semantic scalar.",
         ),
+        EnumCase(
+            "value_to_register",
+            3,
+            doc="A non-register semantic value is materialized into a callee register ABI slot.",
+        ),
+        EnumCase(
+            "register_to_value",
+            4,
+            doc="A callee register ABI slot is unpacked into a non-register semantic value.",
+        ),
     ],
     doc="Per-slot conversion rule used by low ABI adapter mapping records.",
 )
@@ -719,6 +729,7 @@ low_abi_operand = Op(
     ],
     examples=[
         "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index = 0, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<vm.i32>}",
+        "low.abi.operand @extern_add_v4_lhs {adapter = @extern_add_v4, index = 0, conversion = value_to_register, semantic_type = vector<4xi32>, abi_type = reg<avx512.zmm>}",
     ],
 )
 
@@ -756,6 +767,7 @@ low_abi_result = Op(
     ],
     examples=[
         "low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, index = 0, conversion = register_to_scalar, semantic_type = i32, abi_type = reg<vm.i32>}",
+        "low.abi.result @extern_add_v4_result {adapter = @extern_add_v4, index = 0, conversion = register_to_value, semantic_type = vector<4xi32>, abi_type = reg<avx512.zmm>}",
     ],
 )
 

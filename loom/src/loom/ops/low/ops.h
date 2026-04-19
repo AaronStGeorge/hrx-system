@@ -90,7 +90,9 @@ typedef enum loom_low_conversion_e {
   LOOM_LOW_CONVERSION_DIRECT = 0,
   LOOM_LOW_CONVERSION_SCALAR_TO_REGISTER = 1,
   LOOM_LOW_CONVERSION_REGISTER_TO_SCALAR = 2,
-  LOOM_LOW_CONVERSION_COUNT_ = 3,
+  LOOM_LOW_CONVERSION_VALUE_TO_REGISTER = 3,
+  LOOM_LOW_CONVERSION_REGISTER_TO_VALUE = 4,
+  LOOM_LOW_CONVERSION_COUNT_ = 5,
 } loom_low_conversion_t;
 
 // Semantic-to-low ABI conversion rule used by a low ABI adapter record.

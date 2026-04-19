@@ -484,6 +484,9 @@ TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {
   EXPECT_EQ(lower_result.remark_count, 0u);
   EXPECT_NE(lower_result.descriptor_set, nullptr);
   EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_NE(lower_result.abi_adapter_op, nullptr);
+  EXPECT_TRUE(loom_symbol_ref_is_valid(lower_result.low_func_ref));
+  EXPECT_TRUE(loom_symbol_ref_is_valid(lower_result.abi_adapter_ref));
   EXPECT_TRUE(lower_collector.emissions.empty());
 
   EmissionCollector verify_collector;
@@ -503,9 +506,28 @@ TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {
   IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
   EXPECT_NE(text.find("low.func.def target(@test_target) @add_const__low"),
             std::string::npos);
+  EXPECT_NE(text.find("low.abi.adapter @add_const__low__abi"),
+            std::string::npos);
+  EXPECT_NE(text.find("conversion = scalar_to_register"), std::string::npos);
+  EXPECT_NE(text.find("conversion = register_to_scalar"), std::string::npos);
   EXPECT_NE(text.find("asm<test.low.core>"), std::string::npos);
   EXPECT_NE(text.find("test.const.i32"), std::string::npos);
   EXPECT_NE(text.find("test.add.i32"), std::string::npos);
+
+  std::string invoked_text = text;
+  invoked_text.append(
+      "\nfunc.def @call_lowered(%lhs: i32) -> (i32) {\n"
+      "  %result = low.invoke @add_const__low(%lhs) {adapter = "
+      "@add_const__low__abi} : (i32) -> (i32)\n"
+      "  func.return %result : i32\n"
+      "}\n");
+  ModulePtr invoked_module = ParseSource(invoked_text, &environment);
+  EmissionCollector invoked_verify_collector;
+  loom_low_verify_result_t invoked_verify_result = {};
+  IREE_ASSERT_OK(VerifyLowModule(
+      invoked_module.get(), &invoked_verify_collector, &invoked_verify_result));
+  EXPECT_EQ(invoked_verify_result.error_count, 0u);
+  EXPECT_TRUE(invoked_verify_collector.emissions.empty());
 
   ModulePtr reparsed_module = ParseSource(text, &environment);
   EmissionCollector reparse_verify_collector;
@@ -560,6 +582,7 @@ TEST_F(LowLowerTest, LowersVectorCfgFunction) {
 
   EXPECT_EQ(lower_result.error_count, 0u);
   EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_NE(lower_result.abi_adapter_op, nullptr);
   EXPECT_TRUE(lower_collector.emissions.empty());
 
   EmissionCollector verify_collector;
@@ -575,7 +598,10 @@ TEST_F(LowLowerTest, LowersVectorCfgFunction) {
   std::string text;
   IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
   EXPECT_NE(text.find("@select_vector__low"), std::string::npos);
+  EXPECT_NE(text.find("@select_vector__low__abi"), std::string::npos);
   EXPECT_NE(text.find("reg<test.v4i32>"), std::string::npos);
+  EXPECT_NE(text.find("conversion = value_to_register"), std::string::npos);
+  EXPECT_NE(text.find("conversion = register_to_value"), std::string::npos);
   EXPECT_NE(text.find("test.add.v4i32"), std::string::npos);
   EXPECT_NE(text.find("low.cond_br"), std::string::npos);
   EXPECT_NE(text.find("low.br"), std::string::npos);
@@ -596,6 +622,8 @@ TEST_F(LowLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {
   EXPECT_EQ(lower_result.remark_count, 0u);
   EXPECT_EQ(lower_result.low_func_op, nullptr);
   EXPECT_FALSE(loom_symbol_ref_is_valid(lower_result.low_func_ref));
+  EXPECT_EQ(lower_result.abi_adapter_op, nullptr);
+  EXPECT_FALSE(loom_symbol_ref_is_valid(lower_result.abi_adapter_ref));
   ASSERT_EQ(lower_collector.emissions.size(), 1u);
   const CollectedEmission& emission = lower_collector.emissions[0];
   EXPECT_EQ(emission.error,

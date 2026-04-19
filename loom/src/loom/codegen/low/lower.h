@@ -109,6 +109,10 @@ typedef struct loom_low_lower_result_t {
   loom_op_t* low_func_op;
   // Module-local symbol reference for |low_func_op|.
   loom_symbol_ref_t low_func_ref;
+  // Emitted mapped low.abi.adapter op for semantic callers, or NULL on failure.
+  loom_op_t* abi_adapter_op;
+  // Module-local symbol reference for |abi_adapter_op|.
+  loom_symbol_ref_t abi_adapter_ref;
 } loom_low_lower_result_t;
 
 // Lowers one func.def-like source function into a sibling low.func.def.
