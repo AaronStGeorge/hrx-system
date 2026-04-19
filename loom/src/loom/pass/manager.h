@@ -44,6 +44,7 @@ extern "C" {
 #endif
 
 typedef struct loom_module_t loom_module_t;
+typedef struct loom_pass_decoded_options_t loom_pass_decoded_options_t;
 typedef struct loom_pass_t loom_pass_t;
 
 //===----------------------------------------------------------------------===//
@@ -156,6 +157,8 @@ struct loom_pass_t {
   // Per-instance state from create(). The pass owns this memory (typically
   // allocated from |instance_arena|).
   void* state;
+  // Immutable descriptor-decoded options for pass.run-backed invocation.
+  const loom_pass_decoded_options_t* decoded_options;
   // Optional structured diagnostic emitter. Legality passes use this for
   // agent-actionable failures while still returning a non-OK status to abort
   // the pipeline.

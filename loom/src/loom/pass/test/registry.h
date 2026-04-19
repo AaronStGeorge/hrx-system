@@ -31,6 +31,14 @@ typedef struct loom_test_pass_trace_t {
   int mark_changed_invocation_count;
   // Number of times test.options ran.
   int options_invocation_count;
+  // Number of times test.options create observed decoded options.
+  int options_decoded_create_count;
+  // Last decoded count option observed by test.options create.
+  uint32_t decoded_options_count_value;
+  // Last decoded mode enum index observed by test.options create.
+  uint16_t decoded_options_mode_index;
+  // Last decoded string option observed by test.options create.
+  iree_string_view_t decoded_options_string_value;
   // Number of times test.fail ran before returning its intentional failure.
   int fail_invocation_count;
 } loom_test_pass_trace_t;

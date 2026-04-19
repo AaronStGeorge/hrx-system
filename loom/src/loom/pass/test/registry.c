@@ -48,8 +48,26 @@ static iree_status_t loom_test_mark_changed_run(loom_pass_t* pass,
 
 static iree_status_t loom_test_options_create(loom_pass_t* pass,
                                               iree_string_view_t options) {
-  (void)pass;
   (void)options;
+  loom_test_pass_trace_t* trace = loom_test_pass_trace(pass);
+  if (trace && pass->decoded_options) {
+    ++trace->options_decoded_create_count;
+    if (pass->decoded_options->option_count > 0 &&
+        pass->decoded_options->options[0].present) {
+      trace->decoded_options_count_value =
+          pass->decoded_options->options[0].uint32_value;
+    }
+    if (pass->decoded_options->option_count > 1 &&
+        pass->decoded_options->options[1].present) {
+      trace->decoded_options_mode_index =
+          pass->decoded_options->options[1].enum_value_index;
+    }
+    if (pass->decoded_options->option_count > 2 &&
+        pass->decoded_options->options[2].present) {
+      trace->decoded_options_string_value =
+          pass->decoded_options->options[2].string_value;
+    }
+  }
   return iree_ok_status();
 }
 

@@ -92,6 +92,20 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "interpreter",
+    srcs = ["interpreter.c"],
+    hdrs = ["interpreter.h"],
+    deps = [
+        ":program",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/pass",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "builtin_registry",
     srcs = ["builtin_registry.c"],
     hdrs = ["builtin_registry.h"],
@@ -157,6 +171,23 @@ loom_cc_test(
         "//loom/src/loom/pass/test:registry",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "interpreter_test",
+    srcs = ["interpreter_test.cc"],
+    deps = [
+        ":interpreter",
+        ":program",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/pass/test:registry",
+        "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
