@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 9
+LOW_DESCRIPTOR_SET_ABI_VERSION = 10
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 
@@ -298,6 +298,7 @@ class Descriptor:
     effects: tuple[Effect, ...] = ()
     constraints: tuple[Constraint, ...] = ()
     feature_mask_words: tuple[int, ...] = ()
+    encoding_format_id: int = 0
     encoding_id: int = 0
     flags: tuple[DescriptorFlag, ...] = ()
 

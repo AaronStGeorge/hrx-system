@@ -490,6 +490,8 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
             raise ValueError(f"descriptor '{descriptor.key}' uses absent encoding id without the pseudo flag")
         if DescriptorFlag.PSEUDO in descriptor.flags and descriptor.encoding_id != LOW_DESCRIPTOR_ENCODING_ID_NONE:
             raise ValueError(f"descriptor '{descriptor.key}' uses the pseudo flag with a target encoding id")
+        if DescriptorFlag.PSEUDO in descriptor.flags and descriptor.encoding_format_id != 0:
+            raise ValueError(f"descriptor '{descriptor.key}' uses the pseudo flag with a target encoding format id")
         if descriptor.schedule_class is None:
             raise ValueError(f"descriptor '{descriptor.key}' has no schedule class")
         if descriptor.schedule_class not in schedule_inputs:
@@ -1104,6 +1106,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".semantic_tag_string_offset = {_optional_string_expr(pool, f'semantic_{descriptor.key}' if descriptor.semantic_tag is not None else None)},",
                 f".feature_mask_word_start = {compiled.descriptor_rows[i]['feature_mask_word_start']},",
                 f".feature_mask_word_count = {compiled.descriptor_rows[i]['feature_mask_word_count']},",
+                f".encoding_format_id = {descriptor.encoding_format_id},",
                 f".encoding_id = {_encoding_id_expr(descriptor.encoding_id)},",
                 f".operand_start = {compiled.descriptor_rows[i]['operand_start']},",
                 f".operand_count = {compiled.descriptor_rows[i]['operand_count']},",
@@ -1257,6 +1260,8 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
                 "key": descriptor.key,
                 "mnemonic": descriptor.mnemonic or "",
                 "semantic_tag": descriptor.semantic_tag or "",
+                "encoding_format": descriptor.encoding_format_id,
+                "encoding": descriptor.encoding_id,
                 "schedule_class": compiled.schedule_class_ids[descriptor.schedule_class],
                 "operands": compiled.descriptor_rows[i]["operand_count"],
                 "results": compiled.descriptor_rows[i]["result_count"],

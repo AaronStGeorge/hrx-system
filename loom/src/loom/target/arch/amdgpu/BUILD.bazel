@@ -368,6 +368,13 @@ iree_assert_no_dependency(
 # AMDGPU low descriptors
 #===------------------------------------------------------------------------===#
 
+loom_cc_library(
+    name = "encoding",
+    srcs = ["encoding.c"],
+    hdrs = ["encoding.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
 _AMDGPU_DESCRIPTOR_GENERATOR = "//loom/py/loom:amdgpu_descriptors"
 
 _AMDGPU_DESCRIPTOR_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_descriptors.py"

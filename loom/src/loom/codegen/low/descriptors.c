@@ -707,6 +707,13 @@ static iree_status_t loom_low_verify_descriptor_encoding_contract(
                             " is pseudo but has target encoding id %" PRIu16,
                             descriptor_index, descriptor->encoding_id);
   }
+  if (is_pseudo && descriptor->encoding_format_id != 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low descriptor %" PRIu32
+        " is pseudo but has target encoding format id %" PRIu16,
+        descriptor_index, descriptor->encoding_format_id);
+  }
   if (!is_pseudo && descriptor->encoding_id == LOOM_LOW_ID_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor %" PRIu32
@@ -2652,8 +2659,11 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
         descriptor_set, builder, "semantic_tag",
         descriptor->semantic_tag_string_offset));
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        builder, ",\"encoding\":%" PRIu16 ",\"flags\":%" PRIu16,
-        descriptor->encoding_id, descriptor->flags));
+        builder,
+        ",\"encoding_format\":%" PRIu16 ",\"encoding\":%" PRIu16
+        ",\"flags\":%" PRIu16,
+        descriptor->encoding_format_id, descriptor->encoding_id,
+        descriptor->flags));
     IREE_RETURN_IF_ERROR(loom_low_append_manifest_flag_names(
         builder, descriptor->flags, kLoomLowDescriptorFlagNames,
         IREE_ARRAYSIZE(kLoomLowDescriptorFlagNames)));

@@ -837,6 +837,18 @@ TEST(LowDescriptorsTest, RejectsPseudoFlagWithTargetEncoding) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
+TEST(LowDescriptorsTest, RejectsPseudoFlagWithTargetEncodingFormat) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.descriptors[1].encoding_format_id = 1;
+  tables.descriptors[1].encoding_id = LOOM_LOW_ID_NONE;
+  tables.descriptors[1].flags =
+      LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE | LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
 TEST(LowDescriptorsTest, RejectsUnknownDescriptorFlagBits) {
   TestTables tables;
   InitializeTestTables(&tables);

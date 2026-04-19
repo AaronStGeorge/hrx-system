@@ -42,6 +42,33 @@ class AmdgpuDescriptorOverlayError(ValueError):
     """Raised when a Loom overlay does not match parsed AMDGPU ISA facts."""
 
 
+AMDGPU_ENCODING_FORMAT_NONE = 0
+AMDGPU_ENCODING_FORMAT_SOP1 = 1
+AMDGPU_ENCODING_FORMAT_SOP2 = 2
+AMDGPU_ENCODING_FORMAT_SOPP = 3
+AMDGPU_ENCODING_FORMAT_VOP2 = 4
+AMDGPU_ENCODING_FORMAT_VOP2_LITERAL = 5
+AMDGPU_ENCODING_FORMAT_VOP3 = 6
+AMDGPU_ENCODING_FORMAT_VOP3P = 7
+AMDGPU_ENCODING_FORMAT_SMEM = 8
+AMDGPU_ENCODING_FORMAT_MUBUF = 9
+AMDGPU_ENCODING_FORMAT_VBUFFER = 10
+
+_AMDGPU_ENCODING_FORMATS_BY_XML_NAME = {
+    "ENC_SOP1": AMDGPU_ENCODING_FORMAT_SOP1,
+    "ENC_SOP2": AMDGPU_ENCODING_FORMAT_SOP2,
+    "ENC_SOPP": AMDGPU_ENCODING_FORMAT_SOPP,
+    "ENC_VOP2": AMDGPU_ENCODING_FORMAT_VOP2,
+    "VOP2_INST_LITERAL": AMDGPU_ENCODING_FORMAT_VOP2_LITERAL,
+    "ENC_VOP3": AMDGPU_ENCODING_FORMAT_VOP3,
+    "ENC_VOP3P": AMDGPU_ENCODING_FORMAT_VOP3P,
+    "VOP3P_MFMA": AMDGPU_ENCODING_FORMAT_VOP3P,
+    "ENC_SMEM": AMDGPU_ENCODING_FORMAT_SMEM,
+    "ENC_MUBUF": AMDGPU_ENCODING_FORMAT_MUBUF,
+    "ENC_VBUFFER": AMDGPU_ENCODING_FORMAT_VBUFFER,
+}
+
+
 @dataclass(frozen=True, slots=True)
 class AmdgpuOperandOverlay:
     xml_field_name: str
@@ -70,6 +97,7 @@ class AmdgpuDescriptorOverlay:
     implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = ()
     encoding_condition: str = "default"
     mnemonic: str | None = None
+    encoding_format_id: int | None = None
     encoding_id: int | None = None
     immediate_fields: tuple[str, ...] = ()
     immediates: tuple[Immediate, ...] = ()
@@ -127,12 +155,25 @@ def materialize_amdgpu_descriptor_overlay(
         effects=overlay.effects,
         constraints=overlay.constraints,
         feature_mask_words=overlay.feature_mask_words,
+        encoding_format_id=_encoding_format_id(overlay),
         encoding_id=encoding.opcode
         if overlay.encoding_id is None
         else overlay.encoding_id,
         schedule_class=overlay.schedule_class,
         flags=overlay.flags,
     )
+
+
+def _encoding_format_id(overlay: AmdgpuDescriptorOverlay) -> int:
+    if overlay.encoding_format_id is not None:
+        return overlay.encoding_format_id
+    encoding_format_id = _AMDGPU_ENCODING_FORMATS_BY_XML_NAME.get(overlay.encoding_name)
+    if encoding_format_id is None:
+        raise AmdgpuDescriptorOverlayError(
+            f"descriptor overlay '{overlay.descriptor_key}' references "
+            f"unmapped AMDGPU encoding format '{overlay.encoding_name}'"
+        )
+    return encoding_format_id
 
 
 def materialize_amdgpu_descriptor_overlays(

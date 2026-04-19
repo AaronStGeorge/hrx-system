@@ -586,3 +586,22 @@ def test_generator_rejects_pseudo_flag_with_target_encoding() -> None:
         match=("descriptor 'iree.vm.add.i32' uses the pseudo flag with a target encoding id"),
     ):
         generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_pseudo_flag_with_target_encoding_format() -> None:
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        encoding_format_id=1,
+        encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+        flags=(
+            *IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].flags,
+            DescriptorFlag.PSEUDO,
+        ),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' uses the pseudo flag with a target encoding format id"),
+    ):
+        generate_descriptor_set(descriptor_set)

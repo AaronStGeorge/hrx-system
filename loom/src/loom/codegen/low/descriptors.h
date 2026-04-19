@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 9u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 10u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -488,6 +488,9 @@ typedef struct loom_low_descriptor_t {
   uint32_t feature_mask_word_start;
   // Number of feature-mask words required by this descriptor.
   uint16_t feature_mask_word_count;
+  // Target-owned encoding format identifier. Zero means no target-specific
+  // format selector is required by generic descriptor consumers.
+  uint16_t encoding_format_id;
   // Target-owned encoding identifier.
   uint16_t encoding_id;
   // First operand/result row for this descriptor.

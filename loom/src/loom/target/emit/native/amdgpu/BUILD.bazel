@@ -165,6 +165,48 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
 )
 
+iree_assert_no_dependency(
+    name = "encoding_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
+)
+
+iree_assert_no_dependency(
+    name = "encoding_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
+)
+
+iree_assert_no_dependency(
+    name = "encoding_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
+)
+
+iree_assert_no_dependency(
+    name = "encoding_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
+)
+
+iree_assert_no_dependency(
+    name = "encoding_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
+)
+
+iree_assert_no_dependency(
+    name = "encoding_no_hal_amdgpu_dep",
+    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
+    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
+)
+
+iree_assert_no_dependency(
+    name = "encoding_no_target_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
+)
+
 #===------------------------------------------------------------------------===#
 # AMDGPU native assembly fragments
 #===------------------------------------------------------------------------===#
@@ -202,6 +244,23 @@ loom_cc_library(
     deps = [
         ":metadata",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "encoding",
+    srcs = ["encoding.c"],
+    hdrs = ["encoding.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low:schedule",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amdgpu:encoding",
+        "//loom/src/loom/target/arch/amdgpu:wait_packets",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 
@@ -269,6 +328,26 @@ loom_cc_test(
         ":descriptor",
         ":metadata",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "encoding_test",
+    srcs = ["encoding_test.cc"],
+    deps = [
+        ":encoding",
+        "//loom/src/loom/codegen/low:packetization",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:presets",
+        "//loom/src/loom/target/arch/amdgpu:low_registry",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

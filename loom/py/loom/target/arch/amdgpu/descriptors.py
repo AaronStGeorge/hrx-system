@@ -12,6 +12,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from loom.target.arch.amdgpu.descriptor_overlay import (
+    AMDGPU_ENCODING_FORMAT_SOP1,
     AmdgpuDescriptorOverlay,
     AmdgpuImplicitOperandOverlay,
     AmdgpuOperandOverlay,
@@ -829,6 +830,7 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             immediates=(_U32_IMMEDIATE,),
             asm_forms=_asm(results=("dst",), immediates=("imm32",)),
             schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
     ),
@@ -960,6 +962,7 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             immediates=(_U32_IMMEDIATE,),
             asm_forms=_asm(results=("dst",), immediates=("imm32",)),
             schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
     ),
@@ -1099,6 +1102,7 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             immediates=(_U32_IMMEDIATE,),
             asm_forms=_asm(results=("dst",), immediates=("imm32",)),
             schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
     ),
@@ -1255,6 +1259,7 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             immediates=(_U32_IMMEDIATE,),
             asm_forms=_asm(results=("dst",), immediates=("imm32",)),
             schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(

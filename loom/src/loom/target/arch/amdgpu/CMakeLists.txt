@@ -23,6 +23,18 @@ loom_low_descriptor_data_archive(
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    encoding
+  HDRS
+    "encoding.h"
+  SRCS
+    "encoding.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
 loom_low_descriptor_cc_library(
   NAME
     gfx11_descriptors

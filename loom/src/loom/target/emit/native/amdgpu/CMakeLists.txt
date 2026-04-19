@@ -57,6 +57,26 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    encoding
+  HDRS
+    "encoding.h"
+  SRCS
+    "encoding.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::encoding
+    loom::src::loom::target::arch::amdgpu::wait_packets
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     kernel_assembly
   HDRS
     "kernel_assembly.h"
@@ -126,6 +146,27 @@ loom_cc_test(
     ::descriptor
     ::metadata
     iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    encoding_test
+  SRCS
+    "encoding_test.cc"
+  DEPS
+    ::encoding
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::low_registry
+    loom::src::loom::target::presets
+    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )
