@@ -11,6 +11,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/format/text/parser.h"
+#include "loom/ir/attribute.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/pass/ops.h"
@@ -73,6 +74,12 @@ class PassVerifyTest : public ::testing::Test {
     if (!module) {
       return iree_make_status(IREE_STATUS_INTERNAL, "parse failed");
     }
+    return VerifyModule(module, requirement_provider);
+  }
+
+  iree_status_t VerifyModule(
+      const loom_module_t* module,
+      loom_pass_requirement_provider_t requirement_provider = {}) {
     loom_pass_verify_options_t options = {
         .registry = loom_test_pass_registry(),
         .requirement_provider = requirement_provider,
@@ -172,6 +179,20 @@ TEST_F(PassVerifyTest, RejectsMalformedOptions) {
                              "}\n"));
 }
 
+TEST_F(PassVerifyTest, RejectsUnknownOptions) {
+  ExpectVerifyStatus(IREE_STATUS_INVALID_ARGUMENT,
+                     IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
+                             "  test.options(unknown = 1)\n"
+                             "}\n"));
+}
+
+TEST_F(PassVerifyTest, RejectsMissingRequiredOptions) {
+  ExpectVerifyStatus(IREE_STATUS_INVALID_ARGUMENT,
+                     IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
+                             "  test.required\n"
+                             "}\n"));
+}
+
 TEST_F(PassVerifyTest, RejectsMissingDescriptorRequirementProvider) {
   ExpectVerifyStatus(IREE_STATUS_FAILED_PRECONDITION,
                      IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
@@ -201,6 +222,45 @@ TEST_F(PassVerifyTest, RejectsNestedSameAnchorFor) {
                              "    }\n"
                              "  }\n"
                              "}\n"));
+}
+
+TEST_F(PassVerifyTest, RejectsEmptyWherePredicate) {
+  loom_module_t* module =
+      Parse(IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
+                    "  where name() {\n"
+                    "    test.noop\n"
+                    "  }\n"
+                    "}\n"));
+  ASSERT_NE(module, nullptr);
+  loom_op_t* pipeline_op = loom_block_op(loom_region_entry_block(module->body),
+                                         /*op_index=*/0);
+  loom_block_t* pipeline_body =
+      loom_region_entry_block(loom_pass_pipeline_body(pipeline_op));
+  loom_op_t* where_op = loom_block_op(pipeline_body, /*op_index=*/0);
+  ASSERT_TRUE(loom_pass_where_isa(where_op));
+  loom_string_id_t empty_string_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, iree_string_view_empty(),
+                                           &empty_string_id));
+  loom_op_attrs(where_op)[loom_pass_where_predicate_ATTR_INDEX] =
+      loom_attr_string(empty_string_id);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, VerifyModule(module));
+}
+
+TEST_F(PassVerifyTest, RejectsMissingRegionTerminator) {
+  loom_module_t* module =
+      Parse(IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
+                    "  test.noop\n"
+                    "}\n"));
+  ASSERT_NE(module, nullptr);
+  loom_op_t* pipeline_op = loom_block_op(loom_region_entry_block(module->body),
+                                         /*op_index=*/0);
+  loom_block_t* pipeline_body =
+      loom_region_entry_block(loom_pass_pipeline_body(pipeline_op));
+  ASSERT_TRUE(loom_pass_yield_isa(pipeline_body->last_op));
+  pipeline_body->last_op = pipeline_body->first_op;
+  pipeline_body->first_op->next_op = NULL;
+  pipeline_body->op_count = 1;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, VerifyModule(module));
 }
 
 TEST_F(PassVerifyTest, RejectsRepeatMissingCount) {
