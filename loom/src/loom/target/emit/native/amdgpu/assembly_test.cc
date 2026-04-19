@@ -217,6 +217,8 @@ class AmdgpuAssemblyTest : public ::testing::Test {
                                 "  %sum = scalar.addi %biased, %rhs : i32\n"
                                 "  %vsum = vector.addi %vlhs, %vrhs : "
                                 "vector<1xi32>\n"
+                                "  %vproduct = vector.muli %vsum, %vrhs : "
+                                "vector<1xi32>\n"
                                 "  func.return\n"
                                 "}\n",
                                 &sidecar_arena, &packetization);
@@ -231,6 +233,7 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     EXPECT_NE(output.find("s_mov_b32 s"), std::string::npos);
     EXPECT_NE(output.find("s_add_u32 s"), std::string::npos);
     EXPECT_NE(output.find("v_add_u32 v"), std::string::npos);
+    EXPECT_NE(output.find("v_mul_lo_u32 v"), std::string::npos);
     EXPECT_NE(output.find("s_endpgm"), std::string::npos);
     iree_string_builder_deinitialize(&builder);
     iree_arena_deinitialize(&sidecar_arena);

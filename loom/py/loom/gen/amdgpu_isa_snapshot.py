@@ -52,6 +52,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Encoding bit-layout name to retain. Repeat for multiple encodings.",
     )
     parser.add_argument(
+        "--instruction-encoding",
+        action="append",
+        help=(
+            "Instruction encoding selector INSTRUCTION/ENCODING/CONDITION to retain. Repeat for multiple encodings. When omitted, all selected encoding names on selected instructions are retained."
+        ),
+    )
+    parser.add_argument(
         "--manifest-out",
         type=Path,
         help="Optional JSON report path for selected and dropped source facts.",
@@ -67,6 +74,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             allowlist=AmdgpuIsaSnapshotAllowlist(
                 instruction_names=tuple(args.instruction),
                 encoding_names=tuple(args.encoding),
+                instruction_encoding_names=tuple(args.instruction_encoding or ()),
             ),
         )
     except (AmdgpuIsaSnapshotError, AmdgpuIsaXmlError) as exc:

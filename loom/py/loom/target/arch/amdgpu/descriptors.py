@@ -415,6 +415,23 @@ def _v_add_u32_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_mul_lo_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mul_lo_u32",
+        instruction_name="V_MUL_LO_U32",
+        mnemonic="v_mul_lo_u32",
+        encoding_name="ENC_VOP3",
+        semantic_tag="integer.mul.lo.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _s_buffer_load_dword_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.s_buffer_load_dword",
@@ -620,6 +637,7 @@ _GFX950_CORE_OVERLAY_DESCRIPTORS = materialize_amdgpu_descriptor_overlays(
     (
         _s_add_u32_overlay(),
         _v_add_u32_overlay("V_ADD_U32"),
+        _v_mul_lo_u32_overlay(),
         _s_buffer_load_dword_overlay(),
         _buffer_load_dword_overlay(
             encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
@@ -637,6 +655,7 @@ _GFX11_CORE_OVERLAY_DESCRIPTORS = materialize_amdgpu_descriptor_overlays(
     (
         _s_add_u32_overlay(),
         _v_add_u32_overlay("V_ADD_NC_U32"),
+        _v_mul_lo_u32_overlay(),
         _s_buffer_load_dword_overlay(),
         _buffer_load_dword_overlay(
             encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
@@ -656,6 +675,7 @@ _GFX12_CORE_OVERLAY_DESCRIPTORS = materialize_amdgpu_descriptor_overlays(
     (
         _s_add_u32_overlay(),
         _v_add_u32_overlay("V_ADD_NC_U32"),
+        _v_mul_lo_u32_overlay(),
         _s_buffer_load_dword_overlay(),
         _buffer_load_dword_overlay(
             encoding_name="ENC_VBUFFER", resource_field_name="RSRC"
@@ -676,6 +696,7 @@ _GFX1250_CORE_OVERLAY_DESCRIPTORS = materialize_amdgpu_descriptor_overlays(
     (
         _s_add_u32_overlay(),
         _v_add_u32_overlay("V_ADD_NC_U32"),
+        _v_mul_lo_u32_overlay(),
         _s_buffer_load_dword_overlay(),
         _buffer_load_dword_overlay(
             encoding_name="ENC_VBUFFER", resource_field_name="RSRC"

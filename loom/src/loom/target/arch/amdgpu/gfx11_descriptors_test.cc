@@ -76,6 +76,13 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(add_descriptor->result_count, 1u);
   EXPECT_EQ(add_descriptor->encoding_id, 37u);
 
+  const loom_low_descriptor_t* multiply_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_mul_lo_u32"));
+  ASSERT_NE(multiply_descriptor, nullptr);
+  EXPECT_EQ(multiply_descriptor->operand_count, 3u);
+  EXPECT_EQ(multiply_descriptor->result_count, 1u);
+  EXPECT_EQ(multiply_descriptor->encoding_id, 812u);
+
   const loom_low_descriptor_t* load_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_load_dword"));
   ASSERT_NE(load_descriptor, nullptr);
@@ -240,13 +247,15 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorAndMatrixArguments) {
       "%b : reg<amdgpu.vgpr x4>, %acc : reg<amdgpu.vgpr x8>) -> "
       "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {\n"
       "  %sum = v_add_u32 %lhs, %rhs\n"
+      "  %product = v_mul_lo_u32 %sum, %rhs\n"
       "  %matrix = v_wmma_f32_16x16x16_f16 %a, %b, %acc\n"
-      "  return %sum, %matrix\n"
+      "  return %product, %matrix\n"
       "}\n";
   std::string printed;
   IREE_ASSERT_OK(harness.RoundTripAndVerify(
       IREE_SV(source), IREE_SV("amdgpu.gfx11.core"), &printed));
   EXPECT_NE(printed.find("v_add_u32 %lhs, %rhs"), std::string::npos);
+  EXPECT_NE(printed.find("v_mul_lo_u32 %sum, %rhs"), std::string::npos);
   EXPECT_NE(printed.find("v_wmma_f32_16x16x16_f16 %a, %b, %acc"),
             std::string::npos);
 }
@@ -267,6 +276,7 @@ TEST(AmdgpuDescriptorsTest,
   EXPECT_NE(json.find("\"key\":\"amdgpu.gfx11.core\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.s_add_u32\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_add_u32\""), std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"amdgpu.v_mul_lo_u32\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_load_dword\""),
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_wmma_f32_16x16x16_f16\""),

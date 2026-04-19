@@ -45,6 +45,7 @@ class AmdgpuIsaSnapshotError(ValueError):
 class AmdgpuIsaSnapshotAllowlist:
     instruction_names: tuple[str, ...]
     encoding_names: tuple[str, ...]
+    instruction_encoding_names: tuple[str, ...] = ()
     include_instruction_aliases: bool = True
 
 
@@ -145,21 +146,43 @@ def build_amdgpu_isa_snapshot(
         raise AmdgpuIsaSnapshotError("AMDGPU ISA snapshot encoding allowlist is empty")
     _validate_unique_names(allowlist.instruction_names, "instruction allowlist")
     _validate_unique_names(allowlist.encoding_names, "encoding allowlist")
+    _validate_unique_names(
+        allowlist.instruction_encoding_names,
+        "instruction encoding allowlist",
+    )
 
     selected_encodings = _select_snapshot_encodings(spec, allowlist.encoding_names)
     selected_encoding_names = tuple(encoding.name for encoding in selected_encodings)
     selected_encoding_name_set = set(selected_encoding_names)
     selected_instructions = _select_snapshot_instructions(spec, allowlist)
+    selected_instruction_names = tuple(
+        instruction.name for instruction in selected_instructions
+    )
+    instruction_encoding_selector = _build_instruction_encoding_selector(
+        spec,
+        allowlist,
+        selected_instruction_names=set(selected_instruction_names),
+        selected_encoding_names=selected_encoding_name_set,
+    )
 
     snapshot_instructions: list[AmdgpuIsaInstruction] = []
     dropped_instruction_encoding_names: list[str] = []
     referenced_encoding_names: set[str] = set()
+    matched_instruction_encoding_names: set[str] = set()
     for instruction in selected_instructions:
         filtered_encodings: list[AmdgpuIsaInstructionEncoding] = []
         for encoding in instruction.encodings:
-            if encoding.encoding_name in selected_encoding_name_set:
+            instruction_encoding_name = _instruction_encoding_name(
+                instruction, encoding
+            )
+            if encoding.encoding_name in selected_encoding_name_set and (
+                _should_select_instruction_encoding(
+                    instruction_encoding_selector, instruction, encoding
+                )
+            ):
                 filtered_encodings.append(encoding)
                 referenced_encoding_names.add(encoding.encoding_name)
+                matched_instruction_encoding_names.add(instruction_encoding_name)
             else:
                 dropped_instruction_encoding_names.append(
                     _instruction_encoding_report_name(instruction, encoding)
@@ -178,6 +201,18 @@ def build_amdgpu_isa_snapshot(
                 functional_groups=instruction.functional_groups,
             )
         )
+    if instruction_encoding_selector is not None:
+        missing_instruction_encoding_names = tuple(
+            instruction_encoding_name
+            for instruction_encoding_name in sorted(instruction_encoding_selector)
+            if instruction_encoding_name not in matched_instruction_encoding_names
+        )
+        if missing_instruction_encoding_names:
+            missing_text = ", ".join(missing_instruction_encoding_names)
+            raise AmdgpuIsaSnapshotError(
+                "AMDGPU ISA snapshot instruction encoding allowlist references "
+                f"unmatched selector(s): {missing_text}"
+            )
 
     snapshot_name = (
         target_family_key if snapshot_name is None else snapshot_name.strip()
@@ -191,9 +226,6 @@ def build_amdgpu_isa_snapshot(
         architecture_id=spec.architecture_id,
         encodings=selected_encodings,
         instructions=tuple(snapshot_instructions),
-    )
-    selected_instruction_names = tuple(
-        instruction.name for instruction in snapshot_instructions
     )
     report = AmdgpuIsaSnapshotReport(
         selected_instruction_names=selected_instruction_names,
@@ -327,6 +359,70 @@ def _select_snapshot_instructions(
         )
     except AmdgpuIsaXmlError as exc:
         raise AmdgpuIsaSnapshotError(str(exc)) from exc
+
+
+def _instruction_encoding_name(
+    instruction: AmdgpuIsaInstruction, encoding: AmdgpuIsaInstructionEncoding
+) -> str:
+    return f"{instruction.name}/{encoding.encoding_name}/{encoding.condition_name}"
+
+
+def _build_instruction_encoding_selector(
+    spec: AmdgpuIsaSpec,
+    allowlist: AmdgpuIsaSnapshotAllowlist,
+    *,
+    selected_instruction_names: set[str],
+    selected_encoding_names: set[str],
+) -> set[str] | None:
+    if not allowlist.instruction_encoding_names:
+        return None
+    instructions_by_name = spec.instruction_map(
+        include_aliases=allowlist.include_instruction_aliases
+    )
+    selector: set[str] = set()
+    for name in allowlist.instruction_encoding_names:
+        parts = name.split("/")
+        if len(parts) != 3 or any(not part for part in parts):
+            raise AmdgpuIsaSnapshotError(
+                "AMDGPU ISA snapshot instruction encoding selector must have "
+                f"the form INSTRUCTION/ENCODING/CONDITION: {name}"
+            )
+        instruction_name, encoding_name, condition_name = parts
+        instruction = instructions_by_name.get(instruction_name)
+        if instruction is None:
+            raise AmdgpuIsaSnapshotError(
+                "AMDGPU ISA snapshot instruction encoding selector references "
+                f"unknown instruction '{instruction_name}'"
+            )
+        if instruction.name not in selected_instruction_names:
+            raise AmdgpuIsaSnapshotError(
+                "AMDGPU ISA snapshot instruction encoding selector references "
+                f"instruction '{instruction_name}' outside the instruction "
+                "allowlist"
+            )
+        if encoding_name not in selected_encoding_names:
+            raise AmdgpuIsaSnapshotError(
+                "AMDGPU ISA snapshot instruction encoding selector references "
+                f"encoding '{encoding_name}' outside the encoding allowlist"
+            )
+        selector_name = f"{instruction.name}/{encoding_name}/{condition_name}"
+        if selector_name in selector:
+            raise AmdgpuIsaSnapshotError(
+                "AMDGPU ISA snapshot instruction encoding allowlist repeats "
+                f"'{selector_name}' after alias resolution"
+            )
+        selector.add(selector_name)
+    return selector
+
+
+def _should_select_instruction_encoding(
+    selector: set[str] | None,
+    instruction: AmdgpuIsaInstruction,
+    encoding: AmdgpuIsaInstructionEncoding,
+) -> bool:
+    if selector is None:
+        return True
+    return _instruction_encoding_name(instruction, encoding) in selector
 
 
 def _snapshot_to_json_object(snapshot: AmdgpuIsaSnapshot) -> dict[str, Any]:

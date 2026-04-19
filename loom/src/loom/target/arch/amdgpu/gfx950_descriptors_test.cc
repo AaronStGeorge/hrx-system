@@ -67,6 +67,13 @@ TEST(AmdgpuDescriptorsTest, Gfx950CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(add_descriptor->result_count, 1u);
   EXPECT_EQ(add_descriptor->encoding_id, 52u);
 
+  const loom_low_descriptor_t* multiply_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_mul_lo_u32"));
+  ASSERT_NE(multiply_descriptor, nullptr);
+  EXPECT_EQ(multiply_descriptor->operand_count, 3u);
+  EXPECT_EQ(multiply_descriptor->result_count, 1u);
+  EXPECT_EQ(multiply_descriptor->encoding_id, 645u);
+
   const loom_low_descriptor_t* load_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_load_dword"));
   ASSERT_NE(load_descriptor, nullptr);
@@ -185,6 +192,7 @@ TEST(AmdgpuDescriptorsTest, ManifestNamesScalarVectorMemoryAndMatrixPackets) {
   EXPECT_NE(json.find("\"key\":\"amdgpu.gfx950.core\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.s_add_u32\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_add_u32\""), std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"amdgpu.v_mul_lo_u32\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_load_dword\""),
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_mfma_f32_16x16x16_f16\""),

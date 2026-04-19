@@ -42,6 +42,9 @@ static const uint8_t kAmdgpuGfx12CoreStringData[] =
     LOOM_BSTRING_LITERAL("\x03", "rhs")
     LOOM_BSTRING_LITERAL("\x10", "amdgpu.v_add_u32")
     LOOM_BSTRING_LITERAL("\x09", "v_add_u32")
+    LOOM_BSTRING_LITERAL("\x13", "amdgpu.v_mul_lo_u32")
+    LOOM_BSTRING_LITERAL("\x0c", "v_mul_lo_u32")
+    LOOM_BSTRING_LITERAL("\x12", "integer.mul.lo.u32")
     LOOM_BSTRING_LITERAL("\x1a", "amdgpu.s_buffer_load_dword")
     LOOM_BSTRING_LITERAL("\x13", "s_buffer_load_dword")
     LOOM_BSTRING_LITERAL("\x0f", "memory.load.u32")
@@ -151,8 +154,17 @@ enum {
   AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_v_add_u32 =
       AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_v_add_u32 +
       sizeof("amdgpu.v_add_u32"),
-  AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_buffer_load_dword =
+  AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_v_mul_lo_u32 =
       AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_v_add_u32 + sizeof("v_add_u32"),
+  AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_v_mul_lo_u32 =
+      AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_v_mul_lo_u32 +
+      sizeof("amdgpu.v_mul_lo_u32"),
+  AMDGPU_GFX12_CORE_STRING_semantic_amdgpu_v_mul_lo_u32 =
+      AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_v_mul_lo_u32 +
+      sizeof("v_mul_lo_u32"),
+  AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_buffer_load_dword =
+      AMDGPU_GFX12_CORE_STRING_semantic_amdgpu_v_mul_lo_u32 +
+      sizeof("integer.mul.lo.u32"),
   AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_s_buffer_load_dword =
       AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_buffer_load_dword +
       sizeof("amdgpu.s_buffer_load_dword"),
@@ -331,6 +343,39 @@ static const loom_low_operand_t kAmdgpuGfx12CoreOperands[] = {
         .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
         .flags = 0,
         .reg_class_alt_start = 0,
+        .reg_class_alt_count = 1,
+        .unit_count = 1,
+        .data_format_id = 0,
+        .read_stage = 0,
+        .ready_stage = 0,
+    },
+    {
+        .field_name_string_offset = AMDGPU_GFX12_CORE_STRING_field_dst,
+        .role = LOOM_LOW_OPERAND_ROLE_RESULT,
+        .flags = 0,
+        .reg_class_alt_start = 1,
+        .reg_class_alt_count = 1,
+        .unit_count = 1,
+        .data_format_id = 0,
+        .read_stage = 0,
+        .ready_stage = 0,
+    },
+    {
+        .field_name_string_offset = AMDGPU_GFX12_CORE_STRING_field_lhs,
+        .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
+        .flags = 0,
+        .reg_class_alt_start = 1,
+        .reg_class_alt_count = 1,
+        .unit_count = 1,
+        .data_format_id = 0,
+        .read_stage = 0,
+        .ready_stage = 0,
+    },
+    {
+        .field_name_string_offset = AMDGPU_GFX12_CORE_STRING_field_rhs,
+        .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
+        .flags = 0,
+        .reg_class_alt_start = 1,
         .reg_class_alt_count = 1,
         .unit_count = 1,
         .data_format_id = 0,
@@ -1100,6 +1145,29 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
     },
     {
         .key_string_offset =
+            AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_v_mul_lo_u32,
+        .mnemonic_string_offset =
+            AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_v_mul_lo_u32,
+        .semantic_tag_string_offset =
+            AMDGPU_GFX12_CORE_STRING_semantic_amdgpu_v_mul_lo_u32,
+        .feature_mask_word_start = 0,
+        .feature_mask_word_count = 0,
+        .encoding_id = 812,
+        .operand_start = 7,
+        .operand_count = 3,
+        .result_count = 1,
+        .immediate_start = 1,
+        .immediate_count = 0,
+        .effect_start = 0,
+        .effect_count = 0,
+        .constraint_start = 0,
+        .constraint_count = 0,
+        .schedule_class_id = 1,
+        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 10,
+    },
+    {
+        .key_string_offset =
             AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_buffer_load_dword,
         .mnemonic_string_offset =
             AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_s_buffer_load_dword,
@@ -1108,7 +1176,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 16,
-        .operand_start = 7,
+        .operand_start = 10,
         .operand_count = 3,
         .result_count = 1,
         .immediate_start = 1,
@@ -1131,7 +1199,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 20,
-        .operand_start = 10,
+        .operand_start = 13,
         .operand_count = 4,
         .result_count = 1,
         .immediate_start = 2,
@@ -1154,7 +1222,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 26,
-        .operand_start = 14,
+        .operand_start = 17,
         .operand_count = 4,
         .result_count = 0,
         .immediate_start = 3,
@@ -1177,7 +1245,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 64,
-        .operand_start = 18,
+        .operand_start = 21,
         .operand_count = 4,
         .result_count = 1,
         .immediate_start = 4,
@@ -1188,7 +1256,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .constraint_count = 0,
         .schedule_class_id = 5,
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
-        .canonical_asm_form_ordinal = 10,
+        .canonical_asm_form_ordinal = 11,
     },
     {
         .key_string_offset =
@@ -1200,7 +1268,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 64,
-        .operand_start = 22,
+        .operand_start = 25,
         .operand_count = 0,
         .result_count = 0,
         .immediate_start = 4,
@@ -1223,7 +1291,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 65,
-        .operand_start = 22,
+        .operand_start = 25,
         .operand_count = 0,
         .result_count = 0,
         .immediate_start = 5,
@@ -1246,7 +1314,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 8,
-        .operand_start = 22,
+        .operand_start = 25,
         .operand_count = 0,
         .result_count = 0,
         .immediate_start = 6,
@@ -1269,7 +1337,7 @@ static const loom_low_descriptor_t kAmdgpuGfx12CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 10,
-        .operand_start = 22,
+        .operand_start = 25,
         .operand_count = 0,
         .result_count = 0,
         .immediate_start = 7,
@@ -1288,12 +1356,12 @@ static const loom_low_descriptor_ref_t kAmdgpuGfx12CoreDescriptorRefs[] = {
     {
         .key_string_offset =
             AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_buffer_load_dword,
-        .descriptor_ordinal = 4,
+        .descriptor_ordinal = 5,
     },
     {
         .key_string_offset =
             AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_buffer_store_dword,
-        .descriptor_ordinal = 5,
+        .descriptor_ordinal = 6,
     },
     {
         .key_string_offset =
@@ -1303,7 +1371,7 @@ static const loom_low_descriptor_ref_t kAmdgpuGfx12CoreDescriptorRefs[] = {
     {
         .key_string_offset =
             AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_buffer_load_dword,
-        .descriptor_ordinal = 3,
+        .descriptor_ordinal = 4,
     },
     {
         .key_string_offset =
@@ -1313,22 +1381,22 @@ static const loom_low_descriptor_ref_t kAmdgpuGfx12CoreDescriptorRefs[] = {
     {
         .key_string_offset =
             AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_wait_alu,
-        .descriptor_ordinal = 9,
-    },
-    {
-        .key_string_offset =
-            AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_wait_idle,
         .descriptor_ordinal = 10,
     },
     {
         .key_string_offset =
+            AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_wait_idle,
+        .descriptor_ordinal = 11,
+    },
+    {
+        .key_string_offset =
             AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_wait_loadcnt,
-        .descriptor_ordinal = 7,
+        .descriptor_ordinal = 8,
     },
     {
         .key_string_offset =
             AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_s_wait_storecnt,
-        .descriptor_ordinal = 8,
+        .descriptor_ordinal = 9,
     },
     {
         .key_string_offset =
@@ -1337,13 +1405,18 @@ static const loom_low_descriptor_ref_t kAmdgpuGfx12CoreDescriptorRefs[] = {
     },
     {
         .key_string_offset =
+            AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_v_mul_lo_u32,
+        .descriptor_ordinal = 3,
+    },
+    {
+        .key_string_offset =
             AMDGPU_GFX12_CORE_STRING_descriptor_amdgpu_v_wmma_f32_16x16x16_f16,
-        .descriptor_ordinal = 6,
+        .descriptor_ordinal = 7,
     },
 };
 
 static const uint16_t kAmdgpuGfx12CoreAsmOperandIndices[] = {
-    0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 0, 1, 2, 0, 0, 1, 2, 0, 1, 2, 3,
+    0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 0, 1, 2, 0, 0, 1, 2, 0, 1, 2, 0, 1, 2, 3,
 };
 
 static const loom_low_asm_immediate_t kAmdgpuGfx12CoreAsmImmediates[] = {
@@ -1381,7 +1454,7 @@ static const loom_low_asm_form_t kAmdgpuGfx12CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_buffer_load_dword,
-        .descriptor_ordinal = 4,
+        .descriptor_ordinal = 5,
         .result_operand_index_start = 0,
         .result_operand_index_count = 1,
         .operand_index_start = 1,
@@ -1392,7 +1465,7 @@ static const loom_low_asm_form_t kAmdgpuGfx12CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_buffer_store_dword,
-        .descriptor_ordinal = 5,
+        .descriptor_ordinal = 6,
         .result_operand_index_start = 4,
         .result_operand_index_count = 0,
         .operand_index_start = 4,
@@ -1414,7 +1487,7 @@ static const loom_low_asm_form_t kAmdgpuGfx12CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_s_buffer_load_dword,
-        .descriptor_ordinal = 3,
+        .descriptor_ordinal = 4,
         .result_operand_index_start = 11,
         .result_operand_index_count = 1,
         .operand_index_start = 12,
@@ -1436,7 +1509,7 @@ static const loom_low_asm_form_t kAmdgpuGfx12CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_s_wait_alu,
-        .descriptor_ordinal = 9,
+        .descriptor_ordinal = 10,
         .result_operand_index_start = 15,
         .result_operand_index_count = 0,
         .operand_index_start = 15,
@@ -1447,7 +1520,7 @@ static const loom_low_asm_form_t kAmdgpuGfx12CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_s_wait_idle,
-        .descriptor_ordinal = 10,
+        .descriptor_ordinal = 11,
         .result_operand_index_start = 15,
         .result_operand_index_count = 0,
         .operand_index_start = 15,
@@ -1458,7 +1531,7 @@ static const loom_low_asm_form_t kAmdgpuGfx12CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_s_wait_loadcnt,
-        .descriptor_ordinal = 7,
+        .descriptor_ordinal = 8,
         .result_operand_index_start = 15,
         .result_operand_index_count = 0,
         .operand_index_start = 15,
@@ -1469,7 +1542,7 @@ static const loom_low_asm_form_t kAmdgpuGfx12CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_s_wait_storecnt,
-        .descriptor_ordinal = 8,
+        .descriptor_ordinal = 9,
         .result_operand_index_start = 15,
         .result_operand_index_count = 0,
         .operand_index_start = 15,
@@ -1490,11 +1563,22 @@ static const loom_low_asm_form_t kAmdgpuGfx12CoreAsmForms[] = {
     },
     {
         .mnemonic_string_offset =
-            AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_v_wmma_f32_16x16x16_f16,
-        .descriptor_ordinal = 6,
+            AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_v_mul_lo_u32,
+        .descriptor_ordinal = 3,
         .result_operand_index_start = 18,
         .result_operand_index_count = 1,
         .operand_index_start = 19,
+        .operand_index_count = 2,
+        .immediate_start = 7,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            AMDGPU_GFX12_CORE_STRING_mnemonic_amdgpu_v_wmma_f32_16x16x16_f16,
+        .descriptor_ordinal = 7,
+        .result_operand_index_start = 21,
+        .result_operand_index_count = 1,
+        .operand_index_start = 22,
         .operand_index_count = 3,
         .immediate_start = 7,
         .immediate_count = 0,

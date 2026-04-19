@@ -31,6 +31,7 @@ def test_gfx950_core_descriptors_are_materialized_from_snapshot() -> None:
     assert list(descriptor_by_key) == [
         "amdgpu.s_add_u32",
         "amdgpu.v_add_u32",
+        "amdgpu.v_mul_lo_u32",
         "amdgpu.s_buffer_load_dword",
         "amdgpu.buffer_load_dword",
         "amdgpu.buffer_store_dword",
@@ -39,6 +40,7 @@ def test_gfx950_core_descriptors_are_materialized_from_snapshot() -> None:
     ]
     assert descriptor_by_key["amdgpu.s_add_u32"].encoding_id == 0
     assert descriptor_by_key["amdgpu.v_add_u32"].encoding_id == 52
+    assert descriptor_by_key["amdgpu.v_mul_lo_u32"].encoding_id == 645
     assert descriptor_by_key["amdgpu.s_buffer_load_dword"].encoding_id == 8
     assert descriptor_by_key["amdgpu.buffer_load_dword"].encoding_id == 20
     assert descriptor_by_key["amdgpu.buffer_store_dword"].encoding_id == 28
@@ -66,6 +68,7 @@ def test_gfx950_snapshot_covers_cdna4_source_facts() -> None:
         "S_WAITCNT",
         "V_ADD_U32",
         "V_MFMA_F32_16X16X16_F16",
+        "V_MUL_LO_U32",
     )
     assert "S_MOV_B32" not in _GFX950_ISA_SNAPSHOT.instruction_map()
     assert instruction_map["V_MFMA_F32_16X16X16F16"].name == "V_MFMA_F32_16X16X16_F16"
@@ -79,6 +82,7 @@ def test_gfx11_core_descriptors_are_materialized_from_snapshot() -> None:
     assert list(descriptor_by_key) == [
         "amdgpu.s_add_u32",
         "amdgpu.v_add_u32",
+        "amdgpu.v_mul_lo_u32",
         "amdgpu.s_buffer_load_dword",
         "amdgpu.buffer_load_dword",
         "amdgpu.buffer_store_dword",
@@ -88,6 +92,7 @@ def test_gfx11_core_descriptors_are_materialized_from_snapshot() -> None:
         "amdgpu.s_wait_idle",
     ]
     assert descriptor_by_key["amdgpu.v_add_u32"].encoding_id == 37
+    assert descriptor_by_key["amdgpu.v_mul_lo_u32"].encoding_id == 812
     assert descriptor_by_key["amdgpu.s_buffer_load_dword"].encoding_id == 8
     assert descriptor_by_key["amdgpu.buffer_load_dword"].encoding_id == 20
     assert descriptor_by_key["amdgpu.buffer_store_dword"].encoding_id == 26
@@ -117,6 +122,7 @@ def test_gfx11_snapshot_covers_only_overlay_backed_source_facts() -> None:
         "S_WAITCNT_DEPCTR",
         "S_WAIT_IDLE",
         "V_ADD_NC_U32",
+        "V_MUL_LO_U32",
         "V_WMMA_F32_16X16X16_F16",
     )
     assert "S_MOV_B32" not in _GFX11_ISA_SNAPSHOT.instruction_map()
@@ -136,6 +142,7 @@ def test_gfx12_core_descriptors_are_materialized_from_snapshot() -> None:
     assert list(descriptor_by_key) == [
         "amdgpu.s_add_u32",
         "amdgpu.v_add_u32",
+        "amdgpu.v_mul_lo_u32",
         "amdgpu.s_buffer_load_dword",
         "amdgpu.buffer_load_dword",
         "amdgpu.buffer_store_dword",
@@ -146,6 +153,7 @@ def test_gfx12_core_descriptors_are_materialized_from_snapshot() -> None:
         "amdgpu.s_wait_idle",
     ]
     assert descriptor_by_key["amdgpu.v_add_u32"].encoding_id == 37
+    assert descriptor_by_key["amdgpu.v_mul_lo_u32"].encoding_id == 812
     assert descriptor_by_key["amdgpu.s_buffer_load_dword"].encoding_id == 16
     assert descriptor_by_key["amdgpu.buffer_load_dword"].encoding_id == 20
     assert descriptor_by_key["amdgpu.buffer_store_dword"].encoding_id == 26
@@ -179,6 +187,7 @@ def test_gfx1250_baseline_descriptors_are_materialized_from_snapshot() -> None:
     assert list(descriptor_by_key) == [
         "amdgpu.s_add_u32",
         "amdgpu.v_add_u32",
+        "amdgpu.v_mul_lo_u32",
         "amdgpu.s_buffer_load_dword",
         "amdgpu.buffer_load_dword",
         "amdgpu.buffer_store_dword",
@@ -188,6 +197,7 @@ def test_gfx1250_baseline_descriptors_are_materialized_from_snapshot() -> None:
         "amdgpu.s_wait_idle",
     ]
     assert descriptor_by_key["amdgpu.v_add_u32"].encoding_id == 37
+    assert descriptor_by_key["amdgpu.v_mul_lo_u32"].encoding_id == 812
     assert descriptor_by_key["amdgpu.s_buffer_load_dword"].encoding_id == 16
     assert descriptor_by_key["amdgpu.buffer_load_dword"].encoding_id == 20
     assert descriptor_by_key["amdgpu.buffer_store_dword"].encoding_id == 26
@@ -198,14 +208,14 @@ def test_gfx1250_baseline_descriptors_are_materialized_from_snapshot() -> None:
 
     assert AMDGPU_GFX1250_CORE_DESCRIPTOR_SET.descriptors[0].key == "amdgpu.s_mov_b32"
     assert (
-        AMDGPU_GFX1250_CORE_DESCRIPTOR_SET.descriptors[1:10]
+        AMDGPU_GFX1250_CORE_DESCRIPTOR_SET.descriptors[1:11]
         == _GFX1250_CORE_OVERLAY_DESCRIPTORS
     )
     assert (
-        AMDGPU_GFX1250_CORE_DESCRIPTOR_SET.descriptors[10].key
+        AMDGPU_GFX1250_CORE_DESCRIPTOR_SET.descriptors[11].key
         == "amdgpu.v_wmma_f32_16x16x32_f16"
     )
-    for descriptor in AMDGPU_GFX1250_CORE_DESCRIPTOR_SET.descriptors[10:]:
+    for descriptor in AMDGPU_GFX1250_CORE_DESCRIPTOR_SET.descriptors[11:]:
         assert descriptor.encoding_id == LOW_DESCRIPTOR_ENCODING_ID_NONE
         assert DescriptorFlag.PSEUDO in descriptor.flags
 
@@ -226,6 +236,7 @@ def test_gfx1250_snapshot_covers_rdna4_baseline_source_facts() -> None:
         "S_WAIT_LOADCNT",
         "S_WAIT_STORECNT",
         "V_ADD_NC_U32",
+        "V_MUL_LO_U32",
     )
     assert "S_MOV_B32" not in _GFX1250_ISA_SNAPSHOT.instruction_map()
     assert instruction_map["S_ADD_U32"].name == "S_ADD_CO_U32"

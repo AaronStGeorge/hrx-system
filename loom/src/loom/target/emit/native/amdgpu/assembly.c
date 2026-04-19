@@ -276,7 +276,8 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
     return loom_amdgpu_append_s_mov_b32_packet(context);
   }
   if (iree_string_view_equal(key, IREE_SV("amdgpu.s_add_u32")) ||
-      iree_string_view_equal(key, IREE_SV("amdgpu.v_add_u32"))) {
+      iree_string_view_equal(key, IREE_SV("amdgpu.v_add_u32")) ||
+      iree_string_view_equal(key, IREE_SV("amdgpu.v_mul_lo_u32"))) {
     return loom_amdgpu_append_basic_packet(context, 1, 2);
   }
   if (iree_string_view_equal(key, IREE_SV("amdgpu.s_buffer_load_dword"))) {

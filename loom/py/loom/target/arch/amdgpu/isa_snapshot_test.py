@@ -24,7 +24,18 @@ from loom.target.arch.amdgpu.isa_snapshot import (
     format_amdgpu_isa_snapshot_report_json,
     parse_amdgpu_isa_snapshot_json,
 )
-from loom.target.arch.amdgpu.isa_xml import parse_amdgpu_isa_xml_text
+from loom.target.arch.amdgpu.isa_xml import (
+    AmdgpuIsaBitRange,
+    AmdgpuIsaEncoding,
+    AmdgpuIsaEncodingField,
+    AmdgpuIsaFunctionalGroup,
+    AmdgpuIsaInstruction,
+    AmdgpuIsaInstructionEncoding,
+    AmdgpuIsaInstructionFlags,
+    AmdgpuIsaOperand,
+    AmdgpuIsaSpec,
+    parse_amdgpu_isa_xml_text,
+)
 from loom.target.arch.amdgpu.isa_xml_test import SAMPLE_XML
 from loom.target.low_descriptors import (
     DescriptorFlag,
@@ -161,6 +172,105 @@ def test_snapshot_report_tracks_dropped_source_facts_outside_artifact() -> None:
     assert report["unreferenced_selected_encodings"] == ["ENC_SOPP"]
 
 
+def test_snapshot_can_select_precise_instruction_encodings() -> None:
+    spec = AmdgpuIsaSpec(
+        source_name="synthetic.xml",
+        architecture_name="Synthetic AMDGPU",
+        architecture_id=99,
+        encodings=(
+            AmdgpuIsaEncoding(
+                name="ENC_SHARED",
+                order=1,
+                bit_count=32,
+                identifier_mask=0xF0000000,
+                identifier_values=(0xA0000000,),
+                fields=(
+                    AmdgpuIsaEncodingField(
+                        name="OP",
+                        is_conditional=False,
+                        ranges=(AmdgpuIsaBitRange(0, 8, 0),),
+                    ),
+                ),
+            ),
+        ),
+        instructions=(
+            AmdgpuIsaInstruction(
+                name="INST",
+                aliases=(),
+                flags=AmdgpuIsaInstructionFlags(
+                    is_branch=False,
+                    is_conditional_branch=False,
+                    is_indirect_branch=False,
+                    is_program_terminator=False,
+                    is_immediately_executed=False,
+                ),
+                encodings=(
+                    AmdgpuIsaInstructionEncoding(
+                        encoding_name="ENC_SHARED",
+                        condition_name="default",
+                        opcode=1,
+                        operands=(
+                            AmdgpuIsaOperand(
+                                order=1,
+                                field_name="VDST",
+                                data_format_name="FMT_NUM_U32",
+                                operand_type="OPR_VGPR",
+                                size_bits=32,
+                                is_input=False,
+                                is_output=True,
+                                is_implicit=False,
+                                is_binary_microcode_required=True,
+                            ),
+                        ),
+                    ),
+                    AmdgpuIsaInstructionEncoding(
+                        encoding_name="ENC_SHARED",
+                        condition_name="literal",
+                        opcode=2,
+                        operands=(
+                            AmdgpuIsaOperand(
+                                order=1,
+                                field_name="VDST",
+                                data_format_name="FMT_NUM_U32",
+                                operand_type="OPR_VGPR",
+                                size_bits=32,
+                                is_input=False,
+                                is_output=True,
+                                is_implicit=False,
+                                is_binary_microcode_required=True,
+                            ),
+                        ),
+                    ),
+                ),
+                functional_groups=(AmdgpuIsaFunctionalGroup("VALU", ("INTEGER",)),),
+            ),
+        ),
+    )
+
+    result = build_amdgpu_isa_snapshot(
+        spec,
+        target_family_key="amdgpu.gfx11",
+        allowlist=AmdgpuIsaSnapshotAllowlist(
+            instruction_names=("INST",),
+            encoding_names=("ENC_SHARED",),
+            instruction_encoding_names=("INST/ENC_SHARED/default",),
+        ),
+    )
+    snapshot = result.snapshot
+
+    assert [encoding.name for encoding in snapshot.encodings] == ["ENC_SHARED"]
+    assert len(snapshot.instructions) == 1
+    assert snapshot.instructions[0].name == "INST"
+    assert [
+        (encoding.encoding_name, encoding.condition_name)
+        for encoding in snapshot.instructions[0].encodings
+    ] == [("ENC_SHARED", "default")]
+    assert result.report.dropped_instruction_encoding_names == (
+        "INST/ENC_SHARED/literal/opcode=2",
+    )
+    assert result.report.unreferenced_encoding_names == ()
+
+
 def test_snapshot_rejects_unknown_allowlist_instruction() -> None:
     spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
 
@@ -191,6 +301,29 @@ def test_snapshot_rejects_unknown_allowlist_encoding() -> None:
             allowlist=AmdgpuIsaSnapshotAllowlist(
                 instruction_names=("S_ADD_U32",),
                 encoding_names=("MISSING",),
+            ),
+        )
+
+
+def test_snapshot_rejects_duplicate_instruction_encoding_after_alias_resolution() -> (
+    None
+):
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+
+    with pytest.raises(
+        AmdgpuIsaSnapshotError,
+        match="instruction encoding allowlist repeats 'S_ADD_CO_U32/ENC_SOP2/default'",
+    ):
+        build_amdgpu_isa_snapshot(
+            spec,
+            target_family_key="amdgpu.gfx11",
+            allowlist=AmdgpuIsaSnapshotAllowlist(
+                instruction_names=("S_ADD_U32",),
+                encoding_names=("ENC_SOP2",),
+                instruction_encoding_names=(
+                    "S_ADD_U32/ENC_SOP2/default",
+                    "S_ADD_CO_U32/ENC_SOP2/default",
+                ),
             ),
         )
 
