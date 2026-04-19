@@ -80,6 +80,15 @@ static iree_status_t loom_test_required_run(loom_pass_t* pass,
   return iree_ok_status();
 }
 
+static iree_status_t loom_test_requires_target_run(loom_pass_t* pass,
+                                                   loom_module_t* module,
+                                                   loom_func_like_t function) {
+  (void)pass;
+  (void)module;
+  (void)function;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_test_fail_run(loom_pass_t* pass,
                                         loom_module_t* module) {
   (void)module;
@@ -150,6 +159,13 @@ static const loom_pass_option_schema_t kTestRequiredSchema[] = {
         .name = IREE_SVL("required"),
         .kind = LOOM_PASS_OPTION_SCHEMA_STRING,
         .flags = LOOM_PASS_OPTION_SCHEMA_REQUIRED,
+    },
+};
+
+static const loom_pass_requirement_def_t kTestRequiresTargetRequirements[] = {
+    {
+        .key = IREE_SVL("target.bundle"),
+        .description = IREE_SVL("Synthetic target bundle availability."),
     },
 };
 
@@ -227,6 +243,16 @@ static const loom_pass_info_t* loom_test_required_pass_info(void) {
   return &kTestRequiredPassInfo;
 }
 
+static const loom_pass_info_t kTestRequiresTargetPassInfo = {
+    .name = IREE_SVL("test.requires-target"),
+    .description = IREE_SVL("Synthetic function pass with a requirement."),
+    .kind = LOOM_PASS_FUNCTION,
+};
+
+static const loom_pass_info_t* loom_test_requires_target_pass_info(void) {
+  return &kTestRequiresTargetPassInfo;
+}
+
 static const loom_pass_info_t kTestUnavailablePassInfo = {
     .name = IREE_SVL("test.unavailable"),
     .description = IREE_SVL("Synthetic unavailable function pass."),
@@ -273,6 +299,13 @@ static const loom_pass_descriptor_t kTestPassDescriptors[] = {
         .create = loom_test_required_create,
         .option_schema = kTestRequiredSchema,
         .option_schema_count = IREE_ARRAYSIZE(kTestRequiredSchema),
+    },
+    {
+        .key = IREE_SVL("test.requires-target"),
+        .info = loom_test_requires_target_pass_info,
+        .function_run = loom_test_requires_target_run,
+        .requirement_defs = kTestRequiresTargetRequirements,
+        .requirement_count = IREE_ARRAYSIZE(kTestRequiresTargetRequirements),
     },
     {
         .key = IREE_SVL("test.unavailable"),

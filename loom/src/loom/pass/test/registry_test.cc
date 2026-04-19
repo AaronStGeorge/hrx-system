@@ -37,9 +37,13 @@ TEST(PassTestRegistryTest, Verifies) {
 TEST(PassTestRegistryTest, ContainsExpectedPasses) {
   const loom_pass_registry_t* registry = loom_test_pass_registry();
   const iree_string_view_t expected_keys[] = {
-      IREE_SV("test.fail"),        IREE_SV("test.mark-changed"),
-      IREE_SV("test.module-noop"), IREE_SV("test.noop"),
-      IREE_SV("test.options"),     IREE_SV("test.required"),
+      IREE_SV("test.fail"),
+      IREE_SV("test.mark-changed"),
+      IREE_SV("test.module-noop"),
+      IREE_SV("test.noop"),
+      IREE_SV("test.options"),
+      IREE_SV("test.required"),
+      IREE_SV("test.requires-target"),
       IREE_SV("test.unavailable"),
   };
   ASSERT_EQ(registry->descriptor_count, IREE_ARRAYSIZE(expected_keys));
