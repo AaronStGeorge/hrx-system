@@ -257,17 +257,21 @@ static iree_status_t loom_check_emit_parse_low_schedule_option(
   } else if (iree_string_view_equal(value, IREE_SV("candidates"))) {
     request->low_schedule_diagnostic_flags =
         LOOM_LOW_SCHEDULE_DIAGNOSTIC_CANDIDATE_DECISIONS;
+  } else if (iree_string_view_equal(value, IREE_SV("model"))) {
+    request->low_schedule_diagnostic_flags =
+        LOOM_LOW_SCHEDULE_DIAGNOSTIC_MODEL_QUALITY;
   } else if (iree_string_view_equal(value, IREE_SV("all"))) {
     request->low_schedule_diagnostic_flags =
         LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS |
         LOOM_LOW_SCHEDULE_DIAGNOSTIC_RESOURCE_BOTTLENECKS |
         LOOM_LOW_SCHEDULE_DIAGNOSTIC_HAZARD_GAPS |
-        LOOM_LOW_SCHEDULE_DIAGNOSTIC_CANDIDATE_DECISIONS;
+        LOOM_LOW_SCHEDULE_DIAGNOSTIC_CANDIDATE_DECISIONS |
+        LOOM_LOW_SCHEDULE_DIAGNOSTIC_MODEL_QUALITY;
   } else {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "low-schedule-json option 'diagnostics' expected 'none', 'pressure', "
-        "'resources', 'hazards', 'candidates', or 'all', got '%.*s'",
+        "'resources', 'hazards', 'candidates', 'model', or 'all', got '%.*s'",
         (int)value.size, value.data);
   }
   request->has_low_schedule_diagnostics_option = true;

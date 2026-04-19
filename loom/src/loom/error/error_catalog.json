@@ -5179,5 +5179,72 @@
         "kind_name": "U64"
       }
     ]
+  },
+  {
+    "error_id": "ERR_BACKEND_016",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 16,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Schedule model quality recorded.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' schedule class '{schedule_class}' uses {model_quality} model quality with {latency_kind} latency {latency_cycles} cycle(s), {issue_use_count} resource row(s), {hazard_count} hazard row(s), and {use_count} scheduled use(s)",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "schedule_class",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "model_quality",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "latency_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "latency_cycles",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "issue_use_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "hazard_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "use_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
   }
 ]

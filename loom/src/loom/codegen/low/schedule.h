@@ -61,6 +61,8 @@ enum loom_low_schedule_diagnostic_bits_e {
   LOOM_LOW_SCHEDULE_DIAGNOSTIC_HAZARD_GAPS = 1u << 2,
   // Emits BACKEND/015 remarks for pressure-scheduler candidate choices.
   LOOM_LOW_SCHEDULE_DIAGNOSTIC_CANDIDATE_DECISIONS = 1u << 3,
+  // Emits BACKEND/016 remarks for non-exact schedule model quality.
+  LOOM_LOW_SCHEDULE_DIAGNOSTIC_MODEL_QUALITY = 1u << 4,
 };
 typedef uint32_t loom_low_schedule_diagnostic_flags_t;
 
@@ -273,6 +275,31 @@ typedef struct loom_low_schedule_hazard_gap_t {
   loom_low_hazard_flags_t hazard_flags;
 } loom_low_schedule_hazard_gap_t;
 
+// Schedule-class model quality summary for schedule classes used by this
+// function. These summaries make model uncertainty visible without repeating
+// the same schedule-class facts on every packet.
+typedef struct loom_low_schedule_model_summary_t {
+  // Schedule node where this class first appears, or
+  // LOOM_LOW_SCHEDULE_NODE_NONE.
+  uint32_t first_node;
+  // Target descriptor schedule-class identifier.
+  uint32_t schedule_class_id;
+  // Borrowed stable schedule-class name.
+  iree_string_view_t schedule_class_name;
+  // Descriptor schedule latency in cycles.
+  uint16_t latency_cycles;
+  // Descriptor latency interpretation.
+  loom_low_latency_kind_t latency_kind;
+  // Descriptor schedule-model quality.
+  loom_low_model_quality_t model_quality;
+  // Number of issue-resource rows consumed by the schedule class.
+  uint16_t issue_use_count;
+  // Number of hazard rows attached to the schedule class.
+  uint16_t hazard_count;
+  // Number of scheduled nodes using this schedule class.
+  uint32_t use_count;
+} loom_low_schedule_model_summary_t;
+
 // Aggregate descriptor resource pressure for one target resource. Summaries are
 // emitted in resource-id order and only include resources used by the schedule.
 typedef struct loom_low_schedule_resource_summary_t {
@@ -378,6 +405,10 @@ typedef struct loom_low_schedule_sidecar_t {
   const loom_low_schedule_hazard_gap_t* hazard_gaps;
   // Number of minimum-distance hazard gaps.
   iree_host_size_t hazard_gap_count;
+  // Schedule-class model-quality summaries in descriptor schedule-class order.
+  const loom_low_schedule_model_summary_t* model_summaries;
+  // Number of schedule-class model-quality summaries.
+  iree_host_size_t model_summary_count;
   // Per-resource aggregate schedule pressure in resource-id order.
   const loom_low_schedule_resource_summary_t* resource_summaries;
   // Number of resource summary records.

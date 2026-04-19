@@ -101,11 +101,11 @@ iree_status_t loom_low_schedule_format_json(
       ",\"candidate_decision_count\":%zu"
       ",\"resource_use_count\":%zu,\"hazard_use_count\":%zu"
       ",\"hazard_gap_count\":%zu"
-      ",\"resource_summary_count\":%zu",
+      ",\"model_summary_count\":%zu,\"resource_summary_count\":%zu",
       sidecar->block_count, sidecar->node_count, sidecar->dependency_count,
       sidecar->candidate_decision_count, sidecar->resource_use_count,
       sidecar->hazard_use_count, sidecar->hazard_gap_count,
-      sidecar->resource_summary_count));
+      sidecar->model_summary_count, sidecar->resource_summary_count));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"blocks\":["));
@@ -149,11 +149,21 @@ iree_status_t loom_low_schedule_format_json(
         loom_output_stream_write_cstring(&stream, ",\"schedule_class\":"));
     IREE_RETURN_IF_ERROR(loom_low_schedule_json_write_nullable_string(
         &stream, node->schedule_class_name));
+    iree_string_view_t latency_kind_name =
+        loom_low_latency_kind_name(node->latency_kind);
+    iree_string_view_t model_quality_name =
+        loom_low_model_quality_name(node->model_quality);
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         &stream,
-        ",\"latency_cycles\":%" PRIu16 ",\"issue_use_count\":%" PRIu16
-        ",\"hazard_count\":%" PRIu16 ",\"effect_count\":%" PRIu16 "}",
-        node->latency_cycles, node->issue_use_count, node->hazard_count,
+        ",\"latency_cycles\":%" PRIu16
+        ",\"latency_kind\":%u,\"latency_kind_name\":\"%.*s\""
+        ",\"model_quality\":%u,\"model_quality_name\":\"%.*s\""
+        ",\"issue_use_count\":%" PRIu16 ",\"hazard_count\":%" PRIu16
+        ",\"effect_count\":%" PRIu16 "}",
+        node->latency_cycles, (unsigned)node->latency_kind,
+        (int)latency_kind_name.size, latency_kind_name.data,
+        (unsigned)node->model_quality, (int)model_quality_name.size,
+        model_quality_name.data, node->issue_use_count, node->hazard_count,
         node->effect_count));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
@@ -372,6 +382,40 @@ iree_status_t loom_low_schedule_format_json(
           hazard_gap->producer_stage, hazard_gap->consumer_stage,
           hazard_gap->required_distance, hazard_gap->actual_distance,
           hazard_gap->required_delay, hazard_gap->hazard_flags));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+  }
+
+  if (sidecar->model_summary_count > 0) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"model_summaries\":["));
+    for (iree_host_size_t i = 0; i < sidecar->model_summary_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      const loom_low_schedule_model_summary_t* summary =
+          &sidecar->model_summaries[i];
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream, "{\"schedule_class\":%" PRIu32 ",\"schedule_class_name\":",
+          summary->schedule_class_id));
+      IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+          &stream, summary->schedule_class_name));
+      iree_string_view_t latency_kind_name =
+          loom_low_latency_kind_name(summary->latency_kind);
+      iree_string_view_t model_quality_name =
+          loom_low_model_quality_name(summary->model_quality);
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream,
+          ",\"first_node\":%" PRIu32 ",\"use_count\":%" PRIu32
+          ",\"latency_cycles\":%" PRIu16
+          ",\"latency_kind\":%u,\"latency_kind_name\":\"%.*s\""
+          ",\"model_quality\":%u,\"model_quality_name\":\"%.*s\""
+          ",\"issue_use_count\":%" PRIu16 ",\"hazard_count\":%" PRIu16 "}",
+          summary->first_node, summary->use_count, summary->latency_cycles,
+          (unsigned)summary->latency_kind, (int)latency_kind_name.size,
+          latency_kind_name.data, (unsigned)summary->model_quality,
+          (int)model_quality_name.size, model_quality_name.data,
+          summary->issue_use_count, summary->hazard_count));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
   }

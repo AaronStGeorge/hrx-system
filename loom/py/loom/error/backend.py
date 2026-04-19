@@ -408,6 +408,34 @@ ERR_BACKEND_015 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_016: Schedule model quality was recorded.
+ERR_BACKEND_016 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=16,
+    severity=Severity.REMARK,
+    summary="Schedule model quality recorded.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' schedule class '{schedule_class}' uses "
+        "{model_quality} model quality with {latency_kind} latency "
+        "{latency_cycles} cycle(s), {issue_use_count} resource row(s), "
+        "{hazard_count} hazard row(s), and {use_count} scheduled use(s)"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("schedule_class", ParamKind.STRING),
+        ErrorParam("model_quality", ParamKind.STRING),
+        ErrorParam("latency_kind", ParamKind.STRING),
+        ErrorParam("latency_cycles", ParamKind.U32),
+        ErrorParam("issue_use_count", ParamKind.U32),
+        ErrorParam("hazard_count", ParamKind.U32),
+        ErrorParam("use_count", ParamKind.U32),
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_001,
     ERR_BACKEND_002,
@@ -424,4 +452,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_013,
     ERR_BACKEND_014,
     ERR_BACKEND_015,
+    ERR_BACKEND_016,
 )

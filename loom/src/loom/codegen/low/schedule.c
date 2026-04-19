@@ -49,6 +49,8 @@ typedef struct loom_low_schedule_build_state_t {
   loom_low_schedule_hazard_use_t* hazard_uses;
   // Minimum-distance hazard gaps in scheduled order.
   loom_low_schedule_hazard_gap_t* hazard_gaps;
+  // Schedule-class model quality summaries in schedule-class order.
+  loom_low_schedule_model_summary_t* model_summaries;
   // Most recent producer state for each minimum-distance hazard key.
   struct loom_low_schedule_hazard_state_t* hazard_states;
   // Per-resource aggregate resource pressure, dense by descriptor resource id
@@ -72,6 +74,8 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t hazard_use_count;
   // Number of populated hazard_gaps entries.
   iree_host_size_t hazard_gap_count;
+  // Number of populated model_summaries entries.
+  iree_host_size_t model_summary_count;
   // Number of populated hazard_states entries.
   iree_host_size_t hazard_state_count;
   // Number of populated resource_summaries entries after compaction.
@@ -400,6 +404,46 @@ static iree_status_t loom_low_schedule_emit_candidate_decision_diagnostics(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_schedule_emit_model_summary(
+    loom_low_schedule_build_state_t* state,
+    const loom_low_schedule_model_summary_t* summary) {
+  if (summary->model_quality == LOOM_LOW_MODEL_QUALITY_EXACT) {
+    return iree_ok_status();
+  }
+  const loom_low_schedule_node_t* first_node = NULL;
+  if (summary->first_node < state->scheduled_node_count) {
+    first_node = &state->nodes[summary->first_node];
+  }
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(&state->target)),
+      loom_param_string(loom_low_diagnostic_export_name(&state->target)),
+      loom_param_string(loom_low_diagnostic_config_key(&state->target)),
+      loom_param_string(
+          loom_low_diagnostic_function_name(state->module, state->function_op)),
+      loom_param_string(summary->schedule_class_name),
+      loom_param_string(loom_low_model_quality_name(summary->model_quality)),
+      loom_param_string(loom_low_latency_kind_name(summary->latency_kind)),
+      loom_param_u32(summary->latency_cycles),
+      loom_param_u32(summary->issue_use_count),
+      loom_param_u32(summary->hazard_count),
+      loom_param_u32(summary->use_count),
+  };
+  const loom_op_t* origin_op =
+      first_node && first_node->op ? first_node->op : state->function_op;
+  return loom_low_schedule_emit(
+      state, origin_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 16),
+      params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_low_schedule_emit_model_diagnostics(
+    loom_low_schedule_build_state_t* state) {
+  for (iree_host_size_t i = 0; i < state->model_summary_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_schedule_emit_model_summary(
+        state, &state->model_summaries[i]));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_schedule_emit_resource_bottleneck(
     loom_low_schedule_build_state_t* state,
     const loom_low_schedule_resource_summary_t* summary) {
@@ -712,6 +756,16 @@ static iree_status_t loom_low_schedule_initialize_model_uses(
                               "size");
     }
   }
+  if (node_count != 0 &&
+      state->target.descriptor_set->schedule_class_count != 0) {
+    const uint32_t schedule_class_count =
+        state->target.descriptor_set->schedule_class_count;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->arena, schedule_class_count, sizeof(*state->model_summaries),
+        (void**)&state->model_summaries));
+    memset(state->model_summaries, 0,
+           schedule_class_count * sizeof(*state->model_summaries));
+  }
   if (resource_use_capacity != 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->arena, resource_use_capacity, sizeof(*state->resource_uses),
@@ -766,7 +820,9 @@ static iree_status_t loom_low_schedule_fill_nodes(
   for (uint16_t block_index = 0; block_index < state->body->block_count;
        ++block_index) {
     loom_block_t* block = state->body->blocks[block_index];
-    if (!block) continue;
+    if (!block) {
+      continue;
+    }
     state->blocks[block_index] = (loom_low_schedule_block_t){
         .block = block,
         .node_start = next_node_index,
@@ -1328,6 +1384,23 @@ static void loom_low_schedule_compact_resource_summaries(
   state->resource_summary_count = write_index;
 }
 
+static void loom_low_schedule_compact_model_summaries(
+    loom_low_schedule_build_state_t* state) {
+  if (!state->model_summaries) {
+    return;
+  }
+  iree_host_size_t write_index = 0;
+  for (iree_host_size_t read_index = 0;
+       read_index < state->target.descriptor_set->schedule_class_count;
+       ++read_index) {
+    if (state->model_summaries[read_index].use_count == 0) {
+      continue;
+    }
+    state->model_summaries[write_index++] = state->model_summaries[read_index];
+  }
+  state->model_summary_count = write_index;
+}
+
 static iree_status_t loom_low_schedule_note_model_uses_for_node(
     loom_low_schedule_build_state_t* state, uint32_t node_index) {
   const loom_low_schedule_node_t* node = &state->nodes[node_index];
@@ -1343,6 +1416,31 @@ static iree_status_t loom_low_schedule_note_model_uses_for_node(
   }
   const loom_low_schedule_class_t* schedule_class =
       &state->target.descriptor_set->schedule_classes[node->schedule_class_id];
+  if (state->model_summaries) {
+    loom_low_schedule_model_summary_t* model_summary =
+        &state->model_summaries[node->schedule_class_id];
+    if (model_summary->use_count == UINT32_MAX) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "low schedule model summary counters overflow");
+    }
+    if (model_summary->use_count == 0) {
+      iree_string_view_t schedule_class_name = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+          state->target.descriptor_set, schedule_class->name_string_offset,
+          &schedule_class_name));
+      *model_summary = (loom_low_schedule_model_summary_t){
+          .first_node = node_index,
+          .schedule_class_id = node->schedule_class_id,
+          .schedule_class_name = schedule_class_name,
+          .latency_cycles = schedule_class->latency_cycles,
+          .latency_kind = schedule_class->latency_kind,
+          .model_quality = schedule_class->model_quality,
+          .issue_use_count = schedule_class->issue_use_count,
+          .hazard_count = schedule_class->hazard_count,
+      };
+    }
+    ++model_summary->use_count;
+  }
   for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
     const loom_low_issue_use_t* issue_use =
         &state->target.descriptor_set
@@ -1578,6 +1676,7 @@ iree_status_t loom_low_schedule_function(
       loom_liveness_analyze_region(module, state.body, arena, &liveness));
   IREE_RETURN_IF_ERROR(
       loom_low_schedule_run_list_scheduler(&state, node_count, &liveness));
+  loom_low_schedule_compact_model_summaries(&state);
   loom_low_schedule_compact_resource_summaries(&state);
   if (iree_any_bit_set(options->diagnostic_flags,
                        LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS)) {
@@ -1588,6 +1687,10 @@ iree_status_t loom_low_schedule_function(
                        LOOM_LOW_SCHEDULE_DIAGNOSTIC_CANDIDATE_DECISIONS)) {
     IREE_RETURN_IF_ERROR(
         loom_low_schedule_emit_candidate_decision_diagnostics(&state));
+  }
+  if (iree_any_bit_set(options->diagnostic_flags,
+                       LOOM_LOW_SCHEDULE_DIAGNOSTIC_MODEL_QUALITY)) {
+    IREE_RETURN_IF_ERROR(loom_low_schedule_emit_model_diagnostics(&state));
   }
   if (iree_any_bit_set(options->diagnostic_flags,
                        LOOM_LOW_SCHEDULE_DIAGNOSTIC_RESOURCE_BOTTLENECKS)) {
@@ -1621,6 +1724,8 @@ iree_status_t loom_low_schedule_function(
       .hazard_use_count = state.hazard_use_count,
       .hazard_gaps = state.hazard_gaps,
       .hazard_gap_count = state.hazard_gap_count,
+      .model_summaries = state.model_summaries,
+      .model_summary_count = state.model_summary_count,
       .resource_summaries = state.resource_summaries,
       .resource_summary_count = state.resource_summary_count,
   };
