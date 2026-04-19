@@ -60,7 +60,14 @@ typedef iree_status_t (*loom_text_low_asm_lookup_packet_fn_t)(
 
 typedef iree_status_t (*loom_text_low_asm_infer_result_type_fn_t)(
     void* user_data, const loom_text_low_asm_packet_descriptor_t* packet,
+    const loom_value_id_t* operands, iree_host_size_t operand_count,
     uint16_t result_index, loom_module_t* module, loom_type_t* out_type,
+    iree_string_view_t* out_diagnostic_detail);
+
+typedef iree_status_t (*loom_text_low_asm_validate_result_type_fn_t)(
+    void* user_data, const loom_text_low_asm_packet_descriptor_t* packet,
+    const loom_value_id_t* operands, iree_host_size_t operand_count,
+    uint16_t result_index, loom_module_t* module, loom_type_t type,
     iree_string_view_t* out_diagnostic_detail);
 
 typedef iree_status_t (*loom_text_low_asm_immediate_descriptor_fn_t)(
@@ -88,6 +95,8 @@ typedef struct loom_text_low_asm_vtable_t {
   loom_text_low_asm_lookup_packet_fn_t lookup_packet;
   // Infers a result type when the asm packet omits explicit type annotations.
   loom_text_low_asm_infer_result_type_fn_t infer_result_type;
+  // Validates an explicit asm result type annotation against the descriptor.
+  loom_text_low_asm_validate_result_type_fn_t validate_result_type;
   // Returns canonical field and surface spelling metadata for one immediate.
   loom_text_low_asm_immediate_descriptor_fn_t immediate_descriptor;
   // Builds the canonical low operation for a parsed non-return asm packet.
@@ -109,6 +118,7 @@ static inline bool loom_text_low_asm_environment_is_configured(
          environment->vtable->lookup_descriptor_set &&
          environment->vtable->lookup_packet &&
          environment->vtable->infer_result_type &&
+         environment->vtable->validate_result_type &&
          environment->vtable->immediate_descriptor &&
          environment->vtable->build_packet && environment->vtable->build_return;
 }

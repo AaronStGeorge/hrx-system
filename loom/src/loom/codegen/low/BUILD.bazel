@@ -263,6 +263,21 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "text_asm_test_util",
+    testonly = True,
+    srcs = ["text_asm_test_util.cc"],
+    hdrs = ["text_asm_test_util.h"],
+    deps = [
+        ":descriptors",
+        ":text_asm",
+        "//loom/src/loom/format/text:low_asm",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "target_binding",
     srcs = ["target_binding.c"],
     hdrs = ["target_binding.h"],

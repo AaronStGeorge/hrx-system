@@ -10,9 +10,12 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm_test_util.h"
 
 namespace loom {
 namespace {
+
+using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
@@ -116,6 +119,35 @@ TEST(AmdgpuDescriptorsTest, Gfx950MfmaPacketMatchesCdnaRegisterShape) {
   EXPECT_EQ(accumulator_alts[2].reg_class_id, LOOM_LOW_REG_CLASS_NONE);
   EXPECT_NE(accumulator_alts[2].flags & LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE,
             0u);
+}
+
+TEST(AmdgpuDescriptorsTest, Gfx950LowAsmRequiresExplicitMfmaResultType) {
+  LowTextAsmTypeInferenceHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx950_core_descriptor_set));
+
+  loom_text_low_asm_packet_descriptor_t packet = {};
+  IREE_ASSERT_OK(harness.LookupPacket(IREE_SV("amdgpu.gfx950.core"),
+                                      IREE_SV("v_mfma_f32_16x16x16_f16"),
+                                      &packet));
+
+  loom_type_t result_type = loom_type_none();
+  iree_string_view_t diagnostic_detail = iree_string_view_empty();
+  IREE_ASSERT_OK(harness.InferResultType(
+      &packet, /*operands=*/nullptr, /*operand_count=*/0, /*result_index=*/0,
+      &result_type, &diagnostic_detail));
+  std::string detail(diagnostic_detail.data, diagnostic_detail.size);
+  EXPECT_NE(detail.find("result type annotation"), std::string::npos);
+  EXPECT_NE(detail.find("reg<amdgpu.vgpr x4>"), std::string::npos);
+  EXPECT_NE(detail.find("reg<amdgpu.agpr x4>"), std::string::npos);
+
+  loom_type_t agpr_type = loom_type_none();
+  IREE_ASSERT_OK(
+      harness.MakeRegisterType(IREE_SV("amdgpu.agpr"), 4, &agpr_type));
+  diagnostic_detail = iree_string_view_empty();
+  IREE_ASSERT_OK(harness.ValidateResultType(
+      &packet, /*operands=*/nullptr, /*operand_count=*/0, /*result_index=*/0,
+      agpr_type, &diagnostic_detail));
+  EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
 }
 
 TEST(AmdgpuDescriptorsTest, ManifestNamesScalarVectorMemoryAndMatrixPackets) {

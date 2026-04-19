@@ -77,8 +77,10 @@ TEST(TestLowDescriptorsTest, StableKeysCoverGenericLowBehaviors) {
   };
   const ExpectedDescriptor expected_descriptors[] = {
       {IREE_SV("test.add.i32"), 3, 1, 0},
+      {IREE_SV("test.ambiguous"), 1, 1, 0},
       {IREE_SV("test.add.v4i32"), 3, 1, 0},
       {IREE_SV("test.add.phys"), 3, 1, 0},
+      {IREE_SV("test.tied.any"), 2, 1, 0},
       {IREE_SV("test.load.v4i32"), 2, 1, 1},
       {IREE_SV("test.store.v4i32"), 2, 0, 1},
       {IREE_SV("test.call.i32"), 2, 1, 1},
@@ -153,7 +155,7 @@ TEST(TestLowDescriptorsTest, PhysicalClassHasTargetVisiblePressureBudget) {
 TEST(TestLowDescriptorsTest, AsmFormsExposeGenericAndSpirvLikePackets) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_test_low_core_descriptor_set();
-  ASSERT_GE(descriptor_set->asm_form_count, 13u);
+  ASSERT_GE(descriptor_set->asm_form_count, 15u);
 
   uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
   IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(

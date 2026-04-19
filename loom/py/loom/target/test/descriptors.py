@@ -13,6 +13,8 @@ from pathlib import Path
 from loom.target.low_descriptors import (
     AsmForm,
     AsmImmediate,
+    Constraint,
+    ConstraintKind,
     Descriptor,
     DescriptorFlag,
     DescriptorSet,
@@ -61,6 +63,7 @@ _SCHEDULE_CALL = "test.call"
 _SCHEDULE_CONTROL = "test.control"
 
 _I32_ALT = (RegClassAlt(_REG_I32),)
+_I32_I64_ALT = (RegClassAlt(_REG_I32), RegClassAlt(_REG_I64))
 _PTR_ALT = (RegClassAlt(_REG_PTR),)
 _V4I32_ALT = (RegClassAlt(_REG_V4I32),)
 _PHYS_ALT = (RegClassAlt(_REG_PHYS),)
@@ -92,6 +95,14 @@ def _i32_result(field_name: str = "dst") -> Operand:
 
 def _i32_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _I32_ALT)
+
+
+def _i32_i64_result(field_name: str = "dst") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _I32_I64_ALT)
+
+
+def _i32_i64_operand(field_name: str) -> Operand:
+    return Operand(field_name, OperandRole.OPERAND, _I32_I64_ALT)
 
 
 def _i32_predicate(field_name: str) -> Operand:
@@ -180,6 +191,11 @@ _CALL_EFFECT = Effect(
 _CONTROL_EFFECT = Effect(
     EffectKind.CONTROL,
     flags=(EffectFlag.ORDERED,),
+)
+
+_TIED_RESULT_CONSTRAINTS = (
+    Constraint(ConstraintKind.TIED, 0, 1),
+    Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
 )
 
 TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
@@ -303,6 +319,25 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.add.i32",
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SCALAR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.ambiguous",
+            mnemonic="test.ambiguous",
+            semantic_tag="test.ambiguous",
+            operands=(_i32_i64_result(),),
+            asm_forms=_asm(results=("dst",)),
+            schedule_class=_SCHEDULE_SCALAR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.tied.any",
+            mnemonic="test.tied.any",
+            semantic_tag="test.tied.any",
+            operands=(_i32_i64_result(), _i32_i64_operand("src")),
+            constraints=_TIED_RESULT_CONSTRAINTS,
+            asm_forms=_asm(results=("dst",), operands=("src",)),
             schedule_class=_SCHEDULE_SCALAR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),

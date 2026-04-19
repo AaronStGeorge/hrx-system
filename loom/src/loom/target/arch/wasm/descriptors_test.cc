@@ -10,9 +10,12 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm_test_util.h"
 
 namespace loom {
 namespace {
+
+using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 TEST(WasmDescriptorsTest, CoreSimd128DescriptorSetVerifies) {
   const loom_low_descriptor_set_t* descriptor_set =
@@ -61,6 +64,23 @@ TEST(WasmDescriptorsTest, CoreSimd128DescriptorLookupUsesStableKeys) {
   EXPECT_EQ(store_descriptor->effect_count, 1u);
   EXPECT_NE(store_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
+}
+
+TEST(WasmDescriptorsTest, LowAsmInfersV128ResultType) {
+  LowTextAsmTypeInferenceHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_wasm_core_simd128_descriptor_set));
+
+  loom_text_low_asm_packet_descriptor_t packet = {};
+  IREE_ASSERT_OK(harness.LookupPacket(IREE_SV("wasm.core.simd128"),
+                                      IREE_SV("i32x4.add"), &packet));
+
+  loom_type_t result_type = loom_type_none();
+  iree_string_view_t diagnostic_detail = iree_string_view_empty();
+  IREE_ASSERT_OK(harness.InferResultType(
+      &packet, /*operands=*/nullptr, /*operand_count=*/0, /*result_index=*/0,
+      &result_type, &diagnostic_detail));
+  EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
+  EXPECT_TRUE(harness.RegisterTypeEquals(result_type, IREE_SV("wasm.v128"), 1));
 }
 
 TEST(WasmDescriptorsTest, ManifestNamesSimdAndMemoryPackets) {

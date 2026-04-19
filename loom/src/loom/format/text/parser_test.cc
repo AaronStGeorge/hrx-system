@@ -862,6 +862,108 @@ TEST_F(ParserTest, LowAsmRegionSelectsDescriptorSet) {
   loom_module_free(module);
 }
 
+TEST_F(ParserTest, LowAsmRegionRejectsAmbiguousInferredResultType) {
+  const auto& diagnostics = ParseExpectErrors(
+      "test.low_asm_region asm<test.low.core> {\n"
+      "  %amb = test.ambiguous\n"
+      "}\n");
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(
+      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0),
+            "result type annotation is required for one of: "
+            "reg<test.i32> | reg<test.i64>");
+  (void)diagnostics;
+}
+
+TEST_F(ParserTest, LowAsmRegionAcceptsExplicitAmbiguousResultType) {
+  loom_module_t* module = ParseOk(
+      "test.low_asm_region asm<test.low.core> {\n"
+      "  %amb = test.ambiguous : reg<test.i64>\n"
+      "  return %amb\n"
+      "}\n");
+  ASSERT_NE(module, nullptr);
+
+  loom_block_t* module_block = loom_module_block(module);
+  ASSERT_EQ(module_block->op_count, 1u);
+  loom_region_t* region =
+      loom_test_low_asm_region_body(loom_block_op(module_block, 0));
+  loom_block_t* entry = GetEntryBlock(region);
+  ASSERT_NE(entry, nullptr);
+  ASSERT_EQ(entry->op_count, 2u);
+
+  loom_op_t* ambiguous_op = loom_block_op(entry, 0);
+  ASSERT_TRUE(loom_low_op_isa(ambiguous_op));
+  loom_type_t result_type = loom_module_value_type(
+      module, loom_low_op_results(ambiguous_op).values[0]);
+  ASSERT_TRUE(loom_type_is_register(result_type));
+  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(result_type)),
+            "test.i64");
+  EXPECT_EQ(loom_type_register_unit_count(result_type), 1u);
+
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, LowAsmRegionRejectsInvalidExplicitResultType) {
+  const auto& diagnostics = ParseExpectErrors(
+      "test.low_asm_region asm<test.low.core> {\n"
+      "  %c0 = test.const.i32 7\n"
+      "  %bad = test.add.i32 %c0, %c0 : reg<test.i64>\n"
+      "}\n");
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(
+      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0),
+            "result type annotation must be one of: reg<test.i32>");
+  (void)diagnostics;
+}
+
+TEST_F(ParserTest, LowAsmRegionInfersTiedResultTypeFromOperand) {
+  loom_module_t* module = ParseOk(
+      "test.low_asm_region asm<test.low.core> {\n"
+      "  %c0 = test.const.i32 7\n"
+      "  %tied = test.tied.any %c0\n"
+      "  return %tied\n"
+      "}\n");
+  ASSERT_NE(module, nullptr);
+
+  loom_block_t* module_block = loom_module_block(module);
+  ASSERT_EQ(module_block->op_count, 1u);
+  loom_region_t* region =
+      loom_test_low_asm_region_body(loom_block_op(module_block, 0));
+  loom_block_t* entry = GetEntryBlock(region);
+  ASSERT_NE(entry, nullptr);
+  ASSERT_EQ(entry->op_count, 3u);
+
+  loom_op_t* tied_op = loom_block_op(entry, 1);
+  ASSERT_TRUE(loom_low_op_isa(tied_op));
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_low_op_results(tied_op).values[0]);
+  ASSERT_TRUE(loom_type_is_register(result_type));
+  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(result_type)),
+            "test.i32");
+  ASSERT_EQ(tied_op->tied_result_count, 1u);
+  const loom_tied_result_t* tied_results = loom_op_tied_results(tied_op);
+  EXPECT_EQ(tied_results[0].result_index, 0u);
+  EXPECT_EQ(tied_results[0].operand_index, 0u);
+
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, LowAsmRegionRejectsExplicitTiedResultMismatch) {
+  const auto& diagnostics = ParseExpectErrors(
+      "test.low_asm_region asm<test.low.core> {\n"
+      "  %c0 = test.const.i32 7\n"
+      "  %bad = test.tied.any %c0 : reg<test.i64>\n"
+      "}\n");
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(
+      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0),
+            "result type annotation must match tied operand type");
+  (void)diagnostics;
+}
+
 TEST_F(ParserTest, LowAsmRegionRequiresConfiguredEnvironment) {
   loom_module_t* module = nullptr;
   IREE_ASSERT_OK(

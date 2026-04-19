@@ -40,6 +40,7 @@ loom_cc_test(
   DEPS
     ::avx512_descriptors
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::text_asm_test_util
     iree::testing::gtest
     iree::testing::gtest_main
 )

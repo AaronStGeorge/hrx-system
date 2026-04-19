@@ -2555,7 +2555,8 @@ static iree_status_t loom_parse_low_asm_descriptor_set(
 
 static iree_status_t loom_parse_low_asm_result_types(
     loom_parser_t* parser, const loom_text_low_asm_packet_descriptor_t* packet,
-    loom_token_t mnemonic_token, loom_type_t* result_types) {
+    loom_token_t mnemonic_token, const loom_value_id_t* operands,
+    iree_host_size_t operand_count, loom_type_t* result_types) {
   const uint16_t result_count = packet->result_count;
   if (result_count == 0) {
     if (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_COLON)) {
@@ -2572,8 +2573,9 @@ static iree_status_t loom_parse_low_asm_result_types(
       iree_string_view_t diagnostic_detail = iree_string_view_empty();
       IREE_RETURN_IF_ERROR(
           parser->low_asm_environment.vtable->infer_result_type(
-              parser->low_asm_environment.user_data, packet, i, parser->module,
-              &result_types[i], &diagnostic_detail));
+              parser->low_asm_environment.user_data, packet, operands,
+              operand_count, i, parser->module, &result_types[i],
+              &diagnostic_detail));
       if (!iree_string_view_is_empty(diagnostic_detail)) {
         IREE_RETURN_IF_ERROR(loom_parser_emit_low_asm_error(
             parser, mnemonic_token, diagnostic_detail));
@@ -2590,6 +2592,17 @@ static iree_status_t loom_parse_low_asm_result_types(
     }
     IREE_RETURN_IF_ERROR(
         loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &result_types[i]));
+    if (parser->error_count > errors_before) return iree_ok_status();
+    iree_string_view_t diagnostic_detail = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(
+        parser->low_asm_environment.vtable->validate_result_type(
+            parser->low_asm_environment.user_data, packet, operands,
+            operand_count, i, parser->module, result_types[i],
+            &diagnostic_detail));
+    if (!iree_string_view_is_empty(diagnostic_detail)) {
+      IREE_RETURN_IF_ERROR(loom_parser_emit_low_asm_error(
+          parser, mnemonic_token, diagnostic_detail));
+    }
     if (parser->error_count > errors_before) return iree_ok_status();
   }
   if (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
@@ -2981,8 +2994,9 @@ static iree_status_t loom_parse_low_asm_instruction(
         &parser->parser_arena, packet.result_count, sizeof(*result_types),
         (void**)&result_types));
   }
-  IREE_RETURN_IF_ERROR(loom_parse_low_asm_result_types(
-      parser, &packet, mnemonic_token, result_types));
+  IREE_RETURN_IF_ERROR(
+      loom_parse_low_asm_result_types(parser, &packet, mnemonic_token, operands,
+                                      packet.operand_count, result_types));
   if (parser->error_count > errors_before) return iree_ok_status();
 
   loom_location_id_t location = LOOM_LOCATION_UNKNOWN;

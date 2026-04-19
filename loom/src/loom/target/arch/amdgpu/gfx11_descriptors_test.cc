@@ -10,9 +10,12 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm_test_util.h"
 
 namespace loom {
 namespace {
+
+using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 std::string ToString(const loom_low_descriptor_set_t* descriptor_set,
                      loom_bstring_table_offset_t string_offset) {
@@ -168,6 +171,25 @@ TEST(AmdgpuDescriptorsTest, Gfx11AsmFormsExposeNamedWaitcntImmediates) {
             "vmcnt");
   EXPECT_EQ(ToString(descriptor_set, second_immediate->name_string_offset),
             "lgkmcnt");
+}
+
+TEST(AmdgpuDescriptorsTest, Gfx11LowAsmInfersForcedVgprWmmaResultType) {
+  LowTextAsmTypeInferenceHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx11_core_descriptor_set));
+
+  loom_text_low_asm_packet_descriptor_t packet = {};
+  IREE_ASSERT_OK(harness.LookupPacket(IREE_SV("amdgpu.gfx11.core"),
+                                      IREE_SV("v_wmma_f32_16x16x16_f16"),
+                                      &packet));
+
+  loom_type_t result_type = loom_type_none();
+  iree_string_view_t diagnostic_detail = iree_string_view_empty();
+  IREE_ASSERT_OK(harness.InferResultType(
+      &packet, /*operands=*/nullptr, /*operand_count=*/0, /*result_index=*/0,
+      &result_type, &diagnostic_detail));
+  EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
+  EXPECT_TRUE(
+      harness.RegisterTypeEquals(result_type, IREE_SV("amdgpu.vgpr"), 8));
 }
 
 TEST(AmdgpuDescriptorsTest,

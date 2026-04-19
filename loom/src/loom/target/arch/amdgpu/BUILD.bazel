@@ -260,6 +260,7 @@ loom_cc_test(
     deps = [
         ":gfx11_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:text_asm_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -314,6 +315,7 @@ loom_cc_test(
     deps = [
         ":gfx950_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:text_asm_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

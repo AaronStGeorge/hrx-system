@@ -10,9 +10,12 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm_test_util.h"
 
 namespace loom {
 namespace {
+
+using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 std::string ToString(const loom_low_descriptor_set_t* descriptor_set,
                      loom_bstring_table_offset_t string_offset) {
@@ -208,6 +211,48 @@ TEST(X86DescriptorsTest, Avx512AsmFormsNameUnambiguousPackets) {
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
             "x86.avx512.vpaddd.zmm");
+}
+
+TEST(X86DescriptorsTest, Avx512LowAsmInfersTiedAccumulatorResultType) {
+  LowTextAsmTypeInferenceHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_x86_avx512_core_descriptor_set));
+
+  loom_text_low_asm_packet_descriptor_t packet = {};
+  IREE_ASSERT_OK(harness.LookupPacket(IREE_SV("x86.avx512.core"),
+                                      IREE_SV("vpdpbusd"), &packet));
+
+  loom_value_id_t operands[3] = {};
+  IREE_ASSERT_OK(
+      harness.DefineRegisterValue(IREE_SV("x86.zmm"), 1, &operands[0]));
+  IREE_ASSERT_OK(
+      harness.DefineRegisterValue(IREE_SV("x86.zmm"), 1, &operands[1]));
+  IREE_ASSERT_OK(
+      harness.DefineRegisterValue(IREE_SV("x86.zmm"), 1, &operands[2]));
+
+  loom_type_t result_type = loom_type_none();
+  iree_string_view_t diagnostic_detail = iree_string_view_empty();
+  IREE_ASSERT_OK(harness.InferResultType(
+      &packet, operands, IREE_ARRAYSIZE(operands), /*result_index=*/0,
+      &result_type, &diagnostic_detail));
+  EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
+  EXPECT_TRUE(harness.RegisterTypeEquals(result_type, IREE_SV("x86.zmm"), 1));
+
+  loom_value_id_t invalid_operands[3] = {};
+  IREE_ASSERT_OK(
+      harness.DefineRegisterValue(IREE_SV("x86.k"), 1, &invalid_operands[0]));
+  IREE_ASSERT_OK(
+      harness.DefineRegisterValue(IREE_SV("x86.zmm"), 1, &invalid_operands[1]));
+  IREE_ASSERT_OK(
+      harness.DefineRegisterValue(IREE_SV("x86.zmm"), 1, &invalid_operands[2]));
+
+  result_type = loom_type_none();
+  diagnostic_detail = iree_string_view_empty();
+  IREE_ASSERT_OK(harness.InferResultType(
+      &packet, invalid_operands, IREE_ARRAYSIZE(invalid_operands),
+      /*result_index=*/0, &result_type, &diagnostic_detail));
+  std::string detail(diagnostic_detail.data, diagnostic_detail.size);
+  EXPECT_NE(detail.find("tied operand type"), std::string::npos);
+  EXPECT_NE(detail.find("reg<x86.zmm>"), std::string::npos);
 }
 
 TEST(X86DescriptorsTest, ManifestNamesVectorMemoryAndDotPackets) {

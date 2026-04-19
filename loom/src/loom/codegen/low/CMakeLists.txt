@@ -54,6 +54,24 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    text_asm_test_util
+  HDRS
+    "text_asm_test_util.h"
+  SRCS
+    "text_asm_test_util.cc"
+  DEPS
+    ::descriptors
+    ::text_asm
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::text::low_asm
+    loom::src::loom::ir
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_binding
   HDRS
     "target_binding.h"

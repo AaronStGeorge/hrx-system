@@ -10,9 +10,12 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm_test_util.h"
 
 namespace loom {
 namespace {
+
+using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 TEST(IreeVmDescriptorsTest, CoreDescriptorSetVerifies) {
   const loom_low_descriptor_set_t* descriptor_set =
@@ -67,6 +70,23 @@ TEST(IreeVmDescriptorsTest, CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(branch_descriptor->immediate_count, 2u);
   EXPECT_EQ(branch_descriptor->effect_count, 1u);
   EXPECT_NE(branch_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR, 0u);
+}
+
+TEST(IreeVmDescriptorsTest, LowAsmInfersScalarResultType) {
+  LowTextAsmTypeInferenceHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_ireevm_core_descriptor_set));
+
+  loom_text_low_asm_packet_descriptor_t packet = {};
+  IREE_ASSERT_OK(harness.LookupPacket(IREE_SV("iree.vm.core"),
+                                      IREE_SV("vm.add.i32"), &packet));
+
+  loom_type_t result_type = loom_type_none();
+  iree_string_view_t diagnostic_detail = iree_string_view_empty();
+  IREE_ASSERT_OK(harness.InferResultType(
+      &packet, /*operands=*/nullptr, /*operand_count=*/0, /*result_index=*/0,
+      &result_type, &diagnostic_detail));
+  EXPECT_TRUE(iree_string_view_is_empty(diagnostic_detail));
+  EXPECT_TRUE(harness.RegisterTypeEquals(result_type, IREE_SV("vm.i32"), 1));
 }
 
 TEST(IreeVmDescriptorsTest, ManifestNamesCallAndControlPackets) {
