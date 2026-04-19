@@ -39,6 +39,8 @@ def test_checked_in_c_generation_excludes_build_generated_shards() -> None:
     keys = {descriptor_set.key for descriptor_set in iter_checked_in_c_descriptor_sets()}
 
     assert "wasm.core.simd128" not in keys
+    assert "x86.avx512.core" not in keys
+    assert "x86.packed_dot.core" not in keys
     assert "test.low.core" in keys
 
 

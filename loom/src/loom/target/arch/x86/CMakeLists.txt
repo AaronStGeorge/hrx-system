@@ -20,16 +20,25 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
   NAME
     avx512_descriptors
-  HDRS
-    "avx512_descriptors.h"
-  SRCS
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptor_shard.py"
+  SOURCE
     "avx512_descriptors.c"
+  HEADER
+    "avx512_descriptors.h"
+  ARGS
+    "--descriptor-set=x86_avx512_core"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/x86/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/x86/packed_dot_data.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/descriptor_sets.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     loom::src::loom::codegen::low::descriptors
-  PUBLIC
 )
 
 loom_cc_test(
@@ -46,16 +55,25 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
   NAME
     packed_dot_descriptors
-  HDRS
-    "packed_dot_descriptors.h"
-  SRCS
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptor_shard.py"
+  SOURCE
     "packed_dot_descriptors.c"
+  HEADER
+    "packed_dot_descriptors.h"
+  ARGS
+    "--descriptor-set=x86_packed_dot_core"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/x86/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/x86/packed_dot_data.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/descriptor_sets.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     loom::src::loom::codegen::low::descriptors
-  PUBLIC
 )
 
 loom_cc_test(

@@ -44,6 +44,13 @@ _WASM_LOW_DESCRIPTOR_SHARD_SRCS = _LOW_DESCRIPTOR_SHARD_GENERATOR_SRCS + [
     "target/arch/wasm/descriptors.py",
 ]
 
+_X86_LOW_DESCRIPTOR_SHARD_SRCS = _LOW_DESCRIPTOR_SHARD_GENERATOR_SRCS + [
+    "target/arch/__init__.py",
+    "target/arch/x86/__init__.py",
+    "target/arch/x86/descriptors.py",
+    "target/arch/x86/packed_dot_data.py",
+]
+
 py_binary(
     name = "amdgpu_descriptors",
     srcs = [
@@ -69,5 +76,11 @@ py_binary(
 py_binary(
     name = "wasm_low_descriptor_shard",
     srcs = _WASM_LOW_DESCRIPTOR_SHARD_SRCS,
+    main = "gen/low_descriptor_shard.py",
+)
+
+py_binary(
+    name = "x86_low_descriptor_shard",
+    srcs = _X86_LOW_DESCRIPTOR_SHARD_SRCS,
     main = "gen/low_descriptor_shard.py",
 )

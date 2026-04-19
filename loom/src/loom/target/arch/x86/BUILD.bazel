@@ -10,6 +10,7 @@ load(
     "loom_cc_library",
     "loom_cc_test",
 )
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_low_descriptor_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -193,10 +194,20 @@ loom_cc_library(
     deps = ["//runtime/src/iree/base"],
 )
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
     name = "avx512_descriptors",
-    srcs = ["avx512_descriptors.c"],
-    hdrs = ["avx512_descriptors.h"],
+    args = ["--descriptor-set=x86_avx512_core"],
+    cmake_generator = "//loom/py/loom:gen/low_descriptor_shard.py",
+    cmake_generator_deps = [
+        "//loom/py/loom:gen/low_descriptors.py",
+        "//loom/py/loom:target/arch/x86/descriptors.py",
+        "//loom/py/loom:target/arch/x86/packed_dot_data.py",
+        "//loom/py/loom:target/descriptor_sets.py",
+        "//loom/py/loom:target/low_descriptors.py",
+    ],
+    generator = "//loom/py/loom:x86_low_descriptor_shard",
+    header = "avx512_descriptors.h",
+    source = "avx512_descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -213,10 +224,20 @@ loom_cc_test(
     ],
 )
 
-loom_cc_library(
+loom_low_descriptor_cc_library(
     name = "packed_dot_descriptors",
-    srcs = ["packed_dot_descriptors.c"],
-    hdrs = ["packed_dot_descriptors.h"],
+    args = ["--descriptor-set=x86_packed_dot_core"],
+    cmake_generator = "//loom/py/loom:gen/low_descriptor_shard.py",
+    cmake_generator_deps = [
+        "//loom/py/loom:gen/low_descriptors.py",
+        "//loom/py/loom:target/arch/x86/descriptors.py",
+        "//loom/py/loom:target/arch/x86/packed_dot_data.py",
+        "//loom/py/loom:target/descriptor_sets.py",
+        "//loom/py/loom:target/low_descriptors.py",
+    ],
+    generator = "//loom/py/loom:x86_low_descriptor_shard",
+    header = "packed_dot_descriptors.h",
+    source = "packed_dot_descriptors.c",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
