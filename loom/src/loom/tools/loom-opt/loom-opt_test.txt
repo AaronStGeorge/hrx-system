@@ -112,10 +112,16 @@
 // RUN:       --pass-reproducer=%t.missing-pass.repro \
 // RUN:       --output=%t.unused > %t.missing-pass.err 2>&1; test $? -ne 0
 // RUN: FileCheck --check-prefix=MISSING-PASS-REPRO %s < %t.missing-pass.repro
+// RUN: loom-opt --pipeline=@__command_line %t.missing-pass.repro > %t.missing-pass.rerun.err 2>&1; test $? -ne 0
+// RUN: FileCheck --check-prefix=MISSING-PASS-AGAIN %s < %t.missing-pass.rerun.err
 // MISSING-PASS-REPRO: //   "selection": {"kind":"pass-list","passes":["definitely-not-a-pass"]}
 // MISSING-PASS-REPRO: //   "failure_status": "INVALID_ARGUMENT"
 // MISSING-PASS-REPRO: //     {"key":"canonicalize"
-// MISSING-PASS-REPRO: // R{{UN}}: loom-opt --verify=true --pass='definitely-not-a-pass' %s
+// MISSING-PASS-REPRO: // R{{UN}}: loom-opt --verify=true --pipeline='@__command_line' %s
+// MISSING-PASS-REPRO: pass.pipeline<module> @__command_line {
+// MISSING-PASS-REPRO: pass.run<definitely-not-a-pass>
+// MISSING-PASS-REPRO: pass.yield
+// MISSING-PASS-AGAIN: definitely-not-a-pass
 
 // RUN: printf '%%s\n' \
 // RUN:   'func.def @schema_repro(%x: i32) -> (i32) {' \
@@ -125,10 +131,16 @@
 // RUN:       --pass-reproducer=%t.schema-pass.repro \
 // RUN:       --output=%t.unused > %t.schema-pass.err 2>&1; test $? -ne 0
 // RUN: FileCheck --check-prefix=SCHEMA-PASS-REPRO %s < %t.schema-pass.repro
+// RUN: loom-opt --pipeline=@__command_line %t.schema-pass.repro > %t.schema-pass.rerun.err 2>&1; test $? -ne 0
+// RUN: FileCheck --check-prefix=SCHEMA-PASS-AGAIN %s < %t.schema-pass.rerun.err
 // SCHEMA-PASS-REPRO: //   "selection": {"kind":"pass-list","passes":["canonicalize{max-iterations=0}"]}
 // SCHEMA-PASS-REPRO: //   "failure_status": "INVALID_ARGUMENT"
 // SCHEMA-PASS-REPRO: {"name":"max-iterations","kind":"uint32","required":false,"minimum":1,"maximum":4294967295}
-// SCHEMA-PASS-REPRO: // R{{UN}}: loom-opt --verify=true --pass='canonicalize{max-iterations=0}' %s
+// SCHEMA-PASS-REPRO: // R{{UN}}: loom-opt --verify=true --pipeline='@__command_line' %s
+// SCHEMA-PASS-REPRO: pass.for<func> pipeline {
+// SCHEMA-PASS-REPRO: pass.run<canonicalize> {max-iterations=0}
+// SCHEMA-PASS-REPRO: pass.yield
+// SCHEMA-PASS-AGAIN: max-iterations
 
 // RUN: printf '%%s\n' \
 // RUN:   'pass.pipeline<module> @cleanup pipeline {' \
