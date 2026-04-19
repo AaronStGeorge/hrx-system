@@ -88,7 +88,7 @@ loom_cc_library(
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
-    loom::src::loom::transforms::verify
+    loom::src::loom::verify
   PUBLIC
 )
 

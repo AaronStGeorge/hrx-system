@@ -29,8 +29,8 @@
 #include "loom/target/presets.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
-#include "loom/transforms/verify.h"
 #include "loom/util/stream.h"
+#include "loom/verify/verify.h"
 
 typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LLVMIR_TEXT = 0,

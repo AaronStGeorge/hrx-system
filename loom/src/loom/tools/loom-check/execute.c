@@ -22,9 +22,9 @@
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/requirements.h"
-#include "loom/transforms/verify.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
+#include "loom/verify/verify.h"
 
 void loom_check_result_initialize(iree_allocator_t allocator,
                                   loom_check_result_t* out_result) {

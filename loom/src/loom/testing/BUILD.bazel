@@ -89,8 +89,8 @@ loom_cc_test(
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/test",
-        "//loom/src/loom/transforms:verify",
         "//loom/src/loom/util:stream",
+        "//loom/src/loom/verify",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -107,7 +107,7 @@ loom_cc_fuzz(
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/test",
-        "//loom/src/loom/transforms:verify",
+        "//loom/src/loom/verify",
         "//runtime/src/iree/base",
     ],
 )

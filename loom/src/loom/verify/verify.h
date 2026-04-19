@@ -146,8 +146,8 @@
 //   // status is non-ok only on internal verifier failures (OOM, etc.).
 //   if (result.error_count > 0) { /* module is invalid */ }
 
-#ifndef LOOM_TRANSFORMS_VERIFY_H_
-#define LOOM_TRANSFORMS_VERIFY_H_
+#ifndef LOOM_VERIFY_VERIFY_H_
+#define LOOM_VERIFY_VERIFY_H_
 
 #include "iree/base/api.h"
 #include "loom/error/diagnostic.h"
@@ -278,4 +278,4 @@ iree_status_t loom_verify_function(const loom_module_t* module,
 }
 #endif
 
-#endif  // LOOM_TRANSFORMS_VERIFY_H_
+#endif  // LOOM_VERIFY_VERIFY_H_

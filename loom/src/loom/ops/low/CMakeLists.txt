@@ -41,7 +41,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::testing::context
     loom::src::loom::testing::diagnostic_matchers
-    loom::src::loom::transforms::verify
+    loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
 )

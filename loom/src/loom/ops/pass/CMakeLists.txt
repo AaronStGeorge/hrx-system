@@ -39,7 +39,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
-    loom::src::loom::transforms::verify
+    loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
 )

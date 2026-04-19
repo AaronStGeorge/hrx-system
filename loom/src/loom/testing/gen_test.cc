@@ -29,8 +29,8 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
-#include "loom/transforms/verify.h"
 #include "loom/util/stream.h"
+#include "loom/verify/verify.h"
 
 namespace loom {
 namespace {

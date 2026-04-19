@@ -645,49 +645,4 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_library(
-  NAME
-    verify
-  HDRS
-    "verify.h"
-  SRCS
-    "verify.c"
-  DEPS
-    iree::base
-    iree::base::internal::arena
-    iree::base::internal::unicode
-    loom::src::loom::error::diagnostic
-    loom::src::loom::error::error_defs
-    loom::src::loom::error::renderer
-    loom::src::loom::format::text::printer
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::special_values
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    verify_test
-  SRCS
-    "verify_test.cc"
-  DEPS
-    ::verify
-    iree::base::internal::arena
-    loom::src::loom::error::diagnostic
-    loom::src::loom::error::error_defs
-    loom::src::loom::error::json_sink
-    loom::src::loom::error::renderer
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::test
-    loom::src::loom::testing::diagnostic_matchers
-    loom::src::loom::util::stream
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

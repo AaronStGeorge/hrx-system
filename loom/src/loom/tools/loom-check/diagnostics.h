@@ -18,7 +18,7 @@
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/report.h"
-#include "loom/transforms/verify.h"
+#include "loom/verify/verify.h"
 
 #ifdef __cplusplus
 extern "C" {

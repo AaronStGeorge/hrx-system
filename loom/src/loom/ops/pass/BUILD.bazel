@@ -36,7 +36,7 @@ loom_cc_test(
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
-        "//loom/src/loom/transforms:verify",
+        "//loom/src/loom/verify",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",

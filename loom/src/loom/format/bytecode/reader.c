@@ -15,7 +15,7 @@
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/op_defs.h"
-#include "loom/transforms/verify.h"
+#include "loom/verify/verify.h"
 
 // Keep reader allocation guards aligned with the bytecode format comment.
 #define LOOM_BYTECODE_MAX_SECTION_COUNT 256

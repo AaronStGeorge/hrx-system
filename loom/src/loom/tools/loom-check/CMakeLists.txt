@@ -79,9 +79,9 @@ loom_cc_library(
     loom::src::loom::target::presets
     loom::src::loom::target::types
     loom::src::loom::testing::diff
-    loom::src::loom::transforms::verify
     loom::src::loom::util::json
     loom::src::loom::util::stream
+    loom::src::loom::verify
   PUBLIC
 )
 

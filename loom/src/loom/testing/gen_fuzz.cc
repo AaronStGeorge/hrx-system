@@ -35,7 +35,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/testing/gen.h"
-#include "loom/transforms/verify.h"
+#include "loom/verify/verify.h"
 
 //===----------------------------------------------------------------------===//
 // Shared context (initialized once)

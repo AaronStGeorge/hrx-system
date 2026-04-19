@@ -207,8 +207,8 @@ loom_cc_test(
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::testing::context
-    loom::src::loom::transforms::verify
     loom::src::loom::util::fact_table
+    loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
 )

@@ -100,8 +100,8 @@ loom_cc_test(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::ops::test
-    loom::src::loom::transforms::verify
     loom::src::loom::util::stream
+    loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -119,7 +119,7 @@ loom_cc_fuzz(
     loom::src::loom::ops::func
     loom::src::loom::ops::scalar
     loom::src::loom::ops::test
-    loom::src::loom::transforms::verify
+    loom::src::loom::verify
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

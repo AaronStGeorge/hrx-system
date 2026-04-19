@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/transforms/verify.h"
+#include "loom/verify/verify.h"
 
 #include <regex>
 #include <string>

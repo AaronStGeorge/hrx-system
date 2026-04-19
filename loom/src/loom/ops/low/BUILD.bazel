@@ -39,7 +39,7 @@ loom_cc_test(
         "//loom/src/loom/ir",
         "//loom/src/loom/testing:context",
         "//loom/src/loom/testing:diagnostic_matchers",
-        "//loom/src/loom/transforms:verify",
+        "//loom/src/loom/verify",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

@@ -17,7 +17,7 @@
 #include "loom/target/arch/x86/packed_dot_contract.h"
 #include "loom/target/arch/x86/packed_dot_vector.h"
 #include "loom/testing/context.h"
-#include "loom/transforms/verify.h"
+#include "loom/verify/verify.h"
 
 namespace {
 

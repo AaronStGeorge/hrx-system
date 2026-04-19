@@ -19,8 +19,8 @@
 #include "loom/target/arch/amdgpu/matrix_contract.h"
 #include "loom/target/arch/amdgpu/matrix_facts.h"
 #include "loom/testing/context.h"
-#include "loom/transforms/verify.h"
 #include "loom/util/fact_table.h"
+#include "loom/verify/verify.h"
 
 namespace {
 

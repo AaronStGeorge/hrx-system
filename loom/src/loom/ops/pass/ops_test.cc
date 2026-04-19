@@ -19,7 +19,7 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/transforms/verify.h"
+#include "loom/verify/verify.h"
 
 namespace loom {
 namespace {
