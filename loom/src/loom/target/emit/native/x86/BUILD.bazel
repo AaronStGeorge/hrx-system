@@ -1,0 +1,84 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_assert_no_dependency",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+#===------------------------------------------------------------------------===#
+# Layering checks
+#===------------------------------------------------------------------------===#
+
+iree_assert_no_dependency(
+    name = "assembly_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/emit/native/x86:assembly",
+)
+
+iree_assert_no_dependency(
+    name = "assembly_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/native/x86:assembly",
+)
+
+iree_assert_no_dependency(
+    name = "assembly_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/emit/native/x86:assembly",
+)
+
+iree_assert_no_dependency(
+    name = "assembly_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/native/x86:assembly",
+)
+
+#===------------------------------------------------------------------------===#
+# x86 native assembly fragments
+#===------------------------------------------------------------------------===#
+
+loom_cc_library(
+    name = "assembly",
+    srcs = ["assembly.c"],
+    hdrs = ["assembly.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low:schedule",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/emit/native:assembly",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "assembly_test",
+    srcs = ["assembly_test.cc"],
+    deps = [
+        ":assembly",
+        "//loom/src/loom/codegen/low:packetization",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/x86:low_registry",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

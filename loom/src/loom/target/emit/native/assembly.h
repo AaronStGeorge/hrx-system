@@ -1,0 +1,99 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Shared native assembly-fragment formatting over low packet sidecars.
+//
+// This layer is intentionally small: it owns sidecar validation, scheduled
+// packet iteration, block labels, and descriptor/attribute lookup helpers.
+// Target packages own instruction syntax, register spelling, ABI/prologue
+// policy, and any future handoff to assemblers or external validators.
+
+#ifndef LOOM_TARGET_EMIT_NATIVE_ASSEMBLY_H_
+#define LOOM_TARGET_EMIT_NATIVE_ASSEMBLY_H_
+
+#include "iree/base/api.h"
+#include "iree/base/string_builder.h"
+#include "loom/codegen/low/packet.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct loom_native_assembly_packet_context_t {
+  // Schedule sidecar being formatted.
+  const loom_low_schedule_sidecar_t* schedule;
+  // Allocation sidecar supplying physical locations.
+  const loom_low_allocation_sidecar_t* allocation;
+  // Scheduled packet currently being formatted.
+  const loom_low_packet_view_t* packet;
+  // Text destination for the fragment.
+  iree_string_builder_t* builder;
+} loom_native_assembly_packet_context_t;
+
+typedef iree_status_t (*loom_native_assembly_append_packet_fn_t)(
+    void* user_data, const loom_native_assembly_packet_context_t* context);
+
+typedef struct loom_native_assembly_append_packet_callback_t {
+  // Function that appends one packet to the output builder.
+  loom_native_assembly_append_packet_fn_t fn;
+  // Opaque callback state forwarded to |fn|.
+  void* user_data;
+} loom_native_assembly_append_packet_callback_t;
+
+typedef struct loom_native_assembly_format_options_t {
+  // Required formatter for descriptor-backed low.op and low.const packets.
+  loom_native_assembly_append_packet_callback_t append_descriptor_packet;
+  // Optional formatter for low.copy packets.
+  loom_native_assembly_append_packet_callback_t append_copy_packet;
+  // Optional formatter for low.return packets.
+  loom_native_assembly_append_packet_callback_t append_return_packet;
+  // Optional formatter for low.br packets.
+  loom_native_assembly_append_packet_callback_t append_branch_packet;
+  // Optional formatter for low.cond_br packets.
+  loom_native_assembly_append_packet_callback_t append_cond_branch_packet;
+} loom_native_assembly_format_options_t;
+
+// Formats a scheduled and allocated low.func.def as a native assembly fragment.
+// The output is target-owned assembly text, not a complete object/kernel ABI
+// envelope. Unsupported structural packets fail loud through the corresponding
+// missing callback instead of being printed as comments or pseudo-ops.
+iree_status_t loom_native_assembly_format_fragment(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_native_assembly_format_options_t* options,
+    iree_string_builder_t* builder);
+
+// Appends the canonical local block label for |block|, such as ".Lbb0".
+iree_status_t loom_native_assembly_append_block_label(
+    const loom_low_schedule_sidecar_t* schedule, const loom_block_t* block,
+    iree_string_builder_t* builder);
+
+// Returns the interned module string for |string_id|, or the empty string when
+// |string_id| is invalid.
+iree_string_view_t loom_native_assembly_module_string(
+    const loom_module_t* module, loom_string_id_t string_id);
+
+// Resolves a required string from |descriptor_set|.
+iree_status_t loom_native_assembly_descriptor_string(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string);
+
+// Finds a named attribute by textual key in |attrs|.
+const loom_named_attr_t* loom_native_assembly_find_attr(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t name);
+
+// Reads a required I64 attribute from |attrs|.
+iree_status_t loom_native_assembly_read_i64_attr(const loom_module_t* module,
+                                                 loom_named_attr_slice_t attrs,
+                                                 iree_string_view_t name,
+                                                 int64_t* out_value);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // LOOM_TARGET_EMIT_NATIVE_ASSEMBLY_H_
