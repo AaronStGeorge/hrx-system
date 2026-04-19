@@ -276,6 +276,26 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    occupancy
+  HDRS
+    "occupancy.h"
+  SRCS
+    "occupancy.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::diagnostics
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::target::types
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     wait_plan_test
@@ -322,6 +342,30 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    occupancy_test
+  SRCS
+    "occupancy_test.cc"
+  DEPS
+    ::low_registry
+    ::occupancy
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::text_asm
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_registry
+    loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::target::presets
+    loom::src::loom::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_low_descriptor_exclude_from_all(
   CC_LIBRARIES
     "low_registry"
@@ -332,6 +376,7 @@ loom_low_descriptor_exclude_from_all(
     "gfx950_descriptors_test"
     "loom_check_test"
     "low_registry_test"
+    "occupancy_test"
     "wait_packets_test"
     "wait_plan_test"
 )

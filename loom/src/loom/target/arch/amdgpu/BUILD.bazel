@@ -53,6 +53,12 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "occupancy_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/amdgpu:occupancy",
+)
+
+iree_assert_no_dependency(
     name = "wait_plan_no_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
     target = "//loom/src/loom/target/arch/amdgpu:wait_plan",
@@ -62,6 +68,12 @@ iree_assert_no_dependency(
     name = "wait_packets_no_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
     target = "//loom/src/loom/target/arch/amdgpu:wait_packets",
+)
+
+iree_assert_no_dependency(
+    name = "occupancy_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/arch/amdgpu:occupancy",
 )
 
 iree_assert_no_dependency(
@@ -287,6 +299,12 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "occupancy_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:occupancy",
+)
+
+iree_assert_no_dependency(
     name = "low_registry_no_ireevm_emit_dep",
     dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
     target = "//loom/src/loom/target/arch/amdgpu:low_registry",
@@ -305,6 +323,12 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "occupancy_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:occupancy",
+)
+
+iree_assert_no_dependency(
     name = "low_registry_no_llvmir_emit_dep",
     dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
     target = "//loom/src/loom/target/arch/amdgpu:low_registry",
@@ -320,6 +344,12 @@ iree_assert_no_dependency(
     name = "wait_packets_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/target/arch/amdgpu:wait_packets",
+)
+
+iree_assert_no_dependency(
+    name = "occupancy_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/arch/amdgpu:occupancy",
 )
 
 iree_assert_no_dependency(
@@ -556,6 +586,23 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "occupancy",
+    srcs = ["occupancy.c"],
+    hdrs = ["occupancy.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_cc_test(
     name = "wait_plan_test",
     srcs = ["wait_plan_test.cc"],
@@ -600,6 +647,29 @@ loom_cc_test(
     ],
 )
 
+loom_cc_test(
+    name = "occupancy_test",
+    srcs = ["occupancy_test.cc"],
+    deps = [
+        ":low_registry",
+        ":occupancy",
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/target:presets",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_low_descriptor_exclude_from_cmake_all(
     cc_libraries = ["low_registry"],
     targets = [
@@ -609,6 +679,7 @@ loom_low_descriptor_exclude_from_cmake_all(
         "gfx950_descriptors_test",
         "loom_check_test",
         "low_registry_test",
+        "occupancy_test",
         "wait_plan_test",
         "wait_packets_test",
     ],
