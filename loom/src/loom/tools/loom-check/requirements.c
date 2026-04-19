@@ -8,7 +8,6 @@
 
 #include "loom/target/emit/llvmir/target_registry.h"
 #include "loom/target/emit/llvmir/tool.h"
-#include "loom/tools/loom-check/status_util.h"
 
 static bool loom_check_case_has_requirement(const loom_check_case_t* test_case,
                                             iree_string_view_t requirement) {
@@ -123,15 +122,6 @@ static iree_status_t loom_check_query_requirement(
   return iree_ok_status();
 }
 
-static iree_status_t loom_check_append_status_name(
-    iree_status_t source_status, iree_string_builder_t* builder) {
-  iree_string_view_t status_name = loom_check_status_name(source_status);
-  iree_status_t status =
-      iree_string_builder_append_string(builder, status_name);
-  iree_status_ignore(source_status);
-  return status;
-}
-
 static iree_status_t loom_check_append_supported_requirement_names(
     loom_check_result_t* result) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
@@ -183,19 +173,12 @@ static iree_status_t loom_check_skip_unavailable_requirement(
     loom_check_result_t* result) {
   result->raw_outcome = LOOM_CHECK_SKIP;
   result->final_outcome = LOOM_CHECK_SKIP;
+  const char* status_name =
+      iree_status_code_string(iree_status_code(availability_status));
   iree_status_t status = iree_string_builder_append_format(
-      &result->detail,
-      "skipped: requirement '%.*s' unavailable: ", (int)requirement.size,
-      requirement.data);
-  if (iree_status_is_ok(status)) {
-    status =
-        loom_check_append_status_name(availability_status, &result->detail);
-  } else {
-    iree_status_ignore(availability_status);
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_cstring(&result->detail, "\n");
-  }
+      &result->detail, "skipped: requirement '%.*s' unavailable: %s\n",
+      (int)requirement.size, requirement.data, status_name);
+  iree_status_ignore(availability_status);
   return status;
 }
 

@@ -29,7 +29,6 @@
 #include "loom/target/presets.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
-#include "loom/tools/loom-check/status_util.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
 
@@ -581,7 +580,8 @@ static iree_status_t loom_check_emit_collect_status_diagnostic(
                             "LOWERING/001 diagnostic is not registered");
   }
 
-  iree_string_view_t status_name = loom_check_status_name(failure_status);
+  iree_string_view_t status_name = iree_make_cstring_view(
+      iree_status_code_string(iree_status_code(failure_status)));
   loom_diagnostic_param_t params[3] = {
       loom_param_string(IREE_SV("module")),
       loom_param_string(emit_target_name),
@@ -600,7 +600,6 @@ static iree_status_t loom_check_emit_collect_status_diagnostic(
   };
   iree_status_t status =
       loom_check_diagnostic_collector_sink(collector, &diagnostic);
-
   iree_status_ignore(failure_status);
   return status;
 }
