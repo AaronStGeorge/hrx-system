@@ -43,6 +43,16 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "predicate",
+    srcs = ["predicate.c"],
+    hdrs = ["predicate.h"],
+    deps = [
+        ":types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "registry",
     srcs = ["registry.c"],
     hdrs = ["registry.h"],
@@ -72,6 +82,7 @@ loom_cc_library(
     hdrs = ["verify.h"],
     deps = [
         ":invocation",
+        ":predicate",
         ":registry",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/pass",
@@ -114,6 +125,7 @@ loom_cc_library(
     srcs = ["interpreter.c"],
     hdrs = ["interpreter.h"],
     deps = [
+        ":predicate",
         ":program",
         ":report",
         "//loom/src/loom/error:error_defs",

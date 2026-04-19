@@ -180,6 +180,8 @@ typedef struct loom_pass_program_compile_options_t {
   const loom_pass_registry_t* registry;
   // Optional descriptor requirement provider.
   loom_pass_requirement_provider_t requirement_provider;
+  // Optional provider for pass.where predicates outside the core built-ins.
+  loom_pass_predicate_provider_t predicate_provider;
 } loom_pass_program_compile_options_t;
 
 typedef struct loom_pass_program_t {

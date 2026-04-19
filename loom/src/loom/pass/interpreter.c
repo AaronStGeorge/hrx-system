@@ -9,9 +9,11 @@
 #include <string.h>
 
 #include "loom/error/error_defs.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/pass/ops.h"
+#include "loom/pass/predicate.h"
 #include "loom/pass/report.h"
 
 typedef struct loom_pass_interpreter_epoch_t {
@@ -461,6 +463,103 @@ static iree_status_t loom_pass_interpreter_find_attr(
                           name.data);
 }
 
+static const loom_pass_program_attr_t* loom_pass_interpreter_find_optional_attr(
+    loom_pass_program_attr_list_t attrs, iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < attrs.attr_count; ++i) {
+    if (iree_string_view_equal(attrs.attrs[i].name, name)) {
+      return &attrs.attrs[i];
+    }
+  }
+  return NULL;
+}
+
+static const loom_op_t* loom_pass_interpreter_frame_op(
+    const loom_pass_interpreter_frame_t* frame) {
+  if (frame->kind == LOOM_PASS_FUNCTION &&
+      loom_func_like_isa(frame->function)) {
+    return frame->function.op;
+  }
+  return NULL;
+}
+
+static bool loom_pass_interpreter_lookup_attr_descriptor(
+    const loom_module_t* module, const loom_op_t* op, iree_string_view_t name,
+    const loom_attr_descriptor_t** out_descriptor, uint8_t* out_attr_index) {
+  *out_descriptor = NULL;
+  *out_attr_index = LOOM_ATTR_INDEX_NONE;
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable || !vtable->attr_descriptors) {
+    return false;
+  }
+  for (uint8_t i = 0; i < vtable->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    if (iree_string_view_equal(loom_attr_descriptor_name(descriptor), name)) {
+      *out_descriptor = descriptor;
+      *out_attr_index = i;
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_pass_interpreter_attr_string_value_equal(
+    const loom_pass_interpreter_state_t* state,
+    const loom_attr_descriptor_t* descriptor, loom_attribute_t actual_attr,
+    iree_string_view_t expected_string) {
+  if (actual_attr.kind == LOOM_ATTR_STRING) {
+    loom_string_id_t actual_string_id = loom_attr_as_string_id(actual_attr);
+    if (actual_string_id >= state->module->strings.count) {
+      return false;
+    }
+    return iree_string_view_equal(
+        state->module->strings.entries[actual_string_id], expected_string);
+  }
+  if (actual_attr.kind == LOOM_ATTR_ENUM && descriptor &&
+      descriptor->enum_case_names) {
+    uint8_t enum_value = loom_attr_as_enum(actual_attr);
+    if (enum_value >= descriptor->enum_case_count) {
+      return false;
+    }
+    return iree_string_view_equal(
+        loom_bstring_view(descriptor->enum_case_names[enum_value]),
+        expected_string);
+  }
+  if (actual_attr.kind == LOOM_ATTR_SYMBOL) {
+    iree_string_view_t symbol_name = loom_pass_interpreter_source_symbol_name(
+        state->module, loom_attr_as_symbol(actual_attr), IREE_SV("<invalid>"));
+    return iree_string_view_equal(symbol_name, expected_string);
+  }
+  return false;
+}
+
+static bool loom_pass_interpreter_attr_value_equal(
+    const loom_pass_interpreter_state_t* state,
+    const loom_attr_descriptor_t* descriptor, loom_attribute_t actual_attr,
+    const loom_pass_program_attr_value_t* expected_value) {
+  if (loom_attr_is_absent(actual_attr)) {
+    return false;
+  }
+  switch (expected_value->kind) {
+    case LOOM_ATTR_STRING:
+      return loom_pass_interpreter_attr_string_value_equal(
+          state, descriptor, actual_attr, expected_value->string_value);
+    case LOOM_ATTR_I64:
+      return actual_attr.kind == LOOM_ATTR_I64 &&
+             loom_attr_as_i64(actual_attr) == expected_value->i64_value;
+    case LOOM_ATTR_F64:
+      return actual_attr.kind == LOOM_ATTR_F64 &&
+             loom_attr_as_f64(actual_attr) == expected_value->f64_value;
+    case LOOM_ATTR_BOOL:
+      return actual_attr.kind == LOOM_ATTR_BOOL &&
+             loom_attr_as_bool(actual_attr) == expected_value->bool_value;
+    case LOOM_ATTR_ENUM:
+      return actual_attr.kind == LOOM_ATTR_ENUM &&
+             loom_attr_as_enum(actual_attr) == expected_value->enum_value;
+    default:
+      return false;
+  }
+}
+
 static iree_status_t loom_pass_interpreter_evaluate_name_predicate(
     loom_pass_interpreter_state_t* state,
     const loom_pass_interpreter_frame_t* frame,
@@ -481,6 +580,106 @@ static iree_status_t loom_pass_interpreter_evaluate_name_predicate(
   return iree_ok_status();
 }
 
+static iree_status_t loom_pass_interpreter_evaluate_attr_predicate(
+    loom_pass_interpreter_state_t* state,
+    const loom_pass_interpreter_frame_t* frame,
+    const loom_pass_program_where_t* where, bool* out_match) {
+  *out_match = false;
+  const loom_op_t* current_op = loom_pass_interpreter_frame_op(frame);
+  if (!current_op) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass.where attr predicate requires current function");
+  }
+  const loom_pass_program_attr_t* name_attr = NULL;
+  IREE_RETURN_IF_ERROR(loom_pass_interpreter_find_attr(
+      where->attrs, IREE_SV("name"), &name_attr));
+  if (name_attr->value.kind != LOOM_ATTR_STRING) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass.where attr predicate requires string 'name' attr");
+  }
+
+  const loom_attr_descriptor_t* descriptor = NULL;
+  uint8_t attr_index = LOOM_ATTR_INDEX_NONE;
+  if (!loom_pass_interpreter_lookup_attr_descriptor(
+          state->module, current_op, name_attr->value.string_value, &descriptor,
+          &attr_index)) {
+    return iree_ok_status();
+  }
+  loom_attribute_t actual_attr = loom_op_attrs(current_op)[attr_index];
+  if (loom_attr_is_absent(actual_attr)) {
+    return iree_ok_status();
+  }
+
+  const loom_pass_program_attr_t* value_attr =
+      loom_pass_interpreter_find_optional_attr(where->attrs, IREE_SV("value"));
+  if (!value_attr) {
+    *out_match = true;
+    return iree_ok_status();
+  }
+  *out_match = loom_pass_interpreter_attr_value_equal(
+      state, descriptor, actual_attr, &value_attr->value);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_pass_interpreter_evaluate_trait_predicate(
+    loom_pass_interpreter_state_t* state,
+    const loom_pass_interpreter_frame_t* frame,
+    const loom_pass_program_where_t* where, bool* out_match) {
+  *out_match = false;
+  const loom_op_t* current_op = loom_pass_interpreter_frame_op(frame);
+  if (!current_op) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass.where trait predicate requires current function");
+  }
+  const loom_pass_program_attr_t* name_attr = NULL;
+  IREE_RETURN_IF_ERROR(loom_pass_interpreter_find_attr(
+      where->attrs, IREE_SV("name"), &name_attr));
+  if (name_attr->value.kind != LOOM_ATTR_STRING) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass.where trait predicate requires string 'name' attr");
+  }
+  loom_trait_flags_t trait_flag = 0;
+  if (!loom_pass_predicate_lookup_trait(name_attr->value.string_value,
+                                        &trait_flag)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown pass.where trait '%.*s'",
+                            (int)name_attr->value.string_value.size,
+                            name_attr->value.string_value.data);
+  }
+  *out_match =
+      (loom_op_effective_traits(state->module, current_op) & trait_flag) != 0;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_pass_interpreter_evaluate_provider_predicate(
+    loom_pass_interpreter_state_t* state,
+    const loom_pass_interpreter_frame_t* frame,
+    const loom_pass_program_instruction_t* instruction, bool* out_match) {
+  *out_match = false;
+  if (!state->options->predicate_provider.evaluate) {
+    const loom_pass_program_where_t* where = &instruction->where;
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "unsupported pass.where predicate '%.*s'",
+                            (int)where->predicate.size, where->predicate.data);
+  }
+  return state->options->predicate_provider.evaluate(
+      state->options->predicate_provider.user_data,
+      &(loom_pass_predicate_evaluate_context_t){
+          .pipeline_module = state->program->source_module,
+          .where_op = instruction->source.op,
+          .anchor_kind = frame->kind,
+          .predicate = instruction->where.predicate,
+          .target_module = state->module,
+          .symbol = frame->symbol,
+          .function = frame->function,
+      },
+      out_match);
+}
+
 static iree_status_t loom_pass_interpreter_execute_where(
     loom_pass_interpreter_state_t* state,
     const loom_pass_interpreter_frame_t* frame,
@@ -490,10 +689,15 @@ static iree_status_t loom_pass_interpreter_execute_where(
   if (iree_string_view_equal(where->predicate, IREE_SV("name"))) {
     IREE_RETURN_IF_ERROR(loom_pass_interpreter_evaluate_name_predicate(
         state, frame, where, &match));
+  } else if (iree_string_view_equal(where->predicate, IREE_SV("attr"))) {
+    IREE_RETURN_IF_ERROR(loom_pass_interpreter_evaluate_attr_predicate(
+        state, frame, where, &match));
+  } else if (iree_string_view_equal(where->predicate, IREE_SV("trait"))) {
+    IREE_RETURN_IF_ERROR(loom_pass_interpreter_evaluate_trait_predicate(
+        state, frame, where, &match));
   } else {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "unsupported pass.where predicate '%.*s'",
-                            (int)where->predicate.size, where->predicate.data);
+    IREE_RETURN_IF_ERROR(loom_pass_interpreter_evaluate_provider_predicate(
+        state, frame, instruction, &match));
   }
   if (!match) {
     return iree_ok_status();

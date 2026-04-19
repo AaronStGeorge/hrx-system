@@ -18,6 +18,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/ir/ir.h"
+#include "loom/pass/predicate.h"
 #include "loom/pass/registry.h"
 
 #ifdef __cplusplus
@@ -42,6 +43,8 @@ typedef struct loom_pass_verify_options_t {
   // Optional descriptor requirement provider. Required only when a resolved
   // pass descriptor declares requirements.
   loom_pass_requirement_provider_t requirement_provider;
+  // Optional provider for pass.where predicates outside the core built-ins.
+  loom_pass_predicate_provider_t predicate_provider;
 } loom_pass_verify_options_t;
 
 // Verifies every pass.pipeline op in |module|.

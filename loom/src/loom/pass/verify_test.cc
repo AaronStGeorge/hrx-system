@@ -27,6 +27,21 @@ static bool allow_one_requirement(void* user_data,
   return iree_string_view_equal(*allowed, requirement);
 }
 
+static iree_status_t verify_target_predicate(
+    void* user_data, const loom_pass_predicate_verify_context_t* context) {
+  int* call_count = static_cast<int*>(user_data);
+  ++*call_count;
+  if (!iree_string_view_equal(context->predicate, IREE_SV("target"))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unexpected test predicate");
+  }
+  if (context->anchor_kind != LOOM_PASS_FUNCTION) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target predicate requires func anchor");
+  }
+  return iree_ok_status();
+}
+
 class PassVerifyTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -69,28 +84,33 @@ class PassVerifyTest : public ::testing::Test {
 
   iree_status_t Verify(
       iree_string_view_t source,
-      loom_pass_requirement_provider_t requirement_provider = {}) {
+      loom_pass_requirement_provider_t requirement_provider = {},
+      loom_pass_predicate_provider_t predicate_provider = {}) {
     loom_module_t* module = Parse(source);
     if (!module) {
       return iree_make_status(IREE_STATUS_INTERNAL, "parse failed");
     }
-    return VerifyModule(module, requirement_provider);
+    return VerifyModule(module, requirement_provider, predicate_provider);
   }
 
   iree_status_t VerifyModule(
       const loom_module_t* module,
-      loom_pass_requirement_provider_t requirement_provider = {}) {
+      loom_pass_requirement_provider_t requirement_provider = {},
+      loom_pass_predicate_provider_t predicate_provider = {}) {
     loom_pass_verify_options_t options = {
         .registry = loom_test_pass_registry(),
         .requirement_provider = requirement_provider,
+        .predicate_provider = predicate_provider,
     };
     return loom_pass_verify_module(module, &options, &scratch_arena_);
   }
 
   void ExpectVerifyStatus(
       iree_status_code_t expected_code, iree_string_view_t source,
-      loom_pass_requirement_provider_t requirement_provider = {}) {
-    IREE_EXPECT_STATUS_IS(expected_code, Verify(source, requirement_provider));
+      loom_pass_requirement_provider_t requirement_provider = {},
+      loom_pass_predicate_provider_t predicate_provider = {}) {
+    IREE_EXPECT_STATUS_IS(expected_code, Verify(source, requirement_provider,
+                                                predicate_provider));
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -244,6 +264,68 @@ TEST_F(PassVerifyTest, RejectsEmptyWherePredicate) {
   loom_op_attrs(where_op)[loom_pass_where_predicate_ATTR_INDEX] =
       loom_attr_string(empty_string_id);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, VerifyModule(module));
+}
+
+TEST_F(PassVerifyTest, VerifiesBuiltInWherePredicates) {
+  IREE_ASSERT_OK(Verify(
+      IREE_SV("pass.pipeline<module> @pipeline pipeline {\n"
+              "  for func {\n"
+              "    where name(value = \"matmul\") {\n"
+              "      test.noop\n"
+              "    }\n"
+              "    where attr(name = \"visibility\", value = \"public\") {\n"
+              "      test.noop\n"
+              "    }\n"
+              "    where trait(name = \"isolated-from-above\") {\n"
+              "      test.noop\n"
+              "    }\n"
+              "  }\n"
+              "}\n")));
+}
+
+TEST_F(PassVerifyTest, RejectsMalformedWherePredicateAttrs) {
+  ExpectVerifyStatus(IREE_STATUS_INVALID_ARGUMENT,
+                     IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
+                             "  where name(value = 1) {\n"
+                             "    test.noop\n"
+                             "  }\n"
+                             "}\n"));
+  ExpectVerifyStatus(IREE_STATUS_INVALID_ARGUMENT,
+                     IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
+                             "  where attr(name = 1) {\n"
+                             "    test.noop\n"
+                             "  }\n"
+                             "}\n"));
+  ExpectVerifyStatus(IREE_STATUS_INVALID_ARGUMENT,
+                     IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
+                             "  where trait(name = \"definitely-a-trait\") {\n"
+                             "    test.noop\n"
+                             "  }\n"
+                             "}\n"));
+}
+
+TEST_F(PassVerifyTest, RejectsUnknownWherePredicateWithoutProvider) {
+  ExpectVerifyStatus(IREE_STATUS_INVALID_ARGUMENT,
+                     IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
+                             "  where target(value = \"gfx-test\") {\n"
+                             "    test.noop\n"
+                             "  }\n"
+                             "}\n"));
+}
+
+TEST_F(PassVerifyTest, VerifiesProviderWherePredicate) {
+  int verify_count = 0;
+  loom_pass_predicate_provider_t provider = {
+      .verify = verify_target_predicate,
+      .user_data = &verify_count,
+  };
+  IREE_ASSERT_OK(Verify(IREE_SV("pass.pipeline<func> @pipeline pipeline {\n"
+                                "  where target(value = \"gfx-test\") {\n"
+                                "    test.noop\n"
+                                "  }\n"
+                                "}\n"),
+                        {}, provider));
+  EXPECT_EQ(verify_count, 1);
 }
 
 TEST_F(PassVerifyTest, RejectsMissingRegionTerminator) {

@@ -48,6 +48,48 @@ struct DiagnosticCapture {
   loom_diagnostic_param_t params[4] = {};
 };
 
+struct PredicateProviderCapture {
+  int verify_count = 0;
+  int evaluate_count = 0;
+  iree_string_view_t selected_symbol = iree_string_view_empty();
+};
+
+static iree_string_view_t PredicateContextSymbolName(
+    const loom_pass_predicate_evaluate_context_t* context) {
+  if (!context->symbol ||
+      context->symbol->name_id >= context->target_module->strings.count) {
+    return IREE_SV("<none>");
+  }
+  return context->target_module->strings.entries[context->symbol->name_id];
+}
+
+static iree_status_t VerifyTargetPredicate(
+    void* user_data, const loom_pass_predicate_verify_context_t* context) {
+  PredicateProviderCapture* capture =
+      static_cast<PredicateProviderCapture*>(user_data);
+  ++capture->verify_count;
+  if (!iree_string_view_equal(context->predicate, IREE_SV("target"))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unexpected test predicate");
+  }
+  if (context->anchor_kind != LOOM_PASS_FUNCTION) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target predicate requires func anchor");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t EvaluateTargetPredicate(
+    void* user_data, const loom_pass_predicate_evaluate_context_t* context,
+    bool* out_match) {
+  PredicateProviderCapture* capture =
+      static_cast<PredicateProviderCapture*>(user_data);
+  ++capture->evaluate_count;
+  *out_match = iree_string_view_equal(PredicateContextSymbolName(context),
+                                      capture->selected_symbol);
+  return iree_ok_status();
+}
+
 class PassInterpreterTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -107,10 +149,13 @@ class PassInterpreterTest : public ::testing::Test {
     return function;
   }
 
-  iree_status_t Compile(loom_module_t* module, const loom_op_t* pipeline_op,
-                        loom_pass_program_t* out_program) {
+  iree_status_t Compile(
+      loom_module_t* module, const loom_op_t* pipeline_op,
+      loom_pass_program_t* out_program,
+      loom_pass_predicate_provider_t predicate_provider = {}) {
     loom_pass_program_compile_options_t options = {
         .registry = loom_test_pass_registry(),
+        .predicate_provider = predicate_provider,
     };
     return loom_pass_program_compile_pipeline(module, pipeline_op, &options,
                                               &block_pool_, out_program);
@@ -143,9 +188,11 @@ class PassInterpreterTest : public ::testing::Test {
   loom_pass_interpreter_options_t InterpreterOptions(
       loom_test_pass_trace_t* trace,
       iree_diagnostic_emitter_t diagnostic_emitter = {},
-      loom_pass_report_t* report = nullptr) {
+      loom_pass_report_t* report = nullptr,
+      loom_pass_predicate_provider_t predicate_provider = {}) {
     return (loom_pass_interpreter_options_t){
         .block_pool = &block_pool_,
+        .predicate_provider = predicate_provider,
         .diagnostic_emitter = diagnostic_emitter,
         .configure =
             {
@@ -297,6 +344,110 @@ TEST_F(PassInterpreterTest, AppliesNamePredicateToCurrentFunction) {
       loom_pass_interpreter_run_module(&storage.program, module, &options));
 
   EXPECT_EQ(trace.noop_invocation_count, 1);
+}
+
+TEST_F(PassInterpreterTest, AppliesAttrPredicateToCurrentFunction) {
+  loom_module_t* module = Parse(
+      IREE_SV("pass.pipeline<module> @pipeline pipeline {\n"
+              "  for func {\n"
+              "    where attr(name = \"visibility\", value = \"public\") {\n"
+              "      test.noop\n"
+              "    }\n"
+              "  }\n"
+              "}\n"
+              "test.func public @exported() {\n"
+              "  test.yield\n"
+              "}\n"
+              "test.func @private() {\n"
+              "  test.yield\n"
+              "}\n"));
+  ASSERT_NE(module, nullptr);
+
+  ProgramStorage storage;
+  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
+
+  loom_test_pass_trace_t trace = {};
+  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
+  IREE_ASSERT_OK(
+      loom_pass_interpreter_run_module(&storage.program, module, &options));
+
+  ASSERT_EQ(trace.event_count, 1u);
+  EXPECT_TRUE(
+      iree_string_view_equal(trace.events[0].symbol_name, IREE_SV("exported")));
+}
+
+TEST_F(PassInterpreterTest, AppliesTraitPredicateToCurrentFunction) {
+  loom_module_t* module =
+      Parse(IREE_SV("pass.pipeline<module> @pipeline pipeline {\n"
+                    "  for func {\n"
+                    "    where trait(name = \"symbol-define\") {\n"
+                    "      test.noop\n"
+                    "    }\n"
+                    "    where trait(name = \"elementwise\") {\n"
+                    "      test.mark-changed\n"
+                    "    }\n"
+                    "  }\n"
+                    "}\n"
+                    "test.func @first() {\n"
+                    "  test.yield\n"
+                    "}\n"
+                    "test.func @second() {\n"
+                    "  test.yield\n"
+                    "}\n"));
+  ASSERT_NE(module, nullptr);
+
+  ProgramStorage storage;
+  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
+
+  loom_test_pass_trace_t trace = {};
+  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
+  IREE_ASSERT_OK(
+      loom_pass_interpreter_run_module(&storage.program, module, &options));
+
+  EXPECT_EQ(trace.noop_invocation_count, 2);
+  EXPECT_EQ(trace.mark_changed_invocation_count, 0);
+}
+
+TEST_F(PassInterpreterTest, AppliesProviderPredicateToCurrentFunction) {
+  loom_module_t* module =
+      Parse(IREE_SV("pass.pipeline<module> @pipeline pipeline {\n"
+                    "  for func {\n"
+                    "    where target(value = \"gfx-test\") {\n"
+                    "      test.noop\n"
+                    "    }\n"
+                    "  }\n"
+                    "}\n"
+                    "test.func @selected() {\n"
+                    "  test.yield\n"
+                    "}\n"
+                    "test.func @skipped() {\n"
+                    "  test.yield\n"
+                    "}\n"));
+  ASSERT_NE(module, nullptr);
+
+  PredicateProviderCapture predicate_capture = {
+      .selected_symbol = IREE_SV("selected"),
+  };
+  loom_pass_predicate_provider_t predicate_provider = {
+      .verify = VerifyTargetPredicate,
+      .evaluate = EvaluateTargetPredicate,
+      .user_data = &predicate_capture,
+  };
+  ProgramStorage storage;
+  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program,
+                         predicate_provider));
+
+  loom_test_pass_trace_t trace = {};
+  loom_pass_interpreter_options_t options =
+      InterpreterOptions(&trace, {}, nullptr, predicate_provider);
+  IREE_ASSERT_OK(
+      loom_pass_interpreter_run_module(&storage.program, module, &options));
+
+  EXPECT_EQ(predicate_capture.verify_count, 1);
+  EXPECT_EQ(predicate_capture.evaluate_count, 2);
+  ASSERT_EQ(trace.event_count, 1u);
+  EXPECT_TRUE(
+      iree_string_view_equal(trace.events[0].symbol_name, IREE_SV("selected")));
 }
 
 TEST_F(PassInterpreterTest, ExecutesFixedRepeat) {

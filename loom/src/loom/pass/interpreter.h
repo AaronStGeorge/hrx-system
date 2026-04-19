@@ -41,6 +41,8 @@ typedef struct loom_pass_interpreter_configure_callback_t {
 typedef struct loom_pass_interpreter_options_t {
   // Shared block pool used for pass instance, scratch, and snapshot arenas.
   iree_arena_block_pool_t* block_pool;
+  // Optional provider for pass.where predicates outside the core built-ins.
+  loom_pass_predicate_provider_t predicate_provider;
   // Optional structured diagnostic emitter copied into every pass instance.
   iree_diagnostic_emitter_t diagnostic_emitter;
   // Optional user-data callback for pass instances.

@@ -12,6 +12,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/pass/ops.h"
 #include "loom/pass/invocation.h"
+#include "loom/pass/predicate.h"
 
 typedef struct loom_pass_verify_state_t {
   // Module containing the pass pipeline IR.
@@ -87,6 +88,84 @@ static iree_string_view_t loom_pass_pipeline_name(
   }
   return loom_pass_symbol_name_from_ref(module,
                                         loom_pass_pipeline_symbol(pipeline_op));
+}
+
+static iree_status_t loom_pass_find_named_attr(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t attr_name, const loom_attribute_t** out_attr,
+    bool* out_found) {
+  *out_attr = NULL;
+  *out_found = false;
+  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+    iree_string_view_t name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_pass_string_from_id(
+        module, attrs.entries[i].name_id, "pass.where attr name", &name));
+    if (!iree_string_view_equal(name, attr_name)) {
+      continue;
+    }
+    if (*out_found) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "pass.where duplicate predicate attr '%.*s'",
+                              (int)attr_name.size, attr_name.data);
+    }
+    *out_attr = &attrs.entries[i].value;
+    *out_found = true;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_pass_verify_where_attrs_are(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t first_name, iree_string_view_t second_name) {
+  bool seen_first_attr = false;
+  bool seen_second_attr = false;
+  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+    iree_string_view_t name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_pass_string_from_id(
+        module, attrs.entries[i].name_id, "pass.where attr name", &name));
+    if (iree_string_view_equal(name, first_name)) {
+      if (seen_first_attr) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "pass.where duplicate predicate attr '%.*s'",
+                                (int)name.size, name.data);
+      }
+      seen_first_attr = true;
+      continue;
+    }
+    if (!iree_string_view_is_empty(second_name) &&
+        iree_string_view_equal(name, second_name)) {
+      if (seen_second_attr) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "pass.where duplicate predicate attr '%.*s'",
+                                (int)name.size, name.data);
+      }
+      seen_second_attr = true;
+      continue;
+    }
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pass.where predicate does not accept attr '%.*s'",
+                            (int)name.size, name.data);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_pass_verify_required_string_where_attr(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t attr_name, const loom_attribute_t** out_attr) {
+  bool found = false;
+  IREE_RETURN_IF_ERROR(
+      loom_pass_find_named_attr(module, attrs, attr_name, out_attr, &found));
+  if (!found) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pass.where predicate requires string attr '%.*s'",
+                            (int)attr_name.size, attr_name.data);
+  }
+  if ((*out_attr)->kind != LOOM_ATTR_STRING) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pass.where predicate attr '%.*s' must be string",
+                            (int)attr_name.size, attr_name.data);
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_pass_verify_pipeline_symbol(
@@ -293,6 +372,60 @@ static iree_status_t loom_pass_verify_where(
   if (iree_string_view_is_empty(predicate)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "pass.where predicate must not be empty");
+  }
+  loom_named_attr_slice_t attrs = loom_pass_where_attrs(op);
+  if (iree_string_view_equal(predicate, IREE_SV("name"))) {
+    IREE_RETURN_IF_ERROR(loom_pass_verify_where_attrs_are(
+        state->module, attrs, IREE_SV("value"), iree_string_view_empty()));
+    const loom_attribute_t* value_attr = NULL;
+    IREE_RETURN_IF_ERROR(loom_pass_verify_required_string_where_attr(
+        state->module, attrs, IREE_SV("value"), &value_attr));
+    (void)value_attr;
+  } else if (iree_string_view_equal(predicate, IREE_SV("attr"))) {
+    if (current_kind != LOOM_PASS_FUNCTION) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "pass.where attr predicate requires func anchor");
+    }
+    IREE_RETURN_IF_ERROR(loom_pass_verify_where_attrs_are(
+        state->module, attrs, IREE_SV("name"), IREE_SV("value")));
+    const loom_attribute_t* name_attr = NULL;
+    IREE_RETURN_IF_ERROR(loom_pass_verify_required_string_where_attr(
+        state->module, attrs, IREE_SV("name"), &name_attr));
+    (void)name_attr;
+  } else if (iree_string_view_equal(predicate, IREE_SV("trait"))) {
+    if (current_kind != LOOM_PASS_FUNCTION) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass.where trait predicate requires func anchor");
+    }
+    IREE_RETURN_IF_ERROR(loom_pass_verify_where_attrs_are(
+        state->module, attrs, IREE_SV("name"), iree_string_view_empty()));
+    const loom_attribute_t* name_attr = NULL;
+    IREE_RETURN_IF_ERROR(loom_pass_verify_required_string_where_attr(
+        state->module, attrs, IREE_SV("name"), &name_attr));
+    iree_string_view_t trait_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(
+        loom_pass_string_from_id(state->module, name_attr->string_id,
+                                 "pass.where trait name", &trait_name));
+    loom_trait_flags_t trait_flag = 0;
+    if (!loom_pass_predicate_lookup_trait(trait_name, &trait_flag)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown pass.where trait '%.*s'",
+                              (int)trait_name.size, trait_name.data);
+    }
+  } else if (state->options->predicate_provider.verify) {
+    IREE_RETURN_IF_ERROR(state->options->predicate_provider.verify(
+        state->options->predicate_provider.user_data,
+        &(loom_pass_predicate_verify_context_t){
+            .pipeline_module = state->module,
+            .where_op = op,
+            .anchor_kind = current_kind,
+            .predicate = predicate,
+        }));
+  } else if (!state->options->predicate_provider.evaluate) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported pass.where predicate '%.*s'",
+                            (int)predicate.size, predicate.data);
   }
   return loom_pass_verify_region(state, pipeline_op, current_kind,
                                  loom_pass_where_body(op), call_stack);

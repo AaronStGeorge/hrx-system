@@ -48,6 +48,19 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    predicate
+  HDRS
+    "predicate.h"
+  SRCS
+    "predicate.c"
+  DEPS
+    ::types
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     registry
   HDRS
     "registry.h"
@@ -85,6 +98,7 @@ loom_cc_library(
     "verify.c"
   DEPS
     ::invocation
+    ::predicate
     ::registry
     iree::base
     iree::base::internal::arena
@@ -136,6 +150,7 @@ loom_cc_library(
   SRCS
     "interpreter.c"
   DEPS
+    ::predicate
     ::program
     ::report
     iree::base

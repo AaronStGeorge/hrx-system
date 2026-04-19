@@ -28,6 +28,8 @@ typedef struct loom_pass_tool_run_options_t {
   const loom_pass_registry_t* registry;
   // Optional descriptor requirement provider.
   loom_pass_requirement_provider_t requirement_provider;
+  // Optional provider for pass.where predicates outside the core built-ins.
+  loom_pass_predicate_provider_t predicate_provider;
   // Shared block pool used for compilation, execution, and scratch modules.
   iree_arena_block_pool_t* block_pool;
   // Optional structured diagnostic emitter copied into every pass instance.

@@ -31,6 +31,7 @@ static iree_status_t loom_pass_tool_run_program(
     const loom_pass_tool_run_options_t* options) {
   loom_pass_interpreter_options_t interpreter_options = {
       .block_pool = options->block_pool,
+      .predicate_provider = options->predicate_provider,
       .diagnostic_emitter = options->diagnostic_emitter,
       .configure = options->configure,
       .report = options->report,
@@ -102,6 +103,7 @@ iree_status_t loom_pass_tool_run_pipeline_op(
   loom_pass_program_compile_options_t compile_options = {
       .registry = options->registry,
       .requirement_provider = options->requirement_provider,
+      .predicate_provider = options->predicate_provider,
   };
   loom_pass_program_t program = {0};
   iree_status_t status = loom_pass_program_compile_pipeline(
@@ -472,6 +474,7 @@ iree_status_t loom_pass_tool_run_flat_pipeline(
     loom_pass_program_compile_options_t compile_options = {
         .registry = options->registry,
         .requirement_provider = options->requirement_provider,
+        .predicate_provider = options->predicate_provider,
     };
     loom_pass_program_t program = {0};
     status = loom_pass_program_compile_pipeline(pipeline_module, pipeline_op,
