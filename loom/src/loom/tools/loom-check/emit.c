@@ -29,6 +29,7 @@
 #include "loom/target/presets.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
+#include "loom/tools/loom-check/status_util.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
 
@@ -571,8 +572,7 @@ static loom_source_range_t loom_check_emit_first_ir_source_range(
 static iree_status_t loom_check_emit_collect_status_diagnostic(
     loom_check_diagnostic_collector_t* collector,
     const loom_check_case_t* test_case, iree_string_view_t filename,
-    iree_string_view_t emit_target_name, iree_status_t failure_status,
-    iree_allocator_t allocator) {
+    iree_string_view_t emit_target_name, iree_status_t failure_status) {
   const loom_error_def_t* error =
       loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1);
   if (!error) {
@@ -581,21 +581,11 @@ static iree_status_t loom_check_emit_collect_status_diagnostic(
                             "LOWERING/001 diagnostic is not registered");
   }
 
-  char* status_buffer = NULL;
-  iree_host_size_t status_length = 0;
-  if (!iree_status_to_string(failure_status, &allocator, &status_buffer,
-                             &status_length)) {
-    iree_status_ignore(failure_status);
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "failed to render lowering failure status");
-  }
-
-  iree_string_view_t status_text =
-      iree_make_string_view(status_buffer, status_length);
+  iree_string_view_t status_name = loom_check_status_name(failure_status);
   loom_diagnostic_param_t params[3] = {
       loom_param_string(IREE_SV("module")),
       loom_param_string(emit_target_name),
-      loom_param_string(status_text),
+      loom_param_string(status_name),
   };
   loom_source_range_t source_range =
       loom_check_emit_first_ir_source_range(test_case, filename);
@@ -611,7 +601,6 @@ static iree_status_t loom_check_emit_collect_status_diagnostic(
   iree_status_t status =
       loom_check_diagnostic_collector_sink(collector, &diagnostic);
 
-  iree_allocator_free(allocator, status_buffer);
   iree_status_ignore(failure_status);
   return status;
 }
@@ -623,8 +612,7 @@ static iree_status_t loom_check_emit_finish_status_failure(
     iree_string_view_t emit_target_name, iree_allocator_t allocator,
     loom_check_result_t* result) {
   IREE_RETURN_IF_ERROR(loom_check_emit_collect_status_diagnostic(
-      collector, test_case, filename, emit_target_name, failure_status,
-      allocator));
+      collector, test_case, filename, emit_target_name, failure_status));
   return loom_check_diagnostic_collector_finish(
       collector, test_case, case_index, report, allocator, result);
 }

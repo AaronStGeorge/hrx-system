@@ -31,6 +31,7 @@ loom_cc_library(
     "diagnostics.h"
     "execute.h"
     "requirements.h"
+    "status_util.h"
   SRCS
     "diagnostics.c"
     "emit.c"

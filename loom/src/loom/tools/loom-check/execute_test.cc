@@ -968,7 +968,7 @@ TEST_F(ExecuteTest, EmitModeReportsLoweringFailure) {
                    "}\n",
                    &result));
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("scalar.poison"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("UNIMPLEMENTED"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -980,8 +980,7 @@ TEST_F(ExecuteTest, EmitModeReportsUnknownLlvmProfile) {
                    "}\n",
                    &result));
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("unknown LLVMIR target profile"),
-            std::string::npos);
+  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -1013,8 +1012,7 @@ TEST_F(ExecuteTest, EmitLowDescriptorManifestRejectsBackendSets) {
                    &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("unknown low descriptor set"),
-            std::string::npos);
+  EXPECT_NE(DetailString(result).find("NOT_FOUND"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -1027,8 +1025,7 @@ TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsUnknownSet) {
                    &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("unknown low descriptor set"),
-            std::string::npos);
+  EXPECT_NE(DetailString(result).find("NOT_FOUND"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -1095,8 +1092,7 @@ TEST_F(ExecuteTest, EmitLivenessJsonReportsUnknownFunction) {
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_NE(DetailString(result).find("liveness-json"), std::string::npos);
-  EXPECT_NE(DetailString(result).find("unknown function '@missing'"),
-            std::string::npos)
+  EXPECT_NE(DetailString(result).find("NOT_FOUND"), std::string::npos)
       << "detail: " << DetailString(result);
   loom_check_result_deinitialize(&result);
 }

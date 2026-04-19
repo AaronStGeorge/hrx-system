@@ -1106,8 +1106,7 @@ static iree_status_t loom_low_verify_packet(
   iree_status_t lookup_status = loom_low_descriptor_set_lookup_descriptor(
       descriptor_set, opcode, &descriptor_ordinal);
   if (!iree_status_is_ok(lookup_status)) {
-    iree_status_code_t status_code = iree_status_code(lookup_status);
-    if (status_code == IREE_STATUS_NOT_FOUND) {
+    if (iree_status_is_not_found(lookup_status)) {
       iree_status_free(lookup_status);
       return loom_low_verify_emit_missing_descriptor(function_state, op, opcode,
                                                      opcode_attr_index);

@@ -1,7 +1,7 @@
 // RUN: emit llvmir-body x86_64-object
 
 // Missing x86 packed-dot features fail loudly instead of selecting a fallback.
-// ERROR@+1: LOWERING/001 "target legality" "vector.dot4i" "matching x86 packed-dot feature"
+// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def @dot4_s8s8(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
   %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
   func.return %dot : vector<8xi32>
@@ -11,7 +11,7 @@ func.def @dot4_s8s8(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32
 // RUN: emit llvmir-body
 
 // Packed i4 dot has no implicit LLVMIR reference expansion.
-// ERROR@+1: LOWERING/001 "target legality" "vector.dot8i4" "packed i4 dot needs explicit unpack"
+// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def @dot8_i4(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xi32>) -> (vector<4xi32>) {
   %dot = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<4xi32>
   func.return %dot : vector<4xi32>
@@ -20,7 +20,7 @@ func.def @dot8_i4(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xi32>)
 // ====
 
 // Packed fp8/bf8 dot has no implicit LLVMIR reference expansion.
-// ERROR@+1: LOWERING/001 "target legality" "vector.dot4f8" "packed fp8/bf8 dot needs explicit decode"
+// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def @dot4_f8(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xf32>) -> (vector<4xf32>) {
   %dot = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<4xi32>, vector<4xf32>
   func.return %dot : vector<4xf32>
@@ -29,7 +29,7 @@ func.def @dot4_f8(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xf32>)
 // ====
 
 // Vector memory lowering currently requires dense address layouts.
-// ERROR@+1: LOWERING/001 "vector.load" "dense address layouts"
+// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def @vector_load_strided(%buffer: buffer, %offset: offset) -> (vector<4xf32>) {
   %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, #strided<stride=8>>
   %loaded = vector.load %view[0] : view<4xf32, #strided<stride=8>> -> vector<4xf32>
@@ -39,7 +39,7 @@ func.def @vector_load_strided(%buffer: buffer, %offset: offset) -> (vector<4xf32
 // ====
 
 // LLVM immarg operands must be compile-time constants.
-// ERROR@+1: LOWERING/001 "target legality" "llvmir.intrinsic" "llvm.memcpy expects" "constant volatile"
+// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def public @dynamic_memcpy_volatile(%target: buffer, %source: buffer, %length: offset, %is_volatile: i1) {
   llvmir.intrinsic<llvm.memcpy> (%target, %source, %length, %is_volatile) : (buffer, buffer, offset, i1)
   func.return
@@ -49,7 +49,7 @@ func.def public @dynamic_memcpy_volatile(%target: buffer, %source: buffer, %leng
 // RUN: emit llvmir-body x86_64-object
 
 // AMDGPU intrinsics stay unknown when the selected target profile is x86.
-// ERROR@+1: LOWERING/001 "target legality" "llvmir.intrinsic" "unknown llvmir.intrinsic kind"
+// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def public @amdgpu_intrinsic_on_x86() -> (i32) {
   %tid = llvmir.intrinsic<llvm.amdgcn.workitem.id.y> () : () -> i32
   func.return %tid : i32
@@ -59,7 +59,7 @@ func.def public @amdgpu_intrinsic_on_x86() -> (i32) {
 // RUN: emit llvmir-body amdgpu-hal
 
 // Device kernel view parameters require an explicit ABI adapter.
-// ERROR@+1: LOWERING/001 "target legality" "view parameters need an explicit ABI adapter"
+// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def public device @bad_view_dispatch(%view: view<1xf32, #dense>) {
   func.return
 }
@@ -68,7 +68,7 @@ func.def public device @bad_view_dispatch(%view: view<1xf32, #dense>) {
 // RUN: emit llvmir-body
 
 // Unsupported source ops report the op name in the lowering diagnostic.
-// ERROR@+1: LOWERING/001 "target legality" "scalar.poison"
+// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def public @bad() -> (i32) {
   %poison = scalar.poison : i32
   func.return %poison : i32
@@ -77,7 +77,7 @@ func.def public @bad() -> (i32) {
 // ====
 
 // Structured SCF control flow must pass through scf-to-cfg before LLVMIR emission.
-// ERROR@+1: LOWERING/001 "target legality" "scf.if" "lowered to CFG"
+// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def @scf_if_before_cfg(%cond: i1) {
   scf.if %cond {
     scf.yield
@@ -90,7 +90,7 @@ func.def @scf_if_before_cfg(%cond: i1) {
 // ====
 
 // Loop-shaped SCF control flow must pass through scf-to-cfg before LLVMIR emission.
-// ERROR@+1: LOWERING/001 "target legality" "scf.for" "lowered to CFG"
+// ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def @scf_for_before_cfg(%n: index) {
   %zero = index.constant 0 : index
   %one = index.constant 1 : index
@@ -104,7 +104,7 @@ func.def @scf_for_before_cfg(%n: index) {
 // RUN: emit llvmir spirv-vulkan
 
 // Unknown LLVMIR target profiles are reported before parsing/lowering.
-// ERROR@+1: LOWERING/001 "unknown LLVMIR target profile"
+// ERROR@+1: LOWERING/001 "INVALID_ARGUMENT"
 func.def @unknown_profile() {
   func.return
 }

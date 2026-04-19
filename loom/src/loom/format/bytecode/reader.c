@@ -329,10 +329,10 @@ static iree_status_t loom_bytecode_reader_read_uvarint(
   iree_status_t status = loom_uvarint_decode(&cursor->cursor, out_value);
   if (iree_status_is_ok(status)) return iree_ok_status();
 
-  iree_status_code_t code = iree_status_code(status);
+  bool reached_end = iree_status_is_out_of_range(status);
   iree_status_ignore(status);
   iree_string_view_t reason =
-      code == IREE_STATUS_OUT_OF_RANGE
+      reached_end
           ? IREE_SV("continuation bit reached the end of the byte range")
           : IREE_SV("encoding is non-canonical or exceeds the uint64 range");
   loom_diagnostic_param_t params[] = {

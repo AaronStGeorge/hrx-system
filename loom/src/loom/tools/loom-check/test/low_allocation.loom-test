@@ -120,7 +120,7 @@ low.func.def target(@test_target) @copy_coalesced(%value : reg<test.i32>) -> (re
 
 // RUN: emit low-allocation-json @assigned
 
-// ERROR@+1: LOWERING/001 "allocation(virtual)" "allocation(assigned)"
+// ERROR@+1: LOWERING/001 "FAILED_PRECONDITION"
 target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
 target.export @vm_export {export_symbol = "assigned", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
 target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
@@ -134,7 +134,7 @@ low.func.def allocation(assigned) target(@test_target) @assigned(%value : reg<te
 
 // RUN: emit low-allocation-json @bad_budget test.typo=1
 
-// ERROR@+1: LOWERING/001 "low allocation budget" "test.typo"
+// ERROR@+1: LOWERING/001 "INVALID_ARGUMENT"
 target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
 target.export @vm_export {export_symbol = "bad_budget", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
 target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
@@ -148,7 +148,7 @@ low.func.def target(@test_target) @bad_budget(%value : reg<test.i32>) -> (reg<te
 
 // RUN: emit low-allocation-json @bad_register_class
 
-// ERROR@+1: LOWERING/001 "register class" "test.typo" "descriptor set"
+// ERROR@+1: LOWERING/001 "FAILED_PRECONDITION"
 target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
 target.export @vm_export {export_symbol = "bad_register_class", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
 target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}

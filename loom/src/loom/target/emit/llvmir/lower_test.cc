@@ -8,7 +8,6 @@
 
 #include <cstring>
 #include <memory>
-#include <string>
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
@@ -26,19 +25,6 @@ namespace {
 
 using LlvmModulePtr =
     std::unique_ptr<loom_llvmir_module_t, void (*)(loom_llvmir_module_t*)>;
-
-std::string StatusToString(iree_status_t status) {
-  iree_allocator_t allocator = iree_allocator_system();
-  char* buffer = NULL;
-  iree_host_size_t length = 0;
-  if (iree_status_to_string(status, &allocator, &buffer, &length)) {
-    std::string result(buffer, length);
-    iree_allocator_free(allocator, buffer);
-    return result;
-  }
-  return std::string("status code ") +
-         std::to_string(static_cast<int>(iree_status_code(status)));
-}
 
 class LlvmIrLowerTest : public ::testing::Test {
  protected:
@@ -230,12 +216,8 @@ TEST_F(LlvmIrLowerTest, TargetContractOpsRequireProvider) {
 
   loom_llvmir_module_t* lowered = NULL;
   iree_status_t status = LowerModule(&lowered);
-  std::string message = StatusToString(status);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
   EXPECT_EQ(lowered, nullptr);
-  EXPECT_NE(message.find("explicit target lowering provider"),
-            std::string::npos)
-      << message;
 }
 
 }  // namespace

@@ -8,6 +8,7 @@
 
 #include "loom/target/emit/llvmir/target_registry.h"
 #include "loom/target/emit/llvmir/tool.h"
+#include "loom/tools/loom-check/status_util.h"
 
 static bool loom_check_case_has_requirement(const loom_check_case_t* test_case,
                                             iree_string_view_t requirement) {
@@ -122,21 +123,11 @@ static iree_status_t loom_check_query_requirement(
   return iree_ok_status();
 }
 
-static iree_status_t loom_check_append_status_text(
-    iree_status_t source_status, iree_allocator_t allocator,
-    iree_string_builder_t* builder) {
-  char* status_buffer = NULL;
-  iree_host_size_t status_length = 0;
-  if (!iree_status_to_string(source_status, &allocator, &status_buffer,
-                             &status_length)) {
-    iree_status_ignore(source_status);
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "failed to render requirement status");
-  }
-
-  iree_status_t status = iree_string_builder_append_string(
-      builder, iree_make_string_view(status_buffer, status_length));
-  iree_allocator_free(allocator, status_buffer);
+static iree_status_t loom_check_append_status_name(
+    iree_status_t source_status, iree_string_builder_t* builder) {
+  iree_string_view_t status_name = loom_check_status_name(source_status);
+  iree_status_t status =
+      iree_string_builder_append_string(builder, status_name);
   iree_status_ignore(source_status);
   return status;
 }
@@ -189,7 +180,7 @@ static iree_status_t loom_check_fail_missing_requirement_declaration(
 
 static iree_status_t loom_check_skip_unavailable_requirement(
     iree_string_view_t requirement, iree_status_t availability_status,
-    iree_allocator_t allocator, loom_check_result_t* result) {
+    loom_check_result_t* result) {
   result->raw_outcome = LOOM_CHECK_SKIP;
   result->final_outcome = LOOM_CHECK_SKIP;
   iree_status_t status = iree_string_builder_append_format(
@@ -197,8 +188,8 @@ static iree_status_t loom_check_skip_unavailable_requirement(
       "skipped: requirement '%.*s' unavailable: ", (int)requirement.size,
       requirement.data);
   if (iree_status_is_ok(status)) {
-    status = loom_check_append_status_text(availability_status, allocator,
-                                           &result->detail);
+    status =
+        loom_check_append_status_name(availability_status, &result->detail);
   } else {
     iree_status_ignore(availability_status);
   }
@@ -337,7 +328,7 @@ iree_status_t loom_check_preflight_requirements(
     if (!iree_status_is_ok(status)) {
       *out_continue_execution = false;
       return loom_check_skip_unavailable_requirement(requirement, status,
-                                                     allocator, result);
+                                                     result);
     }
   }
 
