@@ -4,9 +4,47 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_binary")
+load("//loom/build_tools/bazel:build_defs.bzl", "iree_lit_test_suite", "loom_cc_binary")
 
 package(
     default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_binary(
+    name = "loom-opt",
+    srcs = ["loom-opt.c"],
+    deps = [
+        "//loom/src/loom/codegen/low:allocation_pass",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/pass:builtin_registry",
+        "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:tooling",
+        "//loom/src/loom/target:presets",
+        "//loom/src/loom/target/all:low_registry",
+        "//loom/src/loom/util:stream",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/io:file_handle",
+    ],
+)
+
+iree_lit_test_suite(
+    name = "lit_test",
+    srcs = ["loom-opt_test.txt"],
+    cfg = "//runtime:lit.cfg.py",
+    tags = ["hostonly"],
+    tools = [
+        ":loom-opt",
+        "@llvm-project//llvm:FileCheck",
+    ],
 )

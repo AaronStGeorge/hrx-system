@@ -10,4 +10,43 @@
 
 iree_add_all_subdirs()
 
+loom_cc_binary(
+  NAME
+    loom-opt
+  SRCS
+    "loom-opt.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    iree::base::tooling::flags
+    iree::io::file_handle
+    loom::src::loom::codegen::low::allocation_pass
+    loom::src::loom::codegen::low::text_asm
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::error::diagnostic
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::pass::builtin_registry
+    loom::src::loom::pass::registry
+    loom::src::loom::pass::tooling
+    loom::src::loom::target::all::low_registry
+    loom::src::loom::target::presets
+    loom::src::loom::util::stream
+    loom::src::loom::verify
+)
+
+iree_lit_test_suite(
+  NAME
+    lit_test
+  SRCS
+    "loom-opt_test.txt"
+  TOOLS
+    ::loom-opt
+    FileCheck
+  LABELS
+    "hostonly"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

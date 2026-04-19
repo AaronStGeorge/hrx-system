@@ -1,0 +1,41 @@
+// RUN: ( loom-opt --list-passes ) | FileCheck --check-prefix=LIST %s
+// LIST: canonicalize{{[[:space:]]+}}func{{[[:space:]]+}}Apply op-specific canonicalization patterns.
+// LIST: low-materialize-allocation{{[[:space:]]+}}func{{[[:space:]]+}}Allocate target-low values and materialize spills.
+// LIST: symbol-dce{{[[:space:]]+}}module{{[[:space:]]+}}Remove unreachable private function and low ABI symbols.
+
+// RUN: ( loom-opt --pass-help=canonicalize ) | FileCheck --check-prefix=HELP %s
+// HELP: canonicalize
+// HELP: kind: func
+// HELP: options:
+// HELP: max-iterations: uint32 [1..4294967295]
+
+// RUN: printf '%%s\n' \
+// RUN:   'func.def @dce_single(%x: i32) -> (i32) {' \
+// RUN:   '  %dead = scalar.constant 42 : i32' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   | loom-opt --pass='canonicalize{max-iterations=2}' --pass=dce \
+// RUN:   | FileCheck --check-prefix=PASS-LIST %s
+// PASS-LIST: func.def @dce_single(%x: i32) -> (i32) {
+// PASS-LIST-NOT: %dead
+// PASS-LIST: func.return %x : i32
+
+// RUN: printf '%%s\n' \
+// RUN:   'pass.pipeline<module> @cleanup pipeline {' \
+// RUN:   '  for func {' \
+// RUN:   '    dce' \
+// RUN:   '  }' \
+// RUN:   '}' \
+// RUN:   '' \
+// RUN:   'func.def @dce_named(%x: i32) -> (i32) {' \
+// RUN:   '  %dead = scalar.constant 42 : i32' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   | loom-opt --pipeline=@cleanup \
+// RUN:   | FileCheck --check-prefix=NAMED %s
+// NAMED: pass.pipeline<module> @cleanup pipeline {
+// NAMED: for func {
+// NAMED: dce
+// NAMED: func.def @dce_named(%x: i32) -> (i32) {
+// NAMED-NOT: %dead
+// NAMED: func.return %x : i32
