@@ -6,15 +6,10 @@
 
 #include "loom/pass/test/registry.h"
 
-#include <string.h>
-
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/ir/context.h"
-#include "loom/ir/module.h"
-#include "loom/ops/pass/ops.h"
-#include "loom/pass/tooling.h"
+#include "loom/pass/test/harness.h"
 
 namespace loom {
 namespace {
@@ -26,47 +21,7 @@ static const loom_pass_descriptor_t* LookupTestPass(iree_string_view_t name) {
   return descriptor;
 }
 
-static iree_status_t configure_trace(
-    void* user_data, const loom_pass_program_instruction_t* instruction,
-    void** out_pass_user_data) {
-  (void)instruction;
-  *out_pass_user_data = user_data;
-  return iree_ok_status();
-}
-
-typedef struct test_module_storage_t {
-  // Block pool used by module allocation and pass execution.
-  iree_arena_block_pool_t block_pool;
-  // Context containing the pass dialect required by synthetic pipelines.
-  loom_context_t context;
-  // Empty target module used by module-pass tests.
-  loom_module_t* module;
-} test_module_storage_t;
-
-static void initialize_test_module_storage(test_module_storage_t* storage) {
-  memset(storage, 0, sizeof(*storage));
-  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
-                                   &storage->block_pool);
-  loom_context_initialize(iree_allocator_system(), &storage->context);
-  iree_host_size_t pass_count = 0;
-  const loom_op_vtable_t* const* pass_vtables =
-      loom_pass_dialect_vtables(&pass_count);
-  IREE_ASSERT_OK(loom_context_register_dialect(&storage->context,
-                                               LOOM_DIALECT_PASS, pass_vtables,
-                                               (uint16_t)pass_count));
-  IREE_ASSERT_OK(loom_context_finalize(&storage->context));
-  IREE_ASSERT_OK(loom_module_allocate(
-      &storage->context, IREE_SV("test"), &storage->block_pool, nullptr,
-      iree_allocator_system(), &storage->module));
-}
-
-static void deinitialize_test_module_storage(test_module_storage_t* storage) {
-  if (storage->module) {
-    loom_module_free(storage->module);
-  }
-  loom_context_deinitialize(&storage->context);
-  iree_arena_block_pool_deinitialize(&storage->block_pool);
-}
+class PassTestRegistryHarness : public PassTestHarness {};
 
 TEST(PassTestRegistryTest, Verifies) {
   IREE_ASSERT_OK(loom_pass_registry_verify(loom_test_pass_registry()));
@@ -145,59 +100,32 @@ TEST(PassTestRegistryTest, DecodesOptions) {
   iree_arena_block_pool_deinitialize(&block_pool);
 }
 
-TEST(PassTestRegistryTest, RunsThroughToolingInterpreter) {
-  test_module_storage_t storage;
-  initialize_test_module_storage(&storage);
+TEST_F(PassTestRegistryHarness, RunsThroughToolingInterpreter) {
+  loom_module_t* module = AllocateModule();
   loom_test_pass_trace_t trace = {};
-  loom_pass_tool_run_options_t options = {
-      .registry = loom_test_pass_registry(),
-      .block_pool = &storage.block_pool,
-      .configure =
-          {
-              .fn = configure_trace,
-              .user_data = &trace,
-          },
-  };
-  IREE_ASSERT_OK(loom_pass_tool_run_flat_pipeline(
-      storage.module, IREE_SV("test.module-noop"), &options));
+  IREE_ASSERT_OK(RunFlatPipeline(module, IREE_SV("test.module-noop"), &trace));
 
   EXPECT_EQ(trace.module_noop_invocation_count, 1);
-
-  deinitialize_test_module_storage(&storage);
 }
 
-TEST(PassTestRegistryTest, FailingPassPropagatesStatusThroughTooling) {
-  test_module_storage_t storage;
-  initialize_test_module_storage(&storage);
-  loom_pass_tool_run_options_t options = {
-      .registry = loom_test_pass_registry(),
-      .block_pool = &storage.block_pool,
-  };
+TEST_F(PassTestRegistryHarness, FailingPassPropagatesStatusThroughTooling) {
+  loom_module_t* module = AllocateModule();
+  loom_test_pass_trace_t trace = {};
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL,
-                        loom_pass_tool_run_flat_pipeline(
-                            storage.module, IREE_SV("test.fail"), &options));
-
-  deinitialize_test_module_storage(&storage);
+                        RunFlatPipeline(module, IREE_SV("test.fail"), &trace));
 }
 
-TEST(PassTestRegistryTest, UnavailablePassFailsThroughTooling) {
+TEST_F(PassTestRegistryHarness, UnavailablePassFailsThroughTooling) {
   const loom_pass_descriptor_t* descriptor =
       LookupTestPass(IREE_SV("test.unavailable"));
   ASSERT_NE(descriptor, nullptr);
   EXPECT_FALSE(loom_pass_descriptor_is_available(descriptor));
 
-  test_module_storage_t storage;
-  initialize_test_module_storage(&storage);
-  loom_pass_tool_run_options_t options = {
-      .registry = loom_test_pass_registry(),
-      .block_pool = &storage.block_pool,
-  };
+  loom_module_t* module = AllocateModule();
+  loom_test_pass_trace_t trace = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,
-      loom_pass_tool_run_flat_pipeline(storage.module,
-                                       IREE_SV("test.unavailable"), &options));
-
-  deinitialize_test_module_storage(&storage);
+      RunFlatPipeline(module, IREE_SV("test.unavailable"), &trace));
 }
 
 }  // namespace

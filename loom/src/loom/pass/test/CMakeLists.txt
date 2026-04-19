@@ -26,18 +26,42 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    harness
+  HDRS
+    "harness.h"
+  SRCS
+    "harness.cc"
+  DEPS
+    ::registry
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::error::emitter
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::pass
+    loom::src::loom::ops::test
+    loom::src::loom::pass::interpreter
+    loom::src::loom::pass::program
+    loom::src::loom::pass::report
+    loom::src::loom::pass::tooling
+    loom::src::loom::pass::verify
+    iree::testing::gtest
+  TESTONLY
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     registry_test
   SRCS
     "registry_test.cc"
   DEPS
+    ::harness
     ::registry
     iree::base::internal::arena
-    loom::src::loom::ir
-    loom::src::loom::ops::pass
     loom::src::loom::pass::registry
-    loom::src::loom::pass::tooling
     loom::src::loom::pass::types
     iree::testing::gtest
     iree::testing::gtest_main

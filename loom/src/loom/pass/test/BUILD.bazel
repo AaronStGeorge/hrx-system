@@ -42,15 +42,36 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "harness",
+    testonly = True,
+    srcs = ["harness.cc"],
+    hdrs = ["harness.h"],
+    deps = [
+        ":registry",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/pass:interpreter",
+        "//loom/src/loom/pass:program",
+        "//loom/src/loom/pass:report",
+        "//loom/src/loom/pass:tooling",
+        "//loom/src/loom/pass:verify",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+    ],
+)
+
 loom_cc_test(
     name = "registry_test",
     srcs = ["registry_test.cc"],
     deps = [
+        ":harness",
         ":registry",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/pass",
         "//loom/src/loom/pass:registry",
-        "//loom/src/loom/pass:tooling",
         "//loom/src/loom/pass:types",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

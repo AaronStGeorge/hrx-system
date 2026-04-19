@@ -6,82 +6,15 @@
 
 #include "loom/pass/program.h"
 
-#include <vector>
-
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/format/text/parser.h"
-#include "loom/ir/context.h"
-#include "loom/ir/module.h"
 #include "loom/ops/pass/ops.h"
-#include "loom/pass/test/registry.h"
+#include "loom/pass/test/harness.h"
 
 namespace loom {
 namespace {
 
-class ProgramStorage {
- public:
-  ~ProgramStorage() { loom_pass_program_deinitialize(&program); }
-
-  loom_pass_program_t program = {};
-};
-
-class PassProgramTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
-                                     &block_pool_);
-    loom_context_initialize(iree_allocator_system(), &context_);
-
-    iree_host_size_t count = 0;
-    const loom_op_vtable_t* const* vtables = loom_pass_dialect_vtables(&count);
-    IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_PASS,
-                                                 vtables, (uint16_t)count));
-    IREE_ASSERT_OK(loom_context_finalize(&context_));
-  }
-
-  void TearDown() override {
-    for (loom_module_t* module : modules_) {
-      loom_module_free(module);
-    }
-    loom_context_deinitialize(&context_);
-    iree_arena_block_pool_deinitialize(&block_pool_);
-  }
-
-  loom_module_t* Parse(iree_string_view_t source) {
-    loom_text_parse_options_t options = {
-        .diagnostic_sink = {loom_diagnostic_stderr_sink, NULL},
-        .max_errors = 20,
-    };
-    loom_module_t* module = NULL;
-    IREE_EXPECT_OK(loom_text_parse(source, IREE_SV("pass_program.loom"),
-                                   &context_, &block_pool_, &options, &module));
-    EXPECT_NE(module, nullptr);
-    if (module) {
-      modules_.push_back(module);
-    }
-    return module;
-  }
-
-  const loom_op_t* Pipeline(loom_module_t* module, iree_host_size_t index) {
-    const loom_op_t* op = loom_block_const_op(loom_module_block(module), index);
-    EXPECT_TRUE(loom_pass_pipeline_isa(op));
-    return op;
-  }
-
-  iree_status_t Compile(loom_module_t* module, const loom_op_t* pipeline_op,
-                        loom_pass_program_t* out_program) {
-    loom_pass_program_compile_options_t options = {
-        .registry = loom_test_pass_registry(),
-    };
-    return loom_pass_program_compile_pipeline(module, pipeline_op, &options,
-                                              &block_pool_, out_program);
-  }
-
-  iree_arena_block_pool_t block_pool_;
-  loom_context_t context_;
-  std::vector<loom_module_t*> modules_;
-};
+class PassProgramTest : public PassTestHarness {};
 
 TEST_F(PassProgramTest, CompilesStructuredProgram) {
   loom_module_t* module =
@@ -106,7 +39,7 @@ TEST_F(PassProgramTest, CompilesStructuredProgram) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
+  PassProgramStorage storage;
   loom_pass_program_t& program = storage.program;
   IREE_ASSERT_OK(Compile(module, Pipeline(module, 1), &program));
 
@@ -214,7 +147,7 @@ TEST_F(PassProgramTest, CompilesFunctionRootPipeline) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
+  PassProgramStorage storage;
   loom_pass_program_t& program = storage.program;
   IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &program));
 
@@ -233,7 +166,7 @@ TEST_F(PassProgramTest, CompilesCanonicalRunOp) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
+  PassProgramStorage storage;
   loom_pass_program_t& program = storage.program;
   IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &program));
 
@@ -263,7 +196,7 @@ TEST_F(PassProgramTest, RejectsUnknownPassBeforeExecution) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
+  PassProgramStorage storage;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Compile(module, Pipeline(module, 0), &storage.program));
 }
@@ -279,7 +212,7 @@ TEST_F(PassProgramTest, RejectsCallCycleBeforeExecution) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
+  PassProgramStorage storage;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Compile(module, Pipeline(module, 0), &storage.program));
 }

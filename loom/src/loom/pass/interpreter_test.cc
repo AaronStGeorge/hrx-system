@@ -6,169 +6,30 @@
 
 #include "loom/pass/interpreter.h"
 
-#include <vector>
-
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/error/error_defs.h"
-#include "loom/format/text/parser.h"
-#include "loom/ir/context.h"
-#include "loom/ir/module.h"
-#include "loom/ops/pass/ops.h"
-#include "loom/ops/test/ops.h"
 #include "loom/pass/report.h"
-#include "loom/pass/test/registry.h"
+#include "loom/pass/test/harness.h"
 
 namespace loom {
 namespace {
 
-class ProgramStorage {
- public:
-  ~ProgramStorage() { loom_pass_program_deinitialize(&program); }
-
-  loom_pass_program_t program = {};
-};
-
-class ReportStorage {
- public:
-  ReportStorage() {
-    loom_pass_report_initialize(iree_allocator_system(), &report);
-  }
-
-  ~ReportStorage() { loom_pass_report_deinitialize(&report); }
-
-  loom_pass_report_t report = {};
-};
-
 struct DiagnosticCapture {
+  // Number of diagnostic emissions captured.
   int emission_count = 0;
+  // Operation associated with the diagnostic emission.
   const loom_op_t* op = nullptr;
+  // Structured diagnostic definition that was emitted.
   const loom_error_def_t* error = nullptr;
+  // Number of captured diagnostic parameters.
   iree_host_size_t param_count = 0;
+  // Bounded diagnostic parameter copy for assertions.
   loom_diagnostic_param_t params[4] = {};
 };
 
-struct PredicateProviderCapture {
-  int verify_count = 0;
-  int evaluate_count = 0;
-  iree_string_view_t selected_symbol = iree_string_view_empty();
-};
-
-static iree_string_view_t PredicateContextSymbolName(
-    const loom_pass_predicate_evaluate_context_t* context) {
-  if (!context->symbol ||
-      context->symbol->name_id >= context->target_module->strings.count) {
-    return IREE_SV("<none>");
-  }
-  return context->target_module->strings.entries[context->symbol->name_id];
-}
-
-static iree_status_t VerifyTargetPredicate(
-    void* user_data, const loom_pass_predicate_verify_context_t* context) {
-  PredicateProviderCapture* capture =
-      static_cast<PredicateProviderCapture*>(user_data);
-  ++capture->verify_count;
-  if (!iree_string_view_equal(context->predicate, IREE_SV("target"))) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unexpected test predicate");
-  }
-  if (context->anchor_kind != LOOM_PASS_FUNCTION) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target predicate requires func anchor");
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t EvaluateTargetPredicate(
-    void* user_data, const loom_pass_predicate_evaluate_context_t* context,
-    bool* out_match) {
-  PredicateProviderCapture* capture =
-      static_cast<PredicateProviderCapture*>(user_data);
-  ++capture->evaluate_count;
-  *out_match = iree_string_view_equal(PredicateContextSymbolName(context),
-                                      capture->selected_symbol);
-  return iree_ok_status();
-}
-
-class PassInterpreterTest : public ::testing::Test {
+class PassInterpreterTest : public PassTestHarness {
  protected:
-  void SetUp() override {
-    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
-                                     &block_pool_);
-    loom_context_initialize(iree_allocator_system(), &context_);
-
-    iree_host_size_t pass_count = 0;
-    const loom_op_vtable_t* const* pass_vtables =
-        loom_pass_dialect_vtables(&pass_count);
-    IREE_ASSERT_OK(loom_context_register_dialect(
-        &context_, LOOM_DIALECT_PASS, pass_vtables, (uint16_t)pass_count));
-
-    iree_host_size_t test_count = 0;
-    const loom_op_vtable_t* const* test_vtables =
-        loom_test_dialect_vtables(&test_count);
-    IREE_ASSERT_OK(loom_context_register_dialect(
-        &context_, LOOM_DIALECT_TEST, test_vtables, (uint16_t)test_count));
-
-    IREE_ASSERT_OK(loom_context_finalize(&context_));
-  }
-
-  void TearDown() override {
-    for (loom_module_t* module : modules_) {
-      loom_module_free(module);
-    }
-    loom_context_deinitialize(&context_);
-    iree_arena_block_pool_deinitialize(&block_pool_);
-  }
-
-  loom_module_t* Parse(iree_string_view_t source) {
-    loom_text_parse_options_t options = {
-        .diagnostic_sink = {loom_diagnostic_stderr_sink, NULL},
-        .max_errors = 20,
-    };
-    loom_module_t* module = nullptr;
-    IREE_EXPECT_OK(loom_text_parse(source, IREE_SV("pass_interpreter.loom"),
-                                   &context_, &block_pool_, &options, &module));
-    EXPECT_NE(module, nullptr);
-    if (module) {
-      modules_.push_back(module);
-    }
-    return module;
-  }
-
-  const loom_op_t* Pipeline(loom_module_t* module, iree_host_size_t index) {
-    const loom_op_t* op = loom_block_const_op(loom_module_block(module), index);
-    EXPECT_TRUE(loom_pass_pipeline_isa(op));
-    return op;
-  }
-
-  loom_func_like_t Function(loom_module_t* module, iree_host_size_t index) {
-    const loom_op_t* op = loom_block_const_op(loom_module_block(module), index);
-    loom_func_like_t function =
-        loom_func_like_cast(module, const_cast<loom_op_t*>(op));
-    EXPECT_TRUE(loom_func_like_isa(function));
-    return function;
-  }
-
-  iree_status_t Compile(
-      loom_module_t* module, const loom_op_t* pipeline_op,
-      loom_pass_program_t* out_program,
-      loom_pass_predicate_provider_t predicate_provider = {}) {
-    loom_pass_program_compile_options_t options = {
-        .registry = loom_test_pass_registry(),
-        .predicate_provider = predicate_provider,
-    };
-    return loom_pass_program_compile_pipeline(module, pipeline_op, &options,
-                                              &block_pool_, out_program);
-  }
-
-  static iree_status_t ConfigureTrace(
-      void* user_data, const loom_pass_program_instruction_t* instruction,
-      void** out_pass_user_data) {
-    (void)instruction;
-    *out_pass_user_data = user_data;
-    return iree_ok_status();
-  }
-
   static iree_status_t CaptureDiagnostic(
       void* user_data, const loom_diagnostic_emission_t* emission) {
     DiagnosticCapture* capture = static_cast<DiagnosticCapture*>(user_data);
@@ -184,28 +45,6 @@ class PassInterpreterTest : public ::testing::Test {
     }
     return iree_ok_status();
   }
-
-  loom_pass_interpreter_options_t InterpreterOptions(
-      loom_test_pass_trace_t* trace,
-      iree_diagnostic_emitter_t diagnostic_emitter = {},
-      loom_pass_report_t* report = nullptr,
-      loom_pass_predicate_provider_t predicate_provider = {}) {
-    return (loom_pass_interpreter_options_t){
-        .block_pool = &block_pool_,
-        .predicate_provider = predicate_provider,
-        .diagnostic_emitter = diagnostic_emitter,
-        .configure =
-            {
-                .fn = ConfigureTrace,
-                .user_data = trace,
-            },
-        .report = report,
-    };
-  }
-
-  iree_arena_block_pool_t block_pool_;
-  loom_context_t context_;
-  std::vector<loom_module_t*> modules_;
 };
 
 TEST_F(PassInterpreterTest, RunsModuleAndFunctionPasses) {
@@ -224,13 +63,8 @@ TEST_F(PassInterpreterTest, RunsModuleAndFunctionPasses) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
-  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
-
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
-  IREE_ASSERT_OK(
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  IREE_ASSERT_OK(RunModulePipeline(module, 0, &trace));
 
   EXPECT_EQ(trace.module_noop_invocation_count, 1);
   EXPECT_EQ(trace.noop_invocation_count, 2);
@@ -249,13 +83,8 @@ TEST_F(PassInterpreterTest, RunsFunctionRootProgram) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
-  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
-
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
-  IREE_ASSERT_OK(loom_pass_interpreter_run_function(
-      &storage.program, module, Function(module, 1), &options));
+  IREE_ASSERT_OK(RunFunctionPipeline(module, 0, 1, &trace));
 
   EXPECT_EQ(trace.noop_invocation_count, 1);
 }
@@ -273,10 +102,10 @@ TEST_F(PassInterpreterTest, AppendsExecutionReportRecords) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
+  PassProgramStorage storage;
   IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
 
-  ReportStorage report_storage;
+  PassReportStorage report_storage;
   loom_test_pass_trace_t trace = {};
   loom_pass_interpreter_options_t options =
       InterpreterOptions(&trace, {}, &report_storage.report);
@@ -335,13 +164,8 @@ TEST_F(PassInterpreterTest, AppliesNamePredicateToCurrentFunction) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
-  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
-
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
-  IREE_ASSERT_OK(
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  IREE_ASSERT_OK(RunModulePipeline(module, 0, &trace));
 
   EXPECT_EQ(trace.noop_invocation_count, 1);
 }
@@ -363,13 +187,8 @@ TEST_F(PassInterpreterTest, AppliesAttrPredicateToCurrentFunction) {
               "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
-  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
-
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
-  IREE_ASSERT_OK(
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  IREE_ASSERT_OK(RunModulePipeline(module, 0, &trace));
 
   ASSERT_EQ(trace.event_count, 1u);
   EXPECT_TRUE(
@@ -396,13 +215,8 @@ TEST_F(PassInterpreterTest, AppliesTraitPredicateToCurrentFunction) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
-  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
-
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
-  IREE_ASSERT_OK(
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  IREE_ASSERT_OK(RunModulePipeline(module, 0, &trace));
 
   EXPECT_EQ(trace.noop_invocation_count, 2);
   EXPECT_EQ(trace.mark_changed_invocation_count, 0);
@@ -425,23 +239,14 @@ TEST_F(PassInterpreterTest, AppliesProviderPredicateToCurrentFunction) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  PredicateProviderCapture predicate_capture = {
+  PassTestPredicateCapture predicate_capture = {
       .selected_symbol = IREE_SV("selected"),
   };
-  loom_pass_predicate_provider_t predicate_provider = {
-      .verify = VerifyTargetPredicate,
-      .evaluate = EvaluateTargetPredicate,
-      .user_data = &predicate_capture,
-  };
-  ProgramStorage storage;
-  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program,
-                         predicate_provider));
+  loom_pass_predicate_provider_t predicate_provider =
+      PassTestTargetPredicateProvider(&predicate_capture);
 
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options =
-      InterpreterOptions(&trace, {}, nullptr, predicate_provider);
-  IREE_ASSERT_OK(
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  IREE_ASSERT_OK(RunModulePipeline(module, 0, &trace, predicate_provider));
 
   EXPECT_EQ(predicate_capture.verify_count, 1);
   EXPECT_EQ(predicate_capture.evaluate_count, 2);
@@ -464,13 +269,8 @@ TEST_F(PassInterpreterTest, ExecutesFixedRepeat) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
-  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
-
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
-  IREE_ASSERT_OK(
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  IREE_ASSERT_OK(RunModulePipeline(module, 0, &trace));
 
   EXPECT_EQ(trace.noop_invocation_count, 3);
 }
@@ -489,13 +289,8 @@ TEST_F(PassInterpreterTest, StopsRepeatUntilConvergedWhenBodyIsStable) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
-  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
-
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
-  IREE_ASSERT_OK(
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  IREE_ASSERT_OK(RunModulePipeline(module, 0, &trace));
 
   EXPECT_EQ(trace.noop_invocation_count, 1);
 }
@@ -514,14 +309,9 @@ TEST_F(PassInterpreterTest, ReportsRepeatUntilConvergedExhaustion) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
-  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
-
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_RESOURCE_EXHAUSTED,
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        RunModulePipeline(module, 0, &trace));
 
   EXPECT_EQ(trace.mark_changed_invocation_count, 2);
 }
@@ -539,13 +329,8 @@ TEST_F(PassInterpreterTest, ExposesDecodedOptionsToPassInstance) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
-  IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
-
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
-  IREE_ASSERT_OK(
-      loom_pass_interpreter_run_module(&storage.program, module, &options));
+  IREE_ASSERT_OK(RunModulePipeline(module, 0, &trace));
 
   EXPECT_EQ(trace.options_invocation_count, 1);
   EXPECT_EQ(trace.options_decoded_create_count, 1);
@@ -562,7 +347,7 @@ TEST_F(PassInterpreterTest, PropagatesDescriptorCallbackFailure) {
                     "}\n"));
   ASSERT_NE(module, nullptr);
 
-  ProgramStorage storage;
+  PassProgramStorage storage;
   IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
 
   loom_test_pass_trace_t trace = {};
@@ -602,7 +387,7 @@ TEST_F(PassInterpreterTest, ExecutesPassFailAndHalt) {
                     "  fail \"stop\"\n"
                     "}\n"));
   ASSERT_NE(fail_module, nullptr);
-  ProgramStorage fail_storage;
+  PassProgramStorage fail_storage;
   IREE_ASSERT_OK(
       Compile(fail_module, Pipeline(fail_module, 0), &fail_storage.program));
 
@@ -617,7 +402,7 @@ TEST_F(PassInterpreterTest, ExecutesPassFailAndHalt) {
                     "  halt \"inspect\"\n"
                     "}\n"));
   ASSERT_NE(halt_module, nullptr);
-  ProgramStorage halt_storage;
+  PassProgramStorage halt_storage;
   IREE_ASSERT_OK(
       Compile(halt_module, Pipeline(halt_module, 0), &halt_storage.program));
 

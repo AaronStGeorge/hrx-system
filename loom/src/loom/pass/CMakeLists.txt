@@ -232,11 +232,8 @@ loom_cc_test(
     "invocation_test.cc"
   DEPS
     ::invocation
-    ::registry
-    iree::base::internal::arena
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
     loom::src::loom::ops::pass
+    loom::src::loom::pass::test::harness
     loom::src::loom::pass::test::registry
     iree::testing::gtest
     iree::testing::gtest_main
@@ -249,11 +246,9 @@ loom_cc_test(
     "verify_test.cc"
   DEPS
     ::verify
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::pass
+    loom::src::loom::pass::test::harness
     loom::src::loom::pass::test::registry
     iree::testing::gtest
     iree::testing::gtest_main
@@ -268,13 +263,8 @@ loom_cc_test(
     ::interpreter
     ::program
     ::report
-    iree::base
     loom::src::loom::error::error_defs
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::pass
-    loom::src::loom::ops::test
-    loom::src::loom::pass::test::registry
+    loom::src::loom::pass::test::harness
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -286,12 +276,7 @@ loom_cc_test(
     "tooling_test.cc"
   DEPS
     ::tooling
-    iree::base
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::pass
-    loom::src::loom::ops::test
-    loom::src::loom::pass::test::registry
+    loom::src::loom::pass::test::harness
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -303,11 +288,8 @@ loom_cc_test(
     "program_test.cc"
   DEPS
     ::program
-    iree::base
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
     loom::src::loom::ops::pass
-    loom::src::loom::pass::test::registry
+    loom::src::loom::pass::test::harness
     iree::testing::gtest
     iree::testing::gtest_main
 )
