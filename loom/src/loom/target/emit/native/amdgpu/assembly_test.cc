@@ -18,6 +18,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
+#include "loom/target/presets.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -69,28 +70,18 @@ class AmdgpuAssemblyTest : public ::testing::Test {
   void BuildSidecars(const char* body, iree_arena_allocator_t* arena,
                      loom_low_packetization_t* out_packetization) {
     std::string source =
-        "target.snapshot @gfx11_snapshot {codegen_format = low_native, "
-        "target_triple = \"amdgcn-amd-amdhsa\", data_layout = \"\", "
-        "artifact_format = elf, target_cpu = \"gfx1100\", "
-        "target_features = \"\", default_pointer_bitwidth = 64, "
-        "index_bitwidth = 32, offset_bitwidth = 64, "
-        "memory_space_generic = 0, memory_space_global = 1, "
-        "memory_space_workgroup = 3, memory_space_constant = 4, "
-        "memory_space_private = 5, memory_space_host = 4294967295, "
-        "memory_space_descriptor = 7}\n"
-        "target.export @gfx11_export {export_symbol = \"gfx11_fragment\", "
-        "abi = hal_kernel, linkage = default, hal_binding_alignment = 16, "
-        "hal_workgroup_size_x = 64, hal_workgroup_size_y = 1, "
-        "hal_workgroup_size_z = 1, hal_flat_workgroup_size_min = 64, "
-        "hal_flat_workgroup_size_max = 64, "
-        "hal_buffer_resource_flags = 159744}\n"
-        "target.config @gfx11_config {contract_set_key = "
-        "\"amdgpu.gfx11.core\", contract_feature_bits = 0}\n"
-        "target.bundle @gfx11_target {snapshot = @gfx11_snapshot, "
-        "export_plan = @gfx11_export, config = @gfx11_config}\n";
+        "target.preset @gfx11_target {key = \"amdgpu-gfx11\", source = "
+        "@gfx11_fragment}\n";
     source += body;
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
+
+    const loom_target_preset_registry_t preset_registry =
+        loom_target_low_descriptor_registry_presets(&target_registry_);
+    iree_host_size_t expanded_preset_count = 0;
+    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
+                                              &expanded_preset_count));
+    EXPECT_EQ(expanded_preset_count, 1u);
 
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
