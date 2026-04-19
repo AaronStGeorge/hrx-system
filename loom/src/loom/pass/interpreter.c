@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/pass/ops.h"
@@ -93,6 +94,33 @@ static iree_string_view_t loom_pass_interpreter_symbol_name(
   return state->module->strings.entries[frame->symbol->name_id];
 }
 
+static iree_string_view_t loom_pass_interpreter_source_symbol_name(
+    const loom_module_t* module, loom_symbol_ref_t symbol_ref,
+    iree_string_view_t fallback) {
+  if (!module || !loom_symbol_ref_is_valid(symbol_ref) ||
+      symbol_ref.module_id != 0 ||
+      symbol_ref.symbol_id >= module->symbols.count) {
+    return fallback;
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->name_id >= module->strings.count) {
+    return fallback;
+  }
+  return module->strings.entries[symbol->name_id];
+}
+
+static iree_string_view_t loom_pass_interpreter_pipeline_name(
+    const loom_pass_interpreter_state_t* state,
+    const loom_pass_program_instruction_t* instruction) {
+  const loom_op_t* pipeline_op = instruction->source.pipeline_op;
+  if (!pipeline_op || !loom_pass_pipeline_isa(pipeline_op)) {
+    return IREE_SV("<unknown>");
+  }
+  return loom_pass_interpreter_source_symbol_name(
+      state->program->source_module, loom_pass_pipeline_symbol(pipeline_op),
+      IREE_SV("<unknown>"));
+}
+
 static iree_status_t loom_pass_interpreter_make_pass(
     loom_pass_interpreter_state_t* state,
     const loom_pass_program_instruction_t* instruction,
@@ -121,6 +149,38 @@ static iree_status_t loom_pass_interpreter_make_pass(
                                            (void**)&out_pass->statistics));
   memset(out_pass->statistics, 0, statistics_size);
   return iree_ok_status();
+}
+
+static iree_status_t loom_pass_interpreter_emit_failure_diagnostic(
+    loom_pass_interpreter_state_t* state,
+    const loom_pass_interpreter_frame_t* frame,
+    const loom_pass_program_instruction_t* instruction) {
+  if (!state->options->diagnostic_emitter.fn) {
+    return iree_ok_status();
+  }
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 28);
+  if (!error) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "missing structured pass interpreter failure diagnostic");
+  }
+  const loom_pass_program_invoke_t* invoke = &instruction->invoke;
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(invoke->descriptor->key),
+      loom_param_string(iree_make_cstring_view(
+          loom_pass_interpreter_anchor_name(frame->kind))),
+      loom_param_string(loom_pass_interpreter_symbol_name(state, frame)),
+      loom_param_string(
+          loom_pass_interpreter_pipeline_name(state, instruction)),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = instruction->source.op,
+      .error = error,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(state->options->diagnostic_emitter, &emission);
 }
 
 static iree_status_t loom_pass_interpreter_invoke_module(
@@ -222,6 +282,9 @@ static iree_status_t loom_pass_interpreter_invoke(
   }
   iree_arena_deinitialize(&instance_arena);
   if (!iree_status_is_ok(status)) {
+    status =
+        iree_status_join(status, loom_pass_interpreter_emit_failure_diagnostic(
+                                     state, frame, instruction));
     iree_string_view_t symbol_name =
         loom_pass_interpreter_symbol_name(state, frame);
     return iree_status_annotate_f(

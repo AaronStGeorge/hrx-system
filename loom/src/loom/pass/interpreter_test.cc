@@ -10,6 +10,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -25,6 +26,14 @@ class ProgramStorage {
   ~ProgramStorage() { loom_pass_program_deinitialize(&program); }
 
   loom_pass_program_t program = {};
+};
+
+struct DiagnosticCapture {
+  int emission_count = 0;
+  const loom_op_t* op = nullptr;
+  const loom_error_def_t* error = nullptr;
+  iree_host_size_t param_count = 0;
+  loom_diagnostic_param_t params[4] = {};
 };
 
 class PassInterpreterTest : public ::testing::Test {
@@ -103,10 +112,28 @@ class PassInterpreterTest : public ::testing::Test {
     return iree_ok_status();
   }
 
+  static iree_status_t CaptureDiagnostic(
+      void* user_data, const loom_diagnostic_emission_t* emission) {
+    DiagnosticCapture* capture = static_cast<DiagnosticCapture*>(user_data);
+    ++capture->emission_count;
+    capture->op = emission->op;
+    capture->error = emission->error;
+    capture->param_count = emission->param_count;
+    EXPECT_LE(emission->param_count, IREE_ARRAYSIZE(capture->params));
+    for (iree_host_size_t i = 0;
+         i < emission->param_count && i < IREE_ARRAYSIZE(capture->params);
+         ++i) {
+      capture->params[i] = emission->params[i];
+    }
+    return iree_ok_status();
+  }
+
   loom_pass_interpreter_options_t InterpreterOptions(
-      loom_test_pass_trace_t* trace) {
+      loom_test_pass_trace_t* trace,
+      iree_diagnostic_emitter_t diagnostic_emitter = {}) {
     return (loom_pass_interpreter_options_t){
         .block_pool = &block_pool_,
+        .diagnostic_emitter = diagnostic_emitter,
         .configure =
             {
                 .fn = ConfigureTrace,
@@ -316,11 +343,34 @@ TEST_F(PassInterpreterTest, PropagatesDescriptorCallbackFailure) {
   IREE_ASSERT_OK(Compile(module, Pipeline(module, 0), &storage.program));
 
   loom_test_pass_trace_t trace = {};
-  loom_pass_interpreter_options_t options = InterpreterOptions(&trace);
+  DiagnosticCapture diagnostic_capture;
+  loom_pass_interpreter_options_t options =
+      InterpreterOptions(&trace, (iree_diagnostic_emitter_t){
+                                     .fn = CaptureDiagnostic,
+                                     .user_data = &diagnostic_capture,
+                                 });
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INTERNAL,
       loom_pass_interpreter_run_module(&storage.program, module, &options));
   EXPECT_EQ(trace.fail_invocation_count, 1);
+  EXPECT_EQ(diagnostic_capture.emission_count, 1);
+  ASSERT_NE(diagnostic_capture.error, nullptr);
+  EXPECT_EQ(diagnostic_capture.error->domain, LOOM_ERROR_DOMAIN_STRUCTURE);
+  EXPECT_EQ(diagnostic_capture.error->code, 28);
+  EXPECT_EQ(diagnostic_capture.op, storage.program.instructions[0].source.op);
+  ASSERT_EQ(diagnostic_capture.param_count, 4);
+  EXPECT_EQ(diagnostic_capture.params[0].kind, LOOM_PARAM_STRING);
+  EXPECT_TRUE(iree_string_view_equal(diagnostic_capture.params[0].string,
+                                     IREE_SV("test.fail")));
+  EXPECT_EQ(diagnostic_capture.params[1].kind, LOOM_PARAM_STRING);
+  EXPECT_TRUE(iree_string_view_equal(diagnostic_capture.params[1].string,
+                                     IREE_SV("module")));
+  EXPECT_EQ(diagnostic_capture.params[2].kind, LOOM_PARAM_STRING);
+  EXPECT_TRUE(iree_string_view_equal(diagnostic_capture.params[2].string,
+                                     IREE_SV("<none>")));
+  EXPECT_EQ(diagnostic_capture.params[3].kind, LOOM_PARAM_STRING);
+  EXPECT_TRUE(iree_string_view_equal(diagnostic_capture.params[3].string,
+                                     IREE_SV("pipeline")));
 }
 
 TEST_F(PassInterpreterTest, ExecutesPassFailAndHalt) {

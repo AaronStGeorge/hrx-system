@@ -1836,6 +1836,39 @@
     "fix_hint_template": "Choose a string value satisfying '{expected_constraint}'"
   },
   {
+    "error_id": "ERR_STRUCTURE_028",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 28,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Pass callback failed.",
+    "message_template": "pass '{pass_key}' failed while running at {anchor_kind} anchor on symbol '{symbol_name}' in pipeline '@{pipeline_name}'",
+    "params": [
+      {
+        "name": "pass_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "anchor_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "symbol_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "pipeline_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Inspect the pass-specific diagnostic or run the named pipeline on IR that satisfies pass '{pass_key}'"
+  },
+  {
     "error_id": "ERR_DOMINANCE_001",
     "domain": 5,
     "domain_name": "DOMINANCE",

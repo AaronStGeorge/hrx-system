@@ -97,6 +97,7 @@ loom_cc_library(
     hdrs = ["interpreter.h"],
     deps = [
         ":program",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/pass",
@@ -182,6 +183,7 @@ loom_cc_test(
     deps = [
         ":interpreter",
         ":program",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/pass",

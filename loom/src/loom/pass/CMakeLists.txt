@@ -116,6 +116,7 @@ loom_cc_library(
     ::program
     iree::base
     iree::base::internal::arena
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::pass
@@ -208,6 +209,7 @@ loom_cc_test(
     ::interpreter
     ::program
     iree::base
+    loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::pass
