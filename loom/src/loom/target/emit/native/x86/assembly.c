@@ -258,6 +258,7 @@ static iree_status_t loom_x86_append_descriptor_packet(
   iree_string_view_t key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_x86_descriptor_key(context, &key));
   if (iree_string_view_equal(key, IREE_SV("x86.avx512.vpaddd.zmm")) ||
+      iree_string_view_equal(key, IREE_SV("x86.avx512.vpmulld.zmm")) ||
       iree_string_view_equal(key, IREE_SV("x86.avx512.kandq"))) {
     return loom_x86_append_binary_vector_packet(context);
   }

@@ -251,6 +251,7 @@ TEST_F(X86AssemblyTest, EmitsAvx512FragmentFromSourceLowering) {
       "func.def @x86_source(%lhs: vector<16xi32>, %rhs: "
       "vector<16xi32>) {\n"
       "  %sum = vector.addi %lhs, %rhs : vector<16xi32>\n"
+      "  %product = vector.muli %sum, %rhs : vector<16xi32>\n"
       "  func.return\n"
       "}\n",
       &sidecar_arena, &packetization);
@@ -263,6 +264,7 @@ TEST_F(X86AssemblyTest, EmitsAvx512FragmentFromSourceLowering) {
                            iree_string_builder_view(&builder).size);
   EXPECT_NE(output.find(".Lbb0:"), std::string::npos);
   EXPECT_NE(output.find("vpaddd zmm"), std::string::npos);
+  EXPECT_NE(output.find("vpmulld zmm"), std::string::npos);
   EXPECT_NE(output.find("ret"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);

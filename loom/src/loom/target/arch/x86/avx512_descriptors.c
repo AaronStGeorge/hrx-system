@@ -37,6 +37,9 @@ static const uint8_t kX86Avx512CoreStringData[] =
     LOOM_BSTRING_LITERAL("\x03", "dst")
     LOOM_BSTRING_LITERAL("\x03", "lhs")
     LOOM_BSTRING_LITERAL("\x03", "rhs")
+    LOOM_BSTRING_LITERAL("\x16", "x86.avx512.vpmulld.zmm")
+    LOOM_BSTRING_LITERAL("\x07", "vpmulld")
+    LOOM_BSTRING_LITERAL("\x12", "integer.mul.i32x16")
     LOOM_BSTRING_LITERAL("\x1d", "x86.avx512.vmovdqu32.load.zmm")
     LOOM_BSTRING_LITERAL("\x09", "vmovdqu32")
     LOOM_BSTRING_LITERAL("\x12", "memory.load.i32x16")
@@ -120,8 +123,17 @@ enum {
       X86_AVX512_CORE_STRING_field_dst + sizeof("dst"),
   X86_AVX512_CORE_STRING_field_rhs =
       X86_AVX512_CORE_STRING_field_lhs + sizeof("lhs"),
-  X86_AVX512_CORE_STRING_descriptor_x86_avx512_vmovdqu32_load_zmm =
+  X86_AVX512_CORE_STRING_descriptor_x86_avx512_vpmulld_zmm =
       X86_AVX512_CORE_STRING_field_rhs + sizeof("rhs"),
+  X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vpmulld_zmm =
+      X86_AVX512_CORE_STRING_descriptor_x86_avx512_vpmulld_zmm +
+      sizeof("x86.avx512.vpmulld.zmm"),
+  X86_AVX512_CORE_STRING_semantic_x86_avx512_vpmulld_zmm =
+      X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vpmulld_zmm +
+      sizeof("vpmulld"),
+  X86_AVX512_CORE_STRING_descriptor_x86_avx512_vmovdqu32_load_zmm =
+      X86_AVX512_CORE_STRING_semantic_x86_avx512_vpmulld_zmm +
+      sizeof("integer.mul.i32x16"),
   X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vmovdqu32_load_zmm =
       X86_AVX512_CORE_STRING_descriptor_x86_avx512_vmovdqu32_load_zmm +
       sizeof("x86.avx512.vmovdqu32.load.zmm"),
@@ -244,6 +256,39 @@ static const loom_low_reg_class_alt_t kX86Avx512CoreRegClassAlts[] = {
 };
 
 static const loom_low_operand_t kX86Avx512CoreOperands[] = {
+    {
+        .field_name_string_offset = X86_AVX512_CORE_STRING_field_dst,
+        .role = LOOM_LOW_OPERAND_ROLE_RESULT,
+        .flags = 0,
+        .reg_class_alt_start = 0,
+        .reg_class_alt_count = 1,
+        .unit_count = 1,
+        .data_format_id = 0,
+        .read_stage = 0,
+        .ready_stage = 0,
+    },
+    {
+        .field_name_string_offset = X86_AVX512_CORE_STRING_field_lhs,
+        .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
+        .flags = 0,
+        .reg_class_alt_start = 0,
+        .reg_class_alt_count = 1,
+        .unit_count = 1,
+        .data_format_id = 0,
+        .read_stage = 0,
+        .ready_stage = 0,
+    },
+    {
+        .field_name_string_offset = X86_AVX512_CORE_STRING_field_rhs,
+        .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
+        .flags = 0,
+        .reg_class_alt_start = 0,
+        .reg_class_alt_count = 1,
+        .unit_count = 1,
+        .data_format_id = 0,
+        .read_stage = 0,
+        .ready_stage = 0,
+    },
     {
         .field_name_string_offset = X86_AVX512_CORE_STRING_field_dst,
         .role = LOOM_LOW_OPERAND_ROLE_RESULT,
@@ -793,6 +838,29 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
     },
     {
         .key_string_offset =
+            X86_AVX512_CORE_STRING_descriptor_x86_avx512_vpmulld_zmm,
+        .mnemonic_string_offset =
+            X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vpmulld_zmm,
+        .semantic_tag_string_offset =
+            X86_AVX512_CORE_STRING_semantic_x86_avx512_vpmulld_zmm,
+        .feature_mask_word_start = 0,
+        .feature_mask_word_count = 0,
+        .encoding_id = 0,
+        .operand_start = 3,
+        .operand_count = 3,
+        .result_count = 1,
+        .immediate_start = 0,
+        .immediate_count = 0,
+        .effect_start = 0,
+        .effect_count = 0,
+        .constraint_start = 0,
+        .constraint_count = 0,
+        .schedule_class_id = 1,
+        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .canonical_asm_form_ordinal = 6,
+    },
+    {
+        .key_string_offset =
             X86_AVX512_CORE_STRING_descriptor_x86_avx512_vmovdqu32_load_zmm,
         .mnemonic_string_offset =
             X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vmovdqu32_load_zmm,
@@ -801,7 +869,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 3,
+        .operand_start = 6,
         .operand_count = 2,
         .result_count = 1,
         .immediate_start = 0,
@@ -824,7 +892,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 5,
+        .operand_start = 8,
         .operand_count = 2,
         .result_count = 0,
         .immediate_start = 1,
@@ -847,7 +915,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 7,
+        .operand_start = 10,
         .operand_count = 4,
         .result_count = 1,
         .immediate_start = 2,
@@ -870,7 +938,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 11,
+        .operand_start = 14,
         .operand_count = 4,
         .result_count = 1,
         .immediate_start = 2,
@@ -892,7 +960,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 15,
+        .operand_start = 18,
         .operand_count = 3,
         .result_count = 1,
         .immediate_start = 2,
@@ -915,7 +983,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 18,
+        .operand_start = 21,
         .operand_count = 2,
         .result_count = 1,
         .immediate_start = 2,
@@ -937,7 +1005,7 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 20,
+        .operand_start = 23,
         .operand_count = 0,
         .result_count = 0,
         .immediate_start = 2,
@@ -956,31 +1024,31 @@ static const loom_low_descriptor_t kX86Avx512CoreDescriptors[] = {
 static const loom_low_descriptor_ref_t kX86Avx512CoreDescriptorRefs[] = {
     {
         .key_string_offset = X86_AVX512_CORE_STRING_descriptor_x86_avx512_jmp,
-        .descriptor_ordinal = 7,
+        .descriptor_ordinal = 8,
     },
     {
         .key_string_offset = X86_AVX512_CORE_STRING_descriptor_x86_avx512_kandq,
-        .descriptor_ordinal = 5,
-    },
-    {
-        .key_string_offset =
-            X86_AVX512_CORE_STRING_descriptor_x86_avx512_mov_gpr64,
         .descriptor_ordinal = 6,
     },
     {
         .key_string_offset =
+            X86_AVX512_CORE_STRING_descriptor_x86_avx512_mov_gpr64,
+        .descriptor_ordinal = 7,
+    },
+    {
+        .key_string_offset =
             X86_AVX512_CORE_STRING_descriptor_x86_avx512_vdpbf16ps_zmm,
-        .descriptor_ordinal = 4,
+        .descriptor_ordinal = 5,
     },
     {
         .key_string_offset =
             X86_AVX512_CORE_STRING_descriptor_x86_avx512_vmovdqu32_load_zmm,
-        .descriptor_ordinal = 1,
+        .descriptor_ordinal = 2,
     },
     {
         .key_string_offset =
             X86_AVX512_CORE_STRING_descriptor_x86_avx512_vmovdqu32_store_zmm,
-        .descriptor_ordinal = 2,
+        .descriptor_ordinal = 3,
     },
     {
         .key_string_offset =
@@ -990,12 +1058,17 @@ static const loom_low_descriptor_ref_t kX86Avx512CoreDescriptorRefs[] = {
     {
         .key_string_offset =
             X86_AVX512_CORE_STRING_descriptor_x86_avx512_vpdpbusd_zmm,
-        .descriptor_ordinal = 3,
+        .descriptor_ordinal = 4,
+    },
+    {
+        .key_string_offset =
+            X86_AVX512_CORE_STRING_descriptor_x86_avx512_vpmulld_zmm,
+        .descriptor_ordinal = 1,
     },
 };
 
 static const uint16_t kX86Avx512CoreAsmOperandIndices[] = {
-    0, 1, 2, 0, 1, 0, 1, 2, 3, 0, 1, 2, 0, 1, 2, 3,
+    0, 1, 2, 0, 1, 0, 1, 2, 3, 0, 1, 2, 0, 1, 2, 3, 0, 1, 2,
 };
 
 static const loom_low_asm_immediate_t kX86Avx512CoreAsmImmediates[] = {
@@ -1009,7 +1082,7 @@ static const loom_low_asm_form_t kX86Avx512CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             X86_AVX512_CORE_STRING_mnemonic_x86_avx512_jmp,
-        .descriptor_ordinal = 7,
+        .descriptor_ordinal = 8,
         .result_operand_index_start = 0,
         .result_operand_index_count = 0,
         .operand_index_start = 0,
@@ -1020,7 +1093,7 @@ static const loom_low_asm_form_t kX86Avx512CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             X86_AVX512_CORE_STRING_mnemonic_x86_avx512_kandq,
-        .descriptor_ordinal = 5,
+        .descriptor_ordinal = 6,
         .result_operand_index_start = 0,
         .result_operand_index_count = 1,
         .operand_index_start = 1,
@@ -1031,7 +1104,7 @@ static const loom_low_asm_form_t kX86Avx512CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             X86_AVX512_CORE_STRING_mnemonic_x86_avx512_mov_gpr64,
-        .descriptor_ordinal = 6,
+        .descriptor_ordinal = 7,
         .result_operand_index_start = 3,
         .result_operand_index_count = 1,
         .operand_index_start = 4,
@@ -1042,7 +1115,7 @@ static const loom_low_asm_form_t kX86Avx512CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vdpbf16ps_zmm,
-        .descriptor_ordinal = 4,
+        .descriptor_ordinal = 5,
         .result_operand_index_start = 5,
         .result_operand_index_count = 1,
         .operand_index_start = 6,
@@ -1064,11 +1137,22 @@ static const loom_low_asm_form_t kX86Avx512CoreAsmForms[] = {
     {
         .mnemonic_string_offset =
             X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vpdpbusd_zmm,
-        .descriptor_ordinal = 3,
+        .descriptor_ordinal = 4,
         .result_operand_index_start = 12,
         .result_operand_index_count = 1,
         .operand_index_start = 13,
         .operand_index_count = 3,
+        .immediate_start = 1,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vpmulld_zmm,
+        .descriptor_ordinal = 1,
+        .result_operand_index_start = 16,
+        .result_operand_index_count = 1,
+        .operand_index_start = 17,
+        .operand_index_count = 2,
         .immediate_start = 1,
         .immediate_count = 0,
     },

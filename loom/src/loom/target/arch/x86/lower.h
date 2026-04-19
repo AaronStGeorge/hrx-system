@@ -21,8 +21,9 @@ extern "C" {
 // Returns the AVX512 register lowering policy.
 //
 // The initial policy maps vector<16xi32> values to ZMM registers and lowers
-// vector.addi to x86.avx512.vpaddd.zmm. Memory operands and object-function ABI
-// pinning are intentionally owned by later low.resource/ABI work.
+// vector.addi/vector.muli to x86.avx512 vpaddd/vpmulld packets. Memory operands
+// and object-function ABI pinning are intentionally owned by later
+// low.resource/ABI work.
 const loom_low_lower_policy_t* loom_x86_low_lower_policy(void);
 
 // Initializes a target-owned registry mapping x86 target-contract keys to
