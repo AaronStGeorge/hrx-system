@@ -24,8 +24,10 @@ typedef struct loom_liveness_block_state_t {
 } loom_liveness_block_state_t;
 
 typedef struct loom_liveness_mutable_interval_t {
+  // Interval fields being assembled.
   loom_liveness_interval_t interval;
-  bool has_live_point;
+  // True once either a definition or live point has established bounds.
+  bool has_bounds;
 } loom_liveness_mutable_interval_t;
 
 typedef struct loom_liveness_pressure_state_t {
@@ -237,7 +239,7 @@ static iree_status_t loom_liveness_ensure_interval(
                 .unit_count =
                     loom_liveness_value_unit_count(state->module, value_id),
             },
-        .has_live_point = false,
+        .has_bounds = false,
     };
   }
   *out_interval = &state->interval_states[interval_index];
@@ -250,9 +252,10 @@ static iree_status_t loom_liveness_note_definition(
   loom_liveness_mutable_interval_t* interval_state = NULL;
   IREE_RETURN_IF_ERROR(
       loom_liveness_ensure_interval(state, value_id, &interval_state));
-  if (!interval_state->has_live_point) {
+  if (!interval_state->has_bounds) {
     interval_state->interval.start_point = point;
     interval_state->interval.end_point = point;
+    interval_state->has_bounds = true;
   } else if (point < interval_state->interval.start_point) {
     interval_state->interval.start_point = point;
   }
@@ -265,10 +268,10 @@ static iree_status_t loom_liveness_note_live_point(
   loom_liveness_mutable_interval_t* interval_state = NULL;
   IREE_RETURN_IF_ERROR(
       loom_liveness_ensure_interval(state, value_id, &interval_state));
-  if (!interval_state->has_live_point) {
+  if (!interval_state->has_bounds) {
     interval_state->interval.start_point = point;
     interval_state->interval.end_point = point + 1u;
-    interval_state->has_live_point = true;
+    interval_state->has_bounds = true;
     return iree_ok_status();
   }
   if (point < interval_state->interval.start_point) {
@@ -601,7 +604,7 @@ static void loom_liveness_initialize_local_liveness(
 //===----------------------------------------------------------------------===//
 
 static uint32_t loom_liveness_block_point_span(const loom_block_t* block) {
-  return block->op_count + 1u;
+  return block->op_count;
 }
 
 typedef struct loom_liveness_point_use_state_t {
@@ -662,7 +665,7 @@ static iree_status_t loom_liveness_finalize_intervals(
     IREE_RETURN_IF_ERROR(loom_liveness_note_bitset_live_point(
         state, block_state->live_out, block_info->end_point));
 
-    uint32_t point = block_info->start_point + 1u;
+    uint32_t point = block_info->start_point;
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
       loom_liveness_point_use_state_t use_state = {
@@ -674,8 +677,8 @@ static iree_status_t loom_liveness_finalize_intervals(
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t result_index = 0; result_index < op->result_count;
            ++result_index) {
-        IREE_RETURN_IF_ERROR(
-            loom_liveness_note_definition(state, results[result_index], point));
+        IREE_RETURN_IF_ERROR(loom_liveness_note_definition(
+            state, results[result_index], point + 1u));
       }
       ++point;
     }
@@ -848,8 +851,6 @@ static iree_status_t loom_liveness_compute_pressure(
     const loom_op_t* op = block->last_op;
     uint32_t point = block_info->end_point;
     while (op) {
-      IREE_RETURN_IF_ERROR(loom_liveness_record_pressure_snapshot(
-          &snapshot, live, block, op, point));
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t result_index = 0; result_index < op->result_count;
            ++result_index) {
@@ -862,6 +863,8 @@ static iree_status_t loom_liveness_compute_pressure(
       IREE_RETURN_IF_ERROR(loom_liveness_for_each_op_use(
           state->module, op, loom_liveness_add_use_to_bitset, &add_state));
       --point;
+      IREE_RETURN_IF_ERROR(loom_liveness_record_pressure_snapshot(
+          &snapshot, live, block, op, point));
       op = op->prev_op;
     }
     IREE_RETURN_IF_ERROR(loom_liveness_record_pressure_snapshot(

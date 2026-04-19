@@ -10,6 +10,12 @@
 // values, CFG successor edges, block arguments, branch operands, and SSA value
 // references embedded in types. Target-specific consumers map the resulting
 // pressure classes to allocation policies, diagnostics, and schedule scoring.
+//
+// Program points are instruction boundaries. A block's start point is before
+// its first operation; operation operands are live into the current boundary,
+// and operation results are defined at the following boundary. This lets a
+// dead operand and a result share a register across the same instruction while
+// still keeping values live from their defining boundary to their final use.
 
 #ifndef LOOM_ANALYSIS_LIVENESS_H_
 #define LOOM_ANALYSIS_LIVENESS_H_

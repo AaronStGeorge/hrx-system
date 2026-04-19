@@ -131,9 +131,12 @@ func.def @linear(%a: i32, %b: i32) -> (i32) {
   ASSERT_NE(a_interval, nullptr);
   ASSERT_NE(sum_interval, nullptr);
   ASSERT_NE(dead_interval, nullptr);
-  EXPECT_LT(a_interval->start_point, a_interval->end_point);
-  EXPECT_LT(sum_interval->start_point, sum_interval->end_point);
-  EXPECT_EQ(dead_interval->start_point, dead_interval->end_point);
+  EXPECT_EQ(a_interval->start_point, 0u);
+  EXPECT_EQ(a_interval->end_point, 2u);
+  EXPECT_EQ(sum_interval->start_point, 1u);
+  EXPECT_EQ(sum_interval->end_point, 3u);
+  EXPECT_EQ(dead_interval->start_point, 2u);
+  EXPECT_EQ(dead_interval->end_point, 2u);
 }
 
 TEST_F(LivenessTest, CfgLiveInOutUsesSuccessorEdgesAndBranchOperands) {

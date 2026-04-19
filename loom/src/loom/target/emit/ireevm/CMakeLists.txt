@@ -73,6 +73,22 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    lower
+  HDRS
+    "lower.h"
+  SRCS
+    "lower.c"
+  DEPS
+    iree::base
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::scalar
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     descriptors_test
@@ -104,6 +120,33 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm
+    iree::vm::bytecode::module
+)
+
+loom_cc_test(
+  NAME
+    lower_test
+  SRCS
+    "lower_test.cc"
+  DEPS
+    ::function_bytecode
+    ::low_registry
+    ::lower
+    ::module_archive
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::low
+    loom::src::loom::target::ir_records
+    loom::src::loom::target::presets
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main

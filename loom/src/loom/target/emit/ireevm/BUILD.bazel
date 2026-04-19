@@ -130,6 +130,36 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "lower_no_descriptors_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/emit/ireevm:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/ireevm:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/emit/ireevm:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/ireevm:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/ireevm:lower",
+)
+
+iree_assert_no_dependency(
     name = "loom_check_execute_no_ireevm_low_registry_dep",
     dependency = "//loom/src/loom/target/emit/ireevm:low_registry",
     target = "//loom/src/loom/tools/loom-check:execute",
@@ -194,6 +224,19 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "lower",
+    srcs = ["lower.c"],
+    hdrs = ["lower.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/scalar",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_cc_test(
     name = "descriptors_test",
     srcs = ["descriptors_test.cc"],
@@ -222,6 +265,32 @@ loom_cc_test(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/vm",
+        "//runtime/src/iree/vm/bytecode:module",
+    ],
+)
+
+loom_cc_test(
+    name = "lower_test",
+    srcs = ["lower_test.cc"],
+    deps = [
+        ":function_bytecode",
+        ":low_registry",
+        ":lower",
+        ":module_archive",
+        "//loom/src/loom/codegen/low:packetization",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:ir_records",
+        "//loom/src/loom/target:presets",
+        "//loom/src/loom/testing:context",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
