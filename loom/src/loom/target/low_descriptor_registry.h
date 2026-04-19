@@ -9,7 +9,9 @@
 // These target-neutral support functions operate on caller-provided
 // descriptor-set and target-bundle tables. Concrete registry packages live with
 // the target families that own the linked descriptor providers and target
-// bundles.
+// bundles. Descriptor provider functions may come from generated table shards,
+// but provider arrays, target snapshots, export plans, feature masks, and
+// bundles are target policy and stay explicit in the target package.
 
 #ifndef LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_H_
 #define LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_H_

@@ -15,8 +15,8 @@ namespace {
 
 void ExpectBundleSelectsDescriptorSet(
     const loom_target_low_descriptor_registry_t* registry,
-    iree_string_view_t bundle_key,
-    const loom_target_bundle_t* expected_bundle) {
+    iree_string_view_t bundle_key, const loom_target_bundle_t* expected_bundle,
+    iree_string_view_t expected_descriptor_set_key) {
   const loom_target_bundle_t* bundle = nullptr;
   IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(
       registry, bundle_key, &bundle));
@@ -34,6 +34,11 @@ void ExpectBundleSelectsDescriptorSet(
       &registry->registry, bundle,
       LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set));
   ASSERT_NE(descriptor_set, nullptr);
+  iree_string_view_t descriptor_set_key = iree_string_view_empty();
+  IREE_ASSERT_OK(loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset, &descriptor_set_key));
+  EXPECT_TRUE(
+      iree_string_view_equal(descriptor_set_key, expected_descriptor_set_key));
 }
 
 TEST(X86LowRegistryTest, VerifiesLinkedRegistryPackage) {
@@ -46,9 +51,11 @@ TEST(X86LowRegistryTest, VerifiesLinkedRegistryPackage) {
       &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("x86-avx512"),
-                                   &loom_x86_low_target_bundle_avx512_core);
+                                   &loom_x86_low_target_bundle_avx512_core,
+                                   IREE_SV("x86.avx512.core"));
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("x86-packed-dot"),
-                                   &loom_x86_low_target_bundle_packed_dot_core);
+                                   &loom_x86_low_target_bundle_packed_dot_core,
+                                   IREE_SV("x86.packed_dot.core"));
 }
 
 }  // namespace

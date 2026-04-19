@@ -15,8 +15,8 @@ namespace {
 
 void ExpectBundleSelectsDescriptorSet(
     const loom_target_low_descriptor_registry_t* registry,
-    iree_string_view_t bundle_key,
-    const loom_target_bundle_t* expected_bundle) {
+    iree_string_view_t bundle_key, const loom_target_bundle_t* expected_bundle,
+    iree_string_view_t expected_descriptor_set_key) {
   const loom_target_bundle_t* bundle = nullptr;
   IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(
       registry, bundle_key, &bundle));
@@ -34,6 +34,11 @@ void ExpectBundleSelectsDescriptorSet(
       &registry->registry, bundle,
       LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set));
   ASSERT_NE(descriptor_set, nullptr);
+  iree_string_view_t descriptor_set_key = iree_string_view_empty();
+  IREE_ASSERT_OK(loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset, &descriptor_set_key));
+  EXPECT_TRUE(
+      iree_string_view_equal(descriptor_set_key, expected_descriptor_set_key));
 }
 
 TEST(AmdgpuLowRegistryTest, VerifiesLinkedRegistryPackage) {
@@ -46,13 +51,17 @@ TEST(AmdgpuLowRegistryTest, VerifiesLinkedRegistryPackage) {
       &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("amdgpu-gfx950"),
-                                   &loom_amdgpu_low_target_bundle_gfx950_core);
+                                   &loom_amdgpu_low_target_bundle_gfx950_core,
+                                   IREE_SV("amdgpu.gfx950.core"));
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("amdgpu-gfx11"),
-                                   &loom_amdgpu_low_target_bundle_gfx11_core);
+                                   &loom_amdgpu_low_target_bundle_gfx11_core,
+                                   IREE_SV("amdgpu.gfx11.core"));
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("amdgpu-gfx12"),
-                                   &loom_amdgpu_low_target_bundle_gfx12_core);
+                                   &loom_amdgpu_low_target_bundle_gfx12_core,
+                                   IREE_SV("amdgpu.gfx12.core"));
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("amdgpu-gfx1250"),
-                                   &loom_amdgpu_low_target_bundle_gfx1250_core);
+                                   &loom_amdgpu_low_target_bundle_gfx1250_core,
+                                   IREE_SV("amdgpu.gfx1250.core"));
 }
 
 }  // namespace
