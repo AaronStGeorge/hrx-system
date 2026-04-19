@@ -20,6 +20,11 @@ using ::loom::testing::LowFuncAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
+constexpr uint16_t kWasmOpcodeI32Add = 0x6A;
+constexpr uint16_t kWasmOpcodeV128Load = 0xFD00;
+constexpr uint16_t kWasmOpcodeI32x4Add = 0xFDAE;
+constexpr uint16_t kWasmOpcodeV128Store = 0xFD0B;
+
 TEST(WasmDescriptorsTest, CoreSimd128DescriptorSetVerifies) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_wasm_core_simd128_descriptor_set();
@@ -55,6 +60,23 @@ TEST(WasmDescriptorsTest, CoreSimd128DescriptorLookupUsesStableKeys) {
   EXPECT_TRUE(iree_string_view_equal(add_key, IREE_SV("wasm.i32x4.add")));
   EXPECT_EQ(add_descriptor->operand_count, 3u);
   EXPECT_EQ(add_descriptor->result_count, 1u);
+  EXPECT_EQ(add_descriptor->encoding_id, kWasmOpcodeI32x4Add);
+
+  uint32_t scalar_add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
+      descriptor_set, IREE_SV("wasm.i32.add"), &scalar_add_ordinal));
+  const loom_low_descriptor_t* scalar_add_descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set, scalar_add_ordinal);
+  ASSERT_NE(scalar_add_descriptor, nullptr);
+  EXPECT_EQ(scalar_add_descriptor->encoding_id, kWasmOpcodeI32Add);
+
+  uint32_t load_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
+      descriptor_set, IREE_SV("wasm.v128.load"), &load_ordinal));
+  const loom_low_descriptor_t* load_descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set, load_ordinal);
+  ASSERT_NE(load_descriptor, nullptr);
+  EXPECT_EQ(load_descriptor->encoding_id, kWasmOpcodeV128Load);
 
   uint32_t store_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
   IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
@@ -67,6 +89,7 @@ TEST(WasmDescriptorsTest, CoreSimd128DescriptorLookupUsesStableKeys) {
   EXPECT_EQ(store_descriptor->effect_count, 1u);
   EXPECT_NE(store_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
+  EXPECT_EQ(store_descriptor->encoding_id, kWasmOpcodeV128Store);
 }
 
 TEST(WasmDescriptorsTest, LowAsmInfersV128ResultType) {

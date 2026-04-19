@@ -122,6 +122,27 @@ _V128_HI_IMMEDIATE = Immediate(
     unsigned_max=(2**64) - 1,
 )
 
+_OP_BR = 0x0C
+_OP_BR_IF = 0x0D
+_OP_RETURN = 0x0F
+_OP_I32_CONST = 0x41
+_OP_I32_LT_U = 0x49
+_OP_I32_ADD = 0x6A
+_OP_I32_SUB = 0x6B
+_OP_SIMD_PREFIX = 0xFD
+
+
+def _simd_encoding_id(subopcode: int) -> int:
+    return (_OP_SIMD_PREFIX << 8) | subopcode
+
+
+_OP_V128_LOAD = _simd_encoding_id(0x00)
+_OP_V128_STORE = _simd_encoding_id(0x0B)
+_OP_V128_CONST = _simd_encoding_id(0x0C)
+_OP_I32X4_SPLAT = _simd_encoding_id(0x11)
+_OP_I32X4_ADD = _simd_encoding_id(0xAE)
+_OP_I32X4_MUL = _simd_encoding_id(0xB5)
+
 _TARGET_BLOCK_IMMEDIATE = Immediate(
     "target_block",
     ImmediateKind.ORDINAL,
@@ -235,6 +256,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.i32.const",
             mnemonic="i32.const",
             semantic_tag="integer.const.i32",
+            encoding_id=_OP_I32_CONST,
             operands=(_i32_result(),),
             immediates=(_I32_VALUE_IMMEDIATE,),
             asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
@@ -245,6 +267,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.i32.add",
             mnemonic="i32.add",
             semantic_tag="integer.add.i32",
+            encoding_id=_OP_I32_ADD,
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_I32,
@@ -254,6 +277,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.i32.sub",
             mnemonic="i32.sub",
             semantic_tag="integer.sub.i32",
+            encoding_id=_OP_I32_SUB,
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_I32,
@@ -263,6 +287,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.i32.lt_u",
             mnemonic="i32.lt_u",
             semantic_tag="integer.cmp.lt.u32",
+            encoding_id=_OP_I32_LT_U,
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_I32,
@@ -272,6 +297,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.v128.const",
             mnemonic="v128.const",
             semantic_tag="vector.const.v128",
+            encoding_id=_OP_V128_CONST,
             operands=(_v128_result(),),
             immediates=(_V128_LO_IMMEDIATE, _V128_HI_IMMEDIATE),
             asm_forms=_asm(results=("dst",), immediates=("lo64", "hi64")),
@@ -282,6 +308,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.i32x4.splat",
             mnemonic="i32x4.splat",
             semantic_tag="vector.splat.i32x4",
+            encoding_id=_OP_I32X4_SPLAT,
             operands=(_v128_result(), _i32_operand("value")),
             asm_forms=_asm(results=("dst",), operands=("value",)),
             schedule_class=_SCHEDULE_SIMD_I32X4,
@@ -291,6 +318,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.i32x4.add",
             mnemonic="i32x4.add",
             semantic_tag="vector.add.i32x4",
+            encoding_id=_OP_I32X4_ADD,
             operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SIMD_I32X4,
@@ -300,6 +328,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.i32x4.mul",
             mnemonic="i32x4.mul",
             semantic_tag="vector.mul.i32x4",
+            encoding_id=_OP_I32X4_MUL,
             operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SIMD_I32X4,
@@ -309,6 +338,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.v128.load",
             mnemonic="v128.load",
             semantic_tag="memory.load.v128",
+            encoding_id=_OP_V128_LOAD,
             operands=(_v128_result(), _i32_resource("address")),
             asm_forms=_asm(results=("dst",), operands=("address",)),
             effects=(_LOAD_EFFECT,),
@@ -319,6 +349,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.v128.store",
             mnemonic="v128.store",
             semantic_tag="memory.store.v128",
+            encoding_id=_OP_V128_STORE,
             operands=(_i32_resource("address"), _v128_operand("value")),
             asm_forms=_asm(operands=("address", "value")),
             effects=(_STORE_EFFECT,),
@@ -329,6 +360,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.br",
             mnemonic="br",
             semantic_tag="control.branch",
+            encoding_id=_OP_BR,
             operands=(),
             immediates=(_TARGET_BLOCK_IMMEDIATE,),
             asm_forms=_asm(immediates=("target_block",)),
@@ -340,6 +372,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.br_if.i32",
             mnemonic="br_if",
             semantic_tag="control.cond_branch.i32",
+            encoding_id=_OP_BR_IF,
             operands=(_i32_predicate("cond"),),
             immediates=(_TARGET_BLOCK_IMMEDIATE,),
             asm_forms=_asm(operands=("cond",), immediates=("target_block",)),
@@ -351,6 +384,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             key="wasm.return.v128",
             mnemonic="return",
             semantic_tag="control.return.v128",
+            encoding_id=_OP_RETURN,
             operands=(_v128_operand("value"),),
             asm_forms=_asm(operands=("value",)),
             effects=(_CONTROL_EFFECT,),
