@@ -6,30 +6,48 @@
 
 // iree-run-loom binary with build-selected execution providers.
 
+#include <stddef.h>
 #include <stdio.h>
 
-#include "loom/target/emit/ireevm/execution_provider.h"
 #include "loom/tooling/execution/execution_provider.h"
 #include "loom/tools/iree-run-loom/main.h"
 
 #ifndef IREE_RUN_LOOM_HAVE_AMDGPU
 #define IREE_RUN_LOOM_HAVE_AMDGPU 0
 #endif  // IREE_RUN_LOOM_HAVE_AMDGPU
+#ifndef IREE_RUN_LOOM_HAVE_IREEVM
+#define IREE_RUN_LOOM_HAVE_IREEVM 0
+#endif  // IREE_RUN_LOOM_HAVE_IREEVM
+
+#define IREE_RUN_LOOM_HAVE_ANY_PROVIDER \
+  (IREE_RUN_LOOM_HAVE_AMDGPU || IREE_RUN_LOOM_HAVE_IREEVM)
 
 #if IREE_RUN_LOOM_HAVE_AMDGPU
 #include "loom/target/arch/amdgpu/execution_provider.h"
 #endif  // IREE_RUN_LOOM_HAVE_AMDGPU
+#if IREE_RUN_LOOM_HAVE_IREEVM
+#include "loom/target/emit/ireevm/execution_provider.h"
+#endif  // IREE_RUN_LOOM_HAVE_IREEVM
 
+#if IREE_RUN_LOOM_HAVE_ANY_PROVIDER
 static const loom_run_execution_provider_t* const kIreeRunLoomProviders[] = {
-    &loom_ireevm_execution_provider,
 #if IREE_RUN_LOOM_HAVE_AMDGPU
     &loom_amdgpu_target_provider,
 #endif  // IREE_RUN_LOOM_HAVE_AMDGPU
+#if IREE_RUN_LOOM_HAVE_IREEVM
+    &loom_ireevm_execution_provider,
+#endif  // IREE_RUN_LOOM_HAVE_IREEVM
 };
+#endif  // IREE_RUN_LOOM_HAVE_ANY_PROVIDER
 
 static const loom_run_execution_provider_set_t kIreeRunLoomProviderSet = {
+#if IREE_RUN_LOOM_HAVE_ANY_PROVIDER
     .providers = kIreeRunLoomProviders,
     .provider_count = IREE_ARRAYSIZE(kIreeRunLoomProviders),
+#else
+    .providers = NULL,
+    .provider_count = 0,
+#endif  // IREE_RUN_LOOM_HAVE_ANY_PROVIDER
 };
 
 int main(int argc, char** argv) {

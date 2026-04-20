@@ -42,7 +42,6 @@ loom_cc_binary(
   DEPS
     ::main
     iree::base
-    loom::src::loom::target::emit::ireevm::execution_provider
     loom::src::loom::tooling::execution::execution_provider
 )
 
@@ -60,15 +59,47 @@ iree_lit_test_suite(
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
 
-if(IREE_HAL_DRIVER_AMDGPU)
-  iree_package_name(_IREE_RUN_LOOM_PACKAGE_NAME)
-  set(_IREE_RUN_LOOM_TARGET "${_IREE_RUN_LOOM_PACKAGE_NAME}_iree-run-loom")
-  target_compile_definitions(${_IREE_RUN_LOOM_TARGET} PRIVATE
-    IREE_RUN_LOOM_HAVE_AMDGPU=1
+set(_IREE_RUN_LOOM_ALL_PROVIDERS amdgpu ireevm)
+set(IREE_RUN_LOOM_PROVIDERS "${_IREE_RUN_LOOM_ALL_PROVIDERS}" CACHE STRING
+  "Semicolon-separated list of execution providers linked into iree-run-loom."
+)
+foreach(_IREE_RUN_LOOM_PROVIDER ${IREE_RUN_LOOM_PROVIDERS})
+  if(NOT _IREE_RUN_LOOM_PROVIDER IN_LIST _IREE_RUN_LOOM_ALL_PROVIDERS)
+    message(FATAL_ERROR
+      "Unknown iree-run-loom provider '${_IREE_RUN_LOOM_PROVIDER}'. "
+      "Expected one of: ${_IREE_RUN_LOOM_ALL_PROVIDERS}"
+    )
+  endif()
+endforeach()
+
+iree_package_name(_IREE_RUN_LOOM_PACKAGE_NAME)
+set(_IREE_RUN_LOOM_TARGET "${_IREE_RUN_LOOM_PACKAGE_NAME}_iree-run-loom")
+
+function(_iree_run_loom_enable_provider _target _definition _library)
+  target_compile_definitions(${_target} PRIVATE
+    ${_definition}=1
   )
-  target_link_libraries(${_IREE_RUN_LOOM_TARGET} PRIVATE
+  target_link_libraries(${_target} PRIVATE
+    ${_library}
+  )
+endfunction()
+
+if("amdgpu" IN_LIST IREE_RUN_LOOM_PROVIDERS AND IREE_HAL_DRIVER_AMDGPU)
+  _iree_run_loom_enable_provider(
+    ${_IREE_RUN_LOOM_TARGET}
+    IREE_RUN_LOOM_HAVE_AMDGPU
     loom::src::loom::target::arch::amdgpu::execution_provider
   )
-  unset(_IREE_RUN_LOOM_TARGET)
-  unset(_IREE_RUN_LOOM_PACKAGE_NAME)
 endif()
+
+if("ireevm" IN_LIST IREE_RUN_LOOM_PROVIDERS)
+  _iree_run_loom_enable_provider(
+    ${_IREE_RUN_LOOM_TARGET}
+    IREE_RUN_LOOM_HAVE_IREEVM
+    loom::src::loom::target::emit::ireevm::execution_provider
+  )
+endif()
+
+unset(_IREE_RUN_LOOM_TARGET)
+unset(_IREE_RUN_LOOM_PACKAGE_NAME)
+unset(_IREE_RUN_LOOM_ALL_PROVIDERS)
