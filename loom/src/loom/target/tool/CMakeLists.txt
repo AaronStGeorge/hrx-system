@@ -12,6 +12,18 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    process
+  HDRS
+    "process.h"
+  SRCS
+    "process.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     llvm
   HDRS
     "llvm.h"

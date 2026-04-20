@@ -116,6 +116,7 @@ TEST_F(JsonOutputTest, SinglePassingCase) {
   EXPECT_NE(json.find("\"default_pipeline\": null"), std::string::npos);
   EXPECT_NE(json.find("\"default_format_target\": null"), std::string::npos);
   EXPECT_NE(json.find("\"default_emit_target\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"default_run_arguments\": null"), std::string::npos);
   EXPECT_NE(json.find("\"default_requirements\": []"), std::string::npos);
   EXPECT_NE(json.find("\"index\": 1"), std::string::npos);
   EXPECT_NE(json.find("\"mode\": \"roundtrip\""), std::string::npos);
@@ -126,6 +127,7 @@ TEST_F(JsonOutputTest, SinglePassingCase) {
   EXPECT_NE(json.find("\"pipeline\": null"), std::string::npos);
   EXPECT_NE(json.find("\"format_target\": null"), std::string::npos);
   EXPECT_NE(json.find("\"emit_target\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"run_arguments\": null"), std::string::npos);
   EXPECT_NE(json.find("\"source_range\": {\"start_byte\": 0"),
             std::string::npos);
   EXPECT_NE(json.find("\"separator_range\": null"), std::string::npos);

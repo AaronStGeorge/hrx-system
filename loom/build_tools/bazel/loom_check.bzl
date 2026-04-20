@@ -16,7 +16,7 @@ def _loom_check_test_base_name(src):
              src)
     return src[:-len(_LOOM_CHECK_EXTENSION)]
 
-def loom_check_test(name, src, size = "small", tags = [], **kwargs):
+def loom_check_test(name, src, size = "small", tags = [], data = [], env = {}, **kwargs):
     """Creates a test that runs a single .loom-test file through loom-check.
 
     Args:
@@ -24,14 +24,17 @@ def loom_check_test(name, src, size = "small", tags = [], **kwargs):
       src: Source .loom-test file containing the test cases.
       size: Test size (default: "small").
       tags: Additional tags to apply to the test.
+      data: Additional runfiles made available to loom-check.
+      env: Additional test environment variables.
       **kwargs: Additional attributes passed to native_test.
     """
     _loom_check_test_base_name(src)
     iree_executable_test(
         name = name,
         src = "//loom/src/loom/tools/loom-check",
-        data = [src],
+        data = [src] + data,
         args = ["$(rootpath %s)" % src],
+        env = env,
         size = size,
         tags = tags + ["loom-check"],
         **kwargs

@@ -584,7 +584,7 @@ static iree_status_t loom_check_emit_collect_status_diagnostic(
   const loom_error_def_t* error =
       loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1);
   if (!error) {
-    iree_status_ignore(failure_status);
+    iree_status_free(failure_status);
     return iree_make_status(IREE_STATUS_INTERNAL,
                             "LOWERING/001 diagnostic is not registered");
   }
@@ -609,7 +609,7 @@ static iree_status_t loom_check_emit_collect_status_diagnostic(
   };
   iree_status_t status =
       loom_check_diagnostic_collector_sink(collector, &diagnostic);
-  iree_status_ignore(failure_status);
+  iree_status_free(failure_status);
   return status;
 }
 
@@ -1341,7 +1341,7 @@ iree_status_t loom_check_execute_emit(
       if (low_diagnostic_count > 0 ||
           pass_diagnostic_capture.emission_count > 0 ||
           diagnostic_collector.count > 0) {
-        iree_status_ignore(status);
+        iree_status_free(status);
         status = loom_check_diagnostic_collector_finish(
             &diagnostic_collector, test_case, case_index, report, allocator,
             result);

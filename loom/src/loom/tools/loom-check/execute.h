@@ -154,6 +154,9 @@ typedef struct loom_check_environment_t {
   // Target-low registry callback for descriptor-backed low IR operations.
   loom_check_initialize_low_descriptor_registry_callback_t
       initialize_low_descriptor_registry;
+  // Filesystem path or executable name for iree-run-loom. Empty means search
+  // PATH for "iree-run-loom".
+  iree_string_view_t iree_run_loom_path;
 } loom_check_environment_t;
 
 //===----------------------------------------------------------------------===//
@@ -258,6 +261,14 @@ iree_status_t loom_check_execute_emit(
     loom_check_file_report_t* report, iree_string_view_t filename,
     const loom_check_environment_t* environment, loom_context_t* context,
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_check_result_t* result);
+
+// Writes the case input to a temporary .loom file, invokes iree-run-loom with
+// test_case->run_arguments, captures stdout/stderr, and compares the captured
+// output against the expected section. Same diff/update behavior as roundtrip.
+iree_status_t loom_check_execute_run(
+    const loom_check_case_t* test_case,
+    const loom_check_environment_t* environment, iree_allocator_t allocator,
     loom_check_result_t* result);
 
 #ifdef __cplusplus

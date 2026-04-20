@@ -1,0 +1,41 @@
+// REQUIRES: iree-run-loom
+
+// ====
+// RUN: run --function=branchy --input=0 --input=21 --expected_output=42
+
+target.preset @vm_target {key = "iree-vm", source = @branchy}
+
+func.def @branchy(%lhs: i32, %rhs: i32) -> (i32) {
+  %c0 = scalar.constant 0 : i32
+  %is_zero = scalar.cmpi eq, %lhs, %c0 : i32
+  cfg.cond_br %is_zero, ^then, ^else : i1
+^then:
+  %sum = scalar.addi %rhs, %rhs : i32
+  func.return %sum : i32
+^else:
+  %diff = scalar.subi %lhs, %rhs : i32
+  func.return %diff : i32
+}
+// ----
+EXEC @branchy
+[SUCCESS] all function outputs matched their expected values.
+
+// ====
+// RUN: run "--function=branchy" --input=50 --input=8 --expected_output=42
+
+target.preset @vm_target {key = "iree-vm", source = @branchy}
+
+func.def @branchy(%lhs: i32, %rhs: i32) -> (i32) {
+  %c0 = scalar.constant 0 : i32
+  %is_zero = scalar.cmpi eq, %lhs, %c0 : i32
+  cfg.cond_br %is_zero, ^then, ^else : i1
+^then:
+  %sum = scalar.addi %rhs, %rhs : i32
+  func.return %sum : i32
+^else:
+  %diff = scalar.subi %lhs, %rhs : i32
+  func.return %diff : i32
+}
+// ----
+EXEC @branchy
+[SUCCESS] all function outputs matched their expected values.

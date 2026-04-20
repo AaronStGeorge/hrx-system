@@ -47,6 +47,7 @@ loom_cc_library(
         "execute.c",
         "requirements.c",
         "roundtrip.c",
+        "run.c",
         "verify.c",
     ],
     hdrs = [
@@ -92,12 +93,14 @@ loom_cc_library(
         "//loom/src/loom/target/emit/llvmir:target_env",
         "//loom/src/loom/target/emit/llvmir:target_registry",
         "//loom/src/loom/target/tool:llvm",
+        "//loom/src/loom/target/tool:process",
         "//loom/src/loom/testing:diff",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:file_handle",
         "//runtime/src/iree/io:stream",
     ],
 )

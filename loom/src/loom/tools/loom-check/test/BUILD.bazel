@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test_suite")
+load("//loom/build_tools/bazel:loom_check.bzl", "loom_check_test", "loom_check_test_suite")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -12,7 +12,7 @@ package(
 )
 
 loom_check_test_suite(
-    name = "test",
+    name = "core_test",
     srcs = [
         "emit.loom-test",
         "llvmir/intrinsics.loom-test",
@@ -31,5 +31,22 @@ loom_check_test_suite(
         "requires.loom-test",
         "roundtrip.loom-test",
         "verify.loom-test",
+    ],
+)
+
+loom_check_test(
+    name = "run",
+    src = "run.loom-test",
+    data = ["//loom/src/loom/tools/iree-run-loom"],
+    env = {
+        "LOOM_CHECK_IREE_RUN_LOOM": "$(rootpath //loom/src/loom/tools/iree-run-loom)",
+    },
+)
+
+test_suite(
+    name = "test",
+    tests = [
+        ":core_test",
+        ":run",
     ],
 )

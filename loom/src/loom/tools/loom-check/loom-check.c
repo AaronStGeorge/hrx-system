@@ -39,6 +39,9 @@ IREE_FLAG(bool, update, false,
           "Cannot be used with stdin or verify mode.");
 IREE_FLAG(bool, verbose, false,
           "Print PASS/FAIL/SKIP for every case, not just failures.");
+IREE_FLAG(string, iree_run_loom, "",
+          "Path to iree-run-loom used by RUN: run cases. Empty uses "
+          "LOOM_CHECK_IREE_RUN_LOOM when set, otherwise PATH lookup.");
 
 typedef struct loom_check_json_flag_t {
   bool enabled;
@@ -130,7 +133,20 @@ static const loom_check_environment_t kLoomCheckEnvironment = {
             .fn = loom_check_cli_initialize_low_descriptor_registry,
             .user_data = NULL,
         },
+    .iree_run_loom_path = IREE_SVL(""),
 };
+
+static iree_string_view_t loom_check_iree_run_loom_path_from_flags(void) {
+  iree_string_view_t flag_path = iree_make_cstring_view(FLAG_iree_run_loom);
+  if (!iree_string_view_is_empty(flag_path)) {
+    return flag_path;
+  }
+  const char* env_path = getenv("LOOM_CHECK_IREE_RUN_LOOM");
+  if (env_path != NULL && env_path[0] != '\0') {
+    return iree_make_cstring_view(env_path);
+  }
+  return iree_string_view_empty();
+}
 
 //===----------------------------------------------------------------------===//
 // Outcome formatting
@@ -185,6 +201,12 @@ static void loom_check_print_case_header(iree_string_view_t filename,
   } else if (test_case->mode == LOOM_CHECK_MODE_FORMAT) {
     fprintf(stderr, " %.*s", (int)test_case->format_target.size,
             test_case->format_target.data);
+  } else if (test_case->mode == LOOM_CHECK_MODE_EMIT) {
+    fprintf(stderr, " %.*s", (int)test_case->emit_target.size,
+            test_case->emit_target.data);
+  } else if (test_case->mode == LOOM_CHECK_MODE_RUN) {
+    fprintf(stderr, " %.*s", (int)test_case->run_arguments.size,
+            test_case->run_arguments.data);
   }
   fprintf(stderr, "]\n");
 }
@@ -441,6 +463,7 @@ int main(int argc, char** argv) {
       "              LLVMIR targets include llvmir, llvmir-body,\n"
       "              llvmir-bitcode, llvmir-object, and\n"
       "              llvmir-assembly-mnemonics.\n"
+      "  run <args>  Execute input with iree-run-loom and compare output.\n"
       "\n"
       "File format:\n"
       "  A .loom-test file contains one or more cases separated by // ====.\n"
@@ -457,7 +480,8 @@ int main(int argc, char** argv) {
       "    // REQUIRES: <name>[, ...] Skip when external tools are missing.\n"
       "    // XFAIL: <reason>       Mark as expected failure.\n"
       "    Known REQUIRES names: llvm-as, llvm-dis, opt, llc, llvm-mc,\n"
-      "    llvm-objdump, and provider-specific llc-<target> names.\n"
+      "    llvm-objdump, iree-run-loom, and provider-specific llc-<target>\n"
+      "    names.\n"
       "\n"
       "  Annotations (verify mode):\n"
       "    // ERROR: DOMAIN/CODE \"substring\"\n"
@@ -505,15 +529,17 @@ int main(int argc, char** argv) {
   iree_host_size_t skip_count = 0;
 
   if (iree_status_is_ok(status)) {
+    loom_check_environment_t environment = kLoomCheckEnvironment;
+    environment.iree_run_loom_path = loom_check_iree_run_loom_path_from_flags();
     if (argc < 2) {
       // No positional args: read from stdin.
       status = loom_check_read_and_process(
-          iree_string_view_empty(), &kLoomCheckEnvironment, &context,
-          &block_pool, host_allocator, &pass_count, &fail_count, &skip_count);
+          iree_string_view_empty(), &environment, &context, &block_pool,
+          host_allocator, &pass_count, &fail_count, &skip_count);
     } else {
       status = loom_check_read_and_process(
-          iree_make_cstring_view(argv[1]), &kLoomCheckEnvironment, &context,
-          &block_pool, host_allocator, &pass_count, &fail_count, &skip_count);
+          iree_make_cstring_view(argv[1]), &environment, &context, &block_pool,
+          host_allocator, &pass_count, &fail_count, &skip_count);
     }
   }
 
@@ -536,12 +562,14 @@ int main(int argc, char** argv) {
   bool had_error = !iree_status_is_ok(status);
   if (had_error) {
     iree_status_fprint(stderr, status);
-    iree_status_ignore(status);
+    iree_status_free(status);
   }
 
   loom_context_deinitialize(&context);
   iree_arena_block_pool_deinitialize(&block_pool);
 
-  if (had_error || fail_count > 0) return 1;
+  if (had_error || fail_count > 0) {
+    return 1;
+  }
   return 0;
 }

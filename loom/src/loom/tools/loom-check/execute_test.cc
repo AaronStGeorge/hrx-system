@@ -64,6 +64,13 @@ class ExecuteTest : public ::testing::Test {
   // result is already cleaned up.
   iree_status_t ExecuteFirst(const char* source,
                              loom_check_result_t* out_result) {
+    return ExecuteFirstWithEnvironment(source, &kExecuteTestEnvironment,
+                                       out_result);
+  }
+
+  iree_status_t ExecuteFirstWithEnvironment(
+      const char* source, const loom_check_environment_t* environment,
+      loom_check_result_t* out_result) {
     iree_arena_allocator_t arena;
     iree_arena_initialize(&block_pool_, &arena);
     loom_check_file_t file = {0};
@@ -82,10 +89,10 @@ class ExecuteTest : public ::testing::Test {
     if (iree_status_is_ok(status)) {
       loom_check_result_initialize(iree_allocator_system(), out_result);
       result_initialized = true;
-      status = loom_check_execute_case(
-          &file.cases[0], 0, &report, iree_make_cstring_view("test.loom-test"),
-          &kExecuteTestEnvironment, &context_, &block_pool_,
-          iree_allocator_system(), out_result);
+      status = loom_check_execute_case(&file.cases[0], 0, &report,
+                                       iree_make_cstring_view("test.loom-test"),
+                                       environment, &context_, &block_pool_,
+                                       iree_allocator_system(), out_result);
     }
     iree_arena_deinitialize(&arena);
     if (!iree_status_is_ok(status) && result_initialized) {
@@ -1098,6 +1105,42 @@ TEST_F(ExecuteTest, EmitLivenessJsonReportsUnknownFunction) {
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_NE(DetailString(result).find("liveness-json"), std::string::npos);
   EXPECT_NE(DetailString(result).find("NOT_FOUND"), std::string::npos)
+      << "detail: " << DetailString(result);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, RunModeRequiresDeclaredRunner) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: run --function=main\n"
+                   "func.def @main() {\n"
+                   "  func.return\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("REQUIRES: iree-run-loom"),
+            std::string::npos)
+      << "detail: " << DetailString(result);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, RunModeSkipsUnavailableRunner) {
+  loom_check_environment_t environment = kExecuteTestEnvironment;
+  environment.iree_run_loom_path =
+      iree_make_cstring_view("/definitely/not/iree-run-loom");
+
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirstWithEnvironment("// RUN: run --function=main\n"
+                                  "// REQUIRES: iree-run-loom\n"
+                                  "func.def @main() {\n"
+                                  "  func.return\n"
+                                  "}\n",
+                                  &environment, &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_SKIP);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_SKIP);
+  EXPECT_NE(DetailString(result).find("iree-run-loom"), std::string::npos)
       << "detail: " << DetailString(result);
   loom_check_result_deinitialize(&result);
 }

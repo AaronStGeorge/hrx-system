@@ -8,6 +8,25 @@
 
 #include "loom/target/emit/llvmir/target_registry.h"
 #include "loom/target/tool/llvm.h"
+#include "loom/target/tool/process.h"
+
+static iree_string_view_t loom_check_iree_run_loom_path(
+    const loom_check_environment_t* environment) {
+  if (environment != NULL &&
+      !iree_string_view_is_empty(environment->iree_run_loom_path)) {
+    return environment->iree_run_loom_path;
+  }
+  return IREE_SV("iree-run-loom");
+}
+
+static bool loom_check_process_path_searches_path(iree_string_view_t path) {
+  for (iree_host_size_t i = 0; i < path.size; ++i) {
+    if (path.data[i] == '/' || path.data[i] == '\\') {
+      return false;
+    }
+  }
+  return true;
+}
 
 static bool loom_check_case_has_requirement(const loom_check_case_t* test_case,
                                             iree_string_view_t requirement) {
@@ -25,8 +44,12 @@ static char loom_check_ascii_lower(char value) {
 
 static bool loom_check_string_contains_case_insensitive(
     iree_string_view_t string, iree_string_view_t needle) {
-  if (iree_string_view_is_empty(needle)) return true;
-  if (needle.size > string.size) return false;
+  if (iree_string_view_is_empty(needle)) {
+    return true;
+  }
+  if (needle.size > string.size) {
+    return false;
+  }
   for (iree_host_size_t i = 0; i <= string.size - needle.size; ++i) {
     bool matches = true;
     for (iree_host_size_t j = 0; j < needle.size; ++j) {
@@ -36,7 +59,9 @@ static bool loom_check_string_contains_case_insensitive(
         break;
       }
     }
-    if (matches) return true;
+    if (matches) {
+      return true;
+    }
   }
   return false;
 }
@@ -51,6 +76,7 @@ static bool loom_check_requirement_name_is_known(
          iree_string_view_equal(requirement, IREE_SV("llc")) ||
          iree_string_view_equal(requirement, IREE_SV("llvm-mc")) ||
          iree_string_view_equal(requirement, IREE_SV("llvm-objdump")) ||
+         iree_string_view_equal(requirement, IREE_SV("iree-run-loom")) ||
          loom_llvmir_target_registry_llc_requirement_provider(
              &target_registry, requirement, NULL) ||
          iree_string_view_equal(requirement,
@@ -95,8 +121,29 @@ static iree_status_t loom_check_query_llc_provider(
   return status;
 }
 
+static iree_status_t loom_check_query_iree_run_loom(
+    const loom_check_environment_t* environment, iree_allocator_t allocator) {
+  iree_string_view_t path = loom_check_iree_run_loom_path(environment);
+  iree_string_view_t arguments[] = {IREE_SV("--help")};
+  loom_tool_process_result_t result = {0};
+  IREE_RETURN_IF_ERROR(loom_tool_process_run(
+      path, loom_check_process_path_searches_path(path), arguments,
+      IREE_ARRAYSIZE(arguments), allocator, &result));
+
+  iree_status_t status = iree_ok_status();
+  if (!loom_tool_process_result_succeeded(&result)) {
+    status = iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "iree-run-loom is available but --help exited with code %d",
+        result.exit_code);
+  }
+  loom_tool_process_result_deinitialize(&result, allocator);
+  return status;
+}
+
 static iree_status_t loom_check_query_requirement(
-    iree_string_view_t requirement, iree_allocator_t allocator) {
+    const loom_check_environment_t* environment, iree_string_view_t requirement,
+    iree_allocator_t allocator) {
   if (iree_string_view_equal(requirement, IREE_SV("llvm-as"))) {
     return loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLVM_AS, allocator);
   }
@@ -114,6 +161,9 @@ static iree_status_t loom_check_query_requirement(
   }
   if (iree_string_view_equal(requirement, IREE_SV("llvm-objdump"))) {
     return loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLVM_OBJDUMP, allocator);
+  }
+  if (iree_string_view_equal(requirement, IREE_SV("iree-run-loom"))) {
+    return loom_check_query_iree_run_loom(environment, allocator);
   }
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
@@ -133,7 +183,8 @@ static iree_status_t loom_check_query_requirement(
 static iree_status_t loom_check_append_supported_requirement_names(
     loom_check_result_t* result) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
-      &result->detail, "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump"));
+      &result->detail,
+      "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump, iree-run-loom"));
 
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
@@ -186,7 +237,7 @@ static iree_status_t loom_check_skip_unavailable_requirement(
   iree_status_t status = iree_string_builder_append_format(
       &result->detail, "skipped: requirement '%.*s' unavailable: %s\n",
       (int)requirement.size, requirement.data, status_name);
-  iree_status_ignore(availability_status);
+  iree_status_free(availability_status);
   return status;
 }
 
@@ -199,6 +250,29 @@ static iree_status_t loom_check_require_declared_requirement(
   *out_continue_execution = false;
   return loom_check_fail_missing_requirement_declaration(test_case->emit_target,
                                                          requirement, result);
+}
+
+static iree_status_t loom_check_fail_missing_run_requirement(
+    loom_check_result_t* result) {
+  result->raw_outcome = LOOM_CHECK_FAIL;
+  result->final_outcome = LOOM_CHECK_FAIL;
+  return iree_string_builder_append_cstring(
+      &result->detail,
+      "RUN: run requires '// REQUIRES: iree-run-loom'; external tool "
+      "dependencies must be declared even when they are available\n");
+}
+
+static iree_status_t loom_check_require_run_tool_declarations(
+    const loom_check_case_t* test_case, loom_check_result_t* result,
+    bool* out_continue_execution) {
+  if (test_case->mode != LOOM_CHECK_MODE_RUN) {
+    return iree_ok_status();
+  }
+  if (loom_check_case_has_requirement(test_case, IREE_SV("iree-run-loom"))) {
+    return iree_ok_status();
+  }
+  *out_continue_execution = false;
+  return loom_check_fail_missing_run_requirement(result);
 }
 
 static bool loom_check_case_has_llc_provider_requirement(
@@ -284,7 +358,7 @@ static iree_status_t loom_check_require_emit_tool_declarations(
       IREE_RETURN_IF_ERROR(loom_check_require_declared_llc_provider_requirement(
           test_case, provider, result, out_continue_execution));
     } else {
-      iree_status_ignore(status);
+      iree_status_free(status);
     }
   }
 
@@ -292,7 +366,8 @@ static iree_status_t loom_check_require_emit_tool_declarations(
 }
 
 iree_status_t loom_check_preflight_requirements(
-    const loom_check_case_t* test_case, iree_allocator_t allocator,
+    const loom_check_case_t* test_case,
+    const loom_check_environment_t* environment, iree_allocator_t allocator,
     loom_check_result_t* result, bool* out_continue_execution) {
   IREE_ASSERT_ARGUMENT(test_case);
   IREE_ASSERT_ARGUMENT(result);
@@ -312,10 +387,16 @@ iree_status_t loom_check_preflight_requirements(
   if (!*out_continue_execution) {
     return iree_ok_status();
   }
+  IREE_RETURN_IF_ERROR(loom_check_require_run_tool_declarations(
+      test_case, result, out_continue_execution));
+  if (!*out_continue_execution) {
+    return iree_ok_status();
+  }
 
   for (iree_host_size_t i = 0; i < test_case->requirement_count; ++i) {
     iree_string_view_t requirement = test_case->requirements[i];
-    iree_status_t status = loom_check_query_requirement(requirement, allocator);
+    iree_status_t status =
+        loom_check_query_requirement(environment, requirement, allocator);
     if (!iree_status_is_ok(status)) {
       *out_continue_execution = false;
       return loom_check_skip_unavailable_requirement(requirement, status,

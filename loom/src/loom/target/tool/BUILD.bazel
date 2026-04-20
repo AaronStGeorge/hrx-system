@@ -50,9 +50,48 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/tool:llvm",
 )
 
+iree_assert_no_dependency(
+    name = "process_no_llvmir_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:core",
+    target = "//loom/src/loom/target/tool:process",
+)
+
+iree_assert_no_dependency(
+    name = "process_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/tool:process",
+)
+
+iree_assert_no_dependency(
+    name = "process_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/tool:process",
+)
+
+iree_assert_no_dependency(
+    name = "process_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/tool:process",
+)
+
+iree_assert_no_dependency(
+    name = "process_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/tool:process",
+)
+
 #===------------------------------------------------------------------------===#
 # External tool runners
 #===------------------------------------------------------------------------===#
+
+loom_cc_library(
+    name = "process",
+    srcs = ["process.c"],
+    hdrs = ["process.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
 
 loom_cc_library(
     name = "llvm",

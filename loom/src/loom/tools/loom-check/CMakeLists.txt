@@ -37,6 +37,7 @@ loom_cc_library(
     "execute.c"
     "requirements.c"
     "roundtrip.c"
+    "run.c"
     "verify.c"
   DEPS
     ::check
@@ -44,6 +45,7 @@ loom_cc_library(
     ::update
     iree::base
     iree::base::internal::arena
+    iree::io::file_handle
     iree::io::stream
     loom::src::loom::analysis::liveness
     loom::src::loom::analysis::liveness_json
@@ -78,6 +80,7 @@ loom_cc_library(
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::presets
     loom::src::loom::target::tool::llvm
+    loom::src::loom::target::tool::process
     loom::src::loom::target::types
     loom::src::loom::testing::diff
     loom::src::loom::util::json

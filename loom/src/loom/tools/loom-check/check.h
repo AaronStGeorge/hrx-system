@@ -42,6 +42,8 @@
 //                           Low schedule diagnostics are one of none,
 //                           pressure, resources, hazards, candidates, model,
 //                           or all.
+//   // RUN: run <args>      Execute the input through iree-run-loom with
+//                           <args> forwarded after the temporary input path.
 //   // REQUIRES: <name>[, <name>...]
 //                           Skip the case when external tools or target
 //                           backends are unavailable.
@@ -113,6 +115,7 @@ typedef enum loom_check_mode_e {
   LOOM_CHECK_MODE_PASS = 2,       // Parse -> run pipeline -> print -> compare.
   LOOM_CHECK_MODE_FORMAT = 3,  // Parse -> convert format -> print -> compare.
   LOOM_CHECK_MODE_EMIT = 4,    // Parse -> lower to target output -> compare.
+  LOOM_CHECK_MODE_RUN = 5,     // Execute with an external iree-run-loom.
 } loom_check_mode_t;
 
 // Returns a human-readable name for the mode.
@@ -128,6 +131,8 @@ static inline const char* loom_check_mode_name(loom_check_mode_t mode) {
       return "format";
     case LOOM_CHECK_MODE_EMIT:
       return "emit";
+    case LOOM_CHECK_MODE_RUN:
+      return "run";
     default:
       return "unknown";
   }
@@ -215,6 +220,9 @@ typedef struct loom_check_case_t {
   iree_string_view_t format_target;
   // For EMIT mode: target emission request (e.g. "llvmir amdgpu-hal").
   iree_string_view_t emit_target;
+  // For RUN mode: iree-run-loom command-line arguments forwarded after the
+  // temporary input file path.
+  iree_string_view_t run_arguments;
   // Whether this case is expected to fail.
   bool xfail;
   // Source range of the // XFAIL: directive line. Empty when absent.
@@ -271,6 +279,7 @@ typedef struct loom_check_file_t {
   iree_string_view_t default_pipeline;
   iree_string_view_t default_format_target;
   iree_string_view_t default_emit_target;
+  iree_string_view_t default_run_arguments;
   // Arena-allocated file-level default requirement name array.
   iree_string_view_t* default_requirements;
   // Number of requirement names in default_requirements.

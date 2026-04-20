@@ -222,7 +222,7 @@ iree_status_t loom_check_execute_case(
 
   bool continue_execution = true;
   IREE_RETURN_IF_ERROR(loom_check_preflight_requirements(
-      test_case, allocator, result, &continue_execution));
+      test_case, environment, allocator, result, &continue_execution));
   if (!continue_execution) {
     return iree_ok_status();
   }
@@ -254,6 +254,11 @@ iree_status_t loom_check_execute_case(
       IREE_RETURN_IF_ERROR(loom_check_execute_emit(
           test_case, case_index, report, filename, environment, context,
           block_pool, allocator, result));
+      break;
+    }
+    case LOOM_CHECK_MODE_RUN: {
+      IREE_RETURN_IF_ERROR(
+          loom_check_execute_run(test_case, environment, allocator, result));
       break;
     }
     default:
@@ -329,7 +334,9 @@ static iree_status_t loom_check_verify_pass_output(
   IREE_RETURN_IF_ERROR(
       loom_verify_module(module, &verify_options, &verify_result));
   *out_failed_verification = verify_result.error_count > 0;
-  if (*out_failed_verification) return iree_ok_status();
+  if (*out_failed_verification) {
+    return iree_ok_status();
+  }
 
   loom_target_low_descriptor_registry_t low_registry;
   IREE_RETURN_IF_ERROR(
@@ -465,7 +472,7 @@ iree_status_t loom_check_execute_pass(
   if (!iree_status_is_ok(status)) {
     if (pass_diagnostic_capture.emission_count > 0 ||
         diagnostic_collector.count > 0 || test_case->annotation_count > 0) {
-      iree_status_ignore(status);
+      iree_status_free(status);
       status = loom_check_diagnostic_collector_finish(
           &diagnostic_collector, test_case, case_index, report, allocator,
           result);

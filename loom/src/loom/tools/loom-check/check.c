@@ -122,10 +122,12 @@ static bool loom_check_is_requires_directive(iree_string_view_t line) {
 static iree_status_t loom_check_parse_run_directive(
     iree_string_view_t value, loom_check_mode_t* out_mode,
     iree_string_view_t* out_pipeline, iree_string_view_t* out_format_target,
-    iree_string_view_t* out_emit_target) {
+    iree_string_view_t* out_emit_target,
+    iree_string_view_t* out_run_arguments) {
   *out_pipeline = iree_string_view_empty();
   *out_format_target = iree_string_view_empty();
   *out_emit_target = iree_string_view_empty();
+  *out_run_arguments = iree_string_view_empty();
   value = iree_string_view_trim(value);
 
   if (iree_string_view_equal(value, iree_make_cstring_view("roundtrip")) ||
@@ -168,6 +170,16 @@ static iree_status_t loom_check_parse_run_directive(
     if (iree_string_view_is_empty(*out_emit_target)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "RUN: emit requires a target argument");
+    }
+    return iree_ok_status();
+  }
+
+  if (iree_string_view_consume_prefix(&value, IREE_SV("run "))) {
+    *out_mode = LOOM_CHECK_MODE_RUN;
+    *out_run_arguments = iree_string_view_trim(value);
+    if (iree_string_view_is_empty(*out_run_arguments)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "RUN: run requires runner arguments");
     }
     return iree_ok_status();
   }
@@ -765,7 +777,8 @@ static iree_status_t loom_check_parse_case_sections(
                                       iree_make_cstring_view("// RUN: "));
       IREE_RETURN_IF_ERROR(loom_check_parse_run_directive(
           run_value, &out_case->mode, &out_case->pipeline,
-          &out_case->format_target, &out_case->emit_target));
+          &out_case->format_target, &out_case->emit_target,
+          &out_case->run_arguments));
       body_start = loom_check_scanner_end(scanner, case_end);
       continue;
     }
@@ -1010,6 +1023,7 @@ iree_status_t loom_check_parse(iree_string_view_t source,
   out_file->default_pipeline = iree_string_view_empty();
   out_file->default_format_target = iree_string_view_empty();
   out_file->default_emit_target = iree_string_view_empty();
+  out_file->default_run_arguments = iree_string_view_empty();
   out_file->default_requirements = NULL;
   out_file->default_requirement_count = 0;
 
@@ -1036,6 +1050,7 @@ iree_status_t loom_check_parse(iree_string_view_t source,
         out_file->default_pipeline = preamble_case.pipeline;
         out_file->default_format_target = preamble_case.format_target;
         out_file->default_emit_target = preamble_case.emit_target;
+        out_file->default_run_arguments = preamble_case.run_arguments;
       }
       if (preamble_case.has_requires_directive) {
         out_file->default_requirements = preamble_case.requirements;
@@ -1069,6 +1084,7 @@ iree_status_t loom_check_parse(iree_string_view_t source,
     out_file->default_pipeline = out_file->cases[0].pipeline;
     out_file->default_format_target = out_file->cases[0].format_target;
     out_file->default_emit_target = out_file->cases[0].emit_target;
+    out_file->default_run_arguments = out_file->cases[0].run_arguments;
   }
   if (first_case == 0 && case_count > 0 &&
       out_file->cases[0].has_requires_directive) {
@@ -1084,6 +1100,7 @@ iree_status_t loom_check_parse(iree_string_view_t source,
       out_file->cases[i].pipeline = out_file->default_pipeline;
       out_file->cases[i].format_target = out_file->default_format_target;
       out_file->cases[i].emit_target = out_file->default_emit_target;
+      out_file->cases[i].run_arguments = out_file->default_run_arguments;
     }
   }
 
