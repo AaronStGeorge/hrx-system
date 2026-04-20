@@ -25,7 +25,13 @@ iree_assert_no_dependency(
 
 loom_cc_binary(
     name = "iree-run-loom",
-    srcs = ["iree-run-loom.c"],
+    srcs = [
+        "amdgpu_hal_backend.c",
+        "amdgpu_hal_backend.h",
+        "hal_backend.h",
+        "hal_backends.c",
+        "iree-run-loom.c",
+    ],
     deps = [
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:diagnostic",
@@ -36,7 +42,9 @@ loom_cc_binary(
         "//loom/src/loom/target/all:low_registry",
         "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/emit/ireevm:module_compiler",
+        "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
         "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
+        "//loom/src/loom/verify",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

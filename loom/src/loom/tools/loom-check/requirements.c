@@ -148,7 +148,8 @@ static iree_status_t loom_check_run_amdgpu_hal_probe(
     loom_tool_process_result_t* out_result) {
   IREE_ASSERT_ARGUMENT(out_result);
   iree_string_view_t path = loom_check_iree_run_loom_path(environment);
-  iree_string_view_t arguments[] = {IREE_SV("--probe_amdgpu_hal")};
+  iree_string_view_t arguments[] = {IREE_SV("--loom_backend=amdgpu-hal"),
+                                    IREE_SV("--probe_hal")};
   return loom_tool_process_run(
       path, loom_check_process_path_searches_path(path), arguments,
       IREE_ARRAYSIZE(arguments), allocator, out_result);
@@ -167,7 +168,8 @@ static iree_status_t loom_check_amdgpu_hal_probe_failure_status(
     detail = iree_string_view_trim(detail);
     status = iree_make_status(
         IREE_STATUS_UNAVAILABLE,
-        "iree-run-loom --probe_amdgpu_hal exited with code %d%s%.*s",
+        "iree-run-loom --loom_backend=amdgpu-hal --probe_hal exited with code "
+        "%d%s%.*s",
         result->exit_code, iree_string_view_is_empty(detail) ? "" : ": ",
         (int)iree_min(detail.size, (iree_host_size_t)2048), detail.data);
   }
@@ -186,7 +188,7 @@ static iree_status_t loom_check_query_amdgpu_hal(
 
 static bool loom_check_amdgpu_hal_probe_has_preset(
     iree_string_view_t stdout_text, iree_string_view_t preset) {
-  iree_string_view_t needle = IREE_SV("amdgpu-hal preset: ");
+  iree_string_view_t needle = IREE_SV("hal preset: ");
   iree_host_size_t position = iree_string_view_find(stdout_text, needle, 0);
   while (position != IREE_STRING_VIEW_NPOS) {
     iree_string_view_t suffix = iree_string_view_substr(

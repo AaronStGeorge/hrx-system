@@ -14,6 +14,10 @@ loom_cc_binary(
   NAME
     iree-run-loom
   SRCS
+    "amdgpu_hal_backend.c"
+    "amdgpu_hal_backend.h"
+    "hal_backend.h"
+    "hal_backends.c"
     "iree-run-loom.c"
   DEPS
     iree::async::util::proactor_pool
@@ -34,7 +38,9 @@ loom_cc_binary(
     loom::src::loom::target::all::low_registry
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::emit::ireevm::module_compiler
+    loom::src::loom::target::emit::native::amdgpu::hal_executable
     loom::src::loom::target::emit::native::amdgpu::module_compiler
+    loom::src::loom::verify
     iree::tooling::comparison
     iree::tooling::context_util
     iree::tooling::device_util

@@ -30,35 +30,31 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
-#include "loom/ops/target/ops.h"
 #include "loom/target/all/low_registry.h"
-#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/ireevm/module_compiler.h"
-#include "loom/target/emit/native/amdgpu/module_compiler.h"
+#include "loom/tools/iree-run-loom/hal_backend.h"
 
 IREE_FLAG(string, loom_target, "",
           "Optional target.bundle symbol to compile, such as '@vm_target'. "
           "When omitted the module must contain exactly one target compatible "
           "with the selected backend.");
 IREE_FLAG(string, loom_backend, "vm",
-          "Compilation backend to run: 'vm' or 'amdgpu-hal'.");
+          "Compilation backend to run: 'vm' or a registered HAL backend.");
 IREE_FLAG(string, loom_module_name, "loom",
           "Module name to store in the compiled VM bytecode archive.");
 IREE_FLAG(int32_t, entry_point, 0,
           "HAL executable entry point ordinal to dispatch.");
 IREE_FLAG(string, workgroup_count, "1,1,1",
           "HAL dispatch workgroup count as `x,y,z`.");
-IREE_FLAG(bool, probe_amdgpu_hal, false,
-          "Creates the selected AMDGPU HAL device, probes for a Loom-supported "
-          "native target, prints the selected target, and exits.");
+IREE_FLAG(bool, probe_hal, false,
+          "Creates the selected HAL backend device, probes for a "
+          "Loom-supported native target, prints the selected target, and "
+          "exits.");
 
 enum {
   IREE_RUN_LOOM_HAL_MAX_BINDING_COUNT = 64,
   IREE_RUN_LOOM_HAL_MAX_OUTPUT_ELEMENT_COUNT = 1024,
 };
-
-static const iree_string_view_t kIreeRunLoomAmdgpuCurrentPreset =
-    IREE_SVL("amdgpu-current");
 
 typedef struct iree_run_loom_hal_flag_state_t {
   // Binding specs in HAL binding ordinal order.
@@ -75,15 +71,6 @@ typedef struct iree_run_loom_hal_flag_state_t {
   // Number of populated entries in |expected_binding_specs|.
   int32_t expected_binding_count;
 } iree_run_loom_hal_flag_state_t;
-
-typedef struct iree_run_loom_hal_runtime_t {
-  // VM instance retaining HAL ref-type registrations for function I/O helpers.
-  iree_vm_instance_t* instance;
-  // Selected HAL device used for executable preparation and dispatch.
-  iree_hal_device_t* device;
-  // Executable cache owned by |device| and used for target probing/loading.
-  iree_hal_executable_cache_t* executable_cache;
-} iree_run_loom_hal_runtime_t;
 
 static iree_run_loom_hal_flag_state_t iree_run_loom_hal_flags = {0};
 
@@ -231,7 +218,9 @@ static void iree_run_loom_hal_runtime_deinitialize(
 }
 
 static iree_status_t iree_run_loom_hal_runtime_initialize(
-    iree_allocator_t allocator, iree_run_loom_hal_runtime_t* out_runtime) {
+    const iree_amdgpu_hal_backend_t* backend, iree_allocator_t allocator,
+    iree_run_loom_hal_runtime_t* out_runtime) {
+  IREE_ASSERT_ARGUMENT(backend);
   IREE_ASSERT_ARGUMENT(out_runtime);
   *out_runtime = (iree_run_loom_hal_runtime_t){0};
 
@@ -248,8 +237,8 @@ static iree_status_t iree_run_loom_hal_runtime_initialize(
         iree_hal_device_create_params_default();
     create_params.proactor_pool = proactor_pool;
     status = iree_hal_create_device_from_flags(
-        iree_hal_available_driver_registry(), IREE_SV("amdgpu"), &create_params,
-        allocator, &out_runtime->device);
+        iree_hal_available_driver_registry(), backend->hal_driver_name,
+        &create_params, allocator, &out_runtime->device);
   }
   iree_async_proactor_pool_release(proactor_pool);
   if (iree_status_is_ok(status)) {
@@ -262,143 +251,34 @@ static iree_status_t iree_run_loom_hal_runtime_initialize(
   return status;
 }
 
-static iree_status_t iree_run_loom_amdgpu_append_target_id(
-    const loom_amdgpu_processor_info_t* processor,
-    iree_string_builder_t* builder) {
-  IREE_ASSERT_ARGUMENT(processor);
-  iree_string_builder_reset(builder);
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(builder, "amdgcn-amd-amdhsa--"));
-  return iree_string_builder_append_string(builder, processor->target_cpu);
-}
-
-static iree_status_t iree_run_loom_amdgpu_processor_is_compile_supported(
-    const loom_amdgpu_processor_info_t* processor, bool* out_supported) {
-  IREE_ASSERT_ARGUMENT(out_supported);
-  *out_supported = false;
-  if (processor == NULL || iree_string_view_is_empty(processor->target_cpu) ||
-      iree_string_view_is_empty(processor->low_preset_key) ||
-      iree_string_view_is_empty(processor->descriptor_set_key) ||
-      processor->elf_machine_flags == 0 ||
-      processor->kernel_descriptor_profile ==
-          LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE) {
-    return iree_ok_status();
-  }
-
-  const loom_amdgpu_descriptor_set_info_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set(
-      processor->descriptor_set_key, &descriptor_set));
-  *out_supported = descriptor_set->supports_descriptor_packet_encoding;
-  return iree_ok_status();
-}
-
-static iree_status_t iree_run_loom_select_amdgpu_processor(
-    const iree_run_loom_hal_runtime_t* runtime, iree_allocator_t allocator,
-    const loom_amdgpu_processor_info_t** out_processor) {
-  IREE_ASSERT_ARGUMENT(runtime);
-  IREE_ASSERT_ARGUMENT(out_processor);
-  *out_processor = NULL;
-  if (runtime->executable_cache == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU HAL executable cache is required");
-  }
-
-  iree_string_builder_t target_id_builder;
-  iree_string_builder_initialize(allocator, &target_id_builder);
-
-  iree_status_t status = iree_ok_status();
-  const iree_host_size_t processor_count =
-      loom_amdgpu_target_info_processor_count();
-  for (iree_host_size_t i = 0; i < processor_count && *out_processor == NULL &&
-                               iree_status_is_ok(status);
-       ++i) {
-    const loom_amdgpu_processor_info_t* processor =
-        loom_amdgpu_target_info_processor_at(i);
-    bool compile_supported = false;
-    status = iree_run_loom_amdgpu_processor_is_compile_supported(
-        processor, &compile_supported);
-    if (!iree_status_is_ok(status) || !compile_supported) {
-      continue;
-    }
-    status =
-        iree_run_loom_amdgpu_append_target_id(processor, &target_id_builder);
-    if (!iree_status_is_ok(status)) {
-      break;
-    }
-    if (iree_hal_executable_cache_can_prepare_format(
-            runtime->executable_cache,
-            IREE_HAL_EXECUTABLE_CACHING_MODE_ALLOW_OPTIMIZATION,
-            iree_string_builder_view(&target_id_builder))) {
-      *out_processor = processor;
-    }
-  }
-
-  iree_string_builder_deinitialize(&target_id_builder);
-  if (iree_status_is_ok(status) && *out_processor == NULL) {
-    status = iree_make_status(
-        IREE_STATUS_UNAVAILABLE,
-        "selected AMDGPU HAL device has no Loom-supported native target");
-  }
-  return status;
-}
-
-static iree_status_t iree_run_loom_rewrite_amdgpu_current_presets(
-    loom_module_t* module, const loom_amdgpu_processor_info_t* processor) {
-  IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(processor);
-  if (iree_string_view_is_empty(processor->low_preset_key)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "selected AMDGPU processor has no low preset key");
-  }
-
-  loom_string_id_t selected_key_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      module, processor->low_preset_key, &selected_key_id));
-
-  loom_block_t* block = loom_module_block(module);
-  loom_op_t* op = NULL;
-  loom_block_for_each_op(block, op) {
-    if (!loom_target_preset_isa(op)) {
-      continue;
-    }
-    const loom_string_id_t key_id = loom_target_preset_key(op);
-    if (key_id == LOOM_STRING_ID_INVALID || key_id >= module->strings.count) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "target preset has invalid key string id");
-    }
-    iree_string_view_t key = module->strings.entries[key_id];
-    if (iree_string_view_equal(key, kIreeRunLoomAmdgpuCurrentPreset)) {
-      loom_op_attrs(op)[loom_target_preset_key_ATTR_INDEX] =
-          loom_attr_string(selected_key_id);
-    }
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t iree_run_loom_probe_amdgpu_hal(
-    iree_allocator_t allocator) {
+static iree_status_t iree_run_loom_probe_hal_backend(
+    const iree_amdgpu_hal_backend_t* backend, iree_allocator_t allocator) {
+  IREE_ASSERT_ARGUMENT(backend);
   iree_run_loom_hal_runtime_t runtime = {0};
-  const loom_amdgpu_processor_info_t* processor = NULL;
+  iree_run_loom_hal_selected_target_t target = {0};
   iree_string_builder_t target_id_builder;
   iree_string_builder_initialize(allocator, &target_id_builder);
 
   iree_status_t status =
-      iree_run_loom_hal_runtime_initialize(allocator, &runtime);
+      iree_run_loom_hal_runtime_initialize(backend, allocator, &runtime);
   if (iree_status_is_ok(status)) {
-    status =
-        iree_run_loom_select_amdgpu_processor(&runtime, allocator, &processor);
+    status = backend->select_target(backend, &runtime, allocator, &target);
   }
   if (iree_status_is_ok(status)) {
-    status =
-        iree_run_loom_amdgpu_append_target_id(processor, &target_id_builder);
+    status = backend->format_target(backend, &target, &target_id_builder);
   }
   if (iree_status_is_ok(status)) {
-    fprintf(stdout, "amdgpu-hal target: %.*s\n",
+    fprintf(stdout, "hal backend: %.*s\n", (int)backend->name.size,
+            backend->name.data);
+    fprintf(stdout, "hal driver: %.*s\n", (int)backend->hal_driver_name.size,
+            backend->hal_driver_name.data);
+    fprintf(stdout, "hal target: %.*s\n",
             (int)iree_string_builder_size(&target_id_builder),
             iree_string_builder_buffer(&target_id_builder));
-    fprintf(stdout, "amdgpu-hal preset: %.*s\n",
-            (int)processor->low_preset_key.size,
-            processor->low_preset_key.data);
+    if (!iree_string_view_is_empty(target.preset_key)) {
+      fprintf(stdout, "hal preset: %.*s\n", (int)target.preset_key.size,
+              target.preset_key.data);
+    }
   }
 
   iree_string_builder_deinitialize(&target_id_builder);
@@ -428,29 +308,23 @@ static iree_status_t iree_run_loom_compile_to_archive(
 
 static iree_status_t iree_run_loom_compile_to_hal_executable(
     iree_string_view_t filename, iree_string_view_t source,
-    loom_module_t* module, const loom_amdgpu_processor_info_t* processor,
-    iree_allocator_t allocator, loom_amdgpu_hal_executable_t* out_executable) {
+    const iree_amdgpu_hal_backend_t* backend, loom_module_t* module,
+    const iree_run_loom_hal_selected_target_t* target,
+    iree_allocator_t allocator,
+    iree_run_loom_hal_executable_t* out_executable) {
+  IREE_ASSERT_ARGUMENT(backend);
   IREE_ASSERT_ARGUMENT(out_executable);
-  if (processor != NULL) {
-    IREE_RETURN_IF_ERROR(
-        iree_run_loom_rewrite_amdgpu_current_presets(module, processor));
-  }
 
   loom_source_entry_t source_entry = {0};
   loom_source_table_resolver_t source_resolver = {0};
   IREE_RETURN_IF_ERROR(iree_run_loom_source_resolver_for_input(
       module->context, filename, source, &source_entry, &source_resolver));
-  const loom_amdgpu_module_compile_options_t compile_options = {
-      .target_symbol = iree_make_cstring_view(FLAG_loom_target),
-      .target_cpu =
-          processor ? processor->target_cpu : iree_string_view_empty(),
-      .diagnostic_sink = {.fn = loom_diagnostic_stderr_sink},
-      .source_resolver = {.fn = loom_source_table_resolve,
-                          .user_data = &source_resolver},
-      .max_errors = 20,
-  };
-  return loom_amdgpu_compile_hal_executable(module, &compile_options, allocator,
-                                            out_executable);
+  return backend->compile(
+      backend, module, target, iree_make_cstring_view(FLAG_loom_target),
+      (loom_diagnostic_sink_t){.fn = loom_diagnostic_stderr_sink},
+      (loom_source_resolver_t){.fn = loom_source_table_resolve,
+                               .user_data = &source_resolver},
+      20, allocator, out_executable);
 }
 
 static iree_status_t iree_run_loom_parse_workgroup_count(
@@ -644,7 +518,7 @@ static iree_status_t iree_run_loom_hal_process_bindings(
 }
 
 static iree_status_t iree_run_loom_run_hal_executable(
-    const loom_amdgpu_hal_executable_t* executable,
+    const iree_run_loom_hal_executable_t* executable,
     const iree_run_loom_hal_runtime_t* runtime, iree_allocator_t allocator,
     int* out_exit_code) {
   IREE_ASSERT_ARGUMENT(executable);
@@ -661,7 +535,7 @@ static iree_status_t iree_run_loom_run_hal_executable(
 
   if (runtime->device == NULL || runtime->executable_cache == NULL) {
     status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "AMDGPU HAL runtime is not initialized");
+                              "HAL runtime is not initialized");
   }
   if (iree_status_is_ok(status)) {
     iree_hal_executable_params_t executable_params;
@@ -670,8 +544,7 @@ static iree_status_t iree_run_loom_run_hal_executable(
         IREE_HAL_EXECUTABLE_CACHING_MODE_ALLOW_OPTIMIZATION |
         IREE_HAL_EXECUTABLE_CACHING_MODE_ALIAS_PROVIDED_DATA;
     executable_params.executable_format = executable->executable_format;
-    executable_params.executable_data =
-        iree_make_const_byte_span(executable->data, executable->data_length);
+    executable_params.executable_data = executable->executable_data;
     status = iree_hal_executable_cache_prepare_executable(
         runtime->executable_cache, &executable_params, &hal_executable);
   }
@@ -700,6 +573,29 @@ static iree_status_t iree_run_loom_run_hal_executable(
   return status;
 }
 
+static iree_status_t iree_run_loom_make_unknown_backend_status(
+    iree_string_view_t backend_name,
+    const iree_amdgpu_hal_backend_registry_t* hal_backend_registry,
+    iree_allocator_t allocator) {
+  iree_string_builder_t backend_names;
+  iree_string_builder_initialize(allocator, &backend_names);
+  iree_status_t status = iree_amdgpu_hal_backend_registry_format_names(
+      hal_backend_registry, &backend_names);
+  if (!iree_status_is_ok(status)) {
+    iree_string_builder_deinitialize(&backend_names);
+    return status;
+  }
+  status = iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "unknown --loom_backend='%.*s'; expected 'vm' or registered HAL backend "
+      "in [%.*s]",
+      (int)backend_name.size, backend_name.data,
+      (int)iree_string_builder_size(&backend_names),
+      iree_string_builder_buffer(&backend_names));
+  iree_string_builder_deinitialize(&backend_names);
+  return status;
+}
+
 int main(int argc, char** argv) {
   IREE_TRACE_APP_ENTER();
   IREE_TRACE_ZONE_BEGIN(z0);
@@ -716,14 +612,34 @@ int main(int argc, char** argv) {
       "\n"
       "The 'vm' backend compiles target.preset key \"iree-vm\" into a real "
       "IREE VM bytecode archive and runs it with the same input/output flags "
-      "as iree-run-module. The 'amdgpu-hal' backend compiles AMDGPU "
-      "HAL-native target-low kernels into an IREE HAL executable and "
-      "dispatches it through the production HAL device path.\n");
+      "as iree-run-module. Registered HAL backends compile HAL-native "
+      "target-low kernels into IREE HAL executables and dispatch them through "
+      "the production HAL device path.\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
-  if (FLAG_probe_amdgpu_hal) {
-    iree_status_t probe_status = iree_run_loom_probe_amdgpu_hal(allocator);
+  iree_amdgpu_hal_backend_registry_t hal_backend_registry;
+  iree_amdgpu_hal_backend_registry_initialize(&hal_backend_registry);
+  const iree_string_view_t backend_name =
+      iree_make_cstring_view(FLAG_loom_backend);
+  const bool run_vm = iree_string_view_equal(backend_name, IREE_SV("vm"));
+  const iree_amdgpu_hal_backend_t* hal_backend =
+      run_vm ? NULL
+             : iree_amdgpu_hal_backend_registry_lookup(&hal_backend_registry,
+                                                         backend_name);
+  if (FLAG_probe_hal) {
+    iree_status_t probe_status = iree_ok_status();
+    if (run_vm) {
+      probe_status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "--probe_hal requires --loom_backend to name a registered HAL "
+          "backend");
+    } else if (hal_backend == NULL) {
+      probe_status = iree_run_loom_make_unknown_backend_status(
+          backend_name, &hal_backend_registry, allocator);
+    } else {
+      probe_status = iree_run_loom_probe_hal_backend(hal_backend, allocator);
+    }
     int probe_exit_code = 0;
     if (!iree_status_is_ok(probe_status)) {
       iree_status_fprint(stderr, probe_status);
@@ -744,9 +660,9 @@ int main(int argc, char** argv) {
   loom_module_t* module = NULL;
   loom_target_low_descriptor_registry_t low_registry = {0};
   loom_ireevm_module_archive_t archive = {0};
-  loom_amdgpu_hal_executable_t hal_executable = {0};
+  iree_run_loom_hal_executable_t hal_executable = {0};
   iree_run_loom_hal_runtime_t hal_runtime = {0};
-  const loom_amdgpu_processor_info_t* selected_amdgpu_processor = NULL;
+  iree_run_loom_hal_selected_target_t selected_hal_target = {0};
   iree_vm_instance_t* instance = NULL;
   int exit_code = 0;
 
@@ -757,6 +673,10 @@ int main(int argc, char** argv) {
         "iree-run-loom accepts at most one input file or '-' for stdin; got %d "
         "inputs",
         argc - 1);
+  }
+  if (iree_status_is_ok(status) && !run_vm && hal_backend == NULL) {
+    status = iree_run_loom_make_unknown_backend_status(
+        backend_name, &hal_backend_registry, allocator);
   }
 
   loom_all_low_descriptor_registry_initialize(&low_registry);
@@ -782,50 +702,35 @@ int main(int argc, char** argv) {
     status = iree_run_loom_parse_module(filename, source, &low_registry,
                                         &context, &block_pool, &module);
   }
-  const iree_string_view_t backend = iree_make_cstring_view(FLAG_loom_backend);
-  if (iree_status_is_ok(status) &&
-      iree_string_view_equal(backend, IREE_SV("vm"))) {
+  if (iree_status_is_ok(status) && run_vm) {
     status = iree_run_loom_compile_to_archive(filename, source, module,
                                               allocator, &archive);
   }
-  if (iree_status_is_ok(status) &&
-      iree_string_view_equal(backend, IREE_SV("vm"))) {
+  if (iree_status_is_ok(status) && run_vm) {
     status = iree_tooling_create_instance(allocator, &instance);
   }
-  if (iree_status_is_ok(status) &&
-      iree_string_view_equal(backend, IREE_SV("vm"))) {
+  if (iree_status_is_ok(status) && run_vm) {
     status = iree_tooling_run_module_with_data(
         instance, iree_string_view_empty(),
         iree_make_const_byte_span(archive.data, archive.data_length), allocator,
         &exit_code);
   }
-  if (iree_status_is_ok(status) &&
-      iree_string_view_equal(backend, IREE_SV("amdgpu-hal"))) {
-    status = iree_run_loom_hal_runtime_initialize(allocator, &hal_runtime);
+  if (iree_status_is_ok(status) && hal_backend != NULL) {
+    status = iree_run_loom_hal_runtime_initialize(hal_backend, allocator,
+                                                  &hal_runtime);
   }
-  if (iree_status_is_ok(status) &&
-      iree_string_view_equal(backend, IREE_SV("amdgpu-hal"))) {
-    status = iree_run_loom_select_amdgpu_processor(&hal_runtime, allocator,
-                                                   &selected_amdgpu_processor);
+  if (iree_status_is_ok(status) && hal_backend != NULL) {
+    status = hal_backend->select_target(hal_backend, &hal_runtime, allocator,
+                                        &selected_hal_target);
   }
-  if (iree_status_is_ok(status) &&
-      iree_string_view_equal(backend, IREE_SV("amdgpu-hal"))) {
+  if (iree_status_is_ok(status) && hal_backend != NULL) {
     status = iree_run_loom_compile_to_hal_executable(
-        filename, source, module, selected_amdgpu_processor, allocator,
+        filename, source, hal_backend, module, &selected_hal_target, allocator,
         &hal_executable);
   }
-  if (iree_status_is_ok(status) &&
-      iree_string_view_equal(backend, IREE_SV("amdgpu-hal"))) {
+  if (iree_status_is_ok(status) && hal_backend != NULL) {
     status = iree_run_loom_run_hal_executable(&hal_executable, &hal_runtime,
                                               allocator, &exit_code);
-  }
-  if (iree_status_is_ok(status) &&
-      !iree_string_view_equal(backend, IREE_SV("vm")) &&
-      !iree_string_view_equal(backend, IREE_SV("amdgpu-hal"))) {
-    status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "unknown --loom_backend='%.*s'; expected 'vm' "
-                              "or 'amdgpu-hal'",
-                              (int)backend.size, backend.data);
   }
 
   const bool had_error = !iree_status_is_ok(status);
@@ -837,7 +742,10 @@ int main(int argc, char** argv) {
 
   iree_vm_instance_release(instance);
   iree_run_loom_hal_runtime_deinitialize(&hal_runtime);
-  loom_amdgpu_hal_executable_deinitialize(&hal_executable, allocator);
+  if (hal_backend && hal_backend->deinitialize_executable) {
+    hal_backend->deinitialize_executable(hal_backend, &hal_executable,
+                                         allocator);
+  }
   loom_ireevm_module_archive_deinitialize(&archive, allocator);
   loom_module_free(module);
   iree_io_file_contents_free(contents);
