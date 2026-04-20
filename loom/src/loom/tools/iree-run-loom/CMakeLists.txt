@@ -45,30 +45,13 @@ loom_cc_binary(
     iree-run-loom
   SRCS
     "iree-run-loom.c"
+  COPTS
+
   DEPS
     ::main
     iree::base
     loom::src::loom::target::emit::ireevm::low_registry
     loom::src::loom::tooling::execution::hal_backend
-)
-
-loom_cc_binary(
-  NAME
-    iree-run-loom-amdgpu
-  SRCS
-    "amdgpu_hal_backend.c"
-    "amdgpu_hal_backend.h"
-    "iree-run-loom-amdgpu.c"
-  DEPS
-    ::main
-    iree::base
-    loom::src::loom::ops::target
-    loom::src::loom::target::arch::amdgpu::low_registry
-    loom::src::loom::target::arch::amdgpu::target_info
-    loom::src::loom::target::emit::native::amdgpu::hal_executable
-    loom::src::loom::target::emit::native::amdgpu::module_compiler
-    loom::src::loom::tooling::execution::hal_backend
-    loom::src::loom::tooling::execution::hal_runtime
 )
 
 iree_lit_test_suite(
@@ -84,3 +67,25 @@ iree_lit_test_suite(
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
+
+if(IREE_HAL_DRIVER_AMDGPU)
+  iree_package_name(_IREE_RUN_LOOM_PACKAGE_NAME)
+  set(_IREE_RUN_LOOM_TARGET "${_IREE_RUN_LOOM_PACKAGE_NAME}_iree-run-loom")
+  target_sources(${_IREE_RUN_LOOM_TARGET} PRIVATE
+    "amdgpu_hal_backend.c"
+    "amdgpu_hal_backend.h"
+  )
+  target_compile_definitions(${_IREE_RUN_LOOM_TARGET} PRIVATE
+    IREE_RUN_LOOM_HAVE_AMDGPU=1
+  )
+  target_link_libraries(${_IREE_RUN_LOOM_TARGET} PRIVATE
+    loom::src::loom::ops::target
+    loom::src::loom::target::arch::amdgpu::low_registry
+    loom::src::loom::target::arch::amdgpu::target_info
+    loom::src::loom::target::emit::native::amdgpu::hal_executable
+    loom::src::loom::target::emit::native::amdgpu::module_compiler
+    loom::src::loom::tooling::execution::hal_runtime
+  )
+  unset(_IREE_RUN_LOOM_TARGET)
+  unset(_IREE_RUN_LOOM_PACKAGE_NAME)
+endif()

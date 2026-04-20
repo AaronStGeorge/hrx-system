@@ -24,6 +24,67 @@ TEST(LowDescriptorRegistryTest, RegistryVerifiesSelectedTargetPackages) {
       &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
+TEST(LowDescriptorRegistryTest, AppendToTablesBuildsBorrowedSubset) {
+  loom_target_low_descriptor_registry_t source_registry = {};
+  loom_target_core_test_low_descriptor_registry_initialize(&source_registry);
+
+  loom_low_descriptor_set_provider_t descriptor_set_providers[8] = {};
+  const loom_target_bundle_t* target_bundles[8] = {};
+  ASSERT_LE(source_registry.descriptor_set_provider_count,
+            IREE_ARRAYSIZE(descriptor_set_providers));
+  ASSERT_LE(source_registry.target_bundle_count,
+            IREE_ARRAYSIZE(target_bundles));
+
+  iree_host_size_t descriptor_set_provider_count = 0;
+  iree_host_size_t target_bundle_count = 0;
+  IREE_ASSERT_OK(loom_target_low_descriptor_registry_append_to_tables(
+      &source_registry, descriptor_set_providers,
+      IREE_ARRAYSIZE(descriptor_set_providers), &descriptor_set_provider_count,
+      target_bundles, IREE_ARRAYSIZE(target_bundles), &target_bundle_count));
+
+  EXPECT_EQ(descriptor_set_provider_count,
+            source_registry.descriptor_set_provider_count);
+  EXPECT_EQ(target_bundle_count, source_registry.target_bundle_count);
+  for (iree_host_size_t i = 0; i < descriptor_set_provider_count; ++i) {
+    EXPECT_EQ(descriptor_set_providers[i],
+              source_registry.descriptor_set_providers[i]);
+  }
+  for (iree_host_size_t i = 0; i < target_bundle_count; ++i) {
+    EXPECT_EQ(target_bundles[i], source_registry.target_bundles[i]);
+  }
+
+  loom_target_low_descriptor_registry_t joined_registry = {};
+  loom_target_low_descriptor_registry_initialize_from_tables(
+      &joined_registry, descriptor_set_providers, descriptor_set_provider_count,
+      target_bundles, target_bundle_count);
+  IREE_EXPECT_OK(loom_target_low_descriptor_registry_verify(
+      &joined_registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
+}
+
+TEST(LowDescriptorRegistryTest, AppendToTablesRejectsOverflow) {
+  loom_target_low_descriptor_registry_t source_registry = {};
+  loom_target_core_test_low_descriptor_registry_initialize(&source_registry);
+  ASSERT_GT(source_registry.descriptor_set_provider_count, 0u);
+  ASSERT_GT(source_registry.target_bundle_count, 0u);
+
+  loom_low_descriptor_set_provider_t descriptor_set_providers[8] = {};
+  const loom_target_bundle_t* target_bundles[8] = {};
+  iree_host_size_t descriptor_set_provider_count =
+      IREE_ARRAYSIZE(descriptor_set_providers);
+  iree_host_size_t target_bundle_count = IREE_ARRAYSIZE(target_bundles);
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_target_low_descriptor_registry_append_to_tables(
+          &source_registry, descriptor_set_providers,
+          IREE_ARRAYSIZE(descriptor_set_providers),
+          &descriptor_set_provider_count, target_bundles,
+          IREE_ARRAYSIZE(target_bundles), &target_bundle_count));
+  EXPECT_EQ(descriptor_set_provider_count,
+            IREE_ARRAYSIZE(descriptor_set_providers));
+  EXPECT_EQ(target_bundle_count, IREE_ARRAYSIZE(target_bundles));
+}
+
 TEST(LowDescriptorRegistryTest, RegistrySatisfiesTargetLowFoundation) {
   loom_target_low_descriptor_registry_t registry = {};
   loom_target_core_test_low_descriptor_registry_initialize(&registry);

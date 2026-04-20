@@ -569,7 +569,6 @@ loom_low_descriptor_exclude_from_all(
     "loom_check_test"
     "low_registry_test"
     "occupancy_test"
-    "source_low"
     "wait_packets_test"
     "wait_plan_test"
 )

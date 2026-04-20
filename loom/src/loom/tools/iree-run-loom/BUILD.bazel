@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_select",
     "iree_assert_no_dependency",
     "loom_cc_binary",
     "loom_cc_library",
@@ -18,6 +19,33 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+_AMDGPU_HAL_COPTS = iree_select({
+    "//runtime/src/iree/hal/drivers:amdgpu_enabled": [
+        "-DIREE_RUN_LOOM_HAVE_AMDGPU=1",
+    ],
+    "//conditions:default": [],
+})
+
+_AMDGPU_HAL_SRCS = iree_select({
+    "//runtime/src/iree/hal/drivers:amdgpu_enabled": [
+        "amdgpu_hal_backend.c",
+        "amdgpu_hal_backend.h",
+    ],
+    "//conditions:default": [],
+})
+
+_AMDGPU_HAL_DEPS = iree_select({
+    "//runtime/src/iree/hal/drivers:amdgpu_enabled": [
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target/arch/amdgpu:low_registry",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
+        "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
+        "//loom/src/loom/tooling/execution:hal_runtime",
+    ],
+    "//conditions:default": [],
+})
+
 iree_assert_no_dependency(
     name = "tool_no_llvmir_emit_dep",
     dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
@@ -25,9 +53,9 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
-    name = "tool_no_amdgpu_native_emit_dep",
+    name = "main_no_amdgpu_native_emit_dep",
     dependency = "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-    target = "//loom/src/loom/tools/iree-run-loom",
+    target = "//loom/src/loom/tools/iree-run-loom:main",
 )
 
 loom_cc_library(
@@ -63,33 +91,14 @@ loom_cc_library(
 
 loom_cc_binary(
     name = "iree-run-loom",
-    srcs = ["iree-run-loom.c"],
+    srcs = ["iree-run-loom.c"] + _AMDGPU_HAL_SRCS,
+    copts = _AMDGPU_HAL_COPTS,
     deps = [
         ":main",
         "//loom/src/loom/target/emit/ireevm:low_registry",
         "//loom/src/loom/tooling/execution:hal_backend",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_binary(
-    name = "iree-run-loom-amdgpu",
-    srcs = [
-        "amdgpu_hal_backend.c",
-        "amdgpu_hal_backend.h",
-        "iree-run-loom-amdgpu.c",
-    ],
-    deps = [
-        ":main",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target/arch/amdgpu:low_registry",
-        "//loom/src/loom/target/arch/amdgpu:target_info",
-        "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
-        "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-        "//loom/src/loom/tooling/execution:hal_backend",
-        "//loom/src/loom/tooling/execution:hal_runtime",
-        "//runtime/src/iree/base",
-    ],
+    ] + _AMDGPU_HAL_DEPS,
 )
 
 iree_lit_test_suite(

@@ -37,9 +37,9 @@ loom_check_test_suite(
 loom_check_test(
     name = "amdgpu_hal_run",
     src = "amdgpu_hal_run.loom-test",
-    data = ["//loom/src/loom/tools/iree-run-loom:iree-run-loom-amdgpu"],
+    data = ["//loom/src/loom/tools/iree-run-loom"],
     env = {
-        "LOOM_CHECK_IREE_RUN_LOOM": "$(rootpath //loom/src/loom/tools/iree-run-loom:iree-run-loom-amdgpu)",
+        "LOOM_CHECK_IREE_RUN_LOOM": "$(rootpath //loom/src/loom/tools/iree-run-loom)",
     },
 )
 

@@ -971,7 +971,6 @@ loom_low_descriptor_exclude_from_cmake_all(
         "gfx950_descriptors_test",
         "hal_resource_materialization_test",
         "loom-check",
-        "source_low",
         "loom_check_test",
         "low_registry_test",
         "occupancy_test",

@@ -48,6 +48,20 @@ void loom_target_low_descriptor_registry_initialize_from_tables(
     const loom_target_bundle_t* const* target_bundles,
     iree_host_size_t target_bundle_count);
 
+// Appends the borrowed package tables in |source| into caller-owned table
+// storage. The inout counts must point at initialized counts already present in
+// the destination arrays. This is intended for tool and embedding boundaries
+// that link a target-selected subset of registry packages without depending on
+// the all-target aggregate package.
+iree_status_t loom_target_low_descriptor_registry_append_to_tables(
+    const loom_target_low_descriptor_registry_t* source,
+    loom_low_descriptor_set_provider_t* descriptor_set_providers,
+    iree_host_size_t descriptor_set_provider_capacity,
+    iree_host_size_t* descriptor_set_provider_count,
+    const loom_target_bundle_t** target_bundles,
+    iree_host_size_t target_bundle_capacity,
+    iree_host_size_t* target_bundle_count);
+
 // Returns a generic preset-registry view over |registry|'s bundle table.
 static inline loom_target_preset_registry_t
 loom_target_low_descriptor_registry_presets(
