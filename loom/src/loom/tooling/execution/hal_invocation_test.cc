@@ -171,5 +171,90 @@ TEST_F(HalInvocationTest,
   loom_run_hal_invocation_plan_deinitialize(&plan);
 }
 
+TEST_F(HalInvocationTest, PreparedCandidatePrepareRequiresInitializedRuntime) {
+  loom_run_hal_runtime_t runtime = {};
+  loom_run_hal_executable_t executable = {};
+  loom_run_hal_prepared_candidate_t candidate = {};
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_run_hal_prepared_candidate_prepare(
+                            &runtime, &executable, &candidate));
+
+  loom_run_hal_prepared_candidate_deinitialize(&candidate);
+}
+
+TEST_F(HalInvocationTest, DispatchPlanRejectsMissingPreparedExecutable) {
+  loom_run_hal_runtime_t runtime = {};
+  loom_run_hal_prepared_candidate_t candidate = {};
+  loom_run_hal_invocation_plan_t plan = {};
+  loom_run_hal_invocation_plan_initialize(&plan);
+
+  const iree_vm_type_def_t value_type =
+      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
+  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
+                                     &plan.bindings));
+
+  loom_run_hal_iteration_t iteration = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_run_hal_invocation_dispatch_plan(
+          &runtime, &candidate, &plan, iree_allocator_system(), &iteration));
+
+  loom_run_hal_iteration_deinitialize(&iteration);
+  loom_run_hal_invocation_plan_deinitialize(&plan);
+}
+
+TEST_F(HalInvocationTest, CollectResultsRejectsMissingIterationBindings) {
+  loom_run_hal_runtime_t runtime = {};
+  loom_run_hal_invocation_plan_t plan = {};
+  loom_run_hal_invocation_plan_initialize(&plan);
+
+  const iree_vm_type_def_t value_type =
+      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
+  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
+                                     &plan.bindings));
+
+  loom_run_hal_iteration_t iteration = {};
+  loom_run_hal_invocation_result_t result = {};
+  loom_run_hal_invocation_result_initialize(iree_allocator_system(), &result);
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_run_hal_invocation_collect_results(
+          &runtime, &plan, &iteration, iree_allocator_system(), &result));
+
+  loom_run_hal_invocation_result_deinitialize(&result);
+  loom_run_hal_invocation_plan_deinitialize(&plan);
+}
+
+TEST_F(HalInvocationTest, CollectResultsRejectsIterationPlanBindingMismatch) {
+  loom_run_hal_runtime_t runtime = {};
+  loom_run_hal_invocation_plan_t plan = {};
+  loom_run_hal_invocation_plan_initialize(&plan);
+  loom_run_hal_iteration_t iteration = {};
+  loom_run_hal_iteration_initialize(&iteration);
+
+  const iree_vm_type_def_t value_type =
+      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
+  IREE_ASSERT_OK(iree_vm_list_create(value_type, 1, iree_allocator_system(),
+                                     &plan.bindings));
+  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
+                                     &iteration.bindings));
+  iree_vm_value_t value = iree_vm_value_make_i32(0);
+  IREE_ASSERT_OK(iree_vm_list_push_value(plan.bindings, &value));
+
+  loom_run_hal_invocation_result_t result = {};
+  loom_run_hal_invocation_result_initialize(iree_allocator_system(), &result);
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_run_hal_invocation_collect_results(
+          &runtime, &plan, &iteration, iree_allocator_system(), &result));
+
+  loom_run_hal_invocation_result_deinitialize(&result);
+  loom_run_hal_iteration_deinitialize(&iteration);
+  loom_run_hal_invocation_plan_deinitialize(&plan);
+}
+
 }  // namespace
 }  // namespace loom

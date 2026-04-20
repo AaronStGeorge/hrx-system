@@ -48,6 +48,35 @@ void loom_run_hal_invocation_plan_deinitialize(
   *plan = (loom_run_hal_invocation_plan_t){0};
 }
 
+void loom_run_hal_prepared_candidate_initialize(
+    loom_run_hal_prepared_candidate_t* out_candidate) {
+  IREE_ASSERT_ARGUMENT(out_candidate);
+  *out_candidate = (loom_run_hal_prepared_candidate_t){0};
+}
+
+void loom_run_hal_prepared_candidate_deinitialize(
+    loom_run_hal_prepared_candidate_t* candidate) {
+  if (candidate == NULL) {
+    return;
+  }
+  iree_hal_executable_release(candidate->executable);
+  *candidate = (loom_run_hal_prepared_candidate_t){0};
+}
+
+void loom_run_hal_iteration_initialize(
+    loom_run_hal_iteration_t* out_iteration) {
+  IREE_ASSERT_ARGUMENT(out_iteration);
+  *out_iteration = (loom_run_hal_iteration_t){0};
+}
+
+void loom_run_hal_iteration_deinitialize(loom_run_hal_iteration_t* iteration) {
+  if (iteration == NULL) {
+    return;
+  }
+  iree_vm_list_release(iteration->bindings);
+  *iteration = (loom_run_hal_iteration_t){0};
+}
+
 void loom_run_hal_invocation_result_initialize(
     iree_allocator_t allocator, loom_run_hal_invocation_result_t* out_result) {
   IREE_ASSERT_ARGUMENT(out_result);
@@ -86,6 +115,22 @@ iree_status_t loom_run_hal_executable_prepare(
   executable_params.executable_data = executable->executable_data;
   return iree_hal_executable_cache_prepare_executable(
       runtime->executable_cache, &executable_params, out_hal_executable);
+}
+
+iree_status_t loom_run_hal_prepared_candidate_prepare(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_executable_t* executable,
+    loom_run_hal_prepared_candidate_t* out_candidate) {
+  IREE_ASSERT_ARGUMENT(runtime);
+  IREE_ASSERT_ARGUMENT(executable);
+  IREE_ASSERT_ARGUMENT(out_candidate);
+  loom_run_hal_prepared_candidate_initialize(out_candidate);
+  iree_status_t status = loom_run_hal_executable_prepare(
+      runtime, executable, &out_candidate->executable);
+  if (!iree_status_is_ok(status)) {
+    loom_run_hal_prepared_candidate_deinitialize(out_candidate);
+  }
+  return status;
 }
 
 static iree_status_t loom_run_hal_binding_refs_from_list(
@@ -197,14 +242,14 @@ iree_status_t loom_run_hal_invocation_execute(
   IREE_ASSERT_ARGUMENT(binding_list);
   IREE_ASSERT_ARGUMENT(options);
 
-  iree_hal_executable_t* hal_executable = NULL;
+  loom_run_hal_prepared_candidate_t candidate = {0};
   iree_status_t status =
-      loom_run_hal_executable_prepare(runtime, executable, &hal_executable);
+      loom_run_hal_prepared_candidate_prepare(runtime, executable, &candidate);
   if (iree_status_is_ok(status)) {
-    status = loom_run_hal_dispatch(runtime->device, hal_executable,
+    status = loom_run_hal_dispatch(runtime->device, candidate.executable,
                                    binding_list, options);
   }
-  iree_hal_executable_release(hal_executable);
+  loom_run_hal_prepared_candidate_deinitialize(&candidate);
   return status;
 }
 
@@ -317,6 +362,25 @@ static iree_status_t loom_run_hal_process_invocation_bindings(
   return status;
 }
 
+static iree_status_t loom_run_hal_invocation_plan_validate(
+    const loom_run_hal_invocation_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+  if (plan->bindings == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL invocation plan requires bindings");
+  }
+  if (plan->expected_bindings != NULL &&
+      iree_vm_list_size(plan->expected_bindings) !=
+          iree_vm_list_size(plan->bindings)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected HAL binding count %" PRIhsz
+                            " must match input binding count %" PRIhsz,
+                            iree_vm_list_size(plan->expected_bindings),
+                            iree_vm_list_size(plan->bindings));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_run_hal_invocation_plan_prepare_from_specs(
     const loom_run_hal_runtime_t* runtime,
     const loom_run_hal_invocation_options_t* options,
@@ -369,6 +433,93 @@ iree_status_t loom_run_hal_invocation_plan_prepare_from_specs(
   return status;
 }
 
+iree_status_t loom_run_hal_invocation_dispatch_plan(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_prepared_candidate_t* candidate,
+    const loom_run_hal_invocation_plan_t* plan, iree_allocator_t allocator,
+    loom_run_hal_iteration_t* out_iteration) {
+  IREE_ASSERT_ARGUMENT(runtime);
+  IREE_ASSERT_ARGUMENT(candidate);
+  IREE_ASSERT_ARGUMENT(plan);
+  IREE_ASSERT_ARGUMENT(out_iteration);
+  loom_run_hal_iteration_initialize(out_iteration);
+  IREE_RETURN_IF_ERROR(loom_run_hal_invocation_plan_validate(plan));
+  if (candidate->executable == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL prepared candidate requires an executable");
+  }
+  if (runtime->device == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL runtime is not initialized");
+  }
+
+  iree_status_t status =
+      iree_vm_list_clone(plan->bindings, allocator, &out_iteration->bindings);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_dispatch(runtime->device, candidate->executable,
+                                   out_iteration->bindings, &plan->options);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_run_hal_iteration_deinitialize(out_iteration);
+  }
+  return status;
+}
+
+iree_status_t loom_run_hal_invocation_collect_results(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_invocation_plan_t* plan,
+    const loom_run_hal_iteration_t* iteration, iree_allocator_t allocator,
+    loom_run_hal_invocation_result_t* result) {
+  IREE_ASSERT_ARGUMENT(runtime);
+  IREE_ASSERT_ARGUMENT(plan);
+  IREE_ASSERT_ARGUMENT(iteration);
+  IREE_ASSERT_ARGUMENT(result);
+  iree_string_builder_reset(&result->output);
+  result->exit_code = 0;
+  IREE_RETURN_IF_ERROR(loom_run_hal_invocation_plan_validate(plan));
+  if (iteration->bindings == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL iteration requires bindings");
+  }
+  if (iree_vm_list_size(iteration->bindings) !=
+      iree_vm_list_size(plan->bindings)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL iteration binding count %" PRIhsz
+                            " must match plan binding count %" PRIhsz,
+                            iree_vm_list_size(iteration->bindings),
+                            iree_vm_list_size(plan->bindings));
+  }
+  if (runtime->device == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL runtime is not initialized");
+  }
+  return loom_run_hal_process_invocation_bindings(
+      runtime, plan, iteration->bindings, allocator, result);
+}
+
+iree_status_t loom_run_hal_invocation_run_prepared(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_prepared_candidate_t* candidate,
+    const loom_run_hal_invocation_plan_t* plan, iree_allocator_t allocator,
+    loom_run_hal_invocation_result_t* result) {
+  IREE_ASSERT_ARGUMENT(runtime);
+  IREE_ASSERT_ARGUMENT(candidate);
+  IREE_ASSERT_ARGUMENT(plan);
+  IREE_ASSERT_ARGUMENT(result);
+  iree_string_builder_reset(&result->output);
+  result->exit_code = 0;
+
+  loom_run_hal_iteration_t iteration = {0};
+  iree_status_t status = loom_run_hal_invocation_dispatch_plan(
+      runtime, candidate, plan, allocator, &iteration);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_invocation_collect_results(runtime, plan, &iteration,
+                                                     allocator, result);
+  }
+  loom_run_hal_iteration_deinitialize(&iteration);
+  return status;
+}
+
 iree_status_t loom_run_hal_invocation_run_plan(
     const loom_run_hal_runtime_t* runtime,
     const loom_run_hal_executable_t* executable,
@@ -380,36 +531,15 @@ iree_status_t loom_run_hal_invocation_run_plan(
   IREE_ASSERT_ARGUMENT(result);
   iree_string_builder_reset(&result->output);
   result->exit_code = 0;
-  if (plan->bindings == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "HAL invocation plan requires bindings");
-  }
-  if (plan->expected_bindings != NULL &&
-      iree_vm_list_size(plan->expected_bindings) !=
-          iree_vm_list_size(plan->bindings)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected HAL binding count %" PRIhsz
-                            " must match input binding count %" PRIhsz,
-                            iree_vm_list_size(plan->expected_bindings),
-                            iree_vm_list_size(plan->bindings));
-  }
-  if (runtime->device == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "HAL runtime is not initialized");
-  }
-
-  iree_vm_list_t* iteration_bindings = NULL;
+  IREE_RETURN_IF_ERROR(loom_run_hal_invocation_plan_validate(plan));
+  loom_run_hal_prepared_candidate_t candidate = {0};
   iree_status_t status =
-      iree_vm_list_clone(plan->bindings, allocator, &iteration_bindings);
+      loom_run_hal_prepared_candidate_prepare(runtime, executable, &candidate);
   if (iree_status_is_ok(status)) {
-    status = loom_run_hal_invocation_execute(
-        runtime, executable, iteration_bindings, &plan->options);
+    status = loom_run_hal_invocation_run_prepared(runtime, &candidate, plan,
+                                                  allocator, result);
   }
-  if (iree_status_is_ok(status)) {
-    status = loom_run_hal_process_invocation_bindings(
-        runtime, plan, iteration_bindings, allocator, result);
-  }
-  iree_vm_list_release(iteration_bindings);
+  loom_run_hal_prepared_candidate_deinitialize(&candidate);
   return status;
 }
 

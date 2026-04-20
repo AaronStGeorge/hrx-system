@@ -50,6 +50,16 @@ typedef struct loom_run_hal_invocation_plan_t {
   iree_host_size_t max_output_element_count;
 } loom_run_hal_invocation_plan_t;
 
+typedef struct loom_run_hal_prepared_candidate_t {
+  // Prepared HAL executable retained for repeated dispatches.
+  iree_hal_executable_t* executable;
+} loom_run_hal_prepared_candidate_t;
+
+typedef struct loom_run_hal_iteration_t {
+  // Iteration-owned binding list cloned from the invocation plan.
+  iree_vm_list_t* bindings;
+} loom_run_hal_iteration_t;
+
 typedef struct loom_run_hal_invocation_request_t {
   // Initialized HAL runtime that owns the device used for dispatch.
   const loom_run_hal_runtime_t* runtime;
@@ -88,6 +98,20 @@ void loom_run_hal_invocation_plan_initialize(
 void loom_run_hal_invocation_plan_deinitialize(
     loom_run_hal_invocation_plan_t* plan);
 
+// Initializes an empty prepared HAL candidate.
+void loom_run_hal_prepared_candidate_initialize(
+    loom_run_hal_prepared_candidate_t* out_candidate);
+
+// Releases storage owned by |candidate|.
+void loom_run_hal_prepared_candidate_deinitialize(
+    loom_run_hal_prepared_candidate_t* candidate);
+
+// Initializes an empty HAL dispatch iteration.
+void loom_run_hal_iteration_initialize(loom_run_hal_iteration_t* out_iteration);
+
+// Releases storage owned by |iteration|.
+void loom_run_hal_iteration_deinitialize(loom_run_hal_iteration_t* iteration);
+
 // Initializes an invocation result. Must be paired with
 // loom_run_hal_invocation_result_deinitialize().
 void loom_run_hal_invocation_result_initialize(
@@ -102,6 +126,12 @@ iree_status_t loom_run_hal_executable_prepare(
     const loom_run_hal_runtime_t* runtime,
     const loom_run_hal_executable_t* executable,
     iree_hal_executable_t** out_hal_executable);
+
+// Prepares |executable| once for repeated dispatches.
+iree_status_t loom_run_hal_prepared_candidate_prepare(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_executable_t* executable,
+    loom_run_hal_prepared_candidate_t* out_candidate);
 
 // Dispatches a prepared HAL executable with |binding_list|.
 iree_status_t loom_run_hal_dispatch(
@@ -123,6 +153,30 @@ iree_status_t loom_run_hal_invocation_plan_prepare_from_specs(
     const loom_run_hal_binding_specs_t* expected_bindings,
     iree_host_size_t max_output_element_count, iree_allocator_t allocator,
     loom_run_hal_invocation_plan_t* out_plan);
+
+// Clones plan bindings and dispatches one iteration through |candidate| without
+// transferring or comparing results. Callers that benchmark dispatch-only paths
+// can deinitialize the returned iteration without collecting.
+iree_status_t loom_run_hal_invocation_dispatch_plan(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_prepared_candidate_t* candidate,
+    const loom_run_hal_invocation_plan_t* plan, iree_allocator_t allocator,
+    loom_run_hal_iteration_t* out_iteration);
+
+// Transfers |iteration| bindings back to host-visible storage and records
+// formatted outputs or expected comparison diagnostics in |result|.
+iree_status_t loom_run_hal_invocation_collect_results(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_invocation_plan_t* plan,
+    const loom_run_hal_iteration_t* iteration, iree_allocator_t allocator,
+    loom_run_hal_invocation_result_t* result);
+
+// Dispatches one iteration of a prepared HAL candidate and collects results.
+iree_status_t loom_run_hal_invocation_run_prepared(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_prepared_candidate_t* candidate,
+    const loom_run_hal_invocation_plan_t* plan, iree_allocator_t allocator,
+    loom_run_hal_invocation_result_t* result);
 
 // Dispatches |executable| using |plan| and records either formatted outputs or
 // expected comparison diagnostics in |result|. The plan bindings are cloned
