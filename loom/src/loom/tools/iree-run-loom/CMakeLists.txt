@@ -29,9 +29,7 @@ loom_cc_library(
     loom::src::loom::tooling::execution::hal_invocation
     loom::src::loom::tooling::execution::hal_runtime
     loom::src::loom::tooling::execution::session
-    iree::tooling::context_util
-    iree::tooling::run_module
-    iree::vm
+    loom::src::loom::tooling::execution::vm_invocation
   PUBLIC
 )
 

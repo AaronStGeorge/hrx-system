@@ -13,9 +13,6 @@
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
 #include "iree/io/file_contents.h"
-#include "iree/tooling/context_util.h"
-#include "iree/tooling/run_module.h"
-#include "iree/vm/api.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
@@ -23,6 +20,7 @@
 #include "loom/tooling/execution/hal_invocation.h"
 #include "loom/tooling/execution/hal_runtime.h"
 #include "loom/tooling/execution/session.h"
+#include "loom/tooling/execution/vm_invocation.h"
 
 IREE_FLAG(string, loom_target, "",
           "Optional target.bundle symbol to compile, such as '@vm_target'. "
@@ -32,6 +30,18 @@ IREE_FLAG(string, loom_backend, "vm",
           "Compilation backend to run: 'vm' or a registered HAL backend.");
 IREE_FLAG(string, loom_module_name, "loom",
           "Module name to store in the compiled VM bytecode archive.");
+IREE_FLAG(string, function, "",
+          "VM export name to invoke. Empty selects the single export.");
+IREE_FLAG_LIST(string, input,
+               "Appends a VM function input in IREE function I/O syntax.");
+IREE_FLAG_LIST(string, output,
+               "Appends a VM function output handling spec in IREE function "
+               "I/O syntax. Empty prints all outputs.");
+IREE_FLAG_LIST(string, expected_output,
+               "Appends an expected VM function output in IREE function I/O "
+               "syntax. Expected outputs take precedence over --output.");
+IREE_FLAG(int32_t, output_max_element_count, 1024,
+          "Maximum number of VM output elements to format.");
 IREE_FLAG(int32_t, entry_point, 0,
           "HAL executable entry point ordinal to dispatch.");
 IREE_FLAG(string, workgroup_count, "1,1,1",
@@ -212,6 +222,72 @@ static iree_status_t iree_run_loom_parse_workgroup_count(
   return iree_ok_status();
 }
 
+static iree_status_t iree_run_loom_write_stdout(iree_string_view_t output) {
+  if (iree_string_view_is_empty(output)) {
+    return iree_ok_status();
+  }
+  if (fwrite(output.data, 1, output.size, stdout) != output.size ||
+      fflush(stdout) != 0) {
+    return iree_make_status(IREE_STATUS_DATA_LOSS,
+                            "failed to write invocation output");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t iree_run_loom_run_vm_archive(
+    const loom_ireevm_module_archive_t* archive, iree_allocator_t allocator,
+    int* out_exit_code) {
+  IREE_ASSERT_ARGUMENT(archive);
+  IREE_ASSERT_ARGUMENT(out_exit_code);
+  *out_exit_code = 0;
+  if (FLAG_output_max_element_count < 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--output_max_element_count must be non-negative; got %d",
+        (int)FLAG_output_max_element_count);
+  }
+
+  loom_run_vm_runtime_t runtime = {0};
+  loom_run_vm_invocation_result_t invocation_result;
+  loom_run_vm_invocation_result_initialize(allocator, &invocation_result);
+
+  iree_status_t status = loom_run_vm_runtime_initialize(allocator, &runtime);
+  if (iree_status_is_ok(status)) {
+    loom_run_vm_invocation_request_t request = {0};
+    loom_run_vm_invocation_request_initialize(&request);
+    request.runtime = &runtime;
+    request.archive = archive;
+    request.options.function_name = iree_make_cstring_view(FLAG_function);
+    request.options.inputs = (loom_run_vm_value_specs_t){
+        .values = FLAG_input_list().values,
+        .count = FLAG_input_list().count,
+    };
+    request.options.outputs = (loom_run_vm_value_specs_t){
+        .values = FLAG_output_list().values,
+        .count = FLAG_output_list().count,
+    };
+    request.options.expected_outputs = (loom_run_vm_value_specs_t){
+        .values = FLAG_expected_output_list().values,
+        .count = FLAG_expected_output_list().count,
+    };
+    request.options.max_output_element_count =
+        (iree_host_size_t)FLAG_output_max_element_count;
+    status =
+        loom_run_vm_invocation_run(&request, allocator, &invocation_result);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_run_loom_write_stdout(
+        iree_string_builder_view(&invocation_result.output));
+  }
+  if (iree_status_is_ok(status)) {
+    *out_exit_code = invocation_result.exit_code;
+  }
+
+  loom_run_vm_runtime_deinitialize(&runtime);
+  loom_run_vm_invocation_result_deinitialize(&invocation_result);
+  return status;
+}
+
 static iree_status_t iree_run_loom_run_hal_executable(
     const loom_run_hal_executable_t* executable,
     const loom_run_hal_runtime_t* runtime, iree_allocator_t allocator,
@@ -259,18 +335,11 @@ static iree_status_t iree_run_loom_run_hal_executable(
         loom_run_hal_invocation_run(&request, allocator, &invocation_result);
   }
   if (iree_status_is_ok(status)) {
-    iree_string_view_t output =
-        iree_string_builder_view(&invocation_result.output);
-    if (output.size > 0) {
-      if (fwrite(output.data, 1, output.size, stdout) != output.size ||
-          fflush(stdout) != 0) {
-        status = iree_make_status(IREE_STATUS_DATA_LOSS,
-                                  "failed to write HAL invocation output");
-      }
-    }
-    if (iree_status_is_ok(status)) {
-      *out_exit_code = invocation_result.exit_code;
-    }
+    status = iree_run_loom_write_stdout(
+        iree_string_builder_view(&invocation_result.output));
+  }
+  if (iree_status_is_ok(status)) {
+    *out_exit_code = invocation_result.exit_code;
   }
   loom_run_hal_invocation_result_deinitialize(&invocation_result);
   return status;
@@ -317,10 +386,10 @@ int iree_run_loom_main(int argc, char** argv,
       "  cat module.loom | iree-run-loom - --function=name --input=...\n"
       "\n"
       "The 'vm' backend compiles target.preset key \"iree-vm\" into a real "
-      "IREE VM bytecode archive and runs it with the same input/output flags "
-      "as iree-run-module. Registered HAL backends compile HAL-native "
-      "target-low kernels into IREE HAL executables and dispatch them through "
-      "the production HAL device path.\n");
+      "IREE VM bytecode archive and runs it with IREE function I/O syntax for "
+      "--input, --output, and --expected_output. Registered HAL backends "
+      "compile HAL-native target-low kernels into IREE HAL executables and "
+      "dispatch them through the production HAL device path.\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
@@ -362,7 +431,6 @@ int iree_run_loom_main(int argc, char** argv,
   loom_run_module_t run_module = {0};
   loom_run_candidate_t candidate = {0};
   loom_run_hal_runtime_t hal_runtime = {0};
-  iree_vm_instance_t* instance = NULL;
   int exit_code = 0;
 
   iree_status_t status = iree_ok_status();
@@ -423,14 +491,8 @@ int iree_run_loom_main(int argc, char** argv,
                                            allocator, &candidate);
   }
   if (iree_status_is_ok(status) && run_vm) {
-    status = iree_tooling_create_instance(allocator, &instance);
-  }
-  if (iree_status_is_ok(status) && run_vm) {
-    status = iree_tooling_run_module_with_data(
-        instance, iree_string_view_empty(),
-        iree_make_const_byte_span(candidate.vm_archive.data,
-                                  candidate.vm_archive.data_length),
-        allocator, &exit_code);
+    status = iree_run_loom_run_vm_archive(&candidate.vm_archive, allocator,
+                                          &exit_code);
   }
   if (iree_status_is_ok(status) && hal_backend != NULL) {
     status =
@@ -453,7 +515,6 @@ int iree_run_loom_main(int argc, char** argv,
     exit_code = 1;
   }
 
-  iree_vm_instance_release(instance);
   loom_run_hal_runtime_deinitialize(&hal_runtime);
   loom_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);

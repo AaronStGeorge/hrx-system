@@ -63,12 +63,10 @@ loom_cc_library(
         "//loom/src/loom/tooling/execution:hal_invocation",
         "//loom/src/loom/tooling/execution:hal_runtime",
         "//loom/src/loom/tooling/execution:session",
+        "//loom/src/loom/tooling/execution:vm_invocation",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/io:file_handle",
-        "//runtime/src/iree/tooling:context_util",
-        "//runtime/src/iree/tooling:run_module",
-        "//runtime/src/iree/vm",
     ],
 )
 

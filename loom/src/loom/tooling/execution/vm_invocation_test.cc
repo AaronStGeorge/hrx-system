@@ -1,0 +1,188 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/tooling/execution/vm_invocation.h"
+
+#include <string>
+
+#include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+#include "loom/ops/op_registry.h"
+#include "loom/target/emit/ireevm/low_registry.h"
+#include "loom/tooling/execution/candidate.h"
+#include "loom/tooling/execution/session.h"
+
+namespace loom {
+namespace {
+
+iree_status_t RegisterContext(void* user_data, loom_context_t* context) {
+  (void)user_data;
+  return loom_op_registry_register_all_dialects(context);
+}
+
+iree_status_t InitializeLowDescriptorRegistry(
+    void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
+  (void)user_data;
+  loom_ireevm_low_descriptor_registry_initialize(out_registry);
+  return iree_ok_status();
+}
+
+constexpr char kVmSource[] =
+    "target.preset @vm_target {key = \"iree-vm\", source = @branchy}\n"
+    "\n"
+    "func.def @branchy(%lhs: i32, %rhs: i32) -> (i32) {\n"
+    "  %c0 = scalar.constant 0 : i32\n"
+    "  %is_zero = scalar.cmpi eq, %lhs, %c0 : i32\n"
+    "  cfg.cond_br %is_zero, ^then, ^else : i1\n"
+    "^then:\n"
+    "  %sum = scalar.addi %rhs, %rhs : i32\n"
+    "  func.return %sum : i32\n"
+    "^else:\n"
+    "  %diff = scalar.subi %lhs, %rhs : i32\n"
+    "  func.return %diff : i32\n"
+    "}\n";
+
+class VmInvocationTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    loom_run_session_options_t options = {};
+    loom_run_session_options_initialize(&options);
+    options.register_context = (loom_run_register_context_callback_t){
+        .fn = RegisterContext,
+    };
+    options.initialize_low_descriptor_registry =
+        (loom_run_initialize_low_descriptor_registry_callback_t){
+            .fn = InitializeLowDescriptorRegistry,
+        };
+    IREE_ASSERT_OK(loom_run_session_initialize(&options, &session_));
+    IREE_ASSERT_OK(
+        loom_run_vm_runtime_initialize(iree_allocator_system(), &runtime_));
+  }
+
+  void TearDown() override {
+    loom_run_vm_runtime_deinitialize(&runtime_);
+    loom_run_session_deinitialize(&session_);
+  }
+
+  void CompileArchive(loom_run_module_t* out_module,
+                      loom_run_candidate_t* out_candidate) {
+    loom_run_module_parse_options_t parse_options = {};
+    loom_run_module_parse_options_initialize(&parse_options);
+    parse_options.filename = IREE_SV("vm_invocation_test.loom");
+    parse_options.source = IREE_SV(kVmSource);
+    IREE_ASSERT_OK(
+        loom_run_module_parse(&session_, &parse_options, out_module));
+
+    loom_run_candidate_compile_options_t compile_options = {};
+    loom_run_candidate_compile_options_initialize(&compile_options);
+    compile_options.source_resolver =
+        loom_run_module_source_resolver(out_module);
+    IREE_ASSERT_OK(loom_run_candidate_compile_vm(
+        out_module, &compile_options, iree_allocator_system(), out_candidate));
+  }
+
+  iree_status_t RunBranchy(const loom_ireevm_module_archive_t* archive,
+                           iree_string_view_t lhs, iree_string_view_t rhs,
+                           iree_string_view_t expected,
+                           loom_run_vm_invocation_result_t* result) {
+    iree_string_view_t inputs[] = {lhs, rhs};
+    iree_string_view_t expected_outputs[] = {expected};
+
+    loom_run_vm_invocation_request_t request = {};
+    loom_run_vm_invocation_request_initialize(&request);
+    request.runtime = &runtime_;
+    request.archive = archive;
+    request.options.function_name = IREE_SV("branchy");
+    request.options.inputs = (loom_run_vm_value_specs_t){
+        .values = inputs,
+        .count = IREE_ARRAYSIZE(inputs),
+    };
+    request.options.expected_outputs = (loom_run_vm_value_specs_t){
+        .values = expected_outputs,
+        .count = IREE_ARRAYSIZE(expected_outputs),
+    };
+    return loom_run_vm_invocation_run(&request, iree_allocator_system(),
+                                      result);
+  }
+
+  loom_run_session_t session_ = {};
+  loom_run_vm_runtime_t runtime_ = {};
+};
+
+TEST_F(VmInvocationTest, RunMatchesExpectedOutputs) {
+  loom_run_module_t module = {};
+  loom_run_candidate_t candidate = {};
+  CompileArchive(&module, &candidate);
+
+  loom_run_vm_invocation_result_t result = {};
+  loom_run_vm_invocation_result_initialize(iree_allocator_system(), &result);
+
+  IREE_ASSERT_OK(RunBranchy(&candidate.vm_archive, IREE_SV("0"), IREE_SV("21"),
+                            IREE_SV("42"), &result));
+  EXPECT_EQ(result.exit_code, 0);
+  std::string output(result.output.buffer, result.output.size);
+  EXPECT_NE(output.find("EXEC @branchy"), std::string::npos);
+  EXPECT_NE(output.find("[SUCCESS] all function outputs matched"),
+            std::string::npos);
+
+  loom_run_vm_invocation_result_deinitialize(&result);
+  loom_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&module);
+}
+
+TEST_F(VmInvocationTest, RunReportsExpectedOutputMismatch) {
+  loom_run_module_t module = {};
+  loom_run_candidate_t candidate = {};
+  CompileArchive(&module, &candidate);
+
+  loom_run_vm_invocation_result_t result = {};
+  loom_run_vm_invocation_result_initialize(iree_allocator_system(), &result);
+
+  IREE_ASSERT_OK(RunBranchy(&candidate.vm_archive, IREE_SV("50"), IREE_SV("8"),
+                            IREE_SV("41"), &result));
+  EXPECT_EQ(result.exit_code, 1);
+  std::string output(result.output.buffer, result.output.size);
+  EXPECT_NE(output.find("EXEC @branchy"), std::string::npos);
+  EXPECT_NE(output.find("[FAILED]"), std::string::npos);
+
+  loom_run_vm_invocation_result_deinitialize(&result);
+  loom_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&module);
+}
+
+TEST_F(VmInvocationTest, RunFormatsOutputsWhenNoExpectationIsProvided) {
+  loom_run_module_t module = {};
+  loom_run_candidate_t candidate = {};
+  CompileArchive(&module, &candidate);
+
+  iree_string_view_t inputs[] = {IREE_SV("50"), IREE_SV("8")};
+  loom_run_vm_invocation_request_t request = {};
+  loom_run_vm_invocation_request_initialize(&request);
+  request.runtime = &runtime_;
+  request.archive = &candidate.vm_archive;
+  request.options.function_name = IREE_SV("branchy");
+  request.options.inputs = (loom_run_vm_value_specs_t){
+      .values = inputs,
+      .count = IREE_ARRAYSIZE(inputs),
+  };
+
+  loom_run_vm_invocation_result_t result = {};
+  loom_run_vm_invocation_result_initialize(iree_allocator_system(), &result);
+
+  IREE_ASSERT_OK(
+      loom_run_vm_invocation_run(&request, iree_allocator_system(), &result));
+  EXPECT_EQ(result.exit_code, 0);
+  std::string output(result.output.buffer, result.output.size);
+  EXPECT_NE(output.find("EXEC @branchy"), std::string::npos);
+  EXPECT_NE(output.find("result[0]"), std::string::npos);
+
+  loom_run_vm_invocation_result_deinitialize(&result);
+  loom_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&module);
+}
+
+}  // namespace
+}  // namespace loom
