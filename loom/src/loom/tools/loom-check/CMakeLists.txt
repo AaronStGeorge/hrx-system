@@ -260,9 +260,10 @@ loom_cc_binary(
     loom-check
   SRCS
     "loom-check.c"
+  COPTS
+
   DEPS
     ::main
-    loom::src::loom::target::arch::amdgpu::check_provider
     loom::src::loom::target::arch::wasm::check_provider
     loom::src::loom::target::arch::x86::check_provider
     loom::src::loom::target::emit::ireevm::check_provider
@@ -282,3 +283,16 @@ loom_cc_binary(
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
+
+if(IREE_HAL_DRIVER_AMDGPU)
+  iree_package_name(_LOOM_CHECK_PACKAGE_NAME)
+  set(_LOOM_CHECK_TARGET "${_LOOM_CHECK_PACKAGE_NAME}_loom-check")
+  target_compile_definitions(${_LOOM_CHECK_TARGET} PRIVATE
+    LOOM_CHECK_HAVE_AMDGPU=1
+  )
+  target_link_libraries(${_LOOM_CHECK_TARGET} PRIVATE
+    loom::src::loom::target::arch::amdgpu::check_provider
+  )
+  unset(_LOOM_CHECK_TARGET)
+  unset(_LOOM_CHECK_PACKAGE_NAME)
+endif()

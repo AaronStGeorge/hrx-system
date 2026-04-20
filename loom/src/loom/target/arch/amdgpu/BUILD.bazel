@@ -485,6 +485,12 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "loom_check_execute_no_amdgpu_check_provider_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:check_provider",
+    target = "//loom/src/loom/tools/loom-check:execute",
+)
+
+iree_assert_no_dependency(
     name = "loom_check_main_no_amdgpu_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
     target = "//loom/src/loom/tools/loom-check:main",
@@ -497,6 +503,12 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "loom_check_main_no_amdgpu_check_provider_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:check_provider",
+    target = "//loom/src/loom/tools/loom-check:main",
+)
+
+iree_assert_no_dependency(
     name = "loom_check_test_no_amdgpu_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
     target = "//loom/src/loom/tools/loom-check:loom-check-test",
@@ -505,6 +517,12 @@ iree_assert_no_dependency(
 iree_assert_no_dependency(
     name = "loom_check_test_no_amdgpu_requirements_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:loom_check_requirements",
+    target = "//loom/src/loom/tools/loom-check:loom-check-test",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_test_no_amdgpu_check_provider_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:check_provider",
     target = "//loom/src/loom/tools/loom-check:loom-check-test",
 )
 
