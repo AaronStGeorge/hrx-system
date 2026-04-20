@@ -27,6 +27,14 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_AMDHSA_TARGET_TRIPLE,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+    AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A,
+    AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908,
+    AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+    AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950,
+    AMDGPU_MATRIX_FEATURE_PROFILE_NONE,
+    AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
+    AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+    AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
     AmdgpuDescriptorSetInfo,
     AmdgpuProcessorInfo,
     sorted_descriptor_set_infos,
@@ -58,6 +66,26 @@ def _kernel_descriptor_profile_expr(profile: str) -> str:
     raise ValueError(f"unknown AMDGPU kernel descriptor profile '{profile}'")
 
 
+def _matrix_feature_profile_expr(profile: str) -> str:
+    if profile == AMDGPU_MATRIX_FEATURE_PROFILE_NONE:
+        return "LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_NONE"
+    if profile == AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908:
+        return "LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908"
+    if profile == AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A:
+        return "LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A"
+    if profile == AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940:
+        return "LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940"
+    if profile == AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950:
+        return "LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950"
+    if profile == AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11:
+        return "LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11"
+    if profile == AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12:
+        return "LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12"
+    if profile == AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250:
+        return "LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250"
+    raise ValueError(f"unknown AMDGPU matrix feature profile '{profile}'")
+
+
 def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]) -> None:
     keys = [info.key for info in descriptor_sets]
     if keys != sorted(keys):
@@ -86,18 +114,24 @@ def _validate_processors(
     for info in processors:
         if not info.target_cpu:
             raise ValueError("AMDGPU target CPU is required")
-        if info.descriptor_set_key not in descriptor_set_keys:
-            raise ValueError(f"AMDGPU processor {info.target_cpu} references unknown descriptor set {info.descriptor_set_key}")
-        if not info.low_preset_key:
-            raise ValueError(f"AMDGPU low preset key is required for {info.target_cpu}")
-        if info.elf_machine_flags <= 0 or info.elf_machine_flags > 0x0FF:
+        if info.descriptor_set_key:
+            if info.descriptor_set_key not in descriptor_set_keys:
+                raise ValueError(f"AMDGPU processor {info.target_cpu} references unknown descriptor set {info.descriptor_set_key}")
+            if not info.low_preset_key:
+                raise ValueError(f"AMDGPU low preset key is required for {info.target_cpu}")
+        elif info.low_preset_key:
+            raise ValueError(f"AMDGPU processor {info.target_cpu} has a low preset key but no descriptor set")
+        if info.elf_machine_flags < 0 or info.elf_machine_flags > 0x0FF:
             raise ValueError(f"AMDGPU ELF machine flags for {info.target_cpu} must fit EF_AMDGPU_MACH")
         if info.default_wavefront_size not in (32, 64):
             raise ValueError(f"AMDGPU default wavefront size for {info.target_cpu} must be 32 or 64")
+        _matrix_feature_profile_expr(info.matrix_feature_profile)
         if info.kernel_descriptor_profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11 and (
             info.kernel_descriptor_vgpr_encoding_granule_wave32 == 0 or info.kernel_descriptor_vgpr_encoding_granule_wave64 == 0
         ):
             raise ValueError(f"AMDGPU processor {info.target_cpu} has descriptor profile but no VGPR encoding granules")
+        if info.kernel_descriptor_profile != AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE and info.elf_machine_flags == 0:
+            raise ValueError(f"AMDGPU processor {info.target_cpu} has a kernel descriptor profile but no ELF machine flags")
 
 
 def _emit_header() -> str:
@@ -127,6 +161,25 @@ def _emit_header() -> str:
         "  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11 = 1,",
         "} loom_amdgpu_kernel_descriptor_profile_t;",
         "",
+        "typedef enum loom_amdgpu_matrix_feature_profile_e {",
+        "  // No matrix instruction feature profile is defined.",
+        "  LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_NONE = 0,",
+        "  // GFX908 MFMA feature baseline.",
+        "  LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908 = 1,",
+        "  // GFX90A MFMA feature baseline.",
+        "  LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A = 2,",
+        "  // GFX940 MFMA/SMFMAC feature baseline.",
+        "  LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940 = 3,",
+        "  // GFX950 MFMA/SMFMAC feature baseline.",
+        "  LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950 = 4,",
+        "  // GFX11 WMMA feature baseline.",
+        "  LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11 = 5,",
+        "  // GFX12 WMMA/SWMMAC feature baseline.",
+        "  LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12 = 6,",
+        "  // GFX1250 WMMA/SWMMAC feature baseline.",
+        "  LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250 = 7,",
+        "} loom_amdgpu_matrix_feature_profile_t;",
+        "",
         "typedef struct loom_amdgpu_descriptor_set_info_t {",
         "  // Target-low descriptor set key such as `amdgpu.gfx11.core`.",
         "  iree_string_view_t descriptor_set_key;",
@@ -145,7 +198,7 @@ def _emit_header() -> str:
         "  iree_string_view_t descriptor_set_key;",
         "  // Production target preset key selected for this processor.",
         "  iree_string_view_t low_preset_key;",
-        "  // ELF EF_AMDGPU_MACH bits for this processor.",
+        "  // ELF EF_AMDGPU_MACH bits for this processor, or 0 when unknown.",
         "  uint32_t elf_machine_flags;",
         "  // ELF EF_AMDGPU_FEATURE_* bits implied by the selected target-id policy.",
         "  uint32_t elf_feature_flags;",
@@ -153,6 +206,8 @@ def _emit_header() -> str:
         "  uint32_t default_wavefront_size;",
         "  // Kernel descriptor packing profile implemented for this processor.",
         "  loom_amdgpu_kernel_descriptor_profile_t kernel_descriptor_profile;",
+        "  // Matrix instruction feature profile implemented for this processor.",
+        "  loom_amdgpu_matrix_feature_profile_t matrix_feature_profile;",
         "  // VGPR encoding granule when wavefront-size-32 mode is enabled.",
         "  uint32_t kernel_descriptor_vgpr_encoding_granule_wave32;",
         "  // VGPR encoding granule when wavefront-size-64 mode is enabled.",
@@ -172,7 +227,8 @@ def _emit_header() -> str:
         "  iree_string_view_t feature_suffix;",
         "} loom_amdgpu_amdhsa_target_id_t;",
         "",
-        "// Looks up a supported AMDGPU processor by target CPU name.",
+        "// Looks up known AMDGPU processor facts by target CPU name.",
+        "// Some known processors do not yet have target-low or HSACO support.",
         "iree_status_t loom_amdgpu_target_info_lookup_processor(",
         "    iree_string_view_t target_cpu,",
         "    const loom_amdgpu_processor_info_t** out_processor);",
@@ -233,11 +289,12 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
     machine_flags_width = len("0x000")
     feature_flags_width = len("0x0")
     wavefront_width = 2
-    profile_width = max(len(_kernel_descriptor_profile_expr(info.kernel_descriptor_profile)) for info in processors)
+    kernel_profile_width = max(len(_kernel_descriptor_profile_expr(info.kernel_descriptor_profile)) for info in processors)
+    matrix_profile_width = max(len(_matrix_feature_profile_expr(info.matrix_feature_profile)) for info in processors)
     register_granule_width = 1
     bool_width = len("false")
     lines = [
-        "#define LOOM_AMDGPU_PROCESSOR_INFO(target_cpu_, descriptor_set_key_, low_preset_key_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_) \\",
+        "#define LOOM_AMDGPU_PROCESSOR_INFO(target_cpu_, descriptor_set_key_, low_preset_key_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_) \\",
         "  { \\",
         "    .target_cpu = IREE_SVL(target_cpu_), \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
@@ -246,6 +303,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "    .elf_feature_flags = UINT32_C(elf_feature_flags_), \\",
         "    .default_wavefront_size = default_wavefront_size_, \\",
         "    .kernel_descriptor_profile = kernel_descriptor_profile_, \\",
+        "    .matrix_feature_profile = matrix_feature_profile_, \\",
         "    .kernel_descriptor_vgpr_encoding_granule_wave32 = vgpr_granule_wave32_, \\",
         "    .kernel_descriptor_vgpr_encoding_granule_wave64 = vgpr_granule_wave64_, \\",
         "    .kernel_descriptor_has_architected_flat_scratch = has_flat_scratch_, \\",
@@ -254,7 +312,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "  }",
         "",
         "static const loom_amdgpu_processor_info_t kAmdgpuProcessorInfos[] = {",
-        "  // target_cpu descriptor_set_key    low_preset_key  mach  feat wave profile                                   vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee",
+        "  // target_cpu descriptor_set_key    low_preset_key  mach  feat wave kernel_profile                             matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee",
     ]
     lines.extend(
         (
@@ -265,7 +323,8 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
             f"{_padded_arg(f'0x{info.elf_machine_flags:03x}', machine_flags_width)}"
             f"{_padded_arg(f'0x{info.elf_feature_flags:x}', feature_flags_width)}"
             f"{_padded_arg(str(info.default_wavefront_size), wavefront_width)}"
-            f"{_padded_arg(_kernel_descriptor_profile_expr(info.kernel_descriptor_profile), profile_width)}"
+            f"{_padded_arg(_kernel_descriptor_profile_expr(info.kernel_descriptor_profile), kernel_profile_width)}"
+            f"{_padded_arg(_matrix_feature_profile_expr(info.matrix_feature_profile), matrix_profile_width)}"
             f"{_padded_arg(str(info.kernel_descriptor_vgpr_encoding_granule_wave32), register_granule_width)}"
             f"{_padded_arg(str(info.kernel_descriptor_vgpr_encoding_granule_wave64), register_granule_width)}"
             f"{_padded_arg(_bool_literal(info.kernel_descriptor_has_architected_flat_scratch), bool_width)}"

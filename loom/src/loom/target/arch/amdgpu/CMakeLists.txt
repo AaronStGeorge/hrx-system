@@ -430,6 +430,7 @@ loom_cc_library(
   SRCS
     "matrix_contract.c"
   DEPS
+    ::target_info
     iree::base
   PUBLIC
 )

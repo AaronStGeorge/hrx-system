@@ -769,6 +769,16 @@ iree_status_t CompileNoopKernelProgramForAmdgpu(
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
       iree_make_string_view(target.target_cpu.data(), target.target_cpu.size()),
       &processor));
+  if (iree_string_view_is_empty(processor->low_preset_key)) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "AMDGPU target CPU '%s' has no target-low preset",
+                            target.target_cpu.c_str());
+  }
+  if (processor->elf_machine_flags == 0) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "AMDGPU target CPU '%s' has no ELF e_flags mapping",
+                            target.target_cpu.c_str());
+  }
 
   std::string descriptor_symbol = program.name + ".kd";
   TestArena arena;

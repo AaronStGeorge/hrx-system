@@ -6,6 +6,8 @@
 
 #include "loom/target/arch/amdgpu/matrix_contract.h"
 
+#include "loom/target/arch/amdgpu/target_info.h"
+
 #define MATRIX_PAYLOAD(numeric_type_value, register_count_value, \
                        element_count_value)                      \
   (loom_amdgpu_matrix_payload_shape_t) {                         \
@@ -1562,15 +1564,6 @@ iree_string_view_t loom_amdgpu_matrix_scale_kind_name(
   return IREE_SV("unknown");
 }
 
-static bool loom_amdgpu_matrix_processor_is_any(iree_string_view_t processor,
-                                                const iree_string_view_t* names,
-                                                iree_host_size_t name_count) {
-  for (iree_host_size_t i = 0; i < name_count; ++i) {
-    if (iree_string_view_equal(processor, names[i])) return true;
-  }
-  return false;
-}
-
 iree_status_t loom_amdgpu_matrix_feature_bits_for_processor(
     iree_string_view_t processor,
     loom_amdgpu_matrix_feature_bits_t* out_feature_bits) {
@@ -1580,88 +1573,55 @@ iree_status_t loom_amdgpu_matrix_feature_bits_for_processor(
   }
   *out_feature_bits = 0;
   processor = iree_string_view_trim(processor);
-  static const iree_string_view_t gfx908_processors[] = {
-      IREE_SVL("gfx908"),
-  };
-  static const iree_string_view_t gfx90a_processors[] = {
-      IREE_SVL("gfx90a"),
-  };
-  static const iree_string_view_t gfx940_processors[] = {
-      IREE_SVL("gfx940"),
-      IREE_SVL("gfx941"),
-      IREE_SVL("gfx942"),
-  };
-  static const iree_string_view_t gfx950_processors[] = {
-      IREE_SVL("gfx950"),
-  };
-  static const iree_string_view_t gfx11_processors[] = {
-      IREE_SVL("gfx1100"), IREE_SVL("gfx1101"), IREE_SVL("gfx1102"),
-      IREE_SVL("gfx1103"), IREE_SVL("gfx1150"), IREE_SVL("gfx1151"),
-  };
-  static const iree_string_view_t gfx12_processors[] = {
-      IREE_SVL("gfx1200"),
-      IREE_SVL("gfx1201"),
-  };
-  static const iree_string_view_t gfx1250_processors[] = {
-      IREE_SVL("gfx1250"),
-      IREE_SVL("gfx1251"),
-      IREE_SVL("gfx1252"),
-  };
-
-  if (loom_amdgpu_matrix_processor_is_any(processor, gfx908_processors,
-                                          IREE_ARRAYSIZE(gfx908_processors))) {
-    *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908;
-    return iree_ok_status();
+  const loom_amdgpu_processor_info_t* processor_info = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_target_info_lookup_processor(processor, &processor_info));
+  switch (processor_info->matrix_feature_profile) {
+    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908:
+      *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908;
+      return iree_ok_status();
+    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A:
+      *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K |
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64;
+      return iree_ok_status();
+    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940:
+      *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K |
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64 |
+                          MFMA_GFX940_FP8_FEATURES |
+                          LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX940;
+      return iree_ok_status();
+    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950:
+      *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K |
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64 |
+                          MFMA_GFX940_FP8_FEATURES |
+                          MFMA_GFX950_SCALE_FEATURES |
+                          LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX940 |
+                          LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX950;
+      return iree_ok_status();
+    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11:
+      *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11;
+      return iree_ok_status();
+    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12:
+      *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11 |
+                          WMMA_GFX12_FEATURES |
+                          LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX12;
+      return iree_ok_status();
+    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250:
+      *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11 |
+                          WMMA_GFX12_FEATURES | WMMA_GFX1250_SCALE_FEATURES |
+                          LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX12 |
+                          LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX1250;
+      return iree_ok_status();
+    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_NONE:
+      break;
   }
-  if (loom_amdgpu_matrix_processor_is_any(processor, gfx90a_processors,
-                                          IREE_ARRAYSIZE(gfx90a_processors))) {
-    *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
-                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K |
-                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64;
-    return iree_ok_status();
-  }
-  if (loom_amdgpu_matrix_processor_is_any(processor, gfx940_processors,
-                                          IREE_ARRAYSIZE(gfx940_processors))) {
-    *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
-                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K |
-                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64 |
-                        MFMA_GFX940_FP8_FEATURES |
-                        LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX940;
-    return iree_ok_status();
-  }
-  if (loom_amdgpu_matrix_processor_is_any(processor, gfx950_processors,
-                                          IREE_ARRAYSIZE(gfx950_processors))) {
-    *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
-                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K |
-                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64 |
-                        MFMA_GFX940_FP8_FEATURES | MFMA_GFX950_SCALE_FEATURES |
-                        LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX940 |
-                        LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX950;
-    return iree_ok_status();
-  }
-  if (loom_amdgpu_matrix_processor_is_any(processor, gfx11_processors,
-                                          IREE_ARRAYSIZE(gfx11_processors))) {
-    *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11;
-    return iree_ok_status();
-  }
-  if (loom_amdgpu_matrix_processor_is_any(processor, gfx12_processors,
-                                          IREE_ARRAYSIZE(gfx12_processors))) {
-    *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11 |
-                        WMMA_GFX12_FEATURES |
-                        LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX12;
-    return iree_ok_status();
-  }
-  if (loom_amdgpu_matrix_processor_is_any(processor, gfx1250_processors,
-                                          IREE_ARRAYSIZE(gfx1250_processors))) {
-    *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11 |
-                        WMMA_GFX12_FEATURES | WMMA_GFX1250_SCALE_FEATURES |
-                        LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX12 |
-                        LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX1250;
-    return iree_ok_status();
-  }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "unknown AMDGPU processor '%.*s'",
-                          (int)processor.size, processor.data);
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "AMDGPU processor '%.*s' has no matrix feature profile",
+      (int)processor.size, processor.data);
 }
 
 iree_host_size_t loom_amdgpu_matrix_contract_descriptor_count(void) {

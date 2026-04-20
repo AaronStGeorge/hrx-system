@@ -660,9 +660,25 @@ TEST(MatrixContractTest, ScaleFeatureDoesNotGateUnscaledDescriptors) {
 
 TEST(MatrixContractTest, ProcessorFeatureBitsRejectUnknownProcessor) {
   loom_amdgpu_matrix_feature_bits_t feature_bits = 0;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
                         loom_amdgpu_matrix_feature_bits_for_processor(
                             IREE_SV("gfx9999"), &feature_bits));
+}
+
+TEST(MatrixContractTest, ProcessorFeatureBitsUseTargetInfoAliases) {
+  loom_amdgpu_matrix_feature_bits_t gfx1170_features = 0;
+  IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(
+      IREE_SV("gfx1170"), &gfx1170_features));
+  EXPECT_EQ(gfx1170_features, LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11);
+
+  loom_amdgpu_matrix_feature_bits_t gfx1252_features = 0;
+  IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(
+      IREE_SV("gfx1252"), &gfx1252_features));
+  EXPECT_NE(gfx1252_features & LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX1250,
+            UINT64_C(0));
+  EXPECT_NE(
+      gfx1252_features & LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX1250_SCALE_F8F6F4,
+      UINT64_C(0));
 }
 
 TEST(MatrixContractTest, NamesAreStable) {

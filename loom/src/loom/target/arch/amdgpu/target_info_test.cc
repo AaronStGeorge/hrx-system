@@ -38,6 +38,19 @@ TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
   EXPECT_FALSE(descriptor_set->supports_descriptor_packet_encoding);
 }
 
+TEST(AmdgpuTargetInfoTest, LooksUpMatrixOnlyProcessor) {
+  const loom_amdgpu_processor_info_t* processor = nullptr;
+  IREE_ASSERT_OK(
+      loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx942"), &processor));
+  ASSERT_NE(processor, nullptr);
+  EXPECT_TRUE(iree_string_view_is_empty(processor->low_preset_key));
+  EXPECT_TRUE(iree_string_view_is_empty(processor->descriptor_set_key));
+  EXPECT_EQ(processor->elf_machine_flags, 0x04Cu);
+  EXPECT_EQ(processor->default_wavefront_size, 64u);
+  EXPECT_EQ(processor->matrix_feature_profile,
+            LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940);
+}
+
 TEST(AmdgpuTargetInfoTest, ParsesAmdhsaTargetIdWithFeatureSuffix) {
   loom_amdgpu_amdhsa_target_id_t target_id = {};
   IREE_ASSERT_OK(loom_amdgpu_target_info_parse_amdhsa_target_id(

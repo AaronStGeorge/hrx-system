@@ -15,6 +15,15 @@ AMDGPU_AMDHSA_TARGET_TRIPLE = "amdgcn-amd-amdhsa"
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE = "none"
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11 = "gfx11"
 
+AMDGPU_MATRIX_FEATURE_PROFILE_NONE = "none"
+AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908 = "mfma_gfx908"
+AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A = "mfma_gfx90a"
+AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940 = "mfma_gfx940"
+AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950 = "mfma_gfx950"
+AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11 = "wmma_gfx11"
+AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12 = "wmma_gfx12"
+AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250 = "wmma_gfx1250"
+
 AMDGPU_SOPP_S_ENDPGM_GFX9_GFX10_GFX13_OPCODE = 0x001
 AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE = 0x030
 
@@ -36,6 +45,7 @@ class AmdgpuProcessorInfo:
     elf_feature_flags: int
     default_wavefront_size: int
     kernel_descriptor_profile: str
+    matrix_feature_profile: str = AMDGPU_MATRIX_FEATURE_PROFILE_NONE
     kernel_descriptor_vgpr_encoding_granule_wave32: int = 0
     kernel_descriptor_vgpr_encoding_granule_wave64: int = 0
     kernel_descriptor_has_architected_flat_scratch: bool = False
@@ -54,6 +64,7 @@ def gfx11_processor_info(
         elf_feature_flags=0,
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
         kernel_descriptor_vgpr_encoding_granule_wave32=8,
         kernel_descriptor_vgpr_encoding_granule_wave64=4,
         kernel_descriptor_has_architected_flat_scratch=True,
@@ -91,6 +102,56 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
 
 
 AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
+    AmdgpuProcessorInfo(
+        target_cpu="gfx908",
+        descriptor_set_key="",
+        low_preset_key="",
+        elf_machine_flags=0x030,
+        elf_feature_flags=0,
+        default_wavefront_size=64,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908,
+    ),
+    AmdgpuProcessorInfo(
+        target_cpu="gfx90a",
+        descriptor_set_key="",
+        low_preset_key="",
+        elf_machine_flags=0x03F,
+        elf_feature_flags=0,
+        default_wavefront_size=64,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A,
+    ),
+    AmdgpuProcessorInfo(
+        target_cpu="gfx940",
+        descriptor_set_key="",
+        low_preset_key="",
+        elf_machine_flags=0,
+        elf_feature_flags=0,
+        default_wavefront_size=64,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+    ),
+    AmdgpuProcessorInfo(
+        target_cpu="gfx941",
+        descriptor_set_key="",
+        low_preset_key="",
+        elf_machine_flags=0,
+        elf_feature_flags=0,
+        default_wavefront_size=64,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+    ),
+    AmdgpuProcessorInfo(
+        target_cpu="gfx942",
+        descriptor_set_key="",
+        low_preset_key="",
+        elf_machine_flags=0x04C,
+        elf_feature_flags=0,
+        default_wavefront_size=64,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+    ),
     gfx11_processor_info(target_cpu="gfx1100", elf_machine_flags=0x041),
     gfx11_processor_info(target_cpu="gfx1101", elf_machine_flags=0x046),
     gfx11_processor_info(target_cpu="gfx1102", elf_machine_flags=0x047),
@@ -108,6 +169,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=0,
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1201",
@@ -117,6 +179,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=0,
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1250",
@@ -126,6 +189,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=0,
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1251",
@@ -135,6 +199,17 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=0,
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+    ),
+    AmdgpuProcessorInfo(
+        target_cpu="gfx1252",
+        descriptor_set_key="amdgpu.gfx1250.core",
+        low_preset_key="amdgpu-gfx1250",
+        elf_machine_flags=0,
+        elf_feature_flags=0,
+        default_wavefront_size=32,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx950",
@@ -144,6 +219,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=0,
         default_wavefront_size=64,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950,
     ),
 )
 

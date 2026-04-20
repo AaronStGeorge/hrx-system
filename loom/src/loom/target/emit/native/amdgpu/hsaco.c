@@ -966,6 +966,12 @@ iree_status_t loom_amdgpu_hsaco_write_file(
   const loom_amdgpu_processor_info_t* processor = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_info_lookup_processor(file->target_cpu, &processor));
+  if (processor->elf_machine_flags == 0) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU HSACO target CPU '%.*s' has no ELF e_flags mapping",
+        (int)file->target_cpu.size, file->target_cpu.data);
+  }
   const uint32_t elf_flags =
       processor->elf_machine_flags | processor->elf_feature_flags;
 

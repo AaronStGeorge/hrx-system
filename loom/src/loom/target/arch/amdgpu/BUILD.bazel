@@ -760,7 +760,10 @@ loom_cc_library(
     name = "matrix_contract",
     srcs = ["matrix_contract.c"],
     hdrs = ["matrix_contract.h"],
-    deps = ["//runtime/src/iree/base"],
+    deps = [
+        ":target_info",
+        "//runtime/src/iree/base",
+    ],
 )
 
 loom_cc_library(
