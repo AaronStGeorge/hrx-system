@@ -6,7 +6,7 @@
 
 #include "loom/target/emit/ireevm/execution_backend.h"
 
-#include "loom/tooling/execution/candidate.h"
+#include "loom/target/emit/ireevm/candidate.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/one_shot.h"
 #include "loom/tooling/execution/vm_invocation.h"
@@ -21,13 +21,13 @@ static iree_status_t loom_ireevm_execution_backend_run_one_shot(
   IREE_ASSERT_ARGUMENT(request->options);
   IREE_ASSERT_ARGUMENT(request->result);
 
-  loom_run_candidate_t candidate = {0};
+  loom_ireevm_run_candidate_t candidate = {0};
   loom_run_vm_runtime_t runtime = {0};
   loom_run_vm_invocation_result_t invocation_result = {0};
   loom_run_vm_invocation_result_initialize(request->host_allocator,
                                            &invocation_result);
 
-  iree_status_t status = loom_run_candidate_compile_vm(
+  iree_status_t status = loom_ireevm_run_candidate_compile(
       request->run_module, request->compile_options, request->host_allocator,
       &candidate);
   if (iree_status_is_ok(status)) {
@@ -37,8 +37,23 @@ static iree_status_t loom_ireevm_execution_backend_run_one_shot(
     loom_run_vm_invocation_request_t invocation_request = {0};
     loom_run_vm_invocation_request_initialize(&invocation_request);
     invocation_request.runtime = &runtime;
-    invocation_request.archive = &candidate.vm_archive;
-    invocation_request.options = request->options->vm_options;
+    invocation_request.archive = &candidate.archive;
+    invocation_request.options.function_name =
+        request->options->vm_function_name;
+    invocation_request.options.inputs = (loom_run_vm_value_specs_t){
+        .values = request->options->vm_inputs.values,
+        .count = request->options->vm_inputs.count,
+    };
+    invocation_request.options.outputs = (loom_run_vm_value_specs_t){
+        .values = request->options->vm_outputs.values,
+        .count = request->options->vm_outputs.count,
+    };
+    invocation_request.options.expected_outputs = (loom_run_vm_value_specs_t){
+        .values = request->options->vm_expected_outputs.values,
+        .count = request->options->vm_expected_outputs.count,
+    };
+    invocation_request.options.max_output_element_count =
+        request->options->vm_max_output_element_count;
     status = loom_run_vm_invocation_run(
         &invocation_request, request->host_allocator, &invocation_result);
   }
@@ -55,7 +70,7 @@ static iree_status_t loom_ireevm_execution_backend_run_one_shot(
 
   loom_run_vm_invocation_result_deinitialize(&invocation_result);
   loom_run_vm_runtime_deinitialize(&runtime);
-  loom_run_candidate_deinitialize(&candidate);
+  loom_ireevm_run_candidate_deinitialize(&candidate);
   return status;
 }
 

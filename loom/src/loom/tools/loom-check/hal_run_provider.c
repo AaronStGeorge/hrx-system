@@ -6,8 +6,8 @@
 
 #include "loom/tools/loom-check/hal_run_provider.h"
 
-#include "loom/tooling/execution/candidate.h"
 #include "loom/tooling/execution/compile_report_capture.h"
+#include "loom/tooling/execution/hal_candidate.h"
 #include "loom/tooling/execution/hal_invocation.h"
 #include "loom/tooling/execution/hal_runtime.h"
 #include "loom/tooling/execution/session.h"
@@ -297,7 +297,7 @@ iree_status_t loom_check_hal_run_provider_execute(
   loom_run_session_t session = {0};
   loom_run_module_t module = {0};
   loom_run_hal_runtime_t runtime = {0};
-  loom_run_candidate_t candidate = {0};
+  loom_run_hal_candidate_t candidate = {0};
   loom_run_compile_report_capture_t compile_report_capture = {0};
   loom_run_hal_invocation_result_t invocation_result = {0};
   loom_run_hal_invocation_result_initialize(request->host_allocator,
@@ -353,7 +353,7 @@ iree_status_t loom_check_hal_run_provider_execute(
     compile_options.source_resolver = loom_run_module_source_resolver(&module);
     loom_run_compile_report_capture_configure_compile_options(
         &compile_report_capture, &compile_options);
-    status = loom_run_candidate_compile_hal(
+    status = loom_run_hal_candidate_compile(
         backend, &runtime, &module, &compile_options, request->host_allocator,
         &candidate);
   }
@@ -361,7 +361,7 @@ iree_status_t loom_check_hal_run_provider_execute(
     loom_run_hal_invocation_request_t invocation_request = {0};
     loom_run_hal_invocation_request_initialize(&invocation_request);
     invocation_request.runtime = &runtime;
-    invocation_request.executable = &candidate.hal_executable;
+    invocation_request.executable = &candidate.executable;
     invocation_request.options.entry_point = run_options.entry_point;
     invocation_request.options.workgroup_count[0] =
         run_options.workgroup_count[0];
@@ -401,7 +401,7 @@ iree_status_t loom_check_hal_run_provider_execute(
 
   loom_run_compile_report_capture_deinitialize(&compile_report_capture);
   loom_run_hal_invocation_result_deinitialize(&invocation_result);
-  loom_run_candidate_deinitialize(&candidate);
+  loom_run_hal_candidate_deinitialize(&candidate);
   loom_run_hal_runtime_deinitialize(&runtime);
   loom_run_module_deinitialize(&module);
   loom_run_session_deinitialize(&session);

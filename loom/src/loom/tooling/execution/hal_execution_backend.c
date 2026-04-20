@@ -6,8 +6,8 @@
 
 #include "loom/tooling/execution/hal_execution_backend.h"
 
-#include "loom/tooling/execution/candidate.h"
 #include "loom/tooling/execution/compile_report_capture.h"
+#include "loom/tooling/execution/hal_candidate.h"
 #include "loom/tooling/execution/hal_invocation.h"
 #include "loom/tooling/execution/hal_runtime.h"
 
@@ -112,7 +112,7 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
   }
 
   loom_run_hal_runtime_t runtime = {0};
-  loom_run_candidate_t candidate = {0};
+  loom_run_hal_candidate_t candidate = {0};
   loom_run_hal_invocation_result_t invocation_result = {0};
   loom_run_hal_invocation_result_initialize(request->host_allocator,
                                             &invocation_result);
@@ -120,7 +120,7 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
   iree_status_t status = loom_run_hal_runtime_initialize(
       hal_backend, request->host_allocator, &runtime);
   if (iree_status_is_ok(status)) {
-    status = loom_run_candidate_compile_hal(
+    status = loom_run_hal_candidate_compile(
         hal_backend, &runtime, request->run_module, request->compile_options,
         request->host_allocator, &candidate);
   }
@@ -128,11 +128,24 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
     loom_run_hal_invocation_request_t invocation_request = {0};
     loom_run_hal_invocation_request_initialize(&invocation_request);
     invocation_request.runtime = &runtime;
-    invocation_request.executable = &candidate.hal_executable;
-    invocation_request.options = request->options->hal_options;
-    invocation_request.bindings = request->options->hal_bindings;
-    invocation_request.expected_bindings =
-        request->options->expected_hal_bindings;
+    invocation_request.executable = &candidate.executable;
+    invocation_request.options.entry_point = request->options->hal_entry_point;
+    invocation_request.options.workgroup_count[0] =
+        request->options->hal_workgroup_count[0];
+    invocation_request.options.workgroup_count[1] =
+        request->options->hal_workgroup_count[1];
+    invocation_request.options.workgroup_count[2] =
+        request->options->hal_workgroup_count[2];
+    invocation_request.bindings = (loom_run_hal_binding_specs_t){
+        .values = request->options->hal_bindings.values,
+        .conventions = request->options->hal_bindings.conventions,
+        .count = request->options->hal_bindings.count,
+    };
+    invocation_request.expected_bindings = (loom_run_hal_binding_specs_t){
+        .values = request->options->hal_expected_bindings.values,
+        .conventions = request->options->hal_expected_bindings.conventions,
+        .count = request->options->hal_expected_bindings.count,
+    };
     invocation_request.max_output_element_count =
         request->options->hal_max_output_element_count;
     status = loom_run_hal_invocation_run(
@@ -150,7 +163,7 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
   }
 
   loom_run_hal_invocation_result_deinitialize(&invocation_result);
-  loom_run_candidate_deinitialize(&candidate);
+  loom_run_hal_candidate_deinitialize(&candidate);
   loom_run_hal_runtime_deinitialize(&runtime);
   return status;
 }

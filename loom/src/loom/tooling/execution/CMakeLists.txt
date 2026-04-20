@@ -12,19 +12,17 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
-    candidate
+    hal_candidate
   HDRS
-    "candidate.h"
+    "hal_candidate.h"
   SRCS
-    "candidate.c"
+    "hal_candidate.c"
   DEPS
     ::compile_options
     ::hal_backend
     ::session
     iree::base
     loom::src::loom::target::compile_report
-    loom::src::loom::target::emit::ireevm::module_archive
-    loom::src::loom::target::emit::ireevm::module_compiler
     loom::src::loom::verify
   PUBLIC
 )
@@ -130,10 +128,10 @@ loom_cc_library(
   SRCS
     "hal_execution_backend.c"
   DEPS
-    ::candidate
     ::compile_report_capture
     ::execution_backend
     ::hal_backend
+    ::hal_candidate
     ::hal_invocation
     ::hal_runtime
     ::one_shot
@@ -182,9 +180,7 @@ loom_cc_library(
     "one_shot.c"
   DEPS
     ::compile_options
-    ::hal_invocation
     ::session
-    ::vm_invocation
     iree::base
   PUBLIC
 )
@@ -231,16 +227,15 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
-    candidate_test
+    hal_candidate_test
   SRCS
-    "candidate_test.cc"
+    "hal_candidate_test.cc"
   DEPS
-    ::candidate
-    ::hal_runtime
+    ::hal_candidate
     ::session
     iree::base
     loom::src::loom::ops::op_registry
-    loom::src::loom::target::emit::ireevm::low_registry
+    loom::src::loom::target::low_descriptor_registry_core_test
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -302,11 +297,11 @@ loom_cc_test(
   SRCS
     "vm_invocation_test.cc"
   DEPS
-    ::candidate
     ::session
     ::vm_invocation
     iree::base
     loom::src::loom::ops::op_registry
+    loom::src::loom::target::emit::ireevm::candidate
     loom::src::loom::target::emit::ireevm::low_registry
     iree::testing::gtest
     iree::testing::gtest_main

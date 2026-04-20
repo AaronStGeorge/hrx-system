@@ -97,9 +97,9 @@ loom_cc_library(
   DEPS
     ::execute
     iree::base
-    loom::src::loom::tooling::execution::candidate
     loom::src::loom::tooling::execution::compile_report_capture
     loom::src::loom::tooling::execution::hal_backend
+    loom::src::loom::tooling::execution::hal_candidate
     loom::src::loom::tooling::execution::hal_invocation
     loom::src::loom::tooling::execution::hal_runtime
     loom::src::loom::tooling::execution::session

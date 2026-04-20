@@ -8,7 +8,7 @@
 
 #include <string.h>
 
-#include "loom/tooling/execution/candidate.h"
+#include "loom/target/emit/ireevm/candidate.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/execution/vm_invocation.h"
@@ -312,7 +312,7 @@ static iree_status_t loom_ireevm_loom_check_run_execute(
   loom_ireevm_loom_check_run_options_t run_options = {0};
   loom_run_session_t session = {0};
   loom_run_module_t module = {0};
-  loom_run_candidate_t candidate = {0};
+  loom_ireevm_run_candidate_t candidate = {0};
   loom_run_compile_report_capture_t compile_report_capture = {0};
   loom_run_vm_runtime_t runtime = {0};
   loom_run_vm_invocation_result_t invocation_result = {0};
@@ -356,8 +356,8 @@ static iree_status_t loom_ireevm_loom_check_run_execute(
     compile_options.source_resolver = loom_run_module_source_resolver(&module);
     loom_run_compile_report_capture_configure_compile_options(
         &compile_report_capture, &compile_options);
-    status = loom_run_candidate_compile_vm(&module, &compile_options,
-                                           request->host_allocator, &candidate);
+    status = loom_ireevm_run_candidate_compile(
+        &module, &compile_options, request->host_allocator, &candidate);
   }
   if (iree_status_is_ok(status)) {
     status = loom_run_vm_runtime_initialize(request->host_allocator, &runtime);
@@ -366,7 +366,7 @@ static iree_status_t loom_ireevm_loom_check_run_execute(
     loom_run_vm_invocation_request_t invocation_request = {0};
     loom_run_vm_invocation_request_initialize(&invocation_request);
     invocation_request.runtime = &runtime;
-    invocation_request.archive = &candidate.vm_archive;
+    invocation_request.archive = &candidate.archive;
     invocation_request.options.function_name = run_options.function_name;
     invocation_request.options.inputs = (loom_run_vm_value_specs_t){
         .values = run_options.inputs,
@@ -403,7 +403,7 @@ static iree_status_t loom_ireevm_loom_check_run_execute(
   loom_run_compile_report_capture_deinitialize(&compile_report_capture);
   loom_run_vm_invocation_result_deinitialize(&invocation_result);
   loom_run_vm_runtime_deinitialize(&runtime);
-  loom_run_candidate_deinitialize(&candidate);
+  loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&module);
   loom_run_session_deinitialize(&session);
   loom_ireevm_loom_check_run_options_deinitialize(&run_options,

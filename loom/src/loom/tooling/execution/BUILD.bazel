@@ -17,16 +17,14 @@ package(
 )
 
 loom_cc_library(
-    name = "candidate",
-    srcs = ["candidate.c"],
-    hdrs = ["candidate.h"],
+    name = "hal_candidate",
+    srcs = ["hal_candidate.c"],
+    hdrs = ["hal_candidate.h"],
     deps = [
         ":compile_options",
         ":hal_backend",
         ":session",
         "//loom/src/loom/target:compile_report",
-        "//loom/src/loom/target/emit/ireevm:module_archive",
-        "//loom/src/loom/target/emit/ireevm:module_compiler",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
     ],
@@ -112,10 +110,10 @@ loom_cc_library(
     srcs = ["hal_execution_backend.c"],
     hdrs = ["hal_execution_backend.h"],
     deps = [
-        ":candidate",
         ":compile_report_capture",
         ":execution_backend",
         ":hal_backend",
+        ":hal_candidate",
         ":hal_invocation",
         ":hal_runtime",
         ":one_shot",
@@ -155,9 +153,7 @@ loom_cc_library(
     hdrs = ["one_shot.h"],
     deps = [
         ":compile_options",
-        ":hal_invocation",
         ":session",
-        ":vm_invocation",
         "//runtime/src/iree/base",
     ],
 )
@@ -197,14 +193,13 @@ loom_cc_library(
 )
 
 loom_cc_test(
-    name = "candidate_test",
-    srcs = ["candidate_test.cc"],
+    name = "hal_candidate_test",
+    srcs = ["hal_candidate_test.cc"],
     deps = [
-        ":candidate",
-        ":hal_runtime",
+        ":hal_candidate",
         ":session",
         "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/target/emit/ireevm:low_registry",
+        "//loom/src/loom/target:low_descriptor_registry_core_test",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -262,10 +257,10 @@ loom_cc_test(
     name = "vm_invocation_test",
     srcs = ["vm_invocation_test.cc"],
     deps = [
-        ":candidate",
         ":session",
         ":vm_invocation",
         "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/target/emit/ireevm:candidate",
         "//loom/src/loom/target/emit/ireevm:low_registry",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",

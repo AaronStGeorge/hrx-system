@@ -218,6 +218,42 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/tools/iree-run-loom:main",
 )
 
+iree_assert_no_dependency(
+    name = "hal_candidate_no_ireevm_module_compiler_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:module_compiler",
+    target = "//loom/src/loom/tooling/execution:hal_candidate",
+)
+
+iree_assert_no_dependency(
+    name = "hal_candidate_no_ireevm_module_archive_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:module_archive",
+    target = "//loom/src/loom/tooling/execution:hal_candidate",
+)
+
+iree_assert_no_dependency(
+    name = "hal_execution_backend_no_ireevm_module_compiler_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:module_compiler",
+    target = "//loom/src/loom/tooling/execution:hal_execution_backend",
+)
+
+iree_assert_no_dependency(
+    name = "hal_execution_backend_no_ireevm_module_archive_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:module_archive",
+    target = "//loom/src/loom/tooling/execution:hal_execution_backend",
+)
+
+iree_assert_no_dependency(
+    name = "hal_run_provider_no_ireevm_module_compiler_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:module_compiler",
+    target = "//loom/src/loom/tools/loom-check:hal_run_provider",
+)
+
+iree_assert_no_dependency(
+    name = "hal_run_provider_no_ireevm_module_archive_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:module_archive",
+    target = "//loom/src/loom/tools/loom-check:hal_run_provider",
+)
+
 #===------------------------------------------------------------------------===#
 # IREE VM low descriptors
 #===------------------------------------------------------------------------===#
@@ -308,11 +344,25 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "candidate",
+    srcs = ["candidate.c"],
+    hdrs = ["candidate.h"],
+    deps = [
+        ":module_archive",
+        ":module_compiler",
+        "//loom/src/loom/target:compile_report",
+        "//loom/src/loom/tooling/execution:compile_options",
+        "//loom/src/loom/tooling/execution:session",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "loom_check_run",
     srcs = ["loom_check_run.c"],
     hdrs = ["loom_check_run.h"],
     deps = [
-        "//loom/src/loom/tooling/execution:candidate",
+        ":candidate",
         "//loom/src/loom/tooling/execution:compile_report_capture",
         "//loom/src/loom/tooling/execution:session",
         "//loom/src/loom/tooling/execution:vm_invocation",
@@ -364,12 +414,25 @@ loom_cc_library(
     srcs = ["execution_backend.c"],
     hdrs = ["execution_backend.h"],
     deps = [
-        "//loom/src/loom/tooling/execution:candidate",
+        ":candidate",
         "//loom/src/loom/tooling/execution:compile_report_capture",
         "//loom/src/loom/tooling/execution:execution_backend",
         "//loom/src/loom/tooling/execution:one_shot",
         "//loom/src/loom/tooling/execution:vm_invocation",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "candidate_test",
+    srcs = ["candidate_test.cc"],
+    deps = [
+        ":candidate",
+        ":low_registry",
+        "//loom/src/loom/ops:op_registry",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

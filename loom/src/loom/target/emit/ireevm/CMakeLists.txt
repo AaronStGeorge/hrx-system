@@ -113,14 +113,31 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    candidate
+  HDRS
+    "candidate.h"
+  SRCS
+    "candidate.c"
+  DEPS
+    ::module_archive
+    ::module_compiler
+    iree::base
+    loom::src::loom::target::compile_report
+    loom::src::loom::tooling::execution::compile_options
+    loom::src::loom::tooling::execution::session
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     loom_check_run
   HDRS
     "loom_check_run.h"
   SRCS
     "loom_check_run.c"
   DEPS
+    ::candidate
     iree::base
-    loom::src::loom::tooling::execution::candidate
     loom::src::loom::tooling::execution::compile_report_capture
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::execution::vm_invocation
@@ -183,13 +200,27 @@ loom_cc_library(
   SRCS
     "execution_backend.c"
   DEPS
+    ::candidate
     iree::base
-    loom::src::loom::tooling::execution::candidate
     loom::src::loom::tooling::execution::compile_report_capture
     loom::src::loom::tooling::execution::execution_backend
     loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::vm_invocation
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    candidate_test
+  SRCS
+    "candidate_test.cc"
+  DEPS
+    ::candidate
+    ::low_registry
+    iree::base
+    loom::src::loom::ops::op_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

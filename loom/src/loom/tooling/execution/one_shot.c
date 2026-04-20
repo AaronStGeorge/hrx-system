@@ -10,8 +10,9 @@ void loom_run_one_shot_options_initialize(
     loom_run_one_shot_options_t* out_options) {
   IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_run_one_shot_options_t){0};
-  loom_run_vm_invocation_options_initialize(&out_options->vm_options);
-  loom_run_hal_invocation_options_initialize(&out_options->hal_options);
+  out_options->hal_workgroup_count[0] = 1;
+  out_options->hal_workgroup_count[1] = 1;
+  out_options->hal_workgroup_count[2] = 1;
 }
 
 void loom_run_one_shot_result_initialize(

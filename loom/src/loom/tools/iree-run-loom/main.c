@@ -63,15 +63,16 @@ enum {
 
 typedef struct iree_run_loom_hal_flag_state_t {
   // Binding specs in HAL binding ordinal order.
-  iree_string_view_t binding_specs[LOOM_RUN_HAL_MAX_BINDING_COUNT];
+  iree_string_view_t binding_specs[LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT];
   // Calling-convention character for each binding spec.
-  char binding_cconv[LOOM_RUN_HAL_MAX_BINDING_COUNT];
+  char binding_cconv[LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT];
   // Number of populated entries in |binding_specs|.
   int32_t binding_count;
   // Expected binding specs in HAL binding ordinal order.
-  iree_string_view_t expected_binding_specs[LOOM_RUN_HAL_MAX_BINDING_COUNT];
+  iree_string_view_t
+      expected_binding_specs[LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT];
   // Calling-convention character for each expected binding spec.
-  char expected_binding_cconv[LOOM_RUN_HAL_MAX_BINDING_COUNT];
+  char expected_binding_cconv[LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT];
   // Number of populated entries in |expected_binding_specs|.
   int32_t expected_binding_count;
 } iree_run_loom_hal_flag_state_t;
@@ -82,10 +83,11 @@ static iree_status_t iree_run_loom_parse_binding_flag(
     iree_string_view_t flag_name, void* storage, iree_string_view_t value) {
   (void)flag_name;
   (void)storage;
-  if (iree_run_loom_hal_flags.binding_count >= LOOM_RUN_HAL_MAX_BINDING_COUNT) {
+  if (iree_run_loom_hal_flags.binding_count >=
+      LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "too many HAL bindings; maximum is %d",
-                            LOOM_RUN_HAL_MAX_BINDING_COUNT);
+                            LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT);
   }
   const int32_t index = iree_run_loom_hal_flags.binding_count++;
   iree_run_loom_hal_flags.binding_specs[index] = value;
@@ -117,10 +119,10 @@ static iree_status_t iree_run_loom_parse_expected_binding_flag(
   (void)flag_name;
   (void)storage;
   if (iree_run_loom_hal_flags.expected_binding_count >=
-      LOOM_RUN_HAL_MAX_BINDING_COUNT) {
+      LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "too many expected HAL bindings; maximum is %d",
-                            LOOM_RUN_HAL_MAX_BINDING_COUNT);
+                            LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT);
   }
   const int32_t index = iree_run_loom_hal_flags.expected_binding_count++;
   iree_run_loom_hal_flags.expected_binding_specs[index] = value;
@@ -220,21 +222,20 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
           "--output_max_element_count must be non-negative; got %d",
           (int)FLAG_output_max_element_count);
     }
-    out_options->vm_options.function_name =
-        iree_make_cstring_view(FLAG_function);
-    out_options->vm_options.inputs = (loom_run_vm_value_specs_t){
+    out_options->vm_function_name = iree_make_cstring_view(FLAG_function);
+    out_options->vm_inputs = (loom_run_one_shot_value_specs_t){
         .values = FLAG_input_list().values,
         .count = FLAG_input_list().count,
     };
-    out_options->vm_options.outputs = (loom_run_vm_value_specs_t){
+    out_options->vm_outputs = (loom_run_one_shot_value_specs_t){
         .values = FLAG_output_list().values,
         .count = FLAG_output_list().count,
     };
-    out_options->vm_options.expected_outputs = (loom_run_vm_value_specs_t){
+    out_options->vm_expected_outputs = (loom_run_one_shot_value_specs_t){
         .values = FLAG_expected_output_list().values,
         .count = FLAG_expected_output_list().count,
     };
-    out_options->vm_options.max_output_element_count =
+    out_options->vm_max_output_element_count =
         (iree_host_size_t)FLAG_output_max_element_count;
   }
 
@@ -245,16 +246,16 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
                               "--entry_point must be non-negative; got %d",
                               (int)FLAG_entry_point);
     }
-    out_options->hal_options.entry_point = (uint32_t)FLAG_entry_point;
+    out_options->hal_entry_point = (uint32_t)FLAG_entry_point;
     IREE_RETURN_IF_ERROR(iree_run_loom_parse_workgroup_count(
         iree_make_cstring_view(FLAG_workgroup_count),
-        out_options->hal_options.workgroup_count));
-    out_options->hal_bindings = (loom_run_hal_binding_specs_t){
+        out_options->hal_workgroup_count));
+    out_options->hal_bindings = (loom_run_one_shot_binding_specs_t){
         .values = iree_run_loom_hal_flags.binding_specs,
         .conventions = iree_run_loom_hal_flags.binding_cconv,
         .count = iree_run_loom_hal_flags.binding_count,
     };
-    out_options->expected_hal_bindings = (loom_run_hal_binding_specs_t){
+    out_options->hal_expected_bindings = (loom_run_one_shot_binding_specs_t){
         .values = iree_run_loom_hal_flags.expected_binding_specs,
         .conventions = iree_run_loom_hal_flags.expected_binding_cconv,
         .count = iree_run_loom_hal_flags.expected_binding_count,

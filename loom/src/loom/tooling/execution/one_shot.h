@@ -11,9 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/tooling/execution/compile_options.h"
-#include "loom/tooling/execution/hal_invocation.h"
 #include "loom/tooling/execution/session.h"
-#include "loom/tooling/execution/vm_invocation.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,20 +20,53 @@ extern "C" {
 typedef struct loom_run_compile_report_capture_t
     loom_run_compile_report_capture_t;
 
+enum {
+  // Maximum number of HAL dispatch bindings accepted by the one-shot front
+  // door.
+  LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT = 64,
+};
+
+typedef struct loom_run_one_shot_value_specs_t {
+  // Textual value specs in IREE function I/O syntax.
+  const iree_string_view_t* values;
+  // Number of entries in |values|.
+  iree_host_size_t count;
+} loom_run_one_shot_value_specs_t;
+
+typedef struct loom_run_one_shot_binding_specs_t {
+  // Textual binding specs in HAL binding ordinal order.
+  const iree_string_view_t* values;
+  // Calling-convention character for each binding spec.
+  const char* conventions;
+  // Number of entries in |values| and |conventions|.
+  iree_host_size_t count;
+} loom_run_one_shot_binding_specs_t;
+
 // Invocation options for the current one-shot run front door.
 //
 // This intentionally preserves the existing textual VM/HAL input specs used by
-// CLI and loom-check adapters. Benchmark/tune hot loops should eventually use
-// typed invocation plans instead of this structure.
+// CLI and loom-check adapters without depending on the concrete VM or HAL
+// invocation headers. Benchmark/tune hot loops should use typed invocation
+// plans instead of this structure.
 typedef struct loom_run_one_shot_options_t {
-  // VM function, input, output, and comparison options.
-  loom_run_vm_invocation_options_t vm_options;
-  // HAL entry point and dispatch geometry.
-  loom_run_hal_invocation_options_t hal_options;
-  // HAL binding specs in dispatch binding order.
-  loom_run_hal_binding_specs_t hal_bindings;
-  // Optional expected HAL binding specs compared after dispatch.
-  loom_run_hal_binding_specs_t expected_hal_bindings;
+  // VM function name to invoke. Empty selects the single export.
+  iree_string_view_t vm_function_name;
+  // VM function input specs.
+  loom_run_one_shot_value_specs_t vm_inputs;
+  // VM function output materialization specs.
+  loom_run_one_shot_value_specs_t vm_outputs;
+  // VM expected output specs. When present, these take precedence over outputs.
+  loom_run_one_shot_value_specs_t vm_expected_outputs;
+  // Maximum number of VM output elements to format.
+  iree_host_size_t vm_max_output_element_count;
+  // HAL executable entry point ordinal to dispatch.
+  uint32_t hal_entry_point;
+  // HAL dispatch workgroup count in x/y/z order.
+  uint32_t hal_workgroup_count[3];
+  // HAL dispatch binding specs.
+  loom_run_one_shot_binding_specs_t hal_bindings;
+  // Optional HAL binding specs compared after dispatch.
+  loom_run_one_shot_binding_specs_t hal_expected_bindings;
   // Maximum number of HAL output elements to format.
   iree_host_size_t hal_max_output_element_count;
 } loom_run_one_shot_options_t;
