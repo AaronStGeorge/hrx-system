@@ -24,6 +24,7 @@ loom_check_test_suite(
         "roundtrip.loom-test",
         "verify.loom-test",
     ],
+    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )
 
 test_suite(

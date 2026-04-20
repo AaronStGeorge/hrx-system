@@ -234,6 +234,7 @@ loom_cc_library(
         ":json_output",
         ":report",
         ":update",
+        "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
@@ -262,6 +263,19 @@ loom_cc_test(
 loom_cc_binary(
     name = "loom-check",
     srcs = ["loom-check.c"],
+    deps = [
+        ":main",
+        "//loom/src/loom/target/arch/amdgpu:check_provider",
+        "//loom/src/loom/target/arch/wasm:check_provider",
+        "//loom/src/loom/target/arch/x86:check_provider",
+        "//loom/src/loom/target/emit/ireevm:check_provider",
+        "//loom/src/loom/target/emit/llvmir:check_provider",
+    ],
+)
+
+loom_cc_binary(
+    name = "loom-check-test",
+    srcs = ["loom-check-test.c"],
     deps = [
         ":main",
         "//loom/src/loom/ops/test",

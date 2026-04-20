@@ -45,6 +45,12 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/emit/native/x86:assembly",
 )
 
+iree_assert_no_dependency(
+    name = "iree_run_loom_main_no_x86_assembly_dep",
+    dependency = "//loom/src/loom/target/emit/native/x86:assembly",
+    target = "//loom/src/loom/tools/iree-run-loom:main",
+)
+
 #===------------------------------------------------------------------------===#
 # x86 native assembly fragments
 #===------------------------------------------------------------------------===#

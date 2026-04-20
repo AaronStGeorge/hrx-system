@@ -4,19 +4,15 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// loom-check runner for Wasm target-owned .loom-test files.
+#include "loom/target/arch/wasm/check_provider.h"
 
 #include "loom/target/arch/wasm/low_registry.h"
 #include "loom/target/emit/wasm/lower.h"
-#include "loom/tools/loom-check/main.h"
 
-static const loom_check_production_runner_t kLoomCheckWasmRunner = {
+const loom_check_provider_t loom_wasm_check_provider = {
+    .name = IREE_SVL("wasm"),
     .initialize_low_descriptor_registry =
         loom_wasm_low_descriptor_registry_initialize,
     .initialize_low_lower_policy_registry =
         loom_wasm_low_lower_policy_registry_initialize,
 };
-
-int main(int argc, char** argv) {
-  return loom_check_production_main(argc, argv, &kLoomCheckWasmRunner);
-}

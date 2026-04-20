@@ -31,27 +31,38 @@ typedef void (*loom_check_low_descriptor_registry_initializer_t)(
 typedef void (*loom_check_low_lower_policy_registry_initializer_t)(
     loom_low_lower_policy_registry_t* out_registry);
 
-// Static configuration for a production loom-check runner binary.
-typedef struct loom_check_production_runner_t {
-  // Function that initializes the target-low descriptor registry package.
+// Target-owned contribution linked into a loom-check environment.
+typedef struct loom_check_provider_t {
+  // Stable provider name used in diagnostics and help text.
+  iree_string_view_t name;
+  // Optional function that initializes a target-low descriptor registry
+  // package.
   loom_check_low_descriptor_registry_initializer_t
       initialize_low_descriptor_registry;
-  // Function that initializes the source-to-low lowering policy package.
+  // Optional function that initializes a source-to-low lowering policy package.
   loom_check_low_lower_policy_registry_initializer_t
       initialize_low_lower_policy_registry;
-  // Optional emit provider table linked into this runner.
+  // Optional emit provider table contributed by this provider.
   const loom_check_emit_provider_t* const* emit_providers;
   // Number of entries in |emit_providers|.
   iree_host_size_t emit_provider_count;
-  // Optional in-process RUN: run provider table linked into this runner.
+  // Optional in-process RUN: run provider table contributed by this provider.
   const loom_check_run_provider_t* const* run_providers;
   // Number of entries in |run_providers|.
   iree_host_size_t run_provider_count;
-  // Optional requirement provider table linked into this runner.
+  // Optional requirement provider table contributed by this provider.
   const loom_check_requirement_provider_t* const* requirement_providers;
   // Number of entries in |requirement_providers|.
   iree_host_size_t requirement_provider_count;
-} loom_check_production_runner_t;
+} loom_check_provider_t;
+
+// Static provider table linked into a loom-check binary or embedding.
+typedef struct loom_check_provider_set_t {
+  // Provider contribution table.
+  const loom_check_provider_t* const* providers;
+  // Number of entries in |providers|.
+  iree_host_size_t provider_count;
+} loom_check_provider_set_t;
 
 // Registers the production Loom dialect surface without the synthetic test
 // dialect. This is suitable for backend-owned .loom-test runners.
@@ -62,9 +73,10 @@ iree_status_t loom_check_register_production_context(void* user_data,
 int loom_check_main(int argc, char** argv,
                     const loom_check_environment_t* environment);
 
-// Runs loom-check using production dialects plus |runner|'s target packages.
-int loom_check_production_main(int argc, char** argv,
-                               const loom_check_production_runner_t* runner);
+// Runs loom-check using production dialects plus |provider_set|'s target
+// contributions.
+int loom_check_provider_main(int argc, char** argv,
+                             const loom_check_provider_set_t* provider_set);
 
 #ifdef __cplusplus
 }  // extern "C"

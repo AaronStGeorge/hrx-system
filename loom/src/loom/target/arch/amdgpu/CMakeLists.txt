@@ -332,18 +332,22 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_binary(
+loom_cc_library(
   NAME
-    loom-check
+    check_provider
+  HDRS
+    "check_provider.h"
   SRCS
-    "loom-check.c"
+    "check_provider.c"
   DEPS
     ::loom_check_requirements
     ::low_registry
     ::lower
     ::amdgpu_hal_backend
+    iree::base
     loom::src::loom::tools::loom-check::hal_run_provider
     loom::src::loom::tools::loom-check::main
+  PUBLIC
 )
 
 loom_cc_library(
@@ -459,7 +463,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "loom-check"
 )
@@ -470,7 +474,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/hal_run.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "driver=amdgpu"
     "nodocker"
@@ -615,7 +619,6 @@ loom_low_descriptor_exclude_from_all(
     "gfx12_descriptors_test"
     "gfx950_descriptors_test"
     "hal_resource_materialization_test"
-    "loom-check"
     "loom_check_test"
     "low_registry_test"
     "occupancy_test"

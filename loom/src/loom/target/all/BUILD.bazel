@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_assert_no_dependency",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -14,6 +15,40 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+#===------------------------------------------------------------------------===#
+# Layering checks
+#===------------------------------------------------------------------------===#
+
+iree_assert_no_dependency(
+    name = "loom_check_execute_no_all_low_registry_dep",
+    dependency = "//loom/src/loom/target/all:low_registry",
+    target = "//loom/src/loom/tools/loom-check:execute",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_main_no_all_low_registry_dep",
+    dependency = "//loom/src/loom/target/all:low_registry",
+    target = "//loom/src/loom/tools/loom-check:main",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_tool_no_all_low_registry_dep",
+    dependency = "//loom/src/loom/target/all:low_registry",
+    target = "//loom/src/loom/tools/loom-check",
+)
+
+iree_assert_no_dependency(
+    name = "iree_run_loom_main_no_all_low_registry_dep",
+    dependency = "//loom/src/loom/target/all:low_registry",
+    target = "//loom/src/loom/tools/iree-run-loom:main",
+)
+
+iree_assert_no_dependency(
+    name = "iree_run_loom_tool_no_all_low_registry_dep",
+    dependency = "//loom/src/loom/target/all:low_registry",
+    target = "//loom/src/loom/tools/iree-run-loom",
 )
 
 #===------------------------------------------------------------------------===#

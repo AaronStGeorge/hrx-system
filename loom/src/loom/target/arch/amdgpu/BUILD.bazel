@@ -12,7 +12,6 @@ load(
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
-    "loom_check_runner_binary",
     "loom_check_test",
     "loom_check_test_suite",
 )
@@ -498,15 +497,27 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
-    name = "loom_check_tool_no_amdgpu_low_registry_dep",
+    name = "loom_check_test_no_amdgpu_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/tools/loom-check",
+    target = "//loom/src/loom/tools/loom-check:loom-check-test",
 )
 
 iree_assert_no_dependency(
-    name = "loom_check_tool_no_amdgpu_requirements_dep",
+    name = "loom_check_test_no_amdgpu_requirements_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:loom_check_requirements",
-    target = "//loom/src/loom/tools/loom-check",
+    target = "//loom/src/loom/tools/loom-check:loom-check-test",
+)
+
+iree_assert_no_dependency(
+    name = "iree_run_loom_main_no_amdgpu_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/tools/iree-run-loom:main",
+)
+
+iree_assert_no_dependency(
+    name = "iree_run_loom_main_no_amdgpu_hal_backend_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:amdgpu_hal_backend",
+    target = "//loom/src/loom/tools/iree-run-loom:main",
 )
 
 #===------------------------------------------------------------------------===#
@@ -784,15 +795,18 @@ loom_cc_library(
     ],
 )
 
-loom_check_runner_binary(
-    name = "loom-check",
-    src = "loom-check.c",
+loom_cc_library(
+    name = "check_provider",
+    srcs = ["check_provider.c"],
+    hdrs = ["check_provider.h"],
     deps = [
         ":loom_check_requirements",
         ":low_registry",
         ":lower",
         ":amdgpu_hal_backend",
         "//loom/src/loom/tools/loom-check:hal_run_provider",
+        "//loom/src/loom/tools/loom-check:main",
+        "//runtime/src/iree/base",
     ],
 )
 
@@ -898,13 +912,11 @@ loom_check_test_suite(
     srcs = [
         "source_low.loom-test",
     ],
-    runner = ":loom-check",
 )
 
 loom_check_test(
     name = "hal_run",
     src = "hal_run.loom-test",
-    runner = ":loom-check",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -1036,7 +1048,6 @@ loom_low_descriptor_exclude_from_cmake_all(
         "gfx1250_descriptors_test",
         "gfx950_descriptors_test",
         "hal_resource_materialization_test",
-        "loom-check",
         "loom_check_test",
         "low_registry_test",
         "occupancy_test",

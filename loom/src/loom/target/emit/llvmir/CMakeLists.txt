@@ -239,16 +239,18 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_binary(
+loom_cc_library(
   NAME
-    loom-check
+    check_provider
+  HDRS
+    "check_provider.h"
   SRCS
-    "loom-check.c"
+    "check_provider.c"
   DEPS
     ::loom_check
     iree::base
-    loom::src::loom::target::low_descriptor_registry
     loom::src::loom::tools::loom-check::main
+  PUBLIC
 )
 
 iree_executable_test(
@@ -257,7 +259,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/emit.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "loom-check"
 )
@@ -268,7 +270,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/intrinsics.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "loom-check"
 )
@@ -279,7 +281,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/lowering_errors.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "loom-check"
 )
@@ -290,7 +292,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/memory.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "loom-check"
 )
@@ -301,7 +303,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/packed_dot.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "loom-check"
 )
@@ -312,7 +314,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/scalar_index.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "loom-check"
 )
@@ -323,7 +325,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/toolchain.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "loom-check"
 )
@@ -334,7 +336,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/vector_core.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "loom-check"
 )

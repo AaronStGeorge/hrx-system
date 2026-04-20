@@ -231,6 +231,7 @@ loom_cc_library(
     iree::base::internal::arena
     iree::base::tooling::flags
     iree::io::file_handle
+    loom::src::loom::codegen::low::lower
     loom::src::loom::ops::op_registry
     loom::src::loom::util::stream
   PUBLIC
@@ -258,6 +259,20 @@ loom_cc_binary(
     loom-check
   SRCS
     "loom-check.c"
+  DEPS
+    ::main
+    loom::src::loom::target::arch::amdgpu::check_provider
+    loom::src::loom::target::arch::wasm::check_provider
+    loom::src::loom::target::arch::x86::check_provider
+    loom::src::loom::target::emit::ireevm::check_provider
+    loom::src::loom::target::emit::llvmir::check_provider
+)
+
+loom_cc_binary(
+  NAME
+    loom-check-test
+  SRCS
+    "loom-check-test.c"
   DEPS
     ::main
     iree::base

@@ -6,12 +6,11 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_lit_test_suite",
     "iree_select",
-    "iree_assert_no_dependency",
     "loom_cc_binary",
     "loom_cc_library",
 )
-load("//loom/build_tools/bazel:build_defs.bzl", "iree_lit_test_suite")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -33,18 +32,6 @@ _AMDGPU_HAL_DEPS = iree_select({
     ],
     "//conditions:default": [],
 })
-
-iree_assert_no_dependency(
-    name = "tool_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/tools/iree-run-loom",
-)
-
-iree_assert_no_dependency(
-    name = "main_no_amdgpu_native_emit_dep",
-    dependency = "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-    target = "//loom/src/loom/tools/iree-run-loom:main",
-)
 
 loom_cc_library(
     name = "main",

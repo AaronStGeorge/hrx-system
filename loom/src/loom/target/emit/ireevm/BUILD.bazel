@@ -12,7 +12,6 @@ load(
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
-    "loom_check_runner_binary",
     "loom_check_test_suite",
 )
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_low_descriptor_cc_library")
@@ -202,9 +201,9 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
-    name = "loom_check_tool_no_ireevm_low_registry_dep",
+    name = "loom_check_test_no_ireevm_low_registry_dep",
     dependency = "//loom/src/loom/target/emit/ireevm:low_registry",
-    target = "//loom/src/loom/tools/loom-check",
+    target = "//loom/src/loom/tools/loom-check:loom-check-test",
 )
 
 #===------------------------------------------------------------------------===#
@@ -320,13 +319,16 @@ loom_cc_library(
     ],
 )
 
-loom_check_runner_binary(
-    name = "loom-check",
-    src = "loom-check.c",
+loom_cc_library(
+    name = "check_provider",
+    srcs = ["check_provider.c"],
+    hdrs = ["check_provider.h"],
     deps = [
         ":loom_check_run",
         ":low_registry",
         ":lower",
+        "//loom/src/loom/tools/loom-check:main",
+        "//runtime/src/iree/base",
     ],
 )
 
@@ -425,5 +427,4 @@ loom_check_test_suite(
         "run.loom-test",
         "source_low.loom-test",
     ],
-    runner = ":loom-check",
 )

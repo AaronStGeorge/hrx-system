@@ -127,15 +127,19 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_binary(
+loom_cc_library(
   NAME
-    loom-check
+    check_provider
+  HDRS
+    "check_provider.h"
   SRCS
-    "loom-check.c"
+    "check_provider.c"
   DEPS
     ::low_registry
     ::lower
+    iree::base
     loom::src::loom::tools::loom-check::main
+  PUBLIC
 )
 
 loom_cc_test(
@@ -172,7 +176,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
   SRC
-    ::loom-check
+    loom::src::loom::tools::loom-check
   LABELS
     "loom-check"
 )

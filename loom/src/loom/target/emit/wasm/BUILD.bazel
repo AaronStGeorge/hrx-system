@@ -99,6 +99,12 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/emit/wasm:lower",
 )
 
+iree_assert_no_dependency(
+    name = "iree_run_loom_main_no_wasm_module_binary_dep",
+    dependency = "//loom/src/loom/target/emit/wasm:module_binary",
+    target = "//loom/src/loom/tools/iree-run-loom:main",
+)
+
 #===------------------------------------------------------------------------===#
 # Wasm emission
 #===------------------------------------------------------------------------===#

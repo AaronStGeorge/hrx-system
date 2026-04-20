@@ -6,10 +6,6 @@
 
 """Macros for defining tests that run .loom-test files through loom-check."""
 
-load(
-    "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_cc_binary",
-)
 load("//build_tools/bazel:executable.bzl", "iree_executable_test")
 
 _LOOM_CHECK_EXTENSION = ".loom-test"
@@ -19,22 +15,6 @@ def _loom_check_test_base_name(src):
         fail("loom_check_test source must use the .loom-test extension: %s" %
              src)
     return src[:-len(_LOOM_CHECK_EXTENSION)]
-
-def loom_check_runner_binary(name, src, deps = [], **kwargs):
-    """Creates a loom-check compatible runner binary.
-
-    Args:
-      name: Name of the generated runner binary.
-      src: C source file that calls loom_check_production_main().
-      deps: Runner-specific descriptor and lowering policy dependencies.
-      **kwargs: Additional attributes passed to loom_cc_binary.
-    """
-    loom_cc_binary(
-        name = name,
-        srcs = [src],
-        deps = deps + ["//loom/src/loom/tools/loom-check:main"],
-        **kwargs
-    )
 
 def loom_check_test(
         name,
