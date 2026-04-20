@@ -233,6 +233,7 @@ loom_cc_test(
   SRCS
     "hsaco_hsa_test.cc"
   DEPS
+    ::encoding
     ::hsaco
     hsa_runtime::headers
     iree::base
@@ -240,11 +241,20 @@ loom_cc_test(
     iree::base::internal::arena
     iree::base::internal::dynamic_library
     iree::io::stream
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::low_registry
+    loom::src::loom::target::presets
+    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
     "driver=amdgpu"
     "nodocker"
+    "requires-gpu-amd"
   GROUP
     "iree-loom-amdgpu-tests"
 )

@@ -221,12 +221,47 @@ TEST_F(AmdgpuEncodingTest, EncodesInitialGfx11Allowlist) {
   iree_arena_deinitialize(&arena);
 }
 
-TEST_F(AmdgpuEncodingTest, RejectsUnsupportedDescriptorSet) {
+TEST_F(AmdgpuEncodingTest, EncodesReturnForCurrentAmdgpuFamilies) {
+  struct Case {
+    // Target preset used to select the low descriptor set.
+    const char* preset_key;
+    // Expected little-endian SOPP instruction word for `s_endpgm 0`.
+    uint32_t expected_return_word;
+  };
+  const Case cases[] = {
+      {"amdgpu-gfx950", UINT32_C(0xBF810000)},
+      {"amdgpu-gfx11", UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx12", UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx1250", UINT32_C(0xBFB00000)},
+  };
+  for (const Case& test_case : cases) {
+    SCOPED_TRACE(test_case.preset_key);
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool_, &arena);
+    loom_low_packetization_t packetization = {};
+    BuildSidecarsForPreset(test_case.preset_key,
+                           "low.func.def target(@gfx_target) @gfx_kernel() {\n"
+                           "  low.return\n"
+                           "}\n",
+                           &arena, &packetization);
+
+    iree_const_byte_span_t text = iree_const_byte_span_empty();
+    IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+        &packetization.schedule, &packetization.allocation, &text, &arena));
+
+    ASSERT_EQ(text.data_length, 4u);
+    EXPECT_EQ(ReadU32LE(text.data), test_case.expected_return_word);
+    iree_arena_deinitialize(&arena);
+  }
+}
+
+TEST_F(AmdgpuEncodingTest, RejectsDescriptorPacketsOutsideImplementedProfile) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildSidecarsForPreset("amdgpu-gfx12",
                          "low.func.def target(@gfx_target) @gfx_kernel() {\n"
+                         "  low.op<amdgpu.s_wait_idle>() : ()\n"
                          "  low.return\n"
                          "}\n",
                          &arena, &packetization);
