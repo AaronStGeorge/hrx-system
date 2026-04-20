@@ -41,7 +41,8 @@ target.preset @x86_f32_target {key = "x86-avx512", source = @x86_f32_arith}
 
 func.def @x86_f32_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<16xf32>
-  %product = vector.mulf %sum, %rhs : vector<16xf32>
+  %difference = vector.subf %sum, %lhs : vector<16xf32>
+  %product = vector.mulf %difference, %rhs : vector<16xf32>
   %fma = vector.fmaf %lhs, %rhs, %product : vector<16xf32>
   func.return %fma : vector<16xf32>
 }
@@ -57,16 +58,18 @@ target.bundle @x86_f32_target {config = @x86_f32_target__config, export_plan = @
 
 func.def @x86_f32_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<16xf32>
-  %product = vector.mulf %sum, %rhs : vector<16xf32>
+  %difference = vector.subf %sum, %lhs : vector<16xf32>
+  %product = vector.mulf %difference, %rhs : vector<16xf32>
   %fma = vector.fmaf %lhs, %rhs, %product : vector<16xf32>
   func.return %fma : vector<16xf32>
 }
 
 low.func.def target(@x86_f32_target) @x86_f32_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) {
   %sum = low.op<x86.avx512.vaddps.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  %product = low.op<x86.avx512.vmulps.zmm>(%sum, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  %11 = low.copy %product : reg<x86.zmm> -> reg<x86.zmm>
-  %fma = low.op<x86.avx512.vfmadd231ps.zmm>(%11, %lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>, reg<x86.zmm>) -> %11 as reg<x86.zmm>
+  %difference = low.op<x86.avx512.vsubps.zmm>(%sum, %lhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
+  %product = low.op<x86.avx512.vmulps.zmm>(%difference, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
+  %13 = low.copy %product : reg<x86.zmm> -> reg<x86.zmm>
+  %fma = low.op<x86.avx512.vfmadd231ps.zmm>(%13, %lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>, reg<x86.zmm>) -> %13 as reg<x86.zmm>
   low.return %fma : reg<x86.zmm>
 }
 

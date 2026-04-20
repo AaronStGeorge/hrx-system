@@ -524,6 +524,23 @@ def _v_add_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_sub_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_sub_f32",
+        instruction_name="V_SUB_F32",
+        mnemonic="v_sub_f32",
+        encoding_name="ENC_VOP2",
+        semantic_tag="float.sub.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_mul_f32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_mul_f32",
@@ -896,6 +913,7 @@ def _gfx950_core_overlay_descriptors(
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _v_add_f32_overlay(),
+            _v_sub_f32_overlay(),
             _v_mul_f32_overlay(),
             _v_fma_f32_overlay(),
             _s_load_dwordx2_overlay(),
@@ -939,6 +957,7 @@ def _gfx11_core_overlay_descriptors(
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _v_add_f32_overlay(),
+            _v_sub_f32_overlay(),
             _v_mul_f32_overlay(),
             _v_fma_f32_overlay(),
             _s_load_dwordx2_overlay(),
@@ -976,6 +995,7 @@ def _gfx12_core_overlay_descriptors(
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _v_add_f32_overlay(),
+            _v_sub_f32_overlay(),
             _v_mul_f32_overlay(),
             _v_fma_f32_overlay(),
             _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
@@ -1026,6 +1046,7 @@ def _gfx1250_core_overlay_descriptors(
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _v_add_f32_overlay(),
+            _v_sub_f32_overlay(),
             _v_mul_f32_overlay(),
             _v_fma_f32_overlay(),
             _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),

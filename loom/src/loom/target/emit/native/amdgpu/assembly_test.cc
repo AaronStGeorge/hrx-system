@@ -313,35 +313,38 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     iree_arena_allocator_t sidecar_arena;
     iree_arena_initialize(&block_pool_, &sidecar_arena);
     loom_low_packetization_t packetization = {};
-    LowerSourceAndBuildSidecars(preset_key,
-                                "func.def @gfx_source(%lhs: i32, %rhs: i32, "
-                                "%vlhs: vector<1xi32>, %vrhs: vector<1xi32>, "
-                                "%flhs: vector<1xf32>, %frhs: vector<1xf32>) "
-                                "{\n"
-                                "  %seven = scalar.constant 7 : i32\n"
-                                "  %biased = scalar.addi %lhs, %seven : i32\n"
-                                "  %sum = scalar.addi %biased, %rhs : i32\n"
-                                "  %difference = scalar.subi %sum, %seven : "
-                                "i32\n"
-                                "  %vconst = vector.constant 42 : "
-                                "vector<1xi32>\n"
-                                "  %vsum = vector.addi %vlhs, %vrhs : "
-                                "vector<1xi32>\n"
-                                "  %vbiased = vector.addi %vsum, %vconst : "
-                                "vector<1xi32>\n"
-                                "  %vdifference = vector.subi %vbiased, "
-                                "%vconst : vector<1xi32>\n"
-                                "  %vproduct = vector.muli %vdifference, %vrhs "
-                                ": vector<1xi32>\n"
-                                "  %fsum = vector.addf %flhs, %frhs : "
-                                "vector<1xf32>\n"
-                                "  %fproduct = vector.mulf %fsum, %frhs : "
-                                "vector<1xf32>\n"
-                                "  %ffma = vector.fmaf %flhs, %frhs, "
-                                "%fproduct : vector<1xf32>\n"
-                                "  func.return\n"
-                                "}\n",
-                                &sidecar_arena, &packetization);
+    LowerSourceAndBuildSidecars(
+        preset_key,
+        "func.def @gfx_source(%lhs: i32, %rhs: i32, "
+        "%vlhs: vector<1xi32>, %vrhs: vector<1xi32>, "
+        "%flhs: vector<1xf32>, %frhs: vector<1xf32>) "
+        "{\n"
+        "  %seven = scalar.constant 7 : i32\n"
+        "  %biased = scalar.addi %lhs, %seven : i32\n"
+        "  %sum = scalar.addi %biased, %rhs : i32\n"
+        "  %difference = scalar.subi %sum, %seven : "
+        "i32\n"
+        "  %vconst = vector.constant 42 : "
+        "vector<1xi32>\n"
+        "  %vsum = vector.addi %vlhs, %vrhs : "
+        "vector<1xi32>\n"
+        "  %vbiased = vector.addi %vsum, %vconst : "
+        "vector<1xi32>\n"
+        "  %vdifference = vector.subi %vbiased, "
+        "%vconst : vector<1xi32>\n"
+        "  %vproduct = vector.muli %vdifference, %vrhs "
+        ": vector<1xi32>\n"
+        "  %fsum = vector.addf %flhs, %frhs : "
+        "vector<1xf32>\n"
+        "  %fdifference = vector.subf %fsum, %flhs : "
+        "vector<1xf32>\n"
+        "  %fproduct = vector.mulf %fdifference, %frhs : "
+        "vector<1xf32>\n"
+        "  %ffma = vector.fmaf %flhs, %frhs, "
+        "%fproduct : vector<1xf32>\n"
+        "  func.return\n"
+        "}\n",
+        &sidecar_arena, &packetization);
 
     iree_string_builder_t builder;
     iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -358,6 +361,7 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     EXPECT_NE(output.find("v_sub"), std::string::npos);
     EXPECT_NE(output.find("v_mul_lo_u32 v"), std::string::npos);
     EXPECT_NE(output.find("v_add_f32 v"), std::string::npos);
+    EXPECT_NE(output.find("v_sub_f32 v"), std::string::npos);
     EXPECT_NE(output.find("v_mul_f32 v"), std::string::npos);
     EXPECT_NE(output.find("v_fma_f32 v"), std::string::npos);
     EXPECT_NE(output.find("s_endpgm"), std::string::npos);

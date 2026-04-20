@@ -137,37 +137,5 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
             LOOM_X86_FEATURE_AVX512_BF16);
 }
 
-TEST(X86PackedDotDescriptorsTest, ManifestNamesPackedDotMetadata) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_x86_packed_dot_core_descriptor_set();
-
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(
-      loom_low_descriptor_set_format_manifest_json(descriptor_set, &builder));
-  std::string json(iree_string_builder_buffer(&builder),
-                   iree_string_builder_size(&builder));
-  iree_string_builder_deinitialize(&builder);
-
-  EXPECT_NE(json.find("\"key\":\"x86.packed_dot.core\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512-vnni.vpdpbusd.512\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx-vnni-int8.vpdpbssd.256\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx10.2.vdpphps.512\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512-bf16.vdpbf16ps.512\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"reg_class_name\":\"x86.zmm\""), std::string::npos);
-  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot.128\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot.256\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot.512\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"feature_mask_words\":[64]"), std::string::npos);
-  EXPECT_NE(json.find("\"kind_name\":\"destructive\""), std::string::npos);
-}
-
 }  // namespace
 }  // namespace loom

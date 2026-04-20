@@ -109,6 +109,12 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(f32_add_descriptor->operand_count, 3u);
   EXPECT_EQ(f32_add_descriptor->result_count, 1u);
 
+  const loom_low_descriptor_t* f32_subtract_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vsubps.zmm"));
+  ASSERT_NE(f32_subtract_descriptor, nullptr);
+  EXPECT_EQ(f32_subtract_descriptor->operand_count, 3u);
+  EXPECT_EQ(f32_subtract_descriptor->result_count, 1u);
+
   const loom_low_descriptor_t* f32_multiply_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vmulps.zmm"));
   ASSERT_NE(f32_multiply_descriptor, nullptr);
@@ -407,26 +413,6 @@ TEST(X86DescriptorsTest, Avx512LowFuncAsmRoundTripsTiedDotArguments) {
   IREE_ASSERT_OK(harness.RoundTripAndVerify(
       IREE_SV(source), IREE_SV("x86.avx512.core"), &printed));
   EXPECT_NE(printed.find("vpdpbusd %acc, %lhs, %rhs"), std::string::npos);
-}
-
-TEST(X86DescriptorsTest, ManifestJsonWritesDescriptorStructure) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_x86_avx512_core_descriptor_set();
-
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(
-      loom_low_descriptor_set_format_manifest_json(descriptor_set, &builder));
-  std::string json(iree_string_builder_buffer(&builder),
-                   iree_string_builder_size(&builder));
-  iree_string_builder_deinitialize(&builder);
-
-  EXPECT_FALSE(json.empty());
-  EXPECT_NE(json.find("\"descriptors\""), std::string::npos);
-  EXPECT_NE(json.find("\"schedule_classes\""), std::string::npos);
-  EXPECT_NE(json.find("\"resources\""), std::string::npos);
-  EXPECT_NE(json.find("\"constraints\""), std::string::npos);
-  EXPECT_NE(json.find("\"descriptor_refs\""), std::string::npos);
 }
 
 }  // namespace

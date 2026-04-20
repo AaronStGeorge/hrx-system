@@ -831,6 +831,7 @@ static const loom_amdgpu_assembly_descriptor_dispatch_t
         {"amdgpu.v_mul_f32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
         {"amdgpu.v_mul_lo_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2,
          NULL},
+        {"amdgpu.v_sub_f32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
         {"amdgpu.v_sub_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
         {"amdgpu.v_wmma_f32_16x16x16_f16",
          LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MATRIX, 0, 0, NULL},

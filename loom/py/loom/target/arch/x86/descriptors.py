@@ -441,6 +441,15 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
+            key="x86.avx512.vsubps.zmm",
+            mnemonic="vsubps",
+            semantic_tag="float.sub.f32x16",
+            operands=(_zmm_result(), _zmm_operand("lhs"), _zmm_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_VECTOR_F32_ZMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
             key="x86.avx512.vmulps.zmm",
             mnemonic="vmulps",
             semantic_tag="float.mul.f32x16",

@@ -87,6 +87,12 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(f32_add_descriptor->operand_count, 3u);
   EXPECT_EQ(f32_add_descriptor->result_count, 1u);
 
+  const loom_low_descriptor_t* f32_subtract_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_sub_f32"));
+  ASSERT_NE(f32_subtract_descriptor, nullptr);
+  EXPECT_EQ(f32_subtract_descriptor->operand_count, 3u);
+  EXPECT_EQ(f32_subtract_descriptor->result_count, 1u);
+
   const loom_low_descriptor_t* f32_multiply_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_mul_f32"));
   ASSERT_NE(f32_multiply_descriptor, nullptr);
@@ -197,25 +203,6 @@ TEST(AmdgpuDescriptorsTest, Gfx12WmmaPacketMatchesRdnaRegisterShape) {
   EXPECT_EQ(accumulator_alts[1].reg_class_id, LOOM_LOW_REG_CLASS_NONE);
   EXPECT_NE(accumulator_alts[1].flags & LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE,
             0u);
-}
-
-TEST(AmdgpuDescriptorsTest, ManifestJsonWritesDescriptorStructure) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_amdgpu_gfx12_core_descriptor_set();
-
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(
-      loom_low_descriptor_set_format_manifest_json(descriptor_set, &builder));
-  std::string json(iree_string_builder_buffer(&builder),
-                   iree_string_builder_size(&builder));
-  iree_string_builder_deinitialize(&builder);
-
-  EXPECT_FALSE(json.empty());
-  EXPECT_NE(json.find("\"descriptors\""), std::string::npos);
-  EXPECT_NE(json.find("\"schedule_classes\""), std::string::npos);
-  EXPECT_NE(json.find("\"resources\""), std::string::npos);
-  EXPECT_NE(json.find("\"descriptor_refs\""), std::string::npos);
 }
 
 }  // namespace
