@@ -823,6 +823,7 @@ static const loom_amdgpu_assembly_descriptor_dispatch_t
          0, 0, "depctr"},
         {"amdgpu.v_add_f32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
         {"amdgpu.v_add_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
+        {"amdgpu.v_fma_f32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 3, NULL},
         {"amdgpu.v_mov_b32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MOV_B32_CONST, 0,
          0, NULL},
         {"amdgpu.v_mfma_f32_16x16x16_f16",

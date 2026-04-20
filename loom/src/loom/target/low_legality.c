@@ -482,6 +482,7 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_VECTOR_FPTOSI:
     case LOOM_OP_VECTOR_FPTRUNC:
     case LOOM_OP_VECTOR_FROM_ELEMENTS:
+    case LOOM_OP_VECTOR_FMAF:
     case LOOM_OP_VECTOR_INSERT:
     case LOOM_OP_VECTOR_LOAD:
     case LOOM_OP_VECTOR_MULF:

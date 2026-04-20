@@ -237,6 +237,18 @@ static bool loom_x86_can_lower_vector_mulf(loom_low_lower_context_t* context,
                                          loom_vector_mulf_result(source_op));
 }
 
+static bool loom_x86_can_lower_vector_fmaf(loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op) {
+  return loom_x86_value_is_vector_16xf32(context,
+                                         loom_vector_fmaf_a(source_op)) &&
+         loom_x86_value_is_vector_16xf32(context,
+                                         loom_vector_fmaf_b(source_op)) &&
+         loom_x86_value_is_vector_16xf32(context,
+                                         loom_vector_fmaf_c(source_op)) &&
+         loom_x86_value_is_vector_16xf32(context,
+                                         loom_vector_fmaf_result(source_op));
+}
+
 static iree_string_view_t loom_x86_packed_dot_rejection_name(
     loom_x86_packed_dot_rejection_bits_t rejection_bits) {
   if (iree_any_bit_set(rejection_bits,
@@ -378,6 +390,11 @@ static iree_status_t loom_x86_can_lower_op(void* user_data,
           loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
           loom_x86_can_lower_vector_mulf(context, source_op);
       return iree_ok_status();
+    case LOOM_OP_VECTOR_FMAF:
+      *out_handled =
+          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_fmaf(context, source_op);
+      return iree_ok_status();
     case LOOM_OP_VECTOR_DOT2F:
     case LOOM_OP_VECTOR_DOT4I:
       return loom_x86_can_lower_vector_dot(context, source_op, out_handled);
@@ -484,22 +501,11 @@ static iree_status_t loom_x86_lower_vector_mulf(
       loom_vector_mulf_result(source_op));
 }
 
-static iree_status_t loom_x86_lower_packed_dot_op(
+static iree_status_t loom_x86_lower_tied_ternary_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_lhs, loom_value_id_t source_rhs,
-    loom_value_id_t source_accumulator, loom_value_id_t source_result) {
-  const loom_x86_packed_dot_descriptor_t* descriptor = NULL;
-  IREE_RETURN_IF_ERROR(loom_x86_select_packed_dot_descriptor(
-      loom_low_lower_context_module(context),
-      loom_low_lower_context_bundle(context),
-      loom_low_lower_context_descriptor_set(context), source_op,
-      /*out_diagnostic=*/NULL, &descriptor));
-  if (descriptor == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "x86 packed-dot lowering reached an unselected descriptor");
-  }
-
+    iree_string_view_t opcode, loom_value_id_t source_lhs,
+    loom_value_id_t source_rhs, loom_value_id_t source_accumulator,
+    loom_value_id_t source_result) {
   loom_value_id_t low_lhs = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, source_lhs, &low_lhs));
@@ -528,7 +534,7 @@ static iree_status_t loom_x86_lower_packed_dot_op(
       .has_type_change = false,
   };
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_x86_intern(context, descriptor->name, &opcode_id));
+  IREE_RETURN_IF_ERROR(loom_x86_intern(context, opcode, &opcode_id));
   loom_op_t* low_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_op_build(
       loom_low_lower_context_builder(context), opcode_id, low_operands,
@@ -537,6 +543,34 @@ static iree_status_t loom_x86_lower_packed_dot_op(
   return loom_low_lower_bind_value(
       context, source_result,
       loom_value_slice_get(loom_low_op_results(low_op), 0));
+}
+
+static iree_status_t loom_x86_lower_vector_fmaf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  return loom_x86_lower_tied_ternary_op(
+      context, source_op, IREE_SV("x86.avx512.vfmadd231ps.zmm"),
+      loom_vector_fmaf_a(source_op), loom_vector_fmaf_b(source_op),
+      loom_vector_fmaf_c(source_op), loom_vector_fmaf_result(source_op));
+}
+
+static iree_status_t loom_x86_lower_packed_dot_op(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_lhs, loom_value_id_t source_rhs,
+    loom_value_id_t source_accumulator, loom_value_id_t source_result) {
+  const loom_x86_packed_dot_descriptor_t* descriptor = NULL;
+  IREE_RETURN_IF_ERROR(loom_x86_select_packed_dot_descriptor(
+      loom_low_lower_context_module(context),
+      loom_low_lower_context_bundle(context),
+      loom_low_lower_context_descriptor_set(context), source_op,
+      /*out_diagnostic=*/NULL, &descriptor));
+  if (descriptor == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "x86 packed-dot lowering reached an unselected descriptor");
+  }
+  return loom_x86_lower_tied_ternary_op(context, source_op, descriptor->name,
+                                        source_lhs, source_rhs,
+                                        source_accumulator, source_result);
 }
 
 static iree_status_t loom_x86_lower_vector_dot2f(
@@ -576,6 +610,8 @@ static iree_status_t loom_x86_try_lower_op(void* user_data,
       return loom_x86_lower_vector_addf(context, source_op);
     case LOOM_OP_VECTOR_MULF:
       return loom_x86_lower_vector_mulf(context, source_op);
+    case LOOM_OP_VECTOR_FMAF:
+      return loom_x86_lower_vector_fmaf(context, source_op);
     case LOOM_OP_VECTOR_DOT2F:
       return loom_x86_lower_vector_dot2f(context, source_op);
     case LOOM_OP_VECTOR_DOT4I:

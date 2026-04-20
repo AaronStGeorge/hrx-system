@@ -18,7 +18,7 @@
       "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:" \
       "64-i128:128-f80:128-n8:16:32:64-S128")
 #define LOOM_X86_64_AVX512_FEATURES \
-  IREE_SVL("+avx512f,+avx512bw,+avx512dq,+avx512vl")
+  IREE_SVL("+avx512f,+avx512bw,+avx512dq,+avx512vl,+fma")
 #define LOOM_X86_64_PACKED_DOT_FEATURES \
   IREE_SVL("+avx512bf16,+avx512vl,+avxvnni,+avxvnniint8")
 #define LOOM_X86_64_PACKED_DOT_DESCRIPTOR_SET IREE_SVL("x86.packed_dot.core")

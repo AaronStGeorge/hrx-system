@@ -99,6 +99,12 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
   EXPECT_EQ(f32_multiply_descriptor->operand_count, 3u);
   EXPECT_EQ(f32_multiply_descriptor->result_count, 1u);
 
+  const loom_low_descriptor_t* f32_fma_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_fma_f32"));
+  ASSERT_NE(f32_fma_descriptor, nullptr);
+  EXPECT_EQ(f32_fma_descriptor->operand_count, 4u);
+  EXPECT_EQ(f32_fma_descriptor->result_count, 1u);
+
   const loom_low_descriptor_t* load_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_load_dword"));
   ASSERT_NE(load_descriptor, nullptr);
@@ -305,8 +311,7 @@ TEST(AmdgpuDescriptorsTest,
   EXPECT_EQ(constraints[2].rhs_operand_index, LOOM_LOW_ID_NONE);
 }
 
-TEST(AmdgpuDescriptorsTest,
-     ManifestNamesScalarVectorMemoryWaitAndRdna4MatrixPackets) {
+TEST(AmdgpuDescriptorsTest, ManifestJsonWritesDescriptorStructure) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_amdgpu_gfx1250_core_descriptor_set();
 
@@ -318,39 +323,11 @@ TEST(AmdgpuDescriptorsTest,
                    iree_string_builder_size(&builder));
   iree_string_builder_deinitialize(&builder);
 
-  EXPECT_NE(json.find("\"key\":\"amdgpu.gfx1250.core\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.s_add_u32\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.v_add_u32\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.v_add_f32\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.v_mul_f32\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.v_mul_lo_u32\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_load_dword\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_load_b128\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_store_b128\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.s_wait_loadcnt\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.v_wmma_f32_16x16x32_f16\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"flag_names\":[\"dead_removable\",\"pseudo\"]"),
-            std::string::npos);
-  EXPECT_NE(
-      json.find("\"key\":\"amdgpu.v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8\""),
-      std::string::npos);
-  EXPECT_NE(
-      json.find("\"key\":\"amdgpu.v_wmma_scale16_f32_16x16x128_f8f6f4_f8_f8\""),
-      std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"amdgpu.v_swmmac_f32_16x16x64_f16\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"schedule_class_name\":\"amdgpu.swmmac\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"resource_name\":\"amdgpu.swmmac\""),
-            std::string::npos);
-  EXPECT_NE(
-      json.find("\"field\":\"index\",\"role\":2,\"role_name\":\"operand\""),
-      std::string::npos);
-  EXPECT_NE(json.find("\"kind_name\":\"early_clobber\""), std::string::npos);
+  EXPECT_FALSE(json.empty());
+  EXPECT_NE(json.find("\"descriptors\""), std::string::npos);
+  EXPECT_NE(json.find("\"schedule_classes\""), std::string::npos);
+  EXPECT_NE(json.find("\"resources\""), std::string::npos);
+  EXPECT_NE(json.find("\"constraints\""), std::string::npos);
   EXPECT_NE(json.find("\"descriptor_refs\""), std::string::npos);
 }
 

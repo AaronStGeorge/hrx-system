@@ -337,6 +337,8 @@ class AmdgpuAssemblyTest : public ::testing::Test {
                                 "vector<1xf32>\n"
                                 "  %fproduct = vector.mulf %fsum, %frhs : "
                                 "vector<1xf32>\n"
+                                "  %ffma = vector.fmaf %flhs, %frhs, "
+                                "%fproduct : vector<1xf32>\n"
                                 "  func.return\n"
                                 "}\n",
                                 &sidecar_arena, &packetization);
@@ -357,6 +359,7 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     EXPECT_NE(output.find("v_mul_lo_u32 v"), std::string::npos);
     EXPECT_NE(output.find("v_add_f32 v"), std::string::npos);
     EXPECT_NE(output.find("v_mul_f32 v"), std::string::npos);
+    EXPECT_NE(output.find("v_fma_f32 v"), std::string::npos);
     EXPECT_NE(output.find("s_endpgm"), std::string::npos);
     iree_string_builder_deinitialize(&builder);
     iree_arena_deinitialize(&sidecar_arena);

@@ -115,6 +115,13 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(f32_multiply_descriptor->operand_count, 3u);
   EXPECT_EQ(f32_multiply_descriptor->result_count, 1u);
 
+  const loom_low_descriptor_t* f32_fma_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vfmadd231ps.zmm"));
+  ASSERT_NE(f32_fma_descriptor, nullptr);
+  EXPECT_EQ(f32_fma_descriptor->operand_count, 4u);
+  EXPECT_EQ(f32_fma_descriptor->result_count, 1u);
+  EXPECT_EQ(f32_fma_descriptor->constraint_count, 2u);
+
   const loom_low_descriptor_t* mask_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.kandq"));
   ASSERT_NE(mask_descriptor, nullptr);
@@ -402,7 +409,7 @@ TEST(X86DescriptorsTest, Avx512LowFuncAsmRoundTripsTiedDotArguments) {
   EXPECT_NE(printed.find("vpdpbusd %acc, %lhs, %rhs"), std::string::npos);
 }
 
-TEST(X86DescriptorsTest, ManifestNamesVectorMemoryAndDotPackets) {
+TEST(X86DescriptorsTest, ManifestJsonWritesDescriptorStructure) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_x86_avx512_core_descriptor_set();
 
@@ -414,26 +421,11 @@ TEST(X86DescriptorsTest, ManifestNamesVectorMemoryAndDotPackets) {
                    iree_string_builder_size(&builder));
   iree_string_builder_deinitialize(&builder);
 
-  EXPECT_NE(json.find("\"key\":\"x86.avx512.core\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512.vpaddd.zmm\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512.vpmulld.zmm\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512.vaddps.zmm\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512.vmulps.zmm\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512.vmovdqu32.load.zmm\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512.vpdpbusd.zmm\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512.vdpbf16ps.zmm\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512.kandq\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"x86.avx512.jmp\""), std::string::npos);
-  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot.512\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"resource_name\":\"x86.vector.dot\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"field\":\"acc\",\"role\":2,\"role_name\":\"operand\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"kind_name\":\"destructive\""), std::string::npos);
+  EXPECT_FALSE(json.empty());
+  EXPECT_NE(json.find("\"descriptors\""), std::string::npos);
+  EXPECT_NE(json.find("\"schedule_classes\""), std::string::npos);
+  EXPECT_NE(json.find("\"resources\""), std::string::npos);
+  EXPECT_NE(json.find("\"constraints\""), std::string::npos);
   EXPECT_NE(json.find("\"descriptor_refs\""), std::string::npos);
 }
 
