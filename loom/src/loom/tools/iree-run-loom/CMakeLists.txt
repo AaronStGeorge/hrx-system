@@ -16,19 +16,30 @@ loom_cc_binary(
   SRCS
     "iree-run-loom.c"
   DEPS
+    iree::async::util::proactor_pool
     iree::base
     iree::base::internal::arena
+    iree::base::threading
     iree::base::tooling::flags
+    iree::hal
     iree::io::file_handle
+    iree::io::stream
+    iree::modules::hal::types
     loom::src::loom::codegen::low::text_asm
     loom::src::loom::error::diagnostic
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
-    loom::src::loom::target::emit::ireevm::low_registry
+    loom::src::loom::ops::target
+    loom::src::loom::target::all::low_registry
+    loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::emit::ireevm::module_compiler
-    loom::src::loom::verify
+    loom::src::loom::target::emit::native::amdgpu::module_compiler
+    iree::tooling::comparison
     iree::tooling::context_util
+    iree::tooling::device_util
+    iree::tooling::function_io
+    iree::tooling::function_util
     iree::tooling::run_module
     iree::vm
 )

@@ -157,6 +157,52 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    hal_executable
+  HDRS
+    "hal_executable.h"
+  SRCS
+    "hal_executable.c"
+  DEPS
+    iree::base
+    iree::base::internal::flatcc::building
+    loom::src::loom::target::types
+    iree::schemas::amdgpu_executable_def_c_fbs
+    iree::schemas::executable_debug_info_c_fbs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    module_compiler
+  HDRS
+    "module_compiler.h"
+  SRCS
+    "module_compiler.c"
+  DEPS
+    ::hal_executable
+    ::kernel_hsaco
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::error::diagnostic
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::target
+    loom::src::loom::target::arch::amdgpu::hal_kernel_abi
+    loom::src::loom::target::arch::amdgpu::hal_resource_materialization
+    loom::src::loom::target::arch::amdgpu::low_registry
+    loom::src::loom::target::arch::amdgpu::target_info
+    loom::src::loom::target::arch::amdgpu::wait_packets
+    loom::src::loom::target::arch::amdgpu::wait_plan
+    loom::src::loom::target::module_compiler
+    loom::src::loom::verify
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     assembly_test
@@ -273,6 +319,40 @@ loom_cc_test(
     iree::base::internal::arena
     iree::io::stream
     loom::src::loom::target::emit::native::elf
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    hal_executable_test
+  SRCS
+    "hal_executable_test.cc"
+  DEPS
+    ::hal_executable
+    iree::base
+    iree::hal::utils::executable_header
+    iree::schemas::amdgpu_executable_def_c_fbs
+    iree::schemas::executable_debug_info_c_fbs
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    module_compiler_test
+  SRCS
+    "module_compiler_test.cc"
+  DEPS
+    ::module_compiler
+    iree::base
+    iree::base::internal::arena
+    iree::hal::utils::executable_header
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::testing::context
+    iree::schemas::amdgpu_executable_def_c_fbs
+    iree::schemas::executable_debug_info_c_fbs
     iree::testing::gtest
     iree::testing::gtest_main
 )

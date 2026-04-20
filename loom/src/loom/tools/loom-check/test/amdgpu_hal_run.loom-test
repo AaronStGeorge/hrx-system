@@ -1,0 +1,20 @@
+// REQUIRES: iree-run-loom, amdgpu-hal
+
+// ====
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&64xi32=0 --expected_binding=64xi32=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63
+
+target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+
+low.func.def target(@gfx_target) @loom_kernel() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %four = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %four) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  low.op<amdgpu.buffer_store_dword>(%tid, %binding, %byte_offset, %zero) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+low.abi.resource @binding0 {function = @loom_kernel, kind = hal_buffer_resource, index = 0, semantic_type = hal.buffer, abi_type = reg<amdgpu.sgpr x4>}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.

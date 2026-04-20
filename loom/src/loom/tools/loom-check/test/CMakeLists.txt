@@ -199,6 +199,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "amdgpu_hal_run"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/amdgpu_hal_run.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "run"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/run.loom-test"

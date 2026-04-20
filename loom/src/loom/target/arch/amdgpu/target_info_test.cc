@@ -27,6 +27,17 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx11Processor) {
   EXPECT_TRUE(processor->kernel_descriptor_has_architected_flat_scratch);
 }
 
+TEST(AmdgpuTargetInfoTest, IteratesProcessors) {
+  const iree_host_size_t count = loom_amdgpu_target_info_processor_count();
+  ASSERT_GT(count, 0u);
+  EXPECT_EQ(loom_amdgpu_target_info_processor_at(count), nullptr);
+
+  const loom_amdgpu_processor_info_t* first =
+      loom_amdgpu_target_info_processor_at(0);
+  ASSERT_NE(first, nullptr);
+  EXPECT_FALSE(iree_string_view_is_empty(first->target_cpu));
+}
+
 TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
   const loom_amdgpu_descriptor_set_info_t* descriptor_set = nullptr;
   IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_descriptor_set(

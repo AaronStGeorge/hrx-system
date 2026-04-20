@@ -128,6 +128,29 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    module_compiler
+  HDRS
+    "module_compiler.h"
+  SRCS
+    "module_compiler.c"
+  DEPS
+    ::ir_records
+    ::low_descriptor_registry
+    ::presets
+    ::types
+    iree::base
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::error::diagnostic
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::low
+    loom::src::loom::ops::target
+    loom::src::loom::verify
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_descriptor_registry_core_test
   HDRS
     "low_descriptor_registry_core_test.h"

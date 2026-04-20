@@ -18,38 +18,11 @@
 #include "loom/target/emit/ireevm/function_bytecode.h"
 #include "loom/target/emit/ireevm/low_registry.h"
 #include "loom/target/emit/ireevm/lower.h"
-#include "loom/target/ir_records.h"
-#include "loom/target/presets.h"
+#include "loom/target/module_compiler.h"
 
 enum {
   LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS = 20,
 };
-
-typedef struct loom_ireevm_module_compile_target_t {
-  // Materialized target.bundle records selected for this compilation.
-  loom_target_ir_bundle_storage_t bundle_storage;
-  // Module-local symbol reference for the selected target.bundle op.
-  loom_symbol_ref_t target_ref;
-} loom_ireevm_module_compile_target_t;
-
-typedef struct loom_ireevm_module_compile_diagnostic_emitter_t {
-  // Module containing op locations referenced by emitted diagnostics.
-  const loom_module_t* module;
-  // Source resolver for original source-backed locations.
-  loom_source_resolver_t source_resolver;
-  // Final diagnostic sink that owns rendering or capture policy.
-  loom_diagnostic_sink_t diagnostic_sink;
-  // Subsystem identity stored in materialized diagnostics.
-  loom_emitter_t emitter;
-} loom_ireevm_module_compile_diagnostic_emitter_t;
-
-static uint32_t loom_ireevm_module_compile_max_errors(
-    const loom_ireevm_module_compile_options_t* options) {
-  if (options && options->max_errors != 0) {
-    return options->max_errors;
-  }
-  return LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS;
-}
 
 static iree_string_view_t loom_ireevm_module_compile_module_name(
     const loom_ireevm_module_compile_options_t* options) {
@@ -59,309 +32,14 @@ static iree_string_view_t loom_ireevm_module_compile_module_name(
   return IREE_SV("loom");
 }
 
-static iree_string_view_t loom_ireevm_module_compile_target_symbol_name(
-    const loom_ireevm_module_compile_options_t* options) {
-  if (!options) {
-    return iree_string_view_empty();
-  }
-  iree_string_view_t target_symbol =
-      iree_string_view_trim(options->target_symbol);
-  if (iree_string_view_starts_with_char(target_symbol, '@')) {
-    target_symbol = iree_string_view_remove_prefix(target_symbol, 1);
-  }
-  return target_symbol;
-}
-
-static bool loom_ireevm_module_compile_resolve_emission_location(
-    const loom_ireevm_module_compile_diagnostic_emitter_t* emitter,
-    const loom_op_t* op, loom_source_range_t* out_source_location) {
-  if (!emitter || !emitter->module || !op) {
-    return false;
-  }
-  if (!loom_source_resolve(emitter->source_resolver, emitter->module,
-                           op->location, out_source_location)) {
-    return false;
-  }
-  if (out_source_location->provenance ==
-          LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE &&
-      out_source_location->source.size > 0) {
-    out_source_location->provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE;
-  }
-  return true;
-}
-
-static iree_host_size_t loom_ireevm_module_compile_collect_related_locations(
-    const loom_ireevm_module_compile_diagnostic_emitter_t* emitter,
-    const loom_diagnostic_related_op_t* related_ops,
-    iree_host_size_t related_op_count,
-    loom_diagnostic_related_location_t* out_related_locations) {
-  if (!related_ops || related_op_count == 0) {
-    return 0;
-  }
-  iree_host_size_t related_location_count = 0;
-  for (iree_host_size_t i = 0;
-       i < related_op_count &&
-       related_location_count < LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS;
-       ++i) {
-    loom_source_range_t source_location = {
-        .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
-    };
-    if (!loom_ireevm_module_compile_resolve_emission_location(
-            emitter, related_ops[i].op, &source_location)) {
-      continue;
-    }
-    out_related_locations[related_location_count++] =
-        (loom_diagnostic_related_location_t){
-            .label = related_ops[i].label,
-            .source_location = source_location,
-        };
-  }
-  return related_location_count;
-}
-
-static iree_status_t loom_ireevm_module_compile_emit_diagnostic(
-    void* user_data, const loom_diagnostic_emission_t* emission) {
-  loom_ireevm_module_compile_diagnostic_emitter_t* emitter =
-      (loom_ireevm_module_compile_diagnostic_emitter_t*)user_data;
-  if (!emitter || !emission || !emission->error) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "diagnostic emitter requires an emission");
-  }
-
-  loom_diagnostic_t diagnostic = {
-      .severity = emission->error->severity,
-      .error = emission->error,
-      .params = emission->params,
-      .param_count = emission->param_count,
-      .emitter = emitter->emitter,
-      .origin = {.provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE},
-      .source_location = {.provenance =
-                              LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE},
-  };
-
-  loom_diagnostic_related_location_t
-      related_locations[LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS];
-  diagnostic.related_location_count =
-      loom_ireevm_module_compile_collect_related_locations(
-          emitter, emission->related_ops, emission->related_op_count,
-          related_locations);
-  if (diagnostic.related_location_count > 0) {
-    diagnostic.related_locations = related_locations;
-  }
-
-  if (loom_ireevm_module_compile_resolve_emission_location(
-          emitter, emission->op, &diagnostic.source_location)) {
-    diagnostic.origin = diagnostic.source_location;
-  }
-  return loom_diagnostic_emit(&emitter->diagnostic_sink, &diagnostic);
-}
-
-static iree_diagnostic_emitter_t loom_ireevm_module_compile_emitter(
-    loom_ireevm_module_compile_diagnostic_emitter_t* emitter) {
-  return (iree_diagnostic_emitter_t){
-      .fn = loom_ireevm_module_compile_emit_diagnostic,
-      .user_data = emitter,
-  };
-}
-
-static iree_status_t loom_ireevm_module_compile_expand_presets(
-    loom_module_t* module,
-    const loom_target_low_descriptor_registry_t* low_registry) {
-  const loom_target_preset_registry_t preset_registry =
-      loom_target_low_descriptor_registry_presets(low_registry);
-  iree_host_size_t expanded_count = 0;
-  return loom_target_expand_presets(module, &preset_registry, &expanded_count);
-}
-
-static iree_status_t loom_ireevm_module_compile_verify_module(
-    const loom_module_t* module,
-    const loom_ireevm_module_compile_options_t* options) {
-  const loom_verify_options_t verify_options = {
-      .sink = options ? options->diagnostic_sink : (loom_diagnostic_sink_t){0},
-      .max_errors = loom_ireevm_module_compile_max_errors(options),
-      .source_resolver =
-          options ? options->source_resolver : (loom_source_resolver_t){0},
-  };
-  loom_verify_result_t result = {0};
-  IREE_RETURN_IF_ERROR(loom_verify_module(module, &verify_options, &result));
-  if (result.error_count > 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module verification failed with %" PRIu32 " error%s",
-        result.error_count, result.error_count == 1 ? "" : "s");
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_ireevm_module_compile_verify_low_module(
-    const loom_module_t* module,
-    const loom_target_low_descriptor_registry_t* low_registry,
-    loom_ireevm_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    uint32_t max_errors) {
-  const loom_low_verify_options_t low_verify_options = {
-      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
-      .descriptor_registry = &low_registry->registry,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-      .emitter = loom_ireevm_module_compile_emitter(diagnostic_emitter),
-      .max_errors = max_errors,
-  };
-  loom_low_verify_result_t result = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_low_verify_module(module, &low_verify_options, &result));
-  if (result.error_count > 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low verification failed with %" PRIu32 " error%s",
-                            result.error_count,
-                            result.error_count == 1 ? "" : "s");
-  }
-  return iree_ok_status();
-}
-
 static bool loom_ireevm_module_compile_bundle_is_compatible(
-    const loom_target_bundle_t* bundle) {
+    void* user_data, const loom_target_bundle_t* bundle) {
+  (void)user_data;
   return bundle && bundle->snapshot && bundle->export_plan &&
          bundle->snapshot->codegen_format == LOOM_TARGET_CODEGEN_FORMAT_VM &&
          bundle->snapshot->artifact_format ==
              LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE &&
          bundle->export_plan->abi_kind == LOOM_TARGET_ABI_VM_MODULE_FUNCTION;
-}
-
-static iree_status_t loom_ireevm_module_compile_find_symbol_by_name(
-    const loom_module_t* module, iree_string_view_t symbol_name,
-    uint16_t* out_symbol_id) {
-  IREE_ASSERT_ARGUMENT(out_symbol_id);
-  *out_symbol_id = LOOM_SYMBOL_ID_INVALID;
-  const loom_string_id_t symbol_name_id =
-      loom_module_lookup_string(module, symbol_name);
-  if (symbol_name_id == LOOM_STRING_ID_INVALID) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND, "symbol @%.*s was not found",
-                            (int)symbol_name.size, symbol_name.data);
-  }
-  const uint16_t symbol_id = loom_module_find_symbol(module, symbol_name_id);
-  if (symbol_id == LOOM_SYMBOL_ID_INVALID) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND, "symbol @%.*s was not found",
-                            (int)symbol_name.size, symbol_name.data);
-  }
-  *out_symbol_id = symbol_id;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_ireevm_module_compile_select_named_target(
-    const loom_module_t* module, iree_string_view_t target_symbol,
-    loom_ireevm_module_compile_target_t* out_target) {
-  uint16_t target_symbol_id = LOOM_SYMBOL_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_find_symbol_by_name(
-      module, target_symbol, &target_symbol_id));
-  IREE_RETURN_IF_ERROR(loom_target_ir_bundle_from_symbol_name(
-      module, target_symbol, &out_target->bundle_storage));
-  if (!loom_ireevm_module_compile_bundle_is_compatible(
-          &out_target->bundle_storage.bundle)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "target bundle @%.*s does not produce an IREE VM bytecode module "
-        "function",
-        (int)target_symbol.size, target_symbol.data);
-  }
-  out_target->target_ref =
-      (loom_symbol_ref_t){.module_id = 0, .symbol_id = target_symbol_id};
-  return iree_ok_status();
-}
-
-static iree_status_t loom_ireevm_module_compile_select_single_target(
-    const loom_module_t* module,
-    loom_ireevm_module_compile_target_t* out_target) {
-  iree_host_size_t candidate_count = 0;
-
-  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
-    if (i > UINT16_MAX) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "symbol index exceeds target ref range");
-    }
-    const loom_symbol_t* symbol = &module->symbols.entries[i];
-    if (!symbol->defining_op || !loom_target_bundle_isa(symbol->defining_op)) {
-      continue;
-    }
-    if (symbol->name_id >= module->strings.count) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "target bundle has invalid symbol name id");
-    }
-    iree_string_view_t symbol_name = module->strings.entries[symbol->name_id];
-    loom_target_ir_bundle_storage_t storage = {0};
-    IREE_RETURN_IF_ERROR(
-        loom_target_ir_bundle_from_symbol_name(module, symbol_name, &storage));
-    if (!loom_ireevm_module_compile_bundle_is_compatible(&storage.bundle)) {
-      continue;
-    }
-
-    ++candidate_count;
-    if (candidate_count == 1) {
-      out_target->bundle_storage = storage;
-      loom_target_ir_bundle_storage_rebind(&out_target->bundle_storage);
-      out_target->target_ref =
-          (loom_symbol_ref_t){.module_id = 0, .symbol_id = (uint16_t)i};
-    }
-  }
-
-  if (candidate_count == 0) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "module contains no IREE VM target bundle");
-  }
-  if (candidate_count > 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module contains %" PRIhsz
-                            " IREE VM target bundles; pass --loom-target=@name",
-                            candidate_count);
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_ireevm_module_compile_select_target(
-    const loom_module_t* module,
-    const loom_ireevm_module_compile_options_t* options,
-    loom_ireevm_module_compile_target_t* out_target) {
-  IREE_ASSERT_ARGUMENT(out_target);
-  *out_target = (loom_ireevm_module_compile_target_t){0};
-  iree_string_view_t target_symbol =
-      loom_ireevm_module_compile_target_symbol_name(options);
-  if (!iree_string_view_is_empty(target_symbol)) {
-    return loom_ireevm_module_compile_select_named_target(module, target_symbol,
-                                                          out_target);
-  }
-  return loom_ireevm_module_compile_select_single_target(module, out_target);
-}
-
-static iree_status_t loom_ireevm_module_compile_find_source_function(
-    const loom_module_t* module, const loom_target_bundle_t* bundle,
-    loom_func_like_t* out_function) {
-  IREE_ASSERT_ARGUMENT(out_function);
-  *out_function = (loom_func_like_t){0};
-  if (!bundle || !bundle->export_plan ||
-      iree_string_view_is_empty(bundle->export_plan->source_symbol)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "selected target bundle does not name an export source function");
-  }
-  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_ireevm_module_compile_find_symbol_by_name(
-      module, bundle->export_plan->source_symbol, &symbol_id));
-  const loom_symbol_t* symbol = &module->symbols.entries[symbol_id];
-  if (!symbol->defining_op) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "source function @%.*s has no definition",
-                            (int)bundle->export_plan->source_symbol.size,
-                            bundle->export_plan->source_symbol.data);
-  }
-  loom_func_like_t function = loom_func_like_cast(module, symbol->defining_op);
-  if (!loom_func_like_isa(function) || !loom_func_like_body(function) ||
-      function.op->kind != LOOM_OP_FUNC_DEF) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source symbol @%.*s is not a func.def with a body",
-                            (int)bundle->export_plan->source_symbol.size,
-                            bundle->export_plan->source_symbol.data);
-  }
-  *out_function = function;
-  return iree_ok_status();
 }
 
 static iree_status_t loom_ireevm_module_compile_append_cconv_type(
@@ -422,9 +100,9 @@ static iree_string_view_t loom_ireevm_module_compile_export_name(
 static iree_status_t loom_ireevm_module_compile_lower_function(
     loom_module_t* module,
     const loom_target_low_descriptor_registry_t* registry,
-    const loom_ireevm_module_compile_target_t* target,
+    const loom_target_module_compile_target_t* target,
     loom_func_like_t source_function,
-    loom_ireevm_module_compile_diagnostic_emitter_t* diagnostic_emitter,
+    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
     uint32_t max_errors, loom_low_lower_result_t* out_result) {
   loom_low_lower_policy_registry_t policy_registry = {0};
   loom_ireevm_low_lower_policy_registry_initialize(&policy_registry);
@@ -439,7 +117,7 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
       .descriptor_requirements =
           LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .policy = policy,
-      .emitter = loom_ireevm_module_compile_emitter(diagnostic_emitter),
+      .emitter = loom_target_module_compile_emitter(diagnostic_emitter),
       .max_errors = max_errors,
   };
   IREE_RETURN_IF_ERROR(loom_low_lower_function(module, source_function,
@@ -462,19 +140,24 @@ iree_status_t loom_ireevm_compile_module_archive(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "module is required");
   }
 
-  const uint32_t max_errors = loom_ireevm_module_compile_max_errors(options);
-  loom_target_low_descriptor_registry_t low_registry = {0};
-  loom_ireevm_low_descriptor_registry_initialize(&low_registry);
-  loom_ireevm_module_compile_diagnostic_emitter_t diagnostic_emitter = {
-      .module = module,
-      .source_resolver =
-          options ? options->source_resolver : (loom_source_resolver_t){0},
+  const loom_target_module_compile_options_t target_options = {
+      .target_symbol =
+          options ? options->target_symbol : iree_string_view_empty(),
       .diagnostic_sink =
           options ? options->diagnostic_sink : (loom_diagnostic_sink_t){0},
-      .emitter = LOOM_EMITTER_VERIFIER,
+      .source_resolver =
+          options ? options->source_resolver : (loom_source_resolver_t){0},
+      .max_errors = options ? options->max_errors : 0,
   };
+  const uint32_t max_errors = loom_target_module_compile_max_errors(
+      &target_options, LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
+  loom_target_low_descriptor_registry_t low_registry = {0};
+  loom_ireevm_low_descriptor_registry_initialize(&low_registry);
+  loom_target_module_compile_diagnostic_emitter_t diagnostic_emitter = {0};
+  loom_target_module_compile_diagnostic_emitter_initialize(
+      module, &target_options, LOOM_EMITTER_VERIFIER, &diagnostic_emitter);
 
-  loom_ireevm_module_compile_target_t target = {0};
+  loom_target_module_compile_target_t target = {0};
   loom_func_like_t source_function = {0};
   loom_low_lower_result_t lower_result = {0};
   loom_ireevm_function_bytecode_t bytecode = {0};
@@ -487,16 +170,26 @@ iree_status_t loom_ireevm_compile_module_archive(
   iree_arena_initialize(&block_pool, &sidecar_arena);
 
   iree_status_t status =
-      loom_ireevm_module_compile_expand_presets(module, &low_registry);
+      loom_target_module_compile_expand_presets(module, &low_registry);
   if (iree_status_is_ok(status)) {
-    status = loom_ireevm_module_compile_verify_module(module, options);
+    status = loom_target_module_compile_verify_module(
+        module, &target_options, LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_ireevm_module_compile_select_target(module, options, &target);
+    status = loom_target_module_compile_select_target(
+        module, &target_options,
+        loom_ireevm_module_compile_bundle_is_compatible, NULL,
+        IREE_SV("IREE VM"), &target);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_ireevm_module_compile_find_source_function(
+    status = loom_target_module_compile_find_source_function(
         module, &target.bundle_storage.bundle, &source_function);
+  }
+  if (iree_status_is_ok(status) &&
+      source_function.op->kind != LOOM_OP_FUNC_DEF) {
+    status = iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "IREE VM archive compiler requires the export source to be a func.def");
   }
   if (iree_status_is_ok(status)) {
     status = loom_ireevm_module_compile_build_cconv(
@@ -508,17 +201,20 @@ iree_status_t loom_ireevm_compile_module_archive(
         max_errors, &lower_result);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_ireevm_module_compile_verify_module(module, options);
+    status = loom_target_module_compile_verify_module(
+        module, &target_options, LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_ireevm_module_compile_verify_low_module(
-        module, &low_registry, &diagnostic_emitter, max_errors);
+    status = loom_target_module_compile_verify_low_module(
+        module, &low_registry,
+        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        &diagnostic_emitter, max_errors);
   }
   loom_low_packetization_t packetization = {0};
   if (iree_status_is_ok(status)) {
     const loom_low_packetization_options_t packetization_options = {
         .descriptor_registry = &low_registry.registry,
-        .emitter = loom_ireevm_module_compile_emitter(&diagnostic_emitter),
+        .emitter = loom_target_module_compile_emitter(&diagnostic_emitter),
     };
     status = loom_low_packetize_function(module, lower_result.low_func_op,
                                          &packetization_options, &sidecar_arena,

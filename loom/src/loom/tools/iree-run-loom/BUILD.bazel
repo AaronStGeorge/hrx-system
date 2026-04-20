@@ -18,24 +18,6 @@ package(
 )
 
 iree_assert_no_dependency(
-    name = "tool_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/tools/iree-run-loom",
-)
-
-iree_assert_no_dependency(
-    name = "tool_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/tools/iree-run-loom",
-)
-
-iree_assert_no_dependency(
-    name = "tool_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/tools/iree-run-loom",
-)
-
-iree_assert_no_dependency(
     name = "tool_no_llvmir_emit_dep",
     dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
     target = "//loom/src/loom/tools/iree-run-loom",
@@ -50,14 +32,25 @@ loom_cc_binary(
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/target/emit/ireevm:low_registry",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target/all:low_registry",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/emit/ireevm:module_compiler",
-        "//loom/src/loom/verify",
+        "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
+        "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/threading",
         "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/hal",
         "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/modules/hal:types",
+        "//runtime/src/iree/tooling:comparison",
         "//runtime/src/iree/tooling:context_util",
+        "//runtime/src/iree/tooling:device_util",
+        "//runtime/src/iree/tooling:function_io",
+        "//runtime/src/iree/tooling:function_util",
         "//runtime/src/iree/tooling:run_module",
         "//runtime/src/iree/vm",
     ],

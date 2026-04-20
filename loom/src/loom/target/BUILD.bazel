@@ -115,6 +115,26 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "module_compiler",
+    srcs = ["module_compiler.c"],
+    hdrs = ["module_compiler.h"],
+    deps = [
+        ":ir_records",
+        ":low_descriptor_registry",
+        ":presets",
+        ":types",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_descriptor_registry_core_test",
     srcs = ["low_descriptor_registry_core_test.c"],
     hdrs = ["low_descriptor_registry_core_test.h"],

@@ -77,6 +77,7 @@ static bool loom_check_requirement_name_is_known(
          iree_string_view_equal(requirement, IREE_SV("llvm-mc")) ||
          iree_string_view_equal(requirement, IREE_SV("llvm-objdump")) ||
          iree_string_view_equal(requirement, IREE_SV("iree-run-loom")) ||
+         iree_string_view_equal(requirement, IREE_SV("amdgpu-hal")) ||
          loom_llvmir_target_registry_llc_requirement_provider(
              &target_registry, requirement, NULL) ||
          iree_string_view_equal(requirement,
@@ -141,6 +142,34 @@ static iree_status_t loom_check_query_iree_run_loom(
   return status;
 }
 
+static iree_status_t loom_check_query_amdgpu_hal(
+    const loom_check_environment_t* environment, iree_allocator_t allocator) {
+  iree_string_view_t path = loom_check_iree_run_loom_path(environment);
+  iree_string_view_t arguments[] = {IREE_SV("--probe_amdgpu_hal")};
+  loom_tool_process_result_t result = {0};
+  IREE_RETURN_IF_ERROR(loom_tool_process_run(
+      path, loom_check_process_path_searches_path(path), arguments,
+      IREE_ARRAYSIZE(arguments), allocator, &result));
+
+  iree_status_t status = iree_ok_status();
+  if (!loom_tool_process_result_succeeded(&result)) {
+    iree_string_view_t detail = iree_make_string_view(
+        result.stderr_text.data, result.stderr_text.length);
+    if (iree_string_view_is_empty(detail)) {
+      detail = iree_make_string_view(result.stdout_text.data,
+                                     result.stdout_text.length);
+    }
+    detail = iree_string_view_trim(detail);
+    status = iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "iree-run-loom --probe_amdgpu_hal exited with code %d%s%.*s",
+        result.exit_code, iree_string_view_is_empty(detail) ? "" : ": ",
+        (int)iree_min(detail.size, (iree_host_size_t)2048), detail.data);
+  }
+  loom_tool_process_result_deinitialize(&result, allocator);
+  return status;
+}
+
 static iree_status_t loom_check_query_requirement(
     const loom_check_environment_t* environment, iree_string_view_t requirement,
     iree_allocator_t allocator) {
@@ -165,6 +194,9 @@ static iree_status_t loom_check_query_requirement(
   if (iree_string_view_equal(requirement, IREE_SV("iree-run-loom"))) {
     return loom_check_query_iree_run_loom(environment, allocator);
   }
+  if (iree_string_view_equal(requirement, IREE_SV("amdgpu-hal"))) {
+    return loom_check_query_amdgpu_hal(environment, allocator);
+  }
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
   const loom_llvmir_target_profile_provider_t* provider = NULL;
@@ -184,7 +216,8 @@ static iree_status_t loom_check_append_supported_requirement_names(
     loom_check_result_t* result) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
       &result->detail,
-      "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump, iree-run-loom"));
+      "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump, iree-run-loom, "
+      "amdgpu-hal"));
 
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
@@ -235,8 +268,18 @@ static iree_status_t loom_check_skip_unavailable_requirement(
   const char* status_name =
       iree_status_code_string(iree_status_code(availability_status));
   iree_status_t status = iree_string_builder_append_format(
-      &result->detail, "skipped: requirement '%.*s' unavailable: %s\n",
+      &result->detail, "skipped: requirement '%.*s' unavailable: %s",
       (int)requirement.size, requirement.data, status_name);
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_cstring(&result->detail, ": ");
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        iree_string_builder_append_status(&result->detail, availability_status);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_cstring(&result->detail, "\n");
+  }
   iree_status_free(availability_status);
   return status;
 }
