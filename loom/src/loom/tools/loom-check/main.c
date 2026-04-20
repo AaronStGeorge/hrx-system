@@ -437,7 +437,8 @@ int loom_check_main(int argc, char** argv,
       "              low-allocation-json, low-packet-json,\n"
       "              low-descriptor-manifest, target-low-registry-manifest,\n"
       "              and source-low. Linked providers may add more.\n"
-      "  run <args>  Execute input with iree-run-loom and compare output.\n"
+      "  run <args>  Execute input with a linked run provider and compare "
+      "output.\n"
       "\n"
       "File format:\n"
       "  A .loom-test file contains one or more cases separated by // ====.\n"
@@ -603,6 +604,11 @@ int loom_check_production_main(int argc, char** argv,
           {
               .providers = runner->emit_providers,
               .provider_count = runner->emit_provider_count,
+          },
+      .run_providers =
+          {
+              .providers = runner->run_providers,
+              .provider_count = runner->run_provider_count,
           },
       .requirement_providers =
           {

@@ -168,8 +168,77 @@ typedef struct loom_check_initialize_low_lower_policy_registry_callback_t {
 
 typedef struct loom_check_environment_t loom_check_environment_t;
 typedef struct loom_check_emit_provider_t loom_check_emit_provider_t;
+typedef struct loom_check_run_provider_t loom_check_run_provider_t;
 typedef struct loom_check_requirement_provider_t
     loom_check_requirement_provider_t;
+
+// Parsed RUN: run arguments after loom-check shell-like quote handling.
+typedef struct loom_check_run_arguments_t {
+  // Argument values in RUN-line order.
+  const iree_string_view_t* values;
+  // Number of entries in |values|.
+  iree_host_size_t count;
+} loom_check_run_arguments_t;
+
+// Comparable result produced by a linked RUN: run provider.
+typedef struct loom_check_run_result_t {
+  // Text written to the provider's stdout stream.
+  iree_string_builder_t stdout_text;
+  // Text written to the provider's stderr stream.
+  iree_string_builder_t stderr_text;
+  // Process-style exit code: zero for success and non-zero for failure.
+  int exit_code;
+} loom_check_run_result_t;
+
+// Prepared RUN: run request passed to a linked provider.
+typedef struct loom_check_run_provider_request_t {
+  // Source filename reported in diagnostics and emitted target modules.
+  iree_string_view_t filename;
+  // Parsed test case being executed.
+  const loom_check_case_t* test_case;
+  // Runner environment that selected this provider.
+  const loom_check_environment_t* environment;
+  // Parsed RUN: run arguments after the "run" verb.
+  const loom_check_run_arguments_t* arguments;
+  // Host allocator for transient provider allocations.
+  iree_allocator_t host_allocator;
+  // Result receiving provider stdout/stderr and exit status.
+  loom_check_run_result_t* result;
+} loom_check_run_provider_request_t;
+
+// Returns true when |provider| can execute |arguments|.
+typedef bool (*loom_check_run_provider_match_fn_t)(
+    const loom_check_run_provider_t* provider,
+    const loom_check_run_arguments_t* arguments);
+
+// Executes a RUN: run case in-process.
+typedef iree_status_t (*loom_check_run_provider_execute_fn_t)(
+    const loom_check_run_provider_t* provider,
+    const loom_check_run_provider_request_t* request);
+
+// Appends provider-owned runner names to a diagnostic list.
+typedef iree_status_t (*loom_check_run_provider_append_names_fn_t)(
+    const loom_check_run_provider_t* provider, iree_string_builder_t* builder);
+
+// In-process RUN: run provider linked into a loom-check runner.
+struct loom_check_run_provider_t {
+  // Human-readable provider name used for debugging and diagnostics.
+  iree_string_view_t name;
+  // Returns true when this provider owns the RUN: run argument set.
+  loom_check_run_provider_match_fn_t match;
+  // Executes the RUN: run case and fills the provider result.
+  loom_check_run_provider_execute_fn_t execute;
+  // Appends supported runner names to diagnostic help text.
+  loom_check_run_provider_append_names_fn_t append_names;
+};
+
+// Registry of optional in-process RUN: run providers linked into a runner.
+typedef struct loom_check_run_provider_registry_t {
+  // Linked run provider table.
+  const loom_check_run_provider_t* const* providers;
+  // Number of entries in |providers|.
+  iree_host_size_t provider_count;
+} loom_check_run_provider_registry_t;
 
 // Prepared module state passed to a linked emit provider.
 typedef struct loom_check_emit_provider_request_t {
@@ -292,6 +361,8 @@ struct loom_check_environment_t {
       initialize_low_lower_policy_registry;
   // Optional emit providers linked into this runner.
   loom_check_emit_provider_registry_t emit_providers;
+  // Optional in-process RUN: run providers linked into this runner.
+  loom_check_run_provider_registry_t run_providers;
   // Optional requirement providers linked into this runner.
   loom_check_requirement_provider_registry_t requirement_providers;
   // Filesystem path or executable name for iree-run-loom. Empty means search
@@ -415,11 +486,11 @@ iree_status_t loom_check_execute_emit(
     iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
     loom_check_result_t* result);
 
-// Writes the case input to a temporary .loom file, invokes iree-run-loom with
+// Executes the case input through a linked run provider selected by
 // test_case->run_arguments, captures stdout/stderr, and compares the captured
 // output against the expected section. Same diff/update behavior as roundtrip.
 iree_status_t loom_check_execute_run(
-    const loom_check_case_t* test_case,
+    const loom_check_case_t* test_case, iree_string_view_t filename,
     const loom_check_environment_t* environment, iree_allocator_t allocator,
     loom_check_result_t* result);
 

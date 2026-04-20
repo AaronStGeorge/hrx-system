@@ -1,6 +1,3 @@
-// REQUIRES: iree-run-loom
-
-// ====
 // RUN: run --function=branchy --input=0 --input=21 --expected_output=42
 
 target.preset @vm_target {key = "iree-vm", source = @branchy}

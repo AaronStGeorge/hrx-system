@@ -111,6 +111,22 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    loom_check_run
+  HDRS
+    "loom_check_run.h"
+  SRCS
+    "loom_check_run.c"
+  DEPS
+    iree::base
+    loom::src::loom::tooling::execution::candidate
+    loom::src::loom::tooling::execution::session
+    loom::src::loom::tooling::execution::vm_invocation
+    loom::src::loom::tools::loom-check::execute
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     lower
   HDRS
     "lower.h"
@@ -131,6 +147,7 @@ loom_cc_binary(
   SRCS
     "loom-check.c"
   DEPS
+    ::loom_check_run
     ::low_registry
     ::lower
     loom::src::loom::tools::loom-check::main
@@ -234,6 +251,17 @@ iree_executable_test(
     "pass_source_low"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/pass_source_low.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "run"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/run.loom-test"
   SRC
     ::loom-check
   LABELS

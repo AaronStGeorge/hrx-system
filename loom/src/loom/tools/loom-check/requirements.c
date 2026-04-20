@@ -26,16 +26,6 @@ bool loom_check_process_path_searches_path(iree_string_view_t path) {
   return true;
 }
 
-static bool loom_check_case_has_requirement(const loom_check_case_t* test_case,
-                                            iree_string_view_t requirement) {
-  for (iree_host_size_t i = 0; i < test_case->requirement_count; ++i) {
-    if (iree_string_view_equal(test_case->requirements[i], requirement)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 static bool loom_check_builtin_requirement_provider_matches(
     const loom_check_requirement_provider_t* provider,
     iree_string_view_t requirement) {
@@ -197,29 +187,6 @@ static iree_status_t loom_check_skip_unavailable_requirement(
   return status;
 }
 
-static iree_status_t loom_check_fail_missing_run_requirement(
-    loom_check_result_t* result) {
-  result->raw_outcome = LOOM_CHECK_FAIL;
-  result->final_outcome = LOOM_CHECK_FAIL;
-  return iree_string_builder_append_cstring(
-      &result->detail,
-      "RUN: run requires '// REQUIRES: iree-run-loom'; external tool "
-      "dependencies must be declared even when they are available\n");
-}
-
-static iree_status_t loom_check_require_run_tool_declarations(
-    const loom_check_case_t* test_case, loom_check_result_t* result,
-    bool* out_continue_execution) {
-  if (test_case->mode != LOOM_CHECK_MODE_RUN) {
-    return iree_ok_status();
-  }
-  if (loom_check_case_has_requirement(test_case, IREE_SV("iree-run-loom"))) {
-    return iree_ok_status();
-  }
-  *out_continue_execution = false;
-  return loom_check_fail_missing_run_requirement(result);
-}
-
 static iree_status_t loom_check_require_emit_tool_declarations(
     const loom_check_environment_t* environment,
     const loom_check_case_t* test_case, loom_check_result_t* result,
@@ -266,12 +233,6 @@ iree_status_t loom_check_preflight_requirements(
   if (!*out_continue_execution) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_check_require_run_tool_declarations(
-      test_case, result, out_continue_execution));
-  if (!*out_continue_execution) {
-    return iree_ok_status();
-  }
-
   for (iree_host_size_t i = 0; i < test_case->requirement_count; ++i) {
     iree_string_view_t requirement = test_case->requirements[i];
     const loom_check_requirement_provider_t* provider =

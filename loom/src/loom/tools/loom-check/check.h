@@ -42,8 +42,8 @@
 //                           Low schedule diagnostics are one of none,
 //                           pressure, resources, hazards, candidates, model,
 //                           or all.
-//   // RUN: run <args>      Execute the input through iree-run-loom with
-//                           <args> forwarded after the temporary input path.
+//   // RUN: run <args>      Execute the input through a linked run provider
+//                           selected by <args>.
 //   // REQUIRES: <name>[, <name>...]
 //                           Skip the case when external tools or target
 //                           backends are unavailable.
@@ -115,7 +115,7 @@ typedef enum loom_check_mode_e {
   LOOM_CHECK_MODE_PASS = 2,       // Parse -> run pipeline -> print -> compare.
   LOOM_CHECK_MODE_FORMAT = 3,  // Parse -> convert format -> print -> compare.
   LOOM_CHECK_MODE_EMIT = 4,    // Parse -> lower to target output -> compare.
-  LOOM_CHECK_MODE_RUN = 5,     // Execute with an external iree-run-loom.
+  LOOM_CHECK_MODE_RUN = 5,     // Execute with a linked run provider.
 } loom_check_mode_t;
 
 // Returns a human-readable name for the mode.
@@ -220,8 +220,7 @@ typedef struct loom_check_case_t {
   iree_string_view_t format_target;
   // For EMIT mode: target emission request (e.g. "target-form profile").
   iree_string_view_t emit_target;
-  // For RUN mode: iree-run-loom command-line arguments forwarded after the
-  // temporary input file path.
+  // For RUN mode: arguments used to select and configure a linked run provider.
   iree_string_view_t run_arguments;
   // Whether this case is expected to fail.
   bool xfail;

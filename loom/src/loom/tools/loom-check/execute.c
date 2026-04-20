@@ -348,8 +348,8 @@ iree_status_t loom_check_execute_case(
       break;
     }
     case LOOM_CHECK_MODE_RUN: {
-      IREE_RETURN_IF_ERROR(
-          loom_check_execute_run(test_case, environment, allocator, result));
+      IREE_RETURN_IF_ERROR(loom_check_execute_run(
+          test_case, filename, environment, allocator, result));
       break;
     }
     default:
