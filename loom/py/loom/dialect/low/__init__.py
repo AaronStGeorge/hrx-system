@@ -26,6 +26,7 @@ from loom.dialect.low.defs import (
     low_ops,
     low_resource,
     low_return,
+    low_slice,
 )
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "low_concat",
     "low_const",
     "low_copy",
+    "low_slice",
     "low_func_decl",
     "low_func_def",
     "low_abi_adapter",

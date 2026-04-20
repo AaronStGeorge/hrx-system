@@ -48,6 +48,8 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_MUBUF = 9,
   // RDNA4 VBUFFER instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER = 10,
+  // Vector one-source 32-bit instruction format.
+  LOOM_AMDGPU_ENCODING_FORMAT_VOP1 = 30,
   // Vector one-source 32-bit instruction format with mandatory literal.
   LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL = 42,
 } loom_amdgpu_encoding_format_t;
@@ -153,6 +155,12 @@ iree_status_t loom_amdgpu_encoding_pack(
     uint16_t opcode, const loom_amdgpu_encoding_field_value_t* field_values,
     iree_host_size_t field_value_count,
     loom_amdgpu_encoding_packet_t* out_packet);
+
+// Packs a 32-bit VGPR-to-VGPR v_mov_b32 packet using the target table's VOP1
+// layout.
+iree_status_t loom_amdgpu_encoding_pack_v_mov_b32_vgpr(
+    const loom_amdgpu_encoding_table_t* table, uint16_t opcode, uint16_t vdst,
+    uint16_t vsrc0, loom_amdgpu_encoding_packet_t* out_packet);
 
 #ifdef __cplusplus
 }  // extern "C"

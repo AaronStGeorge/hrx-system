@@ -337,6 +337,18 @@ static iree_status_t loom_low_packet_asm_append_concat(
   return iree_string_builder_append_cstring(state->builder, ")");
 }
 
+static iree_status_t loom_low_packet_asm_append_slice(
+    loom_low_packet_asm_state_t* state, const loom_op_t* op) {
+  IREE_RETURN_IF_ERROR(
+      loom_low_packet_asm_append_value(state, loom_low_slice_result(op)));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(state->builder, " = slice "));
+  IREE_RETURN_IF_ERROR(
+      loom_low_packet_asm_append_value(state, loom_low_slice_source(op)));
+  return iree_string_builder_append_format(state->builder, "[%" PRId64 "]",
+                                           loom_low_slice_offset(op));
+}
+
 static iree_status_t loom_low_packet_asm_append_branch_args(
     loom_low_packet_asm_state_t* state, const loom_value_id_t* values,
     iree_host_size_t value_count) {
@@ -389,6 +401,7 @@ static const loom_low_packet_asm_structural_dispatch_t
     kLoomLowPacketAsmStructuralDispatch[] = {
         {LOOM_OP_LOW_RETURN, loom_low_packet_asm_append_return},
         {LOOM_OP_LOW_COPY, loom_low_packet_asm_append_copy},
+        {LOOM_OP_LOW_SLICE, loom_low_packet_asm_append_slice},
         {LOOM_OP_LOW_CONCAT, loom_low_packet_asm_append_concat},
         {LOOM_OP_LOW_BR, loom_low_packet_asm_append_br},
         {LOOM_OP_LOW_COND_BR, loom_low_packet_asm_append_cond_br},

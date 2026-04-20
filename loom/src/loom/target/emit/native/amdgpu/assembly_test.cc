@@ -734,6 +734,100 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideCopyToB128Packets) {
   EXPECT_FALSE(saw_dword_store);
 }
 
+TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideAddToLanePackets) {
+  loom_low_lower_result_t lower_result = {};
+  LowerSource("amdgpu-gfx11",
+              "func.def @gfx_source(%lhs: buffer, %rhs: buffer, %output: "
+              "buffer) {\n"
+              "  %tid = kernel.workitem.id<x> : index\n"
+              "  %zero = index.constant 0 : offset\n"
+              "  %lhs_view = buffer.view %lhs[%zero] : buffer -> "
+              "view<64x4xi32, #dense>\n"
+              "  %rhs_view = buffer.view %rhs[%zero] : buffer -> "
+              "view<64x4xi32, #dense>\n"
+              "  %output_view = buffer.view %output[%zero] : buffer -> "
+              "view<64x4xi32, #dense>\n"
+              "  %lhs_loaded = vector.load %lhs_view[%tid, 0] : "
+              "view<64x4xi32, #dense> -> vector<4xi32>\n"
+              "  %rhs_loaded = vector.load %rhs_view[%tid, 0] : "
+              "view<64x4xi32, #dense> -> vector<4xi32>\n"
+              "  %sum = vector.addi %lhs_loaded, %rhs_loaded : vector<4xi32>\n"
+              "  vector.store %sum, %output_view[%tid, 0] : vector<4xi32>, "
+              "view<64x4xi32, #dense>\n"
+              "  func.return\n"
+              "}\n",
+              &lower_result);
+  EXPECT_EQ(lower_result.error_count, 0u);
+  ASSERT_NE(lower_result.low_func_op, nullptr);
+  ASSERT_NE(lower_result.abi_adapter_op, nullptr);
+
+  loom_low_verify_options_t verify_options = {
+      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
+      .descriptor_registry = &target_registry_.registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .max_errors = 20,
+  };
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      loom_low_verify_module(module_, &verify_options, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+
+  uint32_t resource_count = 0;
+  uint32_t wide_load_count = 0;
+  uint32_t add_count = 0;
+  uint32_t slice_count = 0;
+  bool saw_concat = false;
+  bool saw_wide_store = false;
+  bool saw_dword_load = false;
+  bool saw_dword_store = false;
+  loom_region_t* low_body = loom_low_func_def_body(lower_result.low_func_op);
+  loom_block_t* entry_block = loom_region_entry_block(low_body);
+  loom_op_t* op = nullptr;
+  loom_block_for_each_op(entry_block, op) {
+    if (loom_low_resource_isa(op)) {
+      ++resource_count;
+    } else if (loom_low_slice_isa(op)) {
+      EXPECT_GE(loom_low_slice_offset(op), 0);
+      ++slice_count;
+    } else if (loom_low_concat_isa(op)) {
+      EXPECT_EQ(loom_low_concat_sources(op).count, 4u);
+      saw_concat = true;
+    } else if (loom_low_op_isa(op)) {
+      if (StringIdEquals(loom_low_op_opcode(op),
+                         IREE_SV("amdgpu.buffer_load_b128"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 3u);
+        EXPECT_EQ(loom_low_op_results(op).count, 1u);
+        ++wide_load_count;
+      } else if (StringIdEquals(loom_low_op_opcode(op),
+                                IREE_SV("amdgpu.v_add_u32"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 2u);
+        EXPECT_EQ(loom_low_op_results(op).count, 1u);
+        ++add_count;
+      } else if (StringIdEquals(loom_low_op_opcode(op),
+                                IREE_SV("amdgpu.buffer_store_b128"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 4u);
+        EXPECT_EQ(loom_low_op_results(op).count, 0u);
+        saw_wide_store = true;
+      } else if (StringIdEquals(loom_low_op_opcode(op),
+                                IREE_SV("amdgpu.buffer_load_dword"))) {
+        saw_dword_load = true;
+      } else if (StringIdEquals(loom_low_op_opcode(op),
+                                IREE_SV("amdgpu.buffer_store_dword"))) {
+        saw_dword_store = true;
+      }
+    }
+  }
+  EXPECT_EQ(resource_count, 3u);
+  EXPECT_EQ(wide_load_count, 2u);
+  EXPECT_EQ(slice_count, 8u);
+  EXPECT_EQ(add_count, 4u);
+  EXPECT_TRUE(saw_concat);
+  EXPECT_TRUE(saw_wide_store);
+  EXPECT_FALSE(saw_dword_load);
+  EXPECT_FALSE(saw_dword_store);
+}
+
 TEST_F(AmdgpuAssemblyTest, EmitsPlannedWaitPackets) {
   struct Case {
     const char* preset_key;

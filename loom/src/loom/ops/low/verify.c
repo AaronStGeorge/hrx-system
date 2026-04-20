@@ -658,6 +658,59 @@ static iree_status_t loom_low_emit_structural_storage_attr_error(
       field_name, reason, NULL, 0, emitter);
 }
 
+static iree_status_t loom_low_verify_same_register_unit_count(
+    const loom_module_t* module, const loom_op_t* op, loom_value_id_t source_id,
+    loom_value_id_t result_id, iree_diagnostic_emitter_t emitter) {
+  const loom_type_t source_type = loom_module_value_type(module, source_id);
+  const loom_type_t result_type = loom_module_value_type(module, result_id);
+  if (!loom_type_is_register(source_type) ||
+      !loom_type_is_register(result_type)) {
+    return iree_ok_status();
+  }
+  if (loom_type_register_unit_count(source_type) ==
+      loom_type_register_unit_count(result_type)) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_structural_storage_error(
+      module, op, loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, 0),
+      IREE_SV("result"),
+      IREE_SV("result register unit count must match the source"), NULL, 0,
+      emitter);
+}
+
+static iree_status_t loom_low_verify_slice_register_range(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  const int64_t offset = loom_low_slice_offset(op);
+  if (offset < 0) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_slice_offset_ATTR_INDEX, IREE_SV("offset"),
+        IREE_SV("offset must be non-negative"), emitter);
+  }
+
+  const loom_type_t source_type =
+      loom_module_value_type(module, loom_low_slice_source(op));
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_low_slice_result(op));
+  if (!loom_type_is_register(source_type) ||
+      !loom_type_is_register(result_type)) {
+    return iree_ok_status();
+  }
+
+  const uint64_t source_unit_count = loom_type_register_unit_count(source_type);
+  const uint64_t result_unit_count = loom_type_register_unit_count(result_type);
+  const uint64_t offset_unit_count = (uint64_t)offset;
+  if (offset_unit_count > source_unit_count ||
+      result_unit_count > source_unit_count - offset_unit_count) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_slice_offset_ATTR_INDEX, IREE_SV("offset"),
+        IREE_SV("offset plus result register units must fit within the source "
+                "register range"),
+        emitter);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_slot_function(
     const loom_module_t* module, const loom_op_t* op,
     loom_symbol_ref_t function_ref, uint16_t attr_index,
@@ -1906,6 +1959,19 @@ iree_status_t loom_low_const_verify(const loom_module_t* module,
   return loom_low_verify_descriptor_key(module, op, emitter,
                                         loom_low_const_opcode(op),
                                         loom_low_const_opcode_ATTR_INDEX);
+}
+
+iree_status_t loom_low_copy_verify(const loom_module_t* module,
+                                   const loom_op_t* op,
+                                   iree_diagnostic_emitter_t emitter) {
+  return loom_low_verify_same_register_unit_count(
+      module, op, loom_low_copy_source(op), loom_low_copy_result(op), emitter);
+}
+
+iree_status_t loom_low_slice_verify(const loom_module_t* module,
+                                    const loom_op_t* op,
+                                    iree_diagnostic_emitter_t emitter) {
+  return loom_low_verify_slice_register_range(module, op, emitter);
 }
 
 iree_status_t loom_low_live_in_verify(const loom_module_t* module,

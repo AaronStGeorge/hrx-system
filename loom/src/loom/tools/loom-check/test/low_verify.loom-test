@@ -16,7 +16,44 @@ low.func.def target(@test_target) @add(%lhs : reg<test.i32>, %rhs : reg<test.i32
 target.preset @test_target {key = "test-low", source = @concat}
 low.func.def target(@test_target) @concat(%lo : reg<test.i32>, %hi : reg<test.i32>) -> (reg<test.i32 x2>) {
   %pair = low.concat(%lo, %hi) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+  %lane = low.slice %pair[1] : reg<test.i32 x2> -> reg<test.i32>
   low.return %pair : reg<test.i32 x2>
+}
+
+// ====
+
+target.preset @test_target {key = "test-low", source = @copy_bad_units}
+low.func.def target(@test_target) @copy_bad_units(%pair : reg<test.i32 x2>) {
+  // ERROR@+1: LOWERING/024
+  %copy = low.copy %pair : reg<test.i32 x2> -> reg<test.i32>
+  low.return
+}
+
+// ====
+
+target.preset @test_target {key = "test-low", source = @slice_bad_class}
+low.func.def target(@test_target) @slice_bad_class(%pair : reg<test.i32 x2>) {
+  // ERROR@+1: TYPE/001
+  %lane = low.slice %pair[0] : reg<test.i32 x2> -> reg<test.i64>
+  low.return
+}
+
+// ====
+
+target.preset @test_target {key = "test-low", source = @slice_negative_offset}
+low.func.def target(@test_target) @slice_negative_offset(%pair : reg<test.i32 x2>) {
+  // ERROR@+1: LOWERING/024
+  %lane = low.slice %pair[-1] : reg<test.i32 x2> -> reg<test.i32>
+  low.return
+}
+
+// ====
+
+target.preset @test_target {key = "test-low", source = @slice_out_of_range}
+low.func.def target(@test_target) @slice_out_of_range(%pair : reg<test.i32 x2>) {
+  // ERROR@+1: LOWERING/024
+  %lane = low.slice %pair[2] : reg<test.i32 x2> -> reg<test.i32>
+  low.return
 }
 
 // ====
@@ -128,12 +165,11 @@ target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", da
 target.export @vm_export {export_symbol = "branch", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
 target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
 target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
-low.func.def target(@test_target) @branch(%arg : reg<test.i32>) -> (reg<test.i32>) {
-  %copy = low.copy %arg : reg<test.i32> -> reg<test.i64>
-  // ERROR@+1: STRUCTURE/026 "low.br" "successor 0" "expected reg<test.i32>"
-  low.br ^exit(%copy : reg<test.i64>)
-^exit(%value : reg<test.i32>):
-  low.return %value : reg<test.i32>
+low.func.def target(@test_target) @branch(%arg : reg<test.i32>) {
+  // ERROR@+1: STRUCTURE/026 "low.br" "successor 0" "expected reg<test.i64>"
+  low.br ^exit(%arg : reg<test.i32>)
+^exit(%value : reg<test.i64>):
+  low.return
 }
 
 // ====

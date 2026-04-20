@@ -309,6 +309,47 @@ TEST_F(LowPacketAsmTest, FormatsStructuralConcat) {
   iree_arena_deinitialize(&sidecar_arena);
 }
 
+TEST_F(LowPacketAsmTest, FormatsStructuralSlice) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @packet_asm(%pair : reg<test.i32 "
+      "x2>) -> (reg<test.i32>) {\n"
+      "  %lane = low.slice %pair[1] : reg<test.i32 x2> -> reg<test.i32>\n"
+      "  low.return %lane : reg<test.i32>\n"
+      "}\n");
+  const loom_op_t* low_function = FindFirstLowFunction(module_);
+  ASSERT_NE(low_function, nullptr);
+
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  loom_low_packetization_options_t packetization_options = {
+      .descriptor_registry = &target_registry_.registry,
+  };
+  IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
+                                             &packetization_options,
+                                             &sidecar_arena, &packetization));
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_low_packet_asm_options_t asm_options = {
+      .format_value =
+          {
+              .fn = FormatNamedAllocatedValue,
+              .user_data = nullptr,
+          },
+  };
+  IREE_ASSERT_OK(loom_low_packet_asm_format(&packetization.schedule,
+                                            &packetization.allocation,
+                                            &asm_options, &builder));
+  EXPECT_EQ(std::string(iree_string_builder_view(&builder).data,
+                        iree_string_builder_view(&builder).size),
+            "^bb0(pair):\n"
+            "  lane = slice pair[1]\n"
+            "  return lane\n");
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
 TEST_F(LowPacketAsmTest, RejectsMissingValueFormatter) {
   ParseAndVerify(
       "low.func.def target(@test_target) @packet_asm() {\n"

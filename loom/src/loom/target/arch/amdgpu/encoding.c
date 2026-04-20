@@ -10,6 +10,8 @@
 
 #include "loom/target/arch/amdgpu/gfx11_encoding_tables.h"
 
+#define LOOM_AMDGPU_VGPR_SRC_BASE UINT16_C(0x100)
+
 static uint64_t loom_amdgpu_encoding_u64_mask(uint8_t bit_count) {
   if (bit_count == 0) {
     return 0;
@@ -162,6 +164,8 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("mubuf");
     case LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER:
       return IREE_SV("vbuffer");
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP1:
+      return IREE_SV("vop1");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL:
       return IREE_SV("vop1_literal");
     default:
@@ -258,4 +262,22 @@ iree_status_t loom_amdgpu_encoding_pack(
         field_values[i].value));
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_encoding_pack_v_mov_b32_vgpr(
+    const loom_amdgpu_encoding_table_t* table, uint16_t opcode, uint16_t vdst,
+    uint16_t vsrc0, loom_amdgpu_encoding_packet_t* out_packet) {
+  loom_amdgpu_encoding_field_value_t field_values[] = {
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_VDST,
+          .value = vdst,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0,
+          .value = (uint64_t)LOOM_AMDGPU_VGPR_SRC_BASE + vsrc0,
+      },
+  };
+  return loom_amdgpu_encoding_pack(table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1,
+                                   opcode, field_values,
+                                   IREE_ARRAYSIZE(field_values), out_packet);
 }

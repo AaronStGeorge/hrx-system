@@ -20,7 +20,9 @@ from loom.assembly import (
     COLON,
     COMMA,
     GLUE,
+    LBRACKET,
     LPAREN,
+    RBRACKET,
     RPAREN,
     Attr,
     AttrDict,
@@ -547,6 +549,10 @@ low_copy = Op(
     operands=[Operand("source", REGISTER)],
     results=[Result("result", REGISTER)],
     traits=[UNKNOWN_EFFECTS],
+    constraints=[
+        SameRegisterClass("source", "result"),
+    ],
+    verify="loom_low_copy_verify",
     format=[
         Ref("source"),
         COLON,
@@ -556,6 +562,41 @@ low_copy = Op(
     ],
     examples=[
         "%copy = low.copy %value : reg<amdgpu.vgpr x1> -> reg<amdgpu.vgpr x1>",
+    ],
+)
+
+# ============================================================================
+# low.slice — project a contiguous subrange from a register range
+# ============================================================================
+
+low_slice = Op(
+    "low.slice",
+    group=low_ops,
+    doc="Project a contiguous subrange from a register-range value.",
+    attrs=[
+        AttrDef("offset", "i64"),
+    ],
+    operands=[Operand("source", REGISTER)],
+    results=[Result("result", REGISTER)],
+    traits=[UNKNOWN_EFFECTS],
+    constraints=[
+        SameRegisterClass("source", "result"),
+    ],
+    verify="loom_low_slice_verify",
+    format=[
+        Ref("source"),
+        GLUE,
+        LBRACKET,
+        Attr("offset"),
+        RBRACKET,
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%lane = low.slice %quad[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>",
+        "%pair = low.slice %quad[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr x2>",
     ],
 )
 
@@ -1052,6 +1093,7 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_op,
     low_const,
     low_copy,
+    low_slice,
     low_concat,
     low_invoke,
     low_abi_adapter,

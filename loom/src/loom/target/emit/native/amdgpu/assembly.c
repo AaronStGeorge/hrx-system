@@ -554,6 +554,92 @@ static iree_status_t loom_amdgpu_append_copy_packet(
   return status;
 }
 
+static iree_status_t loom_amdgpu_append_slice_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  (void)user_data;
+  const loom_op_t* op = context->packet->node->op;
+  const loom_low_allocation_assignment_t* source_assignment = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
+      context, loom_low_slice_source(op), &source_assignment));
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
+      context, loom_low_slice_result(op), &result_assignment));
+  if (source_assignment->location_kind !=
+          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+      result_assignment->location_kind !=
+          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU assembly slice requires physical register assignments");
+  }
+  if (source_assignment->location_count == 0 ||
+      result_assignment->location_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU assembly slice requires non-empty register ranges");
+  }
+  const int64_t offset = loom_low_slice_offset(op);
+  if (offset < 0 || offset > UINT32_MAX) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU assembly slice offset must fit a non-negative uint32_t");
+  }
+  const uint32_t source_offset = (uint32_t)offset;
+  if (source_offset > source_assignment->location_count ||
+      result_assignment->location_count >
+          source_assignment->location_count - source_offset) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU assembly slice result range exceeds the source range");
+  }
+
+  iree_string_view_t source_register_class = loom_native_assembly_module_string(
+      context->allocation->module,
+      source_assignment->value_class.register_class_id);
+  iree_string_view_t result_register_class = loom_native_assembly_module_string(
+      context->allocation->module,
+      result_assignment->value_class.register_class_id);
+  if (!iree_string_view_equal(source_register_class, result_register_class)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU assembly slice between register classes '%.*s' and '%.*s' is "
+        "unsupported",
+        (int)source_register_class.size, source_register_class.data,
+        (int)result_register_class.size, result_register_class.data);
+  }
+
+  iree_string_view_t mnemonic = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_copy_mnemonic(result_register_class, &mnemonic));
+
+  const uint32_t move_count = result_assignment->location_count;
+  loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
+  loom_low_move_t* moves = inline_moves;
+  iree_status_t status = iree_ok_status();
+  if (move_count > IREE_ARRAYSIZE(inline_moves)) {
+    status =
+        iree_allocator_malloc_array(context->builder->allocator, move_count,
+                                    sizeof(*moves), (void**)&moves);
+  }
+  for (uint32_t i = 0; i < move_count && iree_status_is_ok(status); ++i) {
+    status = loom_low_move_location_from_assignment_unit(result_assignment, i,
+                                                         &moves[i].destination);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    status = loom_low_move_location_from_assignment_unit(
+        source_assignment, source_offset + i, &moves[i].source);
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_amdgpu_emit_move_sequence(context, mnemonic, moves, move_count);
+  }
+  if (moves != inline_moves) {
+    iree_allocator_free(context->builder->allocator, moves);
+  }
+  return status;
+}
+
 static iree_status_t loom_amdgpu_append_concat_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
@@ -863,6 +949,14 @@ static const loom_native_assembly_structural_packet_callback_t
             .append_packet =
                 {
                     .fn = loom_amdgpu_append_copy_packet,
+                    .user_data = NULL,
+                },
+        },
+        {
+            .op_kind = LOOM_OP_LOW_SLICE,
+            .append_packet =
+                {
+                    .fn = loom_amdgpu_append_slice_packet,
                     .user_data = NULL,
                 },
         },
