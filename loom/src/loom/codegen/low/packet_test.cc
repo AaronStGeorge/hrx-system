@@ -206,6 +206,17 @@ TEST(LowPacketTest, RejectsMismatchedSidecars) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
+TEST(LowPacketTest, RejectsUnnamedSidecarFunction) {
+  PacketTestState state;
+  InitializePacketTestState(&state);
+  state.schedule.function_op = nullptr;
+  state.allocation.function_op = nullptr;
+
+  iree_status_t status =
+      loom_low_packet_validate_sidecars(&state.schedule, &state.allocation);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
 TEST(LowPacketTest, RejectsOutOfRangePacketIndex) {
   PacketTestState state;
   InitializePacketTestState(&state);

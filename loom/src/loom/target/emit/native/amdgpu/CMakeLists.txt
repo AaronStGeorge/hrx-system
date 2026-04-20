@@ -81,15 +81,16 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    kernel_assembly
+    kernel_record
   HDRS
-    "kernel_assembly.h"
+    "kernel_record.h"
   SRCS
-    "kernel_assembly.c"
+    "kernel_record.c"
   DEPS
-    ::assembly
+    ::descriptor
     ::metadata
     iree::base
+    iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::packet
     loom::src::loom::codegen::low::schedule
@@ -97,6 +98,23 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::target_info
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    kernel_assembly
+  HDRS
+    "kernel_assembly.h"
+  SRCS
+    "kernel_assembly.c"
+  DEPS
+    ::assembly
+    ::kernel_record
+    ::metadata
+    iree::base
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::schedule
     loom::src::loom::target::arch::amdgpu::wait_packets
   PUBLIC
 )
@@ -111,16 +129,12 @@ loom_cc_library(
   DEPS
     ::encoding
     ::hsaco
+    ::kernel_record
     iree::base
     iree::base::internal::arena
     iree::io::stream
     loom::src::loom::codegen::low::allocation
-    loom::src::loom::codegen::low::packet
     loom::src::loom::codegen::low::schedule
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::target::arch::amdgpu::hal_kernel_abi
-    loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::wait_packets
   PUBLIC
 )

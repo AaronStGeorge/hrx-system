@@ -186,7 +186,7 @@ static uint32_t loom_amdgpu_kernel_descriptor_implied_user_sgpr_count(
   return count;
 }
 
-static iree_status_t loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
+iree_status_t loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
     loom_amdgpu_kernel_descriptor_flags_t flags, uint32_t* out_mode) {
   IREE_ASSERT_ARGUMENT(out_mode);
   *out_mode = 0;

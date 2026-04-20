@@ -108,6 +108,10 @@ iree_status_t loom_amdgpu_kernel_descriptor_validate_metadata(
     const loom_amdgpu_kernel_descriptor_t* descriptor,
     const loom_amdgpu_metadata_kernel_t* metadata_kernel);
 
+// Resolves descriptor workitem-id flags to the COMPUTE_PGM_RSRC2 field value.
+iree_status_t loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
+    loom_amdgpu_kernel_descriptor_flags_t flags, uint32_t* out_mode);
+
 // Writes one AMDHSA kernel descriptor into |target_bytes|.
 iree_status_t loom_amdgpu_kernel_descriptor_write(
     const loom_amdgpu_kernel_descriptor_t* descriptor,

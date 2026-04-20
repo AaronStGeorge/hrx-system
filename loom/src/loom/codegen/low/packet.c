@@ -16,6 +16,12 @@ iree_status_t loom_low_packet_validate_sidecars(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "schedule and allocation sidecars are required");
   }
+  if (schedule->module == NULL || schedule->function_op == NULL ||
+      allocation->module == NULL || allocation->function_op == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "schedule and allocation sidecars must name a low function");
+  }
   if (schedule->module != allocation->module ||
       schedule->function_op != allocation->function_op) {
     return iree_make_status(

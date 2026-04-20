@@ -1,0 +1,58 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// AMDGPU per-kernel native emission facts.
+//
+// This layer derives the target, ABI, metadata, descriptor, and register facts
+// shared by text assembly and direct HSACO emission from target-low sidecars.
+
+#ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_KERNEL_RECORD_H_
+#define LOOM_TARGET_EMIT_NATIVE_AMDGPU_KERNEL_RECORD_H_
+
+#include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
+#include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/schedule.h"
+#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
+#include "loom/target/emit/native/amdgpu/descriptor.h"
+#include "loom/target/emit/native/amdgpu/metadata.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct loom_amdgpu_kernel_record_t {
+  // Exported kernel entry symbol.
+  iree_string_view_t symbol;
+  // Loader-visible kernel descriptor symbol.
+  iree_string_view_t descriptor_symbol;
+  // Full AMDHSA target id such as `amdgcn-amd-amdhsa--gfx1100`.
+  iree_string_view_t target_id;
+  // HAL kernel ABI layout derived from low.abi.resource declarations.
+  loom_amdgpu_hal_kernel_abi_layout_t abi_layout;
+  // Metadata row shared by assembly notes and direct HSACO notes.
+  loom_amdgpu_metadata_kernel_t metadata;
+  // Descriptor flags not represented in the metadata row.
+  loom_amdgpu_kernel_descriptor_flags_t descriptor_flags;
+  // Encoded workitem-id mode for AMDHSA text assembly directives.
+  uint32_t system_vgpr_workitem_id;
+  // User SGPR count required by ABI live-ins.
+  uint32_t user_sgpr_count;
+} loom_amdgpu_kernel_record_t;
+
+// Builds the shared emission record for one scheduled and allocated
+// low.func.def. The returned record points into input IR and |scratch_arena|.
+iree_status_t loom_amdgpu_kernel_record_build(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation,
+    loom_amdgpu_kernel_record_t* out_record,
+    iree_arena_allocator_t* scratch_arena);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // LOOM_TARGET_EMIT_NATIVE_AMDGPU_KERNEL_RECORD_H_
