@@ -220,7 +220,7 @@ typedef struct loom_check_case_t {
   iree_string_view_t pipeline;
   // For FORMAT mode: target format name (e.g. "bytecode").
   iree_string_view_t format_target;
-  // For EMIT mode: target emission request (e.g. "llvmir amdgpu-hal").
+  // For EMIT mode: target emission request (e.g. "llvmir target-profile").
   iree_string_view_t emit_target;
   // For RUN mode: iree-run-loom command-line arguments forwarded after the
   // temporary input file path.

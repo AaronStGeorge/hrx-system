@@ -299,12 +299,27 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    loom_check_requirements
+  HDRS
+    "loom_check_requirements.h"
+  SRCS
+    "loom_check_requirements.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::tool::process
+    loom::src::loom::tools::loom-check::execute
+  PUBLIC
+)
+
 loom_cc_binary(
   NAME
     loom-check
   SRCS
     "loom-check.c"
   DEPS
+    ::loom_check_requirements
     ::low_registry
     ::lower
     loom::src::loom::tools::loom-check::main
@@ -425,6 +440,20 @@ iree_executable_test(
   SRC
     ::loom-check
   LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "hal_run"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "driver=amdgpu"
+    "nodocker"
+    "requires-gpu-amd"
     "loom-check"
 )
 

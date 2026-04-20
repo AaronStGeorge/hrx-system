@@ -10,7 +10,7 @@
 #include "loom/target/tool/llvm.h"
 #include "loom/target/tool/process.h"
 
-static iree_string_view_t loom_check_iree_run_loom_path(
+iree_string_view_t loom_check_environment_iree_run_loom_path(
     const loom_check_environment_t* environment) {
   if (environment != NULL &&
       !iree_string_view_is_empty(environment->iree_run_loom_path)) {
@@ -19,7 +19,7 @@ static iree_string_view_t loom_check_iree_run_loom_path(
   return IREE_SV("iree-run-loom");
 }
 
-static bool loom_check_process_path_searches_path(iree_string_view_t path) {
+bool loom_check_process_path_searches_path(iree_string_view_t path) {
   for (iree_host_size_t i = 0; i < path.size; ++i) {
     if (path.data[i] == '/' || path.data[i] == '\\') {
       return false;
@@ -66,8 +66,10 @@ static bool loom_check_string_contains_case_insensitive(
   return false;
 }
 
-static bool loom_check_requirement_name_is_known(
+static bool loom_check_builtin_requirement_provider_matches(
+    const loom_check_requirement_provider_t* provider,
     iree_string_view_t requirement) {
+  (void)provider;
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
   return iree_string_view_equal(requirement, IREE_SV("llvm-as")) ||
@@ -77,8 +79,6 @@ static bool loom_check_requirement_name_is_known(
          iree_string_view_equal(requirement, IREE_SV("llvm-mc")) ||
          iree_string_view_equal(requirement, IREE_SV("llvm-objdump")) ||
          iree_string_view_equal(requirement, IREE_SV("iree-run-loom")) ||
-         iree_string_view_equal(requirement, IREE_SV("amdgpu-hal")) ||
-         iree_string_view_equal(requirement, IREE_SV("amdgpu-hal-b128")) ||
          loom_llvmir_target_registry_llc_requirement_provider(
              &target_registry, requirement, NULL) ||
          iree_string_view_equal(requirement,
@@ -125,7 +125,8 @@ static iree_status_t loom_check_query_llc_provider(
 
 static iree_status_t loom_check_query_iree_run_loom(
     const loom_check_environment_t* environment, iree_allocator_t allocator) {
-  iree_string_view_t path = loom_check_iree_run_loom_path(environment);
+  iree_string_view_t path =
+      loom_check_environment_iree_run_loom_path(environment);
   iree_string_view_t arguments[] = {IREE_SV("--help")};
   loom_tool_process_result_t result = {0};
   IREE_RETURN_IF_ERROR(loom_tool_process_run(
@@ -143,97 +144,11 @@ static iree_status_t loom_check_query_iree_run_loom(
   return status;
 }
 
-static iree_status_t loom_check_run_amdgpu_hal_probe(
-    const loom_check_environment_t* environment, iree_allocator_t allocator,
-    loom_tool_process_result_t* out_result) {
-  IREE_ASSERT_ARGUMENT(out_result);
-  iree_string_view_t path = loom_check_iree_run_loom_path(environment);
-  iree_string_view_t arguments[] = {IREE_SV("--loom_backend=amdgpu-hal"),
-                                    IREE_SV("--probe_hal")};
-  return loom_tool_process_run(
-      path, loom_check_process_path_searches_path(path), arguments,
-      IREE_ARRAYSIZE(arguments), allocator, out_result);
-}
-
-static iree_status_t loom_check_amdgpu_hal_probe_failure_status(
-    const loom_tool_process_result_t* result) {
-  iree_status_t status = iree_ok_status();
-  if (!loom_tool_process_result_succeeded(result)) {
-    iree_string_view_t detail = iree_make_string_view(
-        result->stderr_text.data, result->stderr_text.length);
-    if (iree_string_view_is_empty(detail)) {
-      detail = iree_make_string_view(result->stdout_text.data,
-                                     result->stdout_text.length);
-    }
-    detail = iree_string_view_trim(detail);
-    status = iree_make_status(
-        IREE_STATUS_UNAVAILABLE,
-        "iree-run-loom --loom_backend=amdgpu-hal --probe_hal exited with code "
-        "%d%s%.*s",
-        result->exit_code, iree_string_view_is_empty(detail) ? "" : ": ",
-        (int)iree_min(detail.size, (iree_host_size_t)2048), detail.data);
-  }
-  return status;
-}
-
-static iree_status_t loom_check_query_amdgpu_hal(
-    const loom_check_environment_t* environment, iree_allocator_t allocator) {
-  loom_tool_process_result_t result = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_check_run_amdgpu_hal_probe(environment, allocator, &result));
-  iree_status_t status = loom_check_amdgpu_hal_probe_failure_status(&result);
-  loom_tool_process_result_deinitialize(&result, allocator);
-  return status;
-}
-
-static bool loom_check_amdgpu_hal_probe_has_preset(
-    iree_string_view_t stdout_text, iree_string_view_t preset) {
-  iree_string_view_t needle = IREE_SV("hal preset: ");
-  iree_host_size_t position = iree_string_view_find(stdout_text, needle, 0);
-  while (position != IREE_STRING_VIEW_NPOS) {
-    iree_string_view_t suffix = iree_string_view_substr(
-        stdout_text, position + needle.size, IREE_HOST_SIZE_MAX);
-    if (iree_string_view_starts_with(suffix, preset)) {
-      return true;
-    }
-    position = iree_string_view_find(stdout_text, needle, position + 1);
-  }
-  return false;
-}
-
-static iree_status_t loom_check_query_amdgpu_hal_b128(
-    const loom_check_environment_t* environment, iree_allocator_t allocator) {
-  loom_tool_process_result_t result = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_check_run_amdgpu_hal_probe(environment, allocator, &result));
-
-  iree_status_t status = loom_check_amdgpu_hal_probe_failure_status(&result);
-  if (iree_status_is_ok(status)) {
-    iree_string_view_t stdout_text = iree_make_string_view(
-        result.stdout_text.data, result.stdout_text.length);
-    const bool supports_b128 = loom_check_amdgpu_hal_probe_has_preset(
-                                   stdout_text, IREE_SV("amdgpu-gfx11")) ||
-                               loom_check_amdgpu_hal_probe_has_preset(
-                                   stdout_text, IREE_SV("amdgpu-gfx12")) ||
-                               loom_check_amdgpu_hal_probe_has_preset(
-                                   stdout_text, IREE_SV("amdgpu-gfx1250"));
-    if (!supports_b128) {
-      iree_string_view_t detail = iree_string_view_trim(stdout_text);
-      status = iree_make_status(
-          IREE_STATUS_UNAVAILABLE,
-          "current AMDGPU HAL target does not use b128 low memory descriptors: "
-          "%.*s",
-          (int)iree_min(detail.size, (iree_host_size_t)2048), detail.data);
-    }
-  }
-
-  loom_tool_process_result_deinitialize(&result, allocator);
-  return status;
-}
-
-static iree_status_t loom_check_query_requirement(
+static iree_status_t loom_check_builtin_requirement_provider_query(
+    const loom_check_requirement_provider_t* provider,
     const loom_check_environment_t* environment, iree_string_view_t requirement,
     iree_allocator_t allocator) {
+  (void)provider;
   if (iree_string_view_equal(requirement, IREE_SV("llvm-as"))) {
     return loom_check_query_llvm_tool(LOOM_LLVM_TOOL_LLVM_AS, allocator);
   }
@@ -255,18 +170,13 @@ static iree_status_t loom_check_query_requirement(
   if (iree_string_view_equal(requirement, IREE_SV("iree-run-loom"))) {
     return loom_check_query_iree_run_loom(environment, allocator);
   }
-  if (iree_string_view_equal(requirement, IREE_SV("amdgpu-hal"))) {
-    return loom_check_query_amdgpu_hal(environment, allocator);
-  }
-  if (iree_string_view_equal(requirement, IREE_SV("amdgpu-hal-b128"))) {
-    return loom_check_query_amdgpu_hal_b128(environment, allocator);
-  }
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
-  const loom_llvmir_target_profile_provider_t* provider = NULL;
+  const loom_llvmir_target_profile_provider_t* target_provider = NULL;
   if (loom_llvmir_target_registry_llc_requirement_provider(
-          &target_registry, requirement, &provider)) {
-    return loom_check_query_llc_provider(requirement, provider, allocator);
+          &target_registry, requirement, &target_provider)) {
+    return loom_check_query_llc_provider(requirement, target_provider,
+                                         allocator);
   }
   if (iree_string_view_equal(requirement,
                              IREE_SV("loom-check-test-unavailable"))) {
@@ -276,12 +186,13 @@ static iree_status_t loom_check_query_requirement(
   return iree_ok_status();
 }
 
-static iree_status_t loom_check_append_supported_requirement_names(
-    loom_check_result_t* result) {
+static iree_status_t loom_check_builtin_requirement_provider_append_names(
+    const loom_check_requirement_provider_t* provider,
+    iree_string_builder_t* builder) {
+  (void)provider;
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
-      &result->detail,
-      "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump, iree-run-loom, "
-      "amdgpu-hal, amdgpu-hal-b128"));
+      builder,
+      "llvm-as, llvm-dis, opt, llc, llvm-mc, llvm-objdump, iree-run-loom"));
 
   loom_llvmir_target_registry_t target_registry;
   loom_llvmir_target_registry_initialize(&target_registry);
@@ -293,14 +204,84 @@ static iree_status_t loom_check_append_supported_requirement_names(
       continue;
     }
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        &result->detail, ", llc-%.*s", (int)provider->name.size,
-        provider->name.data));
+        builder, ", llc-%.*s", (int)provider->name.size, provider->name.data));
+  }
+  return iree_ok_status();
+}
+
+static const loom_check_requirement_provider_t*
+loom_check_builtin_requirement_provider(void) {
+  static const loom_check_requirement_provider_t provider = {
+      .name = IREE_SVL("loom-check.builtin"),
+      .match = loom_check_builtin_requirement_provider_matches,
+      .query = loom_check_builtin_requirement_provider_query,
+      .append_names = loom_check_builtin_requirement_provider_append_names,
+  };
+  return &provider;
+}
+
+static const loom_check_requirement_provider_t*
+loom_check_lookup_requirement_provider(
+    const loom_check_environment_t* environment,
+    iree_string_view_t requirement) {
+  const loom_check_requirement_provider_t* builtin_provider =
+      loom_check_builtin_requirement_provider();
+  if (builtin_provider->match(builtin_provider, requirement)) {
+    return builtin_provider;
+  }
+  if (environment == NULL) {
+    return NULL;
+  }
+  if (environment->requirement_providers.providers == NULL) {
+    return NULL;
+  }
+  for (iree_host_size_t i = 0;
+       i < environment->requirement_providers.provider_count; ++i) {
+    const loom_check_requirement_provider_t* provider =
+        environment->requirement_providers.providers[i];
+    if (provider == NULL || provider->match == NULL) {
+      continue;
+    }
+    if (provider->match(provider, requirement)) {
+      return provider;
+    }
+  }
+  return NULL;
+}
+
+static bool loom_check_requirement_name_is_known(
+    const loom_check_environment_t* environment,
+    iree_string_view_t requirement) {
+  return loom_check_lookup_requirement_provider(environment, requirement) !=
+         NULL;
+}
+
+static iree_status_t loom_check_append_supported_requirement_names(
+    const loom_check_environment_t* environment, loom_check_result_t* result) {
+  const loom_check_requirement_provider_t* builtin_provider =
+      loom_check_builtin_requirement_provider();
+  IREE_RETURN_IF_ERROR(
+      builtin_provider->append_names(builtin_provider, &result->detail));
+  if (environment != NULL &&
+      environment->requirement_providers.providers != NULL) {
+    for (iree_host_size_t i = 0;
+         i < environment->requirement_providers.provider_count; ++i) {
+      const loom_check_requirement_provider_t* provider =
+          environment->requirement_providers.providers[i];
+      if (provider == NULL || provider->append_names == NULL) {
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(
+          iree_string_builder_append_cstring(&result->detail, ", "));
+      IREE_RETURN_IF_ERROR(provider->append_names(provider, &result->detail));
+    }
   }
   return iree_string_builder_append_cstring(&result->detail, "\n");
 }
 
 static iree_status_t loom_check_fail_unknown_requirement(
-    iree_string_view_t requirement, loom_check_result_t* result) {
+    const loom_check_environment_t* environment, iree_string_view_t requirement,
+    loom_check_result_t* result) {
   result->raw_outcome = LOOM_CHECK_FAIL;
   result->final_outcome = LOOM_CHECK_FAIL;
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -308,7 +289,7 @@ static iree_status_t loom_check_fail_unknown_requirement(
       "unknown REQUIRES requirement '%.*s'; supported external requirements "
       "are ",
       (int)requirement.size, requirement.data));
-  return loom_check_append_supported_requirement_names(result);
+  return loom_check_append_supported_requirement_names(environment, result);
 }
 
 static iree_status_t loom_check_fail_missing_requirement_declaration(
@@ -483,9 +464,10 @@ iree_status_t loom_check_preflight_requirements(
   *out_continue_execution = true;
   for (iree_host_size_t i = 0; i < test_case->requirement_count; ++i) {
     iree_string_view_t requirement = test_case->requirements[i];
-    if (!loom_check_requirement_name_is_known(requirement)) {
+    if (!loom_check_requirement_name_is_known(environment, requirement)) {
       *out_continue_execution = false;
-      return loom_check_fail_unknown_requirement(requirement, result);
+      return loom_check_fail_unknown_requirement(environment, requirement,
+                                                 result);
     }
   }
 
@@ -502,8 +484,15 @@ iree_status_t loom_check_preflight_requirements(
 
   for (iree_host_size_t i = 0; i < test_case->requirement_count; ++i) {
     iree_string_view_t requirement = test_case->requirements[i];
+    const loom_check_requirement_provider_t* provider =
+        loom_check_lookup_requirement_provider(environment, requirement);
+    if (provider == NULL || provider->query == NULL) {
+      *out_continue_execution = false;
+      return loom_check_fail_unknown_requirement(environment, requirement,
+                                                 result);
+    }
     iree_status_t status =
-        loom_check_query_requirement(environment, requirement, allocator);
+        provider->query(provider, environment, requirement, allocator);
     if (!iree_status_is_ok(status)) {
       *out_continue_execution = false;
       return loom_check_skip_unavailable_requirement(requirement, status,

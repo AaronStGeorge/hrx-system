@@ -13,6 +13,7 @@ load(
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
     "loom_check_runner_binary",
+    "loom_check_test",
     "loom_check_test_suite",
 )
 load(
@@ -479,8 +480,20 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "loom_check_execute_no_amdgpu_requirements_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:loom_check_requirements",
+    target = "//loom/src/loom/tools/loom-check:execute",
+)
+
+iree_assert_no_dependency(
     name = "loom_check_tool_no_amdgpu_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/tools/loom-check",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_tool_no_amdgpu_requirements_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:loom_check_requirements",
     target = "//loom/src/loom/tools/loom-check",
 )
 
@@ -732,10 +745,22 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "loom_check_requirements",
+    srcs = ["loom_check_requirements.c"],
+    hdrs = ["loom_check_requirements.h"],
+    deps = [
+        "//loom/src/loom/target/tool:process",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_check_runner_binary(
     name = "loom-check",
     src = "loom-check.c",
     deps = [
+        ":loom_check_requirements",
         ":low_registry",
         ":lower",
     ],
@@ -844,6 +869,21 @@ loom_check_test_suite(
         "source_low.loom-test",
     ],
     runner = ":loom-check",
+)
+
+loom_check_test(
+    name = "hal_run",
+    src = "hal_run.loom-test",
+    data = ["//loom/src/loom/tools/iree-run-loom"],
+    env = {
+        "LOOM_CHECK_IREE_RUN_LOOM": "$(rootpath //loom/src/loom/tools/iree-run-loom)",
+    },
+    runner = ":loom-check",
+    tags = [
+        "driver=amdgpu",
+        "nodocker",
+        "requires-gpu-amd",
+    ],
 )
 
 loom_cc_library(

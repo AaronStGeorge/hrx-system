@@ -455,8 +455,8 @@ int loom_check_main(int argc, char** argv,
       "    // REQUIRES: <name>[, ...] Skip when external tools are missing.\n"
       "    // XFAIL: <reason>       Mark as expected failure.\n"
       "    Known REQUIRES names: llvm-as, llvm-dis, opt, llc, llvm-mc,\n"
-      "    llvm-objdump, iree-run-loom, amdgpu-hal, amdgpu-hal-b128, and\n"
-      "    provider-specific llc-<target> names.\n"
+      "    llvm-objdump, iree-run-loom, provider-specific llc-<target>\n"
+      "    names, and names from providers linked into this runner.\n"
       "\n"
       "  Annotations (verify mode):\n"
       "    // ERROR: DOMAIN/CODE \"substring\"\n"
@@ -599,6 +599,11 @@ int loom_check_production_main(int argc, char** argv,
           {
               .fn = loom_check_production_initialize_low_lower_policy_registry,
               .user_data = (void*)runner,
+          },
+      .requirement_providers =
+          {
+              .providers = runner->requirement_providers,
+              .provider_count = runner->requirement_provider_count,
           },
       .iree_run_loom_path = IREE_SVL(""),
   };

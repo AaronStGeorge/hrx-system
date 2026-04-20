@@ -15,6 +15,15 @@
 extern "C" {
 #endif  // __cplusplus
 
+// Returns the configured iree-run-loom path, defaulting to PATH lookup for
+// "iree-run-loom" when |environment| does not override it.
+iree_string_view_t loom_check_environment_iree_run_loom_path(
+    const loom_check_environment_t* environment);
+
+// Returns true when |path| should be resolved through PATH by the process
+// runner.
+bool loom_check_process_path_searches_path(iree_string_view_t path);
+
 // Checks a test case's // REQUIRES declarations before executing its IR body.
 //
 // Unavailable declared requirements set |result| to SKIP and return OK with

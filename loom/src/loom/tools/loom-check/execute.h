@@ -164,8 +164,50 @@ typedef struct loom_check_initialize_low_lower_policy_registry_callback_t {
   void* user_data;
 } loom_check_initialize_low_lower_policy_registry_callback_t;
 
+typedef struct loom_check_environment_t loom_check_environment_t;
+typedef struct loom_check_requirement_provider_t
+    loom_check_requirement_provider_t;
+
+// Returns true when |provider| owns |requirement|.
+typedef bool (*loom_check_requirement_provider_match_fn_t)(
+    const loom_check_requirement_provider_t* provider,
+    iree_string_view_t requirement);
+
+// Queries whether |requirement| is available in |environment|.
+typedef iree_status_t (*loom_check_requirement_provider_query_fn_t)(
+    const loom_check_requirement_provider_t* provider,
+    const loom_check_environment_t* environment, iree_string_view_t requirement,
+    iree_allocator_t allocator);
+
+// Appends provider-owned requirement names to a diagnostic list.
+typedef iree_status_t (*loom_check_requirement_provider_append_names_fn_t)(
+    const loom_check_requirement_provider_t* provider,
+    iree_string_builder_t* builder);
+
+// Requirement namespace provider linked into a loom-check runner. Providers own
+// availability probing for external tools, devices, target runners, and
+// target-specific feature requirements.
+struct loom_check_requirement_provider_t {
+  // Human-readable provider name used for debugging and ownership comments.
+  iree_string_view_t name;
+  // Returns true when this provider owns a requirement name.
+  loom_check_requirement_provider_match_fn_t match;
+  // Queries availability for a requirement owned by this provider.
+  loom_check_requirement_provider_query_fn_t query;
+  // Appends supported requirement names to diagnostic help text.
+  loom_check_requirement_provider_append_names_fn_t append_names;
+};
+
+// Registry of optional requirement providers linked into a runner binary.
+typedef struct loom_check_requirement_provider_registry_t {
+  // Linked requirement provider table.
+  const loom_check_requirement_provider_t* const* providers;
+  // Number of entries in |providers|.
+  iree_host_size_t provider_count;
+} loom_check_requirement_provider_registry_t;
+
 // Execution environment supplied by each loom-check binary or embedding.
-typedef struct loom_check_environment_t {
+struct loom_check_environment_t {
   // Dialect registration callback for the IR surface accepted by this runner.
   loom_check_register_context_callback_t register_context;
   // Target-low registry callback for descriptor-backed low IR operations.
@@ -175,10 +217,12 @@ typedef struct loom_check_environment_t {
   // into descriptor-backed low IR.
   loom_check_initialize_low_lower_policy_registry_callback_t
       initialize_low_lower_policy_registry;
+  // Optional requirement providers linked into this runner.
+  loom_check_requirement_provider_registry_t requirement_providers;
   // Filesystem path or executable name for iree-run-loom. Empty means search
   // PATH for "iree-run-loom".
   iree_string_view_t iree_run_loom_path;
-} loom_check_environment_t;
+};
 
 //===----------------------------------------------------------------------===//
 // API

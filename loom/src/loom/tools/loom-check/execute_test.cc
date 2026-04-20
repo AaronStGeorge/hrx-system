@@ -31,6 +31,47 @@ iree_status_t InitializeTestLowDescriptorRegistry(
   return iree_ok_status();
 }
 
+bool TestRequirementProviderMatches(
+    const loom_check_requirement_provider_t* provider,
+    iree_string_view_t requirement) {
+  (void)provider;
+  return iree_string_view_equal(requirement, IREE_SV("fake-target"));
+}
+
+iree_status_t TestRequirementProviderQuery(
+    const loom_check_requirement_provider_t* provider,
+    const loom_check_environment_t* environment, iree_string_view_t requirement,
+    iree_allocator_t allocator) {
+  (void)provider;
+  (void)environment;
+  (void)allocator;
+  if (iree_string_view_equal(requirement, IREE_SV("fake-target"))) {
+    return iree_make_status(IREE_STATUS_UNAVAILABLE,
+                            "fake target is intentionally unavailable");
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown fake requirement '%.*s'",
+                          (int)requirement.size, requirement.data);
+}
+
+iree_status_t TestRequirementProviderAppendNames(
+    const loom_check_requirement_provider_t* provider,
+    iree_string_builder_t* builder) {
+  (void)provider;
+  return iree_string_builder_append_cstring(builder, "fake-target");
+}
+
+const loom_check_requirement_provider_t kTestRequirementProvider = {
+    .name = IREE_SVL("test"),
+    .match = TestRequirementProviderMatches,
+    .query = TestRequirementProviderQuery,
+    .append_names = TestRequirementProviderAppendNames,
+};
+
+const loom_check_requirement_provider_t* const kTestRequirementProviders[] = {
+    &kTestRequirementProvider,
+};
+
 const loom_check_environment_t kExecuteTestEnvironment = {
     .register_context =
         {
@@ -41,6 +82,24 @@ const loom_check_environment_t kExecuteTestEnvironment = {
         {
             .fn = InitializeTestLowDescriptorRegistry,
             .user_data = nullptr,
+        },
+};
+
+const loom_check_environment_t kExecuteTestProviderEnvironment = {
+    .register_context =
+        {
+            .fn = RegisterTestContext,
+            .user_data = nullptr,
+        },
+    .initialize_low_descriptor_registry =
+        {
+            .fn = InitializeTestLowDescriptorRegistry,
+            .user_data = nullptr,
+        },
+    .requirement_providers =
+        {
+            .providers = kTestRequirementProviders,
+            .provider_count = IREE_ARRAYSIZE(kTestRequirementProviders),
         },
 };
 
@@ -897,6 +956,37 @@ TEST_F(ExecuteTest, UnknownRequiresRequirementFailsLoudly) {
             std::string::npos);
   EXPECT_NE(DetailString(result).find("llvm-as"), std::string::npos);
   EXPECT_NE(DetailString(result).find("llvm-objdump"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, RequirementProviderCanOwnAvailabilityQuery) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirstWithEnvironment("// RUN: roundtrip\n"
+                                  "// REQUIRES: fake-target\n"
+                                  "this.is.not.valid.ir\n",
+                                  &kExecuteTestProviderEnvironment, &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_SKIP);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_SKIP);
+  EXPECT_NE(DetailString(result).find("fake-target"), std::string::npos);
+  EXPECT_NE(
+      DetailString(result).find("fake target is intentionally unavailable"),
+      std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, UnknownRequiresListsProviderRequirements) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirstWithEnvironment("// RUN: roundtrip\n"
+                                  "// REQUIRES: definitely-not-real\n"
+                                  "func.def @f() {}\n",
+                                  &kExecuteTestProviderEnvironment, &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("unknown REQUIRES requirement"),
+            std::string::npos);
+  EXPECT_NE(DetailString(result).find("fake-target"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

@@ -108,11 +108,13 @@ TEST_F(CheckParseTest, FormatMode) {
 }
 
 TEST_F(CheckParseTest, EmitMode) {
-  IREE_ASSERT_OK(Parse("// RUN: emit llvmir amdgpu-hal\nfunc.def @f() {}\n"));
+  IREE_ASSERT_OK(
+      Parse("// RUN: emit llvmir target-profile\nfunc.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(iree_string_view_equal(
-      file_.cases[0].emit_target, iree_make_cstring_view("llvmir amdgpu-hal")));
+  EXPECT_TRUE(
+      iree_string_view_equal(file_.cases[0].emit_target,
+                             iree_make_cstring_view("llvmir target-profile")));
 }
 
 TEST_F(CheckParseTest, RunMode) {
@@ -1458,21 +1460,24 @@ TEST_F(CheckParseTest, PreamblePassModeInherited) {
 
 TEST_F(CheckParseTest, PreambleEmitModeInherited) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit llvmir amdgpu-hal\n"
+      Parse("// RUN: emit llvmir target-profile\n"
             "// ====\n"
             "func.def @a() {}\n"
             "// ====\n"
             "func.def @b() {}\n"));
   ASSERT_EQ(file_.case_count, 2);
   EXPECT_EQ(file_.default_mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(iree_string_view_equal(
-      file_.default_emit_target, iree_make_cstring_view("llvmir amdgpu-hal")));
+  EXPECT_TRUE(
+      iree_string_view_equal(file_.default_emit_target,
+                             iree_make_cstring_view("llvmir target-profile")));
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(iree_string_view_equal(
-      file_.cases[0].emit_target, iree_make_cstring_view("llvmir amdgpu-hal")));
+  EXPECT_TRUE(
+      iree_string_view_equal(file_.cases[0].emit_target,
+                             iree_make_cstring_view("llvmir target-profile")));
   EXPECT_EQ(file_.cases[1].mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(iree_string_view_equal(
-      file_.cases[1].emit_target, iree_make_cstring_view("llvmir amdgpu-hal")));
+  EXPECT_TRUE(
+      iree_string_view_equal(file_.cases[1].emit_target,
+                             iree_make_cstring_view("llvmir target-profile")));
 }
 
 TEST_F(CheckParseTest, PreambleRunModeInherited) {
