@@ -124,6 +124,37 @@ static iree_status_t TestMapType(void* user_data,
       IREE_SV("test lowering only maps i1, i32, and vector<4xi32>"));
 }
 
+static iree_status_t TestMapArgument(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_function_op, uint16_t source_argument_index,
+    loom_value_id_t source_argument_id,
+    loom_low_lower_abi_argument_t* out_argument) {
+  (void)user_data;
+  loom_type_t source_type = loom_module_value_type(
+      loom_low_lower_context_module(context), source_argument_id);
+  if (loom_type_is_buffer(source_type)) {
+    loom_type_t resource_type = loom_type_none();
+    IREE_RETURN_IF_ERROR(
+        MakeRegisterType(context, IREE_SV("test.i32"), &resource_type));
+    *out_argument = (loom_low_lower_abi_argument_t){
+        .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE,
+        .abi_type = resource_type,
+        .resource_kind = LOOM_LOW_ABI_RESOURCE_KIND_NATIVE_POINTER,
+        .resource_index = source_argument_index,
+        .resource_semantic_type = source_type,
+    };
+    return iree_ok_status();
+  }
+
+  *out_argument = (loom_low_lower_abi_argument_t){
+      .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
+      .abi_type = loom_type_none(),
+      .resource_semantic_type = loom_type_none(),
+  };
+  return TestMapType(user_data, context, source_function_op, source_type,
+                     &out_argument->abi_type);
+}
+
 static bool IsI32Value(loom_low_lower_context_t* context,
                        loom_value_id_t value_id) {
   return IsI32(
@@ -288,6 +319,7 @@ static iree_status_t TestTryLowerOp(void* user_data,
 static const loom_low_lower_policy_t kTestLowerPolicy = {
     .name = IREE_SVL("test-lower-policy"),
     .map_type = {.fn = TestMapType, .user_data = nullptr},
+    .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
     .can_lower_op = {.fn = TestCanLowerOp, .user_data = nullptr},
     .try_lower_op = {.fn = TestTryLowerOp, .user_data = nullptr},
 };
@@ -720,6 +752,49 @@ TEST_F(LowLowerTest, LowersVectorCfgFunction) {
   EXPECT_NE(text.find("test.add.v4i32"), std::string::npos);
   EXPECT_NE(text.find("low.cond_br"), std::string::npos);
   EXPECT_NE(text.find("low.br"), std::string::npos);
+}
+
+TEST_F(LowLowerTest, LowersResourceArgumentsWithoutDirectAbiOperands) {
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseExpandAndLower(
+      "target.preset @test_target {key = \"test-low\", source = "
+      "@resource_entry}\n"
+      "func.def @resource_entry(%buffer: buffer) {\n"
+      "  func.return\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_NE(lower_result.abi_adapter_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+
+  EmissionCollector verify_collector;
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      VerifyLowModule(module.get(), &verify_collector, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+  EXPECT_TRUE(verify_collector.emissions.empty());
+
+  const loom_text_print_options_t print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+  };
+  std::string text;
+  IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
+  EXPECT_NE(text.find("low.func.def target(@test_target) "
+                      "@resource_entry__low()"),
+            std::string::npos);
+  EXPECT_NE(text.find("%buffer = low.resource "
+                      "@resource_entry__low__abi_resource0"),
+            std::string::npos);
+  EXPECT_NE(text.find("low.abi.resource "
+                      "@resource_entry__low__abi_resource0"),
+            std::string::npos);
+  EXPECT_NE(text.find("kind = native_pointer"), std::string::npos);
+  EXPECT_NE(text.find("semantic_type = buffer"), std::string::npos);
+  EXPECT_NE(text.find("operand_count = 0"), std::string::npos);
+  EXPECT_EQ(text.find("low.abi.operand"), std::string::npos);
 }
 
 TEST_F(LowLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {

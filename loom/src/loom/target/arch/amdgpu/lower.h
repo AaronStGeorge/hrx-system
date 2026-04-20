@@ -25,9 +25,10 @@ extern "C" {
 // The initial policy is intentionally narrow: it maps i32 scalar values to
 // SGPRs, maps vector<1xi32> lane values to VGPRs, and lowers
 // scalar.constant/scalar.addi/vector.constant/vector.addi/vector.muli to
-// descriptor-backed low packets.
-// Memory, resources, and wider vector packing require explicit low.resource and
-// lane layout contracts and are not guessed here.
+// descriptor-backed low packets. HAL buffer arguments lower to explicit
+// low.abi.resource records and entry low.resource imports.
+// Memory operations and wider vector packing require explicit view/resource
+// layout contracts and are not guessed here.
 const loom_low_lower_policy_t* loom_amdgpu_low_lower_policy(void);
 
 // Initializes a target-owned registry mapping AMDGPU target-contract keys to

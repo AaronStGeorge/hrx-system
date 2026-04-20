@@ -20,6 +20,7 @@
 #include "loom/codegen/low/descriptors.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/types.h"
@@ -41,6 +42,41 @@ typedef struct loom_low_lower_map_type_callback_t {
   // Caller-owned payload passed to |fn|.
   void* user_data;
 } loom_low_lower_map_type_callback_t;
+
+typedef enum loom_low_lower_abi_argument_kind_e {
+  // Source argument is passed as a low function block argument.
+  LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT = 0,
+  // Source argument is imported through a low.abi.resource record.
+  LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE = 1,
+} loom_low_lower_abi_argument_kind_t;
+
+typedef struct loom_low_lower_abi_argument_t {
+  // ABI path used for the source argument.
+  loom_low_lower_abi_argument_kind_t kind;
+  // Register type used by the low argument or imported low.resource result.
+  loom_type_t abi_type;
+  // Resource kind used when |kind| is RESOURCE.
+  loom_low_abi_resource_kind_t resource_kind;
+  // Dense target ABI resource index used when |kind| is RESOURCE.
+  int64_t resource_index;
+  // Semantic ABI type recorded on low.abi.resource. None defaults to the source
+  // argument type.
+  loom_type_t resource_semantic_type;
+} loom_low_lower_abi_argument_t;
+
+typedef iree_status_t (*loom_low_lower_map_argument_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_function_op, uint16_t source_argument_index,
+    loom_value_id_t source_argument_id,
+    loom_low_lower_abi_argument_t* out_argument);
+
+typedef struct loom_low_lower_map_argument_callback_t {
+  // Optional callback invoked to map a source function argument to a direct low
+  // argument or target ABI resource. Missing uses direct |map_type| behavior.
+  loom_low_lower_map_argument_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_map_argument_callback_t;
 
 typedef iree_status_t (*loom_low_lower_can_lower_op_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
@@ -69,6 +105,8 @@ typedef struct loom_low_lower_policy_t {
   iree_string_view_t name;
   // Maps source semantic types to target-low register types.
   loom_low_lower_map_type_callback_t map_type;
+  // Optionally maps source function arguments to non-direct ABI imports.
+  loom_low_lower_map_argument_callback_t map_argument;
   // Preflights a non-structural source op without mutating IR.
   loom_low_lower_can_lower_op_callback_t can_lower_op;
   // Emits target-low ops for a preflighted non-structural source op.
