@@ -210,6 +210,48 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_hal_amdgpu_dep",
+    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_target_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
     name = "gfx950_descriptors_no_wasm_arch_dep",
     dependency = "//loom/src/loom/target/arch/wasm:descriptors",
     target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
@@ -593,6 +635,36 @@ loom_cc_library(
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "hal_kernel_abi",
+    srcs = ["hal_kernel_abi.c"],
+    hdrs = ["hal_kernel_abi.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "hal_kernel_abi_test",
+    srcs = ["hal_kernel_abi_test.cc"],
+    deps = [
+        ":hal_kernel_abi",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:ir_records",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

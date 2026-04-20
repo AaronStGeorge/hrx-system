@@ -83,6 +83,27 @@ TEST(AmdgpuDescriptorTest, WritesNoArgGfx1100Descriptor) {
   EXPECT_EQ(bytes[64], 0xccu);
 }
 
+TEST(AmdgpuDescriptorTest, EnablesKernargSegmentPointerFromMetadata) {
+  loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+  metadata.kernarg_segment_size = 8;
+  metadata.sgpr_count = 2;
+
+  loom_amdgpu_kernel_descriptor_t descriptor = {};
+  IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+      IREE_SV("gfx1100"), &metadata, -64, &descriptor));
+  IREE_ASSERT_OK(
+      loom_amdgpu_kernel_descriptor_validate_metadata(&descriptor, &metadata));
+
+  std::array<uint8_t, 65> bytes;
+  bytes.fill(0);
+  IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_write(
+      &descriptor, iree_make_byte_span(bytes.data(), bytes.size())));
+
+  EXPECT_EQ(LoadLeU32(bytes, 8), 8u);
+  EXPECT_EQ(LoadLeU32(bytes, 52), 0x00000004u);
+  EXPECT_EQ(LoadLeU16(bytes, 56), 0x0408u);
+}
+
 TEST(AmdgpuDescriptorTest, EncodesResourceAndAbiFields) {
   loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
   metadata.group_segment_fixed_size = 128;

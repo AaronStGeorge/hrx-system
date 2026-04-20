@@ -252,6 +252,40 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    hal_kernel_abi
+  HDRS
+    "hal_kernel_abi.h"
+  SRCS
+    "hal_kernel_abi.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    hal_kernel_abi_test
+  SRCS
+    "hal_kernel_abi_test.cc"
+  DEPS
+    ::hal_kernel_abi
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::ir_records
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_test(
   NAME
     low_registry_test

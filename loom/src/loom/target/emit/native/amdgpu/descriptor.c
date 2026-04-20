@@ -46,6 +46,8 @@
 #define LOOM_AMDGPU_KERNEL_CODE_PROPERTY_WAVEFRONT_SIZE32_SHIFT 10u
 #define LOOM_AMDGPU_KERNEL_CODE_PROPERTY_USES_DYNAMIC_STACK_SHIFT 11u
 
+#define LOOM_AMDGPU_KERNEL_DESCRIPTOR_KERNARG_USER_SGPR_COUNT 2u
+
 static iree_status_t loom_amdgpu_kernel_descriptor_resolve_target(
     iree_string_view_t target_cpu,
     const loom_amdgpu_processor_info_t** out_target) {
@@ -241,6 +243,12 @@ iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
       .next_free_sgpr = metadata_kernel->sgpr_count,
       .next_free_vgpr = metadata_kernel->vgpr_count,
       .system_vgpr_workitem_id = 0,
+      .user_sgpr_count =
+          metadata_kernel->kernarg_segment_size != 0
+              ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_KERNARG_USER_SGPR_COUNT
+              : 0,
+      .enable_sgpr_kernarg_segment_ptr =
+          metadata_kernel->kernarg_segment_size != 0,
       .enable_wavefront_size32 = metadata_kernel->wavefront_size == 32,
   };
   (void)target;

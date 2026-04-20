@@ -168,8 +168,9 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
 
     iree_string_builder_t builder;
     iree_string_builder_initialize(iree_allocator_system(), &builder);
-    IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly(
-        &packetization.schedule, &packetization.allocation, &builder));
+    IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly(&packetization.schedule,
+                                                    &packetization.allocation,
+                                                    &builder, &sidecar_arena));
     const std::string output(iree_string_builder_view(&builder).data,
                              iree_string_builder_view(&builder).size);
     EXPECT_NE(output.find(std::string(".amdgcn_target "
@@ -210,6 +211,8 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsKernelEnvelopeForGfx11) {
             std::string::npos);
   EXPECT_NE(output.find("  .amdhsa_kernarg_size 0\n"), std::string::npos);
   EXPECT_NE(output.find("  .amdhsa_user_sgpr_count 0\n"), std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_user_sgpr_kernarg_segment_ptr 0\n"),
+            std::string::npos);
   EXPECT_NE(output.find("  .amdhsa_system_sgpr_workgroup_id_x 0\n"),
             std::string::npos);
   EXPECT_NE(output.find("  .amdhsa_next_free_vgpr 0\n"), std::string::npos);
@@ -227,6 +230,50 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsKernelEnvelopeForGfx11) {
   EXPECT_NE(output.find("      .wavefront_size: 32\n"), std::string::npos);
   EXPECT_NE(output.find("      .args: []\n"), std::string::npos);
   EXPECT_NE(output.find(".end_amdgpu_metadata\n"), std::string::npos);
+}
+
+TEST_F(AmdgpuKernelAssemblyTest, EmitsHalBufferResourceMetadata) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  BuildSidecarsForPreset(
+      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  low.return\n"
+      "}\n"
+      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n",
+      &sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly(&packetization.schedule,
+                                                  &packetization.allocation,
+                                                  &builder, &sidecar_arena));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+
+  EXPECT_NE(output.find("  .amdhsa_kernarg_size 8\n"), std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_user_sgpr_count 2\n"), std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_user_sgpr_kernarg_segment_ptr 1\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_next_free_sgpr 2\n"), std::string::npos);
+  EXPECT_NE(output.find("      .kernarg_segment_size: 8\n"), std::string::npos);
+  EXPECT_NE(output.find("      .kernarg_segment_align: 8\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("      .args:\n"), std::string::npos);
+  EXPECT_NE(output.find("        - .name: 'binding0'\n"), std::string::npos);
+  EXPECT_NE(output.find("          .offset: 0\n"), std::string::npos);
+  EXPECT_NE(output.find("          .size: 8\n"), std::string::npos);
+  EXPECT_NE(output.find("          .value_kind: global_buffer\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("          .align: 8\n"), std::string::npos);
+  EXPECT_NE(output.find("          .address_space: global\n"),
+            std::string::npos);
+
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
 }
 
 TEST_F(AmdgpuKernelAssemblyTest, AssemblesKernelEnvelopeForGfx11WithLlvmMc) {
@@ -371,7 +418,8 @@ TEST_F(AmdgpuKernelAssemblyTest, RejectsFunctionArgumentsBeforeAbiLowering) {
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   iree_status_t status = loom_amdgpu_emit_kernel_assembly(
-      &packetization.schedule, &packetization.allocation, &builder);
+      &packetization.schedule, &packetization.allocation, &builder,
+      &sidecar_arena);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
@@ -408,7 +456,8 @@ TEST_F(AmdgpuKernelAssemblyTest, RejectsNonDefaultLinkage) {
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   iree_status_t status = loom_amdgpu_emit_kernel_assembly(
-      &packetization.schedule, &packetization.allocation, &builder);
+      &packetization.schedule, &packetization.allocation, &builder,
+      &sidecar_arena);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);

@@ -10,11 +10,13 @@
 
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/assembly.h"
 #include "loom/target/emit/native/amdgpu/metadata.h"
 
 #define LOOM_AMDGPU_KERNEL_ASSEMBLY_CODE_OBJECT_VERSION 5u
+#define LOOM_AMDGPU_KERNEL_ASSEMBLY_KERNARG_USER_SGPR_COUNT 2u
 
 typedef struct loom_amdgpu_kernel_assembly_register_usage_t {
   // Highest SGPR index used by the function body plus one.
@@ -280,10 +282,89 @@ static iree_status_t loom_amdgpu_kernel_assembly_collect_register_usage(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_kernel_assembly_validate_reserved_user_sgprs(
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout) {
+  if (!abi_layout->uses_kernarg_segment_ptr) {
+    return iree_ok_status();
+  }
+  for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
+    const loom_low_allocation_assignment_t* assignment =
+        &allocation->assignments[i];
+    if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER ||
+        assignment->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
+      continue;
+    }
+    iree_string_view_t register_class = iree_string_view_empty();
+    if (assignment->value_class.register_class_id == LOOM_STRING_ID_INVALID ||
+        assignment->value_class.register_class_id >=
+            allocation->module->strings.count) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "AMDGPU kernel assembly value %" PRIu32
+                              " has no register-class string",
+                              assignment->value_id);
+    }
+    register_class = allocation->module->strings
+                         .entries[assignment->value_class.register_class_id];
+    if (!iree_string_view_equal(register_class, IREE_SV("amdgpu.sgpr"))) {
+      continue;
+    }
+    if (assignment->location_base <
+        LOOM_AMDGPU_KERNEL_ASSEMBLY_KERNARG_USER_SGPR_COUNT) {
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "AMDGPU kernel assembly requires allocation to reserve the first "
+          "%u SGPRs for the kernarg segment pointer before emitting HAL "
+          "resource kernels",
+          LOOM_AMDGPU_KERNEL_ASSEMBLY_KERNARG_USER_SGPR_COUNT);
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_kernel_assembly_build_metadata_arguments(
+    const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout,
+    const loom_amdgpu_metadata_argument_t** out_arguments,
+    iree_arena_allocator_t* arena) {
+  IREE_ASSERT_ARGUMENT(out_arguments);
+  *out_arguments = NULL;
+  if (abi_layout->resource_count == 0) {
+    return iree_ok_status();
+  }
+  loom_amdgpu_metadata_argument_t* arguments = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(arena, abi_layout->resource_count,
+                                sizeof(*arguments), (void**)&arguments));
+  for (iree_host_size_t i = 0; i < abi_layout->resource_count; ++i) {
+    const loom_amdgpu_hal_kernarg_resource_t* resource =
+        &abi_layout->resources[i];
+    arguments[i] = (loom_amdgpu_metadata_argument_t){
+        .name = resource->name,
+        .offset = resource->kernarg_offset,
+        .size = resource->kernarg_size,
+        .alignment = resource->kernarg_alignment,
+        .kind = LOOM_AMDGPU_METADATA_ARGUMENT_GLOBAL_BUFFER,
+        .address_space = IREE_SV("global"),
+    };
+  }
+  *out_arguments = arguments;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
     const loom_low_resolved_target_t* target, iree_string_view_t symbol,
     const loom_amdgpu_kernel_assembly_register_usage_t* register_usage,
-    iree_string_builder_t* builder) {
+    const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout,
+    iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
+  const uint32_t user_sgpr_count =
+      abi_layout->uses_kernarg_segment_ptr
+          ? LOOM_AMDGPU_KERNEL_ASSEMBLY_KERNARG_USER_SGPR_COUNT
+          : 0;
+  const uint32_t next_free_sgpr =
+      register_usage->next_free_sgpr > user_sgpr_count
+          ? register_usage->next_free_sgpr
+          : user_sgpr_count;
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(builder, "\n.rodata\n.p2align 6\n"));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -291,9 +372,17 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
       builder,
       "  .amdhsa_group_segment_fixed_size 0\n"
-      "  .amdhsa_private_segment_fixed_size 0\n"
-      "  .amdhsa_kernarg_size 0\n"
-      "  .amdhsa_user_sgpr_count 0\n"
+      "  .amdhsa_private_segment_fixed_size 0\n"));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "  .amdhsa_kernarg_size %" PRIu32 "\n",
+      abi_layout->kernarg_segment_size));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "  .amdhsa_user_sgpr_count %" PRIu32 "\n", user_sgpr_count));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "  .amdhsa_user_sgpr_kernarg_segment_ptr %u\n",
+      abi_layout->uses_kernarg_segment_ptr ? 1u : 0u));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+      builder,
       "  .amdhsa_system_sgpr_workgroup_id_x 0\n"
       "  .amdhsa_system_sgpr_workgroup_id_y 0\n"
       "  .amdhsa_system_sgpr_workgroup_id_z 0\n"));
@@ -301,8 +390,7 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
       builder, "  .amdhsa_next_free_vgpr %" PRIu32 "\n",
       register_usage->next_free_vgpr));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      builder, "  .amdhsa_next_free_sgpr %" PRIu32 "\n",
-      register_usage->next_free_sgpr));
+      builder, "  .amdhsa_next_free_sgpr %" PRIu32 "\n", next_free_sgpr));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(builder, ".end_amdhsa_kernel\n"));
 
@@ -328,23 +416,28 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
     status = iree_string_builder_append_format(
         &descriptor_symbol_builder, "%.*s.kd", (int)symbol.size, symbol.data);
   }
+  const loom_amdgpu_metadata_argument_t* arguments = NULL;
+  if (iree_status_is_ok(status)) {
+    status = loom_amdgpu_kernel_assembly_build_metadata_arguments(
+        abi_layout, &arguments, scratch_arena);
+  }
   if (iree_status_is_ok(status)) {
     loom_amdgpu_metadata_kernel_t kernel = {
         .name = symbol,
         .descriptor_symbol =
             iree_string_builder_view(&descriptor_symbol_builder),
-        .kernarg_segment_size = 0,
-        .kernarg_segment_alignment = 8,
+        .kernarg_segment_size = abi_layout->kernarg_segment_size,
+        .kernarg_segment_alignment = abi_layout->kernarg_segment_alignment,
         .wavefront_size = processor->default_wavefront_size,
         .group_segment_fixed_size = 0,
         .private_segment_fixed_size = 0,
-        .sgpr_count = register_usage->next_free_sgpr,
+        .sgpr_count = next_free_sgpr,
         .vgpr_count = register_usage->next_free_vgpr,
         .max_flat_workgroup_size = hal_kernel->flat_workgroup_size_max,
         .required_workgroup_size = hal_kernel->required_workgroup_size,
         .has_required_workgroup_size = true,
-        .arguments = NULL,
-        .argument_count = 0,
+        .arguments = arguments,
+        .argument_count = abi_layout->resource_count,
     };
     loom_amdgpu_code_object_metadata_t metadata = {
         .target = iree_string_builder_view(&target_id_builder),
@@ -362,11 +455,11 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
     const loom_amdgpu_wait_packet_plan_t* wait_packets,
-    iree_string_builder_t* builder) {
-  if (builder == NULL) {
+    iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
+  if (builder == NULL || scratch_arena == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU kernel assembly output builder is required");
+        "AMDGPU kernel assembly output builder and scratch arena are required");
   }
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
   IREE_RETURN_IF_ERROR(
@@ -380,9 +473,16 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_assembly_export_symbol(
       &schedule->target, schedule->module, schedule->function_op, &symbol));
 
+  loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_layout_from_low(
+      schedule->module, schedule->function_op,
+      &schedule->target.bundle_storage.bundle, &abi_layout, scratch_arena));
+
   loom_amdgpu_kernel_assembly_register_usage_t register_usage = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_assembly_collect_register_usage(
       allocation, &register_usage));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_assembly_validate_reserved_user_sgprs(
+      allocation, &abi_layout));
 
   const loom_target_snapshot_t* snapshot =
       &schedule->target.bundle_storage.snapshot;
@@ -415,26 +515,28 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
       ".Lfunc_end0:\n"
       ".size %.*s, .Lfunc_end0-%.*s\n",
       (int)symbol.size, symbol.data, (int)symbol.size, symbol.data));
-  return loom_amdgpu_kernel_assembly_append_metadata(&schedule->target, symbol,
-                                                     &register_usage, builder);
+  return loom_amdgpu_kernel_assembly_append_metadata(
+      &schedule->target, symbol, &register_usage, &abi_layout, builder,
+      scratch_arena);
 }
 
 iree_status_t loom_amdgpu_emit_kernel_assembly(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
-    iree_string_builder_t* builder) {
-  return loom_amdgpu_kernel_assembly_emit(schedule, allocation, NULL, builder);
+    iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
+  return loom_amdgpu_kernel_assembly_emit(schedule, allocation, NULL, builder,
+                                          scratch_arena);
 }
 
 iree_status_t loom_amdgpu_emit_kernel_assembly_with_wait_packets(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
     const loom_amdgpu_wait_packet_plan_t* wait_packets,
-    iree_string_builder_t* builder) {
+    iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
   if (wait_packets == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU kernel assembly wait packets are required");
   }
   return loom_amdgpu_kernel_assembly_emit(schedule, allocation, wait_packets,
-                                          builder);
+                                          builder, scratch_arena);
 }
