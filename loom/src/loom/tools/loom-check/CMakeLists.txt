@@ -52,6 +52,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::allocation_json
     loom::src::loom::codegen::low::allocation_pass
+    loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::packet_json
     loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::schedule
@@ -78,6 +79,7 @@ loom_cc_library(
     loom::src::loom::target::emit::llvmir::target_registry
     loom::src::loom::target::ir_records
     loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::target::module_compiler
     loom::src::loom::target::presets
     loom::src::loom::target::tool::llvm
     loom::src::loom::target::tool::process

@@ -7,6 +7,7 @@
 #include "loom/tools/loom-check/execute.h"
 
 #include "loom/codegen/low/allocation_pass.h"
+#include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/diagnostic.h"
@@ -170,6 +171,24 @@ iree_status_t loom_check_environment_initialize_low_descriptor_registry(
   }
   return environment->initialize_low_descriptor_registry.fn(
       environment->initialize_low_descriptor_registry.user_data, out_registry);
+}
+
+iree_status_t loom_check_environment_initialize_low_lower_policy_registry(
+    const loom_check_environment_t* environment,
+    loom_low_lower_policy_registry_t* out_registry) {
+  if (out_registry == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low lower policy registry output is required");
+  }
+  *out_registry = (loom_low_lower_policy_registry_t){0};
+  if (environment == NULL ||
+      environment->initialize_low_lower_policy_registry.fn == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "loom-check low lower policy registry is required");
+  }
+  return environment->initialize_low_lower_policy_registry.fn(
+      environment->initialize_low_lower_policy_registry.user_data,
+      out_registry);
 }
 
 //===----------------------------------------------------------------------===//

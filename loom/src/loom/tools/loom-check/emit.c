@@ -9,6 +9,7 @@
 #include "loom/analysis/liveness_json.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_json.h"
+#include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packet_json.h"
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/schedule.h"
@@ -16,6 +17,7 @@
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
+#include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
@@ -26,6 +28,7 @@
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/target/ir_records.h"
+#include "loom/target/module_compiler.h"
 #include "loom/target/presets.h"
 #include "loom/target/tool/llvm.h"
 #include "loom/tools/loom-check/diagnostics.h"
@@ -45,6 +48,7 @@ typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST = 8,
   LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON = 9,
   LOOM_CHECK_EMIT_LOW_PACKET_JSON = 10,
+  LOOM_CHECK_EMIT_SOURCE_LOW_TEXT = 11,
 } loom_check_emit_format_t;
 
 #define LOOM_CHECK_LOW_ALLOCATION_MAX_BUDGETS 8
@@ -493,6 +497,21 @@ static iree_status_t loom_check_emit_parse_request(
           "target-low registry manifest does not accept a profile");
     }
     out_request->format = LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST;
+    return iree_ok_status();
+  } else if (iree_string_view_equal(target_name, IREE_SV("source-low")) ||
+             iree_string_view_equal(target_name, IREE_SV("source-to-low"))) {
+    if (!iree_string_view_starts_with(profile_name, IREE_SV("@"))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "source-low requires a target bundle symbol name");
+    }
+    out_request->target_bundle_symbol_name =
+        iree_string_view_substr(profile_name, 1, IREE_HOST_SIZE_MAX);
+    if (iree_string_view_is_empty(out_request->target_bundle_symbol_name)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "target bundle symbol name is required");
+    }
+    out_request->format = LOOM_CHECK_EMIT_SOURCE_LOW_TEXT;
     return iree_ok_status();
   } else {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1087,6 +1106,92 @@ static iree_status_t loom_check_emit_write_low_packet_json(
                                      &result->actual_output);
 }
 
+static bool loom_check_emit_source_low_policy_registry_has_bundle(
+    void* user_data, const loom_target_bundle_t* bundle) {
+  const loom_low_lower_policy_registry_t* registry =
+      (const loom_low_lower_policy_registry_t*)user_data;
+  if (!registry || !bundle || !bundle->config) {
+    return false;
+  }
+  const iree_string_view_t contract_set_key = bundle->config->contract_set_key;
+  for (iree_host_size_t i = 0; i < registry->entry_count; ++i) {
+    if (iree_string_view_equal(registry->entries[i].contract_set_key,
+                               contract_set_key)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_check_emit_write_source_low_text(
+    loom_module_t* module, const loom_check_emit_request_t* request,
+    const loom_target_low_descriptor_registry_t* low_registry,
+    const loom_low_lower_policy_registry_t* policy_registry,
+    loom_source_resolver_t source_resolver,
+    loom_check_diagnostic_collector_t* diagnostic_collector,
+    loom_check_result_t* result) {
+  IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_verify(policy_registry));
+
+  const loom_target_module_compile_options_t compile_options = {
+      .target_symbol = request->target_bundle_symbol_name,
+      .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
+                          .user_data = diagnostic_collector},
+      .source_resolver = source_resolver,
+      .max_errors = 20,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_target_module_compile_verify_module(module, &compile_options, 20));
+
+  loom_target_module_compile_target_t target = {0};
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_select_target(
+      module, &compile_options,
+      loom_check_emit_source_low_policy_registry_has_bundle,
+      (void*)policy_registry, IREE_SV("source-to-low"), &target));
+
+  loom_func_like_t source_function = {0};
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_find_source_function(
+      module, &target.bundle_storage.bundle, &source_function));
+
+  const loom_low_lower_policy_t* policy = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_lookup_for_bundle(
+      policy_registry, &target.bundle_storage.bundle, &policy));
+
+  loom_target_module_compile_diagnostic_emitter_t pass_emitter = {0};
+  loom_target_module_compile_diagnostic_emitter_initialize(
+      module, &compile_options, LOOM_EMITTER_PASS, &pass_emitter);
+
+  const loom_low_lower_options_t lower_options = {
+      .target_ref = target.target_ref,
+      .bundle = &target.bundle_storage.bundle,
+      .descriptor_registry = &low_registry->registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .policy = policy,
+      .emitter = loom_target_module_compile_emitter(&pass_emitter),
+      .max_errors = 20,
+  };
+  loom_low_lower_result_t lower_result = {0};
+  IREE_RETURN_IF_ERROR(loom_low_lower_function(module, source_function,
+                                               &lower_options, &lower_result));
+  if (lower_result.error_count > 0 || lower_result.low_func_op == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "source-to-low lowering failed with %u error%s",
+                            (unsigned)lower_result.error_count,
+                            lower_result.error_count == 1 ? "" : "s");
+  }
+
+  loom_target_module_compile_diagnostic_emitter_t verifier_emitter = {0};
+  loom_target_module_compile_diagnostic_emitter_initialize(
+      module, &compile_options, LOOM_EMITTER_VERIFIER, &verifier_emitter);
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_low_module(
+      module, low_registry,
+      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &verifier_emitter,
+      20));
+
+  return loom_text_print_module_to_builder(module, &result->actual_output,
+                                           LOOM_TEXT_PRINT_DEFAULT);
+}
+
 iree_status_t loom_check_execute_emit(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
@@ -1210,6 +1315,57 @@ iree_status_t loom_check_execute_emit(
     status = loom_check_emit_finish_status_failure(
         status, &diagnostic_collector, test_case, case_index, report, filename,
         request.emit_target_name, allocator, result);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
+
+  if (request.format == LOOM_CHECK_EMIT_SOURCE_LOW_TEXT) {
+    loom_source_entry_t source_entry = {0};
+    loom_source_table_resolver_t resolver_data = {0};
+    status = loom_check_source_resolver_for_case(
+        context, filename, stripped_view, &source_entry, &resolver_data);
+    loom_low_lower_policy_registry_t policy_registry = {0};
+    if (iree_status_is_ok(status)) {
+      status = loom_check_environment_initialize_low_lower_policy_registry(
+          environment, &policy_registry);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_check_emit_write_source_low_text(
+          module, &request, &low_registry, &policy_registry,
+          (loom_source_resolver_t){.fn = loom_source_table_resolve,
+                                   .user_data = &resolver_data},
+          &diagnostic_collector, result);
+    }
+    if (iree_status_is_ok(status)) {
+      result->has_actual_output = true;
+    }
+    loom_module_free(module);
+    diagnostic_collector.module = NULL;
+    if (!iree_status_is_ok(status)) {
+      if (diagnostic_collector.count > 0) {
+        iree_status_free(status);
+        status = loom_check_diagnostic_collector_finish(
+            &diagnostic_collector, test_case, case_index, report, allocator,
+            result);
+      } else {
+        status = loom_check_emit_finish_status_failure(
+            status, &diagnostic_collector, test_case, case_index, report,
+            filename, request.emit_target_name, allocator, result);
+      }
+      iree_string_builder_deinitialize(&stripped_input);
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+    if (test_case->annotation_count > 0 || diagnostic_collector.count > 0) {
+      status = loom_check_emit_finish_diagnostics_and_compare_output(
+          &diagnostic_collector, test_case, case_index, report, allocator,
+          result);
+      iree_string_builder_deinitialize(&stripped_input);
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+    status = loom_check_emit_compare_output(test_case, allocator, result);
+    iree_string_builder_deinitialize(&stripped_input);
     iree_arena_deinitialize(&diagnostic_arena);
     return status;
   }
@@ -1504,6 +1660,11 @@ iree_status_t loom_check_execute_emit(
         status = iree_make_status(
             IREE_STATUS_INTERNAL,
             "target-low registry manifest emit should bypass LLVMIR lowering");
+        break;
+      case LOOM_CHECK_EMIT_SOURCE_LOW_TEXT:
+        status =
+            iree_make_status(IREE_STATUS_INTERNAL,
+                             "source-low emit should bypass LLVMIR lowering");
         break;
     }
   }

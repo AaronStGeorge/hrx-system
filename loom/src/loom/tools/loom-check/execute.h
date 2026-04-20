@@ -38,6 +38,9 @@
 extern "C" {
 #endif
 
+typedef struct loom_low_lower_policy_registry_t
+    loom_low_lower_policy_registry_t;
+
 //===----------------------------------------------------------------------===//
 // Types
 //===----------------------------------------------------------------------===//
@@ -147,6 +150,20 @@ typedef struct loom_check_initialize_low_descriptor_registry_callback_t {
   void* user_data;
 } loom_check_initialize_low_descriptor_registry_callback_t;
 
+// Initializes a linked source-to-target-low lowering policy registry package.
+typedef iree_status_t (*loom_check_initialize_low_lower_policy_registry_fn_t)(
+    void* user_data, loom_low_lower_policy_registry_t* out_registry);
+
+// Callback for the lowering policy registry package used by source-to-low emit
+// modes. The policy package is intentionally separate from descriptor tables:
+// tools may want low parsing/scheduling without linking source lowering.
+typedef struct loom_check_initialize_low_lower_policy_registry_callback_t {
+  // Function that initializes the selected linked lowering policy package.
+  loom_check_initialize_low_lower_policy_registry_fn_t fn;
+  // Opaque callback state forwarded to |fn|.
+  void* user_data;
+} loom_check_initialize_low_lower_policy_registry_callback_t;
+
 // Execution environment supplied by each loom-check binary or embedding.
 typedef struct loom_check_environment_t {
   // Dialect registration callback for the IR surface accepted by this runner.
@@ -154,6 +171,10 @@ typedef struct loom_check_environment_t {
   // Target-low registry callback for descriptor-backed low IR operations.
   loom_check_initialize_low_descriptor_registry_callback_t
       initialize_low_descriptor_registry;
+  // Source-to-low lowering policy callback for emit modes that lower source IR
+  // into descriptor-backed low IR.
+  loom_check_initialize_low_lower_policy_registry_callback_t
+      initialize_low_lower_policy_registry;
   // Filesystem path or executable name for iree-run-loom. Empty means search
   // PATH for "iree-run-loom".
   iree_string_view_t iree_run_loom_path;
@@ -193,6 +214,12 @@ iree_status_t loom_check_context_initialize(
 iree_status_t loom_check_environment_initialize_low_descriptor_registry(
     const loom_check_environment_t* environment,
     loom_target_low_descriptor_registry_t* out_registry);
+
+// Initializes the source-to-target-low lowering policy registry selected by
+// |environment|.
+iree_status_t loom_check_environment_initialize_low_lower_policy_registry(
+    const loom_check_environment_t* environment,
+    loom_low_lower_policy_registry_t* out_registry);
 
 // Executes a single test case: checks declared environment requirements,
 // dispatches to the mode-specific function, then applies XFAIL inversion to

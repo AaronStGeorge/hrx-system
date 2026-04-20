@@ -81,6 +81,7 @@ loom_cc_test(
     "loom_check_test.cc"
   DEPS
     ::low_registry
+    loom::src::loom::target::emit::wasm::lower
     loom::src::loom::tools::loom-check::execute
     loom::src::loom::tools::loom-check::test_util
     iree::testing::gtest

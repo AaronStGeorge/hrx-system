@@ -376,6 +376,7 @@ loom_cc_test(
     srcs = ["loom_check_test.cc"],
     deps = [
         ":low_registry",
+        ":lower",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:test_util",
         "//runtime/src/iree/testing:gtest",

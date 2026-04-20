@@ -9,6 +9,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/target/arch/x86/low_registry.h"
+#include "loom/target/arch/x86/lower.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/test_util.h"
 
@@ -22,6 +23,13 @@ iree_status_t InitializeX86LowDescriptorRegistry(
   return iree_ok_status();
 }
 
+iree_status_t InitializeX86LowLowerPolicyRegistry(
+    void* user_data, loom_low_lower_policy_registry_t* out_registry) {
+  (void)user_data;
+  loom_x86_low_lower_policy_registry_initialize(out_registry);
+  return iree_ok_status();
+}
+
 const loom_check_environment_t kX86LoomCheckEnvironment = {
     .register_context =
         {
@@ -31,6 +39,11 @@ const loom_check_environment_t kX86LoomCheckEnvironment = {
     .initialize_low_descriptor_registry =
         {
             .fn = InitializeX86LowDescriptorRegistry,
+            .user_data = nullptr,
+        },
+    .initialize_low_lower_policy_registry =
+        {
+            .fn = InitializeX86LowLowerPolicyRegistry,
             .user_data = nullptr,
         },
 };
