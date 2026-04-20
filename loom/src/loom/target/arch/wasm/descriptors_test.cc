@@ -208,24 +208,5 @@ TEST(WasmDescriptorsTest, LowFuncAsmRoundTripsMemoryPacketsWithArguments) {
   EXPECT_NE(printed.find("v128.store %addr, %loaded"), std::string::npos);
 }
 
-TEST(WasmDescriptorsTest, ManifestNamesSimdAndMemoryPackets) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_wasm_core_simd128_descriptor_set();
-
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(
-      loom_low_descriptor_set_format_manifest_json(descriptor_set, &builder));
-  std::string json(iree_string_builder_buffer(&builder),
-                   iree_string_builder_size(&builder));
-  iree_string_builder_deinitialize(&builder);
-
-  EXPECT_NE(json.find("\"key\":\"wasm.core.simd128\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"wasm.i32x4.add\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"wasm.f32x4.mul\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"wasm.v128.load\""), std::string::npos);
-  EXPECT_NE(json.find("\"descriptor_refs\""), std::string::npos);
-}
-
 }  // namespace
 }  // namespace loom

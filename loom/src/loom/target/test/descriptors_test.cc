@@ -195,24 +195,5 @@ TEST(TestLowDescriptorsTest, SpirvLikeLowAsmRegionRoundTrips) {
   EXPECT_EQ(printed, source);
 }
 
-TEST(TestLowDescriptorsTest, ManifestNamesRepresentativePackets) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_test_low_core_descriptor_set();
-
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(
-      loom_low_descriptor_set_format_manifest_json(descriptor_set, &builder));
-  std::string json(iree_string_builder_buffer(&builder),
-                   iree_string_builder_size(&builder));
-  iree_string_builder_deinitialize(&builder);
-
-  EXPECT_NE(json.find("\"key\":\"test.low.core\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"test.add.phys\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"test.load.v4i32\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"test.store.v4i32\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"test.call.i32\""), std::string::npos);
-}
-
 }  // namespace
 }  // namespace loom

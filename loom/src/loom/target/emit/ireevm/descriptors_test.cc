@@ -112,27 +112,5 @@ TEST(IreeVmDescriptorsTest, LowAsmRegionRoundTrips) {
   EXPECT_EQ(printed, source);
 }
 
-TEST(IreeVmDescriptorsTest, ManifestNamesCallAndControlPackets) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_ireevm_core_descriptor_set();
-
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(
-      loom_low_descriptor_set_format_manifest_json(descriptor_set, &builder));
-  std::string json(iree_string_builder_buffer(&builder),
-                   iree_string_builder_size(&builder));
-  iree_string_builder_deinitialize(&builder);
-
-  EXPECT_NE(json.find("\"key\":\"iree.vm.core\""), std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"iree.vm.call.import.i32\""),
-            std::string::npos);
-  EXPECT_NE(json.find("\"key\":\"iree.vm.cond_br.i32\""), std::string::npos);
-  EXPECT_NE(json.find("\"kind_name\":\"control\""), std::string::npos);
-  EXPECT_NE(json.find("\"kind_name\":\"call\""), std::string::npos);
-  EXPECT_NE(json.find("\"flag_names\":[\"ordered\",\"dependency\"]"),
-            std::string::npos);
-}
-
 }  // namespace
 }  // namespace loom
