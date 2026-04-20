@@ -62,3 +62,21 @@ func.def @loom_kernel(%output: buffer) {
 }
 // ----
 [SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&1xi32=35 --binding=&1xi32=0 --expected_binding=1xi32=35 --expected_binding=1xi32=42
+
+target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+
+func.def @loom_kernel(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %loaded = vector.load %input_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %value = vector.constant 7 : vector<1xi32>
+  %sum = vector.addi %loaded, %value : vector<1xi32>
+  vector.store %sum, %output_view[0] : vector<1xi32>, view<1xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
