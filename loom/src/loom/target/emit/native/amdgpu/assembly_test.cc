@@ -98,6 +98,89 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     return loom_symbol_ref_t{.module_id = 0, .symbol_id = symbol_id};
   }
 
+  loom_value_id_t FindValueIdByName(const char* name) {
+    iree_string_view_t expected_name = iree_make_cstring_view(name);
+    for (iree_host_size_t i = 0; i < module_->values.count; ++i) {
+      const loom_value_t* value =
+          loom_module_value(module_, (loom_value_id_t)i);
+      if (value->name_id == LOOM_STRING_ID_INVALID ||
+          value->name_id >= module_->strings.count) {
+        continue;
+      }
+      iree_string_view_t value_name = module_->strings.entries[value->name_id];
+      if (iree_string_view_equal(value_name, expected_name)) {
+        return (loom_value_id_t)i;
+      }
+    }
+    return LOOM_VALUE_ID_INVALID;
+  }
+
+  void BuildShiftedCopySidecars(iree_arena_allocator_t* arena,
+                                loom_low_packetization_t* out_packetization) {
+    const char* body =
+        "low.func.def target(@gfx11_target) @gfx11_fragment(%source : "
+        "reg<amdgpu.sgpr x3>) {\n"
+        "  %shifted = low.copy %source : reg<amdgpu.sgpr x3> -> "
+        "reg<amdgpu.sgpr x3>\n"
+        "  low.return\n"
+        "}\n";
+    std::string source =
+        "target.preset @gfx11_target {key = \"amdgpu-gfx11\", source = "
+        "@gfx11_fragment}\n";
+    source += body;
+    ResetModule();
+    module_ = ParseSource(source);
+    ASSERT_NE(module_, nullptr);
+
+    const loom_target_preset_registry_t preset_registry =
+        loom_target_low_descriptor_registry_presets(&target_registry_);
+    iree_host_size_t expanded_preset_count = 0;
+    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
+                                              &expanded_preset_count));
+    EXPECT_EQ(expanded_preset_count, 1u);
+
+    loom_low_verify_options_t verify_options = {
+        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
+        .descriptor_registry = &target_registry_.registry,
+        .descriptor_requirements =
+            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        .max_errors = 20,
+    };
+    loom_low_verify_result_t verify_result = {};
+    IREE_ASSERT_OK(
+        loom_low_verify_module(module_, &verify_options, &verify_result));
+    EXPECT_EQ(verify_result.error_count, 0u);
+
+    loom_value_id_t source_value = FindValueIdByName("source");
+    loom_value_id_t shifted_value = FindValueIdByName("shifted");
+    ASSERT_NE(source_value, LOOM_VALUE_ID_INVALID);
+    ASSERT_NE(shifted_value, LOOM_VALUE_ID_INVALID);
+    const loom_low_allocation_fixed_value_t fixed_values[] = {
+        {
+            .value_id = source_value,
+            .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+            .location_base = 0,
+            .location_count = 3,
+        },
+        {
+            .value_id = shifted_value,
+            .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+            .location_base = 1,
+            .location_count = 3,
+        },
+    };
+    const loom_op_t* low_function = FindFirstLowFunction(module_);
+    ASSERT_NE(low_function, nullptr);
+    loom_low_packetization_options_t packetization_options = {
+        .descriptor_registry = &target_registry_.registry,
+        .allocation_fixed_values = fixed_values,
+        .allocation_fixed_value_count = IREE_ARRAYSIZE(fixed_values),
+    };
+    IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
+                                               &packetization_options, arena,
+                                               out_packetization));
+  }
+
   void BuildSidecarsForPreset(const char* preset_key, const char* target_symbol,
                               const char* function_symbol, const char* body,
                               iree_arena_allocator_t* arena,
@@ -443,6 +526,30 @@ TEST_F(AmdgpuAssemblyTest, EmitsMaterializedCopies) {
   EXPECT_NE(output.find("v_mov_b32 v", first_v_mov + 1), std::string::npos);
   EXPECT_NE(output.find("v_wmma_f32_16x16x16_f16 v["), std::string::npos);
   EXPECT_NE(output.find("s_endpgm"), std::string::npos);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
+TEST_F(AmdgpuAssemblyTest, SequencesOverlappingCopyBeforeClobber) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  BuildShiftedCopySidecars(&sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_emit_assembly_fragment(
+      &packetization.schedule, &packetization.allocation, &builder));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+  const size_t move_s3 = output.find("s_mov_b32 s3, s2");
+  const size_t move_s2 = output.find("s_mov_b32 s2, s1");
+  const size_t move_s1 = output.find("s_mov_b32 s1, s0");
+  EXPECT_NE(move_s3, std::string::npos);
+  EXPECT_NE(move_s2, std::string::npos);
+  EXPECT_NE(move_s1, std::string::npos);
+  EXPECT_LT(move_s3, move_s2);
+  EXPECT_LT(move_s2, move_s1);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
 }

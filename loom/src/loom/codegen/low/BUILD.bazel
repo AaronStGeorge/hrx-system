@@ -130,6 +130,36 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "move_sequence_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/codegen/low:move_sequence",
+)
+
+iree_assert_no_dependency(
+    name = "move_sequence_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/codegen/low:move_sequence",
+)
+
+iree_assert_no_dependency(
+    name = "move_sequence_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/codegen/low:move_sequence",
+)
+
+iree_assert_no_dependency(
+    name = "move_sequence_no_target_registry_dep",
+    dependency = "//loom/src/loom/target:low_descriptor_registry",
+    target = "//loom/src/loom/codegen/low:move_sequence",
+)
+
+iree_assert_no_dependency(
+    name = "move_sequence_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/codegen/low:move_sequence",
+)
+
+iree_assert_no_dependency(
     name = "packet_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/codegen/low:packet",
@@ -530,6 +560,16 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "move_sequence",
+    srcs = ["move_sequence.c"],
+    hdrs = ["move_sequence.h"],
+    deps = [
+        ":allocation",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "allocation_materialization",
     srcs = ["allocation_materialization.c"],
     hdrs = ["allocation_materialization.h"],
@@ -762,6 +802,16 @@ loom_cc_test(
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "move_sequence_test",
+    srcs = ["move_sequence_test.cc"],
+    deps = [
+        ":move_sequence",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

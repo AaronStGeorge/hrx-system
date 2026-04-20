@@ -156,6 +156,19 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    move_sequence
+  HDRS
+    "move_sequence.h"
+  SRCS
+    "move_sequence.c"
+  DEPS
+    ::allocation
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     allocation_materialization
   HDRS
     "allocation_materialization.h"
@@ -423,6 +436,17 @@ loom_cc_test(
     loom::src::loom::target::presets
     loom::src::loom::target::test::low_registry
     loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    move_sequence_test
+  SRCS
+    "move_sequence_test.cc"
+  DEPS
+    ::move_sequence
     iree::testing::gtest
     iree::testing::gtest_main
 )

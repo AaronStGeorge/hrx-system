@@ -1,0 +1,80 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Target-independent sequencing for parallel target-low storage moves.
+
+#ifndef LOOM_CODEGEN_LOW_MOVE_SEQUENCE_H_
+#define LOOM_CODEGEN_LOW_MOVE_SEQUENCE_H_
+
+#include "iree/base/api.h"
+#include "loom/codegen/low/allocation.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// One target-visible allocation unit.
+typedef struct loom_low_move_location_t {
+  // Target-visible storage kind.
+  loom_low_allocation_location_kind_t location_kind;
+  // Storage class for the unit.
+  loom_liveness_value_class_t value_class;
+  // Physical register, target ID, or spill slot ordinal.
+  uint32_t location;
+} loom_low_move_location_t;
+
+// One parallel move from an old source unit to a destination unit.
+typedef struct loom_low_move_t {
+  // Unit overwritten by the move.
+  loom_low_move_location_t destination;
+  // Unit read by the move.
+  loom_low_move_location_t source;
+} loom_low_move_t;
+
+typedef iree_status_t (*loom_low_move_sequence_emit_fn_t)(
+    void* user_data, const loom_low_move_location_t* destination,
+    const loom_low_move_location_t* source);
+
+// Callback used to emit one already-sequenced scalar storage move.
+typedef struct loom_low_move_sequence_emit_callback_t {
+  // Emits |destination| <- |source|.
+  loom_low_move_sequence_emit_fn_t fn;
+  // Opaque user data passed to |fn|.
+  void* user_data;
+} loom_low_move_sequence_emit_callback_t;
+
+// Options for lowering one parallel move set to a linear sequence.
+typedef struct loom_low_move_sequence_options_t {
+  // Optional scratch unit used to break cycles.
+  const loom_low_move_location_t* temporary_location;
+  // Required sequenced move emitter.
+  loom_low_move_sequence_emit_callback_t emit_move;
+} loom_low_move_sequence_options_t;
+
+// Returns true when two move locations name the same target-visible unit.
+bool loom_low_move_locations_equal(const loom_low_move_location_t* lhs,
+                                   const loom_low_move_location_t* rhs);
+
+// Returns the location for one assignment unit.
+iree_status_t loom_low_move_location_from_assignment_unit(
+    const loom_low_allocation_assignment_t* assignment, uint32_t unit_index,
+    loom_low_move_location_t* out_location);
+
+// Emits |moves| as a sequential move list that preserves parallel-copy
+// semantics. Identity moves are elided. Acyclic overlap is handled by choosing
+// a safe order. Cycles use |temporary_location| when provided and otherwise
+// fail loud with IREE_STATUS_FAILED_PRECONDITION.
+//
+// |moves| is caller-owned scratch storage and is mutated during sequencing.
+iree_status_t loom_low_move_sequence_emit(
+    loom_low_move_t* moves, iree_host_size_t move_count,
+    const loom_low_move_sequence_options_t* options);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // LOOM_CODEGEN_LOW_MOVE_SEQUENCE_H_

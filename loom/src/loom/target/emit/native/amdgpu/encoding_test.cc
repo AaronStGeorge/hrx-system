@@ -95,6 +95,89 @@ class AmdgpuEncodingTest : public ::testing::Test {
     return nullptr;
   }
 
+  loom_value_id_t FindValueIdByName(const char* name) {
+    iree_string_view_t expected_name = iree_make_cstring_view(name);
+    for (iree_host_size_t i = 0; i < module_->values.count; ++i) {
+      const loom_value_t* value =
+          loom_module_value(module_, (loom_value_id_t)i);
+      if (value->name_id == LOOM_STRING_ID_INVALID ||
+          value->name_id >= module_->strings.count) {
+        continue;
+      }
+      iree_string_view_t value_name = module_->strings.entries[value->name_id];
+      if (iree_string_view_equal(value_name, expected_name)) {
+        return (loom_value_id_t)i;
+      }
+    }
+    return LOOM_VALUE_ID_INVALID;
+  }
+
+  void BuildShiftedCopySidecars(iree_arena_allocator_t* arena,
+                                loom_low_packetization_t* out_packetization) {
+    const char* body =
+        "low.func.def target(@gfx_target) @gfx_kernel(%source : "
+        "reg<amdgpu.sgpr x3>) {\n"
+        "  %shifted = low.copy %source : reg<amdgpu.sgpr x3> -> "
+        "reg<amdgpu.sgpr x3>\n"
+        "  low.return\n"
+        "}\n";
+    std::string source =
+        "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
+        "@gfx_kernel}\n";
+    source += body;
+    ResetModule();
+    module_ = ParseSource(source);
+    ASSERT_NE(module_, nullptr);
+
+    const loom_target_preset_registry_t preset_registry =
+        loom_target_low_descriptor_registry_presets(&target_registry_);
+    iree_host_size_t expanded_preset_count = 0;
+    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
+                                              &expanded_preset_count));
+    EXPECT_EQ(expanded_preset_count, 1u);
+
+    loom_low_verify_options_t verify_options = {
+        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
+        .descriptor_registry = &target_registry_.registry,
+        .descriptor_requirements =
+            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        .max_errors = 20,
+    };
+    loom_low_verify_result_t verify_result = {};
+    IREE_ASSERT_OK(
+        loom_low_verify_module(module_, &verify_options, &verify_result));
+    EXPECT_EQ(verify_result.error_count, 0u);
+
+    loom_value_id_t source_value = FindValueIdByName("source");
+    loom_value_id_t shifted_value = FindValueIdByName("shifted");
+    ASSERT_NE(source_value, LOOM_VALUE_ID_INVALID);
+    ASSERT_NE(shifted_value, LOOM_VALUE_ID_INVALID);
+    const loom_low_allocation_fixed_value_t fixed_values[] = {
+        {
+            .value_id = source_value,
+            .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+            .location_base = 0,
+            .location_count = 3,
+        },
+        {
+            .value_id = shifted_value,
+            .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+            .location_base = 1,
+            .location_count = 3,
+        },
+    };
+    const loom_op_t* low_function = FindFirstLowFunction(module_);
+    ASSERT_NE(low_function, nullptr);
+    loom_low_packetization_options_t packetization_options = {
+        .descriptor_registry = &target_registry_.registry,
+        .allocation_fixed_values = fixed_values,
+        .allocation_fixed_value_count = IREE_ARRAYSIZE(fixed_values),
+    };
+    IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
+                                               &packetization_options, arena,
+                                               out_packetization));
+  }
+
   void BuildSidecarsForPreset(const char* preset_key, const char* body,
                               iree_arena_allocator_t* arena,
                               loom_low_packetization_t* out_packetization) {
@@ -208,6 +291,24 @@ TEST_F(AmdgpuEncodingTest, EncodesLiveInAsNonEmittingPacket) {
 
   ASSERT_EQ(text.data_length, 4u);
   EXPECT_EQ(ReadU32LE(text.data), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuEncodingTest, SequencesOverlappingCopyBeforeClobber) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildShiftedCopySidecars(&arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_EQ(text.data_length, 16u);
+  EXPECT_EQ(ReadU32LE(text.data + 0), UINT32_C(0xBE830002));
+  EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0xBE820001));
+  EXPECT_EQ(ReadU32LE(text.data + 8), UINT32_C(0xBE810000));
+  EXPECT_EQ(ReadU32LE(text.data + 12), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
 }
 
