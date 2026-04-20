@@ -136,6 +136,7 @@ loom_cc_library(
     ::hal_runtime
     ::one_shot
     iree::base
+    iree::base::core_headers
   PUBLIC
 )
 

@@ -18,19 +18,21 @@
 extern "C" {
 #endif
 
-typedef struct loom_run_hal_execution_backend_config_t {
+typedef struct loom_run_hal_execution_backend_t {
+  // Generic execution backend base registered with Loom execution tools.
+  loom_run_execution_backend_t base;
   // HAL backend adapted by the generic one-shot execution hooks.
   const loom_run_hal_backend_t* hal_backend;
-} loom_run_hal_execution_backend_config_t;
+} loom_run_hal_execution_backend_t;
 
 // Probes the HAL device target for a backend configured with
-// loom_run_hal_execution_backend_config_t.
+// loom_run_hal_execution_backend_t.
 iree_status_t loom_run_hal_execution_backend_probe(
     const loom_run_execution_backend_t* backend,
     const loom_run_one_shot_probe_request_t* request);
 
 // Compiles and invokes one HAL executable through a backend configured with
-// loom_run_hal_execution_backend_config_t.
+// loom_run_hal_execution_backend_t.
 iree_status_t loom_run_hal_execution_backend_run_one_shot(
     const loom_run_execution_backend_t* backend,
     const loom_run_one_shot_request_t* request);

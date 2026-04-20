@@ -701,7 +701,6 @@ static const loom_low_lower_policy_t kX86LowLowerPolicy = {
 
 static const loom_target_low_legality_provider_t kX86LowLegalityProvider = {
     .name = IREE_SVL("x86"),
-    .user_data = NULL,
     .try_verify_op = loom_x86_low_legality_try_verify_op,
 };
 

@@ -97,6 +97,7 @@ loom_cc_library(
   DEPS
     ::execute
     iree::base
+    iree::base::core_headers
     loom::src::loom::tooling::execution::compile_report_capture
     loom::src::loom::tooling::execution::hal_backend
     loom::src::loom::tooling::execution::hal_candidate

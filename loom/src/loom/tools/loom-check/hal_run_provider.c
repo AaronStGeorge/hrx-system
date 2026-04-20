@@ -6,6 +6,7 @@
 
 #include "loom/tools/loom-check/hal_run_provider.h"
 
+#include "iree/base/alignment.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/hal_candidate.h"
 #include "loom/tooling/execution/hal_invocation.h"
@@ -39,24 +40,25 @@ typedef struct loom_check_hal_run_options_t {
   loom_run_compile_report_capture_options_t compile_report_options;
 } loom_check_hal_run_options_t;
 
-static const loom_check_hal_run_provider_config_t*
-loom_check_hal_run_provider_config(const loom_check_run_provider_t* provider) {
+static const loom_check_hal_run_provider_t*
+loom_check_hal_run_provider_from_base(
+    const loom_check_run_provider_t* provider) {
   if (provider == NULL) {
     return NULL;
   }
-  return (const loom_check_hal_run_provider_config_t*)provider->user_data;
+  return iree_containerof(provider, loom_check_hal_run_provider_t, base);
 }
 
 static const loom_run_hal_backend_t* loom_check_hal_run_provider_lookup_backend(
     const loom_check_run_provider_t* provider,
     iree_string_view_t backend_name) {
-  const loom_check_hal_run_provider_config_t* config =
-      loom_check_hal_run_provider_config(provider);
-  if (config == NULL) {
+  const loom_check_hal_run_provider_t* hal_run_provider =
+      loom_check_hal_run_provider_from_base(provider);
+  if (hal_run_provider == NULL) {
     return NULL;
   }
-  return loom_run_hal_backend_registry_lookup(&config->backend_registry,
-                                              backend_name);
+  return loom_run_hal_backend_registry_lookup(
+      &hal_run_provider->backend_registry, backend_name);
 }
 
 bool loom_check_hal_run_provider_match(
@@ -412,11 +414,8 @@ iree_status_t loom_check_hal_run_provider_append_names(
     const loom_check_run_provider_t* provider, iree_string_builder_t* builder) {
   IREE_ASSERT_ARGUMENT(provider);
   IREE_ASSERT_ARGUMENT(builder);
-  const loom_check_hal_run_provider_config_t* config =
-      loom_check_hal_run_provider_config(provider);
-  if (config == NULL) {
-    return iree_string_builder_append_string(builder, provider->name);
-  }
-  return loom_run_hal_backend_registry_format_names(&config->backend_registry,
-                                                    builder);
+  const loom_check_hal_run_provider_t* hal_run_provider =
+      loom_check_hal_run_provider_from_base(provider);
+  return loom_run_hal_backend_registry_format_names(
+      &hal_run_provider->backend_registry, builder);
 }

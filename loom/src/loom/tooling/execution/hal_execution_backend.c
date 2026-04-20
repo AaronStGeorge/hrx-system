@@ -6,28 +6,29 @@
 
 #include "loom/tooling/execution/hal_execution_backend.h"
 
+#include "iree/base/alignment.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/hal_candidate.h"
 #include "loom/tooling/execution/hal_invocation.h"
 #include "loom/tooling/execution/hal_runtime.h"
 
-static const loom_run_hal_execution_backend_config_t*
-loom_run_hal_execution_backend_config(
+static const loom_run_hal_execution_backend_t*
+loom_run_hal_execution_backend_from_base(
     const loom_run_execution_backend_t* backend) {
   if (backend == NULL) {
     return NULL;
   }
-  return (const loom_run_hal_execution_backend_config_t*)backend->user_data;
+  return iree_containerof(backend, loom_run_hal_execution_backend_t, base);
 }
 
 static const loom_run_hal_backend_t* loom_run_hal_execution_backend_hal_backend(
     const loom_run_execution_backend_t* backend) {
-  const loom_run_hal_execution_backend_config_t* config =
-      loom_run_hal_execution_backend_config(backend);
-  if (config == NULL) {
+  const loom_run_hal_execution_backend_t* hal_execution_backend =
+      loom_run_hal_execution_backend_from_base(backend);
+  if (hal_execution_backend == NULL) {
     return NULL;
   }
-  return config->hal_backend;
+  return hal_execution_backend->hal_backend;
 }
 
 iree_status_t loom_run_hal_execution_backend_probe(

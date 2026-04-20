@@ -14,22 +14,20 @@ static const loom_run_hal_backend_t* const kLoomAmdgpuExecutionHalBackends[] = {
     &iree_run_loom_amdgpu_hal_backend,
 };
 
-static const loom_run_hal_execution_backend_config_t
-    kLoomAmdgpuHalExecutionBackendConfig = {
-        .hal_backend = &iree_run_loom_amdgpu_hal_backend,
-};
-
-static const loom_run_execution_backend_t kLoomAmdgpuHalExecutionBackend = {
-    .name = IREE_SVL("amdgpu-hal"),
-    .flags = LOOM_RUN_EXECUTION_BACKEND_FLAG_HAL_OPTIONS,
-    .user_data = &kLoomAmdgpuHalExecutionBackendConfig,
-    .probe = loom_run_hal_execution_backend_probe,
-    .run_one_shot = loom_run_hal_execution_backend_run_one_shot,
+static const loom_run_hal_execution_backend_t kLoomAmdgpuHalExecutionBackend = {
+    .base =
+        {
+            .name = IREE_SVL("amdgpu-hal"),
+            .flags = LOOM_RUN_EXECUTION_BACKEND_FLAG_HAL_OPTIONS,
+            .probe = loom_run_hal_execution_backend_probe,
+            .run_one_shot = loom_run_hal_execution_backend_run_one_shot,
+        },
+    .hal_backend = &iree_run_loom_amdgpu_hal_backend,
 };
 
 static const loom_run_execution_backend_t* const
     kLoomAmdgpuExecutionBackends[] = {
-        &kLoomAmdgpuHalExecutionBackend,
+        &kLoomAmdgpuHalExecutionBackend.base,
 };
 
 const loom_run_execution_provider_t loom_amdgpu_target_provider = {

@@ -43,8 +43,6 @@ struct loom_run_execution_backend_t {
   iree_string_view_t name;
   // Backend option families consumed by one-shot requests.
   loom_run_execution_backend_flags_t flags;
-  // Backend-owned immutable configuration visible to callbacks.
-  const void* user_data;
   // Optional backend probe hook.
   loom_run_execution_backend_probe_fn_t probe;
   // Runs one compile-and-invoke request for CLI and lit adapters.

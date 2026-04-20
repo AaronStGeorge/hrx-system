@@ -118,6 +118,7 @@ loom_cc_library(
         ":hal_runtime",
         ":one_shot",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base:core_headers",
     ],
 )
 

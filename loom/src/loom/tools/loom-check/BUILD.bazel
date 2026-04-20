@@ -143,6 +143,7 @@ loom_cc_library(
         "//loom/src/loom/tooling/execution:hal_runtime",
         "//loom/src/loom/tooling/execution:session",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base:core_headers",
     ],
 )
 

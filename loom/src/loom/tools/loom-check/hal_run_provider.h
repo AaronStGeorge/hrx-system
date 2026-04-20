@@ -16,12 +16,14 @@
 extern "C" {
 #endif
 
-typedef struct loom_check_hal_run_provider_config_t {
+typedef struct loom_check_hal_run_provider_t {
+  // Generic run provider base registered with loom-check.
+  loom_check_run_provider_t base;
   // HAL backends linked into the owning target runner.
   loom_run_hal_backend_registry_t backend_registry;
-} loom_check_hal_run_provider_config_t;
+} loom_check_hal_run_provider_t;
 
-// Returns true when provider->user_data names a HAL backend matching
+// Returns true when |provider| names a HAL backend matching
 // --loom_backend in |arguments|.
 bool loom_check_hal_run_provider_match(
     const loom_check_run_provider_t* provider,

@@ -79,8 +79,6 @@ typedef iree_status_t (*loom_llvmir_target_legality_try_op_fn_t)(
 struct loom_llvmir_target_legality_provider_t {
   // Stable provider name used for diagnostics.
   iree_string_view_t name;
-  // Optional immutable provider data passed back to callbacks.
-  const void* user_data;
   // Attempts to verify one source op. Sets |out_handled| false when the op does
   // not belong to this provider.
   loom_llvmir_target_legality_try_op_fn_t try_verify_op;

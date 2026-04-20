@@ -16,25 +16,23 @@ static const loom_run_hal_backend_t* const kLoomAmdgpuCheckHalBackends[] = {
     &iree_run_loom_amdgpu_hal_backend,
 };
 
-static const loom_check_hal_run_provider_config_t
-    kLoomAmdgpuCheckHalRunProviderConfig = {
-        .backend_registry =
-            {
-                .backends = kLoomAmdgpuCheckHalBackends,
-                .backend_count = IREE_ARRAYSIZE(kLoomAmdgpuCheckHalBackends),
-            },
-};
-
-static const loom_check_run_provider_t kLoomAmdgpuCheckHalRunProvider = {
-    .name = IREE_SVL("amdgpu-hal"),
-    .user_data = &kLoomAmdgpuCheckHalRunProviderConfig,
-    .match = loom_check_hal_run_provider_match,
-    .execute = loom_check_hal_run_provider_execute,
-    .append_names = loom_check_hal_run_provider_append_names,
+static const loom_check_hal_run_provider_t kLoomAmdgpuCheckHalRunProvider = {
+    .base =
+        {
+            .name = IREE_SVL("amdgpu-hal"),
+            .match = loom_check_hal_run_provider_match,
+            .execute = loom_check_hal_run_provider_execute,
+            .append_names = loom_check_hal_run_provider_append_names,
+        },
+    .backend_registry =
+        {
+            .backends = kLoomAmdgpuCheckHalBackends,
+            .backend_count = IREE_ARRAYSIZE(kLoomAmdgpuCheckHalBackends),
+        },
 };
 
 static const loom_check_run_provider_t* const kLoomAmdgpuCheckRunProviders[] = {
-    &kLoomAmdgpuCheckHalRunProvider,
+    &kLoomAmdgpuCheckHalRunProvider.base,
 };
 
 static const loom_check_requirement_provider_t* const

@@ -224,8 +224,6 @@ typedef iree_status_t (*loom_check_run_provider_append_names_fn_t)(
 struct loom_check_run_provider_t {
   // Human-readable provider name used for debugging and diagnostics.
   iree_string_view_t name;
-  // Provider-owned immutable configuration visible to callbacks.
-  const void* user_data;
   // Returns true when this provider owns the RUN: run argument set.
   loom_check_run_provider_match_fn_t match;
   // Executes the RUN: run case and fills the provider result.
