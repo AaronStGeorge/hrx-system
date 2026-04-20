@@ -144,6 +144,33 @@ LowAbiEffectKind = EnumDef(
     doc="Effect summary row attached to a low ABI adapter.",
 )
 
+LowAbiResourceKind = EnumDef(
+    "LowAbiResourceKind",
+    [
+        EnumCase(
+            "native_pointer",
+            1,
+            doc="Native object-function pointer argument materialized as a register value.",
+        ),
+        EnumCase(
+            "vm_state",
+            2,
+            doc="IREE VM module state or context handle materialized as a register value.",
+        ),
+        EnumCase(
+            "vm_import",
+            3,
+            doc="IREE VM imported-function or imported-resource handle materialized as a register value.",
+        ),
+        EnumCase(
+            "hal_buffer_resource",
+            4,
+            doc="IREE HAL dispatch binding buffer resource descriptor materialized as a register value.",
+        ),
+    ],
+    doc="Target ABI resource imported into a low function body.",
+)
+
 LowAllocationMode = EnumDef(
     "LowAllocationMode",
     [
@@ -659,6 +686,73 @@ low_frame_index = Op(
 )
 
 # ============================================================================
+# low.abi.resource — ABI resource binding record
+# ============================================================================
+
+low_abi_resource = Op(
+    "low.abi.resource",
+    group=low_ops,
+    doc="Function-owned target ABI resource imported by low.resource.",
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="low ABI resource",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef(
+            "function",
+            "symbol",
+            symbol_ref=SymbolReference("function", ["func_like"]),
+        ),
+        AttrDef("kind", ATTR_TYPE_ENUM, enum_def=LowAbiResourceKind),
+        AttrDef("index", ATTR_TYPE_I64),
+        AttrDef("semantic_type", ATTR_TYPE_TYPE),
+        AttrDef("abi_type", ATTR_TYPE_TYPE),
+    ],
+    verify="loom_low_abi_resource_verify",
+    format=[
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        "low.abi.resource @vm_state {function = @vm_func, kind = vm_state, index = 0, semantic_type = i64, abi_type = reg<vm.i64>}",
+        "low.abi.resource @binding0 {function = @kernel, kind = hal_buffer_resource, index = 0, semantic_type = hal.buffer, abi_type = reg<amdgpu.sgpr x4>}",
+    ],
+)
+
+# ============================================================================
+# low.resource — import ABI resource into a register value
+# ============================================================================
+
+low_resource = Op(
+    "low.resource",
+    group=low_ops,
+    doc="Import a function-owned target ABI resource into a low register value.",
+    attrs=[
+        AttrDef(
+            "resource",
+            "symbol",
+            symbol_ref=SymbolReference("low ABI resource", ["record"]),
+        ),
+    ],
+    results=[Result("result", REGISTER)],
+    traits=[UNKNOWN_EFFECTS],
+    verify="loom_low_resource_verify",
+    format=[
+        SymbolRef("resource"),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=[
+        "%state = low.resource @vm_state : reg<vm.i64>",
+        "%binding = low.resource @binding0 : reg<amdgpu.sgpr x4>",
+    ],
+)
+
+# ============================================================================
 # low.abi.adapter — explicit semantic-to-low ABI adapter record
 # ============================================================================
 
@@ -910,4 +1004,6 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_frame_index,
     low_br,
     low_cond_br,
+    low_resource,
+    low_abi_resource,
 )

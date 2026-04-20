@@ -1286,6 +1286,245 @@ TEST_F(LowVerifyTest, SlotTrafficPassesWithOwnedSlot) {
   EXPECT_TRUE(capture.diagnostics.empty());
 }
 
+TEST_F(LowVerifyTest, ResourceImportsPassForVmNativeAndHalAbiShapes) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "
+      "\"iree-vm\", data_layout = \"\", artifact_format = vm_bytecode, "
+      "target_cpu = \"\", target_features = \"\", "
+      "default_pointer_bitwidth = 64, index_bitwidth = 64, "
+      "offset_bitwidth = 64, memory_space_generic = 0, "
+      "memory_space_global = 0, memory_space_workgroup = 0, "
+      "memory_space_constant = 0, memory_space_private = 0, "
+      "memory_space_host = 0, memory_space_descriptor = 0}\n"
+      "target.export @vm_export {source = @vm_resource, export_symbol = "
+      "\"vm_resource\", abi = vm_module_function, linkage = default, "
+      "hal_binding_alignment = 0, hal_workgroup_size_x = 0, "
+      "hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, "
+      "hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, "
+      "hal_buffer_resource_flags = 0}\n"
+      "target.config @vm_config {contract_set_key = \"test.low.core\", "
+      "contract_feature_bits = 0}\n"
+      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
+      "@vm_export, config = @vm_config}\n"
+      "low.func.def target(@vm_target) @vm_resource() -> (reg<vm.i32>) {\n"
+      "  %state = low.resource @vm_state : reg<vm.i32>\n"
+      "  low.return %state : reg<vm.i32>\n"
+      "}\n"
+      "low.abi.resource @vm_state {function = @vm_resource, kind = vm_state, "
+      "index = 0, semantic_type = vm.state, abi_type = reg<vm.i32>}\n"
+      "target.snapshot @native_snapshot {codegen_format = low_native, "
+      "target_triple = \"x86_64-unknown-linux-gnu\", data_layout = \"\", "
+      "artifact_format = elf, target_cpu = \"\", target_features = \"\", "
+      "default_pointer_bitwidth = 64, index_bitwidth = 64, "
+      "offset_bitwidth = 64, memory_space_generic = 0, "
+      "memory_space_global = 0, memory_space_workgroup = 4294967295, "
+      "memory_space_constant = 0, memory_space_private = 0, "
+      "memory_space_host = 0, memory_space_descriptor = 4294967295}\n"
+      "target.export @native_export {source = @native_resource, "
+      "export_symbol = \"native_resource\", abi = object_function, linkage = "
+      "dso_local, hal_binding_alignment = 0, hal_workgroup_size_x = 0, "
+      "hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, "
+      "hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, "
+      "hal_buffer_resource_flags = 0}\n"
+      "target.config @native_config {contract_set_key = \"test.low.core\", "
+      "contract_feature_bits = 0}\n"
+      "target.bundle @native_target {snapshot = @native_snapshot, "
+      "export_plan = @native_export, config = @native_config}\n"
+      "low.func.def target(@native_target) @native_resource() -> "
+      "(reg<native.ptr>) {\n"
+      "  %ptr = low.resource @native_arg0 : reg<native.ptr>\n"
+      "  low.return %ptr : reg<native.ptr>\n"
+      "}\n"
+      "low.abi.resource @native_arg0 {function = @native_resource, kind = "
+      "native_pointer, index = 0, semantic_type = buffer, abi_type = "
+      "reg<native.ptr>}\n"
+      "target.snapshot @hal_snapshot {codegen_format = low_native, "
+      "target_triple = \"amdgcn-amd-amdhsa\", data_layout = \"\", "
+      "artifact_format = elf, target_cpu = \"gfx1100\", target_features = "
+      "\"\", default_pointer_bitwidth = 64, index_bitwidth = 64, "
+      "offset_bitwidth = 64, memory_space_generic = 0, "
+      "memory_space_global = 1, memory_space_workgroup = 3, "
+      "memory_space_constant = 4, memory_space_private = 5, "
+      "memory_space_host = 4294967295, memory_space_descriptor = "
+      "4294967295}\n"
+      "target.export @hal_export {source = @hal_kernel, export_symbol = "
+      "\"hal_kernel\", abi = hal_kernel, linkage = default, "
+      "hal_binding_alignment = 16, hal_workgroup_size_x = 1, "
+      "hal_workgroup_size_y = 1, hal_workgroup_size_z = 1, "
+      "hal_flat_workgroup_size_min = 1, hal_flat_workgroup_size_max = 1, "
+      "hal_buffer_resource_flags = 0}\n"
+      "target.config @hal_config {contract_set_key = \"test.low.core\", "
+      "contract_feature_bits = 0}\n"
+      "target.bundle @hal_target {snapshot = @hal_snapshot, export_plan = "
+      "@hal_export, config = @hal_config}\n"
+      "low.func.def target(@hal_target) @hal_kernel() -> "
+      "(reg<amdgpu.sgpr x4>) {\n"
+      "  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+      "  low.return %binding : reg<amdgpu.sgpr x4>\n"
+      "}\n"
+      "low.abi.resource @binding0 {function = @hal_kernel, kind = "
+      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, abi_type = "
+      "reg<amdgpu.sgpr x4>}\n",
+      &capture);
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(capture.diagnostics.empty());
+}
+
+TEST_F(LowVerifyTest, ResourceRejectsLowFunctionDeclarationOwner) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_owner()\n"
+      "low.abi.resource @bad_resource {function = @extern_owner, kind = "
+      "vm_state, index = 0, semantic_type = vm.state, abi_type = "
+      "reg<vm.i32>}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  ExpectFieldRefParam(*diagnostic, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_abi_resource_function_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_owner");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "low function definition");
+}
+
+TEST_F(LowVerifyTest, ResourceRejectsWrongExportAbi) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "target.snapshot @native_snapshot {codegen_format = low_native, "
+      "target_triple = \"x86_64-unknown-linux-gnu\", data_layout = \"\", "
+      "artifact_format = elf, target_cpu = \"\", target_features = \"\", "
+      "default_pointer_bitwidth = 64, index_bitwidth = 64, "
+      "offset_bitwidth = 64, memory_space_generic = 0, "
+      "memory_space_global = 0, memory_space_workgroup = 4294967295, "
+      "memory_space_constant = 0, memory_space_private = 0, "
+      "memory_space_host = 0, memory_space_descriptor = 4294967295}\n"
+      "target.export @native_export {source = @vm_resource, export_symbol = "
+      "\"vm_resource\", abi = object_function, linkage = dso_local, "
+      "hal_binding_alignment = 0, hal_workgroup_size_x = 0, "
+      "hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, "
+      "hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, "
+      "hal_buffer_resource_flags = 0}\n"
+      "target.config @native_config {contract_set_key = \"test.low.core\", "
+      "contract_feature_bits = 0}\n"
+      "target.bundle @native_target {snapshot = @native_snapshot, "
+      "export_plan = @native_export, config = @native_config}\n"
+      "low.func.def target(@native_target) @vm_resource() -> (reg<vm.i32>) {\n"
+      "  %state = low.resource @vm_state : reg<vm.i32>\n"
+      "  low.return %state : reg<vm.i32>\n"
+      "}\n"
+      "low.abi.resource @vm_state {function = @vm_resource, kind = vm_state, "
+      "index = 0, semantic_type = vm.state, abi_type = reg<vm.i32>}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.abi.resource");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_abi_resource_kind_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "kind");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "VM resources require vm_module_function export ABI");
+}
+
+TEST_F(LowVerifyTest, ResourceImportRejectsDifferentOwnerFunction) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "
+      "\"iree-vm\", data_layout = \"\", artifact_format = vm_bytecode, "
+      "target_cpu = \"\", target_features = \"\", "
+      "default_pointer_bitwidth = 64, index_bitwidth = 64, "
+      "offset_bitwidth = 64, memory_space_generic = 0, "
+      "memory_space_global = 0, memory_space_workgroup = 0, "
+      "memory_space_constant = 0, memory_space_private = 0, "
+      "memory_space_host = 0, memory_space_descriptor = 0}\n"
+      "target.export @vm_export {source = @resource_owner, export_symbol = "
+      "\"resource_owner\", abi = vm_module_function, linkage = default, "
+      "hal_binding_alignment = 0, hal_workgroup_size_x = 0, "
+      "hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, "
+      "hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, "
+      "hal_buffer_resource_flags = 0}\n"
+      "target.config @vm_config {contract_set_key = \"test.low.core\", "
+      "contract_feature_bits = 0}\n"
+      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
+      "@vm_export, config = @vm_config}\n"
+      "low.func.def target(@vm_target) @resource_owner() {\n"
+      "  low.return\n"
+      "}\n"
+      "low.func.def target(@vm_target) @resource_user() -> (reg<vm.i32>) {\n"
+      "  %state = low.resource @vm_state : reg<vm.i32>\n"
+      "  low.return %state : reg<vm.i32>\n"
+      "}\n"
+      "low.abi.resource @vm_state {function = @resource_owner, kind = "
+      "vm_state, index = 0, semantic_type = vm.state, abi_type = "
+      "reg<vm.i32>}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.resource");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_resource_resource_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "resource");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "resource owner must match the enclosing low function");
+}
+
+TEST_F(LowVerifyTest, ResourceImportRejectsResultTypeMismatch) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "
+      "\"iree-vm\", data_layout = \"\", artifact_format = vm_bytecode, "
+      "target_cpu = \"\", target_features = \"\", "
+      "default_pointer_bitwidth = 64, index_bitwidth = 64, "
+      "offset_bitwidth = 64, memory_space_generic = 0, "
+      "memory_space_global = 0, memory_space_workgroup = 0, "
+      "memory_space_constant = 0, memory_space_private = 0, "
+      "memory_space_host = 0, memory_space_descriptor = 0}\n"
+      "target.export @vm_export {source = @vm_resource, export_symbol = "
+      "\"vm_resource\", abi = vm_module_function, linkage = default, "
+      "hal_binding_alignment = 0, hal_workgroup_size_x = 0, "
+      "hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, "
+      "hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, "
+      "hal_buffer_resource_flags = 0}\n"
+      "target.config @vm_config {contract_set_key = \"test.low.core\", "
+      "contract_feature_bits = 0}\n"
+      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
+      "@vm_export, config = @vm_config}\n"
+      "low.func.def target(@vm_target) @vm_resource() -> (reg<vm.i64>) {\n"
+      "  %state = low.resource @vm_state : reg<vm.i64>\n"
+      "  low.return %state : reg<vm.i64>\n"
+      "}\n"
+      "low.abi.resource @vm_state {function = @vm_resource, kind = vm_state, "
+      "index = 0, semantic_type = vm.state, abi_type = reg<vm.i32>}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.resource");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "result");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "result type must match the resource ABI type");
+}
+
 TEST_F(LowVerifyTest, SlotRejectsSemanticFunctionOwner) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(

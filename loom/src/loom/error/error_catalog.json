@@ -4288,7 +4288,45 @@
         "kind_name": "STRING"
       }
     ],
-    "fix_hint_template": "Keep low slots owned by low functions and reference them with valid byte offsets"
+    "fix_hint_template": "Keep low structural records owned by low functions and reference them with matching function, type, and target ABI contracts"
+  },
+  {
+    "error_id": "ERR_LOWERING_025",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 25,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low ABI resource register type is not accepted.",
+    "message_template": "low function '{function_name}' resource '{resource_name}' has ABI type {actual_type}, which descriptor set '{descriptor_set}' rejects: {reason}",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "resource_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "descriptor_set",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Use a register class and allocation-unit count accepted by the selected low descriptor set"
   },
   {
     "error_id": "ERR_BACKEND_001",

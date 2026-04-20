@@ -942,6 +942,111 @@ static iree_status_t loom_low_verify_emit_register_type_mismatch(
       IREE_ARRAYSIZE(params), NULL, 0);
 }
 
+static iree_status_t loom_low_verify_format_resource_unit_count_reason(
+    loom_low_function_verify_state_t* function_state, uint32_t unit_count,
+    uint16_t physical_count, iree_string_view_t* out_reason) {
+  IREE_ASSERT_ARGUMENT(out_reason);
+  char scratch[128];
+  int length = iree_snprintf(scratch, sizeof(scratch),
+                             "register class has %" PRIu16
+                             " physical units but resource requires %" PRIu32,
+                             physical_count, unit_count);
+  if (length < 0 || (iree_host_size_t)length >= sizeof(scratch)) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "failed to format resource register reason");
+  }
+  char* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(&function_state->state->arena,
+                                           (iree_host_size_t)length,
+                                           (void**)&storage));
+  memcpy(storage, scratch, (iree_host_size_t)length);
+  *out_reason = iree_make_string_view(storage, (iree_host_size_t)length);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_descriptor_find_register_class(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_view_t register_class_name,
+    const loom_low_reg_class_t** out_register_class) {
+  IREE_ASSERT_ARGUMENT(out_register_class);
+  *out_register_class = NULL;
+  for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {
+    const loom_low_reg_class_t* register_class =
+        &descriptor_set->reg_classes[i];
+    iree_string_view_t descriptor_class_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+        descriptor_set, register_class->name_string_offset,
+        &descriptor_class_name));
+    if (iree_string_view_equal(register_class_name, descriptor_class_name)) {
+      *out_register_class = register_class;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_emit_resource_register_rejected(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    loom_type_t actual_type, iree_string_view_t reason) {
+  const loom_module_t* module = function_state->state->module;
+  const loom_low_resolved_target_t* target = function_state->target;
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(function_state->function_name),
+      loom_param_with_field_ref(
+          loom_param_string(loom_low_verify_symbol_name(
+              module, loom_low_resource_resource(op))),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    loom_low_resource_resource_ATTR_INDEX)),
+      loom_param_with_field_ref(
+          loom_param_type(actual_type),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, 0)),
+      loom_param_string(target->descriptor_set_key),
+      loom_param_string(reason),
+  };
+  return loom_low_verify_emit(
+      function_state->state, op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 25), params,
+      IREE_ARRAYSIZE(params), NULL, 0);
+}
+
+static iree_status_t loom_low_verify_resource(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op) {
+  const loom_module_t* module = function_state->state->module;
+  const loom_type_t actual_type =
+      loom_module_value_type(module, loom_low_resource_result(op));
+  if (!loom_type_is_register(actual_type)) {
+    return loom_low_verify_emit_resource_register_rejected(
+        function_state, op, actual_type,
+        IREE_SV("resource result type is not a register type"));
+  }
+
+  const iree_string_view_t actual_register_class =
+      loom_low_verify_string_or_empty(module,
+                                      loom_type_register_class_id(actual_type));
+  const loom_low_reg_class_t* descriptor_register_class = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_find_register_class(
+      function_state->target->descriptor_set, actual_register_class,
+      &descriptor_register_class));
+  if (!descriptor_register_class) {
+    return loom_low_verify_emit_resource_register_rejected(
+        function_state, op, actual_type,
+        IREE_SV("register class is not defined by the descriptor set"));
+  }
+
+  const uint32_t unit_count = loom_type_register_unit_count(actual_type);
+  if (descriptor_register_class->physical_count != 0 &&
+      unit_count > descriptor_register_class->physical_count) {
+    iree_string_view_t reason = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_verify_format_resource_unit_count_reason(
+        function_state, unit_count, descriptor_register_class->physical_count,
+        &reason));
+    return loom_low_verify_emit_resource_register_rejected(function_state, op,
+                                                           actual_type, reason);
+  }
+
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor_register_field(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     iree_string_view_t opcode, uint16_t opcode_attr_index,
@@ -1189,6 +1294,9 @@ static iree_status_t loom_low_verify_walk_op(void* user_data, loom_op_t* op,
   uint16_t opcode_attr_index = 0;
   if (!loom_low_verify_get_packet_opcode(function_state->state->module, op,
                                          &opcode, &opcode_attr_index)) {
+    if (loom_low_resource_isa(op)) {
+      return loom_low_verify_resource(function_state, op);
+    }
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(

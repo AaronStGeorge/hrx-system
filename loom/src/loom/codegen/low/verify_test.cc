@@ -612,6 +612,71 @@ TEST_F(LowDescriptorVerifyTest, RejectsResultRegisterClassMismatch) {
   loom_module_free(module);
 }
 
+TEST_F(LowDescriptorVerifyTest, ValidResourceRegisterClassPasses) {
+  std::string source =
+      std::string(kVmTargetRecords) +
+      "low.func.def target(@vm_target) @resource_user() -> (reg<vm.i32>) {\n"
+      "  %state = low.resource @vm_state : reg<vm.i32>\n"
+      "  low.return %state : reg<vm.i32>\n"
+      "}\n"
+      "low.abi.resource @vm_state {function = @resource_user, kind = "
+      "vm_state, index = 0, semantic_type = vm.state, abi_type = "
+      "reg<vm.i32>}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, RejectsResourceRegisterClassMismatch) {
+  std::string source =
+      std::string(kVmTargetRecords) +
+      "low.func.def target(@vm_target) @resource_user() -> "
+      "(reg<vm.missing>) {\n"
+      "  %state = low.resource @vm_state : reg<vm.missing>\n"
+      "  low.return %state : reg<vm.missing>\n"
+      "}\n"
+      "low.abi.resource @vm_state {function = @resource_user, kind = "
+      "vm_state, index = 0, semantic_type = vm.state, abi_type = "
+      "reg<vm.missing>}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 25));
+  ASSERT_GE(collector.emissions[0].string_params.size(), 4u);
+  EXPECT_EQ(collector.emissions[0].string_params[0], "resource_user");
+  EXPECT_EQ(collector.emissions[0].string_params[1], "vm_state");
+  EXPECT_EQ(collector.emissions[0].string_params[2], "iree.vm.core");
+  EXPECT_EQ(collector.emissions[0].string_params[3],
+            "register class is not defined by the descriptor set");
+  ASSERT_GE(collector.emissions[0].type_params.size(), 1u);
+  EXPECT_TRUE(loom_type_is_register(collector.emissions[0].type_params[0]));
+  EXPECT_EQ(
+      loom_type_register_unit_count(collector.emissions[0].type_params[0]), 1u);
+  ASSERT_GE(collector.emissions[0].field_refs.size(), 5u);
+  EXPECT_EQ(collector.emissions[0].field_refs[1].kind,
+            LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE);
+  EXPECT_EQ(collector.emissions[0].field_refs[2].kind,
+            LOOM_DIAGNOSTIC_FIELD_RESULT);
+  EXPECT_EQ(collector.emissions[0].field_refs[2].index, 0u);
+
+  loom_module_free(module);
+}
+
 TEST_F(LowDescriptorVerifyTest, RejectsOperandRegisterClassMismatch) {
   std::string source =
       std::string(kVmTargetRecords) +

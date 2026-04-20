@@ -412,6 +412,7 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_LOW_ABI_CLOBBER:
     case LOOM_OP_LOW_ABI_EFFECT:
     case LOOM_OP_LOW_ABI_OPERAND:
+    case LOOM_OP_LOW_ABI_RESOURCE:
     case LOOM_OP_LOW_ABI_RESULT:
     case LOOM_OP_LOW_BR:
     case LOOM_OP_LOW_COND_BR:
@@ -423,6 +424,7 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_LOW_INVOKE:
     case LOOM_OP_LOW_OP:
     case LOOM_OP_LOW_RELOAD:
+    case LOOM_OP_LOW_RESOURCE:
     case LOOM_OP_LOW_RETURN:
     case LOOM_OP_LOW_SLOT:
     case LOOM_OP_LOW_SPILL:

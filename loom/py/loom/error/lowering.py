@@ -529,8 +529,32 @@ ERR_LOWERING_024 = ErrorDef(
         ErrorParam("reason", ParamKind.STRING),
     ),
     fix_hint=(
-        "Keep low slots owned by low functions and reference them with valid "
-        "byte offsets"
+        "Keep low structural records owned by low functions and reference "
+        "them with matching function, type, and target ABI contracts"
+    ),
+)
+
+# ERR_LOWERING_025: Low ABI resource register type is not accepted.
+ERR_LOWERING_025 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=25,
+    severity=Severity.ERROR,
+    summary="Low ABI resource register type is not accepted.",
+    message=(
+        "low function '{function_name}' resource '{resource_name}' has ABI "
+        "type {actual_type}, which descriptor set '{descriptor_set}' rejects: "
+        "{reason}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("resource_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("descriptor_set", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use a register class and allocation-unit count accepted by the "
+        "selected low descriptor set"
     ),
 )
 
@@ -559,4 +583,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_022,
     ERR_LOWERING_023,
     ERR_LOWERING_024,
+    ERR_LOWERING_025,
 )

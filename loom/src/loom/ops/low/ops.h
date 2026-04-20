@@ -36,7 +36,9 @@ enum {
   LOOM_OP_LOW_FRAME_INDEX = LOOM_OP_KIND(LOOM_DIALECT_LOW, 15),
   LOOM_OP_LOW_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 16),
   LOOM_OP_LOW_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 17),
-  LOOM_OP_LOW_COUNT_ = 18,
+  LOOM_OP_LOW_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 18),
+  LOOM_OP_LOW_ABI_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 19),
+  LOOM_OP_LOW_COUNT_ = 20,
 };
 
 // Function visibility. Absent (0) means private (module-internal).
@@ -120,6 +122,15 @@ typedef enum loom_low_slot_space_e {
   LOOM_LOW_SLOT_SPACE_LDS = 4,
   LOOM_LOW_SLOT_SPACE_COUNT_ = 5,
 } loom_low_slot_space_t;
+
+// Target ABI resource imported into a low function body.
+typedef enum loom_low_abi_resource_kind_e {
+  LOOM_LOW_ABI_RESOURCE_KIND_NATIVE_POINTER = 1,
+  LOOM_LOW_ABI_RESOURCE_KIND_VM_STATE = 2,
+  LOOM_LOW_ABI_RESOURCE_KIND_VM_IMPORT = 3,
+  LOOM_LOW_ABI_RESOURCE_KIND_HAL_BUFFER_RESOURCE = 4,
+  LOOM_LOW_ABI_RESOURCE_KIND_COUNT_ = 5,
+} loom_low_abi_resource_kind_t;
 
 // LOOM_OP_LOW_FUNC_DEF: Target-bound low function definition with register-typed signature values.
 // low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
@@ -525,6 +536,44 @@ iree_status_t loom_low_cond_br_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_low_cond_br_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_RESOURCE: Import a function-owned target ABI resource into a low register value.
+// %state = low.resource @vm_state : reg<vm.i64>
+LOOM_DEFINE_ISA(loom_low_resource_isa, LOOM_OP_LOW_RESOURCE)
+LOOM_DEFINE_RESULT(loom_low_resource_result, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_resource_resource, 0)
+iree_status_t loom_low_resource_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t resource,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_resource_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_ABI_RESOURCE: Function-owned target ABI resource imported by low.resource.
+// low.abi.resource @vm_state {function = @vm_func, kind = vm_state, index = 0, semantic_type = i64, abi_type = reg<vm.i64>}
+LOOM_DEFINE_ISA(loom_low_abi_resource_isa, LOOM_OP_LOW_ABI_RESOURCE)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_resource_symbol, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_resource_function, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_low_abi_resource_kind, 2)
+LOOM_DEFINE_ATTR_I64(loom_low_abi_resource_index, 3)
+LOOM_DEFINE_ATTR_TYPE(loom_low_abi_resource_semantic_type, 4)
+LOOM_DEFINE_ATTR_TYPE(loom_low_abi_resource_abi_type, 5)
+iree_status_t loom_low_abi_resource_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t symbol,
+    loom_symbol_ref_t function,
+    uint8_t kind,
+    int64_t index,
+    uint32_t semantic_type,
+    uint32_t abi_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_abi_resource_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

@@ -12,6 +12,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/successor_verify.h"
+#include "loom/ops/target/ops.h"
 
 typedef struct loom_low_callee_signature_t {
   // Defining low.func op for related diagnostic locations.
@@ -745,6 +746,186 @@ static iree_status_t loom_low_verify_slot_use(
   }
 
   return iree_ok_status();
+}
+
+static bool loom_low_abi_resource_kind_is_known(uint8_t kind) {
+  switch (kind) {
+    case LOOM_LOW_ABI_RESOURCE_KIND_NATIVE_POINTER:
+    case LOOM_LOW_ABI_RESOURCE_KIND_VM_STATE:
+    case LOOM_LOW_ABI_RESOURCE_KIND_VM_IMPORT:
+    case LOOM_LOW_ABI_RESOURCE_KIND_HAL_BUFFER_RESOURCE:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_string_view_t loom_low_abi_resource_export_abi_reason(
+    uint8_t kind) {
+  switch (kind) {
+    case LOOM_LOW_ABI_RESOURCE_KIND_NATIVE_POINTER:
+      return IREE_SV(
+          "native_pointer resources require object_function export "
+          "ABI");
+    case LOOM_LOW_ABI_RESOURCE_KIND_VM_STATE:
+    case LOOM_LOW_ABI_RESOURCE_KIND_VM_IMPORT:
+      return IREE_SV("VM resources require vm_module_function export ABI");
+    case LOOM_LOW_ABI_RESOURCE_KIND_HAL_BUFFER_RESOURCE:
+      return IREE_SV("HAL buffer resources require hal_kernel export ABI");
+    default:
+      return IREE_SV("resource kind must name a supported target ABI resource");
+  }
+}
+
+static bool loom_low_abi_resource_matches_export_abi(uint8_t kind,
+                                                     uint8_t abi) {
+  switch (kind) {
+    case LOOM_LOW_ABI_RESOURCE_KIND_NATIVE_POINTER:
+      return abi == LOOM_TARGET_EXPORT_ABI_OBJECT_FUNCTION;
+    case LOOM_LOW_ABI_RESOURCE_KIND_VM_STATE:
+    case LOOM_LOW_ABI_RESOURCE_KIND_VM_IMPORT:
+      return abi == LOOM_TARGET_EXPORT_ABI_VM_MODULE_FUNCTION;
+    case LOOM_LOW_ABI_RESOURCE_KIND_HAL_BUFFER_RESOURCE:
+      return abi == LOOM_TARGET_EXPORT_ABI_HAL_KERNEL;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_low_load_resource(const loom_module_t* module,
+                                            const loom_op_t* op,
+                                            loom_symbol_ref_t resource_ref,
+                                            uint16_t resource_attr_index,
+                                            iree_diagnostic_emitter_t emitter,
+                                            const loom_op_t** out_resource_op) {
+  IREE_ASSERT_ARGUMENT(out_resource_op);
+  *out_resource_op = NULL;
+  const loom_symbol_t* resource_symbol =
+      loom_low_lookup_defined_symbol(module, resource_ref);
+  if (!resource_symbol) {
+    return iree_ok_status();
+  }
+  if (!loom_low_abi_resource_isa(resource_symbol->defining_op)) {
+    return loom_low_emit_symbol_kind_mismatch(
+        module, op, resource_ref, resource_attr_index, resource_symbol,
+        IREE_SV("low ABI resource"), emitter);
+  }
+  *out_resource_op = resource_symbol->defining_op;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_load_resource_function(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_symbol_ref_t function_ref, uint16_t function_attr_index,
+    iree_diagnostic_emitter_t emitter, const loom_op_t** out_function_op) {
+  IREE_ASSERT_ARGUMENT(out_function_op);
+  *out_function_op = NULL;
+  const loom_symbol_t* function_symbol =
+      loom_low_lookup_defined_symbol(module, function_ref);
+  if (!function_symbol) {
+    return iree_ok_status();
+  }
+  if (!loom_low_func_def_isa(function_symbol->defining_op)) {
+    return loom_low_emit_symbol_kind_mismatch(
+        module, op, function_ref, function_attr_index, function_symbol,
+        IREE_SV("low function definition"), emitter);
+  }
+  *out_function_op = function_symbol->defining_op;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_load_resource_export_plan(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_op_t* function_op, uint16_t function_attr_index,
+    iree_diagnostic_emitter_t emitter, const loom_op_t** out_export_op) {
+  IREE_ASSERT_ARGUMENT(out_export_op);
+  *out_export_op = NULL;
+  loom_symbol_ref_t target_ref = loom_low_func_def_target(function_op);
+  const loom_symbol_t* target_symbol =
+      loom_low_lookup_defined_symbol(module, target_ref);
+  if (!target_symbol) {
+    return iree_ok_status();
+  }
+  if (!loom_target_bundle_isa(target_symbol->defining_op)) {
+    loom_diagnostic_related_op_t related[] = {{
+        .label = IREE_SV("function defined here"),
+        .op = function_op,
+        .field_ref =
+            loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                      loom_low_func_def_target_ATTR_INDEX),
+    }};
+    return loom_low_emit_structural_storage_error(
+        module, op,
+        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                  function_attr_index),
+        IREE_SV("function"),
+        IREE_SV("resource owner target must resolve to a target bundle"),
+        related, IREE_ARRAYSIZE(related), emitter);
+  }
+
+  const loom_op_t* bundle_op = target_symbol->defining_op;
+  loom_symbol_ref_t export_ref = loom_target_bundle_export_plan(bundle_op);
+  const loom_symbol_t* export_symbol =
+      loom_low_lookup_defined_symbol(module, export_ref);
+  if (!export_symbol) {
+    return iree_ok_status();
+  }
+  if (!loom_target_export_isa(export_symbol->defining_op)) {
+    return iree_ok_status();
+  }
+  *out_export_op = export_symbol->defining_op;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_resource_export_source(
+    const loom_module_t* module, const loom_op_t* resource_op,
+    const loom_op_t* export_op, loom_symbol_ref_t function_ref,
+    iree_diagnostic_emitter_t emitter) {
+  const loom_attribute_t source_attr =
+      loom_op_attrs(export_op)[loom_target_export_source_ATTR_INDEX];
+  if (loom_attr_is_absent(source_attr)) {
+    return iree_ok_status();
+  }
+  if (loom_low_symbol_ref_equal(loom_target_export_source(export_op),
+                                function_ref)) {
+    return iree_ok_status();
+  }
+  loom_diagnostic_related_op_t related[] = {{
+      .label = IREE_SV("export plan defined here"),
+      .op = export_op,
+      .field_ref =
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    loom_target_export_source_ATTR_INDEX),
+  }};
+  return loom_low_emit_structural_storage_error(
+      module, resource_op,
+      loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                loom_low_abi_resource_function_ATTR_INDEX),
+      IREE_SV("function"),
+      IREE_SV("target export source must match the resource owner function"),
+      related, IREE_ARRAYSIZE(related), emitter);
+}
+
+static iree_status_t loom_low_verify_resource_export_abi(
+    const loom_module_t* module, const loom_op_t* resource_op,
+    const loom_op_t* export_op, uint8_t kind,
+    iree_diagnostic_emitter_t emitter) {
+  uint8_t abi = loom_target_export_abi(export_op);
+  if (loom_low_abi_resource_matches_export_abi(kind, abi)) {
+    return iree_ok_status();
+  }
+  loom_diagnostic_related_op_t related[] = {{
+      .label = IREE_SV("export plan defined here"),
+      .op = export_op,
+      .field_ref = loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                             loom_target_export_abi_ATTR_INDEX),
+  }};
+  return loom_low_emit_structural_storage_error(
+      module, resource_op,
+      loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                loom_low_abi_resource_kind_ATTR_INDEX),
+      IREE_SV("kind"), loom_low_abi_resource_export_abi_reason(kind), related,
+      IREE_ARRAYSIZE(related), emitter);
 }
 
 static iree_status_t loom_low_emit_invoke_count_mismatch(
@@ -1773,6 +1954,122 @@ iree_status_t loom_low_frame_index_verify(const loom_module_t* module,
       module, op, loom_low_frame_index_slot(op),
       loom_low_frame_index_slot_ATTR_INDEX, loom_low_frame_index_offset(op),
       loom_low_frame_index_offset_ATTR_INDEX, emitter);
+}
+
+iree_status_t loom_low_abi_resource_verify(const loom_module_t* module,
+                                           const loom_op_t* op,
+                                           iree_diagnostic_emitter_t emitter) {
+  const loom_op_t* function_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_load_resource_function(
+      module, op, loom_low_abi_resource_function(op),
+      loom_low_abi_resource_function_ATTR_INDEX, emitter, &function_op));
+
+  const uint8_t kind = loom_low_abi_resource_kind(op);
+  if (!loom_low_abi_resource_kind_is_known(kind)) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_abi_resource_kind_ATTR_INDEX, IREE_SV("kind"),
+        IREE_SV("kind must name a supported target ABI resource"), emitter);
+  }
+
+  if (loom_low_abi_resource_index(op) < 0) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_abi_resource_index_ATTR_INDEX, IREE_SV("index"),
+        IREE_SV("index must be non-negative"), emitter);
+  }
+
+  const loom_type_t semantic_type =
+      loom_low_type_attr(module, loom_low_abi_resource_semantic_type(op));
+  if (loom_type_kind(semantic_type) == LOOM_TYPE_NONE) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_abi_resource_semantic_type_ATTR_INDEX,
+        IREE_SV("semantic_type"),
+        IREE_SV("semantic_type must name a valid Loom type"), emitter);
+  }
+
+  const loom_type_t abi_type =
+      loom_low_type_attr(module, loom_low_abi_resource_abi_type(op));
+  if (!loom_type_is_register(abi_type)) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_abi_resource_abi_type_ATTR_INDEX,
+        IREE_SV("abi_type"), IREE_SV("abi_type must be a register type"),
+        emitter);
+  }
+
+  if (!function_op) {
+    return iree_ok_status();
+  }
+  const loom_op_t* export_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_load_resource_export_plan(
+      module, op, function_op, loom_low_abi_resource_function_ATTR_INDEX,
+      emitter, &export_op));
+  if (!export_op) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_resource_export_source(
+      module, op, export_op, loom_low_abi_resource_function(op), emitter));
+  return loom_low_verify_resource_export_abi(module, op, export_op, kind,
+                                             emitter);
+}
+
+iree_status_t loom_low_resource_verify(const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       iree_diagnostic_emitter_t emitter) {
+  const loom_op_t* resource_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_load_resource(
+      module, op, loom_low_resource_resource(op),
+      loom_low_resource_resource_ATTR_INDEX, emitter, &resource_op));
+  if (!resource_op) {
+    return iree_ok_status();
+  }
+
+  const loom_op_t* enclosing_func =
+      loom_low_find_enclosing_low_func_def(module, op);
+  if (!enclosing_func) {
+    return loom_low_emit_structural_storage_error(
+        module, op, loom_diagnostic_field_ref_none(),
+        IREE_SV("enclosing function"),
+        IREE_SV("resource imports must be nested under a low function body"),
+        NULL, 0, emitter);
+  }
+
+  if (!loom_low_symbol_ref_equal(loom_low_abi_resource_function(resource_op),
+                                 loom_low_func_def_callee(enclosing_func))) {
+    loom_diagnostic_related_op_t related[] = {{
+        .label = IREE_SV("resource defined here"),
+        .op = resource_op,
+        .field_ref = loom_diagnostic_field_ref(
+            LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+            loom_low_abi_resource_function_ATTR_INDEX),
+    }};
+    return loom_low_emit_structural_storage_error(
+        module, op,
+        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                  loom_low_resource_resource_ATTR_INDEX),
+        IREE_SV("resource"),
+        IREE_SV("resource owner must match the enclosing low function"),
+        related, IREE_ARRAYSIZE(related), emitter);
+  }
+
+  const loom_type_t expected_type =
+      loom_low_type_attr(module, loom_low_abi_resource_abi_type(resource_op));
+  const loom_type_t actual_type =
+      loom_module_value_type(module, loom_low_resource_result(op));
+  if (loom_type_equal(actual_type, expected_type)) {
+    return iree_ok_status();
+  }
+
+  loom_diagnostic_related_op_t related[] = {{
+      .label = IREE_SV("resource ABI type declared here"),
+      .op = resource_op,
+      .field_ref =
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    loom_low_abi_resource_abi_type_ATTR_INDEX),
+  }};
+  return loom_low_emit_structural_storage_error(
+      module, op, loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, 0),
+      IREE_SV("result"),
+      IREE_SV("result type must match the resource ABI type"), related,
+      IREE_ARRAYSIZE(related), emitter);
 }
 
 iree_status_t loom_low_abi_adapter_verify(const loom_module_t* module,

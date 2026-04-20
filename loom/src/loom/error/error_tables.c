@@ -3102,10 +3102,32 @@ static const loom_error_def_t loom_err_lowering_024 = {
         "low structural op '{op_name}' field '{field_name}' is invalid: "
         "{reason}",
     .fix_hint_template =
-        "Keep low slots owned by low functions and reference them with valid "
-        "byte offsets",
+        "Keep low structural records owned by low functions and reference them "
+        "with matching function, type, and target ABI contracts",
     .param_defs = loom_err_lowering_024_params,
     .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_lowering_025_params[] = {
+    {"function_name", LOOM_PARAM_STRING}, {"resource_name", LOOM_PARAM_STRING},
+    {"actual_type", LOOM_PARAM_TYPE},     {"descriptor_set", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_025 = {
+    .error_id = "ERR_LOWERING_025",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 25,
+    .summary = "Low ABI resource register type is not accepted.",
+    .message_template =
+        "low function '{function_name}' resource '{resource_name}' has ABI "
+        "type {actual_type}, which descriptor set '{descriptor_set}' rejects: "
+        "{reason}",
+    .fix_hint_template =
+        "Use a register class and allocation-unit count accepted by the "
+        "selected low descriptor set",
+    .param_defs = loom_err_lowering_025_params,
+    .param_count = 5,
 };
 
 static const loom_error_param_def_t loom_err_backend_001_params[] = {
@@ -3579,12 +3601,12 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_016,  &loom_err_lowering_017,  &loom_err_lowering_018,
     &loom_err_lowering_019,  &loom_err_lowering_020,  &loom_err_lowering_021,
     &loom_err_lowering_022,  &loom_err_lowering_023,  &loom_err_lowering_024,
-    &loom_err_backend_001,   &loom_err_backend_002,   &loom_err_backend_003,
-    &loom_err_backend_004,   &loom_err_backend_005,   &loom_err_backend_006,
-    &loom_err_backend_007,   &loom_err_backend_008,   &loom_err_backend_009,
-    &loom_err_backend_010,   &loom_err_backend_011,   &loom_err_backend_012,
-    &loom_err_backend_013,   &loom_err_backend_014,   &loom_err_backend_015,
-    &loom_err_backend_016,
+    &loom_err_lowering_025,  &loom_err_backend_001,   &loom_err_backend_002,
+    &loom_err_backend_003,   &loom_err_backend_004,   &loom_err_backend_005,
+    &loom_err_backend_006,   &loom_err_backend_007,   &loom_err_backend_008,
+    &loom_err_backend_009,   &loom_err_backend_010,   &loom_err_backend_011,
+    &loom_err_backend_012,   &loom_err_backend_013,   &loom_err_backend_014,
+    &loom_err_backend_015,   &loom_err_backend_016,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,
