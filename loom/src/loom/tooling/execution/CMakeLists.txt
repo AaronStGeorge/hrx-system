@@ -22,6 +22,7 @@ loom_cc_library(
     ::hal_backend
     ::session
     iree::base
+    loom::src::loom::target::compile_report
     loom::src::loom::target::emit::ireevm::module_archive
     loom::src::loom::target::emit::ireevm::module_compiler
     loom::src::loom::verify
@@ -38,6 +39,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::error::diagnostic
+    loom::src::loom::target::compile_report
     loom::src::loom::verify
   PUBLIC
 )
@@ -81,6 +83,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
+    loom::src::loom::target::compile_report
     loom::src::loom::verify
   PUBLIC
 )

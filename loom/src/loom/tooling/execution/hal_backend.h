@@ -17,6 +17,7 @@
 #include "iree/base/api.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
+#include "loom/target/compile_report.h"
 #include "loom/verify/verify.h"
 
 #ifdef __cplusplus
@@ -59,7 +60,8 @@ typedef iree_status_t (*loom_run_hal_compile_fn_t)(
     const loom_run_hal_selected_target_t* target,
     iree_string_view_t target_symbol, loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
-    iree_allocator_t allocator, loom_run_hal_executable_t* out_executable);
+    loom_target_compile_report_t* report, iree_allocator_t allocator,
+    loom_run_hal_executable_t* out_executable);
 
 typedef void (*loom_run_hal_deinitialize_executable_fn_t)(
     const loom_run_hal_backend_t* backend,

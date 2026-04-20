@@ -347,7 +347,7 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_module_compile_target_t* target,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    iree_arena_allocator_t* sidecar_arena,
+    iree_arena_allocator_t* sidecar_arena, loom_target_compile_report_t* report,
     loom_amdgpu_hal_executable_t* out_executable, iree_allocator_t allocator) {
   (void)amdgpu_options;
   loom_func_like_t source_function = {0};
@@ -360,6 +360,9 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
   IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_select_low_function(
       module, low_registry, target, source_function, diagnostic_emitter,
       max_errors, &low_function_op));
+  if (report != NULL) {
+    report->lowered_symbol = target->bundle_storage.export_plan.source_symbol;
+  }
 
   loom_amdgpu_hal_resource_materialization_result_t materialization = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_materialize(
@@ -389,6 +392,31 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
   IREE_RETURN_IF_ERROR(loom_low_packetize_function(
       module, low_function_op, &packetization_options, sidecar_arena,
       &packetization));
+  if (report != NULL) {
+    uint64_t peak_live_units = 0;
+    for (iree_host_size_t i = 0;
+         i < packetization.allocation.liveness.pressure_summary_count; ++i) {
+      const uint64_t live_units =
+          packetization.allocation.liveness.pressure_summaries[i]
+              .peak_live_units;
+      peak_live_units = iree_max(peak_live_units, live_units);
+    }
+    loom_target_compile_report_record_schedule(
+        report, packetization.schedule.node_count,
+        packetization.schedule.scheduled_node_count,
+        packetization.schedule.dependency_count,
+        packetization.schedule.resource_use_count,
+        packetization.schedule.hazard_gap_count,
+        packetization.schedule.model_summary_count,
+        packetization.allocation.liveness.pressure_summary_count,
+        peak_live_units);
+    loom_target_compile_report_record_allocation(
+        report, packetization.allocation.assignment_count,
+        packetization.allocation.spill_count,
+        packetization.allocation.spill_plan_count,
+        packetization.allocation.coalesced_copy_count,
+        packetization.allocation.materialized_copy_count);
+  }
 
   iree_const_byte_span_t hsaco = iree_const_byte_span_empty();
   iree_status_t status = loom_amdgpu_module_compile_emit_hsaco(
@@ -450,8 +478,20 @@ iree_status_t loom_amdgpu_compile_hal_executable(
     iree_allocator_t allocator, loom_amdgpu_hal_executable_t* out_executable) {
   IREE_ASSERT_ARGUMENT(out_executable);
   *out_executable = (loom_amdgpu_hal_executable_t){0};
+  loom_target_compile_report_t* report = options ? options->report : NULL;
+  if (report != NULL) {
+    loom_target_compile_report_initialize(report);
+    report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
+    report->target_symbol =
+        options ? options->target_symbol : iree_string_view_empty();
+  }
   if (!module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "module is required");
+    iree_status_t status =
+        iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "module is required");
+    if (report != NULL) {
+      loom_target_compile_report_record_status(report, status);
+    }
+    return status;
   }
 
   const loom_target_module_compile_options_t target_options = {
@@ -487,6 +527,10 @@ iree_status_t loom_amdgpu_compile_hal_executable(
         loom_amdgpu_module_compile_bundle_is_compatible, NULL,
         IREE_SV("AMDGPU HAL-native"), &target);
   }
+  if (iree_status_is_ok(status) && report != NULL) {
+    loom_target_compile_report_record_target_bundle(
+        report, &target.bundle_storage.bundle);
+  }
   if (iree_status_is_ok(status) && options != NULL) {
     status = loom_amdgpu_module_compile_apply_target_cpu(module, &target,
                                                          options->target_cpu);
@@ -494,11 +538,18 @@ iree_status_t loom_amdgpu_compile_hal_executable(
   if (iree_status_is_ok(status)) {
     status = loom_amdgpu_module_compile_low_function(
         module, options, &target_options, &low_registry, &target,
-        &diagnostic_emitter, &sidecar_arena, out_executable, allocator);
+        &diagnostic_emitter, &sidecar_arena, report, out_executable, allocator);
+  }
+  if (iree_status_is_ok(status) && report != NULL) {
+    loom_target_compile_report_record_artifact_size(
+        report, out_executable->data_length);
   }
 
   if (!iree_status_is_ok(status)) {
     loom_amdgpu_hal_executable_deinitialize(out_executable, allocator);
+  }
+  if (report != NULL) {
+    loom_target_compile_report_record_status(report, status);
   }
   iree_arena_deinitialize(&sidecar_arena);
   iree_arena_block_pool_deinitialize(&block_pool);

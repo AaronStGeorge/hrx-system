@@ -30,6 +30,8 @@ typedef struct loom_run_candidate_t {
   loom_run_candidate_kind_t kind;
   // Host allocator used for owned candidate storage.
   iree_allocator_t host_allocator;
+  // Structured report for this candidate's compilation.
+  loom_target_compile_report_t compile_report;
   // HAL backend that produced |hal_executable|.
   const loom_run_hal_backend_t* hal_backend;
   // HAL target selected during candidate compilation.

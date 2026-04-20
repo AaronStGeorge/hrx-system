@@ -72,20 +72,20 @@ iree_status_t FakeHalFormatTarget(const loom_run_hal_backend_t* backend,
   return iree_string_builder_append_cstring(output, "fake-hal");
 }
 
-iree_status_t FakeHalCompile(const loom_run_hal_backend_t* backend,
-                             loom_module_t* module,
-                             const loom_run_hal_selected_target_t* target,
-                             iree_string_view_t target_symbol,
-                             loom_diagnostic_sink_t diagnostic_sink,
-                             loom_source_resolver_t source_resolver,
-                             uint32_t max_errors, iree_allocator_t allocator,
-                             loom_run_hal_executable_t* out_executable) {
+iree_status_t FakeHalCompile(
+    const loom_run_hal_backend_t* backend, loom_module_t* module,
+    const loom_run_hal_selected_target_t* target,
+    iree_string_view_t target_symbol, loom_diagnostic_sink_t diagnostic_sink,
+    loom_source_resolver_t source_resolver, uint32_t max_errors,
+    loom_target_compile_report_t* report, iree_allocator_t allocator,
+    loom_run_hal_executable_t* out_executable) {
   (void)backend;
   (void)module;
   (void)target_symbol;
   (void)diagnostic_sink;
   (void)source_resolver;
   (void)max_errors;
+  (void)report;
   (void)allocator;
   if (target->data != &kFakeHalTarget) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -160,12 +160,35 @@ TEST_F(CandidateTest, CompileVmArchiveCandidate) {
 
   loom_run_candidate_compile_options_t options = {};
   InitializeCompileOptions(&run_module, &options);
+  loom_target_compile_report_t report = {};
+  options.report = &report;
 
   loom_run_candidate_t candidate = {};
   IREE_ASSERT_OK(loom_run_candidate_compile_vm(
       &run_module, &options, iree_allocator_system(), &candidate));
   EXPECT_EQ(candidate.kind, LOOM_RUN_CANDIDATE_KIND_VM_ARCHIVE);
   EXPECT_GT(candidate.vm_archive.data_length, 0u);
+  EXPECT_EQ(candidate.compile_report.artifact_kind,
+            LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE);
+  EXPECT_EQ(candidate.compile_report.status_code, IREE_STATUS_OK);
+  EXPECT_TRUE(
+      iree_all_bits_set(candidate.compile_report.detail_flags,
+                        LOOM_TARGET_COMPILE_REPORT_DETAIL_ARTIFACT_SIZE));
+  EXPECT_TRUE(iree_all_bits_set(candidate.compile_report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
+  EXPECT_TRUE(iree_all_bits_set(candidate.compile_report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION));
+  EXPECT_FALSE(
+      iree_string_view_is_empty(candidate.compile_report.target_bundle_name));
+  EXPECT_FALSE(
+      iree_string_view_is_empty(candidate.compile_report.lowered_symbol));
+  EXPECT_GT(candidate.compile_report.schedule_node_count, 0u);
+  EXPECT_GT(candidate.compile_report.scheduled_node_count, 0u);
+  EXPECT_GT(candidate.compile_report.allocation_assignment_count, 0u);
+  EXPECT_EQ(candidate.compile_report.artifact_size,
+            candidate.vm_archive.data_length);
+  EXPECT_EQ(report.artifact_kind, candidate.compile_report.artifact_kind);
+  EXPECT_EQ(report.artifact_size, candidate.compile_report.artifact_size);
 
   loom_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);
@@ -177,6 +200,8 @@ TEST_F(CandidateTest, CompileHalExecutableCandidate) {
 
   loom_run_candidate_compile_options_t options = {};
   InitializeCompileOptions(&run_module, &options);
+  loom_target_compile_report_t report = {};
+  options.report = &report;
 
   loom_run_hal_runtime_t runtime = {};
   loom_run_candidate_t candidate = {};
@@ -192,6 +217,18 @@ TEST_F(CandidateTest, CompileHalExecutableCandidate) {
             kFakeHalExecutableData);
   EXPECT_EQ(candidate.hal_executable.executable_data.data_length,
             sizeof(kFakeHalExecutableData));
+  EXPECT_EQ(candidate.compile_report.artifact_kind,
+            LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE);
+  EXPECT_EQ(candidate.compile_report.status_code, IREE_STATUS_OK);
+  EXPECT_TRUE(iree_string_view_equal(candidate.compile_report.backend_name,
+                                     IREE_SV("fake-hal")));
+  EXPECT_TRUE(iree_string_view_equal(candidate.compile_report.target_preset_key,
+                                     IREE_SV("fake-hal")));
+  EXPECT_TRUE(iree_string_view_equal(candidate.compile_report.executable_format,
+                                     IREE_SV("fake-hal-format")));
+  EXPECT_EQ(candidate.compile_report.artifact_size,
+            sizeof(kFakeHalExecutableData));
+  EXPECT_EQ(report.artifact_size, candidate.compile_report.artifact_size);
 
   loom_run_candidate_deinitialize(&candidate);
   EXPECT_EQ(candidate.kind, LOOM_RUN_CANDIDATE_KIND_UNINITIALIZED);
@@ -204,6 +241,8 @@ TEST_F(CandidateTest, CompileHalRequiresHooks) {
 
   loom_run_candidate_compile_options_t options = {};
   InitializeCompileOptions(&run_module, &options);
+  loom_target_compile_report_t report = {};
+  options.report = &report;
 
   const loom_run_hal_backend_t backend = {
       .name = IREE_SVL("missing-hooks"),
@@ -215,6 +254,9 @@ TEST_F(CandidateTest, CompileHalRequiresHooks) {
       loom_run_candidate_compile_hal(&backend, &runtime, &run_module, &options,
                                      iree_allocator_system(), &candidate));
   EXPECT_EQ(candidate.kind, LOOM_RUN_CANDIDATE_KIND_UNINITIALIZED);
+  EXPECT_EQ(report.artifact_kind,
+            LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE);
+  EXPECT_EQ(report.status_code, IREE_STATUS_INVALID_ARGUMENT);
 
   loom_run_module_deinitialize(&run_module);
 }

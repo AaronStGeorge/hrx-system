@@ -324,11 +324,29 @@ TEST(AmdgpuModuleCompilerTest, CompilesLowNoopToHalExecutable) {
   ASSERT_NE(module, nullptr);
 
   loom_amdgpu_hal_executable_t executable = {};
+  loom_target_compile_report_t report = {};
+  loom_amdgpu_module_compile_options_t options = {
+      .report = &report,
+  };
   IREE_ASSERT_OK(loom_amdgpu_compile_hal_executable(
-      module, /*options=*/nullptr, iree_allocator_system(), &executable));
+      module, &options, iree_allocator_system(), &executable));
   ExpectHalExecutableHasSingleExport(executable, "amdgcn-amd-amdhsa--gfx1100",
                                      "loom_kernel.kd",
                                      /*expected_binding_count=*/0);
+  EXPECT_EQ(report.artifact_kind,
+            LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE);
+  EXPECT_EQ(report.status_code, IREE_STATUS_OK);
+  EXPECT_TRUE(iree_all_bits_set(
+      report.detail_flags, LOOM_TARGET_COMPILE_REPORT_DETAIL_ARTIFACT_SIZE));
+  EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
+  EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION));
+  EXPECT_FALSE(iree_string_view_is_empty(report.target_bundle_name));
+  EXPECT_FALSE(iree_string_view_is_empty(report.lowered_symbol));
+  EXPECT_GT(report.schedule_node_count, 0u);
+  EXPECT_GT(report.scheduled_node_count, 0u);
+  EXPECT_GT(report.artifact_size, 0u);
 
   loom_amdgpu_hal_executable_deinitialize(&executable, iree_allocator_system());
   loom_module_free(module);

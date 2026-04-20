@@ -59,6 +59,16 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "compile_report",
+    srcs = ["compile_report.c"],
+    hdrs = ["compile_report.h"],
+    deps = [
+        ":types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "presets",
     srcs = ["presets.c"],
     hdrs = ["presets.h"],

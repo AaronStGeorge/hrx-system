@@ -10,6 +10,7 @@
 #define LOOM_TOOLING_EXECUTION_COMPILE_OPTIONS_H_
 
 #include "iree/base/api.h"
+#include "loom/target/compile_report.h"
 #include "loom/verify/verify.h"
 
 #ifdef __cplusplus
@@ -30,6 +31,8 @@ typedef struct loom_run_candidate_compile_options_t {
   // Maximum diagnostics to emit before stopping. Zero uses a conservative
   // default.
   uint32_t max_errors;
+  // Optional caller-owned structured compile report to populate.
+  loom_target_compile_report_t* report;
 } loom_run_candidate_compile_options_t;
 
 // Initializes compile options with stderr diagnostics and a small error cap.

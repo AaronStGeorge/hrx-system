@@ -160,7 +160,8 @@ static iree_status_t iree_run_loom_amdgpu_compile(
     const loom_run_hal_selected_target_t* target,
     iree_string_view_t target_symbol, loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
-    iree_allocator_t allocator, loom_run_hal_executable_t* out_executable) {
+    loom_target_compile_report_t* report, iree_allocator_t allocator,
+    loom_run_hal_executable_t* out_executable) {
   IREE_ASSERT_ARGUMENT(backend);
   IREE_ASSERT_ARGUMENT(target);
   IREE_ASSERT_ARGUMENT(out_executable);
@@ -183,6 +184,7 @@ static iree_status_t iree_run_loom_amdgpu_compile(
       .diagnostic_sink = diagnostic_sink,
       .source_resolver = source_resolver,
       .max_errors = max_errors,
+      .report = report,
   };
   iree_status_t status = loom_amdgpu_compile_hal_executable(
       module, &compile_options, allocator, executable);

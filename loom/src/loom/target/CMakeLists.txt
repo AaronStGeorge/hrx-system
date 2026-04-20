@@ -63,6 +63,19 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    compile_report
+  HDRS
+    "compile_report.h"
+  SRCS
+    "compile_report.c"
+  DEPS
+    ::types
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     presets
   HDRS
     "presets.h"

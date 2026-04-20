@@ -97,6 +97,26 @@ static iree_string_view_t loom_ireevm_module_compile_export_name(
   return iree_string_view_empty();
 }
 
+static iree_status_t loom_ireevm_module_compile_symbol_name(
+    const loom_module_t* module, loom_symbol_ref_t symbol_ref,
+    iree_string_view_t* out_name) {
+  IREE_ASSERT_ARGUMENT(out_name);
+  *out_name = iree_string_view_empty();
+  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+      symbol_ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "lowered IREE VM function symbol is invalid");
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->name_id == LOOM_STRING_ID_INVALID ||
+      symbol->name_id >= module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "lowered IREE VM function symbol name is invalid");
+  }
+  *out_name = module->strings.entries[symbol->name_id];
+  return iree_ok_status();
+}
+
 static iree_status_t loom_ireevm_module_compile_lower_function(
     loom_module_t* module,
     const loom_target_low_descriptor_registry_t* registry,
@@ -136,8 +156,21 @@ iree_status_t loom_ireevm_compile_module_archive(
     iree_allocator_t allocator, loom_ireevm_module_archive_t* out_archive) {
   IREE_ASSERT_ARGUMENT(out_archive);
   *out_archive = (loom_ireevm_module_archive_t){0};
+  loom_target_compile_report_t* report = options ? options->report : NULL;
+  if (report != NULL) {
+    loom_target_compile_report_initialize(report);
+    report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
+    report->module_name = loom_ireevm_module_compile_module_name(options);
+    report->target_symbol =
+        options ? options->target_symbol : iree_string_view_empty();
+  }
   if (!module) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "module is required");
+    iree_status_t status =
+        iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "module is required");
+    if (report != NULL) {
+      loom_target_compile_report_record_status(report, status);
+    }
+    return status;
   }
 
   const loom_target_module_compile_options_t target_options = {
@@ -181,6 +214,10 @@ iree_status_t loom_ireevm_compile_module_archive(
         loom_ireevm_module_compile_bundle_is_compatible, NULL,
         IREE_SV("IREE VM"), &target);
   }
+  if (iree_status_is_ok(status) && report != NULL) {
+    loom_target_compile_report_record_target_bundle(
+        report, &target.bundle_storage.bundle);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_target_module_compile_find_source_function(
         module, &target.bundle_storage.bundle, &source_function);
@@ -199,6 +236,10 @@ iree_status_t loom_ireevm_compile_module_archive(
     status = loom_ireevm_module_compile_lower_function(
         module, &low_registry, &target, source_function, &diagnostic_emitter,
         max_errors, &lower_result);
+  }
+  if (iree_status_is_ok(status) && report != NULL) {
+    status = loom_ireevm_module_compile_symbol_name(
+        module, lower_result.low_func_ref, &report->lowered_symbol);
   }
   if (iree_status_is_ok(status)) {
     status = loom_target_module_compile_verify_module(
@@ -220,6 +261,31 @@ iree_status_t loom_ireevm_compile_module_archive(
                                          &packetization_options, &sidecar_arena,
                                          &packetization);
   }
+  if (iree_status_is_ok(status) && report != NULL) {
+    uint64_t peak_live_units = 0;
+    for (iree_host_size_t i = 0;
+         i < packetization.allocation.liveness.pressure_summary_count; ++i) {
+      const uint64_t live_units =
+          packetization.allocation.liveness.pressure_summaries[i]
+              .peak_live_units;
+      peak_live_units = iree_max(peak_live_units, live_units);
+    }
+    loom_target_compile_report_record_schedule(
+        report, packetization.schedule.node_count,
+        packetization.schedule.scheduled_node_count,
+        packetization.schedule.dependency_count,
+        packetization.schedule.resource_use_count,
+        packetization.schedule.hazard_gap_count,
+        packetization.schedule.model_summary_count,
+        packetization.allocation.liveness.pressure_summary_count,
+        peak_live_units);
+    loom_target_compile_report_record_allocation(
+        report, packetization.allocation.assignment_count,
+        packetization.allocation.spill_count,
+        packetization.allocation.spill_plan_count,
+        packetization.allocation.coalesced_copy_count,
+        packetization.allocation.materialized_copy_count);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_ireevm_emit_function_bytecode(&packetization.schedule,
                                                 &packetization.allocation,
@@ -239,9 +305,16 @@ iree_status_t loom_ireevm_compile_module_archive(
         loom_ireevm_module_compile_module_name(options), functions,
         IREE_ARRAYSIZE(functions), allocator, out_archive);
   }
+  if (iree_status_is_ok(status) && report != NULL) {
+    loom_target_compile_report_record_artifact_size(report,
+                                                    out_archive->data_length);
+  }
 
   if (!iree_status_is_ok(status)) {
     loom_ireevm_module_archive_deinitialize(out_archive, allocator);
+  }
+  if (report != NULL) {
+    loom_target_compile_report_record_status(report, status);
   }
   loom_ireevm_function_bytecode_deinitialize(&bytecode, allocator);
   iree_arena_deinitialize(&sidecar_arena);

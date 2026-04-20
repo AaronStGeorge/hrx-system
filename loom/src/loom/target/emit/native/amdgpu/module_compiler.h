@@ -16,6 +16,7 @@
 #include "iree/base/api.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/ir.h"
+#include "loom/target/compile_report.h"
 #include "loom/target/emit/native/amdgpu/hal_executable.h"
 #include "loom/verify/verify.h"
 
@@ -40,6 +41,8 @@ typedef struct loom_amdgpu_module_compile_options_t {
   // Maximum diagnostics to emit before the active subsystem stops walking.
   // Zero uses a conservative default.
   uint32_t max_errors;
+  // Optional caller-owned structured compile report to populate.
+  loom_target_compile_report_t* report;
 } loom_amdgpu_module_compile_options_t;
 
 // Compiles |module| into an allocator-owned IREE HAL AMDGPU executable.
