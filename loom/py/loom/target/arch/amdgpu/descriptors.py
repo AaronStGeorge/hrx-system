@@ -507,6 +507,40 @@ def _v_mul_lo_u32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_add_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_add_f32",
+        instruction_name="V_ADD_F32",
+        mnemonic="v_add_f32",
+        encoding_name="ENC_VOP2",
+        semantic_tag="float.add.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_mul_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mul_f32",
+        instruction_name="V_MUL_F32",
+        mnemonic="v_mul_f32",
+        encoding_name="ENC_VOP2",
+        semantic_tag="float.mul.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_mov_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_mov_b32",
@@ -843,6 +877,8 @@ def _gfx950_core_overlay_descriptors(
             _v_sub_u32_overlay("V_SUB_U32", "v_sub_u32"),
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
+            _v_add_f32_overlay(),
+            _v_mul_f32_overlay(),
             _s_load_dwordx2_overlay(),
             _s_buffer_load_dword_overlay(),
             _buffer_load_dword_overlay(
@@ -883,6 +919,8 @@ def _gfx11_core_overlay_descriptors(
             _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
+            _v_add_f32_overlay(),
+            _v_mul_f32_overlay(),
             _s_load_dwordx2_overlay(),
             _s_buffer_load_dword_overlay(),
             _buffer_load_dword_overlay(
@@ -917,6 +955,8 @@ def _gfx12_core_overlay_descriptors(
             _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
+            _v_add_f32_overlay(),
+            _v_mul_f32_overlay(),
             _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
             _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
             _buffer_load_dword_overlay(
@@ -964,6 +1004,8 @@ def _gfx1250_core_overlay_descriptors(
             _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
+            _v_add_f32_overlay(),
+            _v_mul_f32_overlay(),
             _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
             _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
             _buffer_load_dword_overlay(

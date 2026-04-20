@@ -25,6 +25,13 @@ static bool loom_wasm_type_is_vector_4xi32(loom_type_t type) {
          loom_type_dim_static_size_at(type, 0) == 4;
 }
 
+static bool loom_wasm_type_is_vector_4xf32(loom_type_t type) {
+  return loom_type_is_vector(type) && loom_type_rank(type) == 1 &&
+         loom_type_is_all_static(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_F32 &&
+         loom_type_dim_static_size_at(type, 0) == 4;
+}
+
 static bool loom_wasm_value_is_i32(loom_low_lower_context_t* context,
                                    loom_value_id_t value_id) {
   return loom_wasm_type_is_i32(
@@ -34,6 +41,12 @@ static bool loom_wasm_value_is_i32(loom_low_lower_context_t* context,
 static bool loom_wasm_value_is_vector_4xi32(loom_low_lower_context_t* context,
                                             loom_value_id_t value_id) {
   return loom_wasm_type_is_vector_4xi32(
+      loom_module_value_type(loom_low_lower_context_module(context), value_id));
+}
+
+static bool loom_wasm_value_is_vector_4xf32(loom_low_lower_context_t* context,
+                                            loom_value_id_t value_id) {
+  return loom_wasm_type_is_vector_4xf32(
       loom_module_value_type(loom_low_lower_context_module(context), value_id));
 }
 
@@ -69,10 +82,13 @@ static iree_status_t loom_wasm_map_type(void* user_data,
   if (loom_wasm_type_is_vector_4xi32(source_type)) {
     return loom_wasm_make_v128_register_type(context, out_low_type);
   }
+  if (loom_wasm_type_is_vector_4xf32(source_type)) {
+    return loom_wasm_make_v128_register_type(context, out_low_type);
+  }
   return loom_low_lower_emit_reject(
       context, source_op, IREE_SV("type"), IREE_SV("source"),
       IREE_SV("Wasm lowering currently supports only i32 scalar values and "
-              "vector<4xi32> SIMD values"));
+              "vector<4xi32>/vector<4xf32> SIMD values"));
 }
 
 static bool loom_wasm_can_lower_constant(loom_low_lower_context_t* context,
@@ -101,6 +117,14 @@ static bool loom_wasm_can_lower_vector_4xi32_binary(
   return loom_wasm_value_is_vector_4xi32(context, lhs) &&
          loom_wasm_value_is_vector_4xi32(context, rhs) &&
          loom_wasm_value_is_vector_4xi32(context, result);
+}
+
+static bool loom_wasm_can_lower_vector_4xf32_binary(
+    loom_low_lower_context_t* context, loom_value_id_t lhs, loom_value_id_t rhs,
+    loom_value_id_t result) {
+  return loom_wasm_value_is_vector_4xf32(context, lhs) &&
+         loom_wasm_value_is_vector_4xf32(context, rhs) &&
+         loom_wasm_value_is_vector_4xf32(context, result);
 }
 
 static iree_status_t loom_wasm_can_lower_op(void* user_data,
@@ -136,6 +160,16 @@ static iree_status_t loom_wasm_can_lower_op(void* user_data,
       *out_handled = loom_wasm_can_lower_vector_4xi32_binary(
           context, loom_vector_muli_lhs(source_op),
           loom_vector_muli_rhs(source_op), loom_vector_muli_result(source_op));
+      return iree_ok_status();
+    case LOOM_OP_VECTOR_ADDF:
+      *out_handled = loom_wasm_can_lower_vector_4xf32_binary(
+          context, loom_vector_addf_lhs(source_op),
+          loom_vector_addf_rhs(source_op), loom_vector_addf_result(source_op));
+      return iree_ok_status();
+    case LOOM_OP_VECTOR_MULF:
+      *out_handled = loom_wasm_can_lower_vector_4xf32_binary(
+          context, loom_vector_mulf_lhs(source_op),
+          loom_vector_mulf_rhs(source_op), loom_vector_mulf_result(source_op));
       return iree_ok_status();
     default:
       *out_handled = false;
@@ -264,6 +298,16 @@ static iree_status_t loom_wasm_try_lower_op(void* user_data,
           context, source_op, IREE_SV("wasm.i32x4.mul"),
           loom_vector_muli_lhs(source_op), loom_vector_muli_rhs(source_op),
           loom_vector_muli_result(source_op));
+    case LOOM_OP_VECTOR_ADDF:
+      return loom_wasm_lower_binary(
+          context, source_op, IREE_SV("wasm.f32x4.add"),
+          loom_vector_addf_lhs(source_op), loom_vector_addf_rhs(source_op),
+          loom_vector_addf_result(source_op));
+    case LOOM_OP_VECTOR_MULF:
+      return loom_wasm_lower_binary(
+          context, source_op, IREE_SV("wasm.f32x4.mul"),
+          loom_vector_mulf_lhs(source_op), loom_vector_mulf_rhs(source_op),
+          loom_vector_mulf_result(source_op));
     default:
       return iree_ok_status();
   }

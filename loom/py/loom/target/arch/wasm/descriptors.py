@@ -53,6 +53,7 @@ _RESOURCE_CONTROL = "wasm.control"
 _SCHEDULE_CONST = "wasm.const"
 _SCHEDULE_SCALAR_I32 = "wasm.scalar.i32"
 _SCHEDULE_SIMD_I32X4 = "wasm.simd.i32x4"
+_SCHEDULE_SIMD_F32X4 = "wasm.simd.f32x4"
 _SCHEDULE_MEMORY_LOAD = "wasm.memory.load"
 _SCHEDULE_MEMORY_STORE = "wasm.memory.store"
 _SCHEDULE_CONTROL = "wasm.control"
@@ -143,6 +144,8 @@ _OP_I32X4_SPLAT = _simd_encoding_id(0x11)
 _OP_I32X4_ADD = _simd_encoding_id(0xAE)
 _OP_I32X4_SUB = _simd_encoding_id(0xB1)
 _OP_I32X4_MUL = _simd_encoding_id(0xB5)
+_OP_F32X4_ADD = _simd_encoding_id(0xE4)
+_OP_F32X4_MUL = _simd_encoding_id(0xE6)
 
 _TARGET_BLOCK_IMMEDIATE = Immediate(
     "target_block",
@@ -222,6 +225,13 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
         ),
         ScheduleClass(
             _SCHEDULE_SIMD_I32X4,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_SIMD, cycles=1, units=1),),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
+            _SCHEDULE_SIMD_F32X4,
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_SIMD, cycles=1, units=1),),
@@ -343,6 +353,26 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.f32x4.add",
+            mnemonic="f32x4.add",
+            semantic_tag="vector.add.f32x4",
+            encoding_id=_OP_F32X4_ADD,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_F32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.f32x4.mul",
+            mnemonic="f32x4.mul",
+            semantic_tag="vector.mul.f32x4",
+            encoding_id=_OP_F32X4_MUL,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_F32X4,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(

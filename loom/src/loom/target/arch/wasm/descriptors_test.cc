@@ -24,6 +24,8 @@ constexpr uint16_t kWasmOpcodeI32Add = 0x6A;
 constexpr uint16_t kWasmOpcodeV128Load = 0xFD00;
 constexpr uint16_t kWasmOpcodeI32x4Add = 0xFDAE;
 constexpr uint16_t kWasmOpcodeI32x4Sub = 0xFDB1;
+constexpr uint16_t kWasmOpcodeF32x4Add = 0xFDE4;
+constexpr uint16_t kWasmOpcodeF32x4Mul = 0xFDE6;
 constexpr uint16_t kWasmOpcodeV128Store = 0xFD0B;
 
 TEST(WasmDescriptorsTest, CoreSimd128DescriptorSetVerifies) {
@@ -72,6 +74,27 @@ TEST(WasmDescriptorsTest, CoreSimd128DescriptorLookupUsesStableKeys) {
   EXPECT_EQ(subtract_descriptor->operand_count, 3u);
   EXPECT_EQ(subtract_descriptor->result_count, 1u);
   EXPECT_EQ(subtract_descriptor->encoding_id, kWasmOpcodeI32x4Sub);
+
+  uint32_t f32_add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
+      descriptor_set, IREE_SV("wasm.f32x4.add"), &f32_add_ordinal));
+  const loom_low_descriptor_t* f32_add_descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set, f32_add_ordinal);
+  ASSERT_NE(f32_add_descriptor, nullptr);
+  EXPECT_EQ(f32_add_descriptor->operand_count, 3u);
+  EXPECT_EQ(f32_add_descriptor->result_count, 1u);
+  EXPECT_EQ(f32_add_descriptor->encoding_id, kWasmOpcodeF32x4Add);
+
+  uint32_t f32_multiply_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
+      descriptor_set, IREE_SV("wasm.f32x4.mul"), &f32_multiply_ordinal));
+  const loom_low_descriptor_t* f32_multiply_descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set,
+                                            f32_multiply_ordinal);
+  ASSERT_NE(f32_multiply_descriptor, nullptr);
+  EXPECT_EQ(f32_multiply_descriptor->operand_count, 3u);
+  EXPECT_EQ(f32_multiply_descriptor->result_count, 1u);
+  EXPECT_EQ(f32_multiply_descriptor->encoding_id, kWasmOpcodeF32x4Mul);
 
   uint32_t scalar_add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
   IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
@@ -131,9 +154,11 @@ TEST(WasmDescriptorsTest, LowAsmRegionRoundTrips) {
       "  %rhs = v128.const 3, 4\n"
       "  %sum = i32x4.add %lhs, %rhs\n"
       "  %diff = i32x4.sub %sum, %rhs\n"
+      "  %fsum = f32x4.add %lhs, %rhs\n"
+      "  %fproduct = f32x4.mul %fsum, %rhs\n"
       "  %loaded = v128.load %addr\n"
       "  v128.store %addr, %loaded\n"
-      "  return %diff\n"
+      "  return %fproduct\n"
       "}\n";
   std::string printed;
   IREE_ASSERT_OK(harness.RoundTrip(IREE_SV(source),
@@ -169,14 +194,17 @@ TEST(WasmDescriptorsTest, LowFuncAsmRoundTripsMemoryPacketsWithArguments) {
       "  %loaded = v128.load %addr\n"
       "  %sum = i32x4.add %lhs, %rhs\n"
       "  %diff = i32x4.sub %sum, %rhs\n"
+      "  %fsum = f32x4.add %lhs, %rhs\n"
+      "  %fproduct = f32x4.mul %fsum, %rhs\n"
       "  v128.store %addr, %loaded\n"
-      "  return %diff\n"
+      "  return %fproduct\n"
       "}\n";
   std::string printed;
   IREE_ASSERT_OK(harness.RoundTripAndVerify(
       IREE_SV(source), IREE_SV("wasm.core.simd128"), &printed));
   EXPECT_NE(printed.find("v128.load %addr"), std::string::npos);
   EXPECT_NE(printed.find("i32x4.sub %sum, %rhs"), std::string::npos);
+  EXPECT_NE(printed.find("f32x4.mul %fsum, %rhs"), std::string::npos);
   EXPECT_NE(printed.find("v128.store %addr, %loaded"), std::string::npos);
 }
 
@@ -194,6 +222,7 @@ TEST(WasmDescriptorsTest, ManifestNamesSimdAndMemoryPackets) {
 
   EXPECT_NE(json.find("\"key\":\"wasm.core.simd128\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"wasm.i32x4.add\""), std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"wasm.f32x4.mul\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"wasm.v128.load\""), std::string::npos);
   EXPECT_NE(json.find("\"descriptor_refs\""), std::string::npos);
 }

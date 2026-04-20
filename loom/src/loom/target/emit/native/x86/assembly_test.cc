@@ -284,10 +284,12 @@ TEST_F(X86AssemblyTest, EmitsAvx512FragmentFromSourceLowering) {
   LowerSourceAndBuildSidecars(
       "x86-avx512",
       "func.def @x86_source(%lhs: vector<16xi32>, %rhs: "
-      "vector<16xi32>) {\n"
+      "vector<16xi32>, %flhs: vector<16xf32>, %frhs: vector<16xf32>) {\n"
       "  %sum = vector.addi %lhs, %rhs : vector<16xi32>\n"
       "  %diff = vector.subi %sum, %rhs : vector<16xi32>\n"
       "  %product = vector.muli %diff, %rhs : vector<16xi32>\n"
+      "  %fsum = vector.addf %flhs, %frhs : vector<16xf32>\n"
+      "  %fproduct = vector.mulf %fsum, %frhs : vector<16xf32>\n"
       "  func.return\n"
       "}\n",
       &sidecar_arena, &packetization);
@@ -302,6 +304,8 @@ TEST_F(X86AssemblyTest, EmitsAvx512FragmentFromSourceLowering) {
   EXPECT_NE(output.find("vpaddd zmm"), std::string::npos);
   EXPECT_NE(output.find("vpsubd zmm"), std::string::npos);
   EXPECT_NE(output.find("vpmulld zmm"), std::string::npos);
+  EXPECT_NE(output.find("vaddps zmm"), std::string::npos);
+  EXPECT_NE(output.find("vmulps zmm"), std::string::npos);
   EXPECT_NE(output.find("ret"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);

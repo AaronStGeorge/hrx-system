@@ -389,6 +389,8 @@ static const loom_x86_assembly_descriptor_dispatch_t
         {"x86.avx512.mov.gpr64", loom_x86_append_move_packet},
         {"x86.avx512.vmovdqu32.load.zmm", loom_x86_append_load_packet},
         {"x86.avx512.vmovdqu32.store.zmm", loom_x86_append_store_packet},
+        {"x86.avx512.vaddps.zmm", loom_x86_append_binary_vector_packet},
+        {"x86.avx512.vmulps.zmm", loom_x86_append_binary_vector_packet},
         {"x86.avx512.vpaddd.zmm", loom_x86_append_binary_vector_packet},
         {"x86.avx512.vpmulld.zmm", loom_x86_append_binary_vector_packet},
         {"x86.avx512.vpsubd.zmm", loom_x86_append_binary_vector_packet},

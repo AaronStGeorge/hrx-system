@@ -98,6 +98,23 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(multiply_descriptor->operand_count, 3u);
   EXPECT_EQ(multiply_descriptor->result_count, 1u);
 
+  const loom_low_descriptor_t* f32_add_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vaddps.zmm"));
+  ASSERT_NE(f32_add_descriptor, nullptr);
+  iree_string_view_t f32_add_key = iree_string_view_empty();
+  IREE_ASSERT_OK(loom_low_descriptor_set_string(
+      descriptor_set, f32_add_descriptor->key_string_offset, &f32_add_key));
+  EXPECT_TRUE(
+      iree_string_view_equal(f32_add_key, IREE_SV("x86.avx512.vaddps.zmm")));
+  EXPECT_EQ(f32_add_descriptor->operand_count, 3u);
+  EXPECT_EQ(f32_add_descriptor->result_count, 1u);
+
+  const loom_low_descriptor_t* f32_multiply_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vmulps.zmm"));
+  ASSERT_NE(f32_multiply_descriptor, nullptr);
+  EXPECT_EQ(f32_multiply_descriptor->operand_count, 3u);
+  EXPECT_EQ(f32_multiply_descriptor->result_count, 1u);
+
   const loom_low_descriptor_t* mask_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.kandq"));
   ASSERT_NE(mask_descriptor, nullptr);
@@ -279,6 +296,20 @@ TEST(X86DescriptorsTest, Avx512AsmFormsNameUnambiguousPackets) {
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
             "x86.avx512.vpmulld.zmm");
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("vaddps"), &asm_form_ordinal));
+  asm_form =
+      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
+  ASSERT_NE(asm_form, nullptr);
+  EXPECT_EQ(asm_form->result_operand_index_count, 1u);
+  EXPECT_EQ(asm_form->operand_index_count, 2u);
+
+  descriptor = loom_low_descriptor_set_descriptor_at(
+      descriptor_set, asm_form->descriptor_ordinal);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
+            "x86.avx512.vaddps.zmm");
 }
 
 TEST(X86DescriptorsTest, Avx512LowAsmInfersTiedAccumulatorResultType) {
@@ -386,6 +417,8 @@ TEST(X86DescriptorsTest, ManifestNamesVectorMemoryAndDotPackets) {
   EXPECT_NE(json.find("\"key\":\"x86.avx512.core\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.vpaddd.zmm\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.vpmulld.zmm\""), std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"x86.avx512.vaddps.zmm\""), std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"x86.avx512.vmulps.zmm\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.vmovdqu32.load.zmm\""),
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.vpdpbusd.zmm\""),

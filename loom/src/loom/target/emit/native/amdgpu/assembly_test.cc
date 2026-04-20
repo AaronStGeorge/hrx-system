@@ -315,7 +315,8 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     loom_low_packetization_t packetization = {};
     LowerSourceAndBuildSidecars(preset_key,
                                 "func.def @gfx_source(%lhs: i32, %rhs: i32, "
-                                "%vlhs: vector<1xi32>, %vrhs: vector<1xi32>) "
+                                "%vlhs: vector<1xi32>, %vrhs: vector<1xi32>, "
+                                "%flhs: vector<1xf32>, %frhs: vector<1xf32>) "
                                 "{\n"
                                 "  %seven = scalar.constant 7 : i32\n"
                                 "  %biased = scalar.addi %lhs, %seven : i32\n"
@@ -332,6 +333,10 @@ class AmdgpuAssemblyTest : public ::testing::Test {
                                 "%vconst : vector<1xi32>\n"
                                 "  %vproduct = vector.muli %vdifference, %vrhs "
                                 ": vector<1xi32>\n"
+                                "  %fsum = vector.addf %flhs, %frhs : "
+                                "vector<1xf32>\n"
+                                "  %fproduct = vector.mulf %fsum, %frhs : "
+                                "vector<1xf32>\n"
                                 "  func.return\n"
                                 "}\n",
                                 &sidecar_arena, &packetization);
@@ -350,6 +355,8 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     EXPECT_NE(output.find("v_add_u32 v"), std::string::npos);
     EXPECT_NE(output.find("v_sub"), std::string::npos);
     EXPECT_NE(output.find("v_mul_lo_u32 v"), std::string::npos);
+    EXPECT_NE(output.find("v_add_f32 v"), std::string::npos);
+    EXPECT_NE(output.find("v_mul_f32 v"), std::string::npos);
     EXPECT_NE(output.find("s_endpgm"), std::string::npos);
     iree_string_builder_deinitialize(&builder);
     iree_arena_deinitialize(&sidecar_arena);

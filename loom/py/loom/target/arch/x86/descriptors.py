@@ -70,6 +70,7 @@ _RESOURCE_CONTROL = "x86.control"
 
 _SCHEDULE_SCALAR = "x86.scalar"
 _SCHEDULE_VECTOR_I32_ZMM = "x86.vector.i32.512"
+_SCHEDULE_VECTOR_F32_ZMM = "x86.vector.f32.512"
 _SCHEDULE_VECTOR_DOT_XMM = "x86.vector.dot.128"
 _SCHEDULE_VECTOR_DOT_YMM = "x86.vector.dot.256"
 _SCHEDULE_VECTOR_DOT_ZMM = "x86.vector.dot.512"
@@ -337,6 +338,15 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
+            _SCHEDULE_VECTOR_F32_ZMM,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=1,
+            issue_uses=(
+                IssueUse(_RESOURCE_VECTOR, cycles=1, units=_vector_lane_units(512)),
+            ),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
             _SCHEDULE_VECTOR_DOT_ZMM,
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=4,
@@ -409,6 +419,24 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             operands=(_zmm_result(), _zmm_operand("lhs"), _zmm_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_VECTOR_I32_ZMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="x86.avx512.vaddps.zmm",
+            mnemonic="vaddps",
+            semantic_tag="float.add.f32x16",
+            operands=(_zmm_result(), _zmm_operand("lhs"), _zmm_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_VECTOR_F32_ZMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="x86.avx512.vmulps.zmm",
+            mnemonic="vmulps",
+            semantic_tag="float.mul.f32x16",
+            operands=(_zmm_result(), _zmm_operand("lhs"), _zmm_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_VECTOR_F32_ZMM,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(

@@ -34,3 +34,42 @@ low.abi.operand @wasm_arith__low__abi_arg0 {abi_type = reg<wasm.v128>, adapter =
 low.abi.operand @wasm_arith__low__abi_arg1 {abi_type = reg<wasm.v128>, adapter = @wasm_arith__low__abi, conversion = value_to_register, index = 1, semantic_type = vector<4xi32>}
 
 low.abi.result @wasm_arith__low__abi_result0 {abi_type = reg<wasm.v128>, adapter = @wasm_arith__low__abi, conversion = register_to_value, index = 0, semantic_type = vector<4xi32>}
+
+// ====
+// RUN: emit source-low @wasm_f32_target
+target.preset @wasm_f32_target {key = "wasm-simd128", source = @wasm_f32_arith}
+
+func.def @wasm_f32_arith(%lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4xf32>) {
+  %sum = vector.addf %lhs, %rhs : vector<4xf32>
+  %product = vector.mulf %sum, %rhs : vector<4xf32>
+  func.return %product : vector<4xf32>
+}
+
+// ----
+target.snapshot @wasm_f32_target__snapshot {artifact_format = wasm_binary, codegen_format = wasm, data_layout = "", default_pointer_bitwidth = 32, index_bitwidth = 32, memory_space_constant = 0, memory_space_descriptor = 4294967295, memory_space_generic = 0, memory_space_global = 0, memory_space_host = 4294967295, memory_space_private = 0, memory_space_workgroup = 4294967295, offset_bitwidth = 32, target_cpu = "generic", target_features = "+simd128", target_triple = "wasm32-unknown-unknown"}
+
+target.export @wasm_f32_target__export {abi = wasm_function, export_symbol = "wasm_f32_arith", hal_binding_alignment = 0, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 0, hal_flat_workgroup_size_min = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, linkage = default, source = @wasm_f32_arith}
+
+target.config @wasm_f32_target__config {contract_feature_bits = 0, contract_set_key = "wasm.core.simd128"}
+
+target.bundle @wasm_f32_target {config = @wasm_f32_target__config, export_plan = @wasm_f32_target__export, snapshot = @wasm_f32_target__snapshot}
+
+func.def @wasm_f32_arith(%lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4xf32>) {
+  %sum = vector.addf %lhs, %rhs : vector<4xf32>
+  %product = vector.mulf %sum, %rhs : vector<4xf32>
+  func.return %product : vector<4xf32>
+}
+
+low.func.def target(@wasm_f32_target) @wasm_f32_arith__low(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %sum = low.op<wasm.f32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  %product = low.op<wasm.f32x4.mul>(%sum, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  low.return %product : reg<wasm.v128>
+}
+
+low.abi.adapter @wasm_f32_arith__low__abi {callee = @wasm_f32_arith__low, conversion = mapped, operand_count = 2, result_count = 1}
+
+low.abi.operand @wasm_f32_arith__low__abi_arg0 {abi_type = reg<wasm.v128>, adapter = @wasm_f32_arith__low__abi, conversion = value_to_register, index = 0, semantic_type = vector<4xf32>}
+
+low.abi.operand @wasm_f32_arith__low__abi_arg1 {abi_type = reg<wasm.v128>, adapter = @wasm_f32_arith__low__abi, conversion = value_to_register, index = 1, semantic_type = vector<4xf32>}
+
+low.abi.result @wasm_f32_arith__low__abi_result0 {abi_type = reg<wasm.v128>, adapter = @wasm_f32_arith__low__abi, conversion = register_to_value, index = 0, semantic_type = vector<4xf32>}

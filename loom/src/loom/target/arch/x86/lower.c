@@ -101,9 +101,22 @@ static bool loom_x86_type_is_vector_16xi32(loom_type_t type) {
          loom_type_dim_static_size_at(type, 0) == 16;
 }
 
+static bool loom_x86_type_is_vector_16xf32(loom_type_t type) {
+  return loom_type_is_vector(type) && loom_type_rank(type) == 1 &&
+         loom_type_is_all_static(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_F32 &&
+         loom_type_dim_static_size_at(type, 0) == 16;
+}
+
 static bool loom_x86_value_is_vector_16xi32(loom_low_lower_context_t* context,
                                             loom_value_id_t value_id) {
   return loom_x86_type_is_vector_16xi32(
+      loom_module_value_type(loom_low_lower_context_module(context), value_id));
+}
+
+static bool loom_x86_value_is_vector_16xf32(loom_low_lower_context_t* context,
+                                            loom_value_id_t value_id) {
+  return loom_x86_type_is_vector_16xf32(
       loom_module_value_type(loom_low_lower_context_module(context), value_id));
 }
 
@@ -143,13 +156,14 @@ static iree_status_t loom_x86_map_type(void* user_data,
   const iree_string_view_t contract_set_key =
       loom_x86_lower_contract_set_key(context);
   if (loom_x86_contract_set_key_is_avx512_core(contract_set_key)) {
-    if (loom_x86_type_is_vector_16xi32(source_type)) {
+    if (loom_x86_type_is_vector_16xi32(source_type) ||
+        loom_x86_type_is_vector_16xf32(source_type)) {
       return loom_x86_make_vector_register_type(context, 512, out_low_type);
     }
     return loom_low_lower_emit_reject(
         context, source_op, IREE_SV("type"), IREE_SV("source"),
         IREE_SV("x86 AVX512 lowering currently supports only vector<16xi32> "
-                "values"));
+                "and vector<16xf32> values"));
   }
   if (loom_x86_contract_set_key_is_packed_dot_core(contract_set_key)) {
     uint32_t vector_bit_width = 0;
@@ -201,6 +215,26 @@ static bool loom_x86_can_lower_vector_muli(loom_low_lower_context_t* context,
                                          loom_vector_muli_rhs(source_op)) &&
          loom_x86_value_is_vector_16xi32(context,
                                          loom_vector_muli_result(source_op));
+}
+
+static bool loom_x86_can_lower_vector_addf(loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op) {
+  return loom_x86_value_is_vector_16xf32(context,
+                                         loom_vector_addf_lhs(source_op)) &&
+         loom_x86_value_is_vector_16xf32(context,
+                                         loom_vector_addf_rhs(source_op)) &&
+         loom_x86_value_is_vector_16xf32(context,
+                                         loom_vector_addf_result(source_op));
+}
+
+static bool loom_x86_can_lower_vector_mulf(loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op) {
+  return loom_x86_value_is_vector_16xf32(context,
+                                         loom_vector_mulf_lhs(source_op)) &&
+         loom_x86_value_is_vector_16xf32(context,
+                                         loom_vector_mulf_rhs(source_op)) &&
+         loom_x86_value_is_vector_16xf32(context,
+                                         loom_vector_mulf_result(source_op));
 }
 
 static iree_string_view_t loom_x86_packed_dot_rejection_name(
@@ -334,6 +368,16 @@ static iree_status_t loom_x86_can_lower_op(void* user_data,
           loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
           loom_x86_can_lower_vector_muli(context, source_op);
       return iree_ok_status();
+    case LOOM_OP_VECTOR_ADDF:
+      *out_handled =
+          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_addf(context, source_op);
+      return iree_ok_status();
+    case LOOM_OP_VECTOR_MULF:
+      *out_handled =
+          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_mulf(context, source_op);
+      return iree_ok_status();
     case LOOM_OP_VECTOR_DOT2F:
     case LOOM_OP_VECTOR_DOT4I:
       return loom_x86_can_lower_vector_dot(context, source_op, out_handled);
@@ -424,6 +468,22 @@ static iree_status_t loom_x86_lower_vector_muli(
       loom_vector_muli_result(source_op));
 }
 
+static iree_status_t loom_x86_lower_vector_addf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  return loom_x86_lower_binary_op(
+      context, source_op, IREE_SV("x86.avx512.vaddps.zmm"),
+      loom_vector_addf_lhs(source_op), loom_vector_addf_rhs(source_op),
+      loom_vector_addf_result(source_op));
+}
+
+static iree_status_t loom_x86_lower_vector_mulf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  return loom_x86_lower_binary_op(
+      context, source_op, IREE_SV("x86.avx512.vmulps.zmm"),
+      loom_vector_mulf_lhs(source_op), loom_vector_mulf_rhs(source_op),
+      loom_vector_mulf_result(source_op));
+}
+
 static iree_status_t loom_x86_lower_packed_dot_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_lhs, loom_value_id_t source_rhs,
@@ -512,6 +572,10 @@ static iree_status_t loom_x86_try_lower_op(void* user_data,
       return loom_x86_lower_vector_subi(context, source_op);
     case LOOM_OP_VECTOR_MULI:
       return loom_x86_lower_vector_muli(context, source_op);
+    case LOOM_OP_VECTOR_ADDF:
+      return loom_x86_lower_vector_addf(context, source_op);
+    case LOOM_OP_VECTOR_MULF:
+      return loom_x86_lower_vector_mulf(context, source_op);
     case LOOM_OP_VECTOR_DOT2F:
       return loom_x86_lower_vector_dot2f(context, source_op);
     case LOOM_OP_VECTOR_DOT4I:
