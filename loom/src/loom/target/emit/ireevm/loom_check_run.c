@@ -88,46 +88,6 @@ static bool loom_ireevm_loom_check_run_provider_match(
   return true;
 }
 
-static iree_status_t loom_ireevm_loom_check_run_take_option_value(
-    const loom_check_run_arguments_t* arguments, iree_host_size_t* index,
-    iree_string_view_t option_name, iree_string_view_t* out_value,
-    bool* out_matched) {
-  IREE_ASSERT_ARGUMENT(arguments);
-  IREE_ASSERT_ARGUMENT(index);
-  IREE_ASSERT_ARGUMENT(out_value);
-  IREE_ASSERT_ARGUMENT(out_matched);
-  *out_value = iree_string_view_empty();
-  *out_matched = false;
-
-  const iree_string_view_t argument = arguments->values[*index];
-  if (!iree_string_view_starts_with(argument, IREE_SV("--"))) {
-    return iree_ok_status();
-  }
-
-  iree_string_view_t name_with_prefix = iree_string_view_empty();
-  iree_string_view_t value = iree_string_view_empty();
-  iree_string_view_split(argument, '=', &name_with_prefix, &value);
-  iree_string_view_t name =
-      iree_string_view_substr(name_with_prefix, 2, IREE_HOST_SIZE_MAX);
-  if (!iree_string_view_equal(name, option_name)) {
-    return iree_ok_status();
-  }
-
-  *out_matched = true;
-  if (value.data != NULL) {
-    *out_value = value;
-    return iree_ok_status();
-  }
-  if (*index + 1 >= arguments->count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "RUN: run option '--%.*s' requires a value",
-                            (int)option_name.size, option_name.data);
-  }
-  ++(*index);
-  *out_value = arguments->values[*index];
-  return iree_ok_status();
-}
-
 static iree_status_t loom_ireevm_loom_check_run_append_value(
     iree_string_view_t value, iree_string_view_t* values,
     iree_host_size_t capacity, iree_host_size_t* count,
@@ -194,7 +154,7 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
        i < arguments->count && iree_status_is_ok(status); ++i) {
     iree_string_view_t value = iree_string_view_empty();
     bool matched = false;
-    status = loom_ireevm_loom_check_run_take_option_value(
+    status = loom_check_run_arguments_take_option_value(
         arguments, &i, IREE_SV("loom_backend"), &value, &matched);
     if (!iree_status_is_ok(status)) {
       break;
@@ -208,7 +168,7 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
       }
       continue;
     }
-    status = loom_ireevm_loom_check_run_take_option_value(
+    status = loom_check_run_arguments_take_option_value(
         arguments, &i, IREE_SV("loom_target"), &value, &matched);
     if (!iree_status_is_ok(status)) {
       break;
@@ -217,7 +177,7 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
       out_options->target_symbol = value;
       continue;
     }
-    status = loom_ireevm_loom_check_run_take_option_value(
+    status = loom_check_run_arguments_take_option_value(
         arguments, &i, IREE_SV("loom_module_name"), &value, &matched);
     if (!iree_status_is_ok(status)) {
       break;
@@ -226,7 +186,7 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
       out_options->module_name = value;
       continue;
     }
-    status = loom_ireevm_loom_check_run_take_option_value(
+    status = loom_check_run_arguments_take_option_value(
         arguments, &i, IREE_SV("function"), &value, &matched);
     if (!iree_status_is_ok(status)) {
       break;
@@ -235,7 +195,7 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
       out_options->function_name = value;
       continue;
     }
-    status = loom_ireevm_loom_check_run_take_option_value(
+    status = loom_check_run_arguments_take_option_value(
         arguments, &i, IREE_SV("input"), &value, &matched);
     if (!iree_status_is_ok(status)) {
       break;
@@ -246,7 +206,7 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
           &out_options->input_count, IREE_SV("input"));
       continue;
     }
-    status = loom_ireevm_loom_check_run_take_option_value(
+    status = loom_check_run_arguments_take_option_value(
         arguments, &i, IREE_SV("output"), &value, &matched);
     if (!iree_status_is_ok(status)) {
       break;
@@ -257,7 +217,7 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
           &out_options->output_count, IREE_SV("output"));
       continue;
     }
-    status = loom_ireevm_loom_check_run_take_option_value(
+    status = loom_check_run_arguments_take_option_value(
         arguments, &i, IREE_SV("expected_output"), &value, &matched);
     if (!iree_status_is_ok(status)) {
       break;
@@ -268,7 +228,7 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
           &out_options->expected_output_count, IREE_SV("expected_output"));
       continue;
     }
-    status = loom_ireevm_loom_check_run_take_option_value(
+    status = loom_check_run_arguments_take_option_value(
         arguments, &i, IREE_SV("output_max_element_count"), &value, &matched);
     if (!iree_status_is_ok(status)) {
       break;
@@ -313,21 +273,6 @@ static iree_status_t loom_ireevm_loom_check_run_initialize_low_registry(
       (const loom_check_environment_t*)user_data;
   return loom_check_environment_initialize_low_descriptor_registry(
       environment, out_registry);
-}
-
-static iree_status_t loom_ireevm_loom_check_run_append_status(
-    iree_status_t failure_status, loom_check_run_result_t* result) {
-  IREE_ASSERT_ARGUMENT(result);
-  if (iree_status_is_ok(failure_status)) {
-    return iree_ok_status();
-  }
-  iree_status_t status =
-      iree_string_builder_append_status(&result->stderr_text, failure_status);
-  iree_status_free(failure_status);
-  if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_cstring(&result->stderr_text, "\n");
-  }
-  return status;
 }
 
 static iree_status_t loom_ireevm_loom_check_run_execute(
@@ -415,7 +360,7 @@ static iree_status_t loom_ireevm_loom_check_run_execute(
         iree_string_builder_view(&invocation_result.output));
   } else {
     request->result->exit_code = 1;
-    status = loom_ireevm_loom_check_run_append_status(status, request->result);
+    status = loom_check_run_result_append_status(status, request->result);
   }
 
   loom_run_vm_invocation_result_deinitialize(&invocation_result);

@@ -224,6 +224,8 @@ typedef iree_status_t (*loom_check_run_provider_append_names_fn_t)(
 struct loom_check_run_provider_t {
   // Human-readable provider name used for debugging and diagnostics.
   iree_string_view_t name;
+  // Provider-owned immutable configuration visible to callbacks.
+  const void* user_data;
   // Returns true when this provider owns the RUN: run argument set.
   loom_check_run_provider_match_fn_t match;
   // Executes the RUN: run case and fills the provider result.
@@ -239,6 +241,20 @@ typedef struct loom_check_run_provider_registry_t {
   // Number of entries in |providers|.
   iree_host_size_t provider_count;
 } loom_check_run_provider_registry_t;
+
+// Matches and consumes an option from parsed RUN: run arguments.
+//
+// Accepts both "--name=value" and "--name value" forms. When the current
+// argument at |*index| is a matching split option this advances |*index| to the
+// value argument.
+iree_status_t loom_check_run_arguments_take_option_value(
+    const loom_check_run_arguments_t* arguments, iree_host_size_t* index,
+    iree_string_view_t option_name, iree_string_view_t* out_value,
+    bool* out_matched);
+
+// Appends |failure_status| to |result->stderr_text| and consumes the status.
+iree_status_t loom_check_run_result_append_status(
+    iree_status_t failure_status, loom_check_run_result_t* result);
 
 // Prepared module state passed to a linked emit provider.
 typedef struct loom_check_emit_provider_request_t {
@@ -365,9 +381,6 @@ struct loom_check_environment_t {
   loom_check_run_provider_registry_t run_providers;
   // Optional requirement providers linked into this runner.
   loom_check_requirement_provider_registry_t requirement_providers;
-  // Filesystem path or executable name for iree-run-loom. Empty means search
-  // PATH for "iree-run-loom".
-  iree_string_view_t iree_run_loom_path;
 };
 
 // Returns the linked emit provider for |target_name|, or NULL when none owns

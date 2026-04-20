@@ -762,7 +762,8 @@ loom_cc_library(
     srcs = ["loom_check_requirements.c"],
     hdrs = ["loom_check_requirements.h"],
     deps = [
-        "//loom/src/loom/target/tool:process",
+        ":amdgpu_hal_backend",
+        "//loom/src/loom/tooling/execution:hal_runtime",
         "//loom/src/loom/tools/loom-check:execute",
         "//runtime/src/iree/base",
     ],
@@ -790,6 +791,8 @@ loom_check_runner_binary(
         ":loom_check_requirements",
         ":low_registry",
         ":lower",
+        ":amdgpu_hal_backend",
+        "//loom/src/loom/tools/loom-check:hal_run_provider",
     ],
 )
 
@@ -901,10 +904,6 @@ loom_check_test_suite(
 loom_check_test(
     name = "hal_run",
     src = "hal_run.loom-test",
-    data = ["//loom/src/loom/tools/iree-run-loom"],
-    env = {
-        "LOOM_CHECK_IREE_RUN_LOOM": "$(rootpath //loom/src/loom/tools/iree-run-loom)",
-    },
     runner = ":loom-check",
     tags = [
         "driver=amdgpu",

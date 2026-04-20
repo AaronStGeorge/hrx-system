@@ -41,7 +41,6 @@ static const loom_check_environment_t kLoomCheckEnvironment = {
             .fn = loom_check_cli_initialize_low_descriptor_registry,
             .user_data = NULL,
         },
-    .iree_run_loom_path = IREE_SVL(""),
 };
 
 int main(int argc, char** argv) {

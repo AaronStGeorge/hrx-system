@@ -307,8 +307,9 @@ loom_cc_library(
   SRCS
     "loom_check_requirements.c"
   DEPS
+    ::amdgpu_hal_backend
     iree::base
-    loom::src::loom::target::tool::process
+    loom::src::loom::tooling::execution::hal_runtime
     loom::src::loom::tools::loom-check::execute
   PUBLIC
 )
@@ -340,6 +341,8 @@ loom_cc_binary(
     ::loom_check_requirements
     ::low_registry
     ::lower
+    ::amdgpu_hal_backend
+    loom::src::loom::tools::loom-check::hal_run_provider
     loom::src::loom::tools::loom-check::main
 )
 

@@ -9,7 +9,6 @@
 #include "loom/tools/loom-check/main.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -28,9 +27,6 @@ IREE_FLAG(bool, update, false,
           "Cannot be used with stdin or verify mode.");
 IREE_FLAG(bool, verbose, false,
           "Print PASS/FAIL/SKIP for every case, not just failures.");
-IREE_FLAG(string, iree_run_loom, "",
-          "Path to iree-run-loom used by RUN: run cases. Empty uses "
-          "LOOM_CHECK_IREE_RUN_LOOM when set, otherwise PATH lookup.");
 
 typedef struct loom_check_json_flag_t {
   bool enabled;
@@ -101,18 +97,6 @@ iree_status_t loom_check_register_production_context(void* user_data,
                                                      loom_context_t* context) {
   (void)user_data;
   return loom_op_registry_register_all_dialects(context);
-}
-
-static iree_string_view_t loom_check_iree_run_loom_path_from_flags(void) {
-  iree_string_view_t flag_path = iree_make_cstring_view(FLAG_iree_run_loom);
-  if (!iree_string_view_is_empty(flag_path)) {
-    return flag_path;
-  }
-  const char* env_path = getenv("LOOM_CHECK_IREE_RUN_LOOM");
-  if (env_path != NULL && env_path[0] != '\0') {
-    return iree_make_cstring_view(env_path);
-  }
-  return iree_string_view_empty();
 }
 
 //===----------------------------------------------------------------------===//
@@ -452,10 +436,10 @@ int loom_check_main(int argc, char** argv,
       "\n"
       "  Directives:\n"
       "    // RUN: <mode> [args]    Set the test mode (one per case).\n"
-      "    // REQUIRES: <name>[, ...] Skip when external tools are missing.\n"
+      "    // REQUIRES: <name>[, ...] Skip when requirements are unavailable.\n"
       "    // XFAIL: <reason>       Mark as expected failure.\n"
-      "    Known REQUIRES names: iree-run-loom,\n"
-      "    loom-check-test-unavailable, and names from providers linked\n"
+      "    Known REQUIRES names: loom-check-test-unavailable and names from "
+      "providers linked\n"
       "    into this runner.\n"
       "\n"
       "  Annotations (verify mode):\n"
@@ -505,7 +489,6 @@ int loom_check_main(int argc, char** argv,
 
   if (iree_status_is_ok(status)) {
     loom_check_environment_t environment = *base_environment;
-    environment.iree_run_loom_path = loom_check_iree_run_loom_path_from_flags();
     if (argc < 2) {
       // No positional args: read from stdin.
       status = loom_check_read_and_process(
@@ -615,7 +598,6 @@ int loom_check_production_main(int argc, char** argv,
               .providers = runner->requirement_providers,
               .provider_count = runner->requirement_provider_count,
           },
-      .iree_run_loom_path = IREE_SVL(""),
   };
   return loom_check_main(argc, argv, &environment);
 }

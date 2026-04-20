@@ -960,7 +960,6 @@ TEST_F(ExecuteTest, UnknownRequiresRequirementFailsLoudly) {
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_NE(DetailString(result).find("unknown REQUIRES requirement"),
             std::string::npos);
-  EXPECT_NE(DetailString(result).find("iree-run-loom"), std::string::npos);
   EXPECT_NE(DetailString(result).find("loom-check-test-unavailable"),
             std::string::npos);
   loom_check_result_deinitialize(&result);
@@ -1162,26 +1161,6 @@ TEST_F(ExecuteTest, RunModeReportsMissingLinkedProvider) {
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_NE(DetailString(result).find("no linked in-process provider"),
             std::string::npos)
-      << "detail: " << DetailString(result);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, RunModeSkipsUnavailableRunner) {
-  loom_check_environment_t environment = kExecuteTestEnvironment;
-  environment.iree_run_loom_path =
-      iree_make_cstring_view("/definitely/not/iree-run-loom");
-
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirstWithEnvironment("// RUN: run --function=main\n"
-                                  "// REQUIRES: iree-run-loom\n"
-                                  "func.def @main() {\n"
-                                  "  func.return\n"
-                                  "}\n",
-                                  &environment, &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_SKIP);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_SKIP);
-  EXPECT_NE(DetailString(result).find("iree-run-loom"), std::string::npos)
       << "detail: " << DetailString(result);
   loom_check_result_deinitialize(&result);
 }

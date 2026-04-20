@@ -6,54 +6,12 @@
 
 #include "loom/tools/loom-check/requirements.h"
 
-#include "loom/target/tool/process.h"
-
-iree_string_view_t loom_check_environment_iree_run_loom_path(
-    const loom_check_environment_t* environment) {
-  if (environment != NULL &&
-      !iree_string_view_is_empty(environment->iree_run_loom_path)) {
-    return environment->iree_run_loom_path;
-  }
-  return IREE_SV("iree-run-loom");
-}
-
-bool loom_check_process_path_searches_path(iree_string_view_t path) {
-  for (iree_host_size_t i = 0; i < path.size; ++i) {
-    if (path.data[i] == '/' || path.data[i] == '\\') {
-      return false;
-    }
-  }
-  return true;
-}
-
 static bool loom_check_builtin_requirement_provider_matches(
     const loom_check_requirement_provider_t* provider,
     iree_string_view_t requirement) {
   (void)provider;
-  return iree_string_view_equal(requirement, IREE_SV("iree-run-loom")) ||
-         iree_string_view_equal(requirement,
+  return iree_string_view_equal(requirement,
                                 IREE_SV("loom-check-test-unavailable"));
-}
-
-static iree_status_t loom_check_query_iree_run_loom(
-    const loom_check_environment_t* environment, iree_allocator_t allocator) {
-  iree_string_view_t path =
-      loom_check_environment_iree_run_loom_path(environment);
-  iree_string_view_t arguments[] = {IREE_SV("--help")};
-  loom_tool_process_result_t result = {0};
-  IREE_RETURN_IF_ERROR(loom_tool_process_run(
-      path, loom_check_process_path_searches_path(path), arguments,
-      IREE_ARRAYSIZE(arguments), allocator, &result));
-
-  iree_status_t status = iree_ok_status();
-  if (!loom_tool_process_result_succeeded(&result)) {
-    status = iree_make_status(
-        IREE_STATUS_UNAVAILABLE,
-        "iree-run-loom is available but --help exited with code %d",
-        result.exit_code);
-  }
-  loom_tool_process_result_deinitialize(&result, allocator);
-  return status;
 }
 
 static iree_status_t loom_check_builtin_requirement_provider_query(
@@ -61,9 +19,8 @@ static iree_status_t loom_check_builtin_requirement_provider_query(
     const loom_check_environment_t* environment, iree_string_view_t requirement,
     iree_allocator_t allocator) {
   (void)provider;
-  if (iree_string_view_equal(requirement, IREE_SV("iree-run-loom"))) {
-    return loom_check_query_iree_run_loom(environment, allocator);
-  }
+  (void)environment;
+  (void)allocator;
   if (iree_string_view_equal(requirement,
                              IREE_SV("loom-check-test-unavailable"))) {
     return iree_make_status(IREE_STATUS_UNAVAILABLE,
@@ -76,8 +33,8 @@ static iree_status_t loom_check_builtin_requirement_provider_append_names(
     const loom_check_requirement_provider_t* provider,
     iree_string_builder_t* builder) {
   (void)provider;
-  return iree_string_builder_append_cstring(
-      builder, "iree-run-loom, loom-check-test-unavailable");
+  return iree_string_builder_append_cstring(builder,
+                                            "loom-check-test-unavailable");
 }
 
 static const loom_check_requirement_provider_t*

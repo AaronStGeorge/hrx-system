@@ -79,12 +79,29 @@ loom_cc_library(
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::module_compiler
     loom::src::loom::target::presets
-    loom::src::loom::target::tool::process
     loom::src::loom::target::types
     loom::src::loom::testing::diff
     loom::src::loom::util::json
     loom::src::loom::util::stream
     loom::src::loom::verify
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    hal_run_provider
+  HDRS
+    "hal_run_provider.h"
+  SRCS
+    "hal_run_provider.c"
+  DEPS
+    ::execute
+    iree::base
+    loom::src::loom::tooling::execution::candidate
+    loom::src::loom::tooling::execution::hal_backend
+    loom::src::loom::tooling::execution::hal_invocation
+    loom::src::loom::tooling::execution::hal_runtime
+    loom::src::loom::tooling::execution::session
   PUBLIC
 )
 

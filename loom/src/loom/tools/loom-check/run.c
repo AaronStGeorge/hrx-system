@@ -6,8 +6,6 @@
 
 #include <string.h>
 
-#include "iree/io/file_contents.h"
-#include "loom/target/tool/process.h"
 #include "loom/tools/loom-check/execute.h"
 
 typedef struct loom_check_run_argument_storage_t {
@@ -18,24 +16,6 @@ typedef struct loom_check_run_argument_storage_t {
   // Allocated NUL-terminated argument strings.
   char** strings;
 } loom_check_run_argument_storage_t;
-
-static iree_string_view_t loom_check_iree_run_loom_path(
-    const loom_check_environment_t* environment) {
-  if (environment != NULL &&
-      !iree_string_view_is_empty(environment->iree_run_loom_path)) {
-    return environment->iree_run_loom_path;
-  }
-  return IREE_SV("iree-run-loom");
-}
-
-static bool loom_check_process_path_searches_path(iree_string_view_t path) {
-  for (iree_host_size_t i = 0; i < path.size; ++i) {
-    if (path.data[i] == '/' || path.data[i] == '\\') {
-      return false;
-    }
-  }
-  return true;
-}
 
 static void loom_check_run_arguments_deinitialize(
     loom_check_run_argument_storage_t* storage, iree_allocator_t allocator) {
@@ -227,39 +207,6 @@ static iree_status_t loom_check_run_parse_arguments(
   return status;
 }
 
-static iree_status_t loom_check_run_build_process_arguments(
-    iree_string_view_t input_path,
-    const loom_check_run_arguments_t* run_arguments, iree_allocator_t allocator,
-    iree_string_view_t** out_arguments, iree_host_size_t* out_argument_count) {
-  IREE_ASSERT_ARGUMENT(run_arguments);
-  IREE_ASSERT_ARGUMENT(out_arguments);
-  IREE_ASSERT_ARGUMENT(out_argument_count);
-  *out_arguments = NULL;
-  *out_argument_count = 0;
-
-  iree_host_size_t argument_count = 0;
-  if (!iree_host_size_checked_add(run_arguments->count, 1, &argument_count)) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "RUN: run process argument count overflow");
-  }
-  iree_host_size_t argument_size = 0;
-  if (!iree_host_size_checked_mul(argument_count, sizeof(iree_string_view_t),
-                                  &argument_size)) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "RUN: run process argument array is too large");
-  }
-  iree_string_view_t* arguments = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_allocator_malloc(allocator, argument_size, (void**)&arguments));
-  arguments[0] = input_path;
-  for (iree_host_size_t i = 0; i < run_arguments->count; ++i) {
-    arguments[i + 1] = run_arguments->values[i];
-  }
-  *out_arguments = arguments;
-  *out_argument_count = argument_count;
-  return iree_ok_status();
-}
-
 static void loom_check_run_result_initialize(iree_allocator_t allocator,
                                              loom_check_run_result_t* result) {
   IREE_ASSERT_ARGUMENT(result);
@@ -278,14 +225,59 @@ static void loom_check_run_result_deinitialize(
   *result = (loom_check_run_result_t){0};
 }
 
-static bool loom_check_run_case_has_requirement(
-    const loom_check_case_t* test_case, iree_string_view_t requirement) {
-  for (iree_host_size_t i = 0; i < test_case->requirement_count; ++i) {
-    if (iree_string_view_equal(test_case->requirements[i], requirement)) {
-      return true;
-    }
+iree_status_t loom_check_run_arguments_take_option_value(
+    const loom_check_run_arguments_t* arguments, iree_host_size_t* index,
+    iree_string_view_t option_name, iree_string_view_t* out_value,
+    bool* out_matched) {
+  IREE_ASSERT_ARGUMENT(arguments);
+  IREE_ASSERT_ARGUMENT(index);
+  IREE_ASSERT_ARGUMENT(out_value);
+  IREE_ASSERT_ARGUMENT(out_matched);
+  *out_value = iree_string_view_empty();
+  *out_matched = false;
+
+  const iree_string_view_t argument = arguments->values[*index];
+  if (!iree_string_view_starts_with(argument, IREE_SV("--"))) {
+    return iree_ok_status();
   }
-  return false;
+
+  iree_string_view_t name_with_prefix = iree_string_view_empty();
+  iree_string_view_t value = iree_string_view_empty();
+  iree_string_view_split(argument, '=', &name_with_prefix, &value);
+  iree_string_view_t name =
+      iree_string_view_substr(name_with_prefix, 2, IREE_HOST_SIZE_MAX);
+  if (!iree_string_view_equal(name, option_name)) {
+    return iree_ok_status();
+  }
+
+  *out_matched = true;
+  if (value.data != NULL) {
+    *out_value = value;
+    return iree_ok_status();
+  }
+  if (*index + 1 >= arguments->count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "RUN: run option '--%.*s' requires a value",
+                            (int)option_name.size, option_name.data);
+  }
+  ++(*index);
+  *out_value = arguments->values[*index];
+  return iree_ok_status();
+}
+
+iree_status_t loom_check_run_result_append_status(
+    iree_status_t failure_status, loom_check_run_result_t* result) {
+  IREE_ASSERT_ARGUMENT(result);
+  if (iree_status_is_ok(failure_status)) {
+    return iree_ok_status();
+  }
+  iree_status_t status =
+      iree_string_builder_append_status(&result->stderr_text, failure_status);
+  iree_status_free(failure_status);
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_cstring(&result->stderr_text, "\n");
+  }
+  return status;
 }
 
 static const loom_check_run_provider_t* loom_check_run_lookup_provider(
@@ -346,9 +338,8 @@ static iree_status_t loom_check_run_fail_no_provider(
       loom_check_run_append_provider_names(environment, &result->detail));
   return iree_string_builder_append_cstring(
       &result->detail,
-      "\nUse a target-owned loom-check runner or declare "
-      "'// REQUIRES: iree-run-loom' to use the external compatibility "
-      "runner.\n");
+      "\nUse a target-owned loom-check runner that links the required "
+      "provider.\n");
 }
 
 static iree_status_t loom_check_run_execute_provider(
@@ -371,57 +362,6 @@ static iree_status_t loom_check_run_execute_provider(
       .result = run_result,
   };
   return provider->execute(provider, &request);
-}
-
-static iree_status_t loom_check_run_execute_external(
-    const loom_check_case_t* test_case,
-    const loom_check_environment_t* environment,
-    const loom_check_run_arguments_t* run_arguments, iree_allocator_t allocator,
-    loom_check_run_result_t* run_result) {
-  loom_tool_temp_file_t input_file = {0};
-  iree_string_view_t* process_arguments = NULL;
-  iree_host_size_t process_argument_count = 0;
-  loom_tool_process_result_t process_result = {0};
-
-  iree_status_t status =
-      loom_tool_temp_file_allocate(IREE_SV("loom_run"), &input_file);
-  if (iree_status_is_ok(status)) {
-    status = iree_io_file_contents_write(
-        loom_tool_temp_file_path(&input_file),
-        iree_make_const_byte_span((const uint8_t*)test_case->input.data,
-                                  test_case->input.size),
-        allocator);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_check_run_build_process_arguments(
-        loom_tool_temp_file_path(&input_file), run_arguments, allocator,
-        &process_arguments, &process_argument_count);
-  }
-  if (iree_status_is_ok(status)) {
-    iree_string_view_t executable_path =
-        loom_check_iree_run_loom_path(environment);
-    status = loom_tool_process_run(
-        executable_path, loom_check_process_path_searches_path(executable_path),
-        process_arguments, process_argument_count, allocator, &process_result);
-  }
-  if (iree_status_is_ok(status)) {
-    run_result->exit_code = process_result.exit_code;
-    status = iree_string_builder_append_string(
-        &run_result->stdout_text,
-        iree_make_string_view(process_result.stdout_text.data,
-                              process_result.stdout_text.length));
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_string(
-        &run_result->stderr_text,
-        iree_make_string_view(process_result.stderr_text.data,
-                              process_result.stderr_text.length));
-  }
-
-  loom_tool_process_result_deinitialize(&process_result, allocator);
-  iree_allocator_free(allocator, process_arguments);
-  loom_tool_temp_file_deinitialize(&input_file);
-  return status;
 }
 
 static iree_status_t loom_check_run_append_output(
@@ -479,12 +419,6 @@ iree_status_t loom_check_execute_run(
       status = loom_check_run_execute_provider(
           provider, test_case, filename, environment, &run_arguments.arguments,
           allocator, &run_result);
-      has_run_result = iree_status_is_ok(status);
-    } else if (loom_check_run_case_has_requirement(test_case,
-                                                   IREE_SV("iree-run-loom"))) {
-      status = loom_check_run_execute_external(test_case, environment,
-                                               &run_arguments.arguments,
-                                               allocator, &run_result);
       has_run_result = iree_status_is_ok(status);
     } else {
       status = loom_check_run_fail_no_provider(environment, result);
