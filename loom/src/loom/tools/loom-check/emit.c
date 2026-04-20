@@ -4,7 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "iree/io/vec_stream.h"
 #include "loom/analysis/liveness.h"
 #include "loom/analysis/liveness_json.h"
 #include "loom/codegen/low/allocation.h"
@@ -22,34 +21,21 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
-#include "loom/target/emit/llvmir/bitcode_writer.h"
-#include "loom/target/emit/llvmir/legality.h"
-#include "loom/target/emit/llvmir/lower.h"
-#include "loom/target/emit/llvmir/target_registry.h"
-#include "loom/target/emit/llvmir/text_writer.h"
-#include "loom/target/emit/llvmir/verify.h"
-#include "loom/target/ir_records.h"
 #include "loom/target/module_compiler.h"
 #include "loom/target/presets.h"
-#include "loom/target/tool/llvm.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
 
 typedef enum loom_check_emit_format_e {
-  LOOM_CHECK_EMIT_LLVMIR_TEXT = 0,
-  LOOM_CHECK_EMIT_LLVMIR_BODY_TEXT = 1,
-  LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY = 2,
-  LOOM_CHECK_EMIT_LLVMIR_OBJECT = 3,
-  LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS = 4,
-  LOOM_CHECK_EMIT_LIVENESS_JSON = 5,
-  LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON = 6,
-  LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST = 7,
-  LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST = 8,
-  LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON = 9,
-  LOOM_CHECK_EMIT_LOW_PACKET_JSON = 10,
-  LOOM_CHECK_EMIT_SOURCE_LOW_TEXT = 11,
+  LOOM_CHECK_EMIT_LIVENESS_JSON = 0,
+  LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON = 1,
+  LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST = 2,
+  LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST = 3,
+  LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON = 4,
+  LOOM_CHECK_EMIT_LOW_PACKET_JSON = 5,
+  LOOM_CHECK_EMIT_SOURCE_LOW_TEXT = 6,
 } loom_check_emit_format_t;
 
 typedef enum loom_check_emit_source_low_output_e {
@@ -59,13 +45,28 @@ typedef enum loom_check_emit_source_low_output_e {
 
 #define LOOM_CHECK_LOW_ALLOCATION_MAX_BUDGETS 8
 
+static const iree_string_view_t kLoomCheckEmitCoreTargetNames[] = {
+    IREE_SVL("liveness-json"),
+    IREE_SVL("liveness"),
+    IREE_SVL("low-schedule-json"),
+    IREE_SVL("low-schedule"),
+    IREE_SVL("low-allocation-json"),
+    IREE_SVL("low-allocation"),
+    IREE_SVL("low-packet-json"),
+    IREE_SVL("low-packet"),
+    IREE_SVL("low-descriptor-manifest"),
+    IREE_SVL("low-descriptor-json"),
+    IREE_SVL("target-low-registry-manifest"),
+    IREE_SVL("target-low-registry-json"),
+    IREE_SVL("source-low"),
+    IREE_SVL("source-to-low"),
+};
+
 typedef struct loom_check_emit_request_t {
   // Serialized target form to produce before comparison.
   loom_check_emit_format_t format;
   // Canonical/user-facing emit target name used in diagnostics.
   iree_string_view_t emit_target_name;
-  // Generic target bundle used by legality and LLVMIR profile derivation.
-  const loom_target_bundle_t* target_bundle;
   // Module-local target.bundle symbol name to materialize after parsing.
   iree_string_view_t target_bundle_symbol_name;
   // Module-local function symbol name used by analysis dumps.
@@ -98,13 +99,6 @@ typedef struct loom_check_emit_request_t {
   // Source-low text output form.
   loom_check_emit_source_low_output_t source_low_output;
 } loom_check_emit_request_t;
-
-typedef struct loom_check_emit_byte_buffer_t {
-  // Allocated byte storage owned by this buffer.
-  uint8_t* data;
-  // Number of valid bytes in |data|.
-  iree_host_size_t length;
-} loom_check_emit_byte_buffer_t;
 
 static iree_status_t loom_check_emit_parse_low_allocation_budget(
     iree_string_view_t token, loom_check_emit_request_t* request) {
@@ -404,12 +398,72 @@ static iree_status_t loom_check_emit_parse_low_packet_options(
   return iree_ok_status();
 }
 
+static void loom_check_emit_split_target(
+    iree_string_view_t emit_target, iree_string_view_t* out_target_name,
+    iree_string_view_t* out_target_options) {
+  emit_target = iree_string_view_trim(emit_target);
+  iree_string_view_split(emit_target, ' ', out_target_name, out_target_options);
+  *out_target_name = iree_string_view_trim(*out_target_name);
+  *out_target_options = iree_string_view_trim(*out_target_options);
+}
+
+static bool loom_check_emit_core_target_matches(
+    iree_string_view_t target_name) {
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kLoomCheckEmitCoreTargetNames); ++i) {
+    if (iree_string_view_equal(target_name, kLoomCheckEmitCoreTargetNames[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_check_emit_append_supported_target_names(
+    const loom_check_environment_t* environment,
+    iree_string_builder_t* output) {
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kLoomCheckEmitCoreTargetNames); ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, ", "));
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+        output, kLoomCheckEmitCoreTargetNames[i]));
+  }
+  if (environment == NULL || environment->emit_providers.providers == NULL) {
+    return iree_ok_status();
+  }
+  for (iree_host_size_t i = 0; i < environment->emit_providers.provider_count;
+       ++i) {
+    const loom_check_emit_provider_t* provider =
+        environment->emit_providers.providers[i];
+    if (provider == NULL || provider->append_names == NULL) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, ", "));
+    IREE_RETURN_IF_ERROR(provider->append_names(provider, output));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_emit_fail_unknown_target(
+    const loom_check_environment_t* environment, iree_string_view_t target_name,
+    loom_check_result_t* result) {
+  result->raw_outcome = LOOM_CHECK_FAIL;
+  result->final_outcome = LOOM_CHECK_FAIL;
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      &result->detail,
+      "unknown emit target '%.*s'; supported emit targets are ",
+      (int)target_name.size, target_name.data));
+  IREE_RETURN_IF_ERROR(loom_check_emit_append_supported_target_names(
+      environment, &result->detail));
+  return iree_string_builder_append_cstring(&result->detail, "\n");
+}
+
 static iree_status_t loom_check_emit_parse_request(
     iree_string_view_t emit_target, loom_check_emit_request_t* out_request) {
   *out_request = (loom_check_emit_request_t){
-      .format = LOOM_CHECK_EMIT_LLVMIR_TEXT,
+      .format = LOOM_CHECK_EMIT_LIVENESS_JSON,
       .emit_target_name = IREE_SV("emit"),
-      .target_bundle = NULL,
       .target_bundle_symbol_name = iree_string_view_empty(),
       .analysis_symbol_name = iree_string_view_empty(),
       .low_descriptor_set = NULL,
@@ -425,33 +479,15 @@ static iree_status_t loom_check_emit_parse_request(
       .has_low_schedule_strategy_option = false,
       .source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_MODULE,
   };
-  emit_target = iree_string_view_trim(emit_target);
   iree_string_view_t target_name = iree_string_view_empty();
   iree_string_view_t profile_name = iree_string_view_empty();
-  iree_string_view_split(emit_target, ' ', &target_name, &profile_name);
-  target_name = iree_string_view_trim(target_name);
-  profile_name = iree_string_view_trim(profile_name);
+  loom_check_emit_split_target(emit_target, &target_name, &profile_name);
   if (!iree_string_view_is_empty(target_name)) {
     out_request->emit_target_name = target_name;
   }
 
-  if (iree_string_view_equal(target_name, IREE_SV("llvmir")) ||
-      iree_string_view_equal(target_name, IREE_SV("llvmir-text"))) {
-    out_request->format = LOOM_CHECK_EMIT_LLVMIR_TEXT;
-  } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-body")) ||
-             iree_string_view_equal(target_name, IREE_SV("llvmir-text-body"))) {
-    out_request->format = LOOM_CHECK_EMIT_LLVMIR_BODY_TEXT;
-  } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-bitcode"))) {
-    out_request->format = LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY;
-  } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-object"))) {
-    out_request->format = LOOM_CHECK_EMIT_LLVMIR_OBJECT;
-  } else if (iree_string_view_equal(target_name,
-                                    IREE_SV("llvmir-assembly-mnemonics")) ||
-             iree_string_view_equal(target_name,
-                                    IREE_SV("llvmir-asm-mnemonics"))) {
-    out_request->format = LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS;
-  } else if (iree_string_view_equal(target_name, IREE_SV("liveness-json")) ||
-             iree_string_view_equal(target_name, IREE_SV("liveness"))) {
+  if (iree_string_view_equal(target_name, IREE_SV("liveness-json")) ||
+      iree_string_view_equal(target_name, IREE_SV("liveness"))) {
     if (!iree_string_view_starts_with(profile_name, IREE_SV("@"))) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "liveness-json requires a function symbol name");
@@ -581,19 +617,6 @@ static iree_status_t loom_check_emit_parse_request(
                             "unknown emit target '%.*s'", (int)target_name.size,
                             target_name.data);
   }
-  if (iree_string_view_starts_with(profile_name, IREE_SV("@"))) {
-    out_request->target_bundle_symbol_name =
-        iree_string_view_substr(profile_name, 1, IREE_HOST_SIZE_MAX);
-    if (iree_string_view_is_empty(out_request->target_bundle_symbol_name)) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "target bundle symbol name is required");
-    }
-    return iree_ok_status();
-  }
-  loom_llvmir_target_registry_t target_registry;
-  loom_llvmir_target_registry_initialize(&target_registry);
-  return loom_llvmir_target_registry_lookup_bundle(
-      &target_registry, profile_name, &out_request->target_bundle);
 }
 
 static iree_string_view_t loom_check_emit_consume_line(
@@ -744,285 +767,6 @@ static iree_status_t loom_check_emit_finish_diagnostics_and_compare_output(
     return iree_ok_status();
   }
   return loom_check_emit_compare_output(test_case, allocator, result);
-}
-
-static iree_status_t loom_check_emit_strip_llvmir_comments(
-    iree_string_view_t input, iree_string_builder_t* output) {
-  iree_string_view_t remaining = input;
-  while (!iree_string_view_is_empty(remaining)) {
-    iree_string_view_t line = loom_check_emit_consume_line(&remaining);
-    iree_string_view_t trimmed = iree_string_view_trim(line);
-    if (iree_string_view_starts_with(trimmed, IREE_SV(";"))) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, line));
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
-  }
-  return iree_ok_status();
-}
-
-static bool loom_check_emit_is_llvmir_module_header_line(
-    iree_string_view_t line) {
-  line = iree_string_view_trim(line);
-  return iree_string_view_starts_with(line, IREE_SV("source_filename =")) ||
-         iree_string_view_starts_with(line, IREE_SV("target datalayout =")) ||
-         iree_string_view_starts_with(line, IREE_SV("target triple ="));
-}
-
-static iree_status_t loom_check_emit_strip_llvmir_module_header(
-    iree_string_view_t input, iree_string_builder_t* output) {
-  bool stripped_header = false;
-  bool emitted_body_line = false;
-  iree_string_view_t remaining = input;
-  while (!iree_string_view_is_empty(remaining)) {
-    iree_string_view_t line = loom_check_emit_consume_line(&remaining);
-    if (loom_check_emit_is_llvmir_module_header_line(line)) {
-      stripped_header = true;
-      continue;
-    }
-    if (stripped_header && !emitted_body_line &&
-        iree_string_view_is_empty(iree_string_view_trim(line))) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, line));
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
-    emitted_body_line = true;
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_check_emit_write_llvmir_text(
-    const loom_llvmir_module_t* lowered_module, loom_check_result_t* result) {
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(&result->actual_output, &stream);
-  return loom_llvmir_text_write_module(lowered_module, &stream);
-}
-
-static iree_status_t loom_check_emit_write_llvmir_body_text(
-    const loom_llvmir_module_t* lowered_module, iree_allocator_t allocator,
-    loom_check_result_t* result) {
-  iree_string_builder_t module_text;
-  iree_string_builder_initialize(allocator, &module_text);
-
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(&module_text, &stream);
-  iree_status_t status = loom_llvmir_text_write_module(lowered_module, &stream);
-  if (iree_status_is_ok(status)) {
-    status = loom_check_emit_strip_llvmir_module_header(
-        iree_string_builder_view(&module_text), &result->actual_output);
-  }
-
-  iree_string_builder_deinitialize(&module_text);
-  return status;
-}
-
-static void loom_check_emit_byte_buffer_deinitialize(
-    loom_check_emit_byte_buffer_t* buffer, iree_allocator_t allocator) {
-  iree_allocator_free(allocator, buffer->data);
-  *buffer = (loom_check_emit_byte_buffer_t){0};
-}
-
-static iree_status_t loom_check_emit_write_llvmir_bitcode_bytes(
-    const loom_llvmir_module_t* lowered_module, iree_allocator_t allocator,
-    loom_check_emit_byte_buffer_t* out_bitcode) {
-  *out_bitcode = (loom_check_emit_byte_buffer_t){0};
-  iree_io_stream_t* bitcode_stream = NULL;
-  iree_status_t status = iree_io_vec_stream_create(
-      IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_WRITABLE |
-          IREE_IO_STREAM_MODE_SEEKABLE,
-      4096, allocator, &bitcode_stream);
-
-  uint8_t* bitcode_data = NULL;
-  iree_host_size_t bitcode_length = 0;
-  if (iree_status_is_ok(status)) {
-    status = loom_llvmir_bitcode_write_module(lowered_module, bitcode_stream);
-  }
-  if (iree_status_is_ok(status)) {
-    iree_io_stream_pos_t stream_length = iree_io_stream_length(bitcode_stream);
-    if (stream_length <= 0 ||
-        (uint64_t)stream_length > (uint64_t)IREE_HOST_SIZE_MAX) {
-      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "LLVM bitcode output length is invalid");
-    } else {
-      bitcode_length = (iree_host_size_t)stream_length;
-    }
-  }
-  if (iree_status_is_ok(status)) {
-    status =
-        iree_allocator_malloc(allocator, bitcode_length, (void**)&bitcode_data);
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_io_stream_seek(bitcode_stream, IREE_IO_STREAM_SEEK_SET, 0);
-  }
-  if (iree_status_is_ok(status)) {
-    status =
-        iree_io_stream_read(bitcode_stream, bitcode_length, bitcode_data, NULL);
-  }
-  if (iree_status_is_ok(status)) {
-    *out_bitcode = (loom_check_emit_byte_buffer_t){
-        .data = bitcode_data,
-        .length = bitcode_length,
-    };
-    bitcode_data = NULL;
-  }
-
-  iree_allocator_free(allocator, bitcode_data);
-  iree_io_stream_release(bitcode_stream);
-  return status;
-}
-
-static iree_status_t loom_check_emit_write_llvmir_bitcode_disassembly(
-    const loom_llvmir_module_t* lowered_module, iree_allocator_t allocator,
-    loom_check_result_t* result) {
-  loom_check_emit_byte_buffer_t bitcode = {0};
-  iree_status_t status = loom_check_emit_write_llvmir_bitcode_bytes(
-      lowered_module, allocator, &bitcode);
-
-  loom_llvm_tool_output_t disassembly = {0};
-  if (iree_status_is_ok(status)) {
-    loom_llvm_toolchain_t toolchain;
-    loom_llvm_toolchain_initialize_from_environment(&toolchain);
-    status = loom_llvm_tool_disassemble_bitcode(
-        &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
-        allocator, &disassembly);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_check_emit_strip_llvmir_comments(
-        iree_make_string_view(disassembly.data, disassembly.length),
-        &result->actual_output);
-  }
-
-  loom_llvm_tool_output_deinitialize(&disassembly, allocator);
-  loom_check_emit_byte_buffer_deinitialize(&bitcode, allocator);
-  return status;
-}
-
-static iree_status_t loom_check_emit_write_llvmir_object(
-    const loom_llvmir_module_t* lowered_module,
-    const loom_llvmir_target_profile_t* profile, iree_allocator_t allocator,
-    loom_check_result_t* result) {
-  loom_check_emit_byte_buffer_t bitcode = {0};
-  iree_status_t status = loom_check_emit_write_llvmir_bitcode_bytes(
-      lowered_module, allocator, &bitcode);
-
-  loom_llvm_tool_output_t object = {0};
-  if (iree_status_is_ok(status)) {
-    loom_llvm_toolchain_t toolchain;
-    loom_llvm_toolchain_initialize_from_environment(&toolchain);
-    loom_llvmir_target_profile_llc_arguments_t llc_arguments = {0};
-    status = loom_llvmir_target_profile_llc_arguments(profile, &llc_arguments);
-    if (iree_status_is_ok(status)) {
-      status = loom_llvm_tool_compile_object(
-          &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
-          llc_arguments.values, llc_arguments.count, allocator, &object);
-    }
-  }
-  if (iree_status_is_ok(status) && object.length == 0) {
-    status =
-        iree_make_status(IREE_STATUS_DATA_LOSS, "LLVM object output is empty");
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_string_builder_append_format(
-        &result->actual_output, "object emitted: %.*s\n",
-        (int)profile->name.size, profile->name.data);
-  }
-
-  loom_llvm_tool_output_deinitialize(&object, allocator);
-  loom_check_emit_byte_buffer_deinitialize(&bitcode, allocator);
-  return status;
-}
-
-static bool loom_check_emit_assembly_line_is_label(iree_string_view_t line) {
-  return line.size > 0 && line.data[line.size - 1] == ':';
-}
-
-static iree_string_view_t loom_check_emit_strip_assembly_comment(
-    iree_string_view_t line) {
-  iree_host_size_t hash_position = iree_string_view_find(line, IREE_SV("#"), 0);
-  iree_host_size_t semicolon_position =
-      iree_string_view_find(line, IREE_SV(";"), 0);
-  iree_host_size_t comment_position = IREE_STRING_VIEW_NPOS;
-  if (hash_position != IREE_STRING_VIEW_NPOS) {
-    comment_position = hash_position;
-  }
-  if (semicolon_position != IREE_STRING_VIEW_NPOS &&
-      (comment_position == IREE_STRING_VIEW_NPOS ||
-       semicolon_position < comment_position)) {
-    comment_position = semicolon_position;
-  }
-  if (comment_position == IREE_STRING_VIEW_NPOS) {
-    return line;
-  }
-  return iree_string_view_substr(line, 0, comment_position);
-}
-
-static iree_status_t loom_check_emit_write_assembly_mnemonics(
-    iree_string_view_t assembly, iree_string_builder_t* output) {
-  iree_string_view_t remaining = assembly;
-  while (!iree_string_view_is_empty(remaining)) {
-    iree_string_view_t line = loom_check_emit_strip_assembly_comment(
-        loom_check_emit_consume_line(&remaining));
-    line = iree_string_view_trim(line);
-    if (iree_string_view_is_empty(line) ||
-        iree_string_view_starts_with_char(line, '.') ||
-        iree_string_view_starts_with_char(line, '#') ||
-        iree_string_view_starts_with_char(line, ';') ||
-        loom_check_emit_assembly_line_is_label(line)) {
-      continue;
-    }
-    while (iree_string_view_starts_with_char(line, '{')) {
-      iree_host_size_t closing_brace =
-          iree_string_view_find(line, IREE_SV("}"), 0);
-      if (closing_brace == IREE_STRING_VIEW_NPOS) {
-        break;
-      }
-      line = iree_string_view_trim(
-          iree_string_view_substr(line, closing_brace + 1, IREE_HOST_SIZE_MAX));
-    }
-    if (iree_string_view_is_empty(line)) {
-      continue;
-    }
-    iree_host_size_t mnemonic_length = 0;
-    while (mnemonic_length < line.size && line.data[mnemonic_length] != ' ' &&
-           line.data[mnemonic_length] != '\t') {
-      ++mnemonic_length;
-    }
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
-        output, iree_string_view_substr(line, 0, mnemonic_length)));
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_check_emit_write_llvmir_assembly_mnemonics(
-    const loom_llvmir_module_t* lowered_module,
-    const loom_llvmir_target_profile_t* profile, iree_allocator_t allocator,
-    loom_check_result_t* result) {
-  loom_check_emit_byte_buffer_t bitcode = {0};
-  iree_status_t status = loom_check_emit_write_llvmir_bitcode_bytes(
-      lowered_module, allocator, &bitcode);
-
-  loom_llvm_tool_output_t assembly = {0};
-  if (iree_status_is_ok(status)) {
-    loom_llvm_toolchain_t toolchain;
-    loom_llvm_toolchain_initialize_from_environment(&toolchain);
-    loom_llvmir_target_profile_llc_arguments_t llc_arguments = {0};
-    status = loom_llvmir_target_profile_llc_arguments(profile, &llc_arguments);
-    if (iree_status_is_ok(status)) {
-      status = loom_llvm_tool_compile_assembly(
-          &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
-          llc_arguments.values, llc_arguments.count, allocator, &assembly);
-    }
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_check_emit_write_assembly_mnemonics(
-        iree_make_string_view(assembly.data, assembly.length),
-        &result->actual_output);
-  }
-
-  loom_llvm_tool_output_deinitialize(&assembly, allocator);
-  loom_check_emit_byte_buffer_deinitialize(&bitcode, allocator);
-  return status;
 }
 
 static iree_status_t loom_check_emit_find_func_like(
@@ -1289,15 +1033,37 @@ iree_status_t loom_check_execute_emit(
       .result = result,
   };
 
-  loom_check_emit_request_t request;
-  iree_status_t status =
-      loom_check_emit_parse_request(test_case->emit_target, &request);
-  if (!iree_status_is_ok(status)) {
-    status = loom_check_emit_finish_status_failure(
-        status, &diagnostic_collector, test_case, case_index, report, filename,
-        request.emit_target_name, allocator, result);
+  iree_string_view_t provider_target_name = iree_string_view_empty();
+  iree_string_view_t provider_target_options = iree_string_view_empty();
+  loom_check_emit_split_target(test_case->emit_target, &provider_target_name,
+                               &provider_target_options);
+  const loom_check_emit_provider_t* provider =
+      loom_check_environment_lookup_emit_provider(environment,
+                                                  provider_target_name);
+  iree_status_t status = iree_ok_status();
+  if (provider == NULL &&
+      !loom_check_emit_core_target_matches(provider_target_name)) {
+    status = loom_check_emit_fail_unknown_target(environment,
+                                                 provider_target_name, result);
     iree_arena_deinitialize(&diagnostic_arena);
     return status;
+  }
+
+  loom_check_emit_request_t request;
+  if (provider == NULL) {
+    status = loom_check_emit_parse_request(test_case->emit_target, &request);
+    if (!iree_status_is_ok(status)) {
+      status = loom_check_emit_finish_status_failure(
+          status, &diagnostic_collector, test_case, case_index, report,
+          filename, request.emit_target_name, allocator, result);
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+  } else {
+    request = (loom_check_emit_request_t){
+        .format = LOOM_CHECK_EMIT_LIVENESS_JSON,
+        .emit_target_name = provider_target_name,
+    };
   }
   if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST ||
       request.format == LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST) {
@@ -1398,6 +1164,68 @@ iree_status_t loom_check_execute_emit(
     status = loom_check_emit_finish_status_failure(
         status, &diagnostic_collector, test_case, case_index, report, filename,
         request.emit_target_name, allocator, result);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
+
+  if (provider != NULL) {
+    if (provider->execute == NULL) {
+      status = iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                                "emit provider '%.*s' has no execute callback",
+                                (int)provider->name.size, provider->name.data);
+      loom_module_free(module);
+      iree_string_builder_deinitialize(&stripped_input);
+      status = loom_check_emit_finish_status_failure(
+          status, &diagnostic_collector, test_case, case_index, report,
+          filename, request.emit_target_name, allocator, result);
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+    const loom_check_emit_provider_request_t provider_request = {
+        .emit_target = test_case->emit_target,
+        .target_name = provider_target_name,
+        .target_options = provider_target_options,
+        .filename = filename,
+        .test_case = test_case,
+        .environment = environment,
+        .module = module,
+        .low_registry = &low_registry,
+        .diagnostic_collector = &diagnostic_collector,
+        .case_arena = &diagnostic_arena,
+        .host_allocator = allocator,
+        .result = result,
+    };
+    status = provider->execute(provider, &provider_request);
+    if (iree_status_is_ok(status)) {
+      result->has_actual_output = true;
+    }
+    loom_module_free(module);
+    diagnostic_collector.module = NULL;
+    if (!iree_status_is_ok(status)) {
+      if (diagnostic_collector.count > 0) {
+        iree_status_free(status);
+        status = loom_check_diagnostic_collector_finish(
+            &diagnostic_collector, test_case, case_index, report, allocator,
+            result);
+      } else {
+        status = loom_check_emit_finish_status_failure(
+            status, &diagnostic_collector, test_case, case_index, report,
+            filename, request.emit_target_name, allocator, result);
+      }
+      iree_string_builder_deinitialize(&stripped_input);
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+    if (test_case->annotation_count > 0 || diagnostic_collector.count > 0) {
+      status = loom_check_emit_finish_diagnostics_and_compare_output(
+          &diagnostic_collector, test_case, case_index, report, allocator,
+          result);
+      iree_string_builder_deinitialize(&stripped_input);
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+    status = loom_check_emit_compare_output(test_case, allocator, result);
+    iree_string_builder_deinitialize(&stripped_input);
     iree_arena_deinitialize(&diagnostic_arena);
     return status;
   }
@@ -1610,166 +1438,15 @@ iree_status_t loom_check_execute_emit(
   }
   iree_string_builder_deinitialize(&stripped_input);
 
-  loom_target_ir_bundle_storage_t target_bundle_storage = {0};
-  if (!iree_string_view_is_empty(request.target_bundle_symbol_name)) {
-    status = loom_target_ir_bundle_from_symbol_name(
-        module, request.target_bundle_symbol_name, &target_bundle_storage);
-    if (!iree_status_is_ok(status)) {
-      loom_module_free(module);
-      status = loom_check_emit_finish_status_failure(
-          status, &diagnostic_collector, test_case, case_index, report,
-          filename, request.emit_target_name, allocator, result);
-      iree_arena_deinitialize(&diagnostic_arena);
-      return status;
-    }
-    request.target_bundle = &target_bundle_storage.bundle;
-  }
-
-  loom_llvmir_target_registry_t target_registry;
-  loom_llvmir_target_registry_initialize(&target_registry);
-  loom_llvmir_target_legality_provider_list_t legality_providers;
-  status = loom_llvmir_target_registry_select_legality_providers(
-      &target_registry, request.target_bundle, &legality_providers);
-  if (!iree_status_is_ok(status)) {
-    loom_module_free(module);
-    iree_arena_deinitialize(&diagnostic_arena);
-    return status;
-  }
-  loom_llvmir_target_legality_options_t legality_options = {
-      .snapshot = request.target_bundle->snapshot,
-      .export_plan = request.target_bundle->export_plan,
-      .config = request.target_bundle->config,
-      .providers = legality_providers.providers,
-      .provider_count = legality_providers.provider_count,
-  };
-  status = loom_llvmir_verify_target_legality(module, &legality_options, NULL);
-  if (!iree_status_is_ok(status)) {
-    loom_module_free(module);
-    status = loom_check_emit_finish_status_failure(
-        status, &diagnostic_collector, test_case, case_index, report, filename,
-        request.emit_target_name, allocator, result);
-    iree_arena_deinitialize(&diagnostic_arena);
-    return status;
-  }
-
-  loom_llvmir_target_profile_storage_t profile_storage;
-  status = loom_llvmir_target_profile_storage_initialize_from_bundle(
-      request.target_bundle, &profile_storage);
-  if (!iree_status_is_ok(status)) {
-    loom_module_free(module);
-    status = loom_check_emit_finish_status_failure(
-        status, &diagnostic_collector, test_case, case_index, report, filename,
-        request.emit_target_name, allocator, result);
-    iree_arena_deinitialize(&diagnostic_arena);
-    return status;
-  }
-  const loom_llvmir_target_profile_t* profile = &profile_storage.profile;
-  loom_llvmir_lowering_provider_list_t lowering_providers;
-  status = loom_llvmir_target_registry_select_lowering_providers(
-      &target_registry, profile, &lowering_providers);
-  if (!iree_status_is_ok(status)) {
-    loom_module_free(module);
-    iree_arena_deinitialize(&diagnostic_arena);
-    return status;
-  }
-  loom_llvmir_lowering_options_t options = {
-      .target_profile = profile,
-      .source_name = filename,
-      .providers = lowering_providers.providers,
-      .provider_count = lowering_providers.provider_count,
-  };
-  loom_llvmir_module_t* lowered_module = NULL;
-  status =
-      loom_llvmir_lower_module(module, &options, allocator, &lowered_module);
   loom_module_free(module);
   diagnostic_collector.module = NULL;
-  if (!iree_status_is_ok(status)) {
-    loom_llvmir_module_free(lowered_module);
-    status = loom_check_emit_finish_status_failure(
-        status, &diagnostic_collector, test_case, case_index, report, filename,
-        request.emit_target_name, allocator, result);
-    iree_arena_deinitialize(&diagnostic_arena);
-    return status;
-  }
-
-  status = loom_llvmir_verify_module(lowered_module);
-  if (iree_status_is_ok(status)) {
-    switch (request.format) {
-      case LOOM_CHECK_EMIT_LLVMIR_TEXT:
-        status = loom_check_emit_write_llvmir_text(lowered_module, result);
-        break;
-      case LOOM_CHECK_EMIT_LLVMIR_BODY_TEXT:
-        status = loom_check_emit_write_llvmir_body_text(lowered_module,
-                                                        allocator, result);
-        break;
-      case LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY:
-        status = loom_check_emit_write_llvmir_bitcode_disassembly(
-            lowered_module, allocator, result);
-        break;
-      case LOOM_CHECK_EMIT_LLVMIR_OBJECT:
-        status = loom_check_emit_write_llvmir_object(lowered_module, profile,
-                                                     allocator, result);
-        break;
-      case LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS:
-        status = loom_check_emit_write_llvmir_assembly_mnemonics(
-            lowered_module, profile, allocator, result);
-        break;
-      case LOOM_CHECK_EMIT_LIVENESS_JSON:
-        status = iree_make_status(
-            IREE_STATUS_INTERNAL,
-            "liveness JSON emit should bypass LLVMIR lowering");
-        break;
-      case LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON:
-        status = iree_make_status(
-            IREE_STATUS_INTERNAL,
-            "low schedule JSON emit should bypass LLVMIR lowering");
-        break;
-      case LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON:
-        status = iree_make_status(
-            IREE_STATUS_INTERNAL,
-            "low allocation JSON emit should bypass LLVMIR lowering");
-        break;
-      case LOOM_CHECK_EMIT_LOW_PACKET_JSON:
-        status = iree_make_status(
-            IREE_STATUS_INTERNAL,
-            "low packet JSON emit should bypass LLVMIR lowering");
-        break;
-      case LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST:
-        status = iree_make_status(
-            IREE_STATUS_INTERNAL,
-            "low descriptor manifest emit should bypass LLVMIR lowering");
-        break;
-      case LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST:
-        status = iree_make_status(
-            IREE_STATUS_INTERNAL,
-            "target-low registry manifest emit should bypass LLVMIR lowering");
-        break;
-      case LOOM_CHECK_EMIT_SOURCE_LOW_TEXT:
-        status =
-            iree_make_status(IREE_STATUS_INTERNAL,
-                             "source-low emit should bypass LLVMIR lowering");
-        break;
-    }
-  }
-  loom_llvmir_module_free(lowered_module);
-  if (!iree_status_is_ok(status)) {
-    status = loom_check_emit_finish_status_failure(
-        status, &diagnostic_collector, test_case, case_index, report, filename,
-        request.emit_target_name, allocator, result);
-    iree_arena_deinitialize(&diagnostic_arena);
-    return status;
-  }
-  result->has_actual_output = true;
-
-  if (test_case->annotation_count > 0) {
-    status = loom_check_emit_finish_diagnostics_and_compare_output(
-        &diagnostic_collector, test_case, case_index, report, allocator,
-        result);
-    iree_arena_deinitialize(&diagnostic_arena);
-    return status;
-  }
-
-  status = loom_check_emit_compare_output(test_case, allocator, result);
+  status = loom_check_emit_finish_status_failure(
+      iree_make_status(IREE_STATUS_INTERNAL,
+                       "core emit target '%.*s' was parsed but not handled",
+                       (int)request.emit_target_name.size,
+                       request.emit_target_name.data),
+      &diagnostic_collector, test_case, case_index, report, filename,
+      request.emit_target_name, allocator, result);
   iree_arena_deinitialize(&diagnostic_arena);
   return status;
 }

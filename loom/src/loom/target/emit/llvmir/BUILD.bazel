@@ -7,8 +7,13 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_assert_no_dependency",
+    "loom_cc_binary",
     "loom_cc_library",
     "loom_cc_test",
+)
+load(
+    "//loom/build_tools/bazel:loom_check.bzl",
+    "loom_check_test_suite",
 )
 
 package(
@@ -55,6 +60,54 @@ iree_assert_no_dependency(
     name = "target_low_descriptor_registry_no_llvmir_dep",
     dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
     target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_execute_no_llvmir_core_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:core",
+    target = "//loom/src/loom/tools/loom-check:execute",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_execute_no_llvmir_target_registry_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:target_registry",
+    target = "//loom/src/loom/tools/loom-check:execute",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_execute_no_llvmir_provider_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:loom_check",
+    target = "//loom/src/loom/tools/loom-check:execute",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_execute_no_llvm_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/tools/loom-check:execute",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_main_no_llvmir_core_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:core",
+    target = "//loom/src/loom/tools/loom-check:main",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_main_no_llvmir_target_registry_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:target_registry",
+    target = "//loom/src/loom/tools/loom-check:main",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_main_no_llvmir_provider_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:loom_check",
+    target = "//loom/src/loom/tools/loom-check:main",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_main_no_llvm_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/tools/loom-check:main",
 )
 
 iree_assert_no_dependency(
@@ -302,6 +355,50 @@ loom_cc_library(
         "//loom/src/loom/target/emit/llvmir/x86:target_env",
         "//runtime/src/iree/base",
     ],
+)
+
+loom_cc_library(
+    name = "loom_check",
+    srcs = ["loom_check.c"],
+    hdrs = ["loom_check.h"],
+    deps = [
+        ":core",
+        ":legality",
+        ":lower",
+        ":target_registry",
+        "//loom/src/loom/target:ir_records",
+        "//loom/src/loom/target/tool:llvm",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/io:stream",
+    ],
+)
+
+loom_cc_binary(
+    name = "loom-check",
+    srcs = ["loom-check.c"],
+    deps = [
+        ":loom_check",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/tools/loom-check:main",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_check_test_suite(
+    name = "file_test",
+    srcs = [
+        "test/emit.loom-test",
+        "test/llvmir/intrinsics.loom-test",
+        "test/llvmir/lowering_errors.loom-test",
+        "test/llvmir/memory.loom-test",
+        "test/llvmir/packed_dot.loom-test",
+        "test/llvmir/scalar_index.loom-test",
+        "test/llvmir/toolchain.loom-test",
+        "test/llvmir/vector_core.loom-test",
+    ],
+    runner = ":loom-check",
 )
 
 loom_cc_test(

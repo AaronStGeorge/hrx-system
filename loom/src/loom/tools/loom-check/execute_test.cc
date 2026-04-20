@@ -72,6 +72,39 @@ const loom_check_requirement_provider_t* const kTestRequirementProviders[] = {
     &kTestRequirementProvider,
 };
 
+bool TestEmitProviderMatches(const loom_check_emit_provider_t* provider,
+                             iree_string_view_t target_name) {
+  (void)provider;
+  return iree_string_view_equal(target_name, IREE_SV("fake-emit"));
+}
+
+iree_status_t TestEmitProviderExecute(
+    const loom_check_emit_provider_t* provider,
+    const loom_check_emit_provider_request_t* request) {
+  (void)provider;
+  return iree_string_builder_append_cstring(&request->result->actual_output,
+                                            "fake emit\n");
+}
+
+iree_status_t TestEmitProviderAppendNames(
+    const loom_check_emit_provider_t* provider,
+    iree_string_builder_t* builder) {
+  (void)provider;
+  return iree_string_builder_append_cstring(builder, "fake-emit");
+}
+
+const loom_check_emit_provider_t kTestEmitProvider = {
+    .name = IREE_SVL("test"),
+    .match = TestEmitProviderMatches,
+    .check_requirements = nullptr,
+    .execute = TestEmitProviderExecute,
+    .append_names = TestEmitProviderAppendNames,
+};
+
+const loom_check_emit_provider_t* const kTestEmitProviders[] = {
+    &kTestEmitProvider,
+};
+
 const loom_check_environment_t kExecuteTestEnvironment = {
     .register_context =
         {
@@ -95,6 +128,11 @@ const loom_check_environment_t kExecuteTestProviderEnvironment = {
         {
             .fn = InitializeTestLowDescriptorRegistry,
             .user_data = nullptr,
+        },
+    .emit_providers =
+        {
+            .providers = kTestEmitProviders,
+            .provider_count = IREE_ARRAYSIZE(kTestEmitProviders),
         },
     .requirement_providers =
         {
@@ -954,8 +992,9 @@ TEST_F(ExecuteTest, UnknownRequiresRequirementFailsLoudly) {
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_NE(DetailString(result).find("unknown REQUIRES requirement"),
             std::string::npos);
-  EXPECT_NE(DetailString(result).find("llvm-as"), std::string::npos);
-  EXPECT_NE(DetailString(result).find("llvm-objdump"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("iree-run-loom"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("loom-check-test-unavailable"),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -990,6 +1029,35 @@ TEST_F(ExecuteTest, UnknownRequiresListsProviderRequirements) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, EmitProviderCanOwnTarget) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirstWithEnvironment("// RUN: emit fake-emit\n"
+                                  "func.def @f() {\n"
+                                  "}\n"
+                                  "// ----\n"
+                                  "fake emit\n",
+                                  &kExecuteTestProviderEnvironment, &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_PASS);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, UnknownEmitTargetListsProviderTargets) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirstWithEnvironment("// RUN: emit definitely-not-real\n"
+                                  "this.is.not.valid.ir\n",
+                                  &kExecuteTestProviderEnvironment, &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("unknown emit target"),
+            std::string::npos);
+  EXPECT_NE(DetailString(result).find("low-schedule-json"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("fake-emit"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, XfailDoesNotHideRequiresHarnessFailure) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
@@ -1000,80 +1068,6 @@ TEST_F(ExecuteTest, XfailDoesNotHideRequiresHarnessFailure) {
                    &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitBitcodeRequiresLlvmDisDeclaration) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit llvmir-bitcode\n"
-                   "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
-                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
-                   "  func.return %sum : i32\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("llvm-dis"), std::string::npos);
-  EXPECT_NE(DetailString(result).find("REQUIRES"), std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitObjectRequiresLlcDeclaration) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit llvmir-object @target\n"
-                   "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
-                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
-                   "  func.return %sum : i32\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("llc"), std::string::npos);
-  EXPECT_NE(DetailString(result).find("REQUIRES"), std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitAssemblyMnemonicsRequiresLlcDeclaration) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit llvmir-assembly-mnemonics @target\n"
-                   "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
-                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
-                   "  func.return %sum : i32\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("llc"), std::string::npos);
-  EXPECT_NE(DetailString(result).find("REQUIRES"), std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitModeReportsLoweringFailure) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit llvmir\n"
-                   "func.def @bad() -> (i32) {\n"
-                   "  %poison = scalar.poison : i32\n"
-                   "  func.return %poison : i32\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("UNIMPLEMENTED"), std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitModeReportsUnknownLlvmProfile) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit llvmir spirv-vulkan\n"
-                   "func.def @ok() {\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

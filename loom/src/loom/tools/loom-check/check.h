@@ -26,10 +26,7 @@
 //   // RUN: verify          Parse -> verify -> match annotations.
 //   // RUN: pass <pipeline> Parse -> run pipeline -> print -> compare.
 //   // RUN: format <target> Parse -> convert format -> print -> compare.
-//   // RUN: emit <target>   Parse -> lower to target output -> compare.
-//                           Targets include llvmir, llvmir-body,
-//                           llvmir-bitcode, llvmir-object, and
-//                           llvmir-assembly-mnemonics. Non-IR descriptor
+//   // RUN: emit <target>   Parse -> lower to target output -> compare. Core
 //                           targets include low-descriptor-manifest and
 //                           target-low-registry-manifest. Analysis targets
 //                           include liveness-json @function,
@@ -39,8 +36,9 @@
 //                           low-allocation-json @function
 //                           [diagnostics=...] [output=json|none]
 //                           [class=units...].
-//                           Source lowering tests use
-//                           source-low @target [output=module|low].
+//                           Source lowering tests use source-low @target
+//                           [output=module|low]. Linked providers may add
+//                           target-specific emit forms.
 //                           Low schedule diagnostics are one of none,
 //                           pressure, resources, hazards, candidates, model,
 //                           or all.
@@ -220,7 +218,7 @@ typedef struct loom_check_case_t {
   iree_string_view_t pipeline;
   // For FORMAT mode: target format name (e.g. "bytecode").
   iree_string_view_t format_target;
-  // For EMIT mode: target emission request (e.g. "llvmir target-profile").
+  // For EMIT mode: target emission request (e.g. "target-form profile").
   iree_string_view_t emit_target;
   // For RUN mode: iree-run-loom command-line arguments forwarded after the
   // temporary input file path.

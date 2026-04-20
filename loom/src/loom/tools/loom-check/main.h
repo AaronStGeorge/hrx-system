@@ -39,6 +39,10 @@ typedef struct loom_check_production_runner_t {
   // Function that initializes the source-to-low lowering policy package.
   loom_check_low_lower_policy_registry_initializer_t
       initialize_low_lower_policy_registry;
+  // Optional emit provider table linked into this runner.
+  const loom_check_emit_provider_t* const* emit_providers;
+  // Number of entries in |emit_providers|.
+  iree_host_size_t emit_provider_count;
   // Optional requirement provider table linked into this runner.
   const loom_check_requirement_provider_t* const* requirement_providers;
   // Number of entries in |requirement_providers|.

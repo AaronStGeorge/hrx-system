@@ -14,14 +14,6 @@ package(
 loom_check_test_suite(
     name = "core_test",
     srcs = [
-        "emit.loom-test",
-        "llvmir/intrinsics.loom-test",
-        "llvmir/lowering_errors.loom-test",
-        "llvmir/memory.loom-test",
-        "llvmir/packed_dot.loom-test",
-        "llvmir/scalar_index.loom-test",
-        "llvmir/toolchain.loom-test",
-        "llvmir/vector_core.loom-test",
         "low_allocation.loom-test",
         "low_allocation_materialization.loom-test",
         "low_packet.loom-test",

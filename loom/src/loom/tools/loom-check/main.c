@@ -433,11 +433,10 @@ int loom_check_main(int argc, char** argv,
       "  pass <p>    Parse, run pass pipeline <p>, print, compare.\n"
       "  format <f>  Parse, convert to format <f>, convert back, compare.\n"
       "  emit <t>    Parse, lower to target output <t>, print, compare.\n"
-      "              LLVMIR targets include llvmir, llvmir-body,\n"
-      "              llvmir-bitcode, llvmir-object, and\n"
-      "              llvmir-assembly-mnemonics.\n"
-      "              Source-low accepts source-low @target "
-      "[output=module|low].\n"
+      "              Core targets include liveness-json, low-schedule-json,\n"
+      "              low-allocation-json, low-packet-json,\n"
+      "              low-descriptor-manifest, target-low-registry-manifest,\n"
+      "              and source-low. Linked providers may add more.\n"
       "  run <args>  Execute input with iree-run-loom and compare output.\n"
       "\n"
       "File format:\n"
@@ -454,9 +453,9 @@ int loom_check_main(int argc, char** argv,
       "    // RUN: <mode> [args]    Set the test mode (one per case).\n"
       "    // REQUIRES: <name>[, ...] Skip when external tools are missing.\n"
       "    // XFAIL: <reason>       Mark as expected failure.\n"
-      "    Known REQUIRES names: llvm-as, llvm-dis, opt, llc, llvm-mc,\n"
-      "    llvm-objdump, iree-run-loom, provider-specific llc-<target>\n"
-      "    names, and names from providers linked into this runner.\n"
+      "    Known REQUIRES names: iree-run-loom,\n"
+      "    loom-check-test-unavailable, and names from providers linked\n"
+      "    into this runner.\n"
       "\n"
       "  Annotations (verify mode):\n"
       "    // ERROR: DOMAIN/CODE \"substring\"\n"
@@ -599,6 +598,11 @@ int loom_check_production_main(int argc, char** argv,
           {
               .fn = loom_check_production_initialize_low_lower_policy_registry,
               .user_data = (void*)runner,
+          },
+      .emit_providers =
+          {
+              .providers = runner->emit_providers,
+              .provider_count = runner->emit_provider_count,
           },
       .requirement_providers =
           {

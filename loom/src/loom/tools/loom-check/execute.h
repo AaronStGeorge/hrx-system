@@ -40,6 +40,8 @@ extern "C" {
 
 typedef struct loom_low_lower_policy_registry_t
     loom_low_lower_policy_registry_t;
+typedef struct loom_check_diagnostic_collector_t
+    loom_check_diagnostic_collector_t;
 
 //===----------------------------------------------------------------------===//
 // Types
@@ -165,8 +167,79 @@ typedef struct loom_check_initialize_low_lower_policy_registry_callback_t {
 } loom_check_initialize_low_lower_policy_registry_callback_t;
 
 typedef struct loom_check_environment_t loom_check_environment_t;
+typedef struct loom_check_emit_provider_t loom_check_emit_provider_t;
 typedef struct loom_check_requirement_provider_t
     loom_check_requirement_provider_t;
+
+// Prepared module state passed to a linked emit provider.
+typedef struct loom_check_emit_provider_request_t {
+  // Full RUN: emit target payload, after the "emit" verb.
+  iree_string_view_t emit_target;
+  // First token of |emit_target| used to select the provider.
+  iree_string_view_t target_name;
+  // Remaining target-specific options after |target_name|.
+  iree_string_view_t target_options;
+  // Source filename reported in diagnostics and emitted target modules.
+  iree_string_view_t filename;
+  // Parsed test case being executed.
+  const loom_check_case_t* test_case;
+  // Runner environment that selected this provider.
+  const loom_check_environment_t* environment;
+  // Parsed module after comment stripping and target preset expansion.
+  loom_module_t* module;
+  // Linked target-low registry visible to this runner.
+  const loom_target_low_descriptor_registry_t* low_registry;
+  // Diagnostic collector for provider diagnostics.
+  loom_check_diagnostic_collector_t* diagnostic_collector;
+  // Arena scoped to this emit case for analysis and diagnostics.
+  iree_arena_allocator_t* case_arena;
+  // Host allocator for transient provider allocations.
+  iree_allocator_t host_allocator;
+  // Result receiving provider output.
+  loom_check_result_t* result;
+} loom_check_emit_provider_request_t;
+
+// Returns true when |provider| owns emit targets named |target_name|.
+typedef bool (*loom_check_emit_provider_match_fn_t)(
+    const loom_check_emit_provider_t* provider, iree_string_view_t target_name);
+
+// Checks provider-specific REQUIRES declarations before execution.
+typedef iree_status_t (*loom_check_emit_provider_check_requirements_fn_t)(
+    const loom_check_emit_provider_t* provider,
+    const loom_check_case_t* test_case, loom_check_result_t* result,
+    bool* out_continue_execution);
+
+// Emits the provider-owned comparable output for |request|.
+typedef iree_status_t (*loom_check_emit_provider_execute_fn_t)(
+    const loom_check_emit_provider_t* provider,
+    const loom_check_emit_provider_request_t* request);
+
+// Appends provider-owned emit target names to a diagnostic list.
+typedef iree_status_t (*loom_check_emit_provider_append_names_fn_t)(
+    const loom_check_emit_provider_t* provider, iree_string_builder_t* builder);
+
+// Emit namespace provider linked into a loom-check runner. Providers own
+// target-specific target syntax, requirement preflight, and emission.
+struct loom_check_emit_provider_t {
+  // Human-readable provider name used for debugging and ownership comments.
+  iree_string_view_t name;
+  // Returns true when this provider owns an emit target name.
+  loom_check_emit_provider_match_fn_t match;
+  // Checks provider-specific REQUIRES declarations for an emit case.
+  loom_check_emit_provider_check_requirements_fn_t check_requirements;
+  // Emits provider-owned comparable output.
+  loom_check_emit_provider_execute_fn_t execute;
+  // Appends supported emit target names to diagnostic help text.
+  loom_check_emit_provider_append_names_fn_t append_names;
+};
+
+// Registry of optional emit providers linked into a runner binary.
+typedef struct loom_check_emit_provider_registry_t {
+  // Linked emit provider table.
+  const loom_check_emit_provider_t* const* providers;
+  // Number of entries in |providers|.
+  iree_host_size_t provider_count;
+} loom_check_emit_provider_registry_t;
 
 // Returns true when |provider| owns |requirement|.
 typedef bool (*loom_check_requirement_provider_match_fn_t)(
@@ -217,12 +290,20 @@ struct loom_check_environment_t {
   // into descriptor-backed low IR.
   loom_check_initialize_low_lower_policy_registry_callback_t
       initialize_low_lower_policy_registry;
+  // Optional emit providers linked into this runner.
+  loom_check_emit_provider_registry_t emit_providers;
   // Optional requirement providers linked into this runner.
   loom_check_requirement_provider_registry_t requirement_providers;
   // Filesystem path or executable name for iree-run-loom. Empty means search
   // PATH for "iree-run-loom".
   iree_string_view_t iree_run_loom_path;
 };
+
+// Returns the linked emit provider for |target_name|, or NULL when none owns
+// it.
+const loom_check_emit_provider_t* loom_check_environment_lookup_emit_provider(
+    const loom_check_environment_t* environment,
+    iree_string_view_t target_name);
 
 //===----------------------------------------------------------------------===//
 // API

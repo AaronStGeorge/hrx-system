@@ -218,6 +218,127 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    loom_check
+  HDRS
+    "loom_check.h"
+  SRCS
+    "loom_check.c"
+  DEPS
+    ::core
+    ::legality
+    ::lower
+    ::target_registry
+    iree::base
+    iree::io::stream
+    loom::src::loom::target::ir_records
+    loom::src::loom::target::tool::llvm
+    loom::src::loom::tools::loom-check::execute
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_binary(
+  NAME
+    loom-check
+  SRCS
+    "loom-check.c"
+  DEPS
+    ::loom_check
+    iree::base
+    loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::tools::loom-check::main
+)
+
+iree_executable_test(
+  NAME
+    "test_emit"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/emit.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "test_llvmir_intrinsics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/intrinsics.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "test_llvmir_lowering_errors"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/lowering_errors.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "test_llvmir_memory"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/memory.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "test_llvmir_packed_dot"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/packed_dot.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "test_llvmir_scalar_index"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/scalar_index.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "test_llvmir_toolchain"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/toolchain.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "test_llvmir_vector_core"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/vector_core.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
+)
+
 loom_cc_test(
   NAME
     target_registry_test

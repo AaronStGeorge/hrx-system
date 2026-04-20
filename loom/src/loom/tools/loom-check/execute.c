@@ -48,6 +48,26 @@ void loom_check_result_deinitialize(loom_check_result_t* result) {
   iree_string_builder_deinitialize(&result->detail);
 }
 
+const loom_check_emit_provider_t* loom_check_environment_lookup_emit_provider(
+    const loom_check_environment_t* environment,
+    iree_string_view_t target_name) {
+  if (environment == NULL || environment->emit_providers.providers == NULL) {
+    return NULL;
+  }
+  for (iree_host_size_t i = 0; i < environment->emit_providers.provider_count;
+       ++i) {
+    const loom_check_emit_provider_t* provider =
+        environment->emit_providers.providers[i];
+    if (provider == NULL || provider->match == NULL) {
+      continue;
+    }
+    if (provider->match(provider, target_name)) {
+      return provider;
+    }
+  }
+  return NULL;
+}
+
 static iree_status_t loom_check_write_diff_hunk_json(
     const loom_diff_result_t* diff, const loom_diff_hunk_t* hunk,
     loom_output_stream_t* stream) {

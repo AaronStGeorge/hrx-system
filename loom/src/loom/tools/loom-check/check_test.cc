@@ -109,12 +109,12 @@ TEST_F(CheckParseTest, FormatMode) {
 
 TEST_F(CheckParseTest, EmitMode) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit llvmir target-profile\nfunc.def @f() {}\n"));
+      Parse("// RUN: emit target-form target-profile\nfunc.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(
-      iree_string_view_equal(file_.cases[0].emit_target,
-                             iree_make_cstring_view("llvmir target-profile")));
+  EXPECT_TRUE(iree_string_view_equal(
+      file_.cases[0].emit_target,
+      iree_make_cstring_view("target-form target-profile")));
 }
 
 TEST_F(CheckParseTest, RunMode) {
@@ -130,22 +130,22 @@ TEST_F(CheckParseTest, RunMode) {
 
 TEST_F(CheckParseTest, EmitBitcodeMode) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit llvmir-bitcode x86_64-object\nfunc.def @f() {}\n"));
+      Parse("// RUN: emit target-bitcode profile-a\nfunc.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
   EXPECT_TRUE(iree_string_view_equal(
       file_.cases[0].emit_target,
-      iree_make_cstring_view("llvmir-bitcode x86_64-object")));
+      iree_make_cstring_view("target-bitcode profile-a")));
 }
 
 TEST_F(CheckParseTest, EmitObjectMode) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit llvmir-object x86_64-object\nfunc.def @f() {}\n"));
+      Parse("// RUN: emit target-object profile-a\nfunc.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
   EXPECT_TRUE(iree_string_view_equal(
       file_.cases[0].emit_target,
-      iree_make_cstring_view("llvmir-object x86_64-object")));
+      iree_make_cstring_view("target-object profile-a")));
 }
 
 TEST_F(CheckParseTest, XfailDirective) {
@@ -171,25 +171,25 @@ TEST_F(CheckParseTest, RunAndXfail) {
 
 TEST_F(CheckParseTest, RequiresDirective) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit llvmir-bitcode\n"
-            "// REQUIRES: llvm-dis, llc-x86\n"
+      Parse("// RUN: emit target-bitcode\n"
+            "// REQUIRES: tool-dis, tool-backend\n"
             "func.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
   EXPECT_TRUE(file_.cases[0].has_requires_directive);
   ASSERT_EQ(file_.cases[0].requirement_count, 2);
-  ExpectRequirementName(file_.cases[0], 0, "llvm-dis");
-  ExpectRequirementName(file_.cases[0], 1, "llc-x86");
+  ExpectRequirementName(file_.cases[0], 0, "tool-dis");
+  ExpectRequirementName(file_.cases[0], 1, "tool-backend");
 }
 
 TEST_F(CheckParseTest, RequiresDirectiveAllowsWhitespaceSeparatedNames) {
   IREE_ASSERT_OK(
-      Parse("// REQUIRES: llvm-dis llc llc-x86\n"
+      Parse("// REQUIRES: tool-dis tool tool-backend\n"
             "func.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
   ASSERT_EQ(file_.cases[0].requirement_count, 3);
-  ExpectRequirementName(file_.cases[0], 0, "llvm-dis");
-  ExpectRequirementName(file_.cases[0], 1, "llc");
-  ExpectRequirementName(file_.cases[0], 2, "llc-x86");
+  ExpectRequirementName(file_.cases[0], 0, "tool-dis");
+  ExpectRequirementName(file_.cases[0], 1, "tool");
+  ExpectRequirementName(file_.cases[0], 2, "tool-backend");
 }
 
 TEST_F(CheckParseTest, UnknownModeErrors) {
@@ -246,28 +246,28 @@ TEST_F(CheckParseTest, XfailDirectiveWithoutSpaceAfterColonErrors) {
 
 TEST_F(CheckParseTest, RequiresDirectiveWithoutSpaceAfterColonErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        Parse("// REQUIRES:llvm-dis\nfunc.def @f() {}\n"));
+                        Parse("// REQUIRES:tool-dis\nfunc.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, RequiresDirectiveTrailingCommaErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        Parse("// REQUIRES: llvm-dis,\nfunc.def @f() {}\n"));
+                        Parse("// REQUIRES: tool-dis,\nfunc.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, RequiresDirectiveEmptyNameErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        Parse("// REQUIRES: llvm-dis,,llc\n"
+                        Parse("// REQUIRES: tool-dis,,tool\n"
                               "func.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, RequiresDirectiveInvalidNameErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        Parse("// REQUIRES: llvm/dis\nfunc.def @f() {}\n"));
+                        Parse("// REQUIRES: tool/dis\nfunc.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, RequiresDirectiveDuplicateNameErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        Parse("// REQUIRES: llvm-dis, llvm-dis\n"
+                        Parse("// REQUIRES: tool-dis, tool-dis\n"
                               "func.def @f() {}\n"));
 }
 
@@ -286,7 +286,7 @@ TEST_F(CheckParseTest, XfailDirectiveWithoutSpaceAfterSlashesErrors) {
 
 TEST_F(CheckParseTest, RequiresDirectiveWithoutSpaceAfterSlashesErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        Parse("//REQUIRES: llvm-dis\nfunc.def @f() {}\n"));
+                        Parse("//REQUIRES: tool-dis\nfunc.def @f() {}\n"));
 }
 
 // ===----------------------------------------------------------------------===
@@ -310,7 +310,7 @@ TEST_F(CheckParseTest, StrayXfailAfterIRErrors) {
 TEST_F(CheckParseTest, StrayRequiresAfterIRErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse("func.def @f() {}\n"
-                              "// REQUIRES: llvm-dis\n"));
+                              "// REQUIRES: tool-dis\n"));
 }
 
 TEST_F(CheckParseTest, StrayRunInSecondCaseErrors) {
@@ -1460,24 +1460,24 @@ TEST_F(CheckParseTest, PreamblePassModeInherited) {
 
 TEST_F(CheckParseTest, PreambleEmitModeInherited) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit llvmir target-profile\n"
+      Parse("// RUN: emit target-form target-profile\n"
             "// ====\n"
             "func.def @a() {}\n"
             "// ====\n"
             "func.def @b() {}\n"));
   ASSERT_EQ(file_.case_count, 2);
   EXPECT_EQ(file_.default_mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(
-      iree_string_view_equal(file_.default_emit_target,
-                             iree_make_cstring_view("llvmir target-profile")));
+  EXPECT_TRUE(iree_string_view_equal(
+      file_.default_emit_target,
+      iree_make_cstring_view("target-form target-profile")));
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(
-      iree_string_view_equal(file_.cases[0].emit_target,
-                             iree_make_cstring_view("llvmir target-profile")));
+  EXPECT_TRUE(iree_string_view_equal(
+      file_.cases[0].emit_target,
+      iree_make_cstring_view("target-form target-profile")));
   EXPECT_EQ(file_.cases[1].mode, LOOM_CHECK_MODE_EMIT);
-  EXPECT_TRUE(
-      iree_string_view_equal(file_.cases[1].emit_target,
-                             iree_make_cstring_view("llvmir target-profile")));
+  EXPECT_TRUE(iree_string_view_equal(
+      file_.cases[1].emit_target,
+      iree_make_cstring_view("target-form target-profile")));
 }
 
 TEST_F(CheckParseTest, PreambleRunModeInherited) {
@@ -1504,23 +1504,23 @@ TEST_F(CheckParseTest, PreambleRunModeInherited) {
 
 TEST_F(CheckParseTest, PreambleRequiresInheritedAndCombined) {
   IREE_ASSERT_OK(
-      Parse("// REQUIRES: llvm-dis\n"
+      Parse("// REQUIRES: tool-dis\n"
             "// ====\n"
             "func.def @a() {}\n"
             "// ====\n"
-            "// REQUIRES: llc-x86, llvm-dis\n"
+            "// REQUIRES: tool-backend, tool-dis\n"
             "func.def @b() {}\n"));
   ASSERT_EQ(file_.case_count, 2);
   ASSERT_EQ(file_.default_requirement_count, 1);
   EXPECT_TRUE(iree_string_view_equal(file_.default_requirements[0],
-                                     iree_make_cstring_view("llvm-dis")));
+                                     iree_make_cstring_view("tool-dis")));
   EXPECT_FALSE(file_.cases[0].has_requires_directive);
   ASSERT_EQ(file_.cases[0].requirement_count, 1);
-  ExpectRequirementName(file_.cases[0], 0, "llvm-dis");
+  ExpectRequirementName(file_.cases[0], 0, "tool-dis");
   EXPECT_TRUE(file_.cases[1].has_requires_directive);
   ASSERT_EQ(file_.cases[1].requirement_count, 2);
-  ExpectRequirementName(file_.cases[1], 0, "llvm-dis");
-  ExpectRequirementName(file_.cases[1], 1, "llc-x86");
+  ExpectRequirementName(file_.cases[1], 0, "tool-dis");
+  ExpectRequirementName(file_.cases[1], 1, "tool-backend");
 }
 
 TEST_F(CheckParseTest, NoPreambleDefaultIsRoundtrip) {
@@ -1555,7 +1555,7 @@ TEST_F(CheckParseTest, FirstCaseRunBecomesDefault) {
 
 TEST_F(CheckParseTest, FirstCaseRequiresBecomesDefault) {
   IREE_ASSERT_OK(
-      Parse("// REQUIRES: llvm-dis\n"
+      Parse("// REQUIRES: tool-dis\n"
             "func.def @a() {}\n"
             "// ====\n"
             "func.def @b() {}\n"));
@@ -1565,7 +1565,7 @@ TEST_F(CheckParseTest, FirstCaseRequiresBecomesDefault) {
   ASSERT_EQ(file_.cases[1].requirement_count, 1);
   EXPECT_TRUE(file_.cases[0].has_requires_directive);
   EXPECT_FALSE(file_.cases[1].has_requires_directive);
-  ExpectRequirementName(file_.cases[1], 0, "llvm-dis");
+  ExpectRequirementName(file_.cases[1], 0, "tool-dis");
 }
 
 TEST_F(CheckParseTest, HasRunDirectiveFlag) {

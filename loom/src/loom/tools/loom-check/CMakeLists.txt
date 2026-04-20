@@ -75,16 +75,10 @@ loom_cc_library(
     loom::src::loom::pass::builtin_registry
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::tooling
-    loom::src::loom::target::emit::llvmir::core
-    loom::src::loom::target::emit::llvmir::legality
-    loom::src::loom::target::emit::llvmir::lower
-    loom::src::loom::target::emit::llvmir::target_env
-    loom::src::loom::target::emit::llvmir::target_registry
     loom::src::loom::target::ir_records
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::module_compiler
     loom::src::loom::target::presets
-    loom::src::loom::target::tool::llvm
     loom::src::loom::target::tool::process
     loom::src::loom::target::types
     loom::src::loom::testing::diff
@@ -152,7 +146,6 @@ loom_cc_test(
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
-    loom::src::loom::target::emit::llvmir::core
     loom::src::loom::target::low_descriptor_registry_core_test
     loom::src::loom::testing::context
     iree::testing::gtest

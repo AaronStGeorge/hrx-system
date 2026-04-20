@@ -433,7 +433,7 @@ TEST_F(JsonOutputTest, EmitsInheritedRunMetadata) {
 
 TEST_F(JsonOutputTest, EmitsInheritedRequiresMetadata) {
   auto file = Parse(
-      "// REQUIRES: llvm-dis\n"
+      "// REQUIRES: tool-dis\n"
       "// ====\n"
       "func.def @f() {\n"
       "}\n");
@@ -448,10 +448,10 @@ TEST_F(JsonOutputTest, EmitsInheritedRequiresMetadata) {
   std::string json = WriteJson(iree_make_cstring_view("requires.loom-test"),
                                file, results, 1, 0, 0);
 
-  EXPECT_NE(json.find("\"default_requirements\": [\"llvm-dis\"]"),
+  EXPECT_NE(json.find("\"default_requirements\": [\"tool-dis\"]"),
             std::string::npos);
   EXPECT_NE(json.find("\"has_requires_directive\": false"), std::string::npos);
-  EXPECT_NE(json.find("\"requirements\": [\"llvm-dis\"]"), std::string::npos);
+  EXPECT_NE(json.find("\"requirements\": [\"tool-dis\"]"), std::string::npos);
   EXPECT_NE(json.find("\"requires_directive_range\": null"), std::string::npos);
 
   loom_check_result_deinitialize(&results[0]);
