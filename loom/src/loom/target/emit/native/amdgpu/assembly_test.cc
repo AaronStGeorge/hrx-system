@@ -319,7 +319,7 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
   EXPECT_NE(output.find("s_buffer_load_dword s"), std::string::npos);
   EXPECT_NE(output.find("buffer_load_dword v"), std::string::npos);
   EXPECT_NE(output.find("buffer_store_dword v"), std::string::npos);
-  EXPECT_NE(output.find("offset:8"), std::string::npos);
+  EXPECT_NE(output.find("offen offset:8"), std::string::npos);
   EXPECT_NE(output.find("v_wmma_f32_16x16x16_f16 v["), std::string::npos);
   EXPECT_NE(output.find("s_waitcnt vmcnt(0) lgkmcnt(0)"), std::string::npos);
   EXPECT_NE(output.find("s_waitcnt_depctr depctr(0)"), std::string::npos);

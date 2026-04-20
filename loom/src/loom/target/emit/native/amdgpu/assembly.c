@@ -217,6 +217,40 @@ static iree_status_t loom_amdgpu_append_memory_packet(
   return loom_amdgpu_append_offset_suffix(context);
 }
 
+static iree_status_t loom_amdgpu_append_mubuf_load_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 2));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " offen"));
+  return loom_amdgpu_append_offset_suffix(context);
+}
+
+static iree_status_t loom_amdgpu_append_mubuf_store_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 2));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 3));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " offen"));
+  return loom_amdgpu_append_offset_suffix(context);
+}
+
 static iree_status_t loom_amdgpu_append_s_mov_b32_packet(
     const loom_native_assembly_packet_context_t* context) {
   int64_t value = 0;
@@ -474,10 +508,10 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
     return loom_amdgpu_append_memory_packet(context, 1, 2);
   }
   if (iree_string_view_equal(key, IREE_SV("amdgpu.buffer_load_dword"))) {
-    return loom_amdgpu_append_memory_packet(context, 1, 3);
+    return loom_amdgpu_append_mubuf_load_packet(context);
   }
   if (iree_string_view_equal(key, IREE_SV("amdgpu.buffer_store_dword"))) {
-    return loom_amdgpu_append_memory_packet(context, 0, 4);
+    return loom_amdgpu_append_mubuf_store_packet(context);
   }
   if (iree_string_view_equal(key, IREE_SV("amdgpu.v_wmma_f32_16x16x16_f16")) ||
       iree_string_view_equal(key, IREE_SV("amdgpu.v_mfma_f32_16x16x16_f16"))) {

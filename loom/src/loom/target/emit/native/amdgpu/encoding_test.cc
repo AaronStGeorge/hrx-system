@@ -221,6 +221,58 @@ TEST_F(AmdgpuEncodingTest, EncodesInitialGfx11Allowlist) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufStoreAndReturn) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel(%value : "
+      "reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : "
+      "reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {\n"
+      "  low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, "
+      "%soffset) {offset = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.return\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_EQ(text.data_length, 12u);
+  EXPECT_EQ(ReadU32LE(text.data + 0), UINT32_C(0xE0680008));
+  EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0x04400001));
+  EXPECT_EQ(ReadU32LE(text.data + 8), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufLoadAndReturn) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
+      "reg<amdgpu.sgpr>) {\n"
+      "  %loaded = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, "
+      "%soffset) {offset = 12} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, "
+      "reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>\n"
+      "  low.return\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_EQ(text.data_length, 12u);
+  EXPECT_EQ(ReadU32LE(text.data + 0), UINT32_C(0xE050000C));
+  EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0x04400000));
+  EXPECT_EQ(ReadU32LE(text.data + 8), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(AmdgpuEncodingTest, EncodesReturnForCurrentAmdgpuFamilies) {
   struct Case {
     // Target preset used to select the low descriptor set.

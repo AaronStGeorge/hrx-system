@@ -309,6 +309,44 @@ TEST_F(LowAllocationTest, FutureFixedValueBlocksOverlappingOrdinaryValue) {
   EXPECT_FALSE(AssignmentOverlapsPhysicalLocation(lhs_assignment, 0, 1));
 }
 
+TEST_F(LowAllocationTest, AlignsPowerOfTwoRegisterTuples) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%scalar : "
+      "reg<test.phys>, %wide : reg<test.phys x4>) -> (reg<test.phys>, "
+      "reg<test.phys x4>) {\n"
+      "  low.return %scalar, %wide : reg<test.phys>, reg<test.phys x4>\n"
+      "}\n");
+  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+
+  ExpectPhysicalLocation(FindAssignmentByName(allocation, "scalar"), 0, 1);
+  ExpectPhysicalLocation(FindAssignmentByName(allocation, "wide"), 4, 4);
+}
+
+TEST_F(LowAllocationTest, RejectsMisalignedFixedRegisterTuple) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%wide : "
+      "reg<test.phys x4>) -> (reg<test.phys x4>) {\n"
+      "  low.return %wide : reg<test.phys x4>\n"
+      "}\n");
+  loom_value_id_t wide_value_id = FindValueIdByName("wide");
+  ASSERT_NE(wide_value_id, LOOM_VALUE_ID_INVALID);
+  const loom_low_allocation_fixed_value_t fixed_value = {
+      .value_id = wide_value_id,
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .location_base = 2,
+      .location_count = 4,
+  };
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .fixed_values = &fixed_value,
+      .fixed_value_count = 1,
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      AllocateFirstLowFunctionWithOptions(&options, &allocation));
+}
+
 TEST_F(LowAllocationTest, ReservedRangeBlocksWholeFunction) {
   ParseAndVerify(
       "low.func.def target(@test_target) @allocated(%lhs : reg<test.phys>, "

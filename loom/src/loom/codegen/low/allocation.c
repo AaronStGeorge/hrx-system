@@ -109,6 +109,15 @@ static uint32_t loom_low_allocation_round_up_to_power_of_two_u32(
   return value == UINT32_MAX ? 0 : value + 1u;
 }
 
+static uint32_t loom_low_allocation_interval_alignment(
+    const loom_liveness_interval_t* interval) {
+  if (interval->unit_count <= 1 ||
+      !loom_low_allocation_is_power_of_two_u32(interval->unit_count)) {
+    return 1;
+  }
+  return interval->unit_count;
+}
+
 static bool loom_low_allocation_location_kind_is_known(
     loom_low_allocation_location_kind_t location_kind) {
   switch (location_kind) {
@@ -547,6 +556,15 @@ static iree_status_t loom_low_allocation_validate_fixed_values(
           (unsigned)fixed_value->value_id, interval->unit_count,
           fixed_value->location_count);
     }
+    const uint32_t alignment = loom_low_allocation_interval_alignment(interval);
+    if (fixed_value->location_base % alignment != 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low allocation fixed value %u location base %u is not aligned to "
+          "%u",
+          (unsigned)fixed_value->value_id, fixed_value->location_base,
+          alignment);
+    }
 
     iree_string_view_t register_class_name = loom_low_allocation_module_string(
         state->module, interval->value_class.register_class_id);
@@ -769,16 +787,18 @@ static bool loom_low_allocation_find_location(
         state, interval->value_class, capacity.location_kind);
   }
 
-  for (uint32_t base = 0; base <= last_base; ++base) {
+  const uint32_t alignment = loom_low_allocation_interval_alignment(interval);
+  for (uint32_t base = 0; base <= last_base;) {
     if (!loom_low_allocation_candidate_conflicts(
             state, interval, capacity.location_kind, base, interval->unit_count,
             LOOM_VALUE_ID_INVALID)) {
       *out_base = base;
       return true;
     }
-    if (base == UINT32_MAX) {
+    if (base > UINT32_MAX - alignment) {
       break;
     }
+    base += alignment;
   }
   return false;
 }
