@@ -108,6 +108,37 @@ class VmInvocationTest : public ::testing::Test {
                                       result);
   }
 
+  void PrepareBranchyCandidate(
+      const loom_ireevm_module_archive_t* archive,
+      loom_run_vm_prepared_candidate_t* out_candidate) {
+    loom_run_vm_prepared_candidate_options_t options = {};
+    loom_run_vm_prepared_candidate_options_initialize(&options);
+    options.function_name = IREE_SV("branchy");
+    IREE_ASSERT_OK(loom_run_vm_prepared_candidate_prepare(
+        &runtime_, archive, &options, iree_allocator_system(), out_candidate));
+  }
+
+  void PrepareBranchyPlan(loom_run_vm_prepared_candidate_t* candidate,
+                          iree_string_view_t lhs, iree_string_view_t rhs,
+                          iree_string_view_t expected,
+                          loom_run_vm_invocation_plan_t* out_plan) {
+    iree_string_view_t inputs[] = {lhs, rhs};
+    iree_string_view_t expected_outputs[] = {expected};
+
+    loom_run_vm_invocation_options_t options = {};
+    loom_run_vm_invocation_options_initialize(&options);
+    options.inputs = (loom_run_vm_value_specs_t){
+        .values = inputs,
+        .count = IREE_ARRAYSIZE(inputs),
+    };
+    options.expected_outputs = (loom_run_vm_value_specs_t){
+        .values = expected_outputs,
+        .count = IREE_ARRAYSIZE(expected_outputs),
+    };
+    IREE_ASSERT_OK(loom_run_vm_invocation_plan_prepare_from_prepared(
+        candidate, &options, iree_allocator_system(), out_plan));
+  }
+
   loom_run_session_t session_ = {};
   loom_run_vm_runtime_t runtime_ = {};
 };
@@ -180,6 +211,89 @@ TEST_F(VmInvocationTest, RunFormatsOutputsWhenNoExpectationIsProvided) {
   EXPECT_NE(output.find("result[0]"), std::string::npos);
 
   loom_run_vm_invocation_result_deinitialize(&result);
+  loom_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&module);
+}
+
+TEST_F(VmInvocationTest, PreparedCandidateRunsPlanTwice) {
+  loom_run_module_t module = {};
+  loom_run_candidate_t candidate = {};
+  CompileArchive(&module, &candidate);
+
+  loom_run_vm_prepared_candidate_t prepared = {};
+  PrepareBranchyCandidate(&candidate.vm_archive, &prepared);
+
+  loom_run_vm_invocation_plan_t plan = {};
+  PrepareBranchyPlan(&prepared, IREE_SV("0"), IREE_SV("21"), IREE_SV("42"),
+                     &plan);
+
+  loom_run_vm_invocation_result_t result = {};
+  loom_run_vm_invocation_result_initialize(iree_allocator_system(), &result);
+
+  IREE_ASSERT_OK(loom_run_vm_invocation_run_prepared(
+      &prepared, &plan, iree_allocator_system(), &result));
+  EXPECT_EQ(result.exit_code, 0);
+
+  IREE_ASSERT_OK(loom_run_vm_invocation_run_prepared(
+      &prepared, &plan, iree_allocator_system(), &result));
+  EXPECT_EQ(result.exit_code, 0);
+  std::string output(result.output.buffer, result.output.size);
+  EXPECT_NE(output.find("EXEC @branchy"), std::string::npos);
+  EXPECT_NE(output.find("[SUCCESS] all function outputs matched"),
+            std::string::npos);
+
+  loom_run_vm_invocation_result_deinitialize(&result);
+  loom_run_vm_invocation_plan_deinitialize(&plan);
+  loom_run_vm_prepared_candidate_deinitialize(&prepared);
+  loom_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&module);
+}
+
+TEST_F(VmInvocationTest, InvokePlanCanSkipResultCollection) {
+  loom_run_module_t module = {};
+  loom_run_candidate_t candidate = {};
+  CompileArchive(&module, &candidate);
+
+  loom_run_vm_prepared_candidate_t prepared = {};
+  PrepareBranchyCandidate(&candidate.vm_archive, &prepared);
+
+  loom_run_vm_invocation_plan_t plan = {};
+  PrepareBranchyPlan(&prepared, IREE_SV("50"), IREE_SV("8"), IREE_SV("42"),
+                     &plan);
+
+  loom_run_vm_iteration_t iteration = {};
+  IREE_ASSERT_OK(loom_run_vm_invocation_invoke_plan(
+      &prepared, &plan, iree_allocator_system(), &iteration));
+  EXPECT_NE(iteration.inputs, nullptr);
+  EXPECT_NE(iteration.outputs, nullptr);
+
+  loom_run_vm_iteration_deinitialize(&iteration);
+  loom_run_vm_invocation_plan_deinitialize(&plan);
+  loom_run_vm_prepared_candidate_deinitialize(&prepared);
+  loom_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&module);
+}
+
+TEST_F(VmInvocationTest, PlanPrepareRejectsFunctionMismatch) {
+  loom_run_module_t module = {};
+  loom_run_candidate_t candidate = {};
+  CompileArchive(&module, &candidate);
+
+  loom_run_vm_prepared_candidate_t prepared = {};
+  PrepareBranchyCandidate(&candidate.vm_archive, &prepared);
+
+  loom_run_vm_invocation_options_t options = {};
+  loom_run_vm_invocation_options_initialize(&options);
+  options.function_name = IREE_SV("not_branchy");
+
+  loom_run_vm_invocation_plan_t plan = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_run_vm_invocation_plan_prepare_from_prepared(
+          &prepared, &options, iree_allocator_system(), &plan));
+
+  loom_run_vm_invocation_plan_deinitialize(&plan);
+  loom_run_vm_prepared_candidate_deinitialize(&prepared);
   loom_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&module);
 }

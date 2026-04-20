@@ -6,6 +6,8 @@
 
 #include "loom/tooling/execution/vm_invocation.h"
 
+#include <string.h>
+
 #include "iree/hal/api.h"
 #include "iree/io/vec_stream.h"
 #include "iree/tooling/comparison.h"
@@ -64,6 +66,46 @@ void loom_run_vm_invocation_plan_deinitialize(
   iree_vm_list_release(plan->expected_outputs);
   iree_vm_list_release(plan->inputs);
   *plan = (loom_run_vm_invocation_plan_t){0};
+}
+
+void loom_run_vm_prepared_candidate_options_initialize(
+    loom_run_vm_prepared_candidate_options_t* out_options) {
+  IREE_ASSERT_ARGUMENT(out_options);
+  *out_options = (loom_run_vm_prepared_candidate_options_t){0};
+}
+
+void loom_run_vm_prepared_candidate_initialize(
+    loom_run_vm_prepared_candidate_t* out_candidate) {
+  IREE_ASSERT_ARGUMENT(out_candidate);
+  *out_candidate = (loom_run_vm_prepared_candidate_t){0};
+}
+
+void loom_run_vm_prepared_candidate_deinitialize(
+    loom_run_vm_prepared_candidate_t* candidate) {
+  if (candidate == NULL) {
+    return;
+  }
+  iree_hal_allocator_release(candidate->device_allocator);
+  iree_hal_device_release(candidate->device);
+  iree_vm_context_release(candidate->context);
+  iree_vm_module_release(candidate->module);
+  loom_ireevm_module_archive_deinitialize(&candidate->archive,
+                                          candidate->host_allocator);
+  *candidate = (loom_run_vm_prepared_candidate_t){0};
+}
+
+void loom_run_vm_iteration_initialize(loom_run_vm_iteration_t* out_iteration) {
+  IREE_ASSERT_ARGUMENT(out_iteration);
+  *out_iteration = (loom_run_vm_iteration_t){0};
+}
+
+void loom_run_vm_iteration_deinitialize(loom_run_vm_iteration_t* iteration) {
+  if (iteration == NULL) {
+    return;
+  }
+  iree_vm_list_release(iteration->outputs);
+  iree_vm_list_release(iteration->inputs);
+  *iteration = (loom_run_vm_iteration_t){0};
 }
 
 void loom_run_vm_invocation_request_initialize(
@@ -215,6 +257,141 @@ static iree_status_t loom_run_vm_lookup_function(
       module, IREE_VM_FUNCTION_LINKAGE_EXPORT, function_name, out_function);
 }
 
+static iree_status_t loom_run_vm_clone_archive(
+    const loom_ireevm_module_archive_t* archive, iree_allocator_t allocator,
+    loom_ireevm_module_archive_t* out_archive) {
+  IREE_ASSERT_ARGUMENT(archive);
+  IREE_ASSERT_ARGUMENT(out_archive);
+  *out_archive = (loom_ireevm_module_archive_t){0};
+  if (archive->data == NULL || archive->data_length == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "VM archive is empty");
+  }
+
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(allocator, archive->data_length,
+                                             (void**)&out_archive->data));
+  memcpy(out_archive->data, archive->data, archive->data_length);
+  out_archive->data_length = archive->data_length;
+  return iree_ok_status();
+}
+
+iree_status_t loom_run_vm_prepared_candidate_prepare(
+    const loom_run_vm_runtime_t* runtime,
+    const loom_ireevm_module_archive_t* archive,
+    const loom_run_vm_prepared_candidate_options_t* options,
+    iree_allocator_t allocator,
+    loom_run_vm_prepared_candidate_t* out_candidate) {
+  IREE_ASSERT_ARGUMENT(runtime);
+  IREE_ASSERT_ARGUMENT(archive);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(out_candidate);
+  loom_run_vm_prepared_candidate_initialize(out_candidate);
+  out_candidate->host_allocator = allocator;
+
+  iree_status_t status =
+      loom_run_vm_clone_archive(archive, allocator, &out_candidate->archive);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_vm_load_archive_module(runtime, &out_candidate->archive,
+                                             allocator, &out_candidate->module);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_run_vm_create_context(
+        runtime, out_candidate->module, options->default_device_uri, allocator,
+        &out_candidate->context, &out_candidate->device,
+        &out_candidate->device_allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_run_vm_lookup_function(out_candidate->module,
+                                         options->function_name,
+                                         &out_candidate->function);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_run_vm_prepared_candidate_deinitialize(out_candidate);
+  }
+  return status;
+}
+
+static iree_status_t loom_run_vm_prepared_candidate_validate(
+    const loom_run_vm_prepared_candidate_t* candidate) {
+  IREE_ASSERT_ARGUMENT(candidate);
+  if (candidate->context == NULL ||
+      iree_vm_function_is_null(candidate->function)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "VM prepared candidate is not initialized");
+  }
+  if (candidate->device != NULL && candidate->device_allocator == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "VM device candidate requires a HAL allocator");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_run_vm_invocation_plan_validate(
+    const loom_run_vm_invocation_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+  if (plan->inputs == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "VM invocation plan requires inputs");
+  }
+  switch (plan->output_mode) {
+    case LOOM_RUN_VM_OUTPUT_PLAN_MODE_FORMAT_ALL:
+      return iree_ok_status();
+    case LOOM_RUN_VM_OUTPUT_PLAN_MODE_WRITE_SPECS:
+      return loom_run_vm_value_specs_validate(&plan->output_specs,
+                                              IREE_SV("VM output"));
+    case LOOM_RUN_VM_OUTPUT_PLAN_MODE_COMPARE_EXPECTED:
+      if (plan->expected_outputs == NULL) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "VM expected output comparison requires values");
+      }
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown VM output plan mode %d",
+                              (int)plan->output_mode);
+  }
+}
+
+iree_status_t loom_run_vm_invocation_plan_prepare_from_prepared(
+    const loom_run_vm_prepared_candidate_t* candidate,
+    const loom_run_vm_invocation_options_t* options, iree_allocator_t allocator,
+    loom_run_vm_invocation_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(candidate);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(out_plan);
+  IREE_RETURN_IF_ERROR(loom_run_vm_prepared_candidate_validate(candidate));
+  if (!iree_string_view_is_empty(options->function_name)) {
+    iree_string_view_t function_name =
+        iree_vm_function_name(&candidate->function);
+    if (!iree_string_view_equal(options->function_name, function_name)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "VM invocation function '%.*s' does not match prepared function "
+          "'%.*s'",
+          (int)options->function_name.size, options->function_name.data,
+          (int)function_name.size, function_name.data);
+    }
+  }
+
+  iree_vm_function_signature_t signature =
+      iree_vm_function_signature(&candidate->function);
+  iree_string_view_t arguments_cconv = iree_string_view_empty();
+  iree_string_view_t results_cconv = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(iree_vm_function_call_get_cconv_fragments(
+      &signature, &arguments_cconv, &results_cconv));
+
+  const loom_run_vm_invocation_plan_prepare_request_t prepare_request = {
+      .options = options,
+      .arguments_cconv = arguments_cconv,
+      .results_cconv = results_cconv,
+      .device = candidate->device,
+      .device_allocator = candidate->device_allocator,
+  };
+  return loom_run_vm_invocation_plan_prepare_from_specs(&prepare_request,
+                                                        allocator, out_plan);
+}
+
 static iree_status_t loom_run_vm_annotate_status_with_function_decl(
     iree_status_t status, iree_vm_function_t function) {
   if (iree_status_is_ok(status) || iree_vm_function_is_null(function)) {
@@ -303,46 +480,23 @@ static iree_status_t loom_run_vm_process_outputs(
 }
 
 iree_status_t loom_run_vm_invocation_invoke_plan(
-    const loom_run_vm_invocation_plan_t* plan, iree_vm_context_t* context,
-    iree_vm_function_t function, iree_hal_device_t* device,
-    iree_hal_allocator_t* device_allocator, iree_allocator_t allocator,
-    loom_run_vm_invocation_result_t* result) {
+    const loom_run_vm_prepared_candidate_t* candidate,
+    const loom_run_vm_invocation_plan_t* plan, iree_allocator_t allocator,
+    loom_run_vm_iteration_t* out_iteration) {
+  IREE_ASSERT_ARGUMENT(candidate);
   IREE_ASSERT_ARGUMENT(plan);
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(result);
-  iree_string_builder_reset(&result->output);
-  result->exit_code = 0;
-  if (plan->inputs == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "VM invocation plan requires inputs");
-  }
-  if (plan->output_mode == LOOM_RUN_VM_OUTPUT_PLAN_MODE_WRITE_SPECS) {
-    IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
-        &plan->output_specs, IREE_SV("VM output")));
-  } else if (plan->output_mode ==
-             LOOM_RUN_VM_OUTPUT_PLAN_MODE_COMPARE_EXPECTED) {
-    if (plan->expected_outputs == NULL) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "VM expected output comparison requires values");
-    }
-  } else if (plan->output_mode != LOOM_RUN_VM_OUTPUT_PLAN_MODE_FORMAT_ALL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unknown VM output plan mode %d",
-                            (int)plan->output_mode);
-  }
-  if (device != NULL && device_allocator == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "VM device invocation requires a HAL allocator");
-  }
+  IREE_ASSERT_ARGUMENT(out_iteration);
+  loom_run_vm_iteration_initialize(out_iteration);
+  IREE_RETURN_IF_ERROR(loom_run_vm_prepared_candidate_validate(candidate));
+  IREE_RETURN_IF_ERROR(loom_run_vm_invocation_plan_validate(plan));
 
-  iree_vm_list_t* inputs = NULL;
   iree_hal_fence_t* finish_fence = NULL;
-  iree_vm_list_t* outputs = NULL;
 
-  iree_status_t status = iree_vm_list_clone(plan->inputs, allocator, &inputs);
-  if (iree_status_is_ok(status) && device == NULL) {
+  iree_status_t status =
+      iree_vm_list_clone(plan->inputs, allocator, &out_iteration->inputs);
+  if (iree_status_is_ok(status) && candidate->device == NULL) {
     iree_string_view_t model = iree_vm_function_lookup_attr_by_name(
-        &function, IREE_SV("iree.abi.model"));
+        &candidate->function, IREE_SV("iree.abi.model"));
     if (iree_string_view_equal(model, IREE_SV("coarse-fences"))) {
       status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "async VM invocation requires a HAL device");
@@ -350,27 +504,56 @@ iree_status_t loom_run_vm_invocation_invoke_plan(
   }
   if (iree_status_is_ok(status)) {
     status = iree_tooling_append_async_fences(
-        inputs, function, device, /*wait_fence=*/NULL, &finish_fence);
+        out_iteration->inputs, candidate->function, candidate->device,
+        /*wait_fence=*/NULL, &finish_fence);
   }
   if (iree_status_is_ok(status)) {
     status = iree_vm_list_create(iree_vm_make_undefined_type_def(), 16,
-                                 allocator, &outputs);
+                                 allocator, &out_iteration->outputs);
   }
   if (iree_status_is_ok(status)) {
-    iree_string_view_t function_name = iree_vm_function_name(&function);
-    status = iree_string_builder_append_format(&result->output, "EXEC @%.*s\n",
-                                               (int)function_name.size,
-                                               function_name.data);
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_vm_invoke(context, function, IREE_VM_INVOCATION_FLAG_NONE,
-                            /*policy=*/NULL, inputs, outputs, allocator);
+    status = iree_vm_invoke(candidate->context, candidate->function,
+                            IREE_VM_INVOCATION_FLAG_NONE, /*policy=*/NULL,
+                            out_iteration->inputs, out_iteration->outputs,
+                            allocator);
   }
   if (iree_status_is_ok(status) && finish_fence != NULL) {
     status = iree_hal_fence_wait(finish_fence, iree_infinite_timeout(),
                                  IREE_ASYNC_WAIT_FLAG_NONE);
   }
-  if (iree_status_is_ok(status) && device != NULL) {
+  if (!iree_status_is_ok(status)) {
+    loom_run_vm_iteration_deinitialize(out_iteration);
+  }
+
+  iree_hal_fence_release(finish_fence);
+  return status;
+}
+
+iree_status_t loom_run_vm_invocation_collect_results(
+    const loom_run_vm_prepared_candidate_t* candidate,
+    const loom_run_vm_invocation_plan_t* plan,
+    const loom_run_vm_iteration_t* iteration, iree_allocator_t allocator,
+    loom_run_vm_invocation_result_t* result) {
+  IREE_ASSERT_ARGUMENT(candidate);
+  IREE_ASSERT_ARGUMENT(plan);
+  IREE_ASSERT_ARGUMENT(iteration);
+  IREE_ASSERT_ARGUMENT(result);
+  iree_string_builder_reset(&result->output);
+  result->exit_code = 0;
+  IREE_RETURN_IF_ERROR(loom_run_vm_prepared_candidate_validate(candidate));
+  IREE_RETURN_IF_ERROR(loom_run_vm_invocation_plan_validate(plan));
+  if (iteration->outputs == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "VM iteration requires outputs");
+  }
+
+  iree_status_t status = iree_ok_status();
+  iree_string_view_t function_name =
+      iree_vm_function_name(&candidate->function);
+  status = iree_string_builder_append_format(&result->output, "EXEC @%.*s\n",
+                                             (int)function_name.size,
+                                             function_name.data);
+  if (iree_status_is_ok(status) && candidate->device != NULL) {
     iree_hal_buffer_params_t target_params = {
         .usage = IREE_HAL_BUFFER_USAGE_TRANSFER | IREE_HAL_BUFFER_USAGE_MAPPING,
         .access = IREE_HAL_MEMORY_ACCESS_ALL,
@@ -379,53 +562,35 @@ iree_status_t loom_run_vm_invocation_invoke_plan(
         .queue_affinity = IREE_HAL_QUEUE_AFFINITY_ANY,
         .min_alignment = 0,
     };
-    status = iree_tooling_transfer_variants(outputs, device, device_allocator,
-                                            target_params, /*wait_fence=*/NULL,
-                                            /*signal_fence=*/NULL);
+    status = iree_tooling_transfer_variants(
+        iteration->outputs, candidate->device, candidate->device_allocator,
+        target_params, /*wait_fence=*/NULL, /*signal_fence=*/NULL);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_run_vm_process_outputs(plan, outputs, allocator, result);
+    status = loom_run_vm_process_outputs(plan, iteration->outputs, allocator,
+                                         result);
   }
-
-  iree_vm_list_release(outputs);
-  iree_hal_fence_release(finish_fence);
-  iree_vm_list_release(inputs);
   return status;
 }
 
-static iree_status_t loom_run_vm_invoke_function(
-    const loom_run_vm_invocation_options_t* options, iree_vm_context_t* context,
-    iree_vm_function_t function, iree_hal_device_t* device,
-    iree_hal_allocator_t* device_allocator, iree_allocator_t allocator,
+iree_status_t loom_run_vm_invocation_run_prepared(
+    const loom_run_vm_prepared_candidate_t* candidate,
+    const loom_run_vm_invocation_plan_t* plan, iree_allocator_t allocator,
     loom_run_vm_invocation_result_t* result) {
-  IREE_ASSERT_ARGUMENT(options);
-  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(candidate);
+  IREE_ASSERT_ARGUMENT(plan);
   IREE_ASSERT_ARGUMENT(result);
+  iree_string_builder_reset(&result->output);
+  result->exit_code = 0;
 
-  iree_vm_function_signature_t signature =
-      iree_vm_function_signature(&function);
-  iree_string_view_t arguments_cconv = iree_string_view_empty();
-  iree_string_view_t results_cconv = iree_string_view_empty();
-  iree_status_t status = iree_vm_function_call_get_cconv_fragments(
-      &signature, &arguments_cconv, &results_cconv);
-
-  loom_run_vm_invocation_plan_t plan = {0};
+  loom_run_vm_iteration_t iteration = {0};
+  iree_status_t status = loom_run_vm_invocation_invoke_plan(
+      candidate, plan, allocator, &iteration);
   if (iree_status_is_ok(status)) {
-    const loom_run_vm_invocation_plan_prepare_request_t prepare_request = {
-        .options = options,
-        .arguments_cconv = arguments_cconv,
-        .results_cconv = results_cconv,
-        .device = device,
-        .device_allocator = device_allocator,
-    };
-    status = loom_run_vm_invocation_plan_prepare_from_specs(&prepare_request,
-                                                            allocator, &plan);
+    status = loom_run_vm_invocation_collect_results(candidate, plan, &iteration,
+                                                    allocator, result);
   }
-  if (iree_status_is_ok(status)) {
-    status = loom_run_vm_invocation_invoke_plan(
-        &plan, context, function, device, device_allocator, allocator, result);
-  }
-  loom_run_vm_invocation_plan_deinitialize(&plan);
+  loom_run_vm_iteration_deinitialize(&iteration);
   return status;
 }
 
@@ -439,33 +604,29 @@ iree_status_t loom_run_vm_invocation_run(
   iree_string_builder_reset(&result->output);
   result->exit_code = 0;
 
-  iree_vm_module_t* module = NULL;
-  iree_vm_context_t* context = NULL;
-  iree_hal_device_t* device = NULL;
-  iree_hal_allocator_t* device_allocator = NULL;
-  iree_vm_function_t function = {0};
+  loom_run_vm_prepared_candidate_options_t candidate_options = {0};
+  loom_run_vm_prepared_candidate_options_initialize(&candidate_options);
+  candidate_options.function_name = request->options.function_name;
+  candidate_options.default_device_uri = request->options.default_device_uri;
 
-  iree_status_t status = loom_run_vm_load_archive_module(
-      request->runtime, request->archive, allocator, &module);
-  if (iree_status_is_ok(status)) {
-    status = loom_run_vm_create_context(
-        request->runtime, module, request->options.default_device_uri,
-        allocator, &context, &device, &device_allocator);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_run_vm_lookup_function(module, request->options.function_name,
-                                         &function);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_run_vm_invoke_function(&request->options, context, function,
-                                         device, device_allocator, allocator,
-                                         result);
-  }
-  status = loom_run_vm_annotate_status_with_function_decl(status, function);
+  loom_run_vm_prepared_candidate_t candidate = {0};
+  loom_run_vm_invocation_plan_t plan = {0};
 
-  iree_hal_allocator_release(device_allocator);
-  iree_hal_device_release(device);
-  iree_vm_context_release(context);
-  iree_vm_module_release(module);
+  iree_status_t status = loom_run_vm_prepared_candidate_prepare(
+      request->runtime, request->archive, &candidate_options, allocator,
+      &candidate);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_vm_invocation_plan_prepare_from_prepared(
+        &candidate, &request->options, allocator, &plan);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_run_vm_invocation_run_prepared(&candidate, &plan, allocator,
+                                                 result);
+  }
+  status = loom_run_vm_annotate_status_with_function_decl(status,
+                                                          candidate.function);
+
+  loom_run_vm_invocation_plan_deinitialize(&plan);
+  loom_run_vm_prepared_candidate_deinitialize(&candidate);
   return status;
 }

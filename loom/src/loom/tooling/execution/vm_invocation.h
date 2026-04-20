@@ -52,6 +52,37 @@ typedef struct loom_run_vm_invocation_plan_t {
   iree_host_size_t max_output_element_count;
 } loom_run_vm_invocation_plan_t;
 
+typedef struct loom_run_vm_prepared_candidate_options_t {
+  // Exported function name to invoke. Empty selects the single export.
+  iree_string_view_t function_name;
+  // Optional default HAL device URI for VM modules that depend on HAL.
+  iree_string_view_t default_device_uri;
+} loom_run_vm_prepared_candidate_options_t;
+
+typedef struct loom_run_vm_prepared_candidate_t {
+  // Host allocator used for candidate-owned archive storage.
+  iree_allocator_t host_allocator;
+  // Candidate-owned archive bytes retained while |module| borrows them.
+  loom_ireevm_module_archive_t archive;
+  // Loaded VM bytecode module retained by the prepared candidate.
+  iree_vm_module_t* module;
+  // VM context containing |module| and any dependent runtime modules.
+  iree_vm_context_t* context;
+  // Selected exported VM function resolved during preparation.
+  iree_vm_function_t function;
+  // Optional HAL device used by HAL-dependent VM modules.
+  iree_hal_device_t* device;
+  // Optional HAL allocator paired with |device|.
+  iree_hal_allocator_t* device_allocator;
+} loom_run_vm_prepared_candidate_t;
+
+typedef struct loom_run_vm_iteration_t {
+  // Iteration-owned cloned input values passed to the VM invocation.
+  iree_vm_list_t* inputs;
+  // Iteration-owned output values produced by the VM invocation.
+  iree_vm_list_t* outputs;
+} loom_run_vm_iteration_t;
+
 typedef struct loom_run_vm_invocation_options_t {
   // Exported function name to invoke. Empty selects the single export.
   iree_string_view_t function_name;
@@ -115,6 +146,25 @@ void loom_run_vm_invocation_plan_initialize(
 void loom_run_vm_invocation_plan_deinitialize(
     loom_run_vm_invocation_plan_t* plan);
 
+// Initializes prepared candidate options to the single-export/default-device
+// configuration.
+void loom_run_vm_prepared_candidate_options_initialize(
+    loom_run_vm_prepared_candidate_options_t* out_options);
+
+// Initializes an empty prepared VM candidate.
+void loom_run_vm_prepared_candidate_initialize(
+    loom_run_vm_prepared_candidate_t* out_candidate);
+
+// Releases storage owned by |candidate|.
+void loom_run_vm_prepared_candidate_deinitialize(
+    loom_run_vm_prepared_candidate_t* candidate);
+
+// Initializes an empty VM invocation iteration.
+void loom_run_vm_iteration_initialize(loom_run_vm_iteration_t* out_iteration);
+
+// Releases storage owned by |iteration|.
+void loom_run_vm_iteration_deinitialize(loom_run_vm_iteration_t* iteration);
+
 // Initializes an invocation request.
 void loom_run_vm_invocation_request_initialize(
     loom_run_vm_invocation_request_t* out_request);
@@ -133,14 +183,43 @@ iree_status_t loom_run_vm_invocation_plan_prepare_from_specs(
     const loom_run_vm_invocation_plan_prepare_request_t* request,
     iree_allocator_t allocator, loom_run_vm_invocation_plan_t* out_plan);
 
-// Invokes |function| with |plan| and records formatted outputs or expected
-// comparison diagnostics in |result|. The plan inputs are cloned before
-// invocation so async fences and transfer helpers cannot mutate the plan's list
-// container.
+// Loads |archive|, creates a VM context, and resolves the selected function
+// once for repeated invocations. The prepared candidate owns a copy of the
+// archive bytes because the VM bytecode module borrows archive storage.
+iree_status_t loom_run_vm_prepared_candidate_prepare(
+    const loom_run_vm_runtime_t* runtime,
+    const loom_ireevm_module_archive_t* archive,
+    const loom_run_vm_prepared_candidate_options_t* options,
+    iree_allocator_t allocator,
+    loom_run_vm_prepared_candidate_t* out_candidate);
+
+// Parses textual invocation options against |candidate|'s selected function
+// signature into a reusable typed invocation plan.
+iree_status_t loom_run_vm_invocation_plan_prepare_from_prepared(
+    const loom_run_vm_prepared_candidate_t* candidate,
+    const loom_run_vm_invocation_options_t* options, iree_allocator_t allocator,
+    loom_run_vm_invocation_plan_t* out_plan);
+
+// Invokes |candidate|'s selected function with |plan| and returns the cloned
+// inputs plus produced outputs in |out_iteration|. This does not transfer,
+// format, or compare outputs.
 iree_status_t loom_run_vm_invocation_invoke_plan(
-    const loom_run_vm_invocation_plan_t* plan, iree_vm_context_t* context,
-    iree_vm_function_t function, iree_hal_device_t* device,
-    iree_hal_allocator_t* device_allocator, iree_allocator_t allocator,
+    const loom_run_vm_prepared_candidate_t* candidate,
+    const loom_run_vm_invocation_plan_t* plan, iree_allocator_t allocator,
+    loom_run_vm_iteration_t* out_iteration);
+
+// Transfers |iteration| outputs back to host-visible storage when needed and
+// records formatted outputs or expected comparison diagnostics in |result|.
+iree_status_t loom_run_vm_invocation_collect_results(
+    const loom_run_vm_prepared_candidate_t* candidate,
+    const loom_run_vm_invocation_plan_t* plan,
+    const loom_run_vm_iteration_t* iteration, iree_allocator_t allocator,
+    loom_run_vm_invocation_result_t* result);
+
+// Invokes one iteration of a prepared VM candidate and collects results.
+iree_status_t loom_run_vm_invocation_run_prepared(
+    const loom_run_vm_prepared_candidate_t* candidate,
+    const loom_run_vm_invocation_plan_t* plan, iree_allocator_t allocator,
     loom_run_vm_invocation_result_t* result);
 
 // Loads |request->archive| into a fresh VM context, invokes the selected
