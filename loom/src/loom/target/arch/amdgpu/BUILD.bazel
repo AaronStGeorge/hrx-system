@@ -768,6 +768,21 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "amdgpu_hal_backend",
+    srcs = ["amdgpu_hal_backend.c"],
+    hdrs = ["amdgpu_hal_backend.h"],
+    deps = [
+        ":target_info",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
+        "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
+        "//loom/src/loom/tooling/execution:hal_backend",
+        "//loom/src/loom/tooling/execution:hal_runtime",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_check_runner_binary(
     name = "loom-check",
     src = "loom-check.c",

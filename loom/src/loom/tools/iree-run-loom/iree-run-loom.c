@@ -15,7 +15,7 @@
 
 #if IREE_RUN_LOOM_HAVE_AMDGPU
 #include "loom/target/arch/amdgpu/low_registry.h"
-#include "loom/tools/iree-run-loom/amdgpu_hal_backend.h"
+#include "loom/target/arch/amdgpu/amdgpu_hal_backend.h"
 #endif  // IREE_RUN_LOOM_HAVE_AMDGPU
 
 enum {

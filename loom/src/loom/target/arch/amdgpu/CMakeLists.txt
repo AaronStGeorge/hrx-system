@@ -313,6 +313,24 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    amdgpu_hal_backend
+  HDRS
+    "amdgpu_hal_backend.h"
+  SRCS
+    "amdgpu_hal_backend.c"
+  DEPS
+    ::target_info
+    iree::base
+    loom::src::loom::ops::target
+    loom::src::loom::target::emit::native::amdgpu::hal_executable
+    loom::src::loom::target::emit::native::amdgpu::module_compiler
+    loom::src::loom::tooling::execution::hal_backend
+    loom::src::loom::tooling::execution::hal_runtime
+  PUBLIC
+)
+
 loom_cc_binary(
   NAME
     loom-check
