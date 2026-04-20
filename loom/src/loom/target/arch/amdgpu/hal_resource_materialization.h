@@ -16,7 +16,6 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
-#include "loom/codegen/low/allocation.h"
 #include "loom/ir/ir.h"
 #include "loom/target/types.h"
 
@@ -43,15 +42,6 @@ iree_status_t loom_amdgpu_hal_resource_materialize(
     const loom_target_bundle_t* target_bundle,
     loom_amdgpu_hal_resource_materialization_result_t* out_result,
     iree_arena_allocator_t* scratch_arena);
-
-// Finds ABI live-ins that require fixed physical locations during allocation.
-//
-// The returned array is arena-owned and currently contains the kernarg segment
-// pointer live-in fixed to s[0:1] when present.
-iree_status_t loom_amdgpu_hal_resource_fixed_values_from_low(
-    const loom_module_t* module, const loom_op_t* function_op,
-    const loom_low_allocation_fixed_value_t** out_fixed_values,
-    iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena);
 
 #ifdef __cplusplus
 }  // extern "C"

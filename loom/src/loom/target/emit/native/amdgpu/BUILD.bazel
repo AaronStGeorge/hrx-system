@@ -82,6 +82,48 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "kernel_hsaco_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "kernel_hsaco_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "kernel_hsaco_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "kernel_hsaco_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "kernel_hsaco_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "kernel_hsaco_no_hal_amdgpu_dep",
+    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
+    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
+)
+
+iree_assert_no_dependency(
+    name = "kernel_hsaco_no_target_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
+)
+
+iree_assert_no_dependency(
     name = "metadata_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
@@ -330,6 +372,27 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "kernel_hsaco",
+    srcs = ["kernel_hsaco.c"],
+    hdrs = ["kernel_hsaco.h"],
+    deps = [
+        ":encoding",
+        ":hsaco",
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low:schedule",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/arch/amdgpu:wait_packets",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+    ],
+)
+
+loom_cc_library(
     name = "hsaco",
     srcs = ["hsaco.c"],
     hdrs = ["hsaco.h"],
@@ -428,6 +491,7 @@ loom_cc_test(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:ir_records",
         "//loom/src/loom/target:presets",
+        "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
         "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
         "//loom/src/loom/target/arch/amdgpu:low_registry",
         "//loom/src/loom/target/arch/amdgpu:wait_packets",
@@ -467,16 +531,20 @@ loom_cc_test(
         "requires-gpu-amd",
     ],
     deps = [
-        ":encoding",
-        ":hsaco",
+        ":kernel_hsaco",
         "//loom/src/loom/codegen/low:packetization",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:ir_records",
         "//loom/src/loom/target:presets",
+        "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+        "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
         "//loom/src/loom/target/arch/amdgpu:low_registry",
         "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/arch/amdgpu:wait_packets",
+        "//loom/src/loom/target/arch/amdgpu:wait_plan",
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",

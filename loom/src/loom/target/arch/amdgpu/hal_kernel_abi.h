@@ -16,6 +16,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/allocation.h"
 #include "loom/ir/ir.h"
 #include "loom/target/types.h"
 
@@ -32,6 +33,9 @@ extern "C" {
 // Stable low.live_in source spelling for the AMDGPU kernarg segment pointer.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE \
   "amdgpu.kernarg_segment_ptr"
+
+// Stable low.live_in source spelling for workitem_id.x in v0.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE "amdgpu.workitem_id.x"
 
 typedef struct loom_amdgpu_hal_kernarg_resource_t {
   // Defining low.abi.resource op for diagnostics and cross-checks.
@@ -85,6 +89,20 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
 // Returns true if |value_id| is defined by the kernarg segment pointer live-in.
 bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
+
+// Returns true if |value_id| is defined by the workitem_id.x live-in.
+bool loom_amdgpu_hal_kernel_abi_is_workitem_id_x_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
+// Finds AMDGPU ABI live-ins that require fixed physical locations during
+// allocation.
+//
+// The returned array is arena-owned. The current ABI fixes the kernarg segment
+// pointer live-in to s[0:1] and the workitem_id.x live-in to v0 when present.
+iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
+    const loom_module_t* module, const loom_op_t* function_op,
+    const loom_low_allocation_fixed_value_t** out_fixed_values,
+    iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena);
 
 #ifdef __cplusplus
 }  // extern "C"

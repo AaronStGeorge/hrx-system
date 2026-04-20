@@ -728,6 +728,7 @@ loom_cc_library(
     srcs = ["hal_kernel_abi.c"],
     hdrs = ["hal_kernel_abi.h"],
     deps = [
+        "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:types",

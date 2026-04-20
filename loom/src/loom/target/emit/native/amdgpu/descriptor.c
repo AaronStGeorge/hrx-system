@@ -48,6 +48,26 @@
 
 #define LOOM_AMDGPU_KERNEL_DESCRIPTOR_KERNARG_USER_SGPR_COUNT 2u
 
+static const loom_amdgpu_kernel_descriptor_flags_t
+    kAmdgpuKernelDescriptorKnownFlags =
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_PTR |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_QUEUE_PTR |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_ID |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_FLAT_SCRATCH_INIT |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_SIZE |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_PRIVATE_SEGMENT |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Y |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Z |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_INFO |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32 |
+        LOOM_AMDGPU_KERNEL_DESCRIPTOR_USES_DYNAMIC_STACK;
+
 static iree_status_t loom_amdgpu_kernel_descriptor_resolve_target(
     iree_string_view_t target_cpu,
     const loom_amdgpu_processor_info_t** out_target) {
@@ -130,28 +150,79 @@ static iree_status_t loom_amdgpu_kernel_descriptor_granulated_blocks(
 static uint32_t loom_amdgpu_kernel_descriptor_implied_user_sgpr_count(
     const loom_amdgpu_kernel_descriptor_t* descriptor) {
   uint32_t count = 0;
-  if (descriptor->enable_sgpr_private_segment_buffer) {
+  if (iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER)) {
     count += 4;
   }
-  if (descriptor->enable_sgpr_dispatch_ptr) {
+  if (iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_PTR)) {
     count += 2;
   }
-  if (descriptor->enable_sgpr_queue_ptr) {
+  if (iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_QUEUE_PTR)) {
     count += 2;
   }
-  if (descriptor->enable_sgpr_kernarg_segment_ptr) {
+  if (iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR)) {
     count += 2;
   }
-  if (descriptor->enable_sgpr_dispatch_id) {
+  if (iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_ID)) {
     count += 2;
   }
-  if (descriptor->enable_sgpr_flat_scratch_init) {
+  if (iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_FLAT_SCRATCH_INIT)) {
     count += 2;
   }
-  if (descriptor->enable_sgpr_private_segment_size) {
+  if (iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_SIZE)) {
     count += 1;
   }
   return count;
+}
+
+static iree_status_t loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
+    loom_amdgpu_kernel_descriptor_flags_t flags, uint32_t* out_mode) {
+  IREE_ASSERT_ARGUMENT(out_mode);
+  *out_mode = 0;
+  const loom_amdgpu_kernel_descriptor_flags_t workitem_id_flags =
+      flags & (LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X |
+               LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y |
+               LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z);
+  const bool has_x =
+      iree_any_bit_set(workitem_id_flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X);
+  const bool has_y =
+      iree_any_bit_set(workitem_id_flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y);
+  const bool has_z =
+      iree_any_bit_set(workitem_id_flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z);
+  if (has_z && (!has_x || !has_y)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU kernel descriptor workitem-id-z requires workitem-id-x/y "
+        "flags");
+  }
+  if (has_y && !has_x) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU kernel descriptor workitem-id-y requires the workitem-id-x "
+        "flag");
+  }
+  if (has_z) {
+    *out_mode = 2;
+  } else if (has_y) {
+    *out_mode = 1;
+  } else {
+    *out_mode = 0;
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_kernel_descriptor_validate(
@@ -163,13 +234,17 @@ static iree_status_t loom_amdgpu_kernel_descriptor_validate(
   }
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_descriptor_resolve_target(
       descriptor->target_cpu, out_target));
-  if (descriptor->system_vgpr_workitem_id >
-      loom_amdgpu_kernel_descriptor_bit_mask(
-          LOOM_AMDGPU_COMPUTE_PGM_RSRC2_WORKITEM_ID_WIDTH)) {
+  if (iree_any_bit_set(descriptor->flags, ~kAmdgpuKernelDescriptorKnownFlags)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU kernel descriptor workitem ID mode must fit in 2 bits");
+        "AMDGPU kernel descriptor flags contain unknown bits 0x%08" PRIx32,
+        descriptor->flags & ~kAmdgpuKernelDescriptorKnownFlags);
   }
+  uint32_t system_vgpr_workitem_id = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
+          descriptor->flags, &system_vgpr_workitem_id));
+  (void)system_vgpr_workitem_id;
   const uint32_t implied_user_sgpr_count =
       loom_amdgpu_kernel_descriptor_implied_user_sgpr_count(descriptor);
   if (descriptor->user_sgpr_count < implied_user_sgpr_count) {
@@ -187,14 +262,18 @@ static iree_status_t loom_amdgpu_kernel_descriptor_validate(
         "AMDGPU kernel descriptor user SGPR count exceeds target capacity");
   }
   if ((*out_target)->kernel_descriptor_has_architected_flat_scratch &&
-      descriptor->enable_sgpr_private_segment_buffer) {
+      iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU kernel descriptor private segment buffer user SGPR is invalid "
         "with architected flat scratch");
   }
   if ((*out_target)->kernel_descriptor_has_architected_flat_scratch &&
-      descriptor->enable_sgpr_flat_scratch_init) {
+      iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_FLAT_SCRATCH_INIT)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU kernel descriptor flat scratch init user SGPR is invalid with "
@@ -242,14 +321,17 @@ iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
       .kernel_code_entry_byte_offset = kernel_code_entry_byte_offset,
       .next_free_sgpr = metadata_kernel->sgpr_count,
       .next_free_vgpr = metadata_kernel->vgpr_count,
-      .system_vgpr_workitem_id = 0,
       .user_sgpr_count =
           metadata_kernel->kernarg_segment_size != 0
               ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_KERNARG_USER_SGPR_COUNT
               : 0,
-      .enable_sgpr_kernarg_segment_ptr =
-          metadata_kernel->kernarg_segment_size != 0,
-      .enable_wavefront_size32 = metadata_kernel->wavefront_size == 32,
+      .flags =
+          (metadata_kernel->kernarg_segment_size != 0
+               ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR
+               : 0) |
+          (metadata_kernel->wavefront_size == 32
+               ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32
+               : 0),
   };
   (void)target;
   return iree_ok_status();
@@ -290,7 +372,8 @@ iree_status_t loom_amdgpu_kernel_descriptor_validate_metadata(
                             "AMDGPU descriptor VGPR count does not match "
                             "metadata");
   }
-  if (descriptor->enable_wavefront_size32 !=
+  if (iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32) !=
       (metadata_kernel->wavefront_size == 32)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU descriptor wavefront size does not match "
@@ -336,7 +419,8 @@ iree_status_t loom_amdgpu_kernel_descriptor_write(
   }
 
   const uint32_t vgpr_granule =
-      descriptor->enable_wavefront_size32
+      iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32)
           ? target->kernel_descriptor_vgpr_encoding_granule_wave32
           : target->kernel_descriptor_vgpr_encoding_granule_wave64;
   uint32_t vgpr_block_count = 0;
@@ -379,64 +463,89 @@ iree_status_t loom_amdgpu_kernel_descriptor_write(
   uint32_t compute_pgm_rsrc2 = 0;
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc2, LOOM_AMDGPU_COMPUTE_PGM_RSRC2_PRIVATE_SEGMENT_SHIFT,
-      descriptor->enable_private_segment);
+      iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_PRIVATE_SEGMENT));
   loom_amdgpu_kernel_descriptor_set_bits_u32(
       &compute_pgm_rsrc2, LOOM_AMDGPU_COMPUTE_PGM_RSRC2_USER_SGPR_COUNT_SHIFT,
       LOOM_AMDGPU_COMPUTE_PGM_RSRC2_USER_SGPR_COUNT_WIDTH,
       descriptor->user_sgpr_count);
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc2, LOOM_AMDGPU_COMPUTE_PGM_RSRC2_WORKGROUP_ID_X_SHIFT,
-      descriptor->enable_sgpr_workgroup_id_x);
+      iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X));
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc2, LOOM_AMDGPU_COMPUTE_PGM_RSRC2_WORKGROUP_ID_Y_SHIFT,
-      descriptor->enable_sgpr_workgroup_id_y);
+      iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Y));
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc2, LOOM_AMDGPU_COMPUTE_PGM_RSRC2_WORKGROUP_ID_Z_SHIFT,
-      descriptor->enable_sgpr_workgroup_id_z);
+      iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Z));
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc2, LOOM_AMDGPU_COMPUTE_PGM_RSRC2_WORKGROUP_INFO_SHIFT,
-      descriptor->enable_sgpr_workgroup_info);
+      iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_INFO));
+  uint32_t system_vgpr_workitem_id = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
+          descriptor->flags, &system_vgpr_workitem_id));
   loom_amdgpu_kernel_descriptor_set_bits_u32(
       &compute_pgm_rsrc2, LOOM_AMDGPU_COMPUTE_PGM_RSRC2_WORKITEM_ID_SHIFT,
-      LOOM_AMDGPU_COMPUTE_PGM_RSRC2_WORKITEM_ID_WIDTH,
-      descriptor->system_vgpr_workitem_id);
+      LOOM_AMDGPU_COMPUTE_PGM_RSRC2_WORKITEM_ID_WIDTH, system_vgpr_workitem_id);
 
   uint16_t kernel_code_properties = 0;
   loom_amdgpu_kernel_descriptor_set_bit_u16(
       &kernel_code_properties,
       LOOM_AMDGPU_KERNEL_CODE_PROPERTY_PRIVATE_SEGMENT_BUFFER_SHIFT,
-      descriptor->enable_sgpr_private_segment_buffer);
+      iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER));
   loom_amdgpu_kernel_descriptor_set_bit_u16(
       &kernel_code_properties,
       LOOM_AMDGPU_KERNEL_CODE_PROPERTY_DISPATCH_PTR_SHIFT,
-      descriptor->enable_sgpr_dispatch_ptr);
+      iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_PTR));
   loom_amdgpu_kernel_descriptor_set_bit_u16(
       &kernel_code_properties, LOOM_AMDGPU_KERNEL_CODE_PROPERTY_QUEUE_PTR_SHIFT,
-      descriptor->enable_sgpr_queue_ptr);
+      iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_QUEUE_PTR));
   loom_amdgpu_kernel_descriptor_set_bit_u16(
       &kernel_code_properties,
       LOOM_AMDGPU_KERNEL_CODE_PROPERTY_KERNARG_SEGMENT_PTR_SHIFT,
-      descriptor->enable_sgpr_kernarg_segment_ptr);
+      iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR));
   loom_amdgpu_kernel_descriptor_set_bit_u16(
       &kernel_code_properties,
       LOOM_AMDGPU_KERNEL_CODE_PROPERTY_DISPATCH_ID_SHIFT,
-      descriptor->enable_sgpr_dispatch_id);
+      iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_ID));
   loom_amdgpu_kernel_descriptor_set_bit_u16(
       &kernel_code_properties,
       LOOM_AMDGPU_KERNEL_CODE_PROPERTY_FLAT_SCRATCH_INIT_SHIFT,
-      descriptor->enable_sgpr_flat_scratch_init);
+      iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_FLAT_SCRATCH_INIT));
   loom_amdgpu_kernel_descriptor_set_bit_u16(
       &kernel_code_properties,
       LOOM_AMDGPU_KERNEL_CODE_PROPERTY_PRIVATE_SEGMENT_SIZE_SHIFT,
-      descriptor->enable_sgpr_private_segment_size);
+      iree_any_bit_set(
+          descriptor->flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_SIZE));
   loom_amdgpu_kernel_descriptor_set_bit_u16(
       &kernel_code_properties,
       LOOM_AMDGPU_KERNEL_CODE_PROPERTY_WAVEFRONT_SIZE32_SHIFT,
-      descriptor->enable_wavefront_size32);
+      iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32));
   loom_amdgpu_kernel_descriptor_set_bit_u16(
       &kernel_code_properties,
       LOOM_AMDGPU_KERNEL_CODE_PROPERTY_USES_DYNAMIC_STACK_SHIFT,
-      descriptor->uses_dynamic_stack);
+      iree_any_bit_set(descriptor->flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_USES_DYNAMIC_STACK));
 
   memset(target_bytes.data, 0, LOOM_AMDGPU_KERNEL_DESCRIPTOR_LENGTH);
   loom_amdgpu_kernel_descriptor_store_le_u32(

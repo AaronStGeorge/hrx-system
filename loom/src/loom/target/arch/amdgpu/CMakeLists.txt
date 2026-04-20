@@ -305,6 +305,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::types

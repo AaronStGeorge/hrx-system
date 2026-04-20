@@ -17,16 +17,24 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "iree/io/stream.h"
-#include "loom/target/emit/native/amdgpu/metadata.h"
+#include "loom/target/emit/native/amdgpu/descriptor.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+// Descriptor-only ABI controls for one kernel entry.
+typedef struct loom_amdgpu_hsaco_kernel_descriptor_options_t {
+  // Descriptor-only ABI flags requested by low/kernel lowering.
+  loom_amdgpu_kernel_descriptor_flags_t flags;
+} loom_amdgpu_hsaco_kernel_descriptor_options_t;
+
 // One kernel entry emitted into an AMDGPU HSA code object.
 typedef struct loom_amdgpu_hsaco_kernel_t {
   // Kernel metadata row shared by the AMDGPU note and kernel descriptor.
   loom_amdgpu_metadata_kernel_t metadata;
+  // Descriptor-only ABI controls that are not present in metadata.
+  loom_amdgpu_hsaco_kernel_descriptor_options_t descriptor_options;
   // Encoded native instructions for the kernel entry symbol.
   iree_const_byte_span_t text;
 } loom_amdgpu_hsaco_kernel_t;

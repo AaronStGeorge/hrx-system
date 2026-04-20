@@ -26,10 +26,14 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
+#include "loom/target/arch/amdgpu/hal_resource_materialization.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/target_info.h"
-#include "loom/target/emit/native/amdgpu/encoding.h"
-#include "loom/target/emit/native/amdgpu/hsaco.h"
+#include "loom/target/arch/amdgpu/wait_packets.h"
+#include "loom/target/arch/amdgpu/wait_plan.h"
+#include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
+#include "loom/target/ir_records.h"
 #include "loom/target/presets.h"
 #include "loom/testing/context.h"
 
@@ -146,9 +150,9 @@ std::string HsaStatusString(const HsaApi& api, hsa_status_t status) {
 template <typename Fn, typename... Args>
 hsa_status_t CallHsa(Fn fn, Args... args) {
   IREE_LEAK_CHECK_DISABLE_PUSH();
-  hsa_status_t status = fn(args...);
+  hsa_status_t result = fn(args...);
   IREE_LEAK_CHECK_DISABLE_POP();
-  return status;
+  return result;
 }
 
 template <typename Fn>
@@ -395,7 +399,7 @@ class HsaExecutable {
 struct GpuAgentSearch {
   // HSA API used while iterating agents.
   const HsaApi* api = nullptr;
-  // First discovered GPU agent.
+  // First discovered matching agent.
   hsa_agent_t agent = {};
   // HSA-reported agent name used for diagnostics.
   std::string agent_name;
@@ -403,7 +407,7 @@ struct GpuAgentSearch {
   bool found = false;
 };
 
-hsa_status_t FindFirstGpuAgent(hsa_agent_t agent, void* user_data) {
+hsa_status_t FindFirstAgent(hsa_agent_t agent, void* user_data) {
   GpuAgentSearch* search = reinterpret_cast<GpuAgentSearch*>(user_data);
   hsa_device_type_t device_type = HSA_DEVICE_TYPE_CPU;
   hsa_status_t status = CallHsa(search->api->hsa_agent_get_info, agent,
@@ -497,7 +501,7 @@ bool TryFindFirstGpuAgent(const HsaApi& api, hsa_agent_t* out_agent,
   IREE_ASSERT_ARGUMENT(out_skip_reason);
   GpuAgentSearch search = {.api = &api};
   hsa_status_t status =
-      CallHsa(api.hsa_iterate_agents, FindFirstGpuAgent, &search);
+      CallHsa(api.hsa_iterate_agents, FindFirstAgent, &search);
   if (status != HSA_STATUS_SUCCESS && status != HSA_STATUS_INFO_BREAK) {
     ADD_FAILURE() << "hsa_iterate_agents failed: "
                   << HsaStatusString(api, status);
@@ -599,9 +603,9 @@ bool TryDiscoverCurrentAmdgpuTarget(const HsaApi& api,
   return true;
 }
 
-const loom_op_t* FindFirstLowFunction(loom_module_t* module) {
+loom_op_t* FindFirstLowFunction(loom_module_t* module) {
   loom_block_t* block = loom_module_block(module);
-  const loom_op_t* op = nullptr;
+  loom_op_t* op = nullptr;
   loom_block_for_each_op(block, op) {
     if (loom_low_func_def_isa(op)) {
       return op;
@@ -610,9 +614,9 @@ const loom_op_t* FindFirstLowFunction(loom_module_t* module) {
   return nullptr;
 }
 
-class LowNoopKernelCompiler {
+class LowKernelCompiler {
  public:
-  LowNoopKernelCompiler() {
+  LowKernelCompiler() {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     IREE_CHECK_OK(loom_testing_context_initialize_all(iree_allocator_system(),
@@ -620,27 +624,26 @@ class LowNoopKernelCompiler {
     loom_amdgpu_low_descriptor_registry_initialize(&target_registry_);
   }
 
-  LowNoopKernelCompiler(const LowNoopKernelCompiler&) = delete;
-  LowNoopKernelCompiler& operator=(const LowNoopKernelCompiler&) = delete;
+  LowKernelCompiler(const LowKernelCompiler&) = delete;
+  LowKernelCompiler& operator=(const LowKernelCompiler&) = delete;
 
-  ~LowNoopKernelCompiler() {
+  ~LowKernelCompiler() {
     ResetModule();
     loom_context_deinitialize(&context_);
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
 
-  iree_status_t EncodeReturnOnlyKernel(iree_string_view_t preset_key,
-                                       iree_const_byte_span_t* out_text,
-                                       iree_arena_allocator_t* arena) {
-    IREE_ASSERT_ARGUMENT(out_text);
+  iree_status_t CompileKernel(iree_string_view_t preset_key,
+                              const std::string& kernel_source,
+                              std::string* out_hsaco,
+                              iree_arena_allocator_t* arena) {
+    IREE_ASSERT_ARGUMENT(out_hsaco);
     IREE_ASSERT_ARGUMENT(arena);
-    *out_text = iree_const_byte_span_empty();
+    *out_hsaco = {};
     std::string source = "target.preset @gfx_target {key = \"";
     source.append(preset_key.data, preset_key.size);
     source += "\", source = @loom_kernel}\n";
-    source += "low.func.def target(@gfx_target) @loom_kernel() {\n";
-    source += "  low.return\n";
-    source += "}\n";
+    source += kernel_source;
     IREE_RETURN_IF_ERROR(ParseSource(source));
 
     const loom_target_preset_registry_t preset_registry =
@@ -655,6 +658,25 @@ class LowNoopKernelCompiler {
                               expanded_preset_count);
     }
 
+    loom_op_t* low_function = FindFirstLowFunction(module_);
+    if (low_function == nullptr) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "AMDGPU HSA low kernel has no low func");
+    }
+
+    loom_target_ir_bundle_storage_t bundle_storage = {};
+    IREE_RETURN_IF_ERROR(loom_target_ir_bundle_from_symbol_name(
+        module_, IREE_SV("gfx_target"), &bundle_storage));
+    loom_amdgpu_hal_resource_materialization_result_t materialization = {};
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_materialize(
+        module_, low_function, &bundle_storage.bundle, &materialization,
+        arena));
+
+    const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
+    iree_host_size_t fixed_value_count = 0;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
+        module_, low_function, &fixed_values, &fixed_value_count, arena));
+
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &target_registry_.registry,
@@ -667,24 +689,31 @@ class LowNoopKernelCompiler {
         loom_low_verify_module(module_, &verify_options, &verify_result));
     if (verify_result.error_count != 0) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "AMDGPU HSA low no-op kernel failed low "
-                              "verification");
-    }
-
-    const loom_op_t* low_function = FindFirstLowFunction(module_);
-    if (low_function == nullptr) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "AMDGPU HSA low no-op kernel has no low func");
+                              "AMDGPU HSA low kernel failed low verification");
     }
 
     loom_low_packetization_options_t packetization_options = {
         .descriptor_registry = &target_registry_.registry,
+        .allocation_fixed_values = fixed_values,
+        .allocation_fixed_value_count = fixed_value_count,
     };
     loom_low_packetization_t packetization = {};
     IREE_RETURN_IF_ERROR(loom_low_packetize_function(
         module_, low_function, &packetization_options, arena, &packetization));
-    return loom_amdgpu_encode_instruction_stream(
-        &packetization.schedule, &packetization.allocation, out_text, arena);
+
+    loom_amdgpu_wait_plan_t wait_plan = {};
+    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_plan_build(&packetization.schedule,
+                                                     arena, &wait_plan));
+    loom_amdgpu_wait_packet_plan_t wait_packets = {};
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_wait_packet_plan_build(&wait_plan, arena, &wait_packets));
+
+    StreamPtr stream = CreateStream();
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_kernel_hsaco_with_wait_packets(
+        &packetization.schedule, &packetization.allocation, &wait_packets,
+        stream.get(), arena));
+    *out_hsaco = StreamBytes(stream.get());
+    return iree_ok_status();
   }
 
  private:
@@ -700,7 +729,7 @@ class LowNoopKernelCompiler {
     loom_text_parse_options_t parse_options = {};
     parse_options.max_errors = 20;
     return loom_text_parse(iree_make_string_view(source.data(), source.size()),
-                           IREE_SV("amdgpu_hsaco_hsa_noop.loom"), &context_,
+                           IREE_SV("amdgpu_hsaco_hsa_smoke.loom"), &context_,
                            &block_pool_, &parse_options, &module_);
   }
 
@@ -714,49 +743,8 @@ class LowNoopKernelCompiler {
   loom_target_low_descriptor_registry_t target_registry_ = {};
 };
 
-struct NoopKernelProgram {
-  // Exported kernel entry name.
-  std::string name;
-  // Required workgroup size in the X dimension.
-  uint16_t workgroup_size_x = 1;
-  // Required workgroup size in the Y dimension.
-  uint16_t workgroup_size_y = 1;
-  // Required workgroup size in the Z dimension.
-  uint16_t workgroup_size_z = 1;
-};
-
-loom_amdgpu_metadata_kernel_t MetadataForNoopKernelProgram(
-    const NoopKernelProgram& program, iree_string_view_t descriptor_symbol,
-    uint32_t wavefront_size) {
-  return {
-      .name = iree_make_string_view(program.name.data(), program.name.size()),
-      .descriptor_symbol = descriptor_symbol,
-      .kernarg_segment_size = 0,
-      .kernarg_segment_alignment = 8,
-      .wavefront_size = wavefront_size,
-      .group_segment_fixed_size = 0,
-      .private_segment_fixed_size = 0,
-      .sgpr_count = 0,
-      .vgpr_count = 0,
-      .max_flat_workgroup_size =
-          static_cast<uint32_t>(program.workgroup_size_x) *
-          static_cast<uint32_t>(program.workgroup_size_y) *
-          static_cast<uint32_t>(program.workgroup_size_z),
-      .required_workgroup_size =
-          {
-              .x = program.workgroup_size_x,
-              .y = program.workgroup_size_y,
-              .z = program.workgroup_size_z,
-          },
-      .has_required_workgroup_size = true,
-      .arguments = nullptr,
-      .argument_count = 0,
-  };
-}
-
-iree_status_t CompileNoopKernelProgramForAmdgpu(
-    const NoopKernelProgram& program, const AmdgpuHsaTarget& target,
-    std::string* out_hsaco) {
+iree_status_t CompileWorkitemStoreKernelForAmdgpu(const AmdgpuHsaTarget& target,
+                                                  std::string* out_hsaco) {
   IREE_ASSERT_ARGUMENT(out_hsaco);
   *out_hsaco = {};
   if (!target.feature_suffix.empty()) {
@@ -780,37 +768,117 @@ iree_status_t CompileNoopKernelProgramForAmdgpu(
                             target.target_cpu.c_str());
   }
 
-  std::string descriptor_symbol = program.name + ".kd";
   TestArena arena;
-  LowNoopKernelCompiler compiler;
-  iree_const_byte_span_t text = iree_const_byte_span_empty();
-  IREE_RETURN_IF_ERROR(compiler.EncodeReturnOnlyKernel(
-      processor->low_preset_key, &text, arena.arena()));
-  const loom_amdgpu_hsaco_kernel_t kernel = {
-      .metadata = MetadataForNoopKernelProgram(
-          program,
-          iree_make_string_view(descriptor_symbol.data(),
-                                descriptor_symbol.size()),
-          processor->default_wavefront_size),
-      .text = text,
-  };
-  const loom_amdgpu_hsaco_file_t file = {
-      .target =
-          iree_make_string_view(target.isa_name.data(), target.isa_name.size()),
-      .target_cpu = iree_make_string_view(target.target_cpu.data(),
-                                          target.target_cpu.size()),
-      .kernels = &kernel,
-      .kernel_count = 1,
-  };
-
-  StreamPtr stream = CreateStream();
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
-  *out_hsaco = StreamBytes(stream.get());
-  return iree_ok_status();
+  LowKernelCompiler compiler;
+  return compiler.CompileKernel(
+      processor->low_preset_key,
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
+      "> : reg<amdgpu.vgpr>\n"
+      "  %four = low.const<amdgpu.v_mov_b32> {imm32 = 4} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %four) : "
+      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+      "  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+      "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.sgpr>\n"
+      "  low.op<amdgpu.buffer_store_dword>(%tid, %binding, %byte_offset, "
+      "%zero) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.return\n"
+      "}\n"
+      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n",
+      out_hsaco, arena.arena());
 }
 
-TEST(AmdgpuHsacoHsaTest, LoadsLowReturnNoopKernelAndResolvesDescriptorSymbol) {
+iree_status_t CheckHsaStatus(const HsaApi& api, hsa_status_t status,
+                             const char* call_name) {
+  if (status == HSA_STATUS_SUCCESS) {
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_UNAVAILABLE, "%s failed: %s", call_name,
+                          HsaStatusString(api, status).c_str());
+}
+
+struct LoadedKernelInfo {
+  // Kernel object value to put in AQL dispatch packets.
+  uint64_t kernel_object = 0;
+  // Kernarg segment size reported by the HSA loader.
+  uint32_t kernarg_segment_size = 0;
+  // Group segment size reported by the HSA loader.
+  uint32_t group_segment_size = 0;
+  // Private segment size reported by the HSA loader.
+  uint32_t private_segment_size = 0;
+};
+
+iree_status_t LoadKernelExecutable(const HsaApi& api,
+                                   const AmdgpuHsaTarget& target,
+                                   const std::string& hsaco,
+                                   const char* symbol_name,
+                                   HsaExecutable* executable,
+                                   LoadedKernelInfo* out_info) {
+  IREE_ASSERT_ARGUMENT(executable);
+  IREE_ASSERT_ARGUMENT(out_info);
+  *out_info = {};
+
+  HsaCodeObjectReader reader(&api);
+  IREE_RETURN_IF_ERROR(
+      CheckHsaStatus(api,
+                     CallHsa(api.hsa_code_object_reader_create_from_memory,
+                             hsaco.data(), hsaco.size(), reader.out()),
+                     "hsa_code_object_reader_create_from_memory"));
+
+  IREE_RETURN_IF_ERROR(
+      CheckHsaStatus(api,
+                     CallHsa(api.hsa_executable_create_alt, HSA_PROFILE_FULL,
+                             HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, nullptr,
+                             executable->out()),
+                     "hsa_executable_create_alt"));
+  IREE_RETURN_IF_ERROR(CheckHsaStatus(
+      api,
+      CallHsa(api.hsa_executable_load_agent_code_object, executable->get(),
+              target.agent, reader.get(), nullptr, nullptr),
+      "hsa_executable_load_agent_code_object"));
+  reader.Reset();
+  IREE_RETURN_IF_ERROR(CheckHsaStatus(
+      api, CallHsa(api.hsa_executable_freeze, executable->get(), nullptr),
+      "hsa_executable_freeze"));
+
+  hsa_executable_symbol_t symbol = {};
+  IREE_RETURN_IF_ERROR(CheckHsaStatus(
+      api,
+      CallHsa(api.hsa_executable_get_symbol_by_name, executable->get(),
+              symbol_name, &target.agent, &symbol),
+      "hsa_executable_get_symbol_by_name"));
+  IREE_RETURN_IF_ERROR(
+      CheckHsaStatus(api,
+                     CallHsa(api.hsa_executable_symbol_get_info, symbol,
+                             HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT,
+                             &out_info->kernel_object),
+                     "hsa_executable_symbol_get_info(KERNEL_OBJECT)"));
+  IREE_RETURN_IF_ERROR(CheckHsaStatus(
+      api,
+      CallHsa(api.hsa_executable_symbol_get_info, symbol,
+              HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE,
+              &out_info->kernarg_segment_size),
+      "hsa_executable_symbol_get_info(KERNARG_SEGMENT_SIZE)"));
+  IREE_RETURN_IF_ERROR(CheckHsaStatus(
+      api,
+      CallHsa(api.hsa_executable_symbol_get_info, symbol,
+              HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_GROUP_SEGMENT_SIZE,
+              &out_info->group_segment_size),
+      "hsa_executable_symbol_get_info(GROUP_SEGMENT_SIZE)"));
+  return CheckHsaStatus(
+      api,
+      CallHsa(api.hsa_executable_symbol_get_info, symbol,
+              HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_PRIVATE_SEGMENT_SIZE,
+              &out_info->private_segment_size),
+      "hsa_executable_symbol_get_info(PRIVATE_SEGMENT_SIZE)");
+}
+
+TEST(AmdgpuHsacoHsaTest, LoadsWorkitemIndexedStoreKernel) {
   HsaRuntime runtime;
   iree_status_t load_status = LoadHsaApi(runtime.mutable_api());
   if (!iree_status_is_ok(load_status)) {
@@ -834,15 +902,9 @@ TEST(AmdgpuHsacoHsaTest, LoadsLowReturnNoopKernelAndResolvesDescriptorSymbol) {
     return;
   }
 
-  const NoopKernelProgram program = {
-      .name = "loom_kernel",
-      .workgroup_size_x = 64,
-      .workgroup_size_y = 1,
-      .workgroup_size_z = 1,
-  };
   std::string hsaco;
   iree_status_t compile_status =
-      CompileNoopKernelProgramForAmdgpu(program, target, &hsaco);
+      CompileWorkitemStoreKernelForAmdgpu(target, &hsaco);
   if (iree_status_is_unimplemented(compile_status)) {
     GTEST_SKIP() << "Loom AMDGPU HSACO compiler does not support current ISA '"
                  << target.isa_name << "' from HSA agent '" << target.agent_name
@@ -850,42 +912,14 @@ TEST(AmdgpuHsacoHsaTest, LoadsLowReturnNoopKernelAndResolvesDescriptorSymbol) {
   }
   IREE_ASSERT_OK(compile_status);
 
-  HsaCodeObjectReader reader(&api);
-  ASSERT_EQ(CallHsa(api.hsa_code_object_reader_create_from_memory, hsaco.data(),
-                    hsaco.size(), reader.out()),
-            HSA_STATUS_SUCCESS);
-
   HsaExecutable executable(&api);
-  status = CallHsa(api.hsa_executable_create_alt, HSA_PROFILE_FULL,
-                   HSA_DEFAULT_FLOAT_ROUNDING_MODE_DEFAULT, nullptr,
-                   executable.out());
-  ASSERT_EQ(status, HSA_STATUS_SUCCESS) << HsaStatusString(api, status);
-
-  status = CallHsa(api.hsa_executable_load_agent_code_object, executable.get(),
-                   target.agent, reader.get(), nullptr, nullptr);
-  reader.Reset();
-  ASSERT_EQ(status, HSA_STATUS_SUCCESS) << HsaStatusString(api, status);
-
-  status = CallHsa(api.hsa_executable_freeze, executable.get(), nullptr);
-  ASSERT_EQ(status, HSA_STATUS_SUCCESS) << HsaStatusString(api, status);
-
-  hsa_executable_symbol_t symbol = {};
-  status = CallHsa(api.hsa_executable_get_symbol_by_name, executable.get(),
-                   "loom_kernel.kd", &target.agent, &symbol);
-  ASSERT_EQ(status, HSA_STATUS_SUCCESS) << HsaStatusString(api, status);
-
-  uint64_t kernel_object = 0;
-  status = CallHsa(api.hsa_executable_symbol_get_info, symbol,
-                   HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_OBJECT, &kernel_object);
-  EXPECT_EQ(status, HSA_STATUS_SUCCESS) << HsaStatusString(api, status);
-  EXPECT_NE(kernel_object, 0u);
-
-  uint32_t kernarg_segment_size = UINT32_MAX;
-  status = CallHsa(api.hsa_executable_symbol_get_info, symbol,
-                   HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE,
-                   &kernarg_segment_size);
-  EXPECT_EQ(status, HSA_STATUS_SUCCESS) << HsaStatusString(api, status);
-  EXPECT_EQ(kernarg_segment_size, 0u);
+  LoadedKernelInfo kernel = {};
+  IREE_ASSERT_OK(LoadKernelExecutable(api, target, hsaco, "loom_kernel.kd",
+                                      &executable, &kernel));
+  EXPECT_NE(kernel.kernel_object, 0u);
+  EXPECT_EQ(kernel.kernarg_segment_size, 8u);
+  EXPECT_EQ(kernel.group_segment_size, 0u);
+  EXPECT_EQ(kernel.private_segment_size, 0u);
 }
 
 }  // namespace

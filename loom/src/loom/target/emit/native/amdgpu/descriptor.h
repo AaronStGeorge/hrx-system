@@ -28,6 +28,46 @@ enum {
   LOOM_AMDGPU_KERNEL_DESCRIPTOR_ALIGNMENT = 64,
 };
 
+typedef enum loom_amdgpu_kernel_descriptor_bits_e {
+  // Enable private-segment-buffer user SGPRs.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER = 1u << 0,
+  // Enable dispatch-ptr user SGPRs.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_PTR = 1u << 1,
+  // Enable queue-ptr user SGPRs.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_QUEUE_PTR = 1u << 2,
+  // Enable kernarg-segment-ptr user SGPRs.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR = 1u << 3,
+  // Enable dispatch-id user SGPRs.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_DISPATCH_ID = 1u << 4,
+  // Enable flat-scratch-init user SGPRs.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_FLAT_SCRATCH_INIT = 1u << 5,
+  // Enable private-segment-size user SGPRs.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_SIZE = 1u << 6,
+  // Enable architected private segment setup.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_PRIVATE_SEGMENT = 1u << 7,
+  // Enable workgroup-id-x system SGPR setup.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X = 1u << 8,
+  // Enable workgroup-id-y system SGPR setup.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Y = 1u << 9,
+  // Enable workgroup-id-z system SGPR setup.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Z = 1u << 10,
+  // Enable workgroup-info system SGPR setup.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_INFO = 1u << 11,
+  // Request the architecturally initialized workitem-id-x VGPR.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X = 1u << 12,
+  // Request the workitem-id-y VGPR after workitem-id-x.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y = 1u << 13,
+  // Request the workitem-id-z VGPR after workitem-id-x/y.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z = 1u << 14,
+  // Execute the kernel in wavefront-size-32 mode.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32 = 1u << 15,
+  // Mark that the kernel may use a dynamically sized stack.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_USES_DYNAMIC_STACK = 1u << 16,
+} loom_amdgpu_kernel_descriptor_bits_t;
+
+// Bitset of loom_amdgpu_kernel_descriptor_bits_t values.
+typedef uint32_t loom_amdgpu_kernel_descriptor_flags_t;
+
 typedef struct loom_amdgpu_kernel_descriptor_t {
   // Target CPU string such as `gfx1100`.
   iree_string_view_t target_cpu;
@@ -45,44 +85,17 @@ typedef struct loom_amdgpu_kernel_descriptor_t {
   uint32_t next_free_vgpr;
   // Total user SGPR count encoded in COMPUTE_PGM_RSRC2.
   uint32_t user_sgpr_count;
-  // True when private-segment-buffer user SGPRs are enabled.
-  bool enable_sgpr_private_segment_buffer;
-  // True when dispatch-ptr user SGPRs are enabled.
-  bool enable_sgpr_dispatch_ptr;
-  // True when queue-ptr user SGPRs are enabled.
-  bool enable_sgpr_queue_ptr;
-  // True when kernarg-segment-ptr user SGPRs are enabled.
-  bool enable_sgpr_kernarg_segment_ptr;
-  // True when dispatch-id user SGPRs are enabled.
-  bool enable_sgpr_dispatch_id;
-  // True when flat-scratch-init user SGPRs are enabled.
-  bool enable_sgpr_flat_scratch_init;
-  // True when private-segment-size user SGPRs are enabled.
-  bool enable_sgpr_private_segment_size;
-  // True when architected private segment setup is enabled.
-  bool enable_private_segment;
-  // True when workgroup-id-x system SGPR setup is enabled.
-  bool enable_sgpr_workgroup_id_x;
-  // True when workgroup-id-y system SGPR setup is enabled.
-  bool enable_sgpr_workgroup_id_y;
-  // True when workgroup-id-z system SGPR setup is enabled.
-  bool enable_sgpr_workgroup_id_z;
-  // True when workgroup-info system SGPR setup is enabled.
-  bool enable_sgpr_workgroup_info;
-  // System VGPR workitem ID mode: 0=x, 1=xy, 2=xyz, 3=undefined.
-  uint32_t system_vgpr_workitem_id;
-  // True when the kernel executes in wavefront-size-32 mode.
-  bool enable_wavefront_size32;
-  // True when the kernel may use a dynamically sized stack.
-  bool uses_dynamic_stack;
+  // Descriptor flags controlling AMDHSA setup and code properties.
+  loom_amdgpu_kernel_descriptor_flags_t flags;
 } loom_amdgpu_kernel_descriptor_t;
 
 // Initializes descriptor facts from the metadata kernel record used for the
 // same kernel.
 //
-// Descriptor-only ABI toggles are initialized disabled. Callers that require
-// user SGPRs, system SGPRs, or private-segment state must enable them
-// explicitly before calling loom_amdgpu_kernel_descriptor_write.
+// Metadata-derived descriptor flags are initialized from |metadata_kernel|.
+// Callers that require additional user SGPRs, system SGPRs, private-segment
+// state, workitem IDs, or code properties must OR the corresponding flags
+// before calling loom_amdgpu_kernel_descriptor_write.
 iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
     iree_string_view_t target_cpu,
     const loom_amdgpu_metadata_kernel_t* metadata_kernel,

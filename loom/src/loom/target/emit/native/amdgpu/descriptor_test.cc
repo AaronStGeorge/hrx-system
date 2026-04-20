@@ -116,10 +116,13 @@ TEST(AmdgpuDescriptorTest, EncodesResourceAndAbiFields) {
   IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
       IREE_SV("gfx1100"), &metadata, 256, &descriptor));
   descriptor.user_sgpr_count = 2;
-  descriptor.enable_sgpr_kernarg_segment_ptr = true;
-  descriptor.enable_sgpr_workgroup_id_x = true;
-  descriptor.system_vgpr_workitem_id = 2;
-  descriptor.uses_dynamic_stack = true;
+  descriptor.flags |=
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z |
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_USES_DYNAMIC_STACK;
 
   std::array<uint8_t, 65> bytes;
   bytes.fill(0);
@@ -133,6 +136,28 @@ TEST(AmdgpuDescriptorTest, EncodesResourceAndAbiFields) {
   EXPECT_EQ(LoadLeU32(bytes, 48), 0xe0ac0001u);
   EXPECT_EQ(LoadLeU32(bytes, 52), 0x00001084u);
   EXPECT_EQ(LoadLeU16(bytes, 56), 0x0c08u);
+}
+
+TEST(AmdgpuDescriptorTest, RejectsSparseWorkitemIdFlags) {
+  loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+  loom_amdgpu_kernel_descriptor_t descriptor = {};
+  IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+      IREE_SV("gfx1100"), &metadata, 0, &descriptor));
+
+  std::array<uint8_t, 64> bytes;
+  descriptor.flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_amdgpu_kernel_descriptor_write(
+          &descriptor, iree_make_byte_span(bytes.data(), bytes.size())));
+
+  descriptor.flags = LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X |
+                     LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z |
+                     LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_amdgpu_kernel_descriptor_write(
+          &descriptor, iree_make_byte_span(bytes.data(), bytes.size())));
 }
 
 TEST(AmdgpuDescriptorTest, SupportsGfx11ProcessorVariants) {
@@ -169,7 +194,8 @@ TEST(AmdgpuDescriptorTest, RejectsTooFewUserSgprs) {
   IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
       IREE_SV("gfx1100"), &metadata, 0, &descriptor));
   descriptor.user_sgpr_count = 1;
-  descriptor.enable_sgpr_kernarg_segment_ptr = true;
+  descriptor.flags |=
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR;
 
   std::array<uint8_t, 64> bytes;
   IREE_EXPECT_STATUS_IS(
@@ -184,7 +210,8 @@ TEST(AmdgpuDescriptorTest, RejectsLegacyFlatScratchUserSgprsOnGfx1100) {
   IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
       IREE_SV("gfx1100"), &metadata, 0, &descriptor));
   descriptor.user_sgpr_count = 4;
-  descriptor.enable_sgpr_private_segment_buffer = true;
+  descriptor.flags |=
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER;
 
   std::array<uint8_t, 64> bytes;
   IREE_EXPECT_STATUS_IS(

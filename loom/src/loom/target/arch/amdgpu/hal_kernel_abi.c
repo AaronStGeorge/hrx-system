@@ -70,8 +70,9 @@ static iree_string_view_t loom_amdgpu_hal_kernel_abi_string_or_empty(
   return module->strings.entries[string_id];
 }
 
-bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
-    const loom_module_t* module, loom_value_id_t value_id) {
+static bool loom_amdgpu_hal_kernel_abi_is_live_in_source(
+    const loom_module_t* module, loom_value_id_t value_id,
+    iree_string_view_t expected_source) {
   if (module == NULL || value_id >= module->values.count) {
     return false;
   }
@@ -85,8 +86,63 @@ bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
   }
   iree_string_view_t source = loom_amdgpu_hal_kernel_abi_string_or_empty(
       module, loom_low_live_in_source(def_op));
-  return iree_string_view_equal(
-      source, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE));
+  return iree_string_view_equal(source, expected_source);
+}
+
+bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  return loom_amdgpu_hal_kernel_abi_is_live_in_source(
+      module, value_id,
+      IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE));
+}
+
+bool loom_amdgpu_hal_kernel_abi_is_workitem_id_x_live_in(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  return loom_amdgpu_hal_kernel_abi_is_live_in_source(
+      module, value_id,
+      IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE));
+}
+
+static bool loom_amdgpu_hal_kernel_abi_type_is_register_range(
+    const loom_module_t* module, loom_type_t type,
+    iree_string_view_t register_class, uint32_t unit_count) {
+  if (!loom_type_is_register(type) ||
+      loom_type_register_unit_count(type) != unit_count) {
+    return false;
+  }
+  iree_string_view_t actual_register_class =
+      loom_amdgpu_hal_kernel_abi_string_or_empty(
+          module, loom_type_register_class_id(type));
+  return iree_string_view_equal(actual_register_class, register_class);
+}
+
+static iree_status_t loom_amdgpu_hal_kernel_abi_verify_register_value(
+    const loom_module_t* module, loom_value_id_t value_id,
+    iree_string_view_t register_class, uint32_t unit_count,
+    iree_string_view_t label) {
+  if (value_id >= module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU HAL kernel ABI %.*s value id %" PRIu32
+                            " is invalid",
+                            (int)label.size, label.data, value_id);
+  }
+  loom_type_t type = loom_module_value_type(module, value_id);
+  if (!loom_amdgpu_hal_kernel_abi_type_is_register_range(
+          module, type, register_class, unit_count)) {
+    if (unit_count == 1) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU HAL kernel ABI %.*s must have type reg<%.*s>",
+          (int)label.size, label.data, (int)register_class.size,
+          register_class.data);
+    }
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL kernel ABI %.*s must have type reg<%.*s x%" PRIu32 ">",
+        (int)label.size, label.data, (int)register_class.size,
+        register_class.data, unit_count);
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_validate_target(
@@ -475,5 +531,105 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
     IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_validate_body_imports(
         module, body, out_layout));
   }
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
+    const loom_module_t* module, const loom_op_t* function_op,
+    const loom_low_allocation_fixed_value_t** out_fixed_values,
+    iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena) {
+  IREE_ASSERT_ARGUMENT(out_fixed_values);
+  IREE_ASSERT_ARGUMENT(out_fixed_value_count);
+  *out_fixed_values = NULL;
+  *out_fixed_value_count = 0;
+  if (module == NULL || function_op == NULL || arena == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL kernel ABI fixed-value collection requires a module, "
+        "function, and arena");
+  }
+  if (!loom_low_func_def_isa(function_op)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL kernel ABI fixed-value collection requires low.func.def");
+  }
+
+  loom_region_t* body = loom_low_func_def_body(function_op);
+  if (body == NULL || body->block_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL kernel ABI fixed-value collection requires a function "
+        "body");
+  }
+
+  loom_low_allocation_fixed_value_t local_fixed_values[2] = {0};
+  iree_host_size_t local_fixed_value_count = 0;
+  loom_value_id_t kernarg_ptr = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t workitem_id_x = LOOM_VALUE_ID_INVALID;
+
+  const loom_block_t* entry_block = loom_region_const_entry_block(body);
+  const loom_op_t* op = NULL;
+  loom_block_for_each_op(entry_block, op) {
+    if (!loom_low_live_in_isa(op)) {
+      continue;
+    }
+    iree_string_view_t source = loom_amdgpu_hal_kernel_abi_string_or_empty(
+        module, loom_low_live_in_source(op));
+    if (iree_string_view_equal(
+            source,
+            IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE))) {
+      if (kernarg_ptr != LOOM_VALUE_ID_INVALID) {
+        return iree_make_status(
+            IREE_STATUS_ALREADY_EXISTS,
+            "AMDGPU HAL kernel ABI fixed-value collection found duplicate "
+            "kernarg segment pointer live-ins");
+      }
+      kernarg_ptr = loom_low_live_in_result(op);
+      IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_register_value(
+          module, kernarg_ptr, IREE_SV("amdgpu.sgpr"), 2,
+          IREE_SV("kernarg segment pointer live-in")));
+      local_fixed_values[local_fixed_value_count++] =
+          (loom_low_allocation_fixed_value_t){
+              .value_id = kernarg_ptr,
+              .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+              .location_base = 0,
+              .location_count = 2,
+          };
+      continue;
+    }
+    if (iree_string_view_equal(
+            source, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE))) {
+      if (workitem_id_x != LOOM_VALUE_ID_INVALID) {
+        return iree_make_status(
+            IREE_STATUS_ALREADY_EXISTS,
+            "AMDGPU HAL kernel ABI fixed-value collection found duplicate "
+            "workitem_id.x live-ins");
+      }
+      workitem_id_x = loom_low_live_in_result(op);
+      IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_register_value(
+          module, workitem_id_x, IREE_SV("amdgpu.vgpr"), 1,
+          IREE_SV("workitem_id.x live-in")));
+      local_fixed_values[local_fixed_value_count++] =
+          (loom_low_allocation_fixed_value_t){
+              .value_id = workitem_id_x,
+              .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+              .location_base = 0,
+              .location_count = 1,
+          };
+      continue;
+    }
+  }
+
+  if (local_fixed_value_count == 0) {
+    return iree_ok_status();
+  }
+  loom_low_allocation_fixed_value_t* fixed_values = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, local_fixed_value_count,
+                                                 sizeof(*fixed_values),
+                                                 (void**)&fixed_values));
+  memcpy(fixed_values, local_fixed_values,
+         local_fixed_value_count * sizeof(*fixed_values));
+  *out_fixed_values = fixed_values;
+  *out_fixed_value_count = local_fixed_value_count;
   return iree_ok_status();
 }

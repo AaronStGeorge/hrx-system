@@ -103,6 +103,30 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    kernel_hsaco
+  HDRS
+    "kernel_hsaco.h"
+  SRCS
+    "kernel_hsaco.c"
+  DEPS
+    ::encoding
+    ::hsaco
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::hal_kernel_abi
+    loom::src::loom::target::arch::amdgpu::target_info
+    loom::src::loom::target::arch::amdgpu::wait_packets
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     hsaco
   HDRS
     "hsaco.h"
@@ -209,6 +233,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::hal_resource_materialization
     loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::arch::amdgpu::wait_packets
@@ -244,8 +269,7 @@ loom_cc_test(
   SRCS
     "hsaco_hsa_test.cc"
   DEPS
-    ::encoding
-    ::hsaco
+    ::kernel_hsaco
     hsa_runtime::headers
     iree::base
     iree::base::internal
@@ -257,8 +281,13 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::hal_kernel_abi
+    loom::src::loom::target::arch::amdgpu::hal_resource_materialization
     loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::arch::amdgpu::target_info
+    loom::src::loom::target::arch::amdgpu::wait_packets
+    loom::src::loom::target::arch::amdgpu::wait_plan
+    loom::src::loom::target::ir_records
     loom::src::loom::target::presets
     loom::src::loom::testing::context
     iree::testing::gtest

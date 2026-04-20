@@ -235,7 +235,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 
   const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
   iree_host_size_t fixed_value_count = 0;
-  IREE_ASSERT_OK(loom_amdgpu_hal_resource_fixed_values_from_low(
+  IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
       module_, function_op, &fixed_values, &fixed_value_count, &arena_));
   ASSERT_EQ(fixed_value_count, 1u);
   EXPECT_EQ(fixed_values[0].location_kind,
@@ -298,10 +298,35 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 
   const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
   iree_host_size_t fixed_value_count = 0;
-  IREE_ASSERT_OK(loom_amdgpu_hal_resource_fixed_values_from_low(
+  IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
       module_, function_op, &fixed_values, &fixed_value_count, &arena_));
   EXPECT_EQ(fixed_value_count, 0u);
   EXPECT_EQ(fixed_values, nullptr);
+}
+
+TEST_F(AmdgpuHalResourceMaterializationTest, FixesWorkitemIdXLiveInToVgprZero) {
+  BuildModule(
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
+      "> : reg<amdgpu.vgpr>\n"
+      "  low.return\n"
+      "}\n",
+      "");
+
+  loom_op_t* function_op = FindFirstLowFunction();
+  ASSERT_NE(function_op, nullptr);
+
+  const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
+  iree_host_size_t fixed_value_count = 0;
+  IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
+      module_, function_op, &fixed_values, &fixed_value_count, &arena_));
+  ASSERT_EQ(fixed_value_count, 1u);
+  EXPECT_EQ(fixed_values[0].location_kind,
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER);
+  EXPECT_EQ(fixed_values[0].location_base, 0u);
+  EXPECT_EQ(fixed_values[0].location_count, 1u);
+
+  VerifyModule();
 }
 
 TEST_F(AmdgpuHalResourceMaterializationTest, RejectsUnsupportedResourceShape) {

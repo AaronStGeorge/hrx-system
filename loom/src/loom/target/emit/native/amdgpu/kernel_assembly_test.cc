@@ -17,6 +17,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/hal_resource_materialization.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
@@ -190,7 +191,7 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
 
     const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
     iree_host_size_t fixed_value_count = 0;
-    IREE_ASSERT_OK(loom_amdgpu_hal_resource_fixed_values_from_low(
+    IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
         module_, low_function, &fixed_values, &fixed_value_count, arena));
     ASSERT_EQ(fixed_value_count, 1u);
 

@@ -560,6 +560,7 @@ static iree_status_t loom_amdgpu_hsaco_build_rodata(
     IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
         file->target_cpu, &payloads->metadata_kernels[i], entry_byte_offset,
         &descriptor));
+    descriptor.flags |= file->kernels[i].descriptor_options.flags;
     IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_descriptor_validate_metadata(
         &descriptor, &payloads->metadata_kernels[i]));
 
