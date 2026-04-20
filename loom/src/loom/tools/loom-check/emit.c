@@ -52,6 +52,11 @@ typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_SOURCE_LOW_TEXT = 11,
 } loom_check_emit_format_t;
 
+typedef enum loom_check_emit_source_low_output_e {
+  LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_MODULE = 0,
+  LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW = 1,
+} loom_check_emit_source_low_output_t;
+
 #define LOOM_CHECK_LOW_ALLOCATION_MAX_BUDGETS 8
 
 typedef struct loom_check_emit_request_t {
@@ -90,6 +95,8 @@ typedef struct loom_check_emit_request_t {
   loom_low_schedule_strategy_t low_schedule_strategy;
   // True once a low scheduler strategy option has been parsed.
   bool has_low_schedule_strategy_option;
+  // Source-low text output form.
+  loom_check_emit_source_low_output_t source_low_output;
 } loom_check_emit_request_t;
 
 typedef struct loom_check_emit_byte_buffer_t {
@@ -203,6 +210,53 @@ static iree_status_t loom_check_emit_parse_low_allocation_options(
     if (!iree_string_view_is_empty(token)) {
       IREE_RETURN_IF_ERROR(
           loom_check_emit_parse_low_allocation_option(token, request));
+    }
+    text = iree_string_view_trim(remaining);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_emit_parse_source_low_option(
+    iree_string_view_t token, loom_check_emit_request_t* request) {
+  iree_string_view_t name = iree_string_view_empty();
+  iree_string_view_t value = iree_string_view_empty();
+  iree_string_view_split(token, '=', &name, &value);
+  name = iree_string_view_trim(name);
+  value = iree_string_view_trim(value);
+  if (!iree_string_view_equal(name, IREE_SV("output"))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown source-low option '%.*s'", (int)name.size,
+                            name.data);
+  }
+  if (request->has_output_option) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "duplicate source-low option 'output'");
+  }
+  if (iree_string_view_equal(value, IREE_SV("module"))) {
+    request->source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_MODULE;
+  } else if (iree_string_view_equal(value, IREE_SV("low"))) {
+    request->source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW;
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "source-low option 'output' expected 'module' or 'low', got '%.*s'",
+        (int)value.size, value.data);
+  }
+  request->has_output_option = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_emit_parse_source_low_options(
+    iree_string_view_t text, loom_check_emit_request_t* request) {
+  text = iree_string_view_trim(text);
+  while (!iree_string_view_is_empty(text)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t remaining = iree_string_view_empty();
+    iree_string_view_split(text, ' ', &token, &remaining);
+    token = iree_string_view_trim(token);
+    if (!iree_string_view_is_empty(token)) {
+      IREE_RETURN_IF_ERROR(
+          loom_check_emit_parse_source_low_option(token, request));
     }
     text = iree_string_view_trim(remaining);
   }
@@ -369,6 +423,7 @@ static iree_status_t loom_check_emit_parse_request(
       .has_low_schedule_diagnostics_option = false,
       .low_schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .has_low_schedule_strategy_option = false,
+      .source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_MODULE,
   };
   emit_target = iree_string_view_trim(emit_target);
   iree_string_view_t target_name = iree_string_view_empty();
@@ -501,17 +556,24 @@ static iree_status_t loom_check_emit_parse_request(
     return iree_ok_status();
   } else if (iree_string_view_equal(target_name, IREE_SV("source-low")) ||
              iree_string_view_equal(target_name, IREE_SV("source-to-low"))) {
-    if (!iree_string_view_starts_with(profile_name, IREE_SV("@"))) {
+    iree_string_view_t symbol_name = iree_string_view_empty();
+    iree_string_view_t option_text = iree_string_view_empty();
+    iree_string_view_split(profile_name, ' ', &symbol_name, &option_text);
+    symbol_name = iree_string_view_trim(symbol_name);
+    option_text = iree_string_view_trim(option_text);
+    if (!iree_string_view_starts_with(symbol_name, IREE_SV("@"))) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "source-low requires a target bundle symbol name");
     }
     out_request->target_bundle_symbol_name =
-        iree_string_view_substr(profile_name, 1, IREE_HOST_SIZE_MAX);
+        iree_string_view_substr(symbol_name, 1, IREE_HOST_SIZE_MAX);
     if (iree_string_view_is_empty(out_request->target_bundle_symbol_name)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "target bundle symbol name is required");
     }
+    IREE_RETURN_IF_ERROR(
+        loom_check_emit_parse_source_low_options(option_text, out_request));
     out_request->format = LOOM_CHECK_EMIT_SOURCE_LOW_TEXT;
     return iree_ok_status();
   } else {
@@ -1128,6 +1190,29 @@ static bool loom_check_emit_source_low_policy_registry_has_bundle(
   return false;
 }
 
+static iree_status_t loom_check_emit_write_source_low_artifacts(
+    const loom_module_t* module, iree_string_builder_t* output) {
+  bool has_artifact = false;
+  const loom_block_t* block = loom_region_const_entry_block(module->body);
+  const loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
+    if (loom_op_dialect_id(op->kind) != LOOM_DIALECT_LOW) {
+      continue;
+    }
+    if (has_artifact) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
+    }
+    IREE_RETURN_IF_ERROR(loom_text_print_operation_to_builder(
+        module, op, output, LOOM_TEXT_PRINT_DEFAULT));
+    has_artifact = true;
+  }
+  if (!has_artifact) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "source-low produced no low artifacts");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_emit_write_source_low_text(
     loom_module_t* module, const loom_check_emit_request_t* request,
     const loom_target_low_descriptor_registry_t* low_registry,
@@ -1193,6 +1278,10 @@ static iree_status_t loom_check_emit_write_source_low_text(
       LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &verifier_emitter,
       20));
 
+  if (request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
+    return loom_check_emit_write_source_low_artifacts(module,
+                                                      &result->actual_output);
+  }
   return loom_text_print_module_to_builder(module, &result->actual_output,
                                            LOOM_TEXT_PRINT_DEFAULT);
 }

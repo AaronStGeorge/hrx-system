@@ -39,6 +39,8 @@
 //                           low-allocation-json @function
 //                           [diagnostics=...] [output=json|none]
 //                           [class=units...].
+//                           Source lowering tests use
+//                           source-low @target [output=module|low].
 //                           Low schedule diagnostics are one of none,
 //                           pressure, resources, hazards, candidates, model,
 //                           or all.

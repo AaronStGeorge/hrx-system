@@ -436,6 +436,8 @@ int loom_check_main(int argc, char** argv,
       "              LLVMIR targets include llvmir, llvmir-body,\n"
       "              llvmir-bitcode, llvmir-object, and\n"
       "              llvmir-assembly-mnemonics.\n"
+      "              Source-low accepts source-low @target "
+      "[output=module|low].\n"
       "  run <args>  Execute input with iree-run-loom and compare output.\n"
       "\n"
       "File format:\n"

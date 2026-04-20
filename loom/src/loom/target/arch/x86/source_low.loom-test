@@ -1,4 +1,4 @@
-// RUN: emit source-low @x86_target
+// RUN: emit source-low @x86_target output=low
 target.preset @x86_target {key = "x86-avx512", source = @x86_arith}
 
 func.def @x86_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
@@ -7,20 +7,6 @@ func.def @x86_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi3
   func.return %diff : vector<16xi32>
 }
 // ----
-target.snapshot @x86_target__snapshot {artifact_format = elf, codegen_format = low_native, data_layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128", default_pointer_bitwidth = 64, index_bitwidth = 64, memory_space_constant = 0, memory_space_descriptor = 4294967295, memory_space_generic = 0, memory_space_global = 0, memory_space_host = 0, memory_space_private = 0, memory_space_workgroup = 0, offset_bitwidth = 64, target_cpu = "x86-64-v4", target_features = "+avx512f,+avx512bw,+avx512dq,+avx512vl,+fma", target_triple = "x86_64-unknown-linux-gnu"}
-
-target.export @x86_target__export {abi = object_function, export_symbol = "x86_arith", hal_binding_alignment = 0, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 0, hal_flat_workgroup_size_min = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, linkage = dso_local, source = @x86_arith}
-
-target.config @x86_target__config {contract_feature_bits = 0, contract_set_key = "x86.avx512.core"}
-
-target.bundle @x86_target {config = @x86_target__config, export_plan = @x86_target__export, snapshot = @x86_target__snapshot}
-
-func.def @x86_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
-  %sum = vector.addi %lhs, %rhs : vector<16xi32>
-  %diff = vector.subi %sum, %rhs : vector<16xi32>
-  func.return %diff : vector<16xi32>
-}
-
 low.func.def target(@x86_target) @x86_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) {
   %sum = low.op<x86.avx512.vpaddd.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
   %diff = low.op<x86.avx512.vpsubd.zmm>(%sum, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
@@ -36,7 +22,7 @@ low.abi.operand @x86_arith__low__abi_arg1 {abi_type = reg<x86.zmm>, adapter = @x
 low.abi.result @x86_arith__low__abi_result0 {abi_type = reg<x86.zmm>, adapter = @x86_arith__low__abi, conversion = register_to_value, index = 0, semantic_type = vector<16xi32>}
 
 // ====
-// RUN: emit source-low @x86_f32_target
+// RUN: emit source-low @x86_f32_target output=low
 target.preset @x86_f32_target {key = "x86-avx512", source = @x86_f32_arith}
 
 func.def @x86_f32_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
@@ -48,22 +34,6 @@ func.def @x86_f32_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<1
 }
 
 // ----
-target.snapshot @x86_f32_target__snapshot {artifact_format = elf, codegen_format = low_native, data_layout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128", default_pointer_bitwidth = 64, index_bitwidth = 64, memory_space_constant = 0, memory_space_descriptor = 4294967295, memory_space_generic = 0, memory_space_global = 0, memory_space_host = 0, memory_space_private = 0, memory_space_workgroup = 0, offset_bitwidth = 64, target_cpu = "x86-64-v4", target_features = "+avx512f,+avx512bw,+avx512dq,+avx512vl,+fma", target_triple = "x86_64-unknown-linux-gnu"}
-
-target.export @x86_f32_target__export {abi = object_function, export_symbol = "x86_f32_arith", hal_binding_alignment = 0, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 0, hal_flat_workgroup_size_min = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, linkage = dso_local, source = @x86_f32_arith}
-
-target.config @x86_f32_target__config {contract_feature_bits = 0, contract_set_key = "x86.avx512.core"}
-
-target.bundle @x86_f32_target {config = @x86_f32_target__config, export_plan = @x86_f32_target__export, snapshot = @x86_f32_target__snapshot}
-
-func.def @x86_f32_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
-  %sum = vector.addf %lhs, %rhs : vector<16xf32>
-  %difference = vector.subf %sum, %lhs : vector<16xf32>
-  %product = vector.mulf %difference, %rhs : vector<16xf32>
-  %fma = vector.fmaf %lhs, %rhs, %product : vector<16xf32>
-  func.return %fma : vector<16xf32>
-}
-
 low.func.def target(@x86_f32_target) @x86_f32_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) {
   %sum = low.op<x86.avx512.vaddps.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
   %difference = low.op<x86.avx512.vsubps.zmm>(%sum, %lhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
