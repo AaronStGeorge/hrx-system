@@ -16,6 +16,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
+#include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/execution_backend.h"
 #include "loom/tooling/execution/one_shot.h"
 #include "loom/tooling/execution/session.h"
@@ -45,6 +46,13 @@ IREE_FLAG(int32_t, entry_point, 0,
           "HAL executable entry point ordinal to dispatch.");
 IREE_FLAG(string, workgroup_count, "1,1,1",
           "HAL dispatch workgroup count as `x,y,z`.");
+IREE_FLAG(string, compile_report, "",
+          "Optional compile report output. Use 'summary', 'details', or "
+          "empty/'none'.");
+IREE_FLAG(int32_t, compile_report_row_limit,
+          LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
+          "Maximum pressure and spill rows to capture for "
+          "--compile_report=details.");
 IREE_FLAG(bool, probe_hal, false,
           "Runs the selected backend's target probe, prints the result, and "
           "exits. Not all backends support probing.");
@@ -257,6 +265,22 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
   return iree_ok_status();
 }
 
+static iree_status_t iree_run_loom_compile_report_options_initialize(
+    loom_run_compile_report_capture_options_t* out_options) {
+  IREE_ASSERT_ARGUMENT(out_options);
+  loom_run_compile_report_capture_options_initialize(out_options);
+  IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_mode(
+      iree_make_cstring_view(FLAG_compile_report), out_options));
+  if (FLAG_compile_report_row_limit < 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--compile_report_row_limit must be non-negative; got %d",
+        (int)FLAG_compile_report_row_limit);
+  }
+  out_options->row_limit = (iree_host_size_t)FLAG_compile_report_row_limit;
+  return iree_ok_status();
+}
+
 static iree_status_t iree_run_loom_make_unknown_backend_status(
     iree_string_view_t backend_name,
     const loom_run_execution_backend_registry_t* backend_registry,
@@ -348,6 +372,7 @@ int iree_run_loom_main(int argc, char** argv,
   iree_io_file_contents_t* contents = NULL;
   loom_run_session_t session = {0};
   loom_run_module_t run_module = {0};
+  loom_run_compile_report_capture_t compile_report_capture = {0};
   loom_run_one_shot_result_t run_result = {0};
   loom_run_one_shot_result_initialize(allocator, &run_result);
   int exit_code = 0;
@@ -394,6 +419,19 @@ int iree_run_loom_main(int argc, char** argv,
   loom_run_candidate_compile_options_initialize(&compile_options);
   compile_options.module_name = iree_make_cstring_view(FLAG_loom_module_name);
   compile_options.target_symbol = iree_make_cstring_view(FLAG_loom_target);
+  loom_run_compile_report_capture_options_t compile_report_options = {0};
+  if (iree_status_is_ok(status)) {
+    status = iree_run_loom_compile_report_options_initialize(
+        &compile_report_options);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_run_compile_report_capture_initialize(
+        &compile_report_options, allocator, &compile_report_capture);
+  }
+  if (iree_status_is_ok(status)) {
+    loom_run_compile_report_capture_configure_compile_options(
+        &compile_report_capture, &compile_options);
+  }
   loom_run_one_shot_options_t one_shot_options = {0};
   if (iree_status_is_ok(status)) {
     status =
@@ -415,6 +453,7 @@ int iree_run_loom_main(int argc, char** argv,
         .run_module = &run_module,
         .compile_options = &compile_options,
         .options = &one_shot_options,
+        .compile_report_capture = &compile_report_capture,
         .host_allocator = allocator,
         .result = &run_result,
     };
@@ -435,6 +474,7 @@ int iree_run_loom_main(int argc, char** argv,
     exit_code = 1;
   }
 
+  loom_run_compile_report_capture_deinitialize(&compile_report_capture);
   loom_run_one_shot_result_deinitialize(&run_result);
   loom_run_module_deinitialize(&run_module);
   iree_io_file_contents_free(contents);

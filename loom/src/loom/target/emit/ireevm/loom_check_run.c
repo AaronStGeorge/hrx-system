@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "loom/tooling/execution/candidate.h"
+#include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/execution/vm_invocation.h"
 
@@ -33,6 +34,8 @@ typedef struct loom_ireevm_loom_check_run_options_t {
   iree_host_size_t expected_output_count;
   // Maximum number of output elements to format.
   iree_host_size_t max_output_element_count;
+  // Optional compile report capture/formatting options.
+  loom_run_compile_report_capture_options_t compile_report_options;
 } loom_ireevm_loom_check_run_options_t;
 
 static void loom_ireevm_loom_check_run_options_deinitialize(
@@ -123,6 +126,8 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
       .module_name = IREE_SVL("loom"),
       .max_output_element_count = 1024,
   };
+  loom_run_compile_report_capture_options_initialize(
+      &out_options->compile_report_options);
 
   iree_host_size_t values_size = 0;
   if (!iree_host_size_checked_mul(arguments->count, sizeof(iree_string_view_t),
@@ -241,6 +246,26 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
       out_options->max_output_element_count = max_output_element_count;
       continue;
     }
+    status = loom_check_run_arguments_take_option_value(
+        arguments, &i, IREE_SV("compile_report"), &value, &matched);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    if (matched) {
+      status = loom_run_compile_report_capture_options_parse_mode(
+          value, &out_options->compile_report_options);
+      continue;
+    }
+    status = loom_check_run_arguments_take_option_value(
+        arguments, &i, IREE_SV("compile_report_row_limit"), &value, &matched);
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    if (matched) {
+      status = loom_run_compile_report_capture_options_parse_row_limit(
+          value, &out_options->compile_report_options);
+      continue;
+    }
     if (iree_status_is_ok(status)) {
       iree_string_view_t argument = arguments->values[i];
       status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -288,6 +313,7 @@ static iree_status_t loom_ireevm_loom_check_run_execute(
   loom_run_session_t session = {0};
   loom_run_module_t module = {0};
   loom_run_candidate_t candidate = {0};
+  loom_run_compile_report_capture_t compile_report_capture = {0};
   loom_run_vm_runtime_t runtime = {0};
   loom_run_vm_invocation_result_t invocation_result = {0};
   loom_run_vm_invocation_result_initialize(request->host_allocator,
@@ -318,11 +344,18 @@ static iree_status_t loom_ireevm_loom_check_run_execute(
     status = loom_run_module_parse(&session, &parse_options, &module);
   }
   if (iree_status_is_ok(status)) {
+    status = loom_run_compile_report_capture_initialize(
+        &run_options.compile_report_options, request->host_allocator,
+        &compile_report_capture);
+  }
+  if (iree_status_is_ok(status)) {
     loom_run_candidate_compile_options_t compile_options = {0};
     loom_run_candidate_compile_options_initialize(&compile_options);
     compile_options.module_name = run_options.module_name;
     compile_options.target_symbol = run_options.target_symbol;
     compile_options.source_resolver = loom_run_module_source_resolver(&module);
+    loom_run_compile_report_capture_configure_compile_options(
+        &compile_report_capture, &compile_options);
     status = loom_run_candidate_compile_vm(&module, &compile_options,
                                            request->host_allocator, &candidate);
   }
@@ -358,11 +391,16 @@ static iree_status_t loom_ireevm_loom_check_run_execute(
     status = iree_string_builder_append_string(
         &request->result->stdout_text,
         iree_string_builder_view(&invocation_result.output));
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_run_compile_report_capture_append_text(
+        &compile_report_capture, &request->result->stdout_text);
   } else {
     request->result->exit_code = 1;
     status = loom_check_run_result_append_status(status, request->result);
   }
 
+  loom_run_compile_report_capture_deinitialize(&compile_report_capture);
   loom_run_vm_invocation_result_deinitialize(&invocation_result);
   loom_run_vm_runtime_deinitialize(&runtime);
   loom_run_candidate_deinitialize(&candidate);

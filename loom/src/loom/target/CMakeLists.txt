@@ -76,6 +76,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    compile_report_format
+  HDRS
+    "compile_report_format.h"
+  SRCS
+    "compile_report_format.c"
+  DEPS
+    ::compile_report
+    iree::base
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     compile_report_low
   HDRS
     "compile_report_low.h"
@@ -210,6 +224,18 @@ loom_cc_test(
     "compile_report_low_test.cc"
   DEPS
     ::compile_report_low
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    compile_report_format_test
+  SRCS
+    "compile_report_format_test.cc"
+  DEPS
+    ::compile_report_format
+    loom::src::loom::ir
     iree::testing::gtest
     iree::testing::gtest_main
 )

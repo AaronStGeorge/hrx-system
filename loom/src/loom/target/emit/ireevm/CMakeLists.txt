@@ -121,6 +121,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::tooling::execution::candidate
+    loom::src::loom::tooling::execution::compile_report_capture
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::execution::vm_invocation
     loom::src::loom::tools::loom-check::execute
@@ -184,6 +185,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::tooling::execution::candidate
+    loom::src::loom::tooling::execution::compile_report_capture
     loom::src::loom::tooling::execution::execution_backend
     loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::vm_invocation

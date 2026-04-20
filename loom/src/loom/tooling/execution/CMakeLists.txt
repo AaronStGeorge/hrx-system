@@ -46,6 +46,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    compile_report_capture
+  HDRS
+    "compile_report_capture.h"
+  SRCS
+    "compile_report_capture.c"
+  DEPS
+    ::compile_options
+    iree::base
+    loom::src::loom::target::compile_report
+    loom::src::loom::target::compile_report_format
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     execution_provider
   HDRS
     "execution_provider.h"
@@ -116,6 +131,7 @@ loom_cc_library(
     "hal_execution_backend.c"
   DEPS
     ::candidate
+    ::compile_report_capture
     ::execution_backend
     ::hal_backend
     ::hal_invocation
@@ -225,6 +241,19 @@ loom_cc_test(
     iree::base
     loom::src::loom::ops::op_registry
     loom::src::loom::target::emit::ireevm::low_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    compile_report_capture_test
+  SRCS
+    "compile_report_capture_test.cc"
+  DEPS
+    ::compile_options
+    ::compile_report_capture
+    iree::base
     iree::testing::gtest
     iree::testing::gtest_main
 )

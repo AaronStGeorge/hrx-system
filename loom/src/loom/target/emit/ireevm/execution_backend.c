@@ -7,6 +7,7 @@
 #include "loom/target/emit/ireevm/execution_backend.h"
 
 #include "loom/tooling/execution/candidate.h"
+#include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/one_shot.h"
 #include "loom/tooling/execution/vm_invocation.h"
 
@@ -46,6 +47,10 @@ static iree_status_t loom_ireevm_execution_backend_run_one_shot(
     status = iree_string_builder_append_string(
         &request->result->output,
         iree_string_builder_view(&invocation_result.output));
+  }
+  if (iree_status_is_ok(status) && request->compile_report_capture != NULL) {
+    status = loom_run_compile_report_capture_append_text(
+        request->compile_report_capture, &request->result->output);
   }
 
   loom_run_vm_invocation_result_deinitialize(&invocation_result);

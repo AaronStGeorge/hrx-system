@@ -45,6 +45,18 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "compile_report_capture",
+    srcs = ["compile_report_capture.c"],
+    hdrs = ["compile_report_capture.h"],
+    deps = [
+        ":compile_options",
+        "//loom/src/loom/target:compile_report",
+        "//loom/src/loom/target:compile_report_format",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "execution_provider",
     srcs = ["execution_provider.c"],
     hdrs = ["execution_provider.h"],
@@ -101,6 +113,7 @@ loom_cc_library(
     hdrs = ["hal_execution_backend.h"],
     deps = [
         ":candidate",
+        ":compile_report_capture",
         ":execution_backend",
         ":hal_backend",
         ":hal_invocation",
@@ -192,6 +205,18 @@ loom_cc_test(
         ":session",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/target/emit/ireevm:low_registry",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "compile_report_capture_test",
+    srcs = ["compile_report_capture_test.cc"],
+    deps = [
+        ":compile_options",
+        ":compile_report_capture",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
