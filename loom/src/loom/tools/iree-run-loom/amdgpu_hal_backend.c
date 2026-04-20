@@ -10,6 +10,7 @@
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/hal_executable.h"
 #include "loom/target/emit/native/amdgpu/module_compiler.h"
+#include "loom/tooling/execution/hal_runtime.h"
 
 static const iree_string_view_t kIreeRunLoomAmdgpuCurrentPreset =
     IREE_SVL("amdgpu-current");
@@ -46,13 +47,13 @@ static iree_status_t iree_run_loom_amdgpu_processor_is_compile_supported(
 }
 
 static iree_status_t iree_run_loom_amdgpu_select_target(
-    const iree_amdgpu_hal_backend_t* backend,
-    const iree_run_loom_hal_runtime_t* runtime, iree_allocator_t allocator,
-    iree_run_loom_hal_selected_target_t* out_target) {
+    const loom_run_hal_backend_t* backend,
+    const loom_run_hal_runtime_t* runtime, iree_allocator_t allocator,
+    loom_run_hal_selected_target_t* out_target) {
   IREE_ASSERT_ARGUMENT(backend);
   IREE_ASSERT_ARGUMENT(runtime);
   IREE_ASSERT_ARGUMENT(out_target);
-  *out_target = (iree_run_loom_hal_selected_target_t){0};
+  *out_target = (loom_run_hal_selected_target_t){0};
   if (runtime->executable_cache == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "HAL executable cache is required for %.*s",
@@ -86,7 +87,7 @@ static iree_status_t iree_run_loom_amdgpu_select_target(
             runtime->executable_cache,
             IREE_HAL_EXECUTABLE_CACHING_MODE_ALLOW_OPTIMIZATION,
             iree_string_builder_view(&target_id_builder))) {
-      *out_target = (iree_run_loom_hal_selected_target_t){
+      *out_target = (loom_run_hal_selected_target_t){
           .data = processor,
           .preset_key = processor->low_preset_key,
       };
@@ -105,8 +106,8 @@ static iree_status_t iree_run_loom_amdgpu_select_target(
 }
 
 static iree_status_t iree_run_loom_amdgpu_format_target(
-    const iree_amdgpu_hal_backend_t* backend,
-    const iree_run_loom_hal_selected_target_t* target,
+    const loom_run_hal_backend_t* backend,
+    const loom_run_hal_selected_target_t* target,
     iree_string_builder_t* output) {
   IREE_ASSERT_ARGUMENT(backend);
   IREE_ASSERT_ARGUMENT(target);
@@ -155,16 +156,15 @@ static iree_status_t iree_run_loom_amdgpu_rewrite_current_presets(
 }
 
 static iree_status_t iree_run_loom_amdgpu_compile(
-    const iree_amdgpu_hal_backend_t* backend, loom_module_t* module,
-    const iree_run_loom_hal_selected_target_t* target,
+    const loom_run_hal_backend_t* backend, loom_module_t* module,
+    const loom_run_hal_selected_target_t* target,
     iree_string_view_t target_symbol, loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
-    iree_allocator_t allocator,
-    iree_run_loom_hal_executable_t* out_executable) {
+    iree_allocator_t allocator, loom_run_hal_executable_t* out_executable) {
   IREE_ASSERT_ARGUMENT(backend);
   IREE_ASSERT_ARGUMENT(target);
   IREE_ASSERT_ARGUMENT(out_executable);
-  *out_executable = (iree_run_loom_hal_executable_t){0};
+  *out_executable = (loom_run_hal_executable_t){0};
 
   IREE_ASSERT_ARGUMENT(target->data);
   const loom_amdgpu_processor_info_t* processor =
@@ -187,7 +187,7 @@ static iree_status_t iree_run_loom_amdgpu_compile(
   iree_status_t status = loom_amdgpu_compile_hal_executable(
       module, &compile_options, allocator, executable);
   if (iree_status_is_ok(status)) {
-    *out_executable = (iree_run_loom_hal_executable_t){
+    *out_executable = (loom_run_hal_executable_t){
         .executable_format = executable->executable_format,
         .executable_data = iree_make_const_byte_span(executable->data,
                                                      executable->data_length),
@@ -201,8 +201,8 @@ static iree_status_t iree_run_loom_amdgpu_compile(
 }
 
 static void iree_run_loom_amdgpu_deinitialize_executable(
-    const iree_amdgpu_hal_backend_t* backend,
-    iree_run_loom_hal_executable_t* executable, iree_allocator_t allocator) {
+    const loom_run_hal_backend_t* backend,
+    loom_run_hal_executable_t* executable, iree_allocator_t allocator) {
   (void)backend;
   if (!executable || !executable->storage) {
     return;
@@ -211,10 +211,10 @@ static void iree_run_loom_amdgpu_deinitialize_executable(
       (loom_amdgpu_hal_executable_t*)executable->storage;
   loom_amdgpu_hal_executable_deinitialize(amdgpu_executable, allocator);
   iree_allocator_free(allocator, amdgpu_executable);
-  *executable = (iree_run_loom_hal_executable_t){0};
+  *executable = (loom_run_hal_executable_t){0};
 }
 
-const iree_amdgpu_hal_backend_t iree_run_loom_amdgpu_hal_backend = {
+const loom_run_hal_backend_t iree_run_loom_amdgpu_hal_backend = {
     .name = IREE_SVL("amdgpu-hal"),
     .hal_driver_name = IREE_SVL("amdgpu"),
     .target_family_name = IREE_SVL("AMDGPU"),

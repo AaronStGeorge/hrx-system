@@ -9,13 +9,13 @@
 #ifndef LOOM_TOOLS_IREE_RUN_LOOM_AMDGPU_HAL_BACKEND_H_
 #define LOOM_TOOLS_IREE_RUN_LOOM_AMDGPU_HAL_BACKEND_H_
 
-#include "loom/tools/iree-run-loom/hal_backend.h"
+#include "loom/tooling/execution/hal_backend.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern const iree_amdgpu_hal_backend_t iree_run_loom_amdgpu_hal_backend;
+extern const loom_run_hal_backend_t iree_run_loom_amdgpu_hal_backend;
 
 #ifdef __cplusplus
 }  // extern "C"

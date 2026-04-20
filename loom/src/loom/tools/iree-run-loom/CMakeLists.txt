@@ -10,44 +10,65 @@
 
 iree_add_all_subdirs()
 
-loom_cc_binary(
+loom_cc_library(
   NAME
-    iree-run-loom
+    main
+  HDRS
+    "main.h"
   SRCS
-    "amdgpu_hal_backend.c"
-    "amdgpu_hal_backend.h"
-    "hal_backend.h"
-    "hal_backends.c"
-    "iree-run-loom.c"
+    "main.c"
   DEPS
-    iree::async::util::proactor_pool
     iree::base
-    iree::base::internal::arena
-    iree::base::threading
     iree::base::tooling::flags
     iree::hal
     iree::io::file_handle
     iree::io::stream
-    iree::modules::hal::types
-    loom::src::loom::codegen::low::text_asm
     loom::src::loom::error::diagnostic
-    loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
-    loom::src::loom::ops::target
-    loom::src::loom::target::all::low_registry
-    loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::emit::ireevm::module_compiler
-    loom::src::loom::target::emit::native::amdgpu::hal_executable
-    loom::src::loom::target::emit::native::amdgpu::module_compiler
-    loom::src::loom::verify
+    loom::src::loom::tooling::execution::hal_backend
+    loom::src::loom::tooling::execution::hal_invocation
+    loom::src::loom::tooling::execution::hal_runtime
+    loom::src::loom::tooling::execution::session
     iree::tooling::comparison
     iree::tooling::context_util
-    iree::tooling::device_util
     iree::tooling::function_io
     iree::tooling::function_util
     iree::tooling::run_module
     iree::vm
+  PUBLIC
+)
+
+loom_cc_binary(
+  NAME
+    iree-run-loom
+  SRCS
+    "iree-run-loom.c"
+  DEPS
+    ::main
+    iree::base
+    loom::src::loom::target::emit::ireevm::low_registry
+    loom::src::loom::tooling::execution::hal_backend
+)
+
+loom_cc_binary(
+  NAME
+    iree-run-loom-amdgpu
+  SRCS
+    "amdgpu_hal_backend.c"
+    "amdgpu_hal_backend.h"
+    "iree-run-loom-amdgpu.c"
+  DEPS
+    ::main
+    iree::base
+    loom::src::loom::ops::target
+    loom::src::loom::target::arch::amdgpu::low_registry
+    loom::src::loom::target::arch::amdgpu::target_info
+    loom::src::loom::target::emit::native::amdgpu::hal_executable
+    loom::src::loom::target::emit::native::amdgpu::module_compiler
+    loom::src::loom::tooling::execution::hal_backend
+    loom::src::loom::tooling::execution::hal_runtime
 )
 
 iree_lit_test_suite(

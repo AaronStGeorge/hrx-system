@@ -1,0 +1,75 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "hal_backend",
+    srcs = ["hal_backend.c"],
+    hdrs = ["hal_backend.h"],
+    deps = [
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "hal_runtime",
+    srcs = ["hal_runtime.c"],
+    hdrs = ["hal_runtime.h"],
+    deps = [
+        ":hal_backend",
+        "//runtime/src/iree/async/util:proactor_pool",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/tooling:context_util",
+        "//runtime/src/iree/tooling:device_util",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_library(
+    name = "hal_invocation",
+    srcs = ["hal_invocation.c"],
+    hdrs = ["hal_invocation.h"],
+    deps = [
+        ":hal_backend",
+        ":hal_runtime",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/modules/hal:types",
+        "//runtime/src/iree/tooling:function_util",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_library(
+    name = "session",
+    srcs = ["session.c"],
+    hdrs = ["session.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)

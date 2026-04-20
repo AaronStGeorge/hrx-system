@@ -4,30 +4,26 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tools/iree-run-loom/amdgpu_hal_backend.h"
-#include "loom/tools/iree-run-loom/hal_backend.h"
+#include "loom/tooling/execution/hal_backend.h"
 
-static const iree_amdgpu_hal_backend_t* const kIreeRunLoomHalBackends[] = {
-    &iree_run_loom_amdgpu_hal_backend,
-};
-
-void iree_amdgpu_hal_backend_registry_initialize(
-    iree_amdgpu_hal_backend_registry_t* out_registry) {
+void loom_run_hal_backend_registry_initialize_from_entries(
+    const loom_run_hal_backend_t* const* backends,
+    iree_host_size_t backend_count,
+    loom_run_hal_backend_registry_t* out_registry) {
   IREE_ASSERT_ARGUMENT(out_registry);
-  *out_registry = (iree_amdgpu_hal_backend_registry_t){
-      .backends = kIreeRunLoomHalBackends,
-      .backend_count = IREE_ARRAYSIZE(kIreeRunLoomHalBackends),
+  *out_registry = (loom_run_hal_backend_registry_t){
+      .backends = backends,
+      .backend_count = backend_count,
   };
 }
 
-const iree_amdgpu_hal_backend_t* iree_amdgpu_hal_backend_registry_lookup(
-    const iree_amdgpu_hal_backend_registry_t* registry,
-    iree_string_view_t name) {
-  if (!registry) {
+const loom_run_hal_backend_t* loom_run_hal_backend_registry_lookup(
+    const loom_run_hal_backend_registry_t* registry, iree_string_view_t name) {
+  if (registry == NULL) {
     return NULL;
   }
   for (iree_host_size_t i = 0; i < registry->backend_count; ++i) {
-    const iree_amdgpu_hal_backend_t* backend = registry->backends[i];
+    const loom_run_hal_backend_t* backend = registry->backends[i];
     if (backend && iree_string_view_equal(backend->name, name)) {
       return backend;
     }
@@ -35,15 +31,15 @@ const iree_amdgpu_hal_backend_t* iree_amdgpu_hal_backend_registry_lookup(
   return NULL;
 }
 
-iree_status_t iree_amdgpu_hal_backend_registry_format_names(
-    const iree_amdgpu_hal_backend_registry_t* registry,
+iree_status_t loom_run_hal_backend_registry_format_names(
+    const loom_run_hal_backend_registry_t* registry,
     iree_string_builder_t* output) {
   IREE_ASSERT_ARGUMENT(registry);
   IREE_ASSERT_ARGUMENT(output);
   iree_host_size_t appended_count = 0;
   for (iree_host_size_t i = 0; i < registry->backend_count; ++i) {
-    const iree_amdgpu_hal_backend_t* backend = registry->backends[i];
-    if (!backend) {
+    const loom_run_hal_backend_t* backend = registry->backends[i];
+    if (backend == NULL) {
       continue;
     }
     if (appended_count > 0) {

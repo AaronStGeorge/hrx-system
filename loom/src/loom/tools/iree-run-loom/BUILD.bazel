@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_assert_no_dependency",
     "loom_cc_binary",
+    "loom_cc_library",
 )
 load("//loom/build_tools/bazel:build_defs.bzl", "iree_lit_test_suite")
 
@@ -23,44 +24,71 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/tools/iree-run-loom",
 )
 
-loom_cc_binary(
-    name = "iree-run-loom",
+iree_assert_no_dependency(
+    name = "tool_no_amdgpu_native_emit_dep",
+    dependency = "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
+    target = "//loom/src/loom/tools/iree-run-loom",
+)
+
+loom_cc_library(
+    name = "main",
     srcs = [
-        "amdgpu_hal_backend.c",
-        "amdgpu_hal_backend.h",
-        "hal_backend.h",
-        "hal_backends.c",
-        "iree-run-loom.c",
+        "main.c",
+    ],
+    hdrs = [
+        "main.h",
     ],
     deps = [
-        "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:diagnostic",
-        "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target/all:low_registry",
-        "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/emit/ireevm:module_compiler",
-        "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
-        "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-        "//loom/src/loom/verify",
-        "//runtime/src/iree/async/util:proactor_pool",
+        "//loom/src/loom/tooling/execution:hal_backend",
+        "//loom/src/loom/tooling/execution:hal_invocation",
+        "//loom/src/loom/tooling/execution:hal_runtime",
+        "//loom/src/loom/tooling/execution:session",
         "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/base/threading",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/io:file_handle",
         "//runtime/src/iree/io:stream",
-        "//runtime/src/iree/modules/hal:types",
         "//runtime/src/iree/tooling:comparison",
         "//runtime/src/iree/tooling:context_util",
-        "//runtime/src/iree/tooling:device_util",
         "//runtime/src/iree/tooling:function_io",
         "//runtime/src/iree/tooling:function_util",
         "//runtime/src/iree/tooling:run_module",
         "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_binary(
+    name = "iree-run-loom",
+    srcs = ["iree-run-loom.c"],
+    deps = [
+        ":main",
+        "//loom/src/loom/target/emit/ireevm:low_registry",
+        "//loom/src/loom/tooling/execution:hal_backend",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_binary(
+    name = "iree-run-loom-amdgpu",
+    srcs = [
+        "amdgpu_hal_backend.c",
+        "amdgpu_hal_backend.h",
+        "iree-run-loom-amdgpu.c",
+    ],
+    deps = [
+        ":main",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target/arch/amdgpu:low_registry",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
+        "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
+        "//loom/src/loom/tooling/execution:hal_backend",
+        "//loom/src/loom/tooling/execution:hal_runtime",
+        "//runtime/src/iree/base",
     ],
 )
 
