@@ -23,7 +23,7 @@ extern "C" {
 // Returns the AMDGPU scalar/VGPR lowering policy.
 //
 // The initial policy is intentionally narrow: it maps i32 scalar values to
-// SGPRs, maps vector<1xi32> lane values to VGPRs, and lowers
+// SGPRs, maps 32-bit vector lane values to VGPRs, and lowers
 // scalar.constant/scalar.addi/vector.constant/vector.addi/vector.muli to
 // descriptor-backed low packets. HAL buffer arguments lower to explicit
 // low.abi.resource records and entry low.resource imports.
