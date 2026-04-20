@@ -94,6 +94,12 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "loom_check_main_no_wasm_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:low_registry",
+    target = "//loom/src/loom/tools/loom-check:main",
+)
+
+iree_assert_no_dependency(
     name = "loom_check_tool_no_wasm_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/wasm:low_registry",
     target = "//loom/src/loom/tools/loom-check",

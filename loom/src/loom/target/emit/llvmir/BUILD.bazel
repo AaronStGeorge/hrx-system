@@ -111,6 +111,30 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "loom_check_tool_no_llvmir_core_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:core",
+    target = "//loom/src/loom/tools/loom-check",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_tool_no_llvmir_target_registry_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:target_registry",
+    target = "//loom/src/loom/tools/loom-check",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_tool_no_llvmir_provider_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:loom_check",
+    target = "//loom/src/loom/tools/loom-check",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_tool_no_llvm_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/tools/loom-check",
+)
+
+iree_assert_no_dependency(
     name = "lower_no_x86_packed_dot_vector_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_vector",
     target = "//loom/src/loom/target/emit/llvmir:lower",
