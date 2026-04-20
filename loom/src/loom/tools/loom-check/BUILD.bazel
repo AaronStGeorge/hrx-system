@@ -28,6 +28,18 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/tools/loom-check:execute",
 )
 
+iree_assert_no_dependency(
+    name = "main_no_test_dialect_dep",
+    dependency = "//loom/src/loom/ops/test",
+    target = "//loom/src/loom/tools/loom-check:main",
+)
+
+iree_assert_no_dependency(
+    name = "main_no_core_test_low_registry_dep",
+    dependency = "//loom/src/loom/target:low_descriptor_registry_core_test",
+    target = "//loom/src/loom/tools/loom-check:main",
+)
+
 loom_cc_library(
     name = "check",
     srcs = ["check.c"],
@@ -202,6 +214,25 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "main",
+    srcs = ["main.c"],
+    hdrs = ["main.h"],
+    deps = [
+        ":check",
+        ":execute",
+        ":json_output",
+        ":report",
+        ":update",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/io:file_handle",
+    ],
+)
+
 loom_cc_test(
     name = "json_output_test",
     srcs = ["json_output_test.cc"],
@@ -222,18 +253,9 @@ loom_cc_binary(
     name = "loom-check",
     srcs = ["loom-check.c"],
     deps = [
-        ":check",
-        ":execute",
-        ":json_output",
-        ":report",
-        ":update",
-        "//loom/src/loom/ops:op_registry",
+        ":main",
         "//loom/src/loom/ops/test",
         "//loom/src/loom/target:low_descriptor_registry_core_test",
-        "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/base/tooling:flags",
-        "//runtime/src/iree/io:file_handle",
     ],
 )

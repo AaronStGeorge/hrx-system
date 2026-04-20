@@ -6,6 +6,10 @@
 
 """Macros for defining tests that run .loom-test files through loom-check."""
 
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_binary",
+)
 load("//build_tools/bazel:executable.bzl", "iree_executable_test")
 
 _LOOM_CHECK_EXTENSION = ".loom-test"
@@ -16,7 +20,31 @@ def _loom_check_test_base_name(src):
              src)
     return src[:-len(_LOOM_CHECK_EXTENSION)]
 
-def loom_check_test(name, src, size = "small", tags = [], data = [], env = {}, **kwargs):
+def loom_check_runner_binary(name, src, deps = [], **kwargs):
+    """Creates a loom-check compatible runner binary.
+
+    Args:
+      name: Name of the generated runner binary.
+      src: C source file that calls loom_check_production_main().
+      deps: Runner-specific descriptor and lowering policy dependencies.
+      **kwargs: Additional attributes passed to loom_cc_binary.
+    """
+    loom_cc_binary(
+        name = name,
+        srcs = [src],
+        deps = deps + ["//loom/src/loom/tools/loom-check:main"],
+        **kwargs
+    )
+
+def loom_check_test(
+        name,
+        src,
+        size = "small",
+        tags = [],
+        data = [],
+        env = {},
+        runner = "//loom/src/loom/tools/loom-check",
+        **kwargs):
     """Creates a test that runs a single .loom-test file through loom-check.
 
     Args:
@@ -26,12 +54,13 @@ def loom_check_test(name, src, size = "small", tags = [], data = [], env = {}, *
       tags: Additional tags to apply to the test.
       data: Additional runfiles made available to loom-check.
       env: Additional test environment variables.
+      runner: loom-check compatible runner binary.
       **kwargs: Additional attributes passed to native_test.
     """
     _loom_check_test_base_name(src)
     iree_executable_test(
         name = name,
-        src = "//loom/src/loom/tools/loom-check",
+        src = runner,
         data = [src] + data,
         args = ["$(rootpath %s)" % src],
         env = env,
@@ -40,7 +69,11 @@ def loom_check_test(name, src, size = "small", tags = [], data = [], env = {}, *
         **kwargs
     )
 
-def loom_check_test_suite(name, srcs, **kwargs):
+def loom_check_test_suite(
+        name,
+        srcs,
+        runner = "//loom/src/loom/tools/loom-check",
+        **kwargs):
     """Creates one test per .loom-test file, bundled into a test suite.
 
     Each .loom-test file becomes an independent test target. The test name
@@ -50,12 +83,13 @@ def loom_check_test_suite(name, srcs, **kwargs):
     Args:
       name: Name of the generated test suite.
       srcs: List of .loom-test files to test.
+      runner: loom-check compatible runner binary.
       **kwargs: Additional attributes passed to each loom_check_test
           and the test suite.
     """
     tests = []
     for src in srcs:
         test_name = _loom_check_test_base_name(src).replace("/", "_")
-        loom_check_test(name = test_name, src = src, **kwargs)
+        loom_check_test(name = test_name, src = src, runner = runner, **kwargs)
         tests.append(test_name)
     native.test_suite(name = name, tests = tests, **kwargs)

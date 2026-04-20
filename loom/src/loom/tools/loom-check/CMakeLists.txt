@@ -201,6 +201,28 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    main
+  HDRS
+    "main.h"
+  SRCS
+    "main.c"
+  DEPS
+    ::check
+    ::execute
+    ::json_output
+    ::report
+    ::update
+    iree::base
+    iree::base::internal::arena
+    iree::base::tooling::flags
+    iree::io::file_handle
+    loom::src::loom::ops::op_registry
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     json_output_test
@@ -224,19 +246,10 @@ loom_cc_binary(
   SRCS
     "loom-check.c"
   DEPS
-    ::check
-    ::execute
-    ::json_output
-    ::report
-    ::update
+    ::main
     iree::base
-    iree::base::internal::arena
-    iree::base::tooling::flags
-    iree::io::file_handle
-    loom::src::loom::ops::op_registry
     loom::src::loom::ops::test
     loom::src::loom::target::low_descriptor_registry_core_test
-    loom::src::loom::util::stream
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

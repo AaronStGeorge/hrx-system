@@ -129,54 +129,6 @@ TEST_F(AmdgpuLoomCheckTest, DescriptorManifestUsesGfx11RegistryPackage) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(AmdgpuLoomCheckTest, SourceLowTextLowersGfx11VectorKernel) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(harness_.ExecuteFirst(
-      IREE_SV("// RUN: emit source-low @gfx11_target\n"
-              "target.preset @gfx11_target {key = \"amdgpu-gfx11\", source = "
-              "@loom_kernel}\n"
-              "\n"
-              "func.def @loom_kernel(%input: buffer, %output: buffer) {\n"
-              "  %tid = kernel.workitem.id<x> : index\n"
-              "  %zero_offset = index.constant 0 : offset\n"
-              "  %input_view = buffer.view %input[%zero_offset] : buffer -> "
-              "view<64x4xi32, #dense>\n"
-              "  %output_view = buffer.view %output[%zero_offset] : buffer -> "
-              "view<64x4xi32, #dense>\n"
-              "  %loaded = vector.load %input_view[%tid, 0] : "
-              "view<64x4xi32, #dense> -> vector<4xi32>\n"
-              "  %bias = vector.constant 5 : vector<4xi32>\n"
-              "  %sum = vector.addi %loaded, %bias : vector<4xi32>\n"
-              "  vector.store %sum, %output_view[%tid, 0] : vector<4xi32>, "
-              "view<64x4xi32, #dense>\n"
-              "  func.return\n"
-              "}\n"
-              "// ----\n"),
-      IREE_SV("amdgpu_source_low.loom-test"), &result));
-
-  EXPECT_TRUE(result.has_actual_output);
-  EXPECT_EQ(result.diagnostic_count, 0u)
-      << harness_.DetailString(result) << "\n"
-      << harness_.DiagnosticJsonString(result);
-  const std::string actual_output = harness_.ActualOutputString(result);
-  EXPECT_NE(actual_output.find("low.func.def target(@gfx11_target) "
-                               "@loom_kernel__low"),
-            std::string::npos);
-  EXPECT_NE(actual_output.find("low.live_in<amdgpu.workitem_id.x>"),
-            std::string::npos);
-  EXPECT_NE(actual_output.find("low.op<amdgpu.buffer_load_b128>"),
-            std::string::npos);
-  EXPECT_NE(actual_output.find("low.const<amdgpu.v_mov_b32> {imm32 = 5}"),
-            std::string::npos);
-  EXPECT_NE(actual_output.find("low.concat"), std::string::npos);
-  EXPECT_NE(actual_output.find("low.op<amdgpu.v_add_u32>"), std::string::npos);
-  EXPECT_NE(actual_output.find("low.op<amdgpu.buffer_store_b128>"),
-            std::string::npos);
-  EXPECT_NE(actual_output.find("low.abi.resource"), std::string::npos);
-  EXPECT_NE(actual_output.find("low.abi.adapter"), std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
 TEST_F(AmdgpuLoomCheckTest, ScheduleJsonUsesGfx11ResourcesAndLiveness) {
   loom_check_result_t result;
   std::string source = "// RUN: emit low-schedule-json @gfx11_mix\n";

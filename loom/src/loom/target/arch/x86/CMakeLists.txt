@@ -127,6 +127,17 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_binary(
+  NAME
+    loom-check
+  SRCS
+    "loom-check.c"
+  DEPS
+    ::low_registry
+    ::lower
+    loom::src::loom::tools::loom-check::main
+)
+
 loom_cc_test(
   NAME
     low_registry_test
@@ -153,6 +164,17 @@ loom_cc_test(
     loom::src::loom::tools::loom-check::test_util
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+iree_executable_test(
+  NAME
+    "source_low"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
 )
 
 loom_cc_library(

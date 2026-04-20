@@ -10,6 +10,11 @@ load(
     "loom_cc_library",
     "loom_cc_test",
 )
+load(
+    "//loom/build_tools/bazel:loom_check.bzl",
+    "loom_check_runner_binary",
+    "loom_check_test_suite",
+)
 load("//loom/build_tools/bazel:build_defs.bzl", "loom_low_descriptor_cc_library")
 
 package(
@@ -285,6 +290,15 @@ loom_cc_library(
     ],
 )
 
+loom_check_runner_binary(
+    name = "loom-check",
+    src = "loom-check.c",
+    deps = [
+        ":low_registry",
+        ":lower",
+    ],
+)
+
 loom_cc_test(
     name = "low_registry_test",
     srcs = ["low_registry_test.cc"],
@@ -309,6 +323,14 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
+)
+
+loom_check_test_suite(
+    name = "loom_check_file_test",
+    srcs = [
+        "source_low.loom-test",
+    ],
+    runner = ":loom-check",
 )
 
 #===------------------------------------------------------------------------===#

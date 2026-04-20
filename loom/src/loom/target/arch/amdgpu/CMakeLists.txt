@@ -299,6 +299,17 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_binary(
+  NAME
+    loom-check
+  SRCS
+    "loom-check.c"
+  DEPS
+    ::low_registry
+    ::lower
+    loom::src::loom::tools::loom-check::main
+)
+
 loom_cc_library(
   NAME
     hal_kernel_abi
@@ -404,6 +415,17 @@ loom_cc_test(
     loom::src::loom::tools::loom-check::test_util
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+iree_executable_test(
+  NAME
+    "source_low"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
 )
 
 loom_cc_library(
@@ -543,9 +565,11 @@ loom_low_descriptor_exclude_from_all(
     "gfx12_descriptors_test"
     "gfx950_descriptors_test"
     "hal_resource_materialization_test"
+    "loom-check"
     "loom_check_test"
     "low_registry_test"
     "occupancy_test"
+    "source_low"
     "wait_packets_test"
     "wait_plan_test"
 )
