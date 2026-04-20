@@ -379,6 +379,9 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
       "  %vmem = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, "
       "%soffset) {offset = 4} : (reg<amdgpu.sgpr x4>, "
       "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>\n"
+      "  %vmem_b128 = low.op<amdgpu.buffer_load_b128>(%resource, %vaddr, "
+      "%soffset) {offset = 16} : (reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>\n"
       "  %s_mix = low.op<amdgpu.s_add_u32>(%s_sum, %smem) : "
       "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
       "  %v_mix = low.op<amdgpu.v_add_u32>(%v_sum, %vmem) : "
@@ -391,6 +394,9 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
       "reg<amdgpu.vgpr x8>) -> %matrix0 as reg<amdgpu.vgpr x8>\n"
       "  low.op<amdgpu.buffer_store_dword>(%v_mix, %resource, %vaddr, "
       "%soffset) {offset = 8} : (reg<amdgpu.vgpr>, "
+      "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.op<amdgpu.buffer_store_b128>(%vmem_b128, %resource, %vaddr, "
+      "%soffset) {offset = 32} : (reg<amdgpu.vgpr x4>, "
       "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.op<amdgpu.s_waitcnt>() {vmcnt = 0, lgkmcnt = 0} : ()\n"
       "  low.op<amdgpu.s_waitcnt_depctr>() {depctr = 0} : ()\n"
@@ -412,7 +418,10 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
   EXPECT_NE(output.find("s_load_dwordx2 s"), std::string::npos);
   EXPECT_NE(output.find("buffer_load_dword v"), std::string::npos);
   EXPECT_NE(output.find("buffer_store_dword v"), std::string::npos);
+  EXPECT_NE(output.find("buffer_load_b128 v["), std::string::npos);
+  EXPECT_NE(output.find("buffer_store_b128 v["), std::string::npos);
   EXPECT_NE(output.find("offen offset:8"), std::string::npos);
+  EXPECT_NE(output.find("offen offset:32"), std::string::npos);
   EXPECT_NE(output.find("v_wmma_f32_16x16x16_f16 v["), std::string::npos);
   EXPECT_NE(output.find("s_waitcnt vmcnt(0) lgkmcnt(0)"), std::string::npos);
   EXPECT_NE(output.find("s_waitcnt_depctr depctr(0)"), std::string::npos);

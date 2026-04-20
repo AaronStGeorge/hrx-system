@@ -79,6 +79,36 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorLookupUsesStableKeys) {
   EXPECT_NE(load_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
 
+  const loom_low_descriptor_t* load_128_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_load_b128"));
+  ASSERT_NE(load_128_descriptor, nullptr);
+  EXPECT_EQ(load_128_descriptor->operand_count, 4u);
+  EXPECT_EQ(load_128_descriptor->result_count, 1u);
+  EXPECT_EQ(load_128_descriptor->effect_count, 1u);
+  const loom_low_operand_t* load_128_operands =
+      &descriptor_set->operands[load_128_descriptor->operand_start];
+  EXPECT_EQ(load_128_operands[0].unit_count, 4u);
+  EXPECT_EQ(load_128_operands[1].unit_count, 4u);
+  const loom_low_effect_t* load_128_effect =
+      &descriptor_set->effects[load_128_descriptor->effect_start];
+  EXPECT_EQ(load_128_effect->kind, LOOM_LOW_EFFECT_KIND_READ);
+  EXPECT_EQ(load_128_effect->width_bits, 128u);
+
+  const loom_low_descriptor_t* store_128_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_store_b128"));
+  ASSERT_NE(store_128_descriptor, nullptr);
+  EXPECT_EQ(store_128_descriptor->operand_count, 4u);
+  EXPECT_EQ(store_128_descriptor->result_count, 0u);
+  EXPECT_EQ(store_128_descriptor->effect_count, 1u);
+  const loom_low_operand_t* store_128_operands =
+      &descriptor_set->operands[store_128_descriptor->operand_start];
+  EXPECT_EQ(store_128_operands[0].unit_count, 4u);
+  EXPECT_EQ(store_128_operands[1].unit_count, 4u);
+  const loom_low_effect_t* store_128_effect =
+      &descriptor_set->effects[store_128_descriptor->effect_start];
+  EXPECT_EQ(store_128_effect->kind, LOOM_LOW_EFFECT_KIND_WRITE);
+  EXPECT_EQ(store_128_effect->width_bits, 128u);
+
   const loom_low_descriptor_t* load_wait_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_loadcnt"));
   ASSERT_NE(load_wait_descriptor, nullptr);
@@ -157,6 +187,10 @@ TEST(AmdgpuDescriptorsTest,
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_add_u32\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_mul_lo_u32\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_load_dword\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_load_b128\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_store_b128\""),
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_wmma_f32_16x16x16_f16\""),
             std::string::npos);

@@ -104,6 +104,49 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_NE(load_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
 
+  const loom_low_descriptor_t* load_128_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_load_b128"));
+  ASSERT_NE(load_128_descriptor, nullptr);
+  EXPECT_EQ(load_128_descriptor->operand_count, 4u);
+  EXPECT_EQ(load_128_descriptor->result_count, 1u);
+  EXPECT_EQ(load_128_descriptor->effect_count, 1u);
+  EXPECT_EQ(load_128_descriptor->encoding_id, 23u);
+  const loom_low_operand_t* load_128_operands =
+      &descriptor_set->operands[load_128_descriptor->operand_start];
+  EXPECT_EQ(load_128_operands[0].unit_count, 4u);
+  EXPECT_EQ(load_128_operands[1].unit_count, 4u);
+  EXPECT_EQ(load_128_operands[2].unit_count, 1u);
+  EXPECT_EQ(load_128_operands[3].unit_count, 1u);
+  const loom_low_effect_t* load_128_effect =
+      &descriptor_set->effects[load_128_descriptor->effect_start];
+  EXPECT_EQ(load_128_effect->kind, LOOM_LOW_EFFECT_KIND_READ);
+  EXPECT_EQ(load_128_effect->memory_space, LOOM_LOW_MEMORY_SPACE_GLOBAL);
+  EXPECT_EQ(load_128_effect->width_bits, 128u);
+  EXPECT_NE(
+      load_128_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
+
+  const loom_low_descriptor_t* store_128_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_store_b128"));
+  ASSERT_NE(store_128_descriptor, nullptr);
+  EXPECT_EQ(store_128_descriptor->operand_count, 4u);
+  EXPECT_EQ(store_128_descriptor->result_count, 0u);
+  EXPECT_EQ(store_128_descriptor->effect_count, 1u);
+  EXPECT_EQ(store_128_descriptor->encoding_id, 29u);
+  const loom_low_operand_t* store_128_operands =
+      &descriptor_set->operands[store_128_descriptor->operand_start];
+  EXPECT_EQ(store_128_operands[0].unit_count, 4u);
+  EXPECT_EQ(store_128_operands[1].unit_count, 4u);
+  EXPECT_EQ(store_128_operands[2].unit_count, 1u);
+  EXPECT_EQ(store_128_operands[3].unit_count, 1u);
+  const loom_low_effect_t* store_128_effect =
+      &descriptor_set->effects[store_128_descriptor->effect_start];
+  EXPECT_EQ(store_128_effect->kind, LOOM_LOW_EFFECT_KIND_WRITE);
+  EXPECT_EQ(store_128_effect->memory_space, LOOM_LOW_MEMORY_SPACE_GLOBAL);
+  EXPECT_EQ(store_128_effect->width_bits, 128u);
+  EXPECT_NE(
+      store_128_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+      0u);
+
   const loom_low_descriptor_t* scalar_load_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_load_dwordx2"));
   ASSERT_NE(scalar_load_descriptor, nullptr);
@@ -245,7 +288,7 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowAsmRegionRoundTrips) {
   EXPECT_EQ(printed, source);
 }
 
-TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorAndMatrixArguments) {
+TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorMemoryAndMatrix) {
   LowFuncAsmRoundTripHarness harness;
   IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx11_core_descriptor_set));
 
@@ -267,20 +310,29 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorAndMatrixArguments) {
       "\"amdgpu.gfx11.core\", contract_feature_bits = 0}\n"
       "target.bundle @gfx_target {snapshot = @gfx1100, export_plan = "
       "@hal_export, config = @gfx_config}\n"
-      "low.func.def target(@gfx_target) @vector_matrix(%lhs : "
+      "low.func.def target(@gfx_target) @vector_memory_matrix(%lhs : "
       "reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %a : reg<amdgpu.vgpr x4>, "
-      "%b : reg<amdgpu.vgpr x4>, %acc : reg<amdgpu.vgpr x8>) -> "
-      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {\n"
+      "%b : reg<amdgpu.vgpr x4>, %acc : reg<amdgpu.vgpr x8>, "
+      "%resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, "
+      "%soffset : reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>, "
+      "reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {\n"
       "  %sum = v_add_u32 %lhs, %rhs\n"
       "  %product = v_mul_lo_u32 %sum, %rhs\n"
+      "  %loaded = buffer_load_b128 %resource, %vaddr, %soffset {offset = 16}\n"
+      "  buffer_store_b128 %loaded, %resource, %vaddr, %soffset {offset = 32}\n"
       "  %matrix = v_wmma_f32_16x16x16_f16 %a, %b, %acc\n"
-      "  return %product, %matrix\n"
+      "  return %product, %loaded, %matrix\n"
       "}\n";
   std::string printed;
   IREE_ASSERT_OK(harness.RoundTripAndVerify(
       IREE_SV(source), IREE_SV("amdgpu.gfx11.core"), &printed));
   EXPECT_NE(printed.find("v_add_u32 %lhs, %rhs"), std::string::npos);
   EXPECT_NE(printed.find("v_mul_lo_u32 %sum, %rhs"), std::string::npos);
+  EXPECT_NE(printed.find("buffer_load_b128 %resource, %vaddr, %soffset"),
+            std::string::npos);
+  EXPECT_NE(printed.find("buffer_store_b128 %loaded, %resource, %vaddr, "
+                         "%soffset"),
+            std::string::npos);
   EXPECT_NE(printed.find("v_wmma_f32_16x16x16_f16 %a, %b, %acc"),
             std::string::npos);
 }
@@ -304,6 +356,10 @@ TEST(AmdgpuDescriptorsTest,
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_mov_b32\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_mul_lo_u32\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_load_dword\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_load_b128\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_store_b128\""),
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_wmma_f32_16x16x16_f16\""),
             std::string::npos);

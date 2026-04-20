@@ -304,11 +304,25 @@ _GLOBAL_LOAD_B64_EFFECT = Effect(
     width_bits=64,
 )
 
+_GLOBAL_LOAD_B128_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=128,
+)
+
 _GLOBAL_STORE_EFFECT = Effect(
     EffectKind.WRITE,
     memory_space=MemorySpace.GLOBAL,
     flags=(EffectFlag.DEPENDENCY,),
     width_bits=32,
+)
+
+_GLOBAL_STORE_B128_EFFECT = Effect(
+    EffectKind.WRITE,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=128,
 )
 
 _WAIT_EFFECT = Effect(
@@ -378,10 +392,28 @@ _IGNORE_GLOBAL_READ_MEMORY_B64 = AmdgpuImplicitOperandOverlay(
     ignore_reason="modeled-by-global-read-effect",
 )
 
+_IGNORE_GLOBAL_READ_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B128",
+    size_bits=128,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
 _IGNORE_GLOBAL_WRITE_MEMORY = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
     data_format_name="FMT_NUM_B32",
     size_bits=32,
+    is_input=False,
+    is_output=True,
+    ignore_reason="modeled-by-global-write-effect",
+)
+
+_IGNORE_GLOBAL_WRITE_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B128",
+    size_bits=128,
     is_input=False,
     is_output=True,
     ignore_reason="modeled-by-global-write-effect",
@@ -535,6 +567,40 @@ def _buffer_load_dword_overlay(
     )
 
 
+def _buffer_load_128_overlay(
+    *,
+    descriptor_key: str = "amdgpu.buffer_load_b128",
+    instruction_name: str = "BUFFER_LOAD_B128",
+    mnemonic: str = "buffer_load_b128",
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 12,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag="memory.load.u128",
+        schedule_class=_SCHEDULE_VMEM_LOAD,
+        operands=(
+            AmdgpuOperandOverlay("VDATA", _vgpr_result(units=4)),
+            AmdgpuOperandOverlay(
+                resource_field_name, _sgpr_resource("resource", units=4)
+            ),
+            AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        ),
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B128,),
+        immediate_fields=(offset_field_name,),
+        immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=(("OFFEN", 1),),
+        effects=(_GLOBAL_LOAD_B128_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _buffer_store_dword_overlay(
     *,
     encoding_name: str,
@@ -562,6 +628,40 @@ def _buffer_store_dword_overlay(
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=(("OFFEN", 1),),
         effects=(_GLOBAL_STORE_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _buffer_store_128_overlay(
+    *,
+    descriptor_key: str = "amdgpu.buffer_store_b128",
+    instruction_name: str = "BUFFER_STORE_B128",
+    mnemonic: str = "buffer_store_b128",
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 12,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag="memory.store.u128",
+        schedule_class=_SCHEDULE_VMEM_STORE,
+        operands=(
+            AmdgpuOperandOverlay("VDATA", _vgpr_operand("value", units=4)),
+            AmdgpuOperandOverlay(
+                resource_field_name, _sgpr_resource("resource", units=4)
+            ),
+            AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        ),
+        implicit_operands=(_IGNORE_GLOBAL_WRITE_MEMORY_B128,),
+        immediate_fields=(offset_field_name,),
+        immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=(("OFFEN", 1),),
+        effects=(_GLOBAL_STORE_B128_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
@@ -711,8 +811,22 @@ def _gfx950_core_overlay_descriptors(
             _buffer_load_dword_overlay(
                 encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
             ),
+            _buffer_load_128_overlay(
+                descriptor_key="amdgpu.buffer_load_dwordx4",
+                instruction_name="BUFFER_LOAD_DWORDX4",
+                mnemonic="buffer_load_dwordx4",
+                encoding_name="ENC_MUBUF",
+                resource_field_name="SRSRC",
+            ),
             _buffer_store_dword_overlay(
                 encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            ),
+            _buffer_store_128_overlay(
+                descriptor_key="amdgpu.buffer_store_dwordx4",
+                instruction_name="BUFFER_STORE_DWORDX4",
+                mnemonic="buffer_store_dwordx4",
+                encoding_name="ENC_MUBUF",
+                resource_field_name="SRSRC",
             ),
             _v_mfma_f32_16x16x16_f16_overlay(),
             _s_waitcnt_overlay(),
@@ -735,7 +849,13 @@ def _gfx11_core_overlay_descriptors(
             _buffer_load_dword_overlay(
                 encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
             ),
+            _buffer_load_128_overlay(
+                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            ),
             _buffer_store_dword_overlay(
+                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            ),
+            _buffer_store_128_overlay(
                 encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
             ),
             _v_wmma_f32_16x16x16_f16_overlay(),
@@ -764,7 +884,19 @@ def _gfx12_core_overlay_descriptors(
                 offset_field_name="IOFFSET",
                 offset_bit_width=24,
             ),
+            _buffer_load_128_overlay(
+                encoding_name="ENC_VBUFFER",
+                resource_field_name="RSRC",
+                offset_field_name="IOFFSET",
+                offset_bit_width=24,
+            ),
             _buffer_store_dword_overlay(
+                encoding_name="ENC_VBUFFER",
+                resource_field_name="RSRC",
+                offset_field_name="IOFFSET",
+                offset_bit_width=24,
+            ),
+            _buffer_store_128_overlay(
                 encoding_name="ENC_VBUFFER",
                 resource_field_name="RSRC",
                 offset_field_name="IOFFSET",
@@ -797,7 +929,19 @@ def _gfx1250_core_overlay_descriptors(
                 offset_field_name="IOFFSET",
                 offset_bit_width=24,
             ),
+            _buffer_load_128_overlay(
+                encoding_name="ENC_VBUFFER",
+                resource_field_name="RSRC",
+                offset_field_name="IOFFSET",
+                offset_bit_width=24,
+            ),
             _buffer_store_dword_overlay(
+                encoding_name="ENC_VBUFFER",
+                resource_field_name="RSRC",
+                offset_field_name="IOFFSET",
+                offset_bit_width=24,
+            ),
+            _buffer_store_128_overlay(
                 encoding_name="ENC_VBUFFER",
                 resource_field_name="RSRC",
                 offset_field_name="IOFFSET",
