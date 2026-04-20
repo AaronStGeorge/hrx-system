@@ -32,6 +32,7 @@ from loom.target.low_descriptors import (
     DescriptorFlag,
     DescriptorSet,
     Effect,
+    EncodingFieldValue,
     EnumDomain,
     EnumValue,
     Hazard,
@@ -135,6 +136,7 @@ class _CompiledDescriptorSet:
     hazards: list[Hazard]
     pressure_deltas: list[PressureDelta]
     feature_mask_words: list[int]
+    encoding_field_values: list[EncodingFieldValue]
     descriptor_rows: list[dict[str, int]]
     descriptor_refs: list[tuple[str, int]]
     canonical_asm_form_ordinals: list[int | None]
@@ -245,6 +247,11 @@ def _hazard_reference_id(hazard: Hazard, resource_ids: dict[str, int]) -> int:
 def _validate_u16(value: int, description: str) -> None:
     if value < 0 or value > 0xFFFF:
         raise ValueError(f"{description} does not fit u16")
+
+
+def _validate_u64(value: int, description: str) -> None:
+    if value < 0 or value > 0xFFFFFFFFFFFFFFFF:
+        raise ValueError(f"{description} does not fit u64")
 
 
 def _hazard_reference_count(hazard: Hazard) -> int:
@@ -498,6 +505,10 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
             raise ValueError(f"descriptor '{descriptor.key}' references unknown schedule class '{descriptor.schedule_class}'")
         used_schedule_names.add(descriptor.schedule_class)
         for immediate in descriptor.immediates:
+            _validate_u16(
+                immediate.encoding_field_id,
+                f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' encoding field id",
+            )
             if immediate.kind is ImmediateKind.ENUM:
                 if immediate.enum_domain is None:
                     raise ValueError(f"descriptor '{descriptor.key}' enum immediate '{immediate.field_name}' has no enum domain")
@@ -507,6 +518,10 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
             elif immediate.enum_domain is not None:
                 raise ValueError(f"descriptor '{descriptor.key}' non-enum immediate '{immediate.field_name}' references enum domain '{immediate.enum_domain}'")
         for operand in descriptor.operands:
+            _validate_u16(
+                operand.encoding_field_id,
+                f"descriptor '{descriptor.key}' operand '{operand.field_name}' encoding field id",
+            )
             for reg_alt in operand.reg_alts:
                 if reg_alt.reg_class is None:
                     if RegClassAltFlag.IMMEDIATE not in reg_alt.flags:
@@ -515,6 +530,21 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
                 if reg_alt.reg_class not in reg_class_inputs:
                     raise ValueError(f"descriptor '{descriptor.key}' operand '{operand.field_name}' references unknown register class '{reg_alt.reg_class}'")
                 used_reg_class_names.add(reg_alt.reg_class)
+        seen_fixed_encoding_fields: set[int] = set()
+        for field_value in descriptor.encoding_field_values:
+            _validate_u16(
+                field_value.encoding_field_id,
+                f"descriptor '{descriptor.key}' fixed encoding field id",
+            )
+            if field_value.encoding_field_id == 0:
+                raise ValueError(f"descriptor '{descriptor.key}' has fixed encoding field id zero")
+            if field_value.encoding_field_id in seen_fixed_encoding_fields:
+                raise ValueError(f"descriptor '{descriptor.key}' repeats fixed encoding field id {field_value.encoding_field_id}")
+            seen_fixed_encoding_fields.add(field_value.encoding_field_id)
+            _validate_u64(
+                field_value.value,
+                f"descriptor '{descriptor.key}' fixed encoding field value",
+            )
 
     for schedule_name in list(used_schedule_names):
         schedule_class = schedule_inputs[schedule_name]
@@ -641,6 +671,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     hazards: list[Hazard] = []
     pressure_deltas: list[PressureDelta] = []
     feature_mask_words: list[int] = []
+    encoding_field_values: list[EncodingFieldValue] = []
     descriptor_rows: list[dict[str, int]] = []
     schedule_rows: list[dict[str, int]] = []
     enum_domain_rows: list[dict[str, int]] = []
@@ -706,6 +737,8 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         constraints.extend(descriptor.constraints)
         feature_mask_word_start = len(feature_mask_words)
         feature_mask_words.extend(descriptor.feature_mask_words)
+        encoding_field_value_start = len(encoding_field_values)
+        encoding_field_values.extend(descriptor.encoding_field_values)
         descriptor_rows.append(
             {
                 "operand_start": operand_start,
@@ -719,6 +752,8 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
                 "constraint_count": len(descriptor.constraints),
                 "feature_mask_word_start": feature_mask_word_start,
                 "feature_mask_word_count": len(descriptor.feature_mask_words),
+                "encoding_field_value_start": encoding_field_value_start,
+                "encoding_field_value_count": len(descriptor.encoding_field_values),
             }
         )
 
@@ -748,6 +783,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         hazards=hazards,
         pressure_deltas=pressure_deltas,
         feature_mask_words=feature_mask_words,
+        encoding_field_values=encoding_field_values,
         descriptor_rows=descriptor_rows,
         descriptor_refs=descriptor_refs,
         canonical_asm_form_ordinals=canonical_asm_form_ordinals,
@@ -919,6 +955,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".reg_class_alt_start = {compiled.operand_alt_starts[i]},",
                 f".reg_class_alt_count = {len(operand.reg_alts)},",
                 f".unit_count = {operand.unit_count},",
+                f".encoding_field_id = {operand.encoding_field_id},",
                 f".data_format_id = {operand.data_format_id},",
                 f".read_stage = {operand.read_stage},",
                 f".ready_stage = {operand.ready_stage},",
@@ -937,6 +974,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".kind = {immediate.kind.c_name},",
                 f".flags = {_flag_expr(immediate.flags)},",
                 f".bit_width = {immediate.bit_width},",
+                f".encoding_field_id = {immediate.encoding_field_id},",
                 ".enum_domain_id = " + ("LOOM_LOW_ENUM_DOMAIN_NONE" if compiled.immediate_enum_domain_ids[i] is None else str(compiled.immediate_enum_domain_ids[i])) + ",",
                 f".encoding_id = {immediate.encoding_id},",
                 f".signed_min = {_i64_literal(immediate.signed_min)},",
@@ -1096,6 +1134,20 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         lines.append("")
     _emit_array(
         lines,
+        "loom_low_encoding_field_value_t",
+        spec.c_table_prefix,
+        "EncodingFieldValues",
+        [
+            [
+                f".encoding_field_id = {field_value.encoding_field_id},",
+                ".reserved = 0,",
+                f".value = {_u64_literal(field_value.value)},",
+            ]
+            for field_value in compiled.encoding_field_values
+        ],
+    )
+    _emit_array(
+        lines,
         "loom_low_descriptor_t",
         spec.c_table_prefix,
         "Descriptors",
@@ -1106,6 +1158,8 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".semantic_tag_string_offset = {_optional_string_expr(pool, f'semantic_{descriptor.key}' if descriptor.semantic_tag is not None else None)},",
                 f".feature_mask_word_start = {compiled.descriptor_rows[i]['feature_mask_word_start']},",
                 f".feature_mask_word_count = {compiled.descriptor_rows[i]['feature_mask_word_count']},",
+                f".encoding_field_value_start = {compiled.descriptor_rows[i]['encoding_field_value_start']},",
+                f".encoding_field_value_count = {compiled.descriptor_rows[i]['encoding_field_value_count']},",
                 f".encoding_format_id = {descriptor.encoding_format_id},",
                 f".encoding_id = {_encoding_id_expr(descriptor.encoding_id)},",
                 f".operand_start = {compiled.descriptor_rows[i]['operand_start']},",
@@ -1212,6 +1266,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         "asm_forms": "asm_form_count",
         "asm_operand_indices": "asm_operand_index_count",
         "asm_immediates": "asm_immediate_count",
+        "encoding_field_values": "encoding_field_value_count",
     }
 
     def append_optional_table(field_name: str, table_name: str) -> None:
@@ -1236,6 +1291,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
     append_optional_table("asm_forms", "AsmForms")
     append_optional_table("asm_operand_indices", "AsmOperandIndices")
     append_optional_table("asm_immediates", "AsmImmediates")
+    append_optional_table("encoding_field_values", "EncodingFieldValues")
     if compiled.feature_mask_words:
         lines.append(f"    .feature_mask_words = k{spec.c_table_prefix}FeatureMaskWords,")
         lines.append(f"    .feature_mask_word_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}FeatureMaskWords),")
@@ -1266,6 +1322,13 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
                 "operands": compiled.descriptor_rows[i]["operand_count"],
                 "results": compiled.descriptor_rows[i]["result_count"],
                 "immediates": compiled.descriptor_rows[i]["immediate_count"],
+                "fixed_encoding_fields": [
+                    {
+                        "encoding_field": field_value.encoding_field_id,
+                        "value": field_value.value,
+                    }
+                    for field_value in descriptor.encoding_field_values
+                ],
                 "effects": compiled.descriptor_rows[i]["effect_count"],
                 "asm_forms": sum(1 for asm_form in compiled.asm_forms if asm_form.descriptor_ordinal == i),
                 "flags": [flag.c_name for flag in descriptor.flags],
@@ -1314,6 +1377,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
             "hazards": len(compiled.hazards),
             "pressure_deltas": len(compiled.pressure_deltas),
             "feature_mask_words": len(compiled.feature_mask_words),
+            "encoding_field_values": len(compiled.encoding_field_values),
             "asm_forms": len(compiled.asm_forms),
             "asm_operand_indices": len(compiled.asm_operand_indices),
             "asm_immediates": len(compiled.asm_immediates),

@@ -37,7 +37,9 @@ static iree_status_t loom_low_verify_known_flags(uint16_t flags,
                                                  const char* table_name,
                                                  uint32_t table_index) {
   const uint16_t unknown_flags = flags & (uint16_t)~known_mask;
-  if (unknown_flags == 0) return iree_ok_status();
+  if (unknown_flags == 0) {
+    return iree_ok_status();
+  }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                           "low %s %" PRIu32
                           " has unknown generic flag bits 0x%04x",
@@ -50,7 +52,9 @@ static iree_status_t loom_low_descriptor_set_string_impl(
     iree_string_view_t* out_string) {
   *out_string = iree_string_view_empty();
   if (string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
-    if (allow_none) return iree_ok_status();
+    if (allow_none) {
+      return iree_ok_status();
+    }
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "required low descriptor string offset is NONE");
   }
@@ -121,7 +125,9 @@ static iree_status_t loom_low_verify_non_empty_required_string(
                             "empty",
                             field_name);
   }
-  if (out_value != NULL) *out_value = value;
+  if (out_value != NULL) {
+    *out_value = value;
+  }
   return iree_ok_status();
 }
 
@@ -179,6 +185,9 @@ static iree_status_t loom_low_verify_tables_present(
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->feature_mask_words,
       descriptor_set->feature_mask_word_count, "feature_mask_words"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->encoding_field_values,
+      descriptor_set->encoding_field_value_count, "encoding_field_values"));
   return iree_ok_status();
 }
 
@@ -698,6 +707,7 @@ static bool loom_low_effect_kind_requires_side_effecting_flag(
 }
 
 static iree_status_t loom_low_verify_descriptor_encoding_contract(
+    const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
   const bool is_pseudo =
       iree_all_bits_set(descriptor->flags, LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO);
@@ -719,6 +729,36 @@ static iree_status_t loom_low_verify_descriptor_encoding_contract(
                             "low descriptor %" PRIu32
                             " has no target encoding id but is not pseudo",
                             descriptor_index);
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_span(
+      descriptor->encoding_field_value_start,
+      descriptor->encoding_field_value_count,
+      descriptor_set->encoding_field_value_count, "encoding_field_values"));
+  for (uint16_t i = 0; i < descriptor->encoding_field_value_count; ++i) {
+    const uint32_t field_value_index =
+        descriptor->encoding_field_value_start + i;
+    const loom_low_encoding_field_value_t* field_value =
+        &descriptor_set->encoding_field_values[field_value_index];
+    if (field_value->encoding_field_id == 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor %" PRIu32
+                              " fixed encoding field value %" PRIu32
+                              " has field id zero",
+                              descriptor_index, field_value_index);
+    }
+    for (uint16_t j = 0; j < i; ++j) {
+      const loom_low_encoding_field_value_t* previous =
+          &descriptor_set
+               ->encoding_field_values[descriptor->encoding_field_value_start +
+                                       j];
+      if (previous->encoding_field_id == field_value->encoding_field_id) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low descriptor %" PRIu32
+                                " repeats fixed encoding field id %" PRIu16,
+                                descriptor_index,
+                                field_value->encoding_field_id);
+      }
+    }
   }
   return iree_ok_status();
 }
@@ -945,7 +985,7 @@ static iree_status_t loom_low_verify_descriptor(
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_roles(
       descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_encoding_contract(
-      descriptor, descriptor_index));
+      descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_effect_contract(
       descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(
@@ -1948,11 +1988,11 @@ static iree_status_t loom_low_append_manifest_operand(
       IREE_ARRAYSIZE(kLoomLowOperandFlagNames)));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder,
-      ",\"unit_count\":%" PRIu16 ",\"data_format\":%" PRIu16
-      ",\"read_stage\":%" PRIu16 ",\"ready_stage\":%" PRIu16
-      ",\"reg_class_alts\":[",
-      operand->unit_count, operand->data_format_id, operand->read_stage,
-      operand->ready_stage));
+      ",\"unit_count\":%" PRIu16 ",\"encoding_field\":%" PRIu16
+      ",\"data_format\":%" PRIu16 ",\"read_stage\":%" PRIu16
+      ",\"ready_stage\":%" PRIu16 ",\"reg_class_alts\":[",
+      operand->unit_count, operand->encoding_field_id, operand->data_format_id,
+      operand->read_stage, operand->ready_stage));
   for (uint16_t i = 0; i < operand->reg_class_alt_count; ++i) {
     if (i != 0) {
       IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
@@ -1993,9 +2033,10 @@ static iree_status_t loom_low_append_manifest_immediate(
   return iree_string_builder_append_format(
       builder,
       ",\"bit_width\":%" PRIu16 ",\"enum_domain\":%" PRIu16
-      ",\"encoding\":%" PRIu16 ",\"signed_min\":%" PRId64
-      ",\"unsigned_max\":%" PRIu64 "}",
-      immediate->bit_width, immediate->enum_domain_id, immediate->encoding_id,
+      ",\"encoding_field\":%" PRIu16 ",\"encoding\":%" PRIu16
+      ",\"signed_min\":%" PRId64 ",\"unsigned_max\":%" PRIu64 "}",
+      immediate->bit_width, immediate->enum_domain_id,
+      immediate->encoding_field_id, immediate->encoding_id,
       immediate->signed_min, immediate->unsigned_max);
 }
 
@@ -2194,6 +2235,20 @@ static iree_status_t loom_low_append_manifest_descriptor_rows(
         builder, "%" PRIu64,
         descriptor_set
             ->feature_mask_words[descriptor->feature_mask_word_start + i]));
+  }
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+      builder, "],\"fixed_encoding_fields\":["));
+  for (uint16_t i = 0; i < descriptor->encoding_field_value_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const loom_low_encoding_field_value_t* field_value =
+        &descriptor_set
+             ->encoding_field_values[descriptor->encoding_field_value_start +
+                                     i];
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "{\"encoding_field\":%" PRIu16 ",\"value\":%" PRIu64 "}",
+        field_value->encoding_field_id, field_value->value));
   }
   return iree_string_builder_append_cstring(builder, "]");
 }
@@ -2620,7 +2675,8 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       ",\"reg_classes\":%" PRIu32 ",\"reg_class_alts\":%" PRIu32
       ",\"schedule_classes\":%" PRIu32 ",\"issue_uses\":%" PRIu32
       ",\"resources\":%" PRIu32 ",\"hazards\":%" PRIu32
-      ",\"pressure_deltas\":%" PRIu32 ",\"feature_mask_words\":%" PRIu32 "}",
+      ",\"pressure_deltas\":%" PRIu32 ",\"feature_mask_words\":%" PRIu32
+      ",\"encoding_field_values\":%" PRIu32 "}",
       descriptor_set->descriptor_count, descriptor_set->descriptor_ref_count,
       descriptor_set->asm_form_count, descriptor_set->asm_operand_index_count,
       descriptor_set->asm_immediate_count, descriptor_set->operand_count,
@@ -2630,7 +2686,8 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       descriptor_set->reg_class_alt_count, descriptor_set->schedule_class_count,
       descriptor_set->issue_use_count, descriptor_set->resource_count,
       descriptor_set->hazard_count, descriptor_set->pressure_delta_count,
-      descriptor_set->feature_mask_word_count));
+      descriptor_set->feature_mask_word_count,
+      descriptor_set->encoding_field_value_count));
   IREE_RETURN_IF_ERROR(
       loom_low_append_manifest_reg_classes(descriptor_set, builder));
   IREE_RETURN_IF_ERROR(

@@ -14,21 +14,14 @@
 #include "loom/target/arch/amdgpu/target_info.h"
 
 #define LOOM_AMDGPU_SOP1_BASE UINT32_C(0xBE800000)
-#define LOOM_AMDGPU_SOP2_BASE UINT32_C(0x80000000)
 #define LOOM_AMDGPU_SOPP_BASE UINT32_C(0xBF800000)
-#define LOOM_AMDGPU_VOP2_BASE UINT32_C(0x00000000)
-#define LOOM_AMDGPU_VOP3_BASE UINT32_C(0xD4000000)
-#define LOOM_AMDGPU_MUBUF_BASE UINT32_C(0xE0000000)
 #define LOOM_AMDGPU_SOP1_S_MOV_B32_OPCODE UINT16_C(0x00)
-#define LOOM_AMDGPU_SOP2_S_ADD_U32_OPCODE UINT16_C(0x00)
 #define LOOM_AMDGPU_SOPP_S_WAITCNT_OPCODE UINT16_C(0x09)
 #define LOOM_AMDGPU_SOPP_S_WAITCNT_DEPCTR_OPCODE UINT16_C(0x08)
 #define LOOM_AMDGPU_SOPP_S_WAIT_IDLE_OPCODE UINT16_C(0x0A)
-#define LOOM_AMDGPU_VOP2_V_ADD_U32_OPCODE UINT16_C(0x25)
-#define LOOM_AMDGPU_VOP3_V_MUL_LO_U32_OPCODE UINT16_C(0x32C)
 #define LOOM_AMDGPU_SISRC_LITERAL UINT16_C(255)
 #define LOOM_AMDGPU_VGPR_SRC_BASE UINT16_C(0x100)
-#define LOOM_AMDGPU_MUBUF_OFFEN UINT32_C(1u << 22)
+#define LOOM_AMDGPU_MAX_PACKET_FIELD_VALUES 32u
 
 typedef struct loom_amdgpu_encode_state_t {
   // Schedule sidecar being encoded.
@@ -201,72 +194,6 @@ static iree_status_t loom_amdgpu_assignment_sgpr(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_assignment_vgpr(
-    const loom_low_allocation_sidecar_t* allocation,
-    const loom_low_allocation_assignment_t* assignment,
-    uint16_t* out_register) {
-  IREE_ASSERT_ARGUMENT(out_register);
-  *out_register = 0;
-  iree_string_view_t register_class = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_assignment_register_class(
-      allocation, assignment, &register_class));
-  if (!iree_string_view_equal(register_class, IREE_SV("amdgpu.vgpr"))) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU native encoding value %" PRIu32
-                            " must be a VGPR",
-                            assignment->value_id);
-  }
-  if (assignment->location_count != 1) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU native encoding VGPR value %" PRIu32
-                            " requires %" PRIu32
-                            " registers; only scalar registers are supported",
-                            assignment->value_id, assignment->location_count);
-  }
-  if (assignment->location_base > 255) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU native encoding VGPR index %" PRIu32
-                            " is out of range",
-                            assignment->location_base);
-  }
-  *out_register = (uint16_t)assignment->location_base;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_amdgpu_assignment_sgpr_range(
-    const loom_low_allocation_sidecar_t* allocation,
-    const loom_low_allocation_assignment_t* assignment, uint32_t required_count,
-    uint16_t* out_register) {
-  IREE_ASSERT_ARGUMENT(out_register);
-  *out_register = 0;
-  iree_string_view_t register_class = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_assignment_register_class(
-      allocation, assignment, &register_class));
-  if (!iree_string_view_equal(register_class, IREE_SV("amdgpu.sgpr"))) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU native encoding value %" PRIu32
-                            " must be an SGPR range",
-                            assignment->value_id);
-  }
-  if (assignment->location_count != required_count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU native encoding value %" PRIu32
-                            " requires %" PRIu32 " SGPRs, got %" PRIu32,
-                            assignment->value_id, required_count,
-                            assignment->location_count);
-  }
-  const uint64_t last_register =
-      (uint64_t)assignment->location_base + required_count - 1u;
-  if (last_register > 127) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU native encoding SGPR range s[%" PRIu32
-                            ":%" PRIu64 "] is out of range",
-                            assignment->location_base, last_register);
-  }
-  *out_register = (uint16_t)assignment->location_base;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_packet_result_sgpr(
     const loom_amdgpu_encode_state_t* state,
     const loom_low_packet_view_t* packet, iree_host_size_t result_index,
@@ -282,71 +209,6 @@ static iree_status_t loom_amdgpu_packet_result_sgpr(
       &assignment));
   return loom_amdgpu_assignment_sgpr(state->allocation, assignment,
                                      out_register);
-}
-
-static iree_status_t loom_amdgpu_packet_operand_sgpr(
-    const loom_amdgpu_encode_state_t* state,
-    const loom_low_packet_view_t* packet, iree_host_size_t operand_index,
-    uint16_t* out_register) {
-  if (operand_index >= packet->node->op->operand_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU native encoding operand index is out of "
-                            "range");
-  }
-  const loom_low_allocation_assignment_t* assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      state->allocation,
-      loom_op_const_operands(packet->node->op)[operand_index], &assignment));
-  return loom_amdgpu_assignment_sgpr(state->allocation, assignment,
-                                     out_register);
-}
-
-static iree_status_t loom_amdgpu_packet_result_vgpr(
-    const loom_amdgpu_encode_state_t* state,
-    const loom_low_packet_view_t* packet, iree_host_size_t result_index,
-    uint16_t* out_register) {
-  if (result_index >= packet->node->op->result_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU native encoding result index is out of "
-                            "range");
-  }
-  const loom_low_allocation_assignment_t* assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      state->allocation, loom_op_const_results(packet->node->op)[result_index],
-      &assignment));
-  return loom_amdgpu_assignment_vgpr(state->allocation, assignment,
-                                     out_register);
-}
-
-static iree_status_t loom_amdgpu_packet_operand_vgpr(
-    const loom_amdgpu_encode_state_t* state,
-    const loom_low_packet_view_t* packet, iree_host_size_t operand_index,
-    uint16_t* out_register) {
-  if (operand_index >= packet->node->op->operand_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU native encoding operand index is out of "
-                            "range");
-  }
-  const loom_low_allocation_assignment_t* assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      state->allocation,
-      loom_op_const_operands(packet->node->op)[operand_index], &assignment));
-  return loom_amdgpu_assignment_vgpr(state->allocation, assignment,
-                                     out_register);
-}
-
-static iree_status_t loom_amdgpu_packet_operand_assignment(
-    const loom_amdgpu_encode_state_t* state,
-    const loom_low_packet_view_t* packet, iree_host_size_t operand_index,
-    const loom_low_allocation_assignment_t** out_assignment) {
-  if (operand_index >= packet->node->op->operand_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU native encoding operand index is out of "
-                            "range");
-  }
-  return loom_amdgpu_find_assignment(
-      state->allocation,
-      loom_op_const_operands(packet->node->op)[operand_index], out_assignment);
 }
 
 static iree_status_t loom_amdgpu_read_u32_attr(
@@ -396,6 +258,142 @@ static bool loom_amdgpu_sisrc_inline_u32(uint32_t value, uint16_t* out_sisrc) {
   return false;
 }
 
+static iree_status_t loom_amdgpu_append_encoding_packet(
+    loom_amdgpu_encode_state_t* state,
+    const loom_amdgpu_encoding_packet_t* packet) {
+  for (uint16_t i = 0; i < packet->word_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_u32(state, packet->words[i]));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_packet_descriptor_operand_assignment(
+    const loom_amdgpu_encode_state_t* state,
+    const loom_low_packet_view_t* packet, uint16_t descriptor_operand_index,
+    const loom_low_allocation_assignment_t** out_assignment) {
+  IREE_ASSERT_ARGUMENT(out_assignment);
+  *out_assignment = NULL;
+  const loom_op_t* op = packet->node->op;
+  loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+  if (descriptor_operand_index < packet->descriptor->result_count) {
+    if (descriptor_operand_index >= op->result_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "AMDGPU native encoding result descriptor operand %" PRIu16
+          " has no matching SSA result",
+          descriptor_operand_index);
+    }
+    value_id = loom_op_const_results(op)[descriptor_operand_index];
+  } else {
+    const uint16_t operand_index =
+        descriptor_operand_index - packet->descriptor->result_count;
+    if (operand_index >= op->operand_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "AMDGPU native encoding descriptor operand %" PRIu16
+          " has no matching SSA operand",
+          descriptor_operand_index);
+    }
+    value_id = loom_op_const_operands(op)[operand_index];
+  }
+  return loom_amdgpu_find_assignment(state->allocation, value_id,
+                                     out_assignment);
+}
+
+static iree_status_t loom_amdgpu_assignment_field_value(
+    const loom_amdgpu_encode_state_t* state,
+    const loom_low_allocation_assignment_t* assignment,
+    const loom_low_operand_t* operand, uint64_t* out_value) {
+  IREE_ASSERT_ARGUMENT(out_value);
+  *out_value = 0;
+  iree_string_view_t register_class = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_assignment_register_class(
+      state->allocation, assignment, &register_class));
+  if (assignment->location_count != operand->unit_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU native encoding value %" PRIu32 " has %" PRIu32
+        " assigned registers but descriptor field needs %" PRIu16,
+        assignment->value_id, assignment->location_count, operand->unit_count);
+  }
+  const uint64_t last_register =
+      (uint64_t)assignment->location_base + assignment->location_count - 1u;
+  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.sgpr"))) {
+    if (last_register > 127) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU native encoding SGPR range s[%" PRIu32
+                              ":%" PRIu64 "] is out of range",
+                              assignment->location_base, last_register);
+    }
+    *out_value = assignment->location_base;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.vgpr"))) {
+    if (last_register > 255) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU native encoding VGPR range v[%" PRIu32
+                              ":%" PRIu64 "] is out of range",
+                              assignment->location_base, last_register);
+    }
+    *out_value = assignment->location_base;
+    if (loom_amdgpu_encoding_field_uses_unified_source(
+            operand->encoding_field_id)) {
+      *out_value += LOOM_AMDGPU_VGPR_SRC_BASE;
+    }
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                          "AMDGPU native encoding register class '%.*s' is not "
+                          "supported by the generic packet encoder",
+                          (int)register_class.size, register_class.data);
+}
+
+static iree_status_t loom_amdgpu_push_encoding_field_value(
+    loom_amdgpu_encoding_field_value_t* field_values,
+    iree_host_size_t* field_value_count, uint16_t field_id, uint64_t value) {
+  IREE_ASSERT_ARGUMENT(field_value_count);
+  if (field_id == 0) {
+    return iree_ok_status();
+  }
+  if (*field_value_count >= LOOM_AMDGPU_MAX_PACKET_FIELD_VALUES) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "AMDGPU native encoding field value buffer exceeded %u entries",
+        LOOM_AMDGPU_MAX_PACKET_FIELD_VALUES);
+  }
+  field_values[*field_value_count] = (loom_amdgpu_encoding_field_value_t){
+      .field_id = field_id,
+      .reserved = 0,
+      .value = value,
+  };
+  ++*field_value_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_read_immediate_field_value(
+    const loom_amdgpu_encode_state_t* state,
+    const loom_low_packet_view_t* packet, const loom_low_immediate_t* immediate,
+    uint64_t* out_value) {
+  IREE_ASSERT_ARGUMENT(out_value);
+  *out_value = 0;
+  iree_string_view_t field_name = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_string(
+      state->schedule->target.descriptor_set,
+      immediate->field_name_string_offset, &field_name));
+  int64_t value = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_read_i64_attr(
+      state->schedule->module, loom_amdgpu_packet_attrs(packet), field_name,
+      &value));
+  if (value < 0) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU native encoding immediate '%.*s' value "
+                            "%" PRId64 " is negative",
+                            (int)field_name.size, field_name.data, value);
+  }
+  *out_value = (uint64_t)value;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_encode_sop1_s_mov_b32(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   if (packet->descriptor->encoding_id != LOOM_AMDGPU_SOP1_S_MOV_B32_OPCODE) {
@@ -423,92 +421,6 @@ static iree_status_t loom_amdgpu_encode_sop1_s_mov_b32(
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_u32(state, imm32));
   }
   return iree_ok_status();
-}
-
-static iree_status_t loom_amdgpu_encode_sop2(
-    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
-  if (packet->descriptor->encoding_id != LOOM_AMDGPU_SOP2_S_ADD_U32_OPCODE) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU SOP2 opcode %" PRIu16
-                            " is not supported by native encoding",
-                            packet->descriptor->encoding_id);
-  }
-  if (packet->descriptor->encoding_id > 0x7F) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU SOP2 opcode %" PRIu16 " is out of range",
-                            packet->descriptor->encoding_id);
-  }
-  uint16_t sdst = 0;
-  uint16_t ssrc0 = 0;
-  uint16_t ssrc1 = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_packet_result_sgpr(state, packet, 0, &sdst));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_packet_operand_sgpr(state, packet, 0, &ssrc0));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_packet_operand_sgpr(state, packet, 1, &ssrc1));
-  const uint32_t word = LOOM_AMDGPU_SOP2_BASE |
-                        ((uint32_t)packet->descriptor->encoding_id << 23) |
-                        ((uint32_t)sdst << 16) | ((uint32_t)ssrc1 << 8) | ssrc0;
-  return loom_amdgpu_append_u32(state, word);
-}
-
-static iree_status_t loom_amdgpu_encode_vop2(
-    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
-  if (packet->descriptor->encoding_id != LOOM_AMDGPU_VOP2_V_ADD_U32_OPCODE) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU VOP2 opcode %" PRIu16
-                            " is not supported by native encoding",
-                            packet->descriptor->encoding_id);
-  }
-  if (packet->descriptor->encoding_id > 0x7F) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU VOP2 opcode %" PRIu16 " is out of range",
-                            packet->descriptor->encoding_id);
-  }
-  uint16_t vdst = 0;
-  uint16_t src0 = 0;
-  uint16_t vsrc1 = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_packet_result_vgpr(state, packet, 0, &vdst));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_packet_operand_vgpr(state, packet, 0, &src0));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_packet_operand_vgpr(state, packet, 1, &vsrc1));
-  src0 = (uint16_t)(LOOM_AMDGPU_VGPR_SRC_BASE + src0);
-  const uint32_t word = LOOM_AMDGPU_VOP2_BASE |
-                        ((uint32_t)packet->descriptor->encoding_id << 25) |
-                        ((uint32_t)vdst << 17) | ((uint32_t)vsrc1 << 9) | src0;
-  return loom_amdgpu_append_u32(state, word);
-}
-
-static iree_status_t loom_amdgpu_encode_vop3(
-    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
-  if (packet->descriptor->encoding_id != LOOM_AMDGPU_VOP3_V_MUL_LO_U32_OPCODE) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU VOP3 opcode %" PRIu16
-                            " is not supported by native encoding",
-                            packet->descriptor->encoding_id);
-  }
-  if (packet->descriptor->encoding_id > 0x3FF) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU VOP3 opcode %" PRIu16 " is out of range",
-                            packet->descriptor->encoding_id);
-  }
-  uint16_t vdst = 0;
-  uint16_t src0 = 0;
-  uint16_t src1 = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_packet_result_vgpr(state, packet, 0, &vdst));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_packet_operand_vgpr(state, packet, 0, &src0));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_packet_operand_vgpr(state, packet, 1, &src1));
-  src0 = (uint16_t)(LOOM_AMDGPU_VGPR_SRC_BASE + src0);
-  src1 = (uint16_t)(LOOM_AMDGPU_VGPR_SRC_BASE + src1);
-  const uint32_t low_word = LOOM_AMDGPU_VOP3_BASE |
-                            ((uint32_t)packet->descriptor->encoding_id << 16) |
-                            vdst;
-  const uint32_t high_word = (uint32_t)src0 | ((uint32_t)src1 << 9);
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_u32(state, low_word));
-  return loom_amdgpu_append_u32(state, high_word);
 }
 
 static iree_status_t loom_amdgpu_encode_sopp_word(
@@ -567,77 +479,73 @@ static iree_status_t loom_amdgpu_encode_sopp_packet(
                           opcode);
 }
 
-static iree_status_t loom_amdgpu_encode_mubuf_packet(
+static iree_status_t loom_amdgpu_encode_generic_descriptor_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
-  if (packet->descriptor->encoding_id > 0x7F) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU MUBUF opcode %" PRIu16 " is out of range",
-                            packet->descriptor->encoding_id);
+  iree_string_view_t descriptor_set_key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_string(
+      state->schedule->target.descriptor_set,
+      state->schedule->target.descriptor_set->key_string_offset,
+      &descriptor_set_key));
+  const loom_amdgpu_encoding_table_t* encoding_table =
+      loom_amdgpu_encoding_table_for_descriptor_set(descriptor_set_key);
+  if (encoding_table == NULL) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "AMDGPU native encoding has no bit table for "
+                            "descriptor set '%.*s'",
+                            (int)descriptor_set_key.size,
+                            descriptor_set_key.data);
   }
 
-  uint32_t offset = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_read_u32_attr(state->schedule, packet,
-                                                 IREE_SV("offset"), &offset));
-  if (offset > 0xFFF) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU MUBUF offset %" PRIu32 " does not fit 12 bits", offset);
+  loom_amdgpu_encoding_field_value_t
+      field_values[LOOM_AMDGPU_MAX_PACKET_FIELD_VALUES];
+  iree_host_size_t field_value_count = 0;
+  const loom_low_descriptor_set_t* descriptor_set =
+      state->schedule->target.descriptor_set;
+  for (uint16_t i = 0; i < packet->descriptor->encoding_field_value_count;
+       ++i) {
+    const loom_low_encoding_field_value_t* field_value =
+        &descriptor_set->encoding_field_values
+             [packet->descriptor->encoding_field_value_start + i];
+    IREE_RETURN_IF_ERROR(loom_amdgpu_push_encoding_field_value(
+        field_values, &field_value_count, field_value->encoding_field_id,
+        field_value->value));
   }
 
-  const loom_low_allocation_assignment_t* resource_assignment = NULL;
-  uint16_t vdata = 0;
-  uint16_t vaddr = 0;
-  uint16_t srsrc_base = 0;
-  uint16_t soffset = 0;
-  const loom_op_t* op = packet->node->op;
-  if (op->result_count == 1 && op->operand_count == 3) {
+  for (uint16_t i = 0; i < packet->descriptor->operand_count; ++i) {
+    const loom_low_operand_t* operand =
+        &descriptor_set->operands[packet->descriptor->operand_start + i];
+    if (operand->encoding_field_id == 0) {
+      continue;
+    }
+    const loom_low_allocation_assignment_t* assignment = NULL;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_packet_descriptor_operand_assignment(
+        state, packet, i, &assignment));
+    uint64_t value = 0;
     IREE_RETURN_IF_ERROR(
-        loom_amdgpu_packet_result_vgpr(state, packet, 0, &vdata));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_packet_operand_assignment(
-        state, packet, 0, &resource_assignment));
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_packet_operand_vgpr(state, packet, 1, &vaddr));
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_packet_operand_sgpr(state, packet, 2, &soffset));
-  } else if (op->result_count == 0 && op->operand_count == 4) {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_packet_operand_vgpr(state, packet, 0, &vdata));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_packet_operand_assignment(
-        state, packet, 1, &resource_assignment));
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_packet_operand_vgpr(state, packet, 2, &vaddr));
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_packet_operand_sgpr(state, packet, 3, &soffset));
-  } else {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU MUBUF native encoding supports only dword load/store shapes");
+        loom_amdgpu_assignment_field_value(state, assignment, operand, &value));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_push_encoding_field_value(
+        field_values, &field_value_count, operand->encoding_field_id, value));
   }
 
-  IREE_RETURN_IF_ERROR(loom_amdgpu_assignment_sgpr_range(
-      state->allocation, resource_assignment, 4, &srsrc_base));
-  if (srsrc_base % 4 != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU MUBUF resource value %" PRIu32
-                            " must start on a four-SGPR boundary",
-                            resource_assignment->value_id);
-  }
-  const uint16_t srsrc = (uint16_t)(srsrc_base / 4);
-  if (srsrc > 31) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU MUBUF resource register encoding %" PRIu16
-                            " is out of range",
-                            srsrc);
+  for (uint16_t i = 0; i < packet->descriptor->immediate_count; ++i) {
+    const loom_low_immediate_t* immediate =
+        &descriptor_set->immediates[packet->descriptor->immediate_start + i];
+    if (immediate->encoding_field_id == 0) {
+      continue;
+    }
+    uint64_t value = 0;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_read_immediate_field_value(
+        state, packet, immediate, &value));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_push_encoding_field_value(
+        field_values, &field_value_count, immediate->encoding_field_id, value));
   }
 
-  const uint32_t word0 = LOOM_AMDGPU_MUBUF_BASE |
-                         ((uint32_t)packet->descriptor->encoding_id << 18) |
-                         offset;
-  const uint32_t word1 = (uint32_t)vaddr | ((uint32_t)vdata << 8) |
-                         ((uint32_t)srsrc << 16) | LOOM_AMDGPU_MUBUF_OFFEN |
-                         ((uint32_t)soffset << 24);
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_u32(state, word0));
-  return loom_amdgpu_append_u32(state, word1);
+  loom_amdgpu_encoding_packet_t encoded_packet;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_pack(
+      encoding_table, packet->descriptor->encoding_format_id,
+      packet->descriptor->encoding_id, field_values, field_value_count,
+      &encoded_packet));
+  return loom_amdgpu_append_encoding_packet(state, &encoded_packet);
 }
 
 static iree_status_t loom_amdgpu_encode_descriptor_packet(
@@ -652,16 +560,13 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
   switch (packet->descriptor->encoding_format_id) {
     case LOOM_AMDGPU_ENCODING_FORMAT_SOP1:
       return loom_amdgpu_encode_sop1_s_mov_b32(state, packet);
-    case LOOM_AMDGPU_ENCODING_FORMAT_SOP2:
-      return loom_amdgpu_encode_sop2(state, packet);
     case LOOM_AMDGPU_ENCODING_FORMAT_SOPP:
       return loom_amdgpu_encode_sopp_packet(state, packet);
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOP2:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP2:
-      return loom_amdgpu_encode_vop2(state, packet);
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3:
-      return loom_amdgpu_encode_vop3(state, packet);
     case LOOM_AMDGPU_ENCODING_FORMAT_MUBUF:
-      return loom_amdgpu_encode_mubuf_packet(state, packet);
+      return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
     default: {
       iree_string_view_t key = iree_string_view_empty();
       IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_string(

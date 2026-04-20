@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 10
+LOW_DESCRIPTOR_SET_ABI_VERSION = 11
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 
@@ -178,6 +178,7 @@ class Operand:
     reg_alts: tuple[RegClassAlt, ...]
     flags: tuple[OperandFlag, ...] = ()
     unit_count: int = 1
+    encoding_field_id: int = 0
     data_format_id: int = 0
     read_stage: int = 0
     ready_stage: int = 0
@@ -189,10 +190,17 @@ class Immediate:
     kind: ImmediateKind
     flags: tuple[ImmediateFlag, ...] = ()
     bit_width: int = 0
+    encoding_field_id: int = 0
     enum_domain: str | None = None
     encoding_id: int = 0
     signed_min: int = 0
     unsigned_max: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class EncodingFieldValue:
+    encoding_field_id: int
+    value: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,6 +302,7 @@ class Descriptor:
     operands: tuple[Operand, ...]
     schedule_class: str
     immediates: tuple[Immediate, ...] = ()
+    encoding_field_values: tuple[EncodingFieldValue, ...] = ()
     asm_forms: tuple[AsmForm, ...] = ()
     effects: tuple[Effect, ...] = ()
     constraints: tuple[Constraint, ...] = ()

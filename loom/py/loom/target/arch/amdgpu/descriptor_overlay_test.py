@@ -9,16 +9,18 @@ from __future__ import annotations
 import pytest
 
 from loom.target.arch.amdgpu.descriptor_overlay import (
-    AMDGPU_ENCODING_FORMAT_SOP2,
-    AMDGPU_ENCODING_FORMAT_SOPP,
-    AMDGPU_ENCODING_FORMAT_VBUFFER,
-    AMDGPU_ENCODING_FORMAT_VOP2_LITERAL,
     AmdgpuDescriptorOverlay,
     AmdgpuDescriptorOverlayError,
     AmdgpuImplicitOperandOverlay,
     AmdgpuOperandOverlay,
     materialize_amdgpu_descriptor_overlay,
     materialize_amdgpu_descriptor_overlays,
+)
+from loom.target.arch.amdgpu.encoding import (
+    AMDGPU_ENCODING_FORMAT_SOP2,
+    AMDGPU_ENCODING_FORMAT_SOPP,
+    AMDGPU_ENCODING_FORMAT_VBUFFER,
+    AMDGPU_ENCODING_FORMAT_VOP2_LITERAL,
 )
 from loom.target.arch.amdgpu.isa_xml import parse_amdgpu_isa_xml_text
 from loom.target.arch.amdgpu.isa_xml_test import SAMPLE_XML
@@ -174,7 +176,8 @@ def test_materialize_amdgpu_descriptor_overlays_from_xml_facts() -> None:
         "rhs",
     ]
     assert descriptors[0].encoding_format_id == AMDGPU_ENCODING_FORMAT_SOP2
-    assert descriptors[1].immediates == (_U32_IMMEDIATE,)
+    assert descriptors[1].immediates[0].field_name == _U32_IMMEDIATE.field_name
+    assert descriptors[1].immediates[0].encoding_field_id != 0
     assert descriptors[1].encoding_format_id == AMDGPU_ENCODING_FORMAT_VOP2_LITERAL
     assert descriptors[1].encoding_id == 37
     assert descriptors[1].operands[1].field_name == "rhs"

@@ -71,9 +71,22 @@ py_binary(
         "target/arch/amdgpu/__init__.py",
         "target/arch/amdgpu/descriptor_overlay.py",
         "target/arch/amdgpu/descriptors.py",
+        "target/arch/amdgpu/encoding.py",
         "target/arch/amdgpu/isa_xml.py",
     ],
     main = "gen/amdgpu_descriptors.py",
+)
+
+py_binary(
+    name = "amdgpu_encoding_tables",
+    srcs = [
+        "gen/amdgpu_encoding_tables.py",
+        "target/arch/__init__.py",
+        "target/arch/amdgpu/__init__.py",
+        "target/arch/amdgpu/encoding.py",
+        "target/arch/amdgpu/isa_xml.py",
+    ],
+    main = "gen/amdgpu_encoding_tables.py",
 )
 
 py_binary(

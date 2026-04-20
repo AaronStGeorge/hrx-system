@@ -6,6 +6,138 @@
 
 #include "loom/target/arch/amdgpu/encoding.h"
 
+#include <inttypes.h>
+
+#include "loom/target/arch/amdgpu/gfx11_encoding_tables.h"
+
+static uint64_t loom_amdgpu_encoding_u64_mask(uint8_t bit_count) {
+  if (bit_count == 0) {
+    return 0;
+  }
+  if (bit_count >= 64) {
+    return UINT64_MAX;
+  }
+  return (UINT64_C(1) << bit_count) - 1;
+}
+
+static uint32_t loom_amdgpu_encoding_u32_mask(uint8_t bit_count) {
+  if (bit_count == 0) {
+    return 0;
+  }
+  if (bit_count >= 32) {
+    return UINT32_MAX;
+  }
+  return (UINT32_C(1) << bit_count) - 1;
+}
+
+static const loom_amdgpu_encoding_format_layout_t*
+loom_amdgpu_encoding_find_format(const loom_amdgpu_encoding_table_t* table,
+                                 uint16_t encoding_format) {
+  uint32_t low = 0;
+  uint32_t high = table->format_count;
+  while (low < high) {
+    const uint32_t mid = low + (high - low) / 2;
+    const loom_amdgpu_encoding_format_layout_t* format = &table->formats[mid];
+    if (format->format_id == encoding_format) {
+      return format;
+    }
+    if (format->format_id < encoding_format) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return NULL;
+}
+
+static const loom_amdgpu_encoding_field_layout_t*
+loom_amdgpu_encoding_find_field(
+    const loom_amdgpu_encoding_table_t* table,
+    const loom_amdgpu_encoding_format_layout_t* format, uint16_t field_id) {
+  for (uint16_t i = 0; i < format->field_count; ++i) {
+    const loom_amdgpu_encoding_field_layout_t* field =
+        &table->fields[format->field_start + i];
+    if (field->field_id == field_id) {
+      return field;
+    }
+  }
+  return NULL;
+}
+
+static iree_status_t loom_amdgpu_encoding_write_bits(
+    loom_amdgpu_encoding_packet_t* packet, uint8_t bit_offset,
+    uint8_t bit_count, uint64_t value) {
+  uint8_t remaining_bits = bit_count;
+  uint8_t current_bit_offset = bit_offset;
+  uint64_t current_value = value;
+  while (remaining_bits > 0) {
+    const uint8_t word_index = current_bit_offset / 32;
+    if (word_index >= packet->word_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "AMDGPU encoding bit range starting at bit %u exceeds %u-word packet",
+          bit_offset, packet->word_count);
+    }
+    const uint8_t word_bit_offset = current_bit_offset % 32;
+    const uint8_t chunk_bit_count =
+        (uint8_t)iree_min(remaining_bits, (uint8_t)(32 - word_bit_offset));
+    const uint32_t chunk_mask = loom_amdgpu_encoding_u32_mask(chunk_bit_count);
+    packet->words[word_index] =
+        (packet->words[word_index] & ~(chunk_mask << word_bit_offset)) |
+        ((uint32_t)(current_value & chunk_mask) << word_bit_offset);
+    current_value >>= chunk_bit_count;
+    current_bit_offset += chunk_bit_count;
+    remaining_bits -= chunk_bit_count;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_encoding_set_field(
+    const loom_amdgpu_encoding_table_t* table,
+    const loom_amdgpu_encoding_format_layout_t* format,
+    loom_amdgpu_encoding_packet_t* packet, uint16_t field_id, uint64_t value) {
+  const loom_amdgpu_encoding_field_layout_t* field =
+      loom_amdgpu_encoding_find_field(table, format, field_id);
+  if (field == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU encoding format %" PRIu16
+                            " has no field id %" PRIu16,
+                            format->format_id, field_id);
+  }
+  if (field->value_bit_count < 64 && (value >> field->value_bit_count) != 0) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU encoding field %" PRIu16 " value 0x%" PRIx64
+                            " does not fit %u source bits",
+                            field_id, value, field->value_bit_count);
+  }
+  for (uint8_t i = 0; i < field->range_count; ++i) {
+    const loom_amdgpu_encoding_bit_range_t* bit_range =
+        &table->bit_ranges[field->range_start + i];
+    if (bit_range->padding_bit_count != 0) {
+      const uint64_t padding_mask =
+          loom_amdgpu_encoding_u64_mask(bit_range->padding_bit_count);
+      const uint64_t padding_value =
+          (value >> bit_range->source_bit_offset) & padding_mask;
+      if (padding_value != bit_range->padding_value) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "AMDGPU encoding field %" PRIu16
+                                " requires padding value 0x%" PRIx64
+                                " at source bit %u but found 0x%" PRIx64,
+                                field_id, bit_range->padding_value,
+                                bit_range->source_bit_offset, padding_value);
+      }
+    }
+    const uint8_t value_bit_offset =
+        bit_range->source_bit_offset + bit_range->padding_bit_count;
+    const uint64_t range_value =
+        (value >> value_bit_offset) &
+        loom_amdgpu_encoding_u64_mask(bit_range->bit_count);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_write_bits(
+        packet, bit_range->bit_offset, bit_range->bit_count, range_value));
+  }
+  return iree_ok_status();
+}
+
 iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
   switch (encoding_format) {
     case LOOM_AMDGPU_ENCODING_FORMAT_NONE:
@@ -33,4 +165,95 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
     default:
       return IREE_SV("unknown");
   }
+}
+
+bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id) {
+  switch (field_id) {
+    case LOOM_AMDGPU_ENCODING_FIELD_SRC0:
+    case LOOM_AMDGPU_ENCODING_FIELD_SRC1:
+    case LOOM_AMDGPU_ENCODING_FIELD_SRC2:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const loom_amdgpu_encoding_table_t*
+loom_amdgpu_encoding_table_for_descriptor_set(
+    iree_string_view_t descriptor_set_key) {
+  const loom_amdgpu_encoding_table_t* gfx11_table =
+      loom_amdgpu_gfx11_encoding_table();
+  if (iree_string_view_equal(descriptor_set_key,
+                             gfx11_table->descriptor_set_key)) {
+    return gfx11_table;
+  }
+  return NULL;
+}
+
+iree_status_t loom_amdgpu_encoding_pack(
+    const loom_amdgpu_encoding_table_t* table, uint16_t encoding_format,
+    uint16_t opcode, const loom_amdgpu_encoding_field_value_t* field_values,
+    iree_host_size_t field_value_count,
+    loom_amdgpu_encoding_packet_t* out_packet) {
+  IREE_ASSERT_ARGUMENT(out_packet);
+  *out_packet = (loom_amdgpu_encoding_packet_t){0};
+  if (table == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU encoding table is required");
+  }
+  if (field_value_count != 0 && field_values == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU encoding field values are required when "
+                            "field value count is non-zero");
+  }
+
+  const loom_amdgpu_encoding_format_layout_t* format =
+      loom_amdgpu_encoding_find_format(table, encoding_format);
+  if (format == NULL) {
+    return iree_make_status(
+        IREE_STATUS_NOT_FOUND,
+        "AMDGPU encoding table '%.*s' has no format id %" PRIu16,
+        (int)table->descriptor_set_key.size, table->descriptor_set_key.data,
+        encoding_format);
+  }
+  if (format->word_count > LOOM_AMDGPU_ENCODING_MAX_WORD_COUNT) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU encoding format %" PRIu16
+                            " has unsupported word count %" PRIu16,
+                            encoding_format, format->word_count);
+  }
+
+  out_packet->bit_count = format->bit_count;
+  out_packet->word_count = format->word_count;
+  for (uint16_t i = 0; i < format->word_count; ++i) {
+    out_packet->words[i] = format->identifier_words[i];
+  }
+
+  for (iree_host_size_t i = 0; i < field_value_count; ++i) {
+    if (opcode != LOOM_AMDGPU_ENCODING_OPCODE_NONE &&
+        field_values[i].field_id == LOOM_AMDGPU_ENCODING_FIELD_OP) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU encoding callers must not pass OP as a field value when a "
+          "separate opcode is supplied");
+    }
+    for (iree_host_size_t j = 0; j < i; ++j) {
+      if (field_values[j].field_id == field_values[i].field_id) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "AMDGPU encoding repeats field id %" PRIu16,
+                                field_values[i].field_id);
+      }
+    }
+  }
+
+  if (opcode != LOOM_AMDGPU_ENCODING_OPCODE_NONE) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_set_field(
+        table, format, out_packet, LOOM_AMDGPU_ENCODING_FIELD_OP, opcode));
+  }
+  for (iree_host_size_t i = 0; i < field_value_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_set_field(
+        table, format, out_packet, field_values[i].field_id,
+        field_values[i].value));
+  }
+  return iree_ok_status();
 }

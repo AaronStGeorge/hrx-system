@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 10u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 11u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -323,6 +323,9 @@ typedef struct loom_low_reg_class_alt_t {
 typedef struct loom_low_operand_t {
   // String-table offset for the descriptor field name.
   loom_bstring_table_offset_t field_name_string_offset;
+  // Target-owned encoding field identifier, or zero when this operand does not
+  // directly populate a binary encoding field.
+  uint16_t encoding_field_id;
   // Semantic role this operand row plays.
   loom_low_operand_role_t role;
   // Operand flags used by verifier, allocator, and emitter.
@@ -344,6 +347,9 @@ typedef struct loom_low_operand_t {
 typedef struct loom_low_immediate_t {
   // String-table offset for the immediate field name.
   loom_bstring_table_offset_t field_name_string_offset;
+  // Target-owned encoding field identifier, or zero when this immediate does
+  // not directly populate a binary encoding field.
+  uint16_t encoding_field_id;
   // Immediate interpretation used by verifier and emitter.
   loom_low_immediate_kind_t kind;
   // Immediate flags such as symbolic or relative.
@@ -359,6 +365,15 @@ typedef struct loom_low_immediate_t {
   // Inclusive unsigned maximum when kind is unsigned or ordinal.
   uint64_t unsigned_max;
 } loom_low_immediate_t;
+
+typedef struct loom_low_encoding_field_value_t {
+  // Target-owned encoding field identifier.
+  uint16_t encoding_field_id;
+  // Reserved for future target-owned field flags.
+  uint16_t reserved;
+  // Constant value assigned to the encoding field for this descriptor.
+  uint64_t value;
+} loom_low_encoding_field_value_t;
 
 typedef struct loom_low_enum_domain_t {
   // String-table offset for the stable enum-domain name.
@@ -488,6 +503,10 @@ typedef struct loom_low_descriptor_t {
   uint32_t feature_mask_word_start;
   // Number of feature-mask words required by this descriptor.
   uint16_t feature_mask_word_count;
+  // First target-owned fixed encoding field value for this descriptor.
+  uint32_t encoding_field_value_start;
+  // Number of target-owned fixed encoding field values for this descriptor.
+  uint16_t encoding_field_value_count;
   // Target-owned encoding format identifier. Zero means no target-specific
   // format selector is required by generic descriptor consumers.
   uint16_t encoding_format_id;
@@ -642,6 +661,10 @@ typedef struct loom_low_descriptor_set_t {
   const uint64_t* feature_mask_words;
   // Number of feature-mask words owned by this set.
   uint32_t feature_mask_word_count;
+  // Dense target-owned fixed encoding field values referenced by descriptors.
+  const loom_low_encoding_field_value_t* encoding_field_values;
+  // Number of fixed encoding field values owned by this set.
+  uint32_t encoding_field_value_count;
 } loom_low_descriptor_set_t;
 
 // Returns a borrowed descriptor set linked into a target package. Providers

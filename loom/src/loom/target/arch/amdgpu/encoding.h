@@ -20,6 +20,11 @@
 extern "C" {
 #endif
 
+#define LOOM_AMDGPU_ENCODING_MAX_WORD_COUNT 4u
+// Sentinel passed to loom_amdgpu_encoding_pack when the descriptor supplies all
+// opcode-like fields through explicit encoding field values.
+#define LOOM_AMDGPU_ENCODING_OPCODE_NONE UINT16_MAX
+
 typedef enum loom_amdgpu_encoding_format_e {
   // Descriptor does not carry an AMDGPU machine encoding format.
   LOOM_AMDGPU_ENCODING_FORMAT_NONE = 0,
@@ -45,8 +50,107 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER = 10,
 } loom_amdgpu_encoding_format_t;
 
+typedef struct loom_amdgpu_encoding_bit_range_t {
+  // Target bit offset populated by this range.
+  uint8_t bit_offset;
+  // Number of encoded bits copied into the target packet.
+  uint8_t bit_count;
+  // Source value bit offset before optional padding for this range.
+  uint8_t source_bit_offset;
+  // Number of source padding bits that must match padding_value.
+  uint8_t padding_bit_count;
+  // Required value for the low padding bits in this range.
+  uint64_t padding_value;
+} loom_amdgpu_encoding_bit_range_t;
+
+typedef struct loom_amdgpu_encoding_field_layout_t {
+  // Stable target-owned encoding field identifier.
+  uint16_t field_id;
+  // First bit-range row for this field.
+  uint16_t range_start;
+  // Number of bit-range rows for this field.
+  uint8_t range_count;
+  // Number of low source bits consumed by this field including padding.
+  uint8_t value_bit_count;
+  // Target-owned field flags; bit 0 marks a conditional XML field.
+  uint16_t flags;
+} loom_amdgpu_encoding_field_layout_t;
+
+typedef struct loom_amdgpu_encoding_format_layout_t {
+  // Stable target-owned encoding format identifier.
+  uint16_t format_id;
+  // Total encoded packet width in bits.
+  uint16_t bit_count;
+  // Number of 32-bit words occupied by this packet.
+  uint16_t word_count;
+  // First field-layout row for this format.
+  uint16_t field_start;
+  // Number of field-layout rows for this format.
+  uint16_t field_count;
+  // Base identifier words loaded before fields are overlaid.
+  uint32_t identifier_words[LOOM_AMDGPU_ENCODING_MAX_WORD_COUNT];
+  // Identifier-mask words from the vendor XML.
+  uint32_t identifier_mask_words[LOOM_AMDGPU_ENCODING_MAX_WORD_COUNT];
+} loom_amdgpu_encoding_format_layout_t;
+
+typedef struct loom_amdgpu_encoding_table_t {
+  // Descriptor-set key this table can encode.
+  iree_string_view_t descriptor_set_key;
+  // Sorted format-layout rows.
+  const loom_amdgpu_encoding_format_layout_t* formats;
+  // Number of format-layout rows.
+  uint32_t format_count;
+  // Dense field-layout rows referenced by format rows.
+  const loom_amdgpu_encoding_field_layout_t* fields;
+  // Number of field-layout rows.
+  uint32_t field_count;
+  // Dense bit-range rows referenced by field rows.
+  const loom_amdgpu_encoding_bit_range_t* bit_ranges;
+  // Number of bit-range rows.
+  uint32_t bit_range_count;
+} loom_amdgpu_encoding_table_t;
+
+typedef struct loom_amdgpu_encoding_field_value_t {
+  // Stable target-owned encoding field identifier.
+  uint16_t field_id;
+  // Reserved for alignment and future flags.
+  uint16_t reserved;
+  // Unsigned field value before XML padding/range extraction.
+  uint64_t value;
+} loom_amdgpu_encoding_field_value_t;
+
+typedef struct loom_amdgpu_encoding_packet_t {
+  // Packed little-endian 32-bit instruction words.
+  uint32_t words[LOOM_AMDGPU_ENCODING_MAX_WORD_COUNT];
+  // Total encoded packet width in bits.
+  uint16_t bit_count;
+  // Number of valid words in words.
+  uint16_t word_count;
+} loom_amdgpu_encoding_packet_t;
+
 // Returns a short stable diagnostic name for |encoding_format|.
 iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format);
+
+// Returns true when |field_id| uses AMDGPU's unified scalar/vector source
+// register encoding, where VGPR operands are biased by 0x100.
+bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id);
+
+// Returns the generated encoding table for |descriptor_set_key|, or NULL when
+// this binary was not linked with a matching table.
+const loom_amdgpu_encoding_table_t*
+loom_amdgpu_encoding_table_for_descriptor_set(
+    iree_string_view_t descriptor_set_key);
+
+// Packs a native AMDGPU packet by applying |opcode| and target field values to
+// the XML-derived encoding layout. When |opcode| is
+// LOOM_AMDGPU_ENCODING_OPCODE_NONE, no implicit OP field is written and callers
+// must supply any opcode-like fields explicitly. Field values are architectural
+// numbers; XML padding bits are validated before encoded ranges are extracted.
+iree_status_t loom_amdgpu_encoding_pack(
+    const loom_amdgpu_encoding_table_t* table, uint16_t encoding_format,
+    uint16_t opcode, const loom_amdgpu_encoding_field_value_t* field_values,
+    iree_host_size_t field_value_count,
+    loom_amdgpu_encoding_packet_t* out_packet);
 
 #ifdef __cplusplus
 }  // extern "C"

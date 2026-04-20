@@ -441,13 +441,6 @@ iree_assert_no_dependency(
 # AMDGPU low descriptors
 #===------------------------------------------------------------------------===#
 
-loom_cc_library(
-    name = "encoding",
-    srcs = ["encoding.c"],
-    hdrs = ["encoding.h"],
-    deps = ["//runtime/src/iree/base"],
-)
-
 _AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom:amdgpu_target_info"
 
 _AMDGPU_TARGET_INFO_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_target_info.py"
@@ -485,8 +478,19 @@ _AMDGPU_DESCRIPTOR_GENERATOR_DEPS = [
     "//loom/py/loom:gen/low_descriptors.py",
     "//loom/py/loom:target/arch/amdgpu/descriptor_overlay.py",
     "//loom/py/loom:target/arch/amdgpu/descriptors.py",
+    "//loom/py/loom:target/arch/amdgpu/encoding.py",
     "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
     "//loom/py/loom:target/low_descriptors.py",
+]
+
+_AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom:amdgpu_encoding_tables"
+
+_AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_encoding_tables.py"
+
+_AMDGPU_ENCODING_TABLE_GENERATOR_DEPS = [
+    "//loom/py/loom:gen/amdgpu_encoding_tables.py",
+    "//loom/py/loom:target/arch/amdgpu/encoding.py",
+    "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
 ]
 
 loom_low_descriptor_data_archive(
@@ -494,6 +498,44 @@ loom_low_descriptor_data_archive(
     repo_name = AMDGPU_ISA_XML_ARCHIVE["repo_name"],
     sha256 = AMDGPU_ISA_XML_ARCHIVE["sha256"],
     urls = AMDGPU_ISA_XML_ARCHIVE["urls"],
+)
+
+loom_cc_library(
+    name = "encoding_defs",
+    hdrs = ["encoding.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_target_table_cc_library(
+    name = "gfx11_encoding_tables",
+    args = [
+        "--target=gfx11",
+        "--descriptor-set-key=amdgpu.gfx11.core",
+        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna3.xml)",
+        "--public-header=loom/target/arch/amdgpu/gfx11_encoding_tables.h",
+    ],
+    cmake_generator = _AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_ENCODING_TABLE_GENERATOR_DEPS,
+    exclude_from_cmake_all = True,
+    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
+    header = "gfx11_encoding_tables.h",
+    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna3.xml"],
+    source = "gfx11_encoding_tables.c",
+    deps = [
+        ":encoding_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "encoding",
+    srcs = ["encoding.c"],
+    hdrs = ["encoding.h"],
+    deps = [
+        ":encoding_defs",
+        ":gfx11_encoding_tables",
+        "//runtime/src/iree/base",
+    ],
 )
 
 loom_low_descriptor_cc_library(
