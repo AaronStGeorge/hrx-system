@@ -41,23 +41,34 @@ iree_status_t ParseLowNoopModule(loom_context_t* context,
                          block_pool, &parse_options, out_module);
 }
 
-TEST(AmdgpuModuleCompilerTest, CompilesLowNoopToHalExecutable) {
-  iree_arena_block_pool_t block_pool;
-  iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
-  loom_context_t context = {};
-  IREE_ASSERT_OK(
-      loom_testing_context_initialize_all(iree_allocator_system(), &context));
+iree_status_t ParseSemanticVectorModule(loom_context_t* context,
+                                        iree_arena_block_pool_t* block_pool,
+                                        loom_module_t** out_module) {
+  static const char kSource[] =
+      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
+      "@loom_kernel}\n"
+      "func.def @loom_kernel() {\n"
+      "  %lhs = vector.constant 3 : vector<1xi32>\n"
+      "  %rhs = vector.constant 7 : vector<1xi32>\n"
+      "  %sum = vector.addi %lhs, %rhs : vector<1xi32>\n"
+      "  %product = vector.muli %sum, %rhs : vector<1xi32>\n"
+      "  func.return\n"
+      "}\n";
+  loom_text_parse_options_t parse_options = {
+      .max_errors = 20,
+  };
+  return loom_text_parse(iree_make_cstring_view(kSource),
+                         IREE_SV("amdgpu_module_compiler.loom"), context,
+                         block_pool, &parse_options, out_module);
+}
 
-  loom_module_t* module = nullptr;
-  IREE_ASSERT_OK(ParseLowNoopModule(&context, &block_pool, &module));
-  ASSERT_NE(module, nullptr);
-
-  loom_amdgpu_hal_executable_t executable = {};
-  IREE_ASSERT_OK(loom_amdgpu_compile_hal_executable(
-      module, /*options=*/nullptr, iree_allocator_system(), &executable));
+void ExpectHalExecutableHasSingleExport(
+    const loom_amdgpu_hal_executable_t& executable,
+    const std::string& expected_format, const std::string& expected_symbol,
+    iree_host_size_t expected_binding_count) {
   EXPECT_EQ(std::string(executable.executable_format.data,
                         executable.executable_format.size),
-            "amdgcn-amd-amdhsa--gfx1100");
+            expected_format);
 
   iree_const_byte_span_t flatbuffer_data = iree_const_byte_span_empty();
   IREE_ASSERT_OK(iree_hal_read_executable_flatbuffer_header(
@@ -78,10 +89,11 @@ TEST(AmdgpuModuleCompilerTest, CompilesLowNoopToHalExecutable) {
       iree_hal_amdgpu_ExportDef_vec_at(exports, 0);
   EXPECT_EQ(
       FlatbufferString(iree_hal_amdgpu_ExportDef_symbol_name_get(export_table)),
-      "loom_kernel.kd");
+      expected_symbol);
   iree_hal_amdgpu_BindingBits_vec_t binding_flags =
       iree_hal_amdgpu_ExportDef_binding_flags_get(export_table);
-  EXPECT_EQ(iree_hal_amdgpu_BindingBits_vec_len(binding_flags), 0u);
+  EXPECT_EQ(iree_hal_amdgpu_BindingBits_vec_len(binding_flags),
+            expected_binding_count);
 
   iree_hal_amdgpu_ModuleDef_vec_t modules =
       iree_hal_amdgpu_ExecutableDef_modules_get(executable_def);
@@ -93,6 +105,49 @@ TEST(AmdgpuModuleCompilerTest, CompilesLowNoopToHalExecutable) {
   EXPECT_EQ(std::string(hsaco, 4), std::string("\x7f"
                                                "ELF",
                                                4));
+}
+
+TEST(AmdgpuModuleCompilerTest, CompilesLowNoopToHalExecutable) {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
+  loom_context_t context = {};
+  IREE_ASSERT_OK(
+      loom_testing_context_initialize_all(iree_allocator_system(), &context));
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(ParseLowNoopModule(&context, &block_pool, &module));
+  ASSERT_NE(module, nullptr);
+
+  loom_amdgpu_hal_executable_t executable = {};
+  IREE_ASSERT_OK(loom_amdgpu_compile_hal_executable(
+      module, /*options=*/nullptr, iree_allocator_system(), &executable));
+  ExpectHalExecutableHasSingleExport(executable, "amdgcn-amd-amdhsa--gfx1100",
+                                     "loom_kernel.kd",
+                                     /*expected_binding_count=*/0);
+
+  loom_amdgpu_hal_executable_deinitialize(&executable, iree_allocator_system());
+  loom_module_free(module);
+  loom_context_deinitialize(&context);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+TEST(AmdgpuModuleCompilerTest, CompilesSemanticVectorSourceToHalExecutable) {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
+  loom_context_t context = {};
+  IREE_ASSERT_OK(
+      loom_testing_context_initialize_all(iree_allocator_system(), &context));
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(ParseSemanticVectorModule(&context, &block_pool, &module));
+  ASSERT_NE(module, nullptr);
+
+  loom_amdgpu_hal_executable_t executable = {};
+  IREE_ASSERT_OK(loom_amdgpu_compile_hal_executable(
+      module, /*options=*/nullptr, iree_allocator_system(), &executable));
+  ExpectHalExecutableHasSingleExport(executable, "amdgcn-amd-amdhsa--gfx1100",
+                                     "loom_kernel.kd",
+                                     /*expected_binding_count=*/0);
 
   loom_amdgpu_hal_executable_deinitialize(&executable, iree_allocator_system());
   loom_module_free(module);

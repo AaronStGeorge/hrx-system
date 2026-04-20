@@ -11,14 +11,17 @@
 
 #include "iree/base/internal/arena.h"
 #include "iree/io/vec_stream.h"
+#include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/hal_resource_materialization.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
+#include "loom/target/arch/amdgpu/lower.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
@@ -70,6 +73,26 @@ static iree_status_t loom_amdgpu_module_compile_append_descriptor_symbol(
   }
   IREE_RETURN_IF_ERROR(iree_string_builder_append_string(builder, symbol));
   return iree_string_builder_append_string(builder, IREE_SV(".kd"));
+}
+
+static iree_status_t loom_amdgpu_module_compile_symbol_name(
+    const loom_module_t* module, loom_symbol_ref_t symbol_ref,
+    iree_string_view_t* out_name) {
+  IREE_ASSERT_ARGUMENT(out_name);
+  *out_name = iree_string_view_empty();
+  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+      symbol_ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU compile symbol reference is invalid");
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->name_id == LOOM_STRING_ID_INVALID ||
+      symbol->name_id >= module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU compile symbol has no module string");
+  }
+  *out_name = module->strings.entries[symbol->name_id];
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_module_compile_apply_target_cpu(
@@ -186,6 +209,137 @@ static iree_status_t loom_amdgpu_module_compile_emit_hsaco(
   return status;
 }
 
+static iree_status_t loom_amdgpu_module_compile_lower_function(
+    loom_module_t* module,
+    const loom_target_low_descriptor_registry_t* low_registry,
+    const loom_target_module_compile_target_t* target,
+    loom_func_like_t source_function,
+    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
+    uint32_t max_errors, loom_low_lower_result_t* out_result) {
+  loom_low_lower_policy_registry_t policy_registry = {0};
+  loom_amdgpu_low_lower_policy_registry_initialize(&policy_registry);
+  const loom_low_lower_policy_t* policy = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_lookup_for_bundle(
+      &policy_registry, &target->bundle_storage.bundle, &policy));
+
+  const loom_low_lower_options_t lower_options = {
+      .target_ref = target->target_ref,
+      .bundle = &target->bundle_storage.bundle,
+      .descriptor_registry = &low_registry->registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .policy = policy,
+      .emitter = loom_target_module_compile_emitter(diagnostic_emitter),
+      .max_errors = max_errors,
+  };
+  IREE_RETURN_IF_ERROR(loom_low_lower_function(module, source_function,
+                                               &lower_options, out_result));
+  if (out_result->error_count > 0 || out_result->low_func_op == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU source-to-low lowering failed with %" PRIu32 " error%s",
+        out_result->error_count, out_result->error_count == 1 ? "" : "s");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_module_compile_find_target_export_op(
+    const loom_module_t* module,
+    const loom_target_module_compile_target_t* target,
+    loom_op_t** out_export_op) {
+  IREE_ASSERT_ARGUMENT(out_export_op);
+  *out_export_op = NULL;
+  if (!loom_symbol_ref_is_valid(target->target_ref) ||
+      target->target_ref.module_id != 0 ||
+      target->target_ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "selected AMDGPU target symbol is invalid");
+  }
+  loom_op_t* bundle_op =
+      module->symbols.entries[target->target_ref.symbol_id].defining_op;
+  if (!loom_target_bundle_isa(bundle_op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "selected AMDGPU target is not a target.bundle");
+  }
+  const loom_symbol_ref_t export_ref =
+      loom_target_bundle_export_plan(bundle_op);
+  if (!loom_symbol_ref_is_valid(export_ref) || export_ref.module_id != 0 ||
+      export_ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "selected AMDGPU target export plan is invalid");
+  }
+  loom_op_t* export_op =
+      module->symbols.entries[export_ref.symbol_id].defining_op;
+  if (!loom_target_export_isa(export_op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "selected AMDGPU target export plan is not a "
+                            "target.export");
+  }
+  *out_export_op = export_op;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_module_compile_retarget_export_to_low(
+    loom_module_t* module, loom_target_module_compile_target_t* target,
+    loom_symbol_ref_t low_func_ref, iree_string_view_t low_symbol_name) {
+  iree_string_view_t original_source_symbol =
+      target->bundle_storage.export_plan.source_symbol;
+  loom_op_t* export_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_find_target_export_op(
+      module, target, &export_op));
+
+  loom_op_attrs(export_op)[loom_target_export_source_ATTR_INDEX] =
+      loom_attr_symbol(low_func_ref);
+  target->bundle_storage.export_plan.source_symbol = low_symbol_name;
+
+  if (iree_string_view_is_empty(
+          target->bundle_storage.export_plan.export_symbol)) {
+    loom_string_id_t export_symbol_id = LOOM_STRING_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_module_intern_string(
+        module, original_source_symbol, &export_symbol_id));
+    loom_op_attrs(export_op)[loom_target_export_export_symbol_ATTR_INDEX] =
+        loom_attr_string(export_symbol_id);
+    target->bundle_storage.export_plan.export_symbol = original_source_symbol;
+  }
+  loom_target_ir_bundle_storage_rebind(&target->bundle_storage);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_module_compile_select_low_function(
+    loom_module_t* module,
+    const loom_target_low_descriptor_registry_t* low_registry,
+    loom_target_module_compile_target_t* target,
+    loom_func_like_t source_function,
+    loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
+    uint32_t max_errors, loom_op_t** out_low_function_op) {
+  IREE_ASSERT_ARGUMENT(out_low_function_op);
+  *out_low_function_op = NULL;
+
+  if (loom_low_func_def_isa(source_function.op)) {
+    *out_low_function_op = source_function.op;
+    return iree_ok_status();
+  }
+  if (!loom_func_def_isa(source_function.op)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL executable compilation requires the export source to be "
+        "a func.def or low.func.def");
+  }
+
+  loom_low_lower_result_t lower_result = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_lower_function(
+      module, low_registry, target, source_function, diagnostic_emitter,
+      max_errors, &lower_result));
+
+  iree_string_view_t low_symbol_name = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_symbol_name(
+      module, lower_result.low_func_ref, &low_symbol_name));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_retarget_export_to_low(
+      module, target, lower_result.low_func_ref, low_symbol_name));
+  *out_low_function_op = lower_result.low_func_op;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_module_compile_low_function(
     loom_module_t* module,
     const loom_amdgpu_module_compile_options_t* amdgpu_options,
@@ -199,26 +353,25 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
   loom_func_like_t source_function = {0};
   IREE_RETURN_IF_ERROR(loom_target_module_compile_find_source_function(
       module, &target->bundle_storage.bundle, &source_function));
-  if (!loom_low_func_def_isa(source_function.op)) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU HAL executable compilation currently requires the export "
-        "source to be a low.func.def");
-  }
+
+  const uint32_t max_errors = loom_target_module_compile_max_errors(
+      target_options, LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
+  loom_op_t* low_function_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_select_low_function(
+      module, low_registry, target, source_function, diagnostic_emitter,
+      max_errors, &low_function_op));
 
   loom_amdgpu_hal_resource_materialization_result_t materialization = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_materialize(
-      module, source_function.op, &target->bundle_storage.bundle,
-      &materialization, sidecar_arena));
+      module, low_function_op, &target->bundle_storage.bundle, &materialization,
+      sidecar_arena));
 
   const loom_low_allocation_fixed_value_t* fixed_values = NULL;
   iree_host_size_t fixed_value_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-      module, source_function.op, &fixed_values, &fixed_value_count,
+      module, low_function_op, &fixed_values, &fixed_value_count,
       sidecar_arena));
 
-  const uint32_t max_errors = loom_target_module_compile_max_errors(
-      target_options, LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_module(
       module, target_options, LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS));
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_low_module(
@@ -234,7 +387,7 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
       .emitter = loom_target_module_compile_emitter(diagnostic_emitter),
   };
   IREE_RETURN_IF_ERROR(loom_low_packetize_function(
-      module, source_function.op, &packetization_options, sidecar_arena,
+      module, low_function_op, &packetization_options, sidecar_arena,
       &packetization));
 
   iree_const_byte_span_t hsaco = iree_const_byte_span_empty();
@@ -256,7 +409,7 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
   if (iree_status_is_ok(status)) {
     loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {0};
     status = loom_amdgpu_hal_kernel_abi_layout_from_low(
-        module, source_function.op, &target->bundle_storage.bundle, &abi_layout,
+        module, low_function_op, &target->bundle_storage.bundle, &abi_layout,
         sidecar_arena);
     if (iree_status_is_ok(status)) {
       loom_amdgpu_hal_executable_binding_flags_t* binding_flags = NULL;
