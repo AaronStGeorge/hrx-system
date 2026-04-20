@@ -160,6 +160,11 @@ TEST_F(CandidateTest, CompileVmArchiveCandidate) {
 
   loom_run_candidate_compile_options_t options = {};
   InitializeCompileOptions(&run_module, &options);
+  loom_target_compile_report_pressure_row_t pressure_rows[4] = {};
+  options.report_row_storage = {
+      .pressure_rows = pressure_rows,
+      .pressure_row_capacity = IREE_ARRAYSIZE(pressure_rows),
+  };
   loom_target_compile_report_t report = {};
   options.report = &report;
 
@@ -180,6 +185,9 @@ TEST_F(CandidateTest, CompileVmArchiveCandidate) {
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION));
   EXPECT_TRUE(iree_all_bits_set(candidate.compile_report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_EMISSION));
+  EXPECT_TRUE(
+      iree_all_bits_set(candidate.compile_report.detail_flags,
+                        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS));
   EXPECT_FALSE(
       iree_string_view_is_empty(candidate.compile_report.target_bundle_name));
   EXPECT_FALSE(
@@ -191,10 +199,16 @@ TEST_F(CandidateTest, CompileVmArchiveCandidate) {
   EXPECT_GT(candidate.compile_report.emitted_code_byte_count, 0u);
   EXPECT_GE(candidate.compile_report.emitted_code_storage_byte_count,
             candidate.compile_report.emitted_code_byte_count);
+  EXPECT_EQ(candidate.compile_report.pressure_rows, pressure_rows);
+  EXPECT_GT(candidate.compile_report.pressure_row_total_count, 0u);
+  EXPECT_GT(candidate.compile_report.pressure_row_count, 0u);
+  EXPECT_GT(candidate.compile_report.pressure_rows[0].peak_live_units, 0u);
   EXPECT_EQ(candidate.compile_report.artifact_size,
             candidate.vm_archive.data_length);
   EXPECT_EQ(report.artifact_kind, candidate.compile_report.artifact_kind);
   EXPECT_EQ(report.artifact_size, candidate.compile_report.artifact_size);
+  EXPECT_EQ(report.pressure_row_total_count,
+            candidate.compile_report.pressure_row_total_count);
 
   loom_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);

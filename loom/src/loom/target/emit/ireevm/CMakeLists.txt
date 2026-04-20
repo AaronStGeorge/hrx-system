@@ -103,6 +103,7 @@ loom_cc_library(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
     loom::src::loom::target::compile_report
+    loom::src::loom::target::compile_report_low
     loom::src::loom::target::ir_records
     loom::src::loom::target::module_compiler
     loom::src::loom::target::presets

@@ -14,6 +14,22 @@ void loom_target_compile_report_initialize(
   };
 }
 
+void loom_target_compile_report_set_row_storage(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_row_storage_t* row_storage) {
+  IREE_ASSERT_ARGUMENT(report);
+  report->pressure_rows = row_storage ? row_storage->pressure_rows : NULL;
+  report->pressure_row_capacity =
+      report->pressure_rows != NULL ? row_storage->pressure_row_capacity : 0;
+  report->pressure_row_count = 0;
+  report->pressure_row_total_count = 0;
+  report->spill_rows = row_storage ? row_storage->spill_rows : NULL;
+  report->spill_row_capacity =
+      report->spill_rows != NULL ? row_storage->spill_row_capacity : 0;
+  report->spill_row_count = 0;
+  report->spill_row_total_count = 0;
+}
+
 void loom_target_compile_report_record_status(
     loom_target_compile_report_t* report, iree_status_t status) {
   IREE_ASSERT_ARGUMENT(report);
@@ -93,4 +109,30 @@ void loom_target_compile_report_record_memory(
   report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_MEMORY;
   report->private_memory_bytes = private_memory_bytes;
   report->local_memory_bytes = local_memory_bytes;
+}
+
+void loom_target_compile_report_record_pressure_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_pressure_row_t* row) {
+  IREE_ASSERT_ARGUMENT(report);
+  IREE_ASSERT_ARGUMENT(row);
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS;
+  ++report->pressure_row_total_count;
+  if (report->pressure_rows != NULL &&
+      report->pressure_row_count < report->pressure_row_capacity) {
+    report->pressure_rows[report->pressure_row_count++] = *row;
+  }
+}
+
+void loom_target_compile_report_record_spill_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_spill_row_t* row) {
+  IREE_ASSERT_ARGUMENT(report);
+  IREE_ASSERT_ARGUMENT(row);
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS;
+  ++report->spill_row_total_count;
+  if (report->spill_rows != NULL &&
+      report->spill_row_count < report->spill_row_capacity) {
+    report->spill_rows[report->spill_row_count++] = *row;
+  }
 }

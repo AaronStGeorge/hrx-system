@@ -185,6 +185,14 @@ static iree_status_t iree_run_loom_amdgpu_compile(
       .source_resolver = source_resolver,
       .max_errors = max_errors,
       .report = report,
+      .report_row_storage =
+          {
+              .pressure_rows = report ? report->pressure_rows : NULL,
+              .pressure_row_capacity =
+                  report ? report->pressure_row_capacity : 0,
+              .spill_rows = report ? report->spill_rows : NULL,
+              .spill_row_capacity = report ? report->spill_row_capacity : 0,
+          },
   };
   iree_status_t status = loom_amdgpu_compile_hal_executable(
       module, &compile_options, allocator, executable);

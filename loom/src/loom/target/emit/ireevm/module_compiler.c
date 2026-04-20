@@ -15,6 +15,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/target/ops.h"
+#include "loom/target/compile_report_low.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"
 #include "loom/target/emit/ireevm/low_registry.h"
 #include "loom/target/emit/ireevm/lower.h"
@@ -159,6 +160,8 @@ iree_status_t loom_ireevm_compile_module_archive(
   loom_target_compile_report_t* report = options ? options->report : NULL;
   if (report != NULL) {
     loom_target_compile_report_initialize(report);
+    loom_target_compile_report_set_row_storage(
+        report, options ? &options->report_row_storage : NULL);
     report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
     report->module_name = loom_ireevm_module_compile_module_name(options);
     report->target_symbol =
@@ -262,29 +265,7 @@ iree_status_t loom_ireevm_compile_module_archive(
                                          &packetization);
   }
   if (iree_status_is_ok(status) && report != NULL) {
-    uint64_t peak_live_units = 0;
-    for (iree_host_size_t i = 0;
-         i < packetization.allocation.liveness.pressure_summary_count; ++i) {
-      const uint64_t live_units =
-          packetization.allocation.liveness.pressure_summaries[i]
-              .peak_live_units;
-      peak_live_units = iree_max(peak_live_units, live_units);
-    }
-    loom_target_compile_report_record_schedule(
-        report, packetization.schedule.node_count,
-        packetization.schedule.scheduled_node_count,
-        packetization.schedule.dependency_count,
-        packetization.schedule.resource_use_count,
-        packetization.schedule.hazard_gap_count,
-        packetization.schedule.model_summary_count,
-        packetization.allocation.liveness.pressure_summary_count,
-        peak_live_units);
-    loom_target_compile_report_record_allocation(
-        report, packetization.allocation.assignment_count,
-        packetization.allocation.spill_count,
-        packetization.allocation.spill_plan_count,
-        packetization.allocation.coalesced_copy_count,
-        packetization.allocation.materialized_copy_count);
+    loom_target_compile_report_record_low_packetization(report, &packetization);
   }
   if (iree_status_is_ok(status)) {
     status = loom_ireevm_emit_function_bytecode(&packetization.schedule,

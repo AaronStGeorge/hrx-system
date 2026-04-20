@@ -202,6 +202,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::arch::amdgpu::wait_plan
     loom::src::loom::target::compile_report
+    loom::src::loom::target::compile_report_low
     loom::src::loom::target::module_compiler
     loom::src::loom::verify
   PUBLIC

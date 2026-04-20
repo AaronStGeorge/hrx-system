@@ -76,6 +76,22 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    compile_report_low
+  HDRS
+    "compile_report_low.h"
+  SRCS
+    "compile_report_low.c"
+  DEPS
+    ::compile_report
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     presets
   HDRS
     "presets.h"
@@ -183,6 +199,17 @@ loom_cc_test(
     "records_test.cc"
   DEPS
     ::records
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    compile_report_low_test
+  SRCS
+    "compile_report_low_test.cc"
+  DEPS
+    ::compile_report_low
     iree::testing::gtest
     iree::testing::gtest_main
 )

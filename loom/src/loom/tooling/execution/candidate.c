@@ -32,6 +32,8 @@ iree_status_t loom_run_candidate_compile_vm(
       .host_allocator = allocator,
   };
   loom_target_compile_report_initialize(&out_candidate->compile_report);
+  loom_target_compile_report_set_row_storage(&out_candidate->compile_report,
+                                             &options->report_row_storage);
   out_candidate->compile_report.artifact_kind =
       LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
   out_candidate->compile_report.module_name = options->module_name;
@@ -44,6 +46,7 @@ iree_status_t loom_run_candidate_compile_vm(
       .source_resolver = options->source_resolver,
       .max_errors = options->max_errors,
       .report = &out_candidate->compile_report,
+      .report_row_storage = options->report_row_storage,
   };
   iree_status_t status =
       loom_ireevm_compile_module_archive(run_module->module, &compile_options,
@@ -82,6 +85,8 @@ iree_status_t loom_run_candidate_compile_hal(
       .hal_backend = backend,
   };
   loom_target_compile_report_initialize(&out_candidate->compile_report);
+  loom_target_compile_report_set_row_storage(&out_candidate->compile_report,
+                                             &options->report_row_storage);
   out_candidate->compile_report.artifact_kind =
       LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
   out_candidate->compile_report.target_symbol = options->target_symbol;

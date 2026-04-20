@@ -25,6 +25,7 @@
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
+#include "loom/target/compile_report_low.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
 #include "loom/target/module_compiler.h"
 
@@ -400,29 +401,7 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
       module, low_function_op, &packetization_options, sidecar_arena,
       &packetization));
   if (report != NULL) {
-    uint64_t peak_live_units = 0;
-    for (iree_host_size_t i = 0;
-         i < packetization.allocation.liveness.pressure_summary_count; ++i) {
-      const uint64_t live_units =
-          packetization.allocation.liveness.pressure_summaries[i]
-              .peak_live_units;
-      peak_live_units = iree_max(peak_live_units, live_units);
-    }
-    loom_target_compile_report_record_schedule(
-        report, packetization.schedule.node_count,
-        packetization.schedule.scheduled_node_count,
-        packetization.schedule.dependency_count,
-        packetization.schedule.resource_use_count,
-        packetization.schedule.hazard_gap_count,
-        packetization.schedule.model_summary_count,
-        packetization.allocation.liveness.pressure_summary_count,
-        peak_live_units);
-    loom_target_compile_report_record_allocation(
-        report, packetization.allocation.assignment_count,
-        packetization.allocation.spill_count,
-        packetization.allocation.spill_plan_count,
-        packetization.allocation.coalesced_copy_count,
-        packetization.allocation.materialized_copy_count);
+    loom_target_compile_report_record_low_packetization(report, &packetization);
   }
 
   loom_amdgpu_kernel_hsaco_summary_t hsaco_summary = {0};
@@ -497,6 +476,8 @@ iree_status_t loom_amdgpu_compile_hal_executable(
   loom_target_compile_report_t* report = options ? options->report : NULL;
   if (report != NULL) {
     loom_target_compile_report_initialize(report);
+    loom_target_compile_report_set_row_storage(
+        report, options ? &options->report_row_storage : NULL);
     report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
     report->target_symbol =
         options ? options->target_symbol : iree_string_view_empty();
