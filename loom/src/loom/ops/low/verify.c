@@ -1849,6 +1849,49 @@ static iree_status_t loom_low_verify_invoke_purity(
       IREE_SV("callee defined here"), counts, emitter);
 }
 
+static iree_status_t loom_low_verify_function_preamble(
+    const loom_module_t* module, const loom_op_t* function_op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_region_t* body = loom_low_func_def_body(function_op);
+  if (body == NULL || body->block_count == 0) {
+    return iree_ok_status();
+  }
+
+  const loom_block_t* entry_block = loom_region_const_entry_block(body);
+  bool preamble_open = true;
+  const loom_op_t* nested_op = NULL;
+  loom_block_for_each_op(entry_block, nested_op) {
+    if (loom_low_live_in_isa(nested_op)) {
+      if (!preamble_open) {
+        return loom_low_emit_structural_storage_error(
+            module, nested_op, loom_diagnostic_field_ref_none(),
+            IREE_SV("position"),
+            IREE_SV("live-ins must form an entry-block prefix before ordinary "
+                    "low packets"),
+            NULL, 0, emitter);
+      }
+      continue;
+    }
+    preamble_open = false;
+  }
+
+  for (uint16_t block_index = 1; block_index < body->block_count;
+       ++block_index) {
+    const loom_block_t* block = loom_region_const_block(body, block_index);
+    loom_block_for_each_op(block, nested_op) {
+      if (!loom_low_live_in_isa(nested_op)) {
+        continue;
+      }
+      return loom_low_emit_structural_storage_error(
+          module, nested_op, loom_diagnostic_field_ref_none(),
+          IREE_SV("position"),
+          IREE_SV("live-ins must appear in the low function entry block"), NULL,
+          0, emitter);
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_op_verify(const loom_module_t* module,
                                  const loom_op_t* op,
                                  iree_diagnostic_emitter_t emitter) {
@@ -1863,6 +1906,35 @@ iree_status_t loom_low_const_verify(const loom_module_t* module,
   return loom_low_verify_descriptor_key(module, op, emitter,
                                         loom_low_const_opcode(op),
                                         loom_low_const_opcode_ATTR_INDEX);
+}
+
+iree_status_t loom_low_live_in_verify(const loom_module_t* module,
+                                      const loom_op_t* op,
+                                      iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_low_verify_qualified_key_attr(
+      module, op, emitter, loom_low_live_in_source(op),
+      loom_low_live_in_source_ATTR_INDEX, IREE_SV("source"),
+      IREE_SV("qualified target live-in key")));
+
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_low_live_in_result(op));
+  if (!loom_type_is_register(result_type)) {
+    return loom_low_emit_structural_storage_error(
+        module, op, loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, 0),
+        IREE_SV("result"), IREE_SV("live-in result must be a register type"),
+        NULL, 0, emitter);
+  }
+
+  const loom_op_t* enclosing_func =
+      loom_low_find_enclosing_low_func_def(module, op);
+  if (!enclosing_func) {
+    return loom_low_emit_structural_storage_error(
+        module, op, loom_diagnostic_field_ref_none(),
+        IREE_SV("enclosing function"),
+        IREE_SV("live-ins must be nested under a low function body"), NULL, 0,
+        emitter);
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_low_br_verify(const loom_module_t* module,
@@ -1890,7 +1962,9 @@ iree_status_t loom_low_func_def_verify(const loom_module_t* module,
                                        iree_diagnostic_emitter_t emitter) {
   IREE_RETURN_IF_ERROR(
       loom_low_verify_function_exactness_modes(module, op, emitter));
-  return loom_low_verify_no_code_import_on_def(module, op, emitter);
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_no_code_import_on_def(module, op, emitter));
+  return loom_low_verify_function_preamble(module, op, emitter);
 }
 
 iree_status_t loom_low_func_decl_verify(const loom_module_t* module,

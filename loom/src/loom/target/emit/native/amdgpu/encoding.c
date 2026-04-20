@@ -811,6 +811,9 @@ static iree_status_t loom_amdgpu_encode_packet(
     return loom_amdgpu_encode_descriptor_packet(state, packet);
   }
   const loom_op_t* op = packet->node->op;
+  if (loom_low_live_in_isa(op)) {
+    return iree_ok_status();
+  }
   if (loom_low_return_isa(op)) {
     return loom_amdgpu_encode_return_packet(state, packet);
   }

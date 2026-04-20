@@ -58,6 +58,8 @@ static const char* loom_low_schedule_json_dependency_kind(
       return "effect";
     case LOOM_LOW_SCHEDULE_DEPENDENCY_CONTROL:
       return "control";
+    case LOOM_LOW_SCHEDULE_DEPENDENCY_ANCHOR:
+      return "anchor";
     default:
       return "unknown";
   }

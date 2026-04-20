@@ -38,7 +38,8 @@ enum {
   LOOM_OP_LOW_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 17),
   LOOM_OP_LOW_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 18),
   LOOM_OP_LOW_ABI_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 19),
-  LOOM_OP_LOW_COUNT_ = 20,
+  LOOM_OP_LOW_LIVE_IN = LOOM_OP_KIND(LOOM_DIALECT_LOW, 20),
+  LOOM_OP_LOW_COUNT_ = 21,
 };
 
 // Function visibility. Absent (0) means private (module-internal).
@@ -574,6 +575,23 @@ iree_status_t loom_low_abi_resource_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_low_abi_resource_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_LIVE_IN: Import a target-provided ABI live-in register value at low-function entry.
+// %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : reg<amdgpu.sgpr x2>
+LOOM_DEFINE_ISA(loom_low_live_in_isa, LOOM_OP_LOW_LIVE_IN)
+LOOM_DEFINE_RESULT(loom_low_live_in_result, 0)
+LOOM_DEFINE_ATTR_STRING(loom_low_live_in_source, 0)
+LOOM_DEFINE_ATTR_DICT(loom_low_live_in_attrs, 1)
+iree_status_t loom_low_live_in_build(
+    loom_builder_t* builder,
+    loom_string_id_t source,
+    loom_optional loom_named_attr_slice_t attrs,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_live_in_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

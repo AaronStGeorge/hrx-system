@@ -158,6 +158,71 @@ TEST_F(LowVerifyTest, DescriptorKeysPassWithQualifiedSegments) {
   EXPECT_TRUE(capture.diagnostics.empty());
 }
 
+TEST_F(LowVerifyTest, LiveInAcceptsEntryPreamble) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @target {}\n"
+      "low.func.def target(@target) @kernel() -> (reg<test.i32>) {\n"
+      "  %arg0 = low.live_in<test.arg0> : reg<test.i32>\n"
+      "  %arg1 = low.live_in<test.arg1> : reg<test.i32>\n"
+      "  %copy = low.copy %arg0 : reg<test.i32> -> reg<test.i32>\n"
+      "  low.return %copy : reg<test.i32>\n"
+      "}\n",
+      &capture);
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(capture.diagnostics.empty());
+}
+
+TEST_F(LowVerifyTest, LiveInRejectsAfterEntryPreamble) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @target {}\n"
+      "low.func.def target(@target) @kernel() -> (reg<test.i32>) {\n"
+      "  %arg0 = low.live_in<test.arg0> : reg<test.i32>\n"
+      "  %copy = low.copy %arg0 : reg<test.i32> -> reg<test.i32>\n"
+      "  %late = low.live_in<test.arg1> : reg<test.i32>\n"
+      "  low.return %late : reg<test.i32>\n"
+      "}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.live_in");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "position");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "live-ins must form an entry-block prefix before ordinary low "
+            "packets");
+}
+
+TEST_F(LowVerifyTest, LiveInRejectsNonEntryBlock) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @target {}\n"
+      "low.func.def target(@target) @kernel() -> (reg<test.i32>) {\n"
+      "  %arg0 = low.live_in<test.arg0> : reg<test.i32>\n"
+      "  low.br ^exit\n"
+      "^exit:\n"
+      "  %late = low.live_in<test.arg1> : reg<test.i32>\n"
+      "  low.return %late : reg<test.i32>\n"
+      "}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.live_in");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "position");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "live-ins must appear in the low function entry block");
+}
+
 TEST_F(LowVerifyTest, InvokeMatchesDirectLowFunctionSignature) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(

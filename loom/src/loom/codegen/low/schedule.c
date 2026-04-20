@@ -895,12 +895,36 @@ static iree_status_t loom_low_schedule_build_dependencies(
        ++block_index) {
     const loom_low_schedule_block_t* block_record = &state->blocks[block_index];
     uint32_t last_effect_node = LOOM_LOW_SCHEDULE_NODE_NONE;
+    uint32_t last_live_in_node = LOOM_LOW_SCHEDULE_NODE_NONE;
+    bool live_in_preamble_open = true;
     const uint32_t block_node_end =
         block_record->node_start + block_record->node_count;
     for (uint32_t node_index = block_record->node_start;
          node_index < block_node_end; ++node_index) {
       const loom_low_schedule_node_t* node = &state->nodes[node_index];
       const loom_op_t* op = node->op;
+      if (loom_low_live_in_isa(op)) {
+        if (block_index != 0 || !live_in_preamble_open) {
+          return iree_make_status(
+              IREE_STATUS_FAILED_PRECONDITION,
+              "low schedule requires low.live_in packets in the entry "
+              "preamble");
+        }
+        if (last_live_in_node != LOOM_LOW_SCHEDULE_NODE_NONE) {
+          IREE_RETURN_IF_ERROR(loom_low_schedule_add_dependency(
+              state, last_live_in_node, node_index,
+              LOOM_LOW_SCHEDULE_DEPENDENCY_ANCHOR, UINT32_MAX));
+        }
+        last_live_in_node = node_index;
+      } else {
+        live_in_preamble_open = false;
+        if (last_live_in_node != LOOM_LOW_SCHEDULE_NODE_NONE) {
+          IREE_RETURN_IF_ERROR(loom_low_schedule_add_dependency(
+              state, last_live_in_node, node_index,
+              LOOM_LOW_SCHEDULE_DEPENDENCY_ANCHOR, UINT32_MAX));
+        }
+      }
+
       const loom_value_id_t* operands = loom_op_const_operands(op);
       for (uint16_t operand_index = 0; operand_index < op->operand_count;
            ++operand_index) {

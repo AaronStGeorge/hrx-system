@@ -186,6 +186,27 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralScalarConstantAndReturn) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest, EncodesLiveInAsNonEmittingPacket) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel() {\n"
+      "  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : "
+      "reg<amdgpu.sgpr x2>\n"
+      "  low.return\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_EQ(text.data_length, 4u);
+  EXPECT_EQ(ReadU32LE(text.data), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(AmdgpuEncodingTest, EncodesInitialGfx11Allowlist) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);

@@ -50,6 +50,8 @@ typedef enum loom_low_schedule_dependency_kind_e {
   LOOM_LOW_SCHEDULE_DEPENDENCY_EFFECT = 2,
   // Block-control dependency keeping terminators after block contents.
   LOOM_LOW_SCHEDULE_DEPENDENCY_CONTROL = 3,
+  // Structural anchoring dependency keeping fixed-position packets in place.
+  LOOM_LOW_SCHEDULE_DEPENDENCY_ANCHOR = 4,
 } loom_low_schedule_dependency_kind_t;
 
 enum loom_low_schedule_diagnostic_bits_e {

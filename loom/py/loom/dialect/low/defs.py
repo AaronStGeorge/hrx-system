@@ -558,6 +558,31 @@ low_copy = Op(
 )
 
 # ============================================================================
+# low.live_in — target ABI live-in register value
+# ============================================================================
+
+low_live_in = Op(
+    "low.live_in",
+    group=low_ops,
+    doc="Import a target-provided ABI live-in register value at low-function entry.",
+    attrs=[
+        AttrDef("source", "string"),
+        AttrDef("attrs", "dict", optional=True),
+    ],
+    results=[Result("result", REGISTER)],
+    verify="loom_low_live_in_verify",
+    format=[
+        OpRef("source"),
+        AttrDict("attrs"),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=[
+        "%kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : reg<amdgpu.sgpr x2>",
+    ],
+)
+
+# ============================================================================
 # low.slot — explicit frame/storage slot record
 # ============================================================================
 
@@ -1006,4 +1031,5 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_cond_br,
     low_resource,
     low_abi_resource,
+    low_live_in,
 )

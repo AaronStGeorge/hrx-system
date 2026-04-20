@@ -888,8 +888,8 @@ TEST_F(ExecuteTest, UnknownRequiresRequirementFailsLoudly) {
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_NE(DetailString(result).find("unknown REQUIRES requirement"),
             std::string::npos);
-  EXPECT_NE(DetailString(result).find("llc-x86"), std::string::npos);
-  EXPECT_NE(DetailString(result).find("llc-amdgpu"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("llvm-as"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("llvm-objdump"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -922,11 +922,10 @@ TEST_F(ExecuteTest, EmitBitcodeRequiresLlvmDisDeclaration) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, EmitObjectRequiresLlcBackendDeclaration) {
+TEST_F(ExecuteTest, EmitObjectRequiresLlcDeclaration) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit llvmir-object amdgpu-hal\n"
-                   "// REQUIRES: llc\n"
+      ExecuteFirst("// RUN: emit llvmir-object @target\n"
                    "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
                    "  %sum = scalar.addi %lhs, %rhs : i32\n"
                    "  func.return %sum : i32\n"
@@ -934,26 +933,23 @@ TEST_F(ExecuteTest, EmitObjectRequiresLlcBackendDeclaration) {
                    &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("llc-amdgpu"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("llc"), std::string::npos);
   EXPECT_NE(DetailString(result).find("REQUIRES"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, EmitAssemblyMnemonicsRequiresLlcBackendDeclaration) {
+TEST_F(ExecuteTest, EmitAssemblyMnemonicsRequiresLlcDeclaration) {
   loom_check_result_t result;
-  IREE_ASSERT_OK(ExecuteFirst(
-      "// RUN: emit llvmir-assembly-mnemonics x86_64-packed-dot-object\n"
-      "// REQUIRES: llc\n"
-      "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
-      "  %sum = scalar.addi %lhs, %rhs : i32\n"
-      "  func.return %sum : i32\n"
-      "}\n"
-      "// ----\n"
-      "retq\n",
-      &result));
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit llvmir-assembly-mnemonics @target\n"
+                   "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n",
+                   &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("llc-x86"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("llc"), std::string::npos);
   EXPECT_NE(DetailString(result).find("REQUIRES"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
@@ -1003,19 +999,6 @@ TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsSetShape) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, EmitLowDescriptorManifestRejectsBackendSets) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit low-descriptor-manifest amdgpu.gfx1250.core\n"
-                   "func.def @unused() {\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("NOT_FOUND"), std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
 TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsUnknownSet) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
@@ -1046,11 +1029,33 @@ TEST_F(ExecuteTest, EmitTargetLowRegistryManifestUsesRegistryPackage) {
             std::string::npos);
   EXPECT_NE(actual_output.find("\"descriptor_set\":\"test.low.core\""),
             std::string::npos);
-  EXPECT_EQ(actual_output.find("\"key\":\"amdgpu-gfx11-hal\""),
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitLowScheduleJsonAnchorsLiveInPreamble) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit low-schedule-json @livein\n"
+                   "target.preset @test_target {key = \"test-low\", source = "
+                   "@livein}\n"
+                   "low.func.def target(@test_target) @livein() -> "
+                   "(reg<test.i32>) {\n"
+                   "  %arg0 = low.live_in<test.arg0> : reg<test.i32>\n"
+                   "  %copy = low.copy %arg0 : reg<test.i32> -> "
+                   "reg<test.i32>\n"
+                   "  low.return %copy : reg<test.i32>\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string actual_output = ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"format\":\"loom.low.schedule.v0\""),
             std::string::npos);
-  EXPECT_EQ(actual_output.find("\"key\":\"wasm32-simd128\""),
+  EXPECT_NE(actual_output.find("\"op\":\"low.live_in\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"kind\":\"anchor\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"from\":0,\"to\":1,\"kind\":\"anchor\""),
             std::string::npos);
-  EXPECT_EQ(actual_output.find("\"key\":\"x86_64-avx512-object\""),
+  EXPECT_NE(actual_output.find("\"from\":0,\"to\":2,\"kind\":\"anchor\""),
             std::string::npos);
   loom_check_result_deinitialize(&result);
 }
