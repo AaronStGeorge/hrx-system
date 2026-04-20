@@ -183,6 +183,34 @@ func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
 
 // ====
 // REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=4660,22136,255,1 --binding=&4xi32=0 --expected_binding=4xi32=4660,22136,255,1 --expected_binding=4xi32=64,128,240,16
+
+target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+
+func.def @loom_kernel(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<1x4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1x4xi32, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<1x4xi32, #dense> -> vector<4xi32>
+  %mask = vector.constant 15 : vector<4xi32>
+  %shift = vector.constant 4 : vector<4xi32>
+  %low_nibble = vector.andi %loaded, %mask : vector<4xi32>
+  %high_shifted = vector.shrui %loaded, %shift : vector<4xi32>
+  %high_nibble = vector.andi %high_shifted, %mask : vector<4xi32>
+  %low_shifted = vector.shli %low_nibble, %shift : vector<4xi32>
+  %swapped = vector.ori %low_shifted, %high_nibble : vector<4xi32>
+  %signed_high = vector.shrsi %loaded, %shift : vector<4xi32>
+  %signed_nibble = vector.andi %signed_high, %mask : vector<4xi32>
+  %result = vector.xori %swapped, %signed_nibble : vector<4xi32>
+  vector.store %result, %output_view[%tid, 0] : vector<4xi32>, view<1x4xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&8xi32=1,2,3,4,5,6,7,8 --binding=&8xi32=10,10,10,10,10,10,10,10 --binding=&8xi32=0 --expected_binding=8xi32=1,2,3,4,5,6,7,8 --expected_binding=8xi32=10,10,10,10,10,10,10,10 --expected_binding=8xi32=0,0,0,0,15,16,17,18
 
 target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
