@@ -358,8 +358,9 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
       "reg<amdgpu.sgpr>, %s1 : reg<amdgpu.sgpr>, %v0 : "
       "reg<amdgpu.vgpr>, %v1 : reg<amdgpu.vgpr>, %a : "
       "reg<amdgpu.vgpr x4>, %b : reg<amdgpu.vgpr x4>, %acc : "
-      "reg<amdgpu.vgpr x8>, %resource : reg<amdgpu.sgpr x4>, "
-      "%soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) {\n"
+      "reg<amdgpu.vgpr x8>, %kernarg : reg<amdgpu.sgpr x2>, "
+      "%resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, "
+      "%vaddr : reg<amdgpu.vgpr>) {\n"
       "  %s_sum = low.op<amdgpu.s_add_u32>(%s0, %s1) : "
       "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
       "  %v_sum = low.op<amdgpu.v_add_u32>(%v0, %v1) : "
@@ -367,6 +368,9 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
       "  %smem = low.op<amdgpu.s_buffer_load_dword>(%resource, "
       "%soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, "
       "reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  %binding_ptr = low.op<amdgpu.s_load_dwordx2>(%kernarg, "
+      "%soffset) {offset = 16} : (reg<amdgpu.sgpr x2>, "
+      "reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>\n"
       "  %vmem = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, "
       "%soffset) {offset = 4} : (reg<amdgpu.sgpr x4>, "
       "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>\n"
@@ -400,6 +404,7 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
   EXPECT_NE(output.find("s_add_u32 s"), std::string::npos);
   EXPECT_NE(output.find("v_add_u32 v"), std::string::npos);
   EXPECT_NE(output.find("s_buffer_load_dword s"), std::string::npos);
+  EXPECT_NE(output.find("s_load_dwordx2 s"), std::string::npos);
   EXPECT_NE(output.find("buffer_load_dword v"), std::string::npos);
   EXPECT_NE(output.find("buffer_store_dword v"), std::string::npos);
   EXPECT_NE(output.find("offen offset:8"), std::string::npos);

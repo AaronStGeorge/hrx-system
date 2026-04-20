@@ -288,7 +288,7 @@ TEST_F(AmdgpuKernelAssemblyTest, AssemblesKernelEnvelopeForGfx11WithLlvmMc) {
       loom_llvm_tool_query_version(&toolchain, LOOM_LLVM_TOOL_LLVM_MC,
                                    iree_allocator_system(), &version_text);
   if (IsToolUnavailable(status)) {
-    iree_status_ignore(status);
+    IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llvm-mc is unavailable in this test environment";
   }
   IREE_ASSERT_OK(status);
@@ -323,7 +323,7 @@ TEST_F(AmdgpuKernelAssemblyTest, DisassemblesGfx11ObjectWithLlvmObjdump) {
       &toolchain, LOOM_LLVM_TOOL_LLVM_MC, iree_allocator_system(),
       &llvm_mc_version_text);
   if (IsToolUnavailable(status)) {
-    iree_status_ignore(status);
+    IREE_EXPECT_NOT_OK(status);
     GTEST_SKIP() << "llvm-mc is unavailable in this test environment";
   }
   IREE_ASSERT_OK(status);
@@ -350,7 +350,7 @@ TEST_F(AmdgpuKernelAssemblyTest, DisassemblesGfx11ObjectWithLlvmObjdump) {
                                         iree_allocator_system(),
                                         &objdump_version_text);
   if (IsToolUnavailable(status)) {
-    iree_status_ignore(status);
+    IREE_EXPECT_NOT_OK(status);
     loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
     GTEST_SKIP() << "llvm-objdump is unavailable in this test environment";
   }

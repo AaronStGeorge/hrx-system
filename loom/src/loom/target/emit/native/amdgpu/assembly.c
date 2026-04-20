@@ -676,47 +676,118 @@ static iree_status_t loom_amdgpu_append_matrix_packet(
   return loom_amdgpu_append_basic_packet(context, 1, 3);
 }
 
+typedef enum loom_amdgpu_assembly_descriptor_kind_e {
+  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC,
+  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MEMORY,
+  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MNEMONIC,
+  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MUBUF_LOAD,
+  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MUBUF_STORE,
+  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MATRIX,
+  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_NAMED_WAIT,
+  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_S_MOV_B32,
+  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_WAITCNT,
+} loom_amdgpu_assembly_descriptor_kind_t;
+
+typedef struct loom_amdgpu_assembly_descriptor_dispatch_t {
+  // Stable descriptor key handled by this row.
+  const char* key;
+  // Formatting strategy used for this descriptor.
+  loom_amdgpu_assembly_descriptor_kind_t kind;
+  // Number of leading result values printed by basic/memory strategies.
+  iree_host_size_t result_count;
+  // Number of operand values printed by basic/memory strategies.
+  iree_host_size_t operand_count;
+  // Attribute name used by named wait descriptors.
+  const char* named_wait_attr;
+} loom_amdgpu_assembly_descriptor_dispatch_t;
+
+static const loom_amdgpu_assembly_descriptor_dispatch_t
+    kLoomAmdgpuAssemblyDescriptorDispatch[] = {
+        {"amdgpu.buffer_load_dword", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MUBUF_LOAD,
+         0, 0, NULL},
+        {"amdgpu.buffer_store_dword",
+         LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MUBUF_STORE, 0, 0, NULL},
+        {"amdgpu.s_add_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
+        {"amdgpu.s_buffer_load_dword", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MEMORY,
+         1, 2, NULL},
+        {"amdgpu.s_load_dwordx2", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MEMORY, 1, 2,
+         NULL},
+        {"amdgpu.s_mov_b32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_S_MOV_B32, 0, 0,
+         NULL},
+        {"amdgpu.s_wait_alu", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_NAMED_WAIT, 0, 0,
+         "depctr"},
+        {"amdgpu.s_wait_idle", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MNEMONIC, 0, 0,
+         NULL},
+        {"amdgpu.s_wait_loadcnt", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_NAMED_WAIT, 0,
+         0, "loadcnt"},
+        {"amdgpu.s_wait_storecnt", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_NAMED_WAIT,
+         0, 0, "storecnt"},
+        {"amdgpu.s_waitcnt", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_WAITCNT, 0, 0,
+         NULL},
+        {"amdgpu.s_waitcnt_depctr", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_NAMED_WAIT,
+         0, 0, "depctr"},
+        {"amdgpu.v_add_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
+        {"amdgpu.v_mfma_f32_16x16x16_f16",
+         LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MATRIX, 0, 0, NULL},
+        {"amdgpu.v_mul_lo_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2,
+         NULL},
+        {"amdgpu.v_wmma_f32_16x16x16_f16",
+         LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MATRIX, 0, 0, NULL},
+};
+
+static const loom_amdgpu_assembly_descriptor_dispatch_t*
+loom_amdgpu_lookup_assembly_descriptor_dispatch(iree_string_view_t key) {
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kLoomAmdgpuAssemblyDescriptorDispatch); ++i) {
+    const loom_amdgpu_assembly_descriptor_dispatch_t* row =
+        &kLoomAmdgpuAssemblyDescriptorDispatch[i];
+    if (iree_string_view_equal(key, iree_make_cstring_view(row->key))) {
+      return row;
+    }
+  }
+  return NULL;
+}
+
+static iree_status_t loom_amdgpu_append_descriptor_dispatch_packet(
+    const loom_amdgpu_assembly_descriptor_dispatch_t* row,
+    const loom_native_assembly_packet_context_t* context) {
+  switch (row->kind) {
+    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC:
+      return loom_amdgpu_append_basic_packet(context, row->result_count,
+                                             row->operand_count);
+    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MEMORY:
+      return loom_amdgpu_append_memory_packet(context, row->result_count,
+                                              row->operand_count);
+    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MNEMONIC:
+      return loom_amdgpu_append_mnemonic(context);
+    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MUBUF_LOAD:
+      return loom_amdgpu_append_mubuf_load_packet(context);
+    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MUBUF_STORE:
+      return loom_amdgpu_append_mubuf_store_packet(context);
+    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MATRIX:
+      return loom_amdgpu_append_matrix_packet(context);
+    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_NAMED_WAIT:
+      return loom_amdgpu_append_named_wait_packet(
+          context, iree_make_cstring_view(row->named_wait_attr));
+    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_S_MOV_B32:
+      return loom_amdgpu_append_s_mov_b32_packet(context);
+    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_WAITCNT:
+      return loom_amdgpu_append_waitcnt_packet(context);
+    default:
+      return iree_make_status(IREE_STATUS_INTERNAL,
+                              "AMDGPU assembly descriptor row kind is invalid");
+  }
+}
+
 static iree_status_t loom_amdgpu_append_descriptor_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
   iree_string_view_t key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_key(context, &key));
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.s_mov_b32"))) {
-    return loom_amdgpu_append_s_mov_b32_packet(context);
-  }
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.s_add_u32")) ||
-      iree_string_view_equal(key, IREE_SV("amdgpu.v_add_u32")) ||
-      iree_string_view_equal(key, IREE_SV("amdgpu.v_mul_lo_u32"))) {
-    return loom_amdgpu_append_basic_packet(context, 1, 2);
-  }
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.s_buffer_load_dword"))) {
-    return loom_amdgpu_append_memory_packet(context, 1, 2);
-  }
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.buffer_load_dword"))) {
-    return loom_amdgpu_append_mubuf_load_packet(context);
-  }
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.buffer_store_dword"))) {
-    return loom_amdgpu_append_mubuf_store_packet(context);
-  }
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.v_wmma_f32_16x16x16_f16")) ||
-      iree_string_view_equal(key, IREE_SV("amdgpu.v_mfma_f32_16x16x16_f16"))) {
-    return loom_amdgpu_append_matrix_packet(context);
-  }
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.s_waitcnt"))) {
-    return loom_amdgpu_append_waitcnt_packet(context);
-  }
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.s_waitcnt_depctr")) ||
-      iree_string_view_equal(key, IREE_SV("amdgpu.s_wait_alu"))) {
-    return loom_amdgpu_append_named_wait_packet(context, IREE_SV("depctr"));
-  }
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.s_wait_loadcnt"))) {
-    return loom_amdgpu_append_named_wait_packet(context, IREE_SV("loadcnt"));
-  }
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.s_wait_storecnt"))) {
-    return loom_amdgpu_append_named_wait_packet(context, IREE_SV("storecnt"));
-  }
-  if (iree_string_view_equal(key, IREE_SV("amdgpu.s_wait_idle"))) {
-    return loom_amdgpu_append_mnemonic(context);
+  const loom_amdgpu_assembly_descriptor_dispatch_t* row =
+      loom_amdgpu_lookup_assembly_descriptor_dispatch(key);
+  if (row != NULL) {
+    return loom_amdgpu_append_descriptor_dispatch_packet(row, context);
   }
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                           "AMDGPU assembly descriptor '%.*s' is unsupported",

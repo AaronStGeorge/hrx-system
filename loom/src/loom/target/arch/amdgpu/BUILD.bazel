@@ -252,6 +252,48 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "hal_resource_materialization_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "hal_resource_materialization_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "hal_resource_materialization_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "hal_resource_materialization_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "hal_resource_materialization_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "hal_resource_materialization_no_hal_amdgpu_dep",
+    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "hal_resource_materialization_no_target_tool_dep",
+    dependency = "//loom/src/loom/target/tool:llvm",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
+)
+
+iree_assert_no_dependency(
     name = "gfx950_descriptors_no_wasm_arch_dep",
     dependency = "//loom/src/loom/target/arch/wasm:descriptors",
     target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
@@ -558,6 +600,7 @@ loom_cc_test(
     name = "gfx11_descriptors_test",
     srcs = ["gfx11_descriptors_test.cc"],
     deps = [
+        ":encoding_defs",
         ":gfx11_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:text_asm_roundtrip_test_util",
@@ -693,6 +736,22 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "hal_resource_materialization",
+    srcs = ["hal_resource_materialization.c"],
+    hdrs = ["hal_resource_materialization.h"],
+    deps = [
+        ":hal_kernel_abi",
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_cc_test(
     name = "hal_kernel_abi_test",
     srcs = ["hal_kernel_abi_test.cc"],
@@ -702,6 +761,30 @@ loom_cc_test(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:ir_records",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "hal_resource_materialization_test",
+    srcs = ["hal_resource_materialization_test.cc"],
+    deps = [
+        ":hal_kernel_abi",
+        ":hal_resource_materialization",
+        ":low_registry",
+        ":wait_packets",
+        ":wait_plan",
+        "//loom/src/loom/codegen/low:packetization",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:ir_records",
+        "//loom/src/loom/target/emit/native/amdgpu:encoding",
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -858,6 +941,7 @@ loom_low_descriptor_exclude_from_cmake_all(
         "gfx12_descriptors_test",
         "gfx1250_descriptors_test",
         "gfx950_descriptors_test",
+        "hal_resource_materialization_test",
         "loom_check_test",
         "low_registry_test",
         "occupancy_test",

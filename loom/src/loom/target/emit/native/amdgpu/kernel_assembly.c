@@ -282,7 +282,7 @@ static iree_status_t loom_amdgpu_kernel_assembly_collect_register_usage(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_kernel_assembly_validate_reserved_user_sgprs(
+static iree_status_t loom_amdgpu_kernel_assembly_validate_kernarg_live_in(
     const loom_low_allocation_sidecar_t* allocation,
     const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout) {
   if (!abi_layout->uses_kernarg_segment_ptr) {
@@ -296,28 +296,18 @@ static iree_status_t loom_amdgpu_kernel_assembly_validate_reserved_user_sgprs(
             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
       continue;
     }
-    iree_string_view_t register_class = iree_string_view_empty();
-    if (assignment->value_class.register_class_id == LOOM_STRING_ID_INVALID ||
-        assignment->value_class.register_class_id >=
-            allocation->module->strings.count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "AMDGPU kernel assembly value %" PRIu32
-                              " has no register-class string",
-                              assignment->value_id);
-    }
-    register_class = allocation->module->strings
-                         .entries[assignment->value_class.register_class_id];
-    if (!iree_string_view_equal(register_class, IREE_SV("amdgpu.sgpr"))) {
+    if (!loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
+            allocation->module, assignment->value_id)) {
       continue;
     }
-    if (assignment->location_base <
-        LOOM_AMDGPU_KERNEL_ASSEMBLY_KERNARG_USER_SGPR_COUNT) {
+    if (assignment->location_base != 0 ||
+        assignment->location_count !=
+            LOOM_AMDGPU_KERNEL_ASSEMBLY_KERNARG_USER_SGPR_COUNT) {
       return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "AMDGPU kernel assembly requires allocation to reserve the first "
-          "%u SGPRs for the kernarg segment pointer before emitting HAL "
-          "resource kernels",
-          LOOM_AMDGPU_KERNEL_ASSEMBLY_KERNARG_USER_SGPR_COUNT);
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU kernel assembly requires the kernarg segment pointer "
+          "live-in to be fixed to s[0:%u]",
+          LOOM_AMDGPU_KERNEL_ASSEMBLY_KERNARG_USER_SGPR_COUNT - 1);
     }
   }
   return iree_ok_status();
@@ -481,7 +471,7 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
   loom_amdgpu_kernel_assembly_register_usage_t register_usage = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_assembly_collect_register_usage(
       allocation, &register_usage));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_assembly_validate_reserved_user_sgprs(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_assembly_validate_kernarg_live_in(
       allocation, &abi_layout));
 
   const loom_target_snapshot_t* snapshot =

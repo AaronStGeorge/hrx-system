@@ -134,6 +134,7 @@ loom_cc_test(
   SRCS
     "gfx11_descriptors_test.cc"
   DEPS
+    ::encoding_defs
     ::gfx11_descriptors
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::text_asm_roundtrip_test_util
@@ -310,6 +311,25 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    hal_resource_materialization
+  HDRS
+    "hal_resource_materialization.h"
+  SRCS
+    "hal_resource_materialization.c"
+  DEPS
+    ::hal_kernel_abi
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::rewrite::rewriter
+    loom::src::loom::target::types
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     hal_kernel_abi_test
@@ -322,6 +342,31 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::ir_records
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    hal_resource_materialization_test
+  SRCS
+    "hal_resource_materialization_test.cc"
+  DEPS
+    ::hal_kernel_abi
+    ::hal_resource_materialization
+    ::low_registry
+    ::wait_packets
+    ::wait_plan
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::emit::native::amdgpu::encoding
     loom::src::loom::target::ir_records
     loom::src::loom::testing::context
     iree::testing::gtest
@@ -491,6 +536,7 @@ loom_low_descriptor_exclude_from_all(
     "gfx1250_descriptors_test"
     "gfx12_descriptors_test"
     "gfx950_descriptors_test"
+    "hal_resource_materialization_test"
     "loom_check_test"
     "low_registry_test"
     "occupancy_test"

@@ -12,6 +12,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/text_asm_test_util.h"
+#include "loom/target/arch/amdgpu/encoding.h"
 
 namespace loom {
 namespace {
@@ -92,6 +93,19 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(load_descriptor->encoding_id, 20u);
   EXPECT_NE(load_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
+
+  const loom_low_descriptor_t* scalar_load_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_load_dwordx2"));
+  ASSERT_NE(scalar_load_descriptor, nullptr);
+  EXPECT_EQ(scalar_load_descriptor->operand_count, 3u);
+  EXPECT_EQ(scalar_load_descriptor->result_count, 1u);
+  EXPECT_EQ(scalar_load_descriptor->immediate_count, 1u);
+  EXPECT_EQ(scalar_load_descriptor->effect_count, 1u);
+  EXPECT_EQ(scalar_load_descriptor->encoding_format_id,
+            LOOM_AMDGPU_ENCODING_FORMAT_SMEM);
+  EXPECT_NE(
+      scalar_load_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+      0u);
 
   const loom_low_descriptor_t* wait_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_waitcnt"));

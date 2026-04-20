@@ -29,6 +29,10 @@ extern "C" {
 // Required kernarg alignment for HAL binding pointers.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT 8u
 
+// Stable low.live_in source spelling for the AMDGPU kernarg segment pointer.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE \
+  "amdgpu.kernarg_segment_ptr"
+
 typedef struct loom_amdgpu_hal_kernarg_resource_t {
   // Defining low.abi.resource op for diagnostics and cross-checks.
   const loom_op_t* resource_op;
@@ -77,6 +81,10 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
     const loom_target_bundle_t* target_bundle,
     loom_amdgpu_hal_kernel_abi_layout_t* out_layout,
     iree_arena_allocator_t* arena);
+
+// Returns true if |value_id| is defined by the kernarg segment pointer live-in.
+bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
 
 #ifdef __cplusplus
 }  // extern "C"

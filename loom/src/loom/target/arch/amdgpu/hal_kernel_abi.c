@@ -70,6 +70,25 @@ static iree_string_view_t loom_amdgpu_hal_kernel_abi_string_or_empty(
   return module->strings.entries[string_id];
 }
 
+bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  if (module == NULL || value_id >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return false;
+  }
+  const loom_op_t* def_op = loom_value_def_op(value);
+  if (def_op == NULL || !loom_low_live_in_isa(def_op)) {
+    return false;
+  }
+  iree_string_view_t source = loom_amdgpu_hal_kernel_abi_string_or_empty(
+      module, loom_low_live_in_source(def_op));
+  return iree_string_view_equal(
+      source, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE));
+}
+
 static iree_status_t loom_amdgpu_hal_kernel_abi_validate_target(
     const loom_module_t* module, const loom_op_t* function_op,
     const loom_target_bundle_t* target_bundle) {

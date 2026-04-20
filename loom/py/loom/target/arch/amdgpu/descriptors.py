@@ -297,6 +297,13 @@ _GLOBAL_LOAD_EFFECT = Effect(
     width_bits=32,
 )
 
+_GLOBAL_LOAD_B64_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=64,
+)
+
 _GLOBAL_STORE_EFFECT = Effect(
     EffectKind.WRITE,
     memory_space=MemorySpace.GLOBAL,
@@ -357,6 +364,15 @@ _IGNORE_GLOBAL_READ_MEMORY = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
     data_format_name="FMT_NUM_B32",
     size_bits=32,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
+_IGNORE_GLOBAL_READ_MEMORY_B64 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B64",
+    size_bits=64,
     is_input=True,
     is_output=False,
     ignore_reason="modeled-by-global-read-effect",
@@ -443,6 +459,29 @@ def _s_buffer_load_dword_overlay(
         immediate_fields=(offset_field_name,),
         immediates=(_offset_immediate(offset_bit_width),),
         effects=(_GLOBAL_LOAD_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _s_load_dwordx2_overlay(
+    offset_field_name: str = "OFFSET", offset_bit_width: int = 21
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_load_dwordx2",
+        instruction_name="S_LOAD_DWORDX2",
+        mnemonic="s_load_dwordx2",
+        encoding_name="ENC_SMEM",
+        semantic_tag="memory.load.u64",
+        schedule_class=_SCHEDULE_SMEM_LOAD,
+        operands=(
+            AmdgpuOperandOverlay("SDATA", _sgpr_result(units=2)),
+            AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        ),
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B64,),
+        immediate_fields=(offset_field_name,),
+        immediates=(_offset_immediate(offset_bit_width),),
+        effects=(_GLOBAL_LOAD_B64_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
@@ -648,6 +687,7 @@ def _gfx950_core_overlay_descriptors(
             _s_add_u32_overlay(),
             _v_add_u32_overlay("V_ADD_U32"),
             _v_mul_lo_u32_overlay(),
+            _s_load_dwordx2_overlay(),
             _s_buffer_load_dword_overlay(),
             _buffer_load_dword_overlay(
                 encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
@@ -670,6 +710,7 @@ def _gfx11_core_overlay_descriptors(
             _s_add_u32_overlay(),
             _v_add_u32_overlay("V_ADD_NC_U32"),
             _v_mul_lo_u32_overlay(),
+            _s_load_dwordx2_overlay(),
             _s_buffer_load_dword_overlay(),
             _buffer_load_dword_overlay(
                 encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
@@ -694,6 +735,7 @@ def _gfx12_core_overlay_descriptors(
             _s_add_u32_overlay(),
             _v_add_u32_overlay("V_ADD_NC_U32"),
             _v_mul_lo_u32_overlay(),
+            _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
             _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
             _buffer_load_dword_overlay(
                 encoding_name="ENC_VBUFFER",
@@ -725,6 +767,7 @@ def _gfx1250_core_overlay_descriptors(
             _s_add_u32_overlay(),
             _v_add_u32_overlay("V_ADD_NC_U32"),
             _v_mul_lo_u32_overlay(),
+            _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
             _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
             _buffer_load_dword_overlay(
                 encoding_name="ENC_VBUFFER",

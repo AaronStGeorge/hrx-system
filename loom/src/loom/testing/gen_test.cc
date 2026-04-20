@@ -87,7 +87,7 @@ class GenTest : public ::testing::Test {
     // Print the module first so diagnostics are readable in context.
     iree_string_builder_t builder;
     iree_string_builder_initialize(iree_allocator_system(), &builder);
-    iree_status_ignore(
+    IREE_RETURN_IF_ERROR(
         loom_text_print_module_to_builder(*out_module, &builder, 0));
     fprintf(stderr, "Generated module (seed=%" PRIu64 "):\n%.*s\n", seed,
             (int)iree_string_builder_size(&builder),
