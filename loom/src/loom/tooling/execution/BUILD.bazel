@@ -7,12 +7,28 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_cc_library",
+    "loom_cc_test",
 )
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "candidate",
+    srcs = ["candidate.c"],
+    hdrs = ["candidate.h"],
+    deps = [
+        ":hal_backend",
+        ":session",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/target/emit/ireevm:module_archive",
+        "//loom/src/loom/target/emit/ireevm:module_compiler",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+    ],
 )
 
 loom_cc_library(
@@ -71,5 +87,20 @@ loom_cc_library(
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "candidate_test",
+    srcs = ["candidate_test.cc"],
+    deps = [
+        ":candidate",
+        ":hal_runtime",
+        ":session",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/target/emit/ireevm:low_registry",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )

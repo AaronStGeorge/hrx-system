@@ -12,6 +12,24 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    candidate
+  HDRS
+    "candidate.h"
+  SRCS
+    "candidate.c"
+  DEPS
+    ::hal_backend
+    ::session
+    iree::base
+    loom::src::loom::error::diagnostic
+    loom::src::loom::target::emit::ireevm::module_archive
+    loom::src::loom::target::emit::ireevm::module_compiler
+    loom::src::loom::verify
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     hal_backend
   HDRS
     "hal_backend.h"
@@ -79,6 +97,22 @@ loom_cc_library(
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::verify
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    candidate_test
+  SRCS
+    "candidate_test.cc"
+  DEPS
+    ::candidate
+    ::hal_runtime
+    ::session
+    iree::base
+    loom::src::loom::ops::op_registry
+    loom::src::loom::target::emit::ireevm::low_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

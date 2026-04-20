@@ -70,7 +70,7 @@ loom_cc_library(
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/target/emit/ireevm:module_compiler",
+        "//loom/src/loom/tooling/execution:candidate",
         "//loom/src/loom/tooling/execution:hal_backend",
         "//loom/src/loom/tooling/execution:hal_invocation",
         "//loom/src/loom/tooling/execution:hal_runtime",

@@ -24,7 +24,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
-#include "loom/target/emit/ireevm/module_compiler.h"
+#include "loom/tooling/execution/candidate.h"
 #include "loom/tooling/execution/hal_invocation.h"
 #include "loom/tooling/execution/hal_runtime.h"
 #include "loom/tooling/execution/session.h"
@@ -195,35 +195,6 @@ static iree_status_t iree_run_loom_probe_hal_backend(
   iree_string_builder_deinitialize(&target_id_builder);
   loom_run_hal_runtime_deinitialize(&runtime);
   return status;
-}
-
-static iree_status_t iree_run_loom_compile_to_archive(
-    loom_run_module_t* run_module, iree_allocator_t allocator,
-    loom_ireevm_module_archive_t* out_archive) {
-  const loom_ireevm_module_compile_options_t compile_options = {
-      .module_name = iree_make_cstring_view(FLAG_loom_module_name),
-      .target_symbol = iree_make_cstring_view(FLAG_loom_target),
-      .diagnostic_sink = {.fn = loom_diagnostic_stderr_sink},
-      .source_resolver = loom_run_module_source_resolver(run_module),
-      .max_errors = 20,
-  };
-  return loom_ireevm_compile_module_archive(
-      run_module->module, &compile_options, allocator, out_archive);
-}
-
-static iree_status_t iree_run_loom_compile_to_hal_executable(
-    const loom_run_hal_backend_t* backend, loom_run_module_t* run_module,
-    const loom_run_hal_selected_target_t* target, iree_allocator_t allocator,
-    loom_run_hal_executable_t* out_executable) {
-  IREE_ASSERT_ARGUMENT(backend);
-  IREE_ASSERT_ARGUMENT(out_executable);
-
-  return backend->compile(
-      backend, run_module->module, target,
-      iree_make_cstring_view(FLAG_loom_target),
-      (loom_diagnostic_sink_t){.fn = loom_diagnostic_stderr_sink},
-      loom_run_module_source_resolver(run_module), 20, allocator,
-      out_executable);
 }
 
 static iree_status_t iree_run_loom_parse_workgroup_count(
@@ -447,10 +418,8 @@ int iree_run_loom_main(int argc, char** argv,
   iree_io_file_contents_t* contents = NULL;
   loom_run_session_t session = {0};
   loom_run_module_t run_module = {0};
-  loom_ireevm_module_archive_t archive = {0};
-  loom_run_hal_executable_t hal_executable = {0};
+  loom_run_candidate_t candidate = {0};
   loom_run_hal_runtime_t hal_runtime = {0};
-  loom_run_hal_selected_target_t selected_hal_target = {0};
   iree_vm_instance_t* instance = NULL;
   int exit_code = 0;
 
@@ -492,6 +461,10 @@ int iree_run_loom_main(int argc, char** argv,
       source = iree_run_loom_file_contents_string_view(contents);
     }
   }
+  loom_run_candidate_compile_options_t compile_options = {0};
+  loom_run_candidate_compile_options_initialize(&compile_options);
+  compile_options.module_name = iree_make_cstring_view(FLAG_loom_module_name);
+  compile_options.target_symbol = iree_make_cstring_view(FLAG_loom_target);
   if (iree_status_is_ok(status)) {
     loom_run_module_parse_options_t parse_options = {0};
     loom_run_module_parse_options_initialize(&parse_options);
@@ -499,8 +472,13 @@ int iree_run_loom_main(int argc, char** argv,
     parse_options.source = source;
     status = loom_run_module_parse(&session, &parse_options, &run_module);
   }
+  if (iree_status_is_ok(status)) {
+    compile_options.source_resolver =
+        loom_run_module_source_resolver(&run_module);
+  }
   if (iree_status_is_ok(status) && run_vm) {
-    status = iree_run_loom_compile_to_archive(&run_module, allocator, &archive);
+    status = loom_run_candidate_compile_vm(&run_module, &compile_options,
+                                           allocator, &candidate);
   }
   if (iree_status_is_ok(status) && run_vm) {
     status = iree_tooling_create_instance(allocator, &instance);
@@ -508,25 +486,22 @@ int iree_run_loom_main(int argc, char** argv,
   if (iree_status_is_ok(status) && run_vm) {
     status = iree_tooling_run_module_with_data(
         instance, iree_string_view_empty(),
-        iree_make_const_byte_span(archive.data, archive.data_length), allocator,
-        &exit_code);
+        iree_make_const_byte_span(candidate.vm_archive.data,
+                                  candidate.vm_archive.data_length),
+        allocator, &exit_code);
   }
   if (iree_status_is_ok(status) && hal_backend != NULL) {
     status =
         loom_run_hal_runtime_initialize(hal_backend, allocator, &hal_runtime);
   }
   if (iree_status_is_ok(status) && hal_backend != NULL) {
-    status = hal_backend->select_target(hal_backend, &hal_runtime, allocator,
-                                        &selected_hal_target);
+    status =
+        loom_run_candidate_compile_hal(hal_backend, &hal_runtime, &run_module,
+                                       &compile_options, allocator, &candidate);
   }
   if (iree_status_is_ok(status) && hal_backend != NULL) {
-    status = iree_run_loom_compile_to_hal_executable(
-        hal_backend, &run_module, &selected_hal_target, allocator,
-        &hal_executable);
-  }
-  if (iree_status_is_ok(status) && hal_backend != NULL) {
-    status = iree_run_loom_run_hal_executable(&hal_executable, &hal_runtime,
-                                              allocator, &exit_code);
+    status = iree_run_loom_run_hal_executable(
+        &candidate.hal_executable, &hal_runtime, allocator, &exit_code);
   }
 
   const bool had_error = !iree_status_is_ok(status);
@@ -538,11 +513,7 @@ int iree_run_loom_main(int argc, char** argv,
 
   iree_vm_instance_release(instance);
   loom_run_hal_runtime_deinitialize(&hal_runtime);
-  if (hal_backend && hal_backend->deinitialize_executable) {
-    hal_backend->deinitialize_executable(hal_backend, &hal_executable,
-                                         allocator);
-  }
-  loom_ireevm_module_archive_deinitialize(&archive, allocator);
+  loom_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);
   iree_io_file_contents_free(contents);
   loom_run_session_deinitialize(&session);
