@@ -345,5 +345,26 @@ TEST(AmdgpuHsacoTest, RejectsMismatchedTargetCpu) {
       loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
 }
 
+TEST(AmdgpuHsacoTest, RejectsTargetFeatureSuffixesUntilFlagsAreEncoded) {
+  const uint8_t text[] = {0x00, 0x00, 0x81, 0xbf};
+  const loom_amdgpu_hsaco_kernel_t kernel = {
+      .metadata =
+          MinimalKernel(IREE_SV("loom_kernel"), IREE_SV("loom_kernel.kd")),
+      .text = iree_make_const_byte_span(text, sizeof(text)),
+  };
+  const loom_amdgpu_hsaco_file_t file = {
+      .target = IREE_SV("amdgcn-amd-amdhsa--gfx1100:sramecc+:xnack-"),
+      .target_cpu = IREE_SV("gfx1100"),
+      .kernels = &kernel,
+      .kernel_count = 1,
+  };
+
+  StreamPtr stream = CreateStream();
+  TestArena arena;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNIMPLEMENTED,
+      loom_amdgpu_hsaco_write_file(&file, stream.get(), arena.arena()));
+}
+
 }  // namespace
 }  // namespace loom

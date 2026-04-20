@@ -27,6 +27,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/encoding.h"
 #include "loom/target/emit/native/amdgpu/hsaco.h"
 #include "loom/target/presets.h"
@@ -513,27 +514,26 @@ bool TryFindFirstGpuAgent(const HsaApi& api, hsa_agent_t* out_agent,
 
 bool TryParseAmdhsaTargetCpu(const std::string& target_id,
                              std::string* out_target_cpu,
+                             std::string* out_feature_suffix,
                              std::string* out_error) {
   IREE_ASSERT_ARGUMENT(out_target_cpu);
+  IREE_ASSERT_ARGUMENT(out_feature_suffix);
   IREE_ASSERT_ARGUMENT(out_error);
   *out_target_cpu = {};
+  *out_feature_suffix = {};
   *out_error = {};
-  constexpr const char* kPrefix = "amdgcn-amd-amdhsa--";
-  constexpr size_t kPrefixLength = sizeof("amdgcn-amd-amdhsa--") - 1u;
-  if (target_id.compare(0, kPrefixLength, kPrefix) != 0) {
-    *out_error = "HSA GPU ISA is not an AMDHSA target id: " + target_id;
+  loom_amdgpu_amdhsa_target_id_t parsed_target_id = {};
+  iree_status_t status = loom_amdgpu_target_info_parse_amdhsa_target_id(
+      iree_make_string_view(target_id.data(), target_id.size()),
+      &parsed_target_id);
+  if (!iree_status_is_ok(status)) {
+    *out_error = StatusToStringAndFree(status);
     return false;
   }
-  const size_t cpu_start = kPrefixLength;
-  size_t cpu_end = target_id.find(':', cpu_start);
-  if (cpu_end == std::string::npos) {
-    cpu_end = target_id.size();
-  }
-  if (cpu_end == cpu_start) {
-    *out_error = "HSA AMDHSA target id has no target CPU: " + target_id;
-    return false;
-  }
-  *out_target_cpu = target_id.substr(cpu_start, cpu_end - cpu_start);
+  out_target_cpu->assign(parsed_target_id.processor->target_cpu.data,
+                         parsed_target_id.processor->target_cpu.size);
+  out_feature_suffix->assign(parsed_target_id.feature_suffix.data,
+                             parsed_target_id.feature_suffix.size);
   return true;
 }
 
@@ -546,6 +546,8 @@ struct AmdgpuHsaTarget {
   std::string isa_name;
   // Target CPU parsed out of |isa_name|.
   std::string target_cpu;
+  // Target-feature suffix parsed out of |isa_name|.
+  std::string feature_suffix;
 };
 
 bool TryDiscoverCurrentAmdgpuTarget(const HsaApi& api,
@@ -579,9 +581,10 @@ bool TryDiscoverCurrentAmdgpuTarget(const HsaApi& api,
   }
 
   std::string target_cpu;
+  std::string feature_suffix;
   std::string parse_error;
   if (!TryParseAmdhsaTargetCpu(isa_search.isa_name, &target_cpu,
-                               &parse_error)) {
+                               &feature_suffix, &parse_error)) {
     *out_skip_reason = parse_error;
     return false;
   }
@@ -591,41 +594,9 @@ bool TryDiscoverCurrentAmdgpuTarget(const HsaApi& api,
       .agent_name = std::move(agent_name),
       .isa_name = std::move(isa_search.isa_name),
       .target_cpu = std::move(target_cpu),
+      .feature_suffix = std::move(feature_suffix),
   };
   return true;
-}
-
-iree_status_t LowPresetForTargetCpu(iree_string_view_t target_cpu,
-                                    iree_string_view_t* out_preset_key) {
-  IREE_ASSERT_ARGUMENT(out_preset_key);
-  *out_preset_key = iree_string_view_empty();
-  static const iree_string_view_t gfx11_processors[] = {
-      IREE_SVL("gfx1100"), IREE_SVL("gfx1101"), IREE_SVL("gfx1102"),
-      IREE_SVL("gfx1103"), IREE_SVL("gfx1150"), IREE_SVL("gfx1151"),
-      IREE_SVL("gfx1152"), IREE_SVL("gfx1153"),
-  };
-  if (iree_string_view_equal(target_cpu, IREE_SV("gfx950"))) {
-    *out_preset_key = IREE_SV("amdgpu-gfx950");
-    return iree_ok_status();
-  }
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(gfx11_processors); ++i) {
-    if (iree_string_view_equal(target_cpu, gfx11_processors[i])) {
-      *out_preset_key = IREE_SV("amdgpu-gfx11");
-      return iree_ok_status();
-    }
-  }
-  if (iree_string_view_equal(target_cpu, IREE_SV("gfx1200"))) {
-    *out_preset_key = IREE_SV("amdgpu-gfx12");
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(target_cpu, IREE_SV("gfx1250"))) {
-    *out_preset_key = IREE_SV("amdgpu-gfx1250");
-    return iree_ok_status();
-  }
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "AMDGPU low preset for target CPU '%.*s' is not "
-                          "supported yet",
-                          (int)target_cpu.size, target_cpu.data);
 }
 
 const loom_op_t* FindFirstLowFunction(loom_module_t* module) {
@@ -755,13 +726,14 @@ struct NoopKernelProgram {
 };
 
 loom_amdgpu_metadata_kernel_t MetadataForNoopKernelProgram(
-    const NoopKernelProgram& program, iree_string_view_t descriptor_symbol) {
+    const NoopKernelProgram& program, iree_string_view_t descriptor_symbol,
+    uint32_t wavefront_size) {
   return {
       .name = iree_make_string_view(program.name.data(), program.name.size()),
       .descriptor_symbol = descriptor_symbol,
       .kernarg_segment_size = 0,
       .kernarg_segment_alignment = 8,
-      .wavefront_size = 32,
+      .wavefront_size = wavefront_size,
       .group_segment_fixed_size = 0,
       .private_segment_fixed_size = 0,
       .sgpr_count = 0,
@@ -787,27 +759,29 @@ iree_status_t CompileNoopKernelProgramForAmdgpu(
     std::string* out_hsaco) {
   IREE_ASSERT_ARGUMENT(out_hsaco);
   *out_hsaco = {};
-  if (target.isa_name.find(':') != std::string::npos) {
+  if (!target.feature_suffix.empty()) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "AMDGPU HSACO target-feature suffixes are not supported yet: %s",
-        target.isa_name.c_str());
+        target.feature_suffix.c_str());
   }
-  iree_string_view_t preset_key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(LowPresetForTargetCpu(
+  const loom_amdgpu_processor_info_t* processor = nullptr;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
       iree_make_string_view(target.target_cpu.data(), target.target_cpu.size()),
-      &preset_key));
+      &processor));
 
   std::string descriptor_symbol = program.name + ".kd";
   TestArena arena;
   LowNoopKernelCompiler compiler;
   iree_const_byte_span_t text = iree_const_byte_span_empty();
-  IREE_RETURN_IF_ERROR(
-      compiler.EncodeReturnOnlyKernel(preset_key, &text, arena.arena()));
+  IREE_RETURN_IF_ERROR(compiler.EncodeReturnOnlyKernel(
+      processor->low_preset_key, &text, arena.arena()));
   const loom_amdgpu_hsaco_kernel_t kernel = {
       .metadata = MetadataForNoopKernelProgram(
-          program, iree_make_string_view(descriptor_symbol.data(),
-                                         descriptor_symbol.size())),
+          program,
+          iree_make_string_view(descriptor_symbol.data(),
+                                descriptor_symbol.size()),
+          processor->default_wavefront_size),
       .text = text,
   };
   const loom_amdgpu_hsaco_file_t file = {

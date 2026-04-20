@@ -15,6 +15,7 @@ load(
     "loom_low_descriptor_cc_library",
     "loom_low_descriptor_data_archive",
     "loom_low_descriptor_exclude_from_cmake_all",
+    "loom_target_table_cc_library",
 )
 load(":archives.bzl", "AMDGPU_ISA_XML_ARCHIVE")
 
@@ -56,6 +57,36 @@ iree_assert_no_dependency(
     name = "occupancy_no_llvmir_emit_dep",
     dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
     target = "//loom/src/loom/target/arch/amdgpu:occupancy",
+)
+
+iree_assert_no_dependency(
+    name = "target_info_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/arch/amdgpu:target_info",
+)
+
+iree_assert_no_dependency(
+    name = "target_info_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/arch/amdgpu:target_info",
+)
+
+iree_assert_no_dependency(
+    name = "target_info_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:target_info",
+)
+
+iree_assert_no_dependency(
+    name = "target_info_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:target_info",
+)
+
+iree_assert_no_dependency(
+    name = "target_info_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/amdgpu:target_info",
 )
 
 iree_assert_no_dependency(
@@ -373,6 +404,35 @@ loom_cc_library(
     srcs = ["encoding.c"],
     hdrs = ["encoding.h"],
     deps = ["//runtime/src/iree/base"],
+)
+
+_AMDGPU_TARGET_INFO_GENERATOR = "//loom/py/loom:amdgpu_target_info"
+
+_AMDGPU_TARGET_INFO_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_target_info.py"
+
+_AMDGPU_TARGET_INFO_GENERATOR_DEPS = [
+    "//loom/py/loom:gen/amdgpu_target_info.py",
+    "//loom/py/loom:target/arch/amdgpu/target_info.py",
+]
+
+loom_target_table_cc_library(
+    name = "target_info",
+    cmake_generator = _AMDGPU_TARGET_INFO_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_TARGET_INFO_GENERATOR_DEPS,
+    generator = _AMDGPU_TARGET_INFO_GENERATOR,
+    header = "target_info.h",
+    source = "target_info.c",
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_test(
+    name = "target_info_test",
+    srcs = ["target_info_test.cc"],
+    deps = [
+        ":target_info",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
 )
 
 _AMDGPU_DESCRIPTOR_GENERATOR = "//loom/py/loom:amdgpu_descriptors"

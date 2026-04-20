@@ -35,6 +35,35 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_target_table_cc_library(
+  NAME
+    target_info
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_target_info.py"
+  SOURCE
+    "target_info.c"
+  HEADER
+    "target_info.h"
+  ARGS
+
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_target_info.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
+  DEPS
+    iree::base
+)
+
+loom_cc_test(
+  NAME
+    target_info_test
+  SRCS
+    "target_info_test.cc"
+  DEPS
+    ::target_info
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_low_descriptor_cc_library(
   NAME
     gfx11_descriptors

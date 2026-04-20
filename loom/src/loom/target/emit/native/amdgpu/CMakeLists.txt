@@ -52,6 +52,7 @@ loom_cc_library(
   DEPS
     ::metadata
     iree::base
+    loom::src::loom::target::arch::amdgpu::target_info
   PUBLIC
 )
 
@@ -71,6 +72,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::encoding
+    loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::wait_packets
   PUBLIC
 )
@@ -91,6 +93,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::wait_packets
   PUBLIC
 )
@@ -108,6 +111,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::io::stream
+    loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::emit::native::elf
   PUBLIC
 )
@@ -247,6 +251,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::low_registry
+    loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::presets
     loom::src::loom::testing::context
     iree::testing::gtest

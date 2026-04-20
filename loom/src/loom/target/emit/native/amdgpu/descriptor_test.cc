@@ -118,7 +118,7 @@ TEST(AmdgpuDescriptorTest, SupportsGfx11ProcessorVariants) {
   static const iree_string_view_t processors[] = {
       IREE_SVL("gfx1100"), IREE_SVL("gfx1101"), IREE_SVL("gfx1102"),
       IREE_SVL("gfx1103"), IREE_SVL("gfx1150"), IREE_SVL("gfx1151"),
-      IREE_SVL("gfx1152"), IREE_SVL("gfx1153"),
+      IREE_SVL("gfx1152"), IREE_SVL("gfx1153"), IREE_SVL("gfx1170"),
   };
   loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(processors); ++i) {

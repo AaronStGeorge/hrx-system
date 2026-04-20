@@ -4,12 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-# Loom target-low descriptor build helpers.
+# Loom target-low generated table build helpers.
 #
 # These helpers mirror loom/src/loom/build_defs.bzl for generated CMake.
-# Target packages declare descriptor shards; this file owns the CMake mechanics
-# for running the generator into the binary tree and wrapping the outputs in an
-# iree_cc_library.
+# Target packages declare descriptor shards and target-info tables; this file
+# owns the CMake mechanics for running generators into the binary tree and
+# wrapping the outputs in iree_cc_library targets.
 
 include(ExternalProject)
 
@@ -55,7 +55,7 @@ function(loom_low_descriptor_data_archive)
   )
 endfunction()
 
-function(loom_low_descriptor_cc_library)
+function(loom_target_table_cc_library)
   cmake_parse_arguments(
     _RULE
     "EXCLUDE_FROM_ALL"
@@ -65,16 +65,16 @@ function(loom_low_descriptor_cc_library)
   )
 
   if(NOT _RULE_NAME)
-    message(FATAL_ERROR "loom_low_descriptor_cc_library requires NAME")
+    message(FATAL_ERROR "loom_target_table_cc_library requires NAME")
   endif()
   if(NOT _RULE_GENERATOR)
-    message(FATAL_ERROR "loom_low_descriptor_cc_library requires GENERATOR")
+    message(FATAL_ERROR "loom_target_table_cc_library requires GENERATOR")
   endif()
   if(NOT _RULE_SOURCE)
-    message(FATAL_ERROR "loom_low_descriptor_cc_library requires SOURCE")
+    message(FATAL_ERROR "loom_target_table_cc_library requires SOURCE")
   endif()
   if(NOT _RULE_HEADER)
-    message(FATAL_ERROR "loom_low_descriptor_cc_library requires HEADER")
+    message(FATAL_ERROR "loom_target_table_cc_library requires HEADER")
   endif()
 
   set(_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_SOURCE}")
@@ -94,7 +94,7 @@ function(loom_low_descriptor_cc_library)
       "${_RULE_GENERATOR}"
       ${_RULE_INPUTS}
     COMMENT
-      "Generating ${_RULE_NAME} low descriptors"
+      "Generating ${_RULE_NAME} target table"
     VERBATIM
   )
 
@@ -120,6 +120,10 @@ function(loom_low_descriptor_cc_library)
   if(_RULE_EXCLUDE_FROM_ALL)
     iree_cc_library_exclude_from_all(${_RULE_NAME} TRUE)
   endif()
+endfunction()
+
+function(loom_low_descriptor_cc_library)
+  loom_target_table_cc_library(${ARGN})
 endfunction()
 
 function(loom_low_descriptor_exclude_from_all)

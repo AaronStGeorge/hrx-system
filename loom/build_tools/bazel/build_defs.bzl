@@ -42,7 +42,7 @@ def loom_low_descriptor_data_archive(
     # target-local CMake conversion contract.
     _ignore = (name, repo_name, urls, sha256, kwargs)
 
-def loom_low_descriptor_cc_library(
+def loom_target_table_cc_library(
         name,
         generator,
         cmake_generator,
@@ -57,17 +57,16 @@ def loom_low_descriptor_cc_library(
         testonly = False,
         visibility = None,
         **kwargs):
-    """Generates a low descriptor C/H shard and wraps it in a runtime library.
+    """Generates a target-owned C/H table and wraps it in a runtime library.
 
-    This is the common build-system contract for target-low descriptor tables.
-    It deliberately abstracts only generation and library wiring. Target
-    packages still own vendor schema parsing, overlay selection, semantic
-    descriptor tests, registry composition, and which shards are selected by
-    default.
+    This is the common build-system contract for compact target-owned generated
+    data. It deliberately abstracts only generation and library wiring. Target
+    packages still own vendor schema parsing, overlay selection, semantic tests,
+    registry composition, and which shards are selected by default.
 
     Args:
       name: Runtime C library target name.
-      generator: Bazel executable label that writes descriptor C/H outputs.
+      generator: Bazel executable label that writes C/H outputs.
       cmake_generator: Source-file label for the same generator script in CMake.
       source: Generated C source filename.
       header: Generated C header filename.
@@ -120,6 +119,39 @@ def loom_low_descriptor_cc_library(
     )
 
     _ignore = (cmake_generator, cmake_generator_deps, exclude_from_cmake_all)
+
+def loom_low_descriptor_cc_library(
+        name,
+        generator,
+        cmake_generator,
+        source,
+        header,
+        args = [],
+        inputs = [],
+        cmake_generator_deps = [],
+        deps = [],
+        exclude_from_cmake_all = False,
+        tags = [],
+        testonly = False,
+        visibility = None,
+        **kwargs):
+    """Generates a low descriptor C/H shard and wraps it in a runtime library."""
+    loom_target_table_cc_library(
+        name = name,
+        generator = generator,
+        cmake_generator = cmake_generator,
+        source = source,
+        header = header,
+        args = args,
+        inputs = inputs,
+        cmake_generator_deps = cmake_generator_deps,
+        deps = deps,
+        exclude_from_cmake_all = exclude_from_cmake_all,
+        tags = tags,
+        testonly = testonly,
+        visibility = visibility,
+        **kwargs
+    )
 
 def loom_low_descriptor_exclude_from_cmake_all(
         cc_libraries = [],

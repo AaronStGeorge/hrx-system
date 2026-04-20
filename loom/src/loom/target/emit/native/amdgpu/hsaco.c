@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/descriptor.h"
 #include "loom/target/emit/native/elf.h"
 
@@ -274,71 +275,30 @@ static iree_status_t loom_amdgpu_hsaco_validate_symbol(
 
 static iree_status_t loom_amdgpu_hsaco_validate_target_id(
     iree_string_view_t target, iree_string_view_t target_cpu) {
-  if (iree_string_view_is_empty(target)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU HSACO target id is required");
-  }
   if (iree_string_view_is_empty(target_cpu)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU HSACO target CPU is required");
   }
-  if (!iree_string_view_starts_with(target, IREE_SV("amdgcn-amd-amdhsa--"))) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU HSACO target id '%.*s' is not an AMDHSA "
-                            "target",
-                            (int)target.size, target.data);
+  loom_amdgpu_amdhsa_target_id_t target_id = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_target_info_parse_amdhsa_target_id(target, &target_id));
+  if (!iree_string_view_is_empty(target_id.feature_suffix)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU HSACO target-feature suffixes are not supported yet: '%.*s'",
+        (int)target_id.feature_suffix.size, target_id.feature_suffix.data);
   }
-  if (!iree_string_view_ends_with(target, target_cpu)) {
+  if (!iree_string_view_equal(target_id.processor->target_cpu, target_cpu)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU HSACO target id '%.*s' does not end with target CPU '%.*s'",
-        (int)target.size, target.data, (int)target_cpu.size, target_cpu.data);
-  }
-  for (iree_host_size_t i = 0; i < target.size; ++i) {
-    const unsigned char c = (unsigned char)target.data[i];
-    if (c <= ' ' || c == '"' || c == '\\') {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "AMDGPU HSACO target id contains an unsupported character");
-    }
+        "AMDGPU HSACO target id '%.*s' selects target CPU '%.*s' but file "
+        "target CPU is '%.*s'",
+        (int)target.size, target.data,
+        (int)target_id.processor->target_cpu.size,
+        target_id.processor->target_cpu.data, (int)target_cpu.size,
+        target_cpu.data);
   }
   return iree_ok_status();
-}
-
-typedef struct loom_amdgpu_hsaco_cpu_elf_flags_t {
-  // Target CPU name without target-id feature suffixes.
-  iree_string_view_t target_cpu;
-  // ELF e_flags machine bits for the target CPU.
-  uint32_t flags;
-} loom_amdgpu_hsaco_cpu_elf_flags_t;
-
-static iree_status_t loom_amdgpu_hsaco_elf_flags_for_cpu(
-    iree_string_view_t target_cpu, uint32_t* out_flags) {
-  IREE_ASSERT_ARGUMENT(out_flags);
-  *out_flags = 0;
-  static const loom_amdgpu_hsaco_cpu_elf_flags_t cpu_flags[] = {
-      {IREE_SVL("gfx1100"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1100},
-      {IREE_SVL("gfx1101"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1101},
-      {IREE_SVL("gfx1102"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1102},
-      {IREE_SVL("gfx1103"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1103},
-      {IREE_SVL("gfx1150"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1150},
-      {IREE_SVL("gfx1151"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1151},
-      {IREE_SVL("gfx1152"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1152},
-      {IREE_SVL("gfx1153"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1153},
-      {IREE_SVL("gfx1200"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1200},
-      {IREE_SVL("gfx1250"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1250},
-      {IREE_SVL("gfx950"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX950},
-  };
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(cpu_flags); ++i) {
-    if (iree_string_view_equal(target_cpu, cpu_flags[i].target_cpu)) {
-      *out_flags = cpu_flags[i].flags;
-      return iree_ok_status();
-    }
-  }
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "AMDGPU HSACO target CPU '%.*s' has no ELF e_flags "
-                          "mapping",
-                          (int)target_cpu.size, target_cpu.data);
 }
 
 static iree_status_t loom_amdgpu_hsaco_validate_file(
@@ -1003,9 +963,11 @@ iree_status_t loom_amdgpu_hsaco_write_file(
   }
   IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_validate_file(file));
 
-  uint32_t elf_flags = 0;
+  const loom_amdgpu_processor_info_t* processor = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_hsaco_elf_flags_for_cpu(file->target_cpu, &elf_flags));
+      loom_amdgpu_target_info_lookup_processor(file->target_cpu, &processor));
+  const uint32_t elf_flags =
+      processor->elf_machine_flags | processor->elf_feature_flags;
 
   loom_amdgpu_hsaco_payloads_t payloads = {0};
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(

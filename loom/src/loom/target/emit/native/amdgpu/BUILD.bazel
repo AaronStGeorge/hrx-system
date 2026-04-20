@@ -285,6 +285,7 @@ loom_cc_library(
     hdrs = ["descriptor.h"],
     deps = [
         ":metadata",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
         "//runtime/src/iree/base",
     ],
 )
@@ -300,6 +301,7 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target/arch/amdgpu:encoding",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/arch/amdgpu:wait_packets",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -318,6 +320,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:schedule",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/arch/amdgpu:wait_packets",
         "//runtime/src/iree/base",
     ],
@@ -330,6 +333,7 @@ loom_cc_library(
     deps = [
         ":descriptor",
         ":metadata",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/target/emit/native:elf",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -465,6 +469,7 @@ loom_cc_test(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:presets",
         "//loom/src/loom/target/arch/amdgpu:low_registry",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",

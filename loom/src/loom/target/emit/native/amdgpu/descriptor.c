@@ -9,6 +9,8 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/target/arch/amdgpu/target_info.h"
+
 //===----------------------------------------------------------------------===//
 // AMDHSA descriptor bit fields
 //===----------------------------------------------------------------------===//
@@ -44,57 +46,23 @@
 #define LOOM_AMDGPU_KERNEL_CODE_PROPERTY_WAVEFRONT_SIZE32_SHIFT 10u
 #define LOOM_AMDGPU_KERNEL_CODE_PROPERTY_USES_DYNAMIC_STACK_SHIFT 11u
 
-typedef struct loom_amdgpu_kernel_descriptor_target_t {
-  // VGPR encoding granule when wavefront-size-32 mode is enabled.
-  uint32_t vgpr_encoding_granule_wave32;
-  // VGPR encoding granule when wavefront-size-64 mode is enabled.
-  uint32_t vgpr_encoding_granule_wave64;
-  // True when flat scratch is architected and legacy user SGPRs are invalid.
-  bool has_architected_flat_scratch;
-  // True when the target uses the GFX10+ SGPR resource encoding rule.
-  bool uses_gfx10_sgpr_encoding;
-  // True when DX10 clamp and IEEE mode defaults are supported.
-  bool has_dx10_clamp_and_ieee_mode;
-} loom_amdgpu_kernel_descriptor_target_t;
-
-static bool loom_amdgpu_kernel_descriptor_is_gfx11_cpu(
-    iree_string_view_t target_cpu) {
-  static const iree_string_view_t gfx11_processors[] = {
-      IREE_SVL("gfx1100"), IREE_SVL("gfx1101"), IREE_SVL("gfx1102"),
-      IREE_SVL("gfx1103"), IREE_SVL("gfx1150"), IREE_SVL("gfx1151"),
-      IREE_SVL("gfx1152"), IREE_SVL("gfx1153"),
-  };
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(gfx11_processors); ++i) {
-    if (iree_string_view_equal(target_cpu, gfx11_processors[i])) {
-      return true;
-    }
-  }
-  return false;
-}
-
 static iree_status_t loom_amdgpu_kernel_descriptor_resolve_target(
     iree_string_view_t target_cpu,
-    loom_amdgpu_kernel_descriptor_target_t* out_target) {
+    const loom_amdgpu_processor_info_t** out_target) {
   IREE_ASSERT_ARGUMENT(out_target);
-  *out_target = (loom_amdgpu_kernel_descriptor_target_t){0};
-  if (loom_amdgpu_kernel_descriptor_is_gfx11_cpu(target_cpu)) {
-    *out_target = (loom_amdgpu_kernel_descriptor_target_t){
-        .vgpr_encoding_granule_wave32 = 8,
-        .vgpr_encoding_granule_wave64 = 4,
-        .has_architected_flat_scratch = true,
-        .uses_gfx10_sgpr_encoding = true,
-        .has_dx10_clamp_and_ieee_mode = true,
-    };
-    return iree_ok_status();
+  *out_target = NULL;
+  const loom_amdgpu_processor_info_t* target = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_target_info_lookup_processor(target_cpu, &target));
+  if (target->kernel_descriptor_profile !=
+      LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU kernel descriptor target CPU '%.*s' is not supported yet",
+        (int)target_cpu.size, target_cpu.data);
   }
-  if (iree_string_view_is_empty(target_cpu)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU kernel descriptor target CPU is required");
-  }
-  return iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
-      "AMDGPU kernel descriptor target CPU '%.*s' is not supported yet",
-      (int)target_cpu.size, target_cpu.data);
+  *out_target = target;
+  return iree_ok_status();
 }
 
 static uint32_t loom_amdgpu_kernel_descriptor_bit_mask(uint32_t width) {
@@ -186,7 +154,7 @@ static uint32_t loom_amdgpu_kernel_descriptor_implied_user_sgpr_count(
 
 static iree_status_t loom_amdgpu_kernel_descriptor_validate(
     const loom_amdgpu_kernel_descriptor_t* descriptor,
-    loom_amdgpu_kernel_descriptor_target_t* out_target) {
+    const loom_amdgpu_processor_info_t** out_target) {
   if (descriptor == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU kernel descriptor is required");
@@ -216,14 +184,14 @@ static iree_status_t loom_amdgpu_kernel_descriptor_validate(
         IREE_STATUS_OUT_OF_RANGE,
         "AMDGPU kernel descriptor user SGPR count exceeds target capacity");
   }
-  if (out_target->has_architected_flat_scratch &&
+  if ((*out_target)->kernel_descriptor_has_architected_flat_scratch &&
       descriptor->enable_sgpr_private_segment_buffer) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU kernel descriptor private segment buffer user SGPR is invalid "
         "with architected flat scratch");
   }
-  if (out_target->has_architected_flat_scratch &&
+  if ((*out_target)->kernel_descriptor_has_architected_flat_scratch &&
       descriptor->enable_sgpr_flat_scratch_init) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -259,7 +227,7 @@ iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
     loom_amdgpu_kernel_descriptor_t* out_descriptor) {
   IREE_ASSERT_ARGUMENT(out_descriptor);
   *out_descriptor = (loom_amdgpu_kernel_descriptor_t){0};
-  loom_amdgpu_kernel_descriptor_target_t target = {0};
+  const loom_amdgpu_processor_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_descriptor_resolve_target(target_cpu, &target));
   IREE_RETURN_IF_ERROR(
@@ -282,7 +250,7 @@ iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
 iree_status_t loom_amdgpu_kernel_descriptor_validate_metadata(
     const loom_amdgpu_kernel_descriptor_t* descriptor,
     const loom_amdgpu_metadata_kernel_t* metadata_kernel) {
-  loom_amdgpu_kernel_descriptor_target_t target = {0};
+  const loom_amdgpu_processor_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_descriptor_validate(descriptor, &target));
   IREE_RETURN_IF_ERROR(
@@ -348,7 +316,7 @@ static void loom_amdgpu_kernel_descriptor_store_le_i64(uint8_t* target,
 iree_status_t loom_amdgpu_kernel_descriptor_write(
     const loom_amdgpu_kernel_descriptor_t* descriptor,
     iree_byte_span_t target_bytes) {
-  loom_amdgpu_kernel_descriptor_target_t target = {0};
+  const loom_amdgpu_processor_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_descriptor_validate(descriptor, &target));
   if (target_bytes.data == NULL ||
@@ -359,16 +327,17 @@ iree_status_t loom_amdgpu_kernel_descriptor_write(
         LOOM_AMDGPU_KERNEL_DESCRIPTOR_LENGTH);
   }
 
-  const uint32_t vgpr_granule = descriptor->enable_wavefront_size32
-                                    ? target.vgpr_encoding_granule_wave32
-                                    : target.vgpr_encoding_granule_wave64;
+  const uint32_t vgpr_granule =
+      descriptor->enable_wavefront_size32
+          ? target->kernel_descriptor_vgpr_encoding_granule_wave32
+          : target->kernel_descriptor_vgpr_encoding_granule_wave64;
   uint32_t vgpr_block_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_descriptor_granulated_blocks(
       descriptor->next_free_vgpr, vgpr_granule,
       LOOM_AMDGPU_COMPUTE_PGM_RSRC1_VGPR_COUNT_WIDTH, &vgpr_block_count));
 
   uint32_t sgpr_block_count = 0;
-  if (!target.uses_gfx10_sgpr_encoding) {
+  if (!target->kernel_descriptor_uses_gfx10_sgpr_encoding) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_descriptor_granulated_blocks(
         descriptor->next_free_sgpr, 16,
         LOOM_AMDGPU_COMPUTE_PGM_RSRC1_SGPR_COUNT_WIDTH, &sgpr_block_count));
@@ -386,10 +355,10 @@ iree_status_t loom_amdgpu_kernel_descriptor_write(
       3);
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_DX10_CLAMP_SHIFT,
-      target.has_dx10_clamp_and_ieee_mode);
+      target->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_IEEE_MODE_SHIFT,
-      target.has_dx10_clamp_and_ieee_mode);
+      target->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   loom_amdgpu_kernel_descriptor_set_bit_u32(
       &compute_pgm_rsrc1, LOOM_AMDGPU_COMPUTE_PGM_RSRC1_WGP_MODE_SHIFT, true);
   loom_amdgpu_kernel_descriptor_set_bit_u32(

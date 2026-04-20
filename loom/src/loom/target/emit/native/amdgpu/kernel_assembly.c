@@ -10,6 +10,7 @@
 
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/assembly.h"
 #include "loom/target/emit/native/amdgpu/metadata.h"
 
@@ -279,25 +280,6 @@ static iree_status_t loom_amdgpu_kernel_assembly_collect_register_usage(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_kernel_assembly_wavefront_size(
-    iree_string_view_t target_cpu, uint32_t* out_wavefront_size) {
-  IREE_ASSERT_ARGUMENT(out_wavefront_size);
-  *out_wavefront_size = 0;
-  if (iree_string_view_starts_with(target_cpu, IREE_SV("gfx9"))) {
-    *out_wavefront_size = 64;
-    return iree_ok_status();
-  }
-  if (iree_string_view_starts_with(target_cpu, IREE_SV("gfx11")) ||
-      iree_string_view_starts_with(target_cpu, IREE_SV("gfx12"))) {
-    *out_wavefront_size = 32;
-    return iree_ok_status();
-  }
-  return iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
-      "AMDGPU kernel assembly has no wavefront-size rule for target CPU '%.*s'",
-      (int)target_cpu.size, target_cpu.data);
-}
-
 static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
     const loom_low_resolved_target_t* target, iree_string_view_t symbol,
     const loom_amdgpu_kernel_assembly_register_usage_t* register_usage,
@@ -333,14 +315,14 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
   const loom_target_snapshot_t* snapshot = &target->bundle_storage.snapshot;
   const loom_target_hal_kernel_abi_t* hal_kernel =
       &target->bundle_storage.export_plan.hal_kernel;
-  uint32_t wavefront_size = 0;
+  const loom_amdgpu_processor_info_t* processor = NULL;
   iree_status_t status = iree_string_builder_append_format(
       &target_id_builder, "%.*s--%.*s", (int)snapshot->target_triple.size,
       snapshot->target_triple.data, (int)snapshot->target_cpu.size,
       snapshot->target_cpu.data);
   if (iree_status_is_ok(status)) {
-    status = loom_amdgpu_kernel_assembly_wavefront_size(snapshot->target_cpu,
-                                                        &wavefront_size);
+    status = loom_amdgpu_target_info_lookup_processor(snapshot->target_cpu,
+                                                      &processor);
   }
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_format(
@@ -353,7 +335,7 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
             iree_string_builder_view(&descriptor_symbol_builder),
         .kernarg_segment_size = 0,
         .kernarg_segment_alignment = 8,
-        .wavefront_size = wavefront_size,
+        .wavefront_size = processor->default_wavefront_size,
         .group_segment_fixed_size = 0,
         .private_segment_fixed_size = 0,
         .sgpr_count = register_usage->next_free_sgpr,

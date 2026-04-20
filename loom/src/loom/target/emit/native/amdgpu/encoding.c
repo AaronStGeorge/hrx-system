@@ -11,6 +11,7 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/encoding.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 
 #define LOOM_AMDGPU_SOP1_BASE UINT32_C(0xBE800000)
 #define LOOM_AMDGPU_SOP2_BASE UINT32_C(0x80000000)
@@ -22,21 +23,10 @@
 #define LOOM_AMDGPU_SOPP_S_WAITCNT_OPCODE UINT16_C(0x09)
 #define LOOM_AMDGPU_SOPP_S_WAITCNT_DEPCTR_OPCODE UINT16_C(0x08)
 #define LOOM_AMDGPU_SOPP_S_WAIT_IDLE_OPCODE UINT16_C(0x0A)
-#define LOOM_AMDGPU_SOPP_S_ENDPGM_GFX9_GFX10_GFX13_OPCODE UINT16_C(0x01)
-#define LOOM_AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE UINT16_C(0x30)
 #define LOOM_AMDGPU_VOP2_V_ADD_U32_OPCODE UINT16_C(0x25)
 #define LOOM_AMDGPU_VOP3_V_MUL_LO_U32_OPCODE UINT16_C(0x32C)
 #define LOOM_AMDGPU_SISRC_LITERAL UINT16_C(255)
 #define LOOM_AMDGPU_VGPR_SRC_BASE UINT16_C(0x100)
-
-typedef struct loom_amdgpu_native_encoding_target_t {
-  // Descriptor-set key for diagnostics.
-  iree_string_view_t descriptor_set_key;
-  // SOPP opcode used by structural `low.return` lowering.
-  uint16_t s_endpgm_opcode;
-  // True when descriptor packets use the currently implemented native profile.
-  bool supports_descriptor_packets;
-} loom_amdgpu_native_encoding_target_t;
 
 typedef struct loom_amdgpu_encode_state_t {
   // Schedule sidecar being encoded.
@@ -44,7 +34,7 @@ typedef struct loom_amdgpu_encode_state_t {
   // Allocation sidecar supplying physical locations.
   const loom_low_allocation_sidecar_t* allocation;
   // Resolved native target encoding profile.
-  loom_amdgpu_native_encoding_target_t target;
+  const loom_amdgpu_descriptor_set_info_t* target;
   // Optional planned wait packets consumed in scheduled order.
   const loom_amdgpu_wait_packet_plan_t* wait_packets;
   // Destination byte storage, or NULL during the sizing pass.
@@ -522,12 +512,12 @@ static iree_status_t loom_amdgpu_encode_sopp_packet(
 
 static iree_status_t loom_amdgpu_encode_descriptor_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
-  if (!state->target.supports_descriptor_packets) {
+  if (!state->target->supports_descriptor_packet_encoding) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "AMDGPU descriptor packet encoding for descriptor "
                             "set '%.*s' is not supported yet",
-                            (int)state->target.descriptor_set_key.size,
-                            state->target.descriptor_set_key.data);
+                            (int)state->target->descriptor_set_key.size,
+                            state->target->descriptor_set_key.data);
   }
   switch (packet->descriptor->encoding_format_id) {
     case LOOM_AMDGPU_ENCODING_FORMAT_SOP1:
@@ -564,7 +554,7 @@ static iree_status_t loom_amdgpu_encode_return_packet(
         IREE_STATUS_UNIMPLEMENTED,
         "AMDGPU native encoding return values require ABI lowering");
   }
-  return loom_amdgpu_encode_sopp_word(state, state->target.s_endpgm_opcode, 0);
+  return loom_amdgpu_encode_sopp_word(state, state->target->s_endpgm_opcode, 0);
 }
 
 static bool loom_amdgpu_wait_packet_is_before_node(
@@ -700,9 +690,9 @@ static iree_status_t loom_amdgpu_encode_packet(
 
 static iree_status_t loom_amdgpu_resolve_encoding_target(
     const loom_low_schedule_sidecar_t* schedule,
-    loom_amdgpu_native_encoding_target_t* out_target) {
+    const loom_amdgpu_descriptor_set_info_t** out_target) {
   IREE_ASSERT_ARGUMENT(out_target);
-  *out_target = (loom_amdgpu_native_encoding_target_t){0};
+  *out_target = NULL;
   if (schedule == NULL || schedule->target.descriptor_set == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU native encoding schedule target is "
@@ -721,36 +711,8 @@ static iree_status_t loom_amdgpu_resolve_encoding_target(
   IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_string(
       schedule->target.descriptor_set,
       schedule->target.descriptor_set->key_string_offset, &descriptor_set_key));
-  if (iree_string_view_equal(descriptor_set_key,
-                             IREE_SV("amdgpu.gfx950.core"))) {
-    *out_target = (loom_amdgpu_native_encoding_target_t){
-        .descriptor_set_key = descriptor_set_key,
-        .s_endpgm_opcode = LOOM_AMDGPU_SOPP_S_ENDPGM_GFX9_GFX10_GFX13_OPCODE,
-        .supports_descriptor_packets = false,
-    };
-  } else if (iree_string_view_equal(descriptor_set_key,
-                                    IREE_SV("amdgpu.gfx11.core"))) {
-    *out_target = (loom_amdgpu_native_encoding_target_t){
-        .descriptor_set_key = descriptor_set_key,
-        .s_endpgm_opcode = LOOM_AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE,
-        .supports_descriptor_packets = true,
-    };
-  } else if (iree_string_view_equal(descriptor_set_key,
-                                    IREE_SV("amdgpu.gfx12.core")) ||
-             iree_string_view_equal(descriptor_set_key,
-                                    IREE_SV("amdgpu.gfx1250.core"))) {
-    *out_target = (loom_amdgpu_native_encoding_target_t){
-        .descriptor_set_key = descriptor_set_key,
-        .s_endpgm_opcode = LOOM_AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE,
-        .supports_descriptor_packets = false,
-    };
-  } else {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU native encoding descriptor set '%.*s' is "
-                            "not supported yet",
-                            (int)descriptor_set_key.size,
-                            descriptor_set_key.data);
-  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set(
+      descriptor_set_key, out_target));
   if (schedule->block_count != 1) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
@@ -813,7 +775,7 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
   IREE_ASSERT_ARGUMENT(arena);
   *out_text = iree_const_byte_span_empty();
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
-  loom_amdgpu_native_encoding_target_t target = {0};
+  const loom_amdgpu_descriptor_set_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_encoding_target(schedule, &target));
   if (wait_packets != NULL) {
     IREE_RETURN_IF_ERROR(

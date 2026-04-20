@@ -77,6 +77,17 @@ py_binary(
 )
 
 py_binary(
+    name = "amdgpu_target_info",
+    srcs = [
+        "gen/amdgpu_target_info.py",
+        "target/arch/__init__.py",
+        "target/arch/amdgpu/__init__.py",
+        "target/arch/amdgpu/target_info.py",
+    ],
+    main = "gen/amdgpu_target_info.py",
+)
+
+py_binary(
     name = "low_descriptor_shard",
     srcs = [
         "gen/low_descriptor_shard.py",
