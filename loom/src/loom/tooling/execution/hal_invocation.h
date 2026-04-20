@@ -30,9 +30,53 @@ typedef struct loom_run_hal_invocation_options_t {
   uint32_t workgroup_count[3];
 } loom_run_hal_invocation_options_t;
 
+typedef struct loom_run_hal_binding_specs_t {
+  // Binding value specs in HAL binding ordinal order.
+  const iree_string_view_t* values;
+  // Calling-convention character for each binding value spec.
+  const char* conventions;
+  // Number of entries in |values| and |conventions|.
+  iree_host_size_t count;
+} loom_run_hal_binding_specs_t;
+
+typedef struct loom_run_hal_invocation_request_t {
+  // Initialized HAL runtime that owns the device used for dispatch.
+  const loom_run_hal_runtime_t* runtime;
+  // Backend-produced executable bytes to prepare and dispatch.
+  const loom_run_hal_executable_t* executable;
+  // HAL dispatch entry point and workgroup count.
+  loom_run_hal_invocation_options_t options;
+  // Input/output binding specs parsed before dispatch.
+  loom_run_hal_binding_specs_t bindings;
+  // Optional expected binding specs compared after dispatch.
+  loom_run_hal_binding_specs_t expected_bindings;
+  // Maximum number of output elements to format for human-readable output.
+  iree_host_size_t max_output_element_count;
+} loom_run_hal_invocation_request_t;
+
+typedef struct loom_run_hal_invocation_result_t {
+  // Human-readable execution output or comparison diagnostics.
+  iree_string_builder_t output;
+  // Process-style exit code: zero for success, non-zero for mismatches.
+  int exit_code;
+} loom_run_hal_invocation_result_t;
+
 // Initializes invocation options to entry point 0 and a single workgroup.
 void loom_run_hal_invocation_options_initialize(
     loom_run_hal_invocation_options_t* out_options);
+
+// Initializes a request to dispatch entry point 0 over one workgroup.
+void loom_run_hal_invocation_request_initialize(
+    loom_run_hal_invocation_request_t* out_request);
+
+// Initializes an invocation result. Must be paired with
+// loom_run_hal_invocation_result_deinitialize().
+void loom_run_hal_invocation_result_initialize(
+    iree_allocator_t allocator, loom_run_hal_invocation_result_t* out_result);
+
+// Releases storage owned by |result|.
+void loom_run_hal_invocation_result_deinitialize(
+    loom_run_hal_invocation_result_t* result);
 
 // Prepares a HAL executable object from backend-produced executable bytes.
 iree_status_t loom_run_hal_executable_prepare(
@@ -55,6 +99,13 @@ iree_status_t loom_run_hal_invocation_execute(
 // Transfers dispatch bindings back to host-visible storage for inspection.
 iree_status_t loom_run_hal_transfer_bindings_to_host(
     const loom_run_hal_runtime_t* runtime, iree_vm_list_t* binding_list);
+
+// Parses bindings, dispatches |request->executable|, transfers bindings back
+// to host-visible storage, and records either formatted outputs or expected
+// comparison diagnostics in |result|.
+iree_status_t loom_run_hal_invocation_run(
+    const loom_run_hal_invocation_request_t* request,
+    iree_allocator_t allocator, loom_run_hal_invocation_result_t* result);
 
 #ifdef __cplusplus
 }  // extern "C"

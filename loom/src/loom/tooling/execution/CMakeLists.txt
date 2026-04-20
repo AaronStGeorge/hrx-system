@@ -75,6 +75,8 @@ loom_cc_library(
     iree::base
     iree::hal
     iree::modules::hal::types
+    iree::tooling::comparison
+    iree::tooling::function_io
     iree::tooling::function_util
     iree::vm
   PUBLIC
@@ -111,6 +113,19 @@ loom_cc_test(
     iree::base
     loom::src::loom::ops::op_registry
     loom::src::loom::target::emit::ireevm::low_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    hal_invocation_test
+  SRCS
+    "hal_invocation_test.cc"
+  DEPS
+    ::hal_invocation
+    ::hal_runtime
+    iree::base
     iree::testing::gtest
     iree::testing::gtest_main
 )

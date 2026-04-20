@@ -12,13 +12,8 @@
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
-#include "iree/hal/api.h"
 #include "iree/io/file_contents.h"
-#include "iree/io/stdio_stream.h"
-#include "iree/tooling/comparison.h"
 #include "iree/tooling/context_util.h"
-#include "iree/tooling/function_io.h"
-#include "iree/tooling/function_util.h"
 #include "iree/tooling/run_module.h"
 #include "iree/vm/api.h"
 #include "loom/error/diagnostic.h"
@@ -217,74 +212,6 @@ static iree_status_t iree_run_loom_parse_workgroup_count(
   return iree_ok_status();
 }
 
-static iree_status_t iree_run_loom_hal_process_bindings(
-    const loom_run_hal_runtime_t* runtime, iree_vm_list_t* binding_list,
-    iree_allocator_t allocator, int* out_exit_code) {
-  IREE_ASSERT_ARGUMENT(runtime);
-  IREE_ASSERT_ARGUMENT(out_exit_code);
-  *out_exit_code = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_run_hal_transfer_bindings_to_host(runtime, binding_list));
-
-  iree_io_stream_t* stdout_stream = NULL;
-  iree_hal_allocator_t* heap_allocator = NULL;
-  iree_vm_list_t* expected_list = NULL;
-
-  iree_status_t status = iree_io_stdio_stream_wrap(
-      IREE_IO_STREAM_MODE_WRITABLE, stdout, /*owns_handle=*/false, allocator,
-      &stdout_stream);
-  if (iree_status_is_ok(status) &&
-      iree_run_loom_hal_flags.expected_binding_count == 0) {
-    status = iree_tooling_print_variants(
-        IREE_SV("binding"), binding_list,
-        IREE_RUN_LOOM_HAL_MAX_OUTPUT_ELEMENT_COUNT, stdout_stream, allocator);
-  }
-  if (iree_status_is_ok(status) &&
-      iree_run_loom_hal_flags.expected_binding_count != 0) {
-    if (iree_run_loom_hal_flags.expected_binding_count !=
-        iree_run_loom_hal_flags.binding_count) {
-      status = iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "--expected_binding count (%d) must match --binding count (%d)",
-          iree_run_loom_hal_flags.expected_binding_count,
-          iree_run_loom_hal_flags.binding_count);
-    }
-  }
-  if (iree_status_is_ok(status) &&
-      iree_run_loom_hal_flags.expected_binding_count != 0) {
-    status = iree_hal_allocator_create_heap(IREE_SV("heap"), allocator,
-                                            allocator, &heap_allocator);
-  }
-  if (iree_status_is_ok(status) &&
-      iree_run_loom_hal_flags.expected_binding_count != 0) {
-    status = iree_tooling_parse_variants(
-        iree_make_string_view(iree_run_loom_hal_flags.expected_binding_cconv,
-                              iree_run_loom_hal_flags.expected_binding_count),
-        (iree_string_view_list_t){
-            .count = iree_run_loom_hal_flags.expected_binding_count,
-            .values = iree_run_loom_hal_flags.expected_binding_specs,
-        },
-        runtime->device, heap_allocator, allocator, &expected_list);
-  }
-  if (iree_status_is_ok(status) &&
-      iree_run_loom_hal_flags.expected_binding_count != 0) {
-    const bool did_match = iree_tooling_compare_variant_lists(
-        expected_list, binding_list, allocator, stdout);
-    if (did_match) {
-      fprintf(stdout,
-              "[SUCCESS] all HAL bindings matched their expected "
-              "values.\n");
-    }
-    *out_exit_code = did_match ? 0 : 1;
-  }
-
-  iree_vm_list_release(expected_list);
-  iree_hal_allocator_release(heap_allocator);
-  iree_io_stream_release(stdout_stream);
-  fflush(stdout);
-  return status;
-}
-
 static iree_status_t iree_run_loom_run_hal_executable(
     const loom_run_hal_executable_t* executable,
     const loom_run_hal_runtime_t* runtime, iree_allocator_t allocator,
@@ -308,29 +235,44 @@ static iree_status_t iree_run_loom_run_hal_executable(
     invocation_options.entry_point = (uint32_t)FLAG_entry_point;
   }
 
-  iree_vm_list_t* binding_list = NULL;
-
+  loom_run_hal_invocation_result_t invocation_result;
+  loom_run_hal_invocation_result_initialize(allocator, &invocation_result);
   if (iree_status_is_ok(status)) {
-    status = iree_tooling_parse_variants(
-        iree_make_string_view(iree_run_loom_hal_flags.binding_cconv,
-                              iree_run_loom_hal_flags.binding_count),
-        (iree_string_view_list_t){
-            .count = iree_run_loom_hal_flags.binding_count,
-            .values = iree_run_loom_hal_flags.binding_specs,
-        },
-        runtime->device, iree_hal_device_allocator(runtime->device), allocator,
-        &binding_list);
+    loom_run_hal_invocation_request_t request = {0};
+    loom_run_hal_invocation_request_initialize(&request);
+    request.runtime = runtime;
+    request.executable = executable;
+    request.options = invocation_options;
+    request.bindings = (loom_run_hal_binding_specs_t){
+        .values = iree_run_loom_hal_flags.binding_specs,
+        .conventions = iree_run_loom_hal_flags.binding_cconv,
+        .count = iree_run_loom_hal_flags.binding_count,
+    };
+    request.expected_bindings = (loom_run_hal_binding_specs_t){
+        .values = iree_run_loom_hal_flags.expected_binding_specs,
+        .conventions = iree_run_loom_hal_flags.expected_binding_cconv,
+        .count = iree_run_loom_hal_flags.expected_binding_count,
+    };
+    request.max_output_element_count =
+        IREE_RUN_LOOM_HAL_MAX_OUTPUT_ELEMENT_COUNT;
+    status =
+        loom_run_hal_invocation_run(&request, allocator, &invocation_result);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_run_hal_invocation_execute(runtime, executable, binding_list,
-                                             &invocation_options);
+    iree_string_view_t output =
+        iree_string_builder_view(&invocation_result.output);
+    if (output.size > 0) {
+      if (fwrite(output.data, 1, output.size, stdout) != output.size ||
+          fflush(stdout) != 0) {
+        status = iree_make_status(IREE_STATUS_DATA_LOSS,
+                                  "failed to write HAL invocation output");
+      }
+    }
+    if (iree_status_is_ok(status)) {
+      *out_exit_code = invocation_result.exit_code;
+    }
   }
-  if (iree_status_is_ok(status)) {
-    status = iree_run_loom_hal_process_bindings(runtime, binding_list,
-                                                allocator, out_exit_code);
-  }
-
-  iree_vm_list_release(binding_list);
+  loom_run_hal_invocation_result_deinitialize(&invocation_result);
   return status;
 }
 

@@ -7,6 +7,8 @@
 #include "loom/tooling/execution/hal_invocation.h"
 
 #include "iree/modules/hal/types.h"
+#include "iree/tooling/comparison.h"
+#include "iree/tooling/function_io.h"
 #include "iree/tooling/function_util.h"
 
 void loom_run_hal_invocation_options_initialize(
@@ -16,6 +18,29 @@ void loom_run_hal_invocation_options_initialize(
       .entry_point = 0,
       .workgroup_count = {1, 1, 1},
   };
+}
+
+void loom_run_hal_invocation_request_initialize(
+    loom_run_hal_invocation_request_t* out_request) {
+  IREE_ASSERT_ARGUMENT(out_request);
+  *out_request = (loom_run_hal_invocation_request_t){0};
+  loom_run_hal_invocation_options_initialize(&out_request->options);
+}
+
+void loom_run_hal_invocation_result_initialize(
+    iree_allocator_t allocator, loom_run_hal_invocation_result_t* out_result) {
+  IREE_ASSERT_ARGUMENT(out_result);
+  *out_result = (loom_run_hal_invocation_result_t){0};
+  iree_string_builder_initialize(allocator, &out_result->output);
+}
+
+void loom_run_hal_invocation_result_deinitialize(
+    loom_run_hal_invocation_result_t* result) {
+  if (result == NULL) {
+    return;
+  }
+  iree_string_builder_deinitialize(&result->output);
+  *result = (loom_run_hal_invocation_result_t){0};
 }
 
 iree_status_t loom_run_hal_executable_prepare(
@@ -184,4 +209,147 @@ iree_status_t loom_run_hal_transfer_bindings_to_host(
   return iree_tooling_transfer_variants(
       binding_list, runtime->device, device_allocator, host_params,
       /*wait_fence=*/NULL, /*signal_fence=*/NULL);
+}
+
+static iree_status_t loom_run_hal_binding_specs_validate(
+    const loom_run_hal_binding_specs_t* specs,
+    iree_string_view_t binding_list_name) {
+  IREE_ASSERT_ARGUMENT(specs);
+  if (specs->count > LOOM_RUN_HAL_MAX_BINDING_COUNT) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "%.*s binding count %" PRIhsz " exceeds maximum %d",
+                            (int)binding_list_name.size, binding_list_name.data,
+                            specs->count, LOOM_RUN_HAL_MAX_BINDING_COUNT);
+  }
+  if (specs->count > 0 &&
+      (specs->values == NULL || specs->conventions == NULL)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "%.*s binding specs require values and calling conventions",
+        (int)binding_list_name.size, binding_list_name.data);
+  }
+  return iree_ok_status();
+}
+
+static iree_string_view_t loom_run_hal_binding_specs_conventions(
+    const loom_run_hal_binding_specs_t* specs) {
+  IREE_ASSERT_ARGUMENT(specs);
+  return iree_make_string_view(specs->conventions, specs->count);
+}
+
+static iree_string_view_list_t loom_run_hal_binding_specs_values(
+    const loom_run_hal_binding_specs_t* specs) {
+  IREE_ASSERT_ARGUMENT(specs);
+  return (iree_string_view_list_t){
+      .count = specs->count,
+      .values = specs->values,
+  };
+}
+
+static iree_status_t loom_run_hal_parse_binding_specs(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_binding_specs_t* specs,
+    iree_hal_allocator_t* device_allocator, iree_allocator_t allocator,
+    iree_vm_list_t** out_list) {
+  IREE_ASSERT_ARGUMENT(runtime);
+  IREE_ASSERT_ARGUMENT(specs);
+  IREE_ASSERT_ARGUMENT(device_allocator);
+  IREE_ASSERT_ARGUMENT(out_list);
+  IREE_RETURN_IF_ERROR(
+      loom_run_hal_binding_specs_validate(specs, IREE_SV("HAL")));
+  return iree_tooling_parse_variants(
+      loom_run_hal_binding_specs_conventions(specs),
+      loom_run_hal_binding_specs_values(specs), runtime->device,
+      device_allocator, allocator, out_list);
+}
+
+static iree_status_t loom_run_hal_process_invocation_bindings(
+    const loom_run_hal_invocation_request_t* request,
+    iree_vm_list_t* binding_list, iree_allocator_t allocator,
+    loom_run_hal_invocation_result_t* result) {
+  IREE_ASSERT_ARGUMENT(request);
+  IREE_ASSERT_ARGUMENT(binding_list);
+  IREE_ASSERT_ARGUMENT(result);
+  IREE_RETURN_IF_ERROR(
+      loom_run_hal_transfer_bindings_to_host(request->runtime, binding_list));
+
+  const iree_host_size_t max_output_element_count =
+      request->max_output_element_count == 0
+          ? 1024
+          : request->max_output_element_count;
+  if (request->expected_bindings.count == 0) {
+    return iree_tooling_format_variants(IREE_SV("binding"), binding_list,
+                                        max_output_element_count,
+                                        &result->output);
+  }
+
+  iree_hal_allocator_t* heap_allocator = NULL;
+  iree_vm_list_t* expected_list = NULL;
+
+  iree_status_t status = iree_hal_allocator_create_heap(
+      IREE_SV("heap"), allocator, allocator, &heap_allocator);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_parse_binding_specs(
+        request->runtime, &request->expected_bindings, heap_allocator,
+        allocator, &expected_list);
+  }
+  if (iree_status_is_ok(status)) {
+    const bool did_match = iree_tooling_compare_variant_lists_and_append(
+        expected_list, binding_list, allocator, &result->output);
+    if (did_match) {
+      status = iree_string_builder_append_cstring(
+          &result->output,
+          "[SUCCESS] all HAL bindings matched their expected values.\n");
+    }
+    result->exit_code = did_match ? 0 : 1;
+  }
+
+  iree_vm_list_release(expected_list);
+  iree_hal_allocator_release(heap_allocator);
+  return status;
+}
+
+iree_status_t loom_run_hal_invocation_run(
+    const loom_run_hal_invocation_request_t* request,
+    iree_allocator_t allocator, loom_run_hal_invocation_result_t* result) {
+  IREE_ASSERT_ARGUMENT(request);
+  IREE_ASSERT_ARGUMENT(request->runtime);
+  IREE_ASSERT_ARGUMENT(request->executable);
+  IREE_ASSERT_ARGUMENT(result);
+  iree_string_builder_reset(&result->output);
+  result->exit_code = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_run_hal_binding_specs_validate(&request->bindings, IREE_SV("HAL")));
+  IREE_RETURN_IF_ERROR(loom_run_hal_binding_specs_validate(
+      &request->expected_bindings, IREE_SV("expected HAL")));
+  if (request->expected_bindings.count != 0 &&
+      request->expected_bindings.count != request->bindings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected HAL binding count %" PRIhsz
+                            " must match input binding count %" PRIhsz,
+                            request->expected_bindings.count,
+                            request->bindings.count);
+  }
+  if (request->runtime->device == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL runtime is not initialized");
+  }
+
+  iree_vm_list_t* binding_list = NULL;
+
+  iree_status_t status = loom_run_hal_parse_binding_specs(
+      request->runtime, &request->bindings,
+      iree_hal_device_allocator(request->runtime->device), allocator,
+      &binding_list);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_invocation_execute(
+        request->runtime, request->executable, binding_list, &request->options);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_process_invocation_bindings(request, binding_list,
+                                                      allocator, result);
+  }
+
+  iree_vm_list_release(binding_list);
+  return status;
 }

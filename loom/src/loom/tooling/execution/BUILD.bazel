@@ -69,6 +69,8 @@ loom_cc_library(
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/modules/hal:types",
+        "//runtime/src/iree/tooling:comparison",
+        "//runtime/src/iree/tooling:function_io",
         "//runtime/src/iree/tooling:function_util",
         "//runtime/src/iree/vm",
     ],
@@ -99,6 +101,18 @@ loom_cc_test(
         ":session",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/target/emit/ireevm:low_registry",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "hal_invocation_test",
+    srcs = ["hal_invocation_test.cc"],
+    deps = [
+        ":hal_invocation",
+        ":hal_runtime",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

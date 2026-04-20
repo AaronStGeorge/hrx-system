@@ -20,9 +20,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::tooling::flags
-    iree::hal
     iree::io::file_handle
-    iree::io::stream
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
@@ -31,10 +29,7 @@ loom_cc_library(
     loom::src::loom::tooling::execution::hal_invocation
     loom::src::loom::tooling::execution::hal_runtime
     loom::src::loom::tooling::execution::session
-    iree::tooling::comparison
     iree::tooling::context_util
-    iree::tooling::function_io
-    iree::tooling::function_util
     iree::tooling::run_module
     iree::vm
   PUBLIC
