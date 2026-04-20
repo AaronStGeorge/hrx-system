@@ -134,6 +134,7 @@ loom_cc_library(
     deps = [
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
     ],

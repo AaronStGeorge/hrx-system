@@ -416,6 +416,7 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_LOW_ABI_RESULT:
     case LOOM_OP_LOW_BR:
     case LOOM_OP_LOW_COND_BR:
+    case LOOM_OP_LOW_CONCAT:
     case LOOM_OP_LOW_CONST:
     case LOOM_OP_LOW_COPY:
     case LOOM_OP_LOW_FRAME_INDEX:

@@ -202,6 +202,10 @@ TRAIT_MAP: dict[str, str] = {
 CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
     "SameType": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_TYPE"),
     "SameKind": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_KIND"),
+    "SameRegisterClass": (
+        "LOOM_RELATION_PAIRWISE_EQ",
+        "LOOM_PROPERTY_REGISTER_CLASS",
+    ),
     "SameElementType": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_ELEMENT_TYPE"),
     "SameEncoding": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_ENCODING"),
     "SameShape": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_SHAPE"),
@@ -281,6 +285,10 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
     "AttrMatchesElementType": (
         "LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE",
         "LOOM_PROPERTY_ELEMENT_TYPE",
+    ),
+    "RegisterUnitsSumTo": (
+        "LOOM_RELATION_REGISTER_UNIT_COUNT_SUM",
+        "LOOM_PROPERTY_REGISTER_UNIT_COUNT",
     ),
     "TotalBitCountEqual": (
         "LOOM_RELATION_TOTAL_BIT_COUNT_EQUAL",

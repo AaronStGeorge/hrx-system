@@ -753,6 +753,8 @@ static bool loom_canonicalize_type_constraint_mentions_operand(
     case LOOM_PROPERTY_TYPE:
     case LOOM_PROPERTY_ENCODING:
     case LOOM_PROPERTY_SHAPE:
+    case LOOM_PROPERTY_REGISTER_CLASS:
+    case LOOM_PROPERTY_REGISTER_UNIT_COUNT:
       break;
     default:
       return false;
@@ -763,6 +765,7 @@ static bool loom_canonicalize_type_constraint_mentions_operand(
     case LOOM_RELATION_REGION_ARG_MATCH:
     case LOOM_RELATION_YIELD_MATCH:
     case LOOM_RELATION_VARIADIC_MATCH:
+    case LOOM_RELATION_REGISTER_UNIT_COUNT_SUM:
       break;
     default:
       return false;

@@ -447,6 +447,45 @@ TEST_F(AmdgpuAssemblyTest, EmitsMaterializedCopies) {
   iree_arena_deinitialize(&sidecar_arena);
 }
 
+TEST_F(AmdgpuAssemblyTest, EmitsConcatRegisterCopies) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  BuildSidecars(
+      "low.func.def target(@gfx11_target) @gfx11_fragment(%r0 : "
+      "reg<amdgpu.sgpr>, %r1 : reg<amdgpu.sgpr>, %r2 : reg<amdgpu.sgpr>, "
+      "%r3 : reg<amdgpu.sgpr>, %value : reg<amdgpu.vgpr>, %vaddr : "
+      "reg<amdgpu.vgpr>) {\n"
+      "  %resource = low.concat(%r0, %r1, %r2, %r3) : (reg<amdgpu.sgpr>, "
+      "reg<amdgpu.sgpr>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> "
+      "reg<amdgpu.sgpr x4>\n"
+      "  %sum0 = low.op<amdgpu.s_add_u32>(%r0, %r1) : "
+      "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  %sum1 = low.op<amdgpu.s_add_u32>(%r2, %r3) : "
+      "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  %soffset = low.op<amdgpu.s_add_u32>(%sum0, %sum1) : "
+      "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, "
+      "%soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.return\n"
+      "}\n",
+      &sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_emit_assembly_fragment(
+      &packetization.schedule, &packetization.allocation, &builder));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+  const size_t first_move = output.find("s_mov_b32 s");
+  EXPECT_NE(first_move, std::string::npos);
+  EXPECT_NE(output.find("s_mov_b32 s", first_move + 1), std::string::npos);
+  EXPECT_NE(output.find("s_endpgm"), std::string::npos);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
 TEST_F(AmdgpuAssemblyTest, EmitsFragmentsFromSourceLowering) {
   static constexpr const char* kPresetKeys[] = {
       "amdgpu-gfx950",

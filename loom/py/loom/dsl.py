@@ -142,6 +142,7 @@ __all__ = [
     "Constraint",
     "SameType",
     "SameKind",
+    "SameRegisterClass",
     "SameElementType",
     "SameEncoding",
     "SameShape",
@@ -181,6 +182,7 @@ __all__ = [
     "YieldElementTypesMatchResults",
     "IterArgsMatchResults",
     "AttrMatchesElementType",
+    "RegisterUnitsSumTo",
     # Op group.
     "Dialect",
     # Interfaces.
@@ -933,6 +935,22 @@ def _field_element_type(item: Any) -> Any:
     return None
 
 
+def _field_register_class(item: Any) -> Any:
+    """Returns the register class carried by a register field."""
+    value_type = _field_value_type(item)
+    if hasattr(value_type, "reg_class"):
+        return value_type.reg_class
+    return None
+
+
+def _field_register_unit_count(item: Any) -> Any:
+    """Returns the register unit count carried by a register field."""
+    value_type = _field_value_type(item)
+    if hasattr(value_type, "unit_count"):
+        return value_type.unit_count
+    return None
+
+
 def _field_shape(item: Any) -> Any:
     """Returns the shape carried by a shaped field."""
     value_type = _field_value_type(item)
@@ -1013,6 +1031,42 @@ def SameKind(*fields: str) -> Constraint:
 
     return Constraint(
         "SameKind",
+        fields,
+        error=ERR_TYPE_001,
+        validate=_validate,
+    )
+
+
+def SameRegisterClass(*fields: str) -> Constraint:
+    """All named register fields must have the same register class.
+
+    Handles variadic fields: if a field's value is a list, each
+    element is checked individually against the others.
+    """
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        classes = []
+        for name in fields:
+            for display_name, item in _flatten_field(name, values.get(name)):
+                reg_class = _field_register_class(item)
+                if reg_class is not None:
+                    classes.append((display_name, reg_class))
+        if len(classes) < 2:
+            return (True, "")
+        first_name, first_class = classes[0]
+        for entry_name, reg_class in classes[1:]:
+            if reg_class != first_class:
+                return (
+                    False,
+                    f"'{entry_name}' register class {reg_class}"
+                    f" != '{first_name}' register class {first_class}",
+                )
+        return (True, "")
+
+    from loom.error.type import ERR_TYPE_001
+
+    return Constraint(
+        "SameRegisterClass",
         fields,
         error=ERR_TYPE_001,
         validate=_validate,
@@ -1962,6 +2016,41 @@ def IterArgsMatchResults(iter_args: str, results: str) -> Constraint:
         "IterArgsMatchResults",
         (iter_args, results),
         error=ERR_STRUCTURE_013,
+    )
+
+
+def RegisterUnitsSumTo(sources: str, result: str) -> Constraint:
+    """Register unit counts in a variadic source field must sum to a result."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        source_items = _flatten_field(sources, values.get(sources))
+        result_items = _flatten_field(result, values.get(result))
+        if len(result_items) != 1:
+            return (True, "")
+        unit_counts = []
+        for _display_name, item in source_items:
+            unit_count = _field_register_unit_count(item)
+            if unit_count is not None:
+                unit_counts.append(unit_count)
+        result_unit_count = _field_register_unit_count(result_items[0][1])
+        if result_unit_count is None:
+            return (True, "")
+        source_unit_count = sum(unit_counts)
+        if source_unit_count == result_unit_count:
+            return (True, "")
+        return (
+            False,
+            f"'{sources}' register units sum to {source_unit_count}, "
+            f"but '{result}' has {result_unit_count}",
+        )
+
+    from loom.error.type import ERR_TYPE_004
+
+    return Constraint(
+        "RegisterUnitsSumTo",
+        (sources, result),
+        error=ERR_TYPE_004,
+        validate=_validate,
     )
 
 

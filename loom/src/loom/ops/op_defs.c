@@ -202,6 +202,7 @@ const char* loom_constraint_relation_name(loom_constraint_relation_t relation) {
       [LOOM_RELATION_YIELD_MATCH] = "YieldMatch",
       [LOOM_RELATION_VARIADIC_MATCH] = "VariadicMatch",
       [LOOM_RELATION_LAST_AXIS_GROUPED_BY] = "LastAxisGroupedBy",
+      [LOOM_RELATION_REGISTER_UNIT_COUNT_SUM] = "RegisterUnitCountSum",
   };
   static_assert(IREE_ARRAYSIZE(names) == LOOM_RELATION_COUNT_,
                 "relation names out of sync with enum");
@@ -228,6 +229,8 @@ const char* loom_constraint_property_name(loom_constraint_property_t property) {
           "PackedPayloadBitCountMatchesStorage",
       [LOOM_PROPERTY_UNPACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE] =
           "UnpackedPayloadBitCountMatchesStorage",
+      [LOOM_PROPERTY_REGISTER_CLASS] = "RegisterClass",
+      [LOOM_PROPERTY_REGISTER_UNIT_COUNT] = "RegisterUnitCount",
   };
   static_assert(IREE_ARRAYSIZE(names) == LOOM_PROPERTY_COUNT_,
                 "property names out of sync with enum");

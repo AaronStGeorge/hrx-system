@@ -126,6 +126,40 @@ typedef struct loom_low_allocation_assignment_t {
   uint32_t location_count;
 } loom_low_allocation_assignment_t;
 
+// Returns true when two assignments name the same target storage space.
+static inline bool loom_low_allocation_assignments_share_storage(
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs) {
+  return lhs->location_kind == rhs->location_kind &&
+         loom_liveness_value_class_equal(lhs->value_class, rhs->value_class);
+}
+
+// Returns true when two same-length assignment subranges name the same units.
+static inline bool loom_low_allocation_assignment_subranges_match(
+    const loom_low_allocation_assignment_t* lhs, uint32_t lhs_start,
+    const loom_low_allocation_assignment_t* rhs, uint32_t rhs_start,
+    uint32_t unit_count) {
+  return unit_count != 0 &&
+         loom_low_allocation_assignments_share_storage(lhs, rhs) &&
+         (uint64_t)lhs->location_base + lhs_start ==
+             (uint64_t)rhs->location_base + rhs_start;
+}
+
+// Returns true when two same-length assignment subranges overlap in storage.
+static inline bool loom_low_allocation_assignment_subranges_overlap(
+    const loom_low_allocation_assignment_t* lhs, uint32_t lhs_start,
+    const loom_low_allocation_assignment_t* rhs, uint32_t rhs_start,
+    uint32_t unit_count) {
+  if (!loom_low_allocation_assignments_share_storage(lhs, rhs)) {
+    return false;
+  }
+  const uint64_t lhs_begin = (uint64_t)lhs->location_base + lhs_start;
+  const uint64_t rhs_begin = (uint64_t)rhs->location_base + rhs_start;
+  const uint64_t lhs_end = lhs_begin + unit_count;
+  const uint64_t rhs_end = rhs_begin + unit_count;
+  return lhs_begin < rhs_end && rhs_begin < lhs_end;
+}
+
 // Allocation remark for agent/tool feedback.
 typedef struct loom_low_allocation_remark_t {
   // Remark category.

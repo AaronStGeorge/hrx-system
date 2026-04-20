@@ -432,6 +432,34 @@ static iree_status_t loom_x86_append_branch_packet(
       context->schedule, loom_low_br_dest(op), context->builder);
 }
 
+static const loom_native_assembly_structural_packet_callback_t
+    kLoomX86AssemblyStructuralPacketCallbacks[] = {
+        {
+            .op_kind = LOOM_OP_LOW_COPY,
+            .append_packet =
+                {
+                    .fn = loom_x86_append_copy_packet,
+                    .user_data = NULL,
+                },
+        },
+        {
+            .op_kind = LOOM_OP_LOW_RETURN,
+            .append_packet =
+                {
+                    .fn = loom_x86_append_return_packet,
+                    .user_data = NULL,
+                },
+        },
+        {
+            .op_kind = LOOM_OP_LOW_BR,
+            .append_packet =
+                {
+                    .fn = loom_x86_append_branch_packet,
+                    .user_data = NULL,
+                },
+        },
+};
+
 iree_status_t loom_x86_emit_assembly_fragment(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
@@ -455,21 +483,9 @@ iree_status_t loom_x86_emit_assembly_fragment(
               .fn = loom_x86_append_descriptor_packet,
               .user_data = NULL,
           },
-      .append_copy_packet =
-          {
-              .fn = loom_x86_append_copy_packet,
-              .user_data = NULL,
-          },
-      .append_return_packet =
-          {
-              .fn = loom_x86_append_return_packet,
-              .user_data = NULL,
-          },
-      .append_branch_packet =
-          {
-              .fn = loom_x86_append_branch_packet,
-              .user_data = NULL,
-          },
+      .structural_packet_callbacks = kLoomX86AssemblyStructuralPacketCallbacks,
+      .structural_packet_callback_count =
+          IREE_ARRAYSIZE(kLoomX86AssemblyStructuralPacketCallbacks),
   };
   return loom_native_assembly_format_fragment(schedule, allocation, &options,
                                               builder);

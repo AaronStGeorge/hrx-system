@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+#include "loom/ir/context.h"
 #include "loom/ops/low/ops.h"
 
 iree_string_view_t loom_native_assembly_module_string(
@@ -87,12 +88,12 @@ iree_status_t loom_native_assembly_append_block_label(
 
 static iree_status_t loom_native_assembly_append_with_callback(
     const loom_native_assembly_append_packet_callback_t* callback,
-    const char* missing_name,
+    iree_string_view_t op_name,
     const loom_native_assembly_packet_context_t* context) {
   if (callback->fn == NULL) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "native assembly emitter does not support %s",
-                            missing_name);
+                            "native assembly emitter does not support %.*s",
+                            (int)op_name.size, op_name.data);
   }
   return callback->fn(callback->user_data, context);
 }
@@ -101,25 +102,24 @@ static iree_status_t loom_native_assembly_append_structural_packet(
     const loom_native_assembly_format_options_t* options,
     const loom_native_assembly_packet_context_t* context) {
   const loom_op_t* op = context->packet->node->op;
-  if (loom_low_copy_isa(op)) {
-    return loom_native_assembly_append_with_callback(
-        &options->append_copy_packet, "low.copy", context);
-  }
-  if (loom_low_return_isa(op)) {
-    return loom_native_assembly_append_with_callback(
-        &options->append_return_packet, "low.return", context);
-  }
-  if (loom_low_br_isa(op)) {
-    return loom_native_assembly_append_with_callback(
-        &options->append_branch_packet, "low.br", context);
-  }
-  if (loom_low_cond_br_isa(op)) {
-    return loom_native_assembly_append_with_callback(
-        &options->append_cond_branch_packet, "low.cond_br", context);
+  const loom_op_vtable_t* vtable =
+      loom_op_vtable(context->schedule->module, op);
+  iree_string_view_t op_name =
+      vtable ? loom_bstring_view(vtable->name) : IREE_SV("<unknown>");
+  for (iree_host_size_t i = 0; i < options->structural_packet_callback_count;
+       ++i) {
+    const loom_native_assembly_structural_packet_callback_t* row =
+        &options->structural_packet_callbacks[i];
+    if (op->kind != row->op_kind) {
+      continue;
+    }
+    return loom_native_assembly_append_with_callback(&row->append_packet,
+                                                     op_name, context);
   }
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                           "native assembly emitter does not support "
-                          "structural low packet");
+                          "structural op %.*s",
+                          (int)op_name.size, op_name.data);
 }
 
 static iree_status_t loom_native_assembly_append_packet(
@@ -141,6 +141,12 @@ iree_status_t loom_native_assembly_format_fragment(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "native assembly descriptor packet formatter is "
                             "required");
+  }
+  if (options->structural_packet_callback_count != 0 &&
+      options->structural_packet_callbacks == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "native assembly structural packet callback rows "
+                            "are required");
   }
   if (builder == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

@@ -17,6 +17,7 @@
 #include "iree/base/api.h"
 #include "iree/base/string_builder.h"
 #include "loom/codegen/low/packet.h"
+#include "loom/ops/op_defs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,6 +44,13 @@ typedef struct loom_native_assembly_append_packet_callback_t {
   void* user_data;
 } loom_native_assembly_append_packet_callback_t;
 
+typedef struct loom_native_assembly_structural_packet_callback_t {
+  // Structural low op handled by this callback row.
+  loom_op_kind_t op_kind;
+  // Formatter for packets with |op_kind|.
+  loom_native_assembly_append_packet_callback_t append_packet;
+} loom_native_assembly_structural_packet_callback_t;
+
 typedef struct loom_native_assembly_format_options_t {
   // Optional hook that appends zero or more complete assembly lines before the
   // current scheduled packet. Targets use this for sidecar-materialized packets
@@ -50,20 +58,17 @@ typedef struct loom_native_assembly_format_options_t {
   loom_native_assembly_append_packet_callback_t append_before_packet;
   // Required formatter for descriptor-backed low.op and low.const packets.
   loom_native_assembly_append_packet_callback_t append_descriptor_packet;
-  // Optional formatter for low.copy packets.
-  loom_native_assembly_append_packet_callback_t append_copy_packet;
-  // Optional formatter for low.return packets.
-  loom_native_assembly_append_packet_callback_t append_return_packet;
-  // Optional formatter for low.br packets.
-  loom_native_assembly_append_packet_callback_t append_branch_packet;
-  // Optional formatter for low.cond_br packets.
-  loom_native_assembly_append_packet_callback_t append_cond_branch_packet;
+  // Target-owned structural low op formatter rows.
+  const loom_native_assembly_structural_packet_callback_t*
+      structural_packet_callbacks;
+  // Number of rows in |structural_packet_callbacks|.
+  iree_host_size_t structural_packet_callback_count;
 } loom_native_assembly_format_options_t;
 
 // Formats a scheduled and allocated low.func.def as a native assembly fragment.
 // The output is target-owned assembly text, not a complete object/kernel ABI
-// envelope. Unsupported structural packets fail loud through the corresponding
-// missing callback instead of being printed as comments or pseudo-ops.
+// envelope. Unsupported structural packets fail loud through the target-owned
+// callback table instead of being printed as comments or pseudo-ops.
 iree_status_t loom_native_assembly_format_fragment(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,

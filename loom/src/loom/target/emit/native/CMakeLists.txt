@@ -22,6 +22,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::packet
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
   PUBLIC
 )
 

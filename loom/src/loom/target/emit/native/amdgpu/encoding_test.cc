@@ -44,6 +44,10 @@ std::string Bytes(std::initializer_list<uint8_t> values) {
                      reinterpret_cast<const char*>(values.end()));
 }
 
+bool IsSop1SMovB32(uint32_t word) {
+  return (word & UINT32_C(0xFF80FF00)) == UINT32_C(0xBE800000);
+}
+
 class AmdgpuEncodingTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -204,6 +208,46 @@ TEST_F(AmdgpuEncodingTest, EncodesLiveInAsNonEmittingPacket) {
 
   ASSERT_EQ(text.data_length, 4u);
   EXPECT_EQ(ReadU32LE(text.data), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuEncodingTest, EncodesConcatRegisterCopies) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel(%r0 : reg<amdgpu.sgpr>, "
+      "%r1 : reg<amdgpu.sgpr>, %r2 : reg<amdgpu.sgpr>, %r3 : "
+      "reg<amdgpu.sgpr>, %value : reg<amdgpu.vgpr>, %vaddr : "
+      "reg<amdgpu.vgpr>) {\n"
+      "  %resource = low.concat(%r0, %r1, %r2, %r3) : (reg<amdgpu.sgpr>, "
+      "reg<amdgpu.sgpr>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> "
+      "reg<amdgpu.sgpr x4>\n"
+      "  %sum0 = low.op<amdgpu.s_add_u32>(%r0, %r1) : "
+      "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  %sum1 = low.op<amdgpu.s_add_u32>(%r2, %r3) : "
+      "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  %soffset = low.op<amdgpu.s_add_u32>(%sum0, %sum1) : "
+      "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+      "  low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, "
+      "%soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.return\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_GE(text.data_length, 8u);
+  ASSERT_EQ(text.data_length % 4, 0u);
+  bool saw_concat_copy = false;
+  for (iree_host_size_t i = 0; i < text.data_length; i += 4) {
+    saw_concat_copy |= IsSop1SMovB32(ReadU32LE(text.data + i));
+  }
+  EXPECT_TRUE(saw_concat_copy);
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
 }
 

@@ -61,7 +61,9 @@ from loom.dsl import (
     Op,
     Operand,
     RegionDef,
+    RegisterUnitsSumTo,
     Result,
+    SameRegisterClass,
     Successor,
     SymbolDefinition,
     SymbolReference,
@@ -558,6 +560,39 @@ low_copy = Op(
 )
 
 # ============================================================================
+# low.concat — compose a register range from ordered subranges
+# ============================================================================
+
+low_concat = Op(
+    "low.concat",
+    group=low_ops,
+    doc="Compose one register-range value from ordered register subranges.",
+    operands=[Operand("sources", REGISTER, variadic=True)],
+    results=[Result("result", REGISTER)],
+    traits=[UNKNOWN_EFFECTS],
+    constraints=[
+        SameRegisterClass("sources", "result"),
+        RegisterUnitsSumTo("sources", "result"),
+    ],
+    format=[
+        GLUE,
+        LPAREN,
+        Refs("sources"),
+        RPAREN,
+        COLON,
+        LPAREN,
+        TypesOf("sources"),
+        RPAREN,
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%pair = low.concat(%lo, %hi) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>",
+        "%resource = low.concat(%ptr, %limit, %flags) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>",
+    ],
+)
+
+# ============================================================================
 # low.live_in — target ABI live-in register value
 # ============================================================================
 
@@ -1017,6 +1052,7 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_op,
     low_const,
     low_copy,
+    low_concat,
     low_invoke,
     low_abi_adapter,
     low_abi_operand,

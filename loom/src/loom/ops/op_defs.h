@@ -534,6 +534,11 @@ enum loom_constraint_relation_e {
   // LastAxisGroupedBy.
   LOOM_RELATION_LAST_AXIS_GROUPED_BY,
 
+  // Register unit counts in the first variadic register field sum to the
+  // register unit count of the second register field. Args: (summed register
+  // value field, result register value field). Used by RegisterUnitsSumTo.
+  LOOM_RELATION_REGISTER_UNIT_COUNT_SUM,
+
   LOOM_RELATION_COUNT_,
 };
 typedef uint8_t loom_constraint_relation_t;
@@ -579,6 +584,11 @@ enum loom_constraint_property_e {
   // Unpacked payload bit count equals storage bit count. Used by
   // UnpackedPayloadBitCountMatchesStorage.
   LOOM_PROPERTY_UNPACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE = 13,
+  // Register allocation class, ignoring the number of units. Used by
+  // SameRegisterClass.
+  LOOM_PROPERTY_REGISTER_CLASS = 14,
+  // Register unit count. Used by RegisterUnitsSumTo.
+  LOOM_PROPERTY_REGISTER_UNIT_COUNT = 15,
   LOOM_PROPERTY_COUNT_,
 };
 typedef uint8_t loom_constraint_property_t;

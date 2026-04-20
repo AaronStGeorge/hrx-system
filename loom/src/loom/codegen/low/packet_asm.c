@@ -10,6 +10,7 @@
 
 #include "loom/codegen/low/packet.h"
 #include "loom/format/text/printer.h"
+#include "loom/ir/context.h"
 #include "loom/ops/low/ops.h"
 #include "loom/util/stream.h"
 
@@ -324,6 +325,18 @@ static iree_status_t loom_low_packet_asm_append_copy(
   return loom_low_packet_asm_append_value(state, loom_low_copy_source(op));
 }
 
+static iree_status_t loom_low_packet_asm_append_concat(
+    loom_low_packet_asm_state_t* state, const loom_op_t* op) {
+  IREE_RETURN_IF_ERROR(
+      loom_low_packet_asm_append_value(state, loom_low_concat_result(op)));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(state->builder, " = concat("));
+  loom_value_slice_t sources = loom_low_concat_sources(op);
+  IREE_RETURN_IF_ERROR(loom_low_packet_asm_append_value_list(
+      state, sources.values, sources.count));
+  return iree_string_builder_append_cstring(state->builder, ")");
+}
+
 static iree_status_t loom_low_packet_asm_append_branch_args(
     loom_low_packet_asm_state_t* state, const loom_value_id_t* values,
     iree_host_size_t value_count) {
@@ -362,22 +375,42 @@ static iree_status_t loom_low_packet_asm_append_cond_br(
       state, loom_low_cond_br_false_dest(op));
 }
 
+typedef iree_status_t (*loom_low_packet_asm_append_structural_fn_t)(
+    loom_low_packet_asm_state_t* state, const loom_op_t* op);
+
+typedef struct loom_low_packet_asm_structural_dispatch_t {
+  // Structural op handled by this row.
+  loom_op_kind_t op_kind;
+  // Formatter for the structural packet.
+  loom_low_packet_asm_append_structural_fn_t append;
+} loom_low_packet_asm_structural_dispatch_t;
+
+static const loom_low_packet_asm_structural_dispatch_t
+    kLoomLowPacketAsmStructuralDispatch[] = {
+        {LOOM_OP_LOW_RETURN, loom_low_packet_asm_append_return},
+        {LOOM_OP_LOW_COPY, loom_low_packet_asm_append_copy},
+        {LOOM_OP_LOW_CONCAT, loom_low_packet_asm_append_concat},
+        {LOOM_OP_LOW_BR, loom_low_packet_asm_append_br},
+        {LOOM_OP_LOW_COND_BR, loom_low_packet_asm_append_cond_br},
+};
+
 static iree_status_t loom_low_packet_asm_append_structural_packet(
     loom_low_packet_asm_state_t* state, const loom_op_t* op) {
-  if (loom_low_return_isa(op)) {
-    return loom_low_packet_asm_append_return(state, op);
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kLoomLowPacketAsmStructuralDispatch); ++i) {
+    const loom_low_packet_asm_structural_dispatch_t* row =
+        &kLoomLowPacketAsmStructuralDispatch[i];
+    if (op->kind != row->op_kind) {
+      continue;
+    }
+    return row->append(state, op);
   }
-  if (loom_low_copy_isa(op)) {
-    return loom_low_packet_asm_append_copy(state, op);
-  }
-  if (loom_low_br_isa(op)) {
-    return loom_low_packet_asm_append_br(state, op);
-  }
-  if (loom_low_cond_br_isa(op)) {
-    return loom_low_packet_asm_append_cond_br(state, op);
-  }
+  const loom_op_vtable_t* vtable = loom_op_vtable(state->schedule->module, op);
+  iree_string_view_t op_name =
+      vtable ? loom_bstring_view(vtable->name) : IREE_SV("<unknown>");
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "low packet asm structural op is unsupported");
+                          "low packet asm structural op %.*s is unsupported",
+                          (int)op_name.size, op_name.data);
 }
 
 static iree_status_t loom_low_packet_asm_append_packet(

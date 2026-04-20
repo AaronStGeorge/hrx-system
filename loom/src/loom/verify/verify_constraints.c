@@ -26,6 +26,13 @@ static bool loom_constraint_property_equals(
       return loom_type_shape_equals(a, b);
     case LOOM_PROPERTY_RANK:
       return loom_type_rank(a) == loom_type_rank(b);
+    case LOOM_PROPERTY_REGISTER_CLASS:
+      return loom_type_is_register(a) && loom_type_is_register(b) &&
+             loom_type_register_class_id(a) == loom_type_register_class_id(b);
+    case LOOM_PROPERTY_REGISTER_UNIT_COUNT:
+      return loom_type_is_register(a) && loom_type_is_register(b) &&
+             loom_type_register_unit_count(a) ==
+                 loom_type_register_unit_count(b);
     default:
       return false;
   }
@@ -47,6 +54,9 @@ static const loom_error_def_t* loom_pairwise_eq_default_error(
       return loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 2);
     case LOOM_PROPERTY_RANK:
       return loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 1);
+    case LOOM_PROPERTY_REGISTER_CLASS:
+    case LOOM_PROPERTY_REGISTER_UNIT_COUNT:
+      return loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1);
     default:
       return loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1);
   }
@@ -93,6 +103,8 @@ static void loom_verify_emit_pairwise_mismatch(
           error->param_count < 4 ? error->param_count : 4);
       break;
     }
+    case LOOM_PROPERTY_REGISTER_CLASS:
+    case LOOM_PROPERTY_REGISTER_UNIT_COUNT:
     case LOOM_PROPERTY_KIND: {
       loom_diagnostic_param_t params[] = {
           loom_verify_param_string_for_field(name_a, ref_a),
@@ -1436,6 +1448,60 @@ static void loom_verify_relation_variadic_match(
   }
 }
 
+// REGISTER_UNIT_COUNT_SUM: register unit counts in the first variadic register
+// field sum to the register unit count of the second register field. Args:
+// (summed register value field, result register value field).
+static void loom_verify_relation_register_unit_count_sum(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) {
+    return;
+  }
+  uint8_t sources_ref = constraint->args[0];
+  uint8_t result_ref = constraint->args[1];
+  if (!loom_verify_is_variadic_field(vtable, sources_ref) ||
+      loom_verify_is_variadic_field(vtable, result_ref)) {
+    return;
+  }
+
+  uint16_t source_count = 0;
+  const loom_value_id_t* source_values =
+      loom_verify_resolve_variadic_field(op, sources_ref, &source_count);
+  loom_value_id_t result_value =
+      loom_verify_resolve_value_field(op, result_ref);
+  if (!source_values || result_value == LOOM_VALUE_ID_INVALID) {
+    return;
+  }
+
+  uint64_t source_unit_count = 0;
+  for (uint16_t i = 0; i < source_count; ++i) {
+    loom_type_t source_type = loom_verify_value_type(state, source_values[i]);
+    if (!loom_type_is_register(source_type)) {
+      return;
+    }
+    source_unit_count += loom_type_register_unit_count(source_type);
+  }
+
+  loom_type_t result_type = loom_verify_value_type(state, result_value);
+  if (!loom_type_is_register(result_type)) {
+    return;
+  }
+  if (source_unit_count == loom_type_register_unit_count(result_type)) {
+    return;
+  }
+
+  char source_name_buffer[32];
+  char expected_buffer[96];
+  iree_string_view_t source_name = loom_verify_field_name(
+      vtable, sources_ref, source_name_buffer, sizeof(source_name_buffer));
+  iree_snprintf(expected_buffer, sizeof(expected_buffer),
+                "register unit count equal to sum of %.*s",
+                (int)source_name.size, source_name.data);
+  loom_verify_emit_value_field_constraint(
+      state, op, vtable, result_ref, result_type,
+      iree_make_cstring_view(expected_buffer));
+}
+
 // Dispatch table for semantic constraint relations. Indexed by the
 // loom_constraint_relation_t enum value. Adding a relation requires
 // (a) updating the enum in op_defs.h, (b) adding a handler above, and
@@ -1479,6 +1545,8 @@ static const loom_verify_relation_fn_t kVerifyRelationFns[] = {
     [LOOM_RELATION_VARIADIC_MATCH] = loom_verify_relation_variadic_match,
     [LOOM_RELATION_LAST_AXIS_GROUPED_BY] =
         loom_verify_relation_last_axis_grouped_by,
+    [LOOM_RELATION_REGISTER_UNIT_COUNT_SUM] =
+        loom_verify_relation_register_unit_count_sum,
 };
 static_assert(IREE_ARRAYSIZE(kVerifyRelationFns) == LOOM_RELATION_COUNT_,
               "verify relation dispatch table out of sync with enum");

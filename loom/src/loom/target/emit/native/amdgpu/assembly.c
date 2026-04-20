@@ -391,9 +391,30 @@ static iree_status_t loom_amdgpu_append_copy_element(
     const loom_native_assembly_packet_context_t* context,
     iree_string_view_t mnemonic,
     const loom_low_allocation_assignment_t* result_assignment,
+    uint32_t result_register_index,
     const loom_low_allocation_assignment_t* source_assignment,
-    uint32_t register_index) {
-  if (register_index != 0) {
+    uint32_t source_register_index, uint32_t* emitted_count) {
+  IREE_ASSERT_ARGUMENT(emitted_count);
+  if (result_register_index >= result_assignment->location_count ||
+      source_register_index >= source_assignment->location_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU assembly copy register offset exceeds "
+                            "assigned range");
+  }
+  if (result_assignment->location_base > UINT32_MAX - result_register_index ||
+      source_assignment->location_base > UINT32_MAX - source_register_index) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU assembly copy register range exceeds "
+                            "uint32_t");
+  }
+  if (result_assignment->location_kind == source_assignment->location_kind &&
+      loom_liveness_value_class_equal(result_assignment->value_class,
+                                      source_assignment->value_class) &&
+      result_assignment->location_base + result_register_index ==
+          source_assignment->location_base + source_register_index) {
+    return iree_ok_status();
+  }
+  if (*emitted_count != 0) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_cstring(context->builder, "\n  "));
   }
@@ -402,14 +423,16 @@ static iree_status_t loom_amdgpu_append_copy_element(
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
   loom_low_allocation_assignment_t result_element = *result_assignment;
-  result_element.location_base += register_index;
+  result_element.location_base += result_register_index;
   result_element.location_count = 1;
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_assignment(context, &result_element));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
   loom_low_allocation_assignment_t source_element = *source_assignment;
-  source_element.location_base += register_index;
+  source_element.location_base += source_register_index;
   source_element.location_count = 1;
-  return loom_amdgpu_append_assignment(context, &source_element);
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_assignment(context, &source_element));
+  ++*emitted_count;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_append_copy_packet(
@@ -447,6 +470,15 @@ static iree_status_t loom_amdgpu_append_copy_packet(
         IREE_STATUS_OUT_OF_RANGE,
         "AMDGPU assembly copy register range exceeds uint32_t");
   }
+  if (loom_low_allocation_assignment_subranges_overlap(
+          result_assignment, 0, source_assignment, 0, register_count) &&
+      !loom_low_allocation_assignment_subranges_match(
+          result_assignment, 0, source_assignment, 0, register_count)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU assembly copy requires a temporary register for overlapping "
+        "physical ranges");
+  }
 
   iree_string_view_t source_register_class = loom_native_assembly_module_string(
       context->allocation->module,
@@ -466,9 +498,94 @@ static iree_status_t loom_amdgpu_append_copy_packet(
   iree_string_view_t mnemonic = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_copy_mnemonic(result_register_class, &mnemonic));
+  uint32_t emitted_count = 0;
   for (uint32_t i = 0; i < register_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_append_copy_element(
-        context, mnemonic, result_assignment, source_assignment, i));
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_append_copy_element(context, mnemonic, result_assignment, i,
+                                        source_assignment, i, &emitted_count));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_append_concat_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  (void)user_data;
+  const loom_op_t* op = context->packet->node->op;
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
+      context, loom_low_concat_result(op), &result_assignment));
+  if (result_assignment->location_kind !=
+          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+      result_assignment->location_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU assembly concat requires a non-empty physical result range");
+  }
+
+  iree_string_view_t result_register_class = loom_native_assembly_module_string(
+      context->allocation->module,
+      result_assignment->value_class.register_class_id);
+  iree_string_view_t mnemonic = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_copy_mnemonic(result_register_class, &mnemonic));
+
+  uint32_t result_register_index = 0;
+  uint32_t emitted_count = 0;
+  loom_value_slice_t sources = loom_low_concat_sources(op);
+  for (uint16_t i = 0; i < sources.count; ++i) {
+    const loom_low_allocation_assignment_t* source_assignment = NULL;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(context, sources.values[i],
+                                                     &source_assignment));
+    if (source_assignment->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        source_assignment->location_count == 0) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU assembly concat requires non-empty physical source ranges");
+    }
+    iree_string_view_t source_register_class =
+        loom_native_assembly_module_string(
+            context->allocation->module,
+            source_assignment->value_class.register_class_id);
+    if (!iree_string_view_equal(source_register_class, result_register_class)) {
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "AMDGPU assembly concat between register classes '%.*s' and '%.*s' "
+          "is unsupported",
+          (int)source_register_class.size, source_register_class.data,
+          (int)result_register_class.size, result_register_class.data);
+    }
+    if (result_register_index > result_assignment->location_count ||
+        source_assignment->location_count >
+            result_assignment->location_count - result_register_index) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU assembly concat source ranges exceed the result range");
+    }
+    if (loom_low_allocation_assignment_subranges_overlap(
+            result_assignment, result_register_index, source_assignment, 0,
+            source_assignment->location_count) &&
+        !loom_low_allocation_assignment_subranges_match(
+            result_assignment, result_register_index, source_assignment, 0,
+            source_assignment->location_count)) {
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "AMDGPU assembly concat requires a temporary register for "
+          "overlapping physical ranges");
+    }
+    for (uint32_t source_register_index = 0;
+         source_register_index < source_assignment->location_count;
+         ++source_register_index) {
+      IREE_RETURN_IF_ERROR(loom_amdgpu_append_copy_element(
+          context, mnemonic, result_assignment, result_register_index,
+          source_assignment, source_register_index, &emitted_count));
+      ++result_register_index;
+    }
+  }
+  if (result_register_index != result_assignment->location_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU assembly concat source ranges do not fill the result range");
   }
   return iree_ok_status();
 }
@@ -590,6 +707,34 @@ static iree_status_t loom_amdgpu_verify_wait_packet_plan(
   return iree_ok_status();
 }
 
+static const loom_native_assembly_structural_packet_callback_t
+    kLoomAmdgpuAssemblyStructuralPacketCallbacks[] = {
+        {
+            .op_kind = LOOM_OP_LOW_COPY,
+            .append_packet =
+                {
+                    .fn = loom_amdgpu_append_copy_packet,
+                    .user_data = NULL,
+                },
+        },
+        {
+            .op_kind = LOOM_OP_LOW_CONCAT,
+            .append_packet =
+                {
+                    .fn = loom_amdgpu_append_concat_packet,
+                    .user_data = NULL,
+                },
+        },
+        {
+            .op_kind = LOOM_OP_LOW_RETURN,
+            .append_packet =
+                {
+                    .fn = loom_amdgpu_append_return_packet,
+                    .user_data = NULL,
+                },
+        },
+};
+
 static loom_native_assembly_format_options_t loom_amdgpu_assembly_options(
     loom_native_assembly_append_packet_callback_t append_before_packet) {
   return (loom_native_assembly_format_options_t){
@@ -599,16 +744,10 @@ static loom_native_assembly_format_options_t loom_amdgpu_assembly_options(
               .fn = loom_amdgpu_append_descriptor_packet,
               .user_data = NULL,
           },
-      .append_copy_packet =
-          {
-              .fn = loom_amdgpu_append_copy_packet,
-              .user_data = NULL,
-          },
-      .append_return_packet =
-          {
-              .fn = loom_amdgpu_append_return_packet,
-              .user_data = NULL,
-          },
+      .structural_packet_callbacks =
+          kLoomAmdgpuAssemblyStructuralPacketCallbacks,
+      .structural_packet_callback_count =
+          IREE_ARRAYSIZE(kLoomAmdgpuAssemblyStructuralPacketCallbacks),
   };
 }
 
