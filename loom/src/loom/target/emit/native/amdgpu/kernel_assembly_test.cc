@@ -155,6 +155,8 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
   void BuildMaterializedHalResourceSidecarsForPreset(
       const char* preset_key, const char* target_symbol,
       const char* function_symbol, const char* body,
+      iree_host_size_t expected_materialized_resource_count,
+      iree_host_size_t expected_fixed_value_count,
       iree_arena_allocator_t* arena,
       loom_low_packetization_t* out_packetization) {
     std::string source = "target.preset @";
@@ -186,14 +188,15 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_amdgpu_hal_resource_materialize(
         module_, low_function, &bundle_storage.bundle, &materialization,
         arena));
-    ASSERT_EQ(materialization.materialized_resource_count, 1u);
+    ASSERT_EQ(materialization.materialized_resource_count,
+              expected_materialized_resource_count);
     ASSERT_TRUE(materialization.inserted_kernarg_segment_ptr_live_in);
 
     const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
     iree_host_size_t fixed_value_count = 0;
     IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
         module_, low_function, &fixed_values, &fixed_value_count, arena));
-    ASSERT_EQ(fixed_value_count, 1u);
+    ASSERT_EQ(fixed_value_count, expected_fixed_value_count);
 
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -369,7 +372,7 @@ TEST_F(AmdgpuKernelAssemblyTest,
       "low.abi.resource @binding0 {function = @loom_kernel, kind = "
       "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
       "abi_type = reg<amdgpu.sgpr x4>}\n",
-      &sidecar_arena, &packetization);
+      1, 1, &sidecar_arena, &packetization);
 
   loom_amdgpu_wait_plan_t wait_plan = {};
   IREE_ASSERT_OK(loom_amdgpu_wait_plan_build(&packetization.schedule,
@@ -399,6 +402,82 @@ TEST_F(AmdgpuKernelAssemblyTest,
   EXPECT_NE(output.find("        - .name: 'binding0'\n"), std::string::npos);
   EXPECT_NE(output.find("          .value_kind: global_buffer\n"),
             std::string::npos);
+  EXPECT_NE(load, std::string::npos);
+  EXPECT_NE(store, std::string::npos);
+  EXPECT_NE(wait_before_store, std::string::npos);
+  EXPECT_NE(wait_after_store, std::string::npos);
+  EXPECT_NE(endpgm, std::string::npos);
+  EXPECT_LT(load, wait_before_store);
+  EXPECT_LT(wait_before_store, store);
+  EXPECT_LT(store, wait_after_store);
+  EXPECT_LT(wait_after_store, endpgm);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
+TEST_F(AmdgpuKernelAssemblyTest, EmitsB128CopyKernelForGfx11) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  BuildMaterializedHalResourceSidecarsForPreset(
+      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
+      "> : reg<amdgpu.vgpr>\n"
+      "  %scale = low.const<amdgpu.v_mov_b32> {imm32 = 16} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %scale) : "
+      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+      "  %source = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+      "  %target = low.resource @binding1 : reg<amdgpu.sgpr x4>\n"
+      "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.sgpr>\n"
+      "  %loaded = low.op<amdgpu.buffer_load_b128>(%source, %byte_offset, "
+      "%zero) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, "
+      "reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>\n"
+      "  low.op<amdgpu.buffer_store_b128>(%loaded, %target, %byte_offset, "
+      "%zero) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.return\n"
+      "}\n"
+      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n"
+      "low.abi.resource @binding1 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 1, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n",
+      2, 2, &sidecar_arena, &packetization);
+
+  loom_amdgpu_wait_plan_t wait_plan = {};
+  IREE_ASSERT_OK(loom_amdgpu_wait_plan_build(&packetization.schedule,
+                                             &sidecar_arena, &wait_plan));
+  loom_amdgpu_wait_packet_plan_t wait_packets = {};
+  IREE_ASSERT_OK(loom_amdgpu_wait_packet_plan_build(&wait_plan, &sidecar_arena,
+                                                    &wait_packets));
+  ASSERT_GE(wait_packets.packet_count, 2u);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_wait_packets(
+      &packetization.schedule, &packetization.allocation, &wait_packets,
+      &builder, &sidecar_arena));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+
+  const size_t load = output.find("buffer_load_b128 v[");
+  const size_t store = output.find("buffer_store_b128 v[");
+  const size_t wait_before_store = output.rfind("s_waitcnt", store);
+  const size_t wait_after_store = output.find("s_waitcnt", store);
+  const size_t endpgm = output.find("s_endpgm");
+  EXPECT_NE(output.find("  .amdhsa_kernarg_size 16\n"), std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_user_sgpr_kernarg_segment_ptr 1\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_system_vgpr_workitem_id 0\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("        - .name: 'binding0'\n"), std::string::npos);
+  EXPECT_NE(output.find("        - .name: 'binding1'\n"), std::string::npos);
+  EXPECT_NE(output.find("          .offset: 8\n"), std::string::npos);
+  EXPECT_NE(output.find("v_mul_lo_u32 v"), std::string::npos);
   EXPECT_NE(load, std::string::npos);
   EXPECT_NE(store, std::string::npos);
   EXPECT_NE(wait_before_store, std::string::npos);

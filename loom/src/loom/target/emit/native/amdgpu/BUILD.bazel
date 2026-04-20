@@ -585,6 +585,7 @@ loom_cc_test(
     ],
     deps = [
         ":kernel_hsaco",
+        "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:packetization",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/format/text:parser",

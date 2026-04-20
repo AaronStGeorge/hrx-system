@@ -290,6 +290,7 @@ loom_cc_test(
     iree::base::internal::arena
     iree::base::internal::dynamic_library
     iree::io::stream
+    loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::verify
     loom::src::loom::format::text::parser
