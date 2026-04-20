@@ -68,6 +68,18 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
   EXPECT_EQ(add_descriptor->result_count, 1u);
   EXPECT_EQ(add_descriptor->encoding_id, 37u);
 
+  const loom_low_descriptor_t* scalar_subtract_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_sub_u32"));
+  ASSERT_NE(scalar_subtract_descriptor, nullptr);
+  EXPECT_EQ(scalar_subtract_descriptor->operand_count, 3u);
+  EXPECT_EQ(scalar_subtract_descriptor->result_count, 1u);
+
+  const loom_low_descriptor_t* vector_subtract_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_sub_u32"));
+  ASSERT_NE(vector_subtract_descriptor, nullptr);
+  EXPECT_EQ(vector_subtract_descriptor->operand_count, 3u);
+  EXPECT_EQ(vector_subtract_descriptor->result_count, 1u);
+
   const loom_low_descriptor_t* multiply_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_mul_lo_u32"));
   ASSERT_NE(multiply_descriptor, nullptr);

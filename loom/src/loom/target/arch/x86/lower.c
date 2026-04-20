@@ -183,6 +183,16 @@ static bool loom_x86_can_lower_vector_addi(loom_low_lower_context_t* context,
                                          loom_vector_addi_result(source_op));
 }
 
+static bool loom_x86_can_lower_vector_subi(loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op) {
+  return loom_x86_value_is_vector_16xi32(context,
+                                         loom_vector_subi_lhs(source_op)) &&
+         loom_x86_value_is_vector_16xi32(context,
+                                         loom_vector_subi_rhs(source_op)) &&
+         loom_x86_value_is_vector_16xi32(context,
+                                         loom_vector_subi_result(source_op));
+}
+
 static bool loom_x86_can_lower_vector_muli(loom_low_lower_context_t* context,
                                            const loom_op_t* source_op) {
   return loom_x86_value_is_vector_16xi32(context,
@@ -314,6 +324,11 @@ static iree_status_t loom_x86_can_lower_op(void* user_data,
           loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
           loom_x86_can_lower_vector_addi(context, source_op);
       return iree_ok_status();
+    case LOOM_OP_VECTOR_SUBI:
+      *out_handled =
+          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_subi(context, source_op);
+      return iree_ok_status();
     case LOOM_OP_VECTOR_MULI:
       *out_handled =
           loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
@@ -391,6 +406,14 @@ static iree_status_t loom_x86_lower_vector_addi(
       context, source_op, IREE_SV("x86.avx512.vpaddd.zmm"),
       loom_vector_addi_lhs(source_op), loom_vector_addi_rhs(source_op),
       loom_vector_addi_result(source_op));
+}
+
+static iree_status_t loom_x86_lower_vector_subi(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  return loom_x86_lower_binary_op(
+      context, source_op, IREE_SV("x86.avx512.vpsubd.zmm"),
+      loom_vector_subi_lhs(source_op), loom_vector_subi_rhs(source_op),
+      loom_vector_subi_result(source_op));
 }
 
 static iree_status_t loom_x86_lower_vector_muli(
@@ -485,6 +508,8 @@ static iree_status_t loom_x86_try_lower_op(void* user_data,
   switch (source_op->kind) {
     case LOOM_OP_VECTOR_ADDI:
       return loom_x86_lower_vector_addi(context, source_op);
+    case LOOM_OP_VECTOR_SUBI:
+      return loom_x86_lower_vector_subi(context, source_op);
     case LOOM_OP_VECTOR_MULI:
       return loom_x86_lower_vector_muli(context, source_op);
     case LOOM_OP_VECTOR_DOT2F:

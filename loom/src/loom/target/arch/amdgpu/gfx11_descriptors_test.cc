@@ -77,6 +77,24 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(add_descriptor->result_count, 1u);
   EXPECT_EQ(add_descriptor->encoding_id, 37u);
 
+  const loom_low_descriptor_t* scalar_subtract_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_sub_u32"));
+  ASSERT_NE(scalar_subtract_descriptor, nullptr);
+  EXPECT_EQ(scalar_subtract_descriptor->operand_count, 3u);
+  EXPECT_EQ(scalar_subtract_descriptor->result_count, 1u);
+
+  const loom_low_descriptor_t* vector_subtract_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_sub_u32"));
+  ASSERT_NE(vector_subtract_descriptor, nullptr);
+  iree_string_view_t vector_subtract_key = iree_string_view_empty();
+  IREE_ASSERT_OK(loom_low_descriptor_set_string(
+      descriptor_set, vector_subtract_descriptor->key_string_offset,
+      &vector_subtract_key));
+  EXPECT_TRUE(
+      iree_string_view_equal(vector_subtract_key, IREE_SV("amdgpu.v_sub_u32")));
+  EXPECT_EQ(vector_subtract_descriptor->operand_count, 3u);
+  EXPECT_EQ(vector_subtract_descriptor->result_count, 1u);
+
   const loom_low_descriptor_t* multiply_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_mul_lo_u32"));
   ASSERT_NE(multiply_descriptor, nullptr);
@@ -248,6 +266,20 @@ TEST(AmdgpuDescriptorsTest, Gfx11AsmFormsExposeNamedWaitcntImmediates) {
             "vmcnt");
   EXPECT_EQ(ToString(descriptor_set, second_immediate->name_string_offset),
             "lgkmcnt");
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("v_sub_nc_u32"), &asm_form_ordinal));
+  asm_form =
+      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
+  ASSERT_NE(asm_form, nullptr);
+  EXPECT_EQ(asm_form->result_operand_index_count, 1u);
+  EXPECT_EQ(asm_form->operand_index_count, 2u);
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set,
+                                            asm_form->descriptor_ordinal);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
+            "amdgpu.v_sub_u32");
 }
 
 TEST(AmdgpuDescriptorsTest, Gfx11LowAsmInfersForcedVgprWmmaResultType) {

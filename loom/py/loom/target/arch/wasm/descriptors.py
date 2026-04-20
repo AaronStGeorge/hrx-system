@@ -141,6 +141,7 @@ _OP_V128_STORE = _simd_encoding_id(0x0B)
 _OP_V128_CONST = _simd_encoding_id(0x0C)
 _OP_I32X4_SPLAT = _simd_encoding_id(0x11)
 _OP_I32X4_ADD = _simd_encoding_id(0xAE)
+_OP_I32X4_SUB = _simd_encoding_id(0xB1)
 _OP_I32X4_MUL = _simd_encoding_id(0xB5)
 
 _TARGET_BLOCK_IMMEDIATE = Immediate(
@@ -319,6 +320,16 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="i32x4.add",
             semantic_tag="vector.add.i32x4",
             encoding_id=_OP_I32X4_ADD,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.sub",
+            mnemonic="i32x4.sub",
+            semantic_tag="vector.sub.i32x4",
+            encoding_id=_OP_I32X4_SUB,
             operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SIMD_I32X4,

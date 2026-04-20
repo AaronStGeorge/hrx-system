@@ -127,6 +127,11 @@ static iree_status_t loom_wasm_can_lower_op(void* user_data,
           context, loom_vector_addi_lhs(source_op),
           loom_vector_addi_rhs(source_op), loom_vector_addi_result(source_op));
       return iree_ok_status();
+    case LOOM_OP_VECTOR_SUBI:
+      *out_handled = loom_wasm_can_lower_vector_4xi32_binary(
+          context, loom_vector_subi_lhs(source_op),
+          loom_vector_subi_rhs(source_op), loom_vector_subi_result(source_op));
+      return iree_ok_status();
     case LOOM_OP_VECTOR_MULI:
       *out_handled = loom_wasm_can_lower_vector_4xi32_binary(
           context, loom_vector_muli_lhs(source_op),
@@ -249,6 +254,11 @@ static iree_status_t loom_wasm_try_lower_op(void* user_data,
           context, source_op, IREE_SV("wasm.i32x4.add"),
           loom_vector_addi_lhs(source_op), loom_vector_addi_rhs(source_op),
           loom_vector_addi_result(source_op));
+    case LOOM_OP_VECTOR_SUBI:
+      return loom_wasm_lower_binary(
+          context, source_op, IREE_SV("wasm.i32x4.sub"),
+          loom_vector_subi_lhs(source_op), loom_vector_subi_rhs(source_op),
+          loom_vector_subi_result(source_op));
     case LOOM_OP_VECTOR_MULI:
       return loom_wasm_lower_binary(
           context, source_op, IREE_SV("wasm.i32x4.mul"),

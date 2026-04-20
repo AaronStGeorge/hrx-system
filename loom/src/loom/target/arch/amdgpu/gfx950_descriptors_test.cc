@@ -67,6 +67,18 @@ TEST(AmdgpuDescriptorsTest, Gfx950CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(add_descriptor->result_count, 1u);
   EXPECT_EQ(add_descriptor->encoding_id, 52u);
 
+  const loom_low_descriptor_t* scalar_subtract_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_sub_u32"));
+  ASSERT_NE(scalar_subtract_descriptor, nullptr);
+  EXPECT_EQ(scalar_subtract_descriptor->operand_count, 3u);
+  EXPECT_EQ(scalar_subtract_descriptor->result_count, 1u);
+
+  const loom_low_descriptor_t* vector_subtract_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_sub_u32"));
+  ASSERT_NE(vector_subtract_descriptor, nullptr);
+  EXPECT_EQ(vector_subtract_descriptor->operand_count, 3u);
+  EXPECT_EQ(vector_subtract_descriptor->result_count, 1u);
+
   const loom_low_descriptor_t* multiply_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.v_mul_lo_u32"));
   ASSERT_NE(multiply_descriptor, nullptr);
@@ -198,8 +210,9 @@ TEST(AmdgpuDescriptorsTest, Gfx950LowAsmRegionRoundTrips) {
       "  %c0 = s_mov_b32 7\n"
       "  %c1 = s_mov_b32 5\n"
       "  %sum = s_add_u32 %c0, %c1\n"
+      "  %diff = s_sub_u32 %sum, %c1\n"
       "  s_waitcnt {vmcnt = 0, lgkmcnt = 0}\n"
-      "  return %sum\n"
+      "  return %diff\n"
       "}\n";
   std::string printed;
   IREE_ASSERT_OK(harness.RoundTrip(IREE_SV(source),

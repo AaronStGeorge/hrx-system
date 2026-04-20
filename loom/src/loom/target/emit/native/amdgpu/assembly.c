@@ -802,6 +802,7 @@ static const loom_amdgpu_assembly_descriptor_dispatch_t
         {"amdgpu.buffer_store_dwordx4",
          LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MUBUF_STORE, 0, 0, NULL},
         {"amdgpu.s_add_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
+        {"amdgpu.s_sub_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
         {"amdgpu.s_buffer_load_dword", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MEMORY,
          1, 2, NULL},
         {"amdgpu.s_load_dwordx2", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MEMORY, 1, 2,
@@ -827,6 +828,7 @@ static const loom_amdgpu_assembly_descriptor_dispatch_t
          LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MATRIX, 0, 0, NULL},
         {"amdgpu.v_mul_lo_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2,
          NULL},
+        {"amdgpu.v_sub_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
         {"amdgpu.v_wmma_f32_16x16x16_f16",
          LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MATRIX, 0, 0, NULL},
 };

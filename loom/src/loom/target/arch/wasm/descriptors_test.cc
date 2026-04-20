@@ -23,6 +23,7 @@ using ::loom::testing::LowTextAsmTypeInferenceHarness;
 constexpr uint16_t kWasmOpcodeI32Add = 0x6A;
 constexpr uint16_t kWasmOpcodeV128Load = 0xFD00;
 constexpr uint16_t kWasmOpcodeI32x4Add = 0xFDAE;
+constexpr uint16_t kWasmOpcodeI32x4Sub = 0xFDB1;
 constexpr uint16_t kWasmOpcodeV128Store = 0xFD0B;
 
 TEST(WasmDescriptorsTest, CoreSimd128DescriptorSetVerifies) {
@@ -61,6 +62,16 @@ TEST(WasmDescriptorsTest, CoreSimd128DescriptorLookupUsesStableKeys) {
   EXPECT_EQ(add_descriptor->operand_count, 3u);
   EXPECT_EQ(add_descriptor->result_count, 1u);
   EXPECT_EQ(add_descriptor->encoding_id, kWasmOpcodeI32x4Add);
+
+  uint32_t subtract_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
+      descriptor_set, IREE_SV("wasm.i32x4.sub"), &subtract_ordinal));
+  const loom_low_descriptor_t* subtract_descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set, subtract_ordinal);
+  ASSERT_NE(subtract_descriptor, nullptr);
+  EXPECT_EQ(subtract_descriptor->operand_count, 3u);
+  EXPECT_EQ(subtract_descriptor->result_count, 1u);
+  EXPECT_EQ(subtract_descriptor->encoding_id, kWasmOpcodeI32x4Sub);
 
   uint32_t scalar_add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
   IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
@@ -119,9 +130,10 @@ TEST(WasmDescriptorsTest, LowAsmRegionRoundTrips) {
       "  %lhs = v128.const 1, 2\n"
       "  %rhs = v128.const 3, 4\n"
       "  %sum = i32x4.add %lhs, %rhs\n"
+      "  %diff = i32x4.sub %sum, %rhs\n"
       "  %loaded = v128.load %addr\n"
       "  v128.store %addr, %loaded\n"
-      "  return %sum\n"
+      "  return %diff\n"
       "}\n";
   std::string printed;
   IREE_ASSERT_OK(harness.RoundTrip(IREE_SV(source),
@@ -156,13 +168,15 @@ TEST(WasmDescriptorsTest, LowFuncAsmRoundTripsMemoryPacketsWithArguments) {
       "asm<wasm.core.simd128> {\n"
       "  %loaded = v128.load %addr\n"
       "  %sum = i32x4.add %lhs, %rhs\n"
+      "  %diff = i32x4.sub %sum, %rhs\n"
       "  v128.store %addr, %loaded\n"
-      "  return %sum\n"
+      "  return %diff\n"
       "}\n";
   std::string printed;
   IREE_ASSERT_OK(harness.RoundTripAndVerify(
       IREE_SV(source), IREE_SV("wasm.core.simd128"), &printed));
   EXPECT_NE(printed.find("v128.load %addr"), std::string::npos);
+  EXPECT_NE(printed.find("i32x4.sub %sum, %rhs"), std::string::npos);
   EXPECT_NE(printed.find("v128.store %addr, %loaded"), std::string::npos);
 }
 

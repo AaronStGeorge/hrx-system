@@ -76,6 +76,17 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(add_descriptor->operand_count, 3u);
   EXPECT_EQ(add_descriptor->result_count, 1u);
 
+  const loom_low_descriptor_t* subtract_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vpsubd.zmm"));
+  ASSERT_NE(subtract_descriptor, nullptr);
+  iree_string_view_t subtract_key = iree_string_view_empty();
+  IREE_ASSERT_OK(loom_low_descriptor_set_string(
+      descriptor_set, subtract_descriptor->key_string_offset, &subtract_key));
+  EXPECT_TRUE(
+      iree_string_view_equal(subtract_key, IREE_SV("x86.avx512.vpsubd.zmm")));
+  EXPECT_EQ(subtract_descriptor->operand_count, 3u);
+  EXPECT_EQ(subtract_descriptor->result_count, 1u);
+
   const loom_low_descriptor_t* multiply_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vpmulld.zmm"));
   ASSERT_NE(multiply_descriptor, nullptr);
@@ -240,6 +251,20 @@ TEST(X86DescriptorsTest, Avx512AsmFormsNameUnambiguousPackets) {
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
             "x86.avx512.vpaddd.zmm");
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("vpsubd"), &asm_form_ordinal));
+  asm_form =
+      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
+  ASSERT_NE(asm_form, nullptr);
+  EXPECT_EQ(asm_form->result_operand_index_count, 1u);
+  EXPECT_EQ(asm_form->operand_index_count, 2u);
+
+  descriptor = loom_low_descriptor_set_descriptor_at(
+      descriptor_set, asm_form->descriptor_ordinal);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
+            "x86.avx512.vpsubd.zmm");
 
   IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
       descriptor_set, IREE_SV("vpmulld"), &asm_form_ordinal));

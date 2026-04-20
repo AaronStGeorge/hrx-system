@@ -375,30 +375,53 @@ static iree_status_t loom_x86_append_copy_packet(
   return loom_x86_append_assignment(context, source_assignment);
 }
 
+typedef iree_status_t (*loom_x86_assembly_descriptor_append_fn_t)(
+    const loom_native_assembly_packet_context_t* context);
+
+typedef struct loom_x86_assembly_descriptor_dispatch_t {
+  const char* key;
+  loom_x86_assembly_descriptor_append_fn_t append_packet;
+} loom_x86_assembly_descriptor_dispatch_t;
+
+static const loom_x86_assembly_descriptor_dispatch_t
+    kLoomX86AssemblyDescriptorDispatch[] = {
+        {"x86.avx512.kandq", loom_x86_append_binary_vector_packet},
+        {"x86.avx512.mov.gpr64", loom_x86_append_move_packet},
+        {"x86.avx512.vmovdqu32.load.zmm", loom_x86_append_load_packet},
+        {"x86.avx512.vmovdqu32.store.zmm", loom_x86_append_store_packet},
+        {"x86.avx512.vpaddd.zmm", loom_x86_append_binary_vector_packet},
+        {"x86.avx512.vpmulld.zmm", loom_x86_append_binary_vector_packet},
+        {"x86.avx512.vpsubd.zmm", loom_x86_append_binary_vector_packet},
+};
+
+static const loom_x86_assembly_descriptor_dispatch_t*
+loom_x86_find_descriptor_dispatch(iree_string_view_t key) {
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kLoomX86AssemblyDescriptorDispatch); ++i) {
+    const loom_x86_assembly_descriptor_dispatch_t* dispatch =
+        &kLoomX86AssemblyDescriptorDispatch[i];
+    if (iree_string_view_equal(key, iree_make_cstring_view(dispatch->key))) {
+      return dispatch;
+    }
+  }
+  return NULL;
+}
+
 static iree_status_t loom_x86_append_descriptor_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
   iree_string_view_t key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_x86_descriptor_key(context, &key));
-  if (iree_string_view_equal(key, IREE_SV("x86.avx512.vpaddd.zmm")) ||
-      iree_string_view_equal(key, IREE_SV("x86.avx512.vpmulld.zmm")) ||
-      iree_string_view_equal(key, IREE_SV("x86.avx512.kandq"))) {
-    return loom_x86_append_binary_vector_packet(context);
+  const loom_x86_assembly_descriptor_dispatch_t* dispatch =
+      loom_x86_find_descriptor_dispatch(key);
+  if (dispatch != NULL) {
+    return dispatch->append_packet(context);
   }
   bool uses_tied_ternary_form = false;
   IREE_RETURN_IF_ERROR(loom_x86_descriptor_uses_tied_ternary_form(
       context, &uses_tied_ternary_form));
   if (uses_tied_ternary_form) {
     return loom_x86_append_tied_ternary_packet(context);
-  }
-  if (iree_string_view_equal(key, IREE_SV("x86.avx512.vmovdqu32.load.zmm"))) {
-    return loom_x86_append_load_packet(context);
-  }
-  if (iree_string_view_equal(key, IREE_SV("x86.avx512.vmovdqu32.store.zmm"))) {
-    return loom_x86_append_store_packet(context);
-  }
-  if (iree_string_view_equal(key, IREE_SV("x86.avx512.mov.gpr64"))) {
-    return loom_x86_append_move_packet(context);
   }
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                           "x86 assembly descriptor '%.*s' is unsupported",

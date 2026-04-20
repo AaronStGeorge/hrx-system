@@ -438,6 +438,24 @@ def _s_add_u32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_sub_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_sub_u32",
+        instruction_name="S_SUB_U32",
+        mnemonic="s_sub_u32",
+        encoding_name="ENC_SOP2",
+        semantic_tag="integer.sub.u32",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result()),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
+        ),
+        implicit_operands=(_IGNORE_SCC_OUTPUT,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_add_u32_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_add_u32",
@@ -445,6 +463,23 @@ def _v_add_u32_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
         mnemonic="v_add_u32",
         encoding_name="ENC_VOP2",
         semantic_tag="integer.add.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_sub_u32_overlay(instruction_name: str, mnemonic: str) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_sub_u32",
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_VOP2",
+        semantic_tag="integer.sub.u32",
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
@@ -803,7 +838,9 @@ def _gfx950_core_overlay_descriptors(
         spec,
         (
             _s_add_u32_overlay(),
+            _s_sub_u32_overlay(),
             _v_add_u32_overlay("V_ADD_U32"),
+            _v_sub_u32_overlay("V_SUB_U32", "v_sub_u32"),
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _s_load_dwordx2_overlay(),
@@ -841,7 +878,9 @@ def _gfx11_core_overlay_descriptors(
         spec,
         (
             _s_add_u32_overlay(),
+            _s_sub_u32_overlay(),
             _v_add_u32_overlay("V_ADD_NC_U32"),
+            _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _s_load_dwordx2_overlay(),
@@ -873,7 +912,9 @@ def _gfx12_core_overlay_descriptors(
         spec,
         (
             _s_add_u32_overlay(),
+            _s_sub_u32_overlay(),
             _v_add_u32_overlay("V_ADD_NC_U32"),
+            _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
@@ -918,7 +959,9 @@ def _gfx1250_core_overlay_descriptors(
         spec,
         (
             _s_add_u32_overlay(),
+            _s_sub_u32_overlay(),
             _v_add_u32_overlay("V_ADD_NC_U32"),
+            _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
             _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),

@@ -320,14 +320,18 @@ class AmdgpuAssemblyTest : public ::testing::Test {
                                 "  %seven = scalar.constant 7 : i32\n"
                                 "  %biased = scalar.addi %lhs, %seven : i32\n"
                                 "  %sum = scalar.addi %biased, %rhs : i32\n"
+                                "  %difference = scalar.subi %sum, %seven : "
+                                "i32\n"
                                 "  %vconst = vector.constant 42 : "
                                 "vector<1xi32>\n"
                                 "  %vsum = vector.addi %vlhs, %vrhs : "
                                 "vector<1xi32>\n"
                                 "  %vbiased = vector.addi %vsum, %vconst : "
                                 "vector<1xi32>\n"
-                                "  %vproduct = vector.muli %vbiased, %vrhs : "
-                                "vector<1xi32>\n"
+                                "  %vdifference = vector.subi %vbiased, "
+                                "%vconst : vector<1xi32>\n"
+                                "  %vproduct = vector.muli %vdifference, %vrhs "
+                                ": vector<1xi32>\n"
                                 "  func.return\n"
                                 "}\n",
                                 &sidecar_arena, &packetization);
@@ -341,8 +345,10 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     EXPECT_NE(output.find(".Lbb0:"), std::string::npos);
     EXPECT_NE(output.find("s_mov_b32 s"), std::string::npos);
     EXPECT_NE(output.find("s_add_u32 s"), std::string::npos);
+    EXPECT_NE(output.find("s_sub_u32 s"), std::string::npos);
     EXPECT_NE(output.find("v_mov_b32 v"), std::string::npos);
     EXPECT_NE(output.find("v_add_u32 v"), std::string::npos);
+    EXPECT_NE(output.find("v_sub"), std::string::npos);
     EXPECT_NE(output.find("v_mul_lo_u32 v"), std::string::npos);
     EXPECT_NE(output.find("s_endpgm"), std::string::npos);
     iree_string_builder_deinitialize(&builder);
