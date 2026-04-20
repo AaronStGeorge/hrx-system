@@ -491,6 +491,97 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsB128CopyKernelForGfx11) {
   iree_arena_deinitialize(&sidecar_arena);
 }
 
+TEST_F(AmdgpuKernelAssemblyTest, EmitsMemoryAluStressKernelForGfx11) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  BuildMaterializedHalResourceSidecarsForPreset(
+      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
+      "> : reg<amdgpu.vgpr>\n"
+      "  %zero_v = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %four = low.const<amdgpu.v_mov_b32> {imm32 = 4} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %four) : "
+      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+      "  %source = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+      "  %wide_target = low.resource @binding1 : reg<amdgpu.sgpr x4>\n"
+      "  %scalar_target = low.resource @binding2 : reg<amdgpu.sgpr x4>\n"
+      "  %zero_s = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.sgpr>\n"
+      "  %wide = low.op<amdgpu.buffer_load_b128>(%source, %zero_v, "
+      "%zero_s) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, "
+      "reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>\n"
+      "  %seven = low.const<amdgpu.v_mov_b32> {imm32 = 7} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %sum = low.op<amdgpu.v_add_u32>(%tid, %seven) : "
+      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+      "  low.op<amdgpu.buffer_store_b128>(%wide, %wide_target, %zero_v, "
+      "%zero_s) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.op<amdgpu.buffer_store_dword>(%sum, %scalar_target, "
+      "%byte_offset, %zero_s) {offset = 0} : (reg<amdgpu.vgpr>, "
+      "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.return\n"
+      "}\n"
+      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n"
+      "low.abi.resource @binding1 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 1, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n"
+      "low.abi.resource @binding2 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 2, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n",
+      3, 2, &sidecar_arena, &packetization);
+
+  loom_amdgpu_wait_plan_t wait_plan = {};
+  IREE_ASSERT_OK(loom_amdgpu_wait_plan_build(&packetization.schedule,
+                                             &sidecar_arena, &wait_plan));
+  loom_amdgpu_wait_packet_plan_t wait_packets = {};
+  IREE_ASSERT_OK(loom_amdgpu_wait_packet_plan_build(&wait_plan, &sidecar_arena,
+                                                    &wait_packets));
+  ASSERT_GE(wait_packets.packet_count, 2u);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_wait_packets(
+      &packetization.schedule, &packetization.allocation, &wait_packets,
+      &builder, &sidecar_arena));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+
+  const size_t load = output.find("buffer_load_b128 v[");
+  const size_t add = output.find("v_add_u32 v");
+  const size_t wide_store = output.find("buffer_store_b128 v[");
+  const size_t scalar_store = output.find("buffer_store_dword v");
+  const size_t wait_before_wide_store = output.rfind("s_waitcnt", wide_store);
+  const size_t wait_after_scalar_store = output.find("s_waitcnt", scalar_store);
+  const size_t endpgm = output.find("s_endpgm");
+  EXPECT_NE(output.find("  .amdhsa_kernarg_size 24\n"), std::string::npos);
+  EXPECT_NE(output.find("        - .name: 'binding0'\n"), std::string::npos);
+  EXPECT_NE(output.find("        - .name: 'binding1'\n"), std::string::npos);
+  EXPECT_NE(output.find("        - .name: 'binding2'\n"), std::string::npos);
+  EXPECT_NE(output.find("v_mul_lo_u32 v"), std::string::npos);
+  EXPECT_NE(load, std::string::npos);
+  EXPECT_NE(add, std::string::npos);
+  EXPECT_NE(wide_store, std::string::npos);
+  EXPECT_NE(scalar_store, std::string::npos);
+  EXPECT_NE(wait_before_wide_store, std::string::npos);
+  EXPECT_NE(wait_after_scalar_store, std::string::npos);
+  EXPECT_NE(endpgm, std::string::npos);
+  EXPECT_LT(load, add);
+  EXPECT_LT(add, wait_before_wide_store);
+  EXPECT_LT(wait_before_wide_store, wide_store);
+  EXPECT_LT(wide_store, scalar_store);
+  EXPECT_LT(scalar_store, wait_after_scalar_store);
+  EXPECT_LT(wait_after_scalar_store, endpgm);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
 TEST_F(AmdgpuKernelAssemblyTest, AssemblesKernelEnvelopeForGfx11WithLlvmMc) {
   std::string assembly;
   EmitKernelForPreset("amdgpu-gfx11", "gfx1100", &assembly);

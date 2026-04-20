@@ -41,6 +41,57 @@ iree_status_t ParseLowNoopModule(loom_context_t* context,
                          block_pool, &parse_options, out_module);
 }
 
+iree_status_t ParseLowMemoryAluStressModule(loom_context_t* context,
+                                            iree_arena_block_pool_t* block_pool,
+                                            loom_module_t** out_module) {
+  static const char kSource[] =
+      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
+      "@loom_kernel}\n"
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>\n"
+      "  %zero_v = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %four = low.const<amdgpu.v_mov_b32> {imm32 = 4} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %four) : "
+      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+      "  %source = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+      "  %wide_target = low.resource @binding1 : reg<amdgpu.sgpr x4>\n"
+      "  %scalar_target = low.resource @binding2 : reg<amdgpu.sgpr x4>\n"
+      "  %zero_s = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.sgpr>\n"
+      "  %wide = low.op<amdgpu.buffer_load_b128>(%source, %zero_v, "
+      "%zero_s) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, "
+      "reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>\n"
+      "  %seven = low.const<amdgpu.v_mov_b32> {imm32 = 7} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %sum = low.op<amdgpu.v_add_u32>(%tid, %seven) : "
+      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+      "  low.op<amdgpu.buffer_store_b128>(%wide, %wide_target, %zero_v, "
+      "%zero_s) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.op<amdgpu.buffer_store_dword>(%sum, %scalar_target, "
+      "%byte_offset, %zero_s) {offset = 0} : (reg<amdgpu.vgpr>, "
+      "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.return\n"
+      "}\n"
+      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n"
+      "low.abi.resource @binding1 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 1, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n"
+      "low.abi.resource @binding2 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 2, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n";
+  loom_text_parse_options_t parse_options = {
+      .max_errors = 20,
+  };
+  return loom_text_parse(iree_make_cstring_view(kSource),
+                         IREE_SV("amdgpu_module_compiler.loom"), context,
+                         block_pool, &parse_options, out_module);
+}
+
 iree_status_t ParseSemanticVectorModule(loom_context_t* context,
                                         iree_arena_block_pool_t* block_pool,
                                         loom_module_t** out_module) {
@@ -162,6 +213,30 @@ TEST(AmdgpuModuleCompilerTest, CompilesLowNoopToHalExecutable) {
   ExpectHalExecutableHasSingleExport(executable, "amdgcn-amd-amdhsa--gfx1100",
                                      "loom_kernel.kd",
                                      /*expected_binding_count=*/0);
+
+  loom_amdgpu_hal_executable_deinitialize(&executable, iree_allocator_system());
+  loom_module_free(module);
+  loom_context_deinitialize(&context);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+TEST(AmdgpuModuleCompilerTest, CompilesLowMemoryAluStressToHalExecutable) {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
+  loom_context_t context = {};
+  IREE_ASSERT_OK(
+      loom_testing_context_initialize_all(iree_allocator_system(), &context));
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(ParseLowMemoryAluStressModule(&context, &block_pool, &module));
+  ASSERT_NE(module, nullptr);
+
+  loom_amdgpu_hal_executable_t executable = {};
+  IREE_ASSERT_OK(loom_amdgpu_compile_hal_executable(
+      module, /*options=*/nullptr, iree_allocator_system(), &executable));
+  ExpectHalExecutableHasSingleExport(executable, "amdgcn-amd-amdhsa--gfx1100",
+                                     "loom_kernel.kd",
+                                     /*expected_binding_count=*/3);
 
   loom_amdgpu_hal_executable_deinitialize(&executable, iree_allocator_system());
   loom_module_free(module);
