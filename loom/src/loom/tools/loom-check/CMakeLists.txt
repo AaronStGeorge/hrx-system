@@ -265,10 +265,6 @@ loom_cc_binary(
 
   DEPS
     ::main
-    loom::src::loom::target::arch::wasm::check_provider
-    loom::src::loom::target::arch::x86::check_provider
-    loom::src::loom::target::emit::ireevm::check_provider
-    loom::src::loom::target::emit::llvmir::check_provider
 )
 
 loom_cc_binary(
@@ -285,15 +281,71 @@ loom_cc_binary(
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
 
-if(IREE_HAL_DRIVER_AMDGPU)
-  iree_package_name(_LOOM_CHECK_PACKAGE_NAME)
-  set(_LOOM_CHECK_TARGET "${_LOOM_CHECK_PACKAGE_NAME}_loom-check")
-  target_compile_definitions(${_LOOM_CHECK_TARGET} PRIVATE
-    LOOM_CHECK_HAVE_AMDGPU=1
+set(_LOOM_CHECK_ALL_PROVIDERS amdgpu ireevm llvmir wasm x86)
+set(IREE_LOOM_CHECK_PROVIDERS "${_LOOM_CHECK_ALL_PROVIDERS}" CACHE STRING
+  "Semicolon-separated list of target providers linked into loom-check."
+)
+foreach(_LOOM_CHECK_PROVIDER ${IREE_LOOM_CHECK_PROVIDERS})
+  if(NOT _LOOM_CHECK_PROVIDER IN_LIST _LOOM_CHECK_ALL_PROVIDERS)
+    message(FATAL_ERROR
+      "Unknown loom-check provider '${_LOOM_CHECK_PROVIDER}'. "
+      "Expected one of: ${_LOOM_CHECK_ALL_PROVIDERS}"
+    )
+  endif()
+endforeach()
+
+iree_package_name(_LOOM_CHECK_PACKAGE_NAME)
+set(_LOOM_CHECK_TARGET "${_LOOM_CHECK_PACKAGE_NAME}_loom-check")
+
+function(_loom_check_enable_provider _target _definition _library)
+  target_compile_definitions(${_target} PRIVATE
+    ${_definition}=1
   )
-  target_link_libraries(${_LOOM_CHECK_TARGET} PRIVATE
+  target_link_libraries(${_target} PRIVATE
+    ${_library}
+  )
+endfunction()
+
+if("amdgpu" IN_LIST IREE_LOOM_CHECK_PROVIDERS AND IREE_HAL_DRIVER_AMDGPU)
+  _loom_check_enable_provider(
+    ${_LOOM_CHECK_TARGET}
+    LOOM_CHECK_HAVE_AMDGPU
     loom::src::loom::target::arch::amdgpu::check_provider
   )
-  unset(_LOOM_CHECK_TARGET)
-  unset(_LOOM_CHECK_PACKAGE_NAME)
 endif()
+
+if("ireevm" IN_LIST IREE_LOOM_CHECK_PROVIDERS)
+  _loom_check_enable_provider(
+    ${_LOOM_CHECK_TARGET}
+    LOOM_CHECK_HAVE_IREEVM
+    loom::src::loom::target::emit::ireevm::check_provider
+  )
+endif()
+
+if("llvmir" IN_LIST IREE_LOOM_CHECK_PROVIDERS)
+  _loom_check_enable_provider(
+    ${_LOOM_CHECK_TARGET}
+    LOOM_CHECK_HAVE_LLVMIR
+    loom::src::loom::target::emit::llvmir::check_provider
+  )
+endif()
+
+if("wasm" IN_LIST IREE_LOOM_CHECK_PROVIDERS)
+  _loom_check_enable_provider(
+    ${_LOOM_CHECK_TARGET}
+    LOOM_CHECK_HAVE_WASM
+    loom::src::loom::target::arch::wasm::check_provider
+  )
+endif()
+
+if("x86" IN_LIST IREE_LOOM_CHECK_PROVIDERS)
+  _loom_check_enable_provider(
+    ${_LOOM_CHECK_TARGET}
+    LOOM_CHECK_HAVE_X86
+    loom::src::loom::target::arch::x86::check_provider
+  )
+endif()
+
+unset(_LOOM_CHECK_TARGET)
+unset(_LOOM_CHECK_PACKAGE_NAME)
+unset(_LOOM_CHECK_ALL_PROVIDERS)

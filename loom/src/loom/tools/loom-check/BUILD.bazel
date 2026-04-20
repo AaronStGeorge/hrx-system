@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
@@ -11,6 +12,41 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+ALL_CHECK_PROVIDERS = [
+    "amdgpu",
+    "ireevm",
+    "llvmir",
+    "wasm",
+    "x86",
+]
+
+#===------------------------------------------------------------------------===#
+# Provider selection
+#===------------------------------------------------------------------------===#
+
+string_list_flag(
+    name = "enabled_providers",
+    build_setting_default = ALL_CHECK_PROVIDERS,
+)
+
+[
+    config_setting(
+        name = "{}_provider_enabled".format(provider),
+        flag_values = {
+            ":enabled_providers": provider,
+        },
+    )
+    for provider in ALL_CHECK_PROVIDERS
+]
+
+config_setting(
+    name = "amdgpu_provider_and_hal_enabled",
+    flag_values = {
+        ":enabled_providers": "amdgpu",
+        "//runtime/src/iree/hal/drivers:enabled_drivers": "amdgpu",
+    },
 )
 
 #===------------------------------------------------------------------------===#
@@ -42,18 +78,90 @@ iree_assert_no_dependency(
 )
 
 _AMDGPU_CHECK_COPTS = iree_select({
-    "//runtime/src/iree/hal/drivers:amdgpu_enabled": [
+    ":amdgpu_provider_and_hal_enabled": [
         "-DLOOM_CHECK_HAVE_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
 _AMDGPU_CHECK_DEPS = iree_select({
-    "//runtime/src/iree/hal/drivers:amdgpu_enabled": [
+    ":amdgpu_provider_and_hal_enabled": [
         "//loom/src/loom/target/arch/amdgpu:check_provider",
     ],
     "//conditions:default": [],
 })
+
+_IREEVM_CHECK_COPTS = iree_select({
+    ":ireevm_provider_enabled": [
+        "-DLOOM_CHECK_HAVE_IREEVM=1",
+    ],
+    "//conditions:default": [],
+})
+
+_IREEVM_CHECK_DEPS = iree_select({
+    ":ireevm_provider_enabled": [
+        "//loom/src/loom/target/emit/ireevm:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_LLVMIR_CHECK_COPTS = iree_select({
+    ":llvmir_provider_enabled": [
+        "-DLOOM_CHECK_HAVE_LLVMIR=1",
+    ],
+    "//conditions:default": [],
+})
+
+_LLVMIR_CHECK_DEPS = iree_select({
+    ":llvmir_provider_enabled": [
+        "//loom/src/loom/target/emit/llvmir:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_WASM_CHECK_COPTS = iree_select({
+    ":wasm_provider_enabled": [
+        "-DLOOM_CHECK_HAVE_WASM=1",
+    ],
+    "//conditions:default": [],
+})
+
+_WASM_CHECK_DEPS = iree_select({
+    ":wasm_provider_enabled": [
+        "//loom/src/loom/target/arch/wasm:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_X86_CHECK_COPTS = iree_select({
+    ":x86_provider_enabled": [
+        "-DLOOM_CHECK_HAVE_X86=1",
+    ],
+    "//conditions:default": [],
+})
+
+_X86_CHECK_DEPS = iree_select({
+    ":x86_provider_enabled": [
+        "//loom/src/loom/target/arch/x86:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_LOOM_CHECK_PROVIDER_COPTS = (
+    _AMDGPU_CHECK_COPTS +
+    _IREEVM_CHECK_COPTS +
+    _LLVMIR_CHECK_COPTS +
+    _WASM_CHECK_COPTS +
+    _X86_CHECK_COPTS
+)
+
+_LOOM_CHECK_PROVIDER_DEPS = (
+    _AMDGPU_CHECK_DEPS +
+    _IREEVM_CHECK_DEPS +
+    _LLVMIR_CHECK_DEPS +
+    _WASM_CHECK_DEPS +
+    _X86_CHECK_DEPS
+)
 
 loom_cc_library(
     name = "check",
@@ -280,14 +388,10 @@ loom_cc_test(
 loom_cc_binary(
     name = "loom-check",
     srcs = ["loom-check.c"],
-    copts = _AMDGPU_CHECK_COPTS,
+    copts = _LOOM_CHECK_PROVIDER_COPTS,
     deps = [
         ":main",
-        "//loom/src/loom/target/arch/wasm:check_provider",
-        "//loom/src/loom/target/arch/x86:check_provider",
-        "//loom/src/loom/target/emit/ireevm:check_provider",
-        "//loom/src/loom/target/emit/llvmir:check_provider",
-    ] + _AMDGPU_CHECK_DEPS,
+    ] + _LOOM_CHECK_PROVIDER_DEPS,
 )
 
 loom_cc_binary(
