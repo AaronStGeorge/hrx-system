@@ -1190,6 +1190,22 @@ static iree_status_t loom_low_lower_emit_argument_resource_imports(
   return status;
 }
 
+static iree_status_t loom_low_lower_emit_preamble(
+    loom_low_lower_context_t* context) {
+  if (context->policy->emit_preamble.fn == NULL) {
+    return iree_ok_status();
+  }
+
+  loom_region_t* low_body = loom_low_func_def_body(context->low_func_op);
+  loom_builder_ip_t saved_ip = loom_builder_enter_region(
+      &context->builder, context->low_func_op, low_body);
+  loom_builder_set_block(&context->builder, loom_region_entry_block(low_body));
+  iree_status_t status = context->policy->emit_preamble.fn(
+      context->policy->emit_preamble.user_data, context);
+  loom_builder_restore(&context->builder, saved_ip);
+  return status;
+}
+
 static iree_status_t loom_low_lower_find_block_index(loom_region_t* region,
                                                      const loom_block_t* block,
                                                      uint16_t* out_index) {
@@ -1412,6 +1428,9 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     }
     if (iree_status_is_ok(status)) {
       status = loom_low_lower_map_blocks(&context, source_body);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_low_lower_emit_preamble(&context);
     }
     if (iree_status_is_ok(status)) {
       status = loom_low_lower_emit_argument_resource_imports(&context);

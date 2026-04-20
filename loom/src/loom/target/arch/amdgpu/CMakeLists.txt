@@ -286,11 +286,13 @@ loom_cc_library(
   SRCS
     "lower.c"
   DEPS
+    ::hal_kernel_abi
     iree::base
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir
     loom::src::loom::ops::buffer
     loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector

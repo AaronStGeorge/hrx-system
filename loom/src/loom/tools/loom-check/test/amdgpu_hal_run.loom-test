@@ -20,6 +20,25 @@ low.abi.resource @binding0 {function = @loom_kernel, kind = hal_buffer_resource,
 [SUCCESS] all HAL bindings matched their expected values.
 
 // ====
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&64xi32=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63 --binding=&64xi32=0 --expected_binding=64xi32=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63 --expected_binding=64xi32=7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70
+
+target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+
+func.def @loom_kernel(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %value = vector.constant 7 : vector<1xi32>
+  %sum = vector.addi %loaded, %value : vector<1xi32>
+  vector.store %sum, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=5,6,7,8 --binding=&4xi32=0 --binding=&64xi32=0 --expected_binding=4xi32=5,6,7,8 --expected_binding=4xi32=5,6,7,8 --expected_binding=64xi32=7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70
 

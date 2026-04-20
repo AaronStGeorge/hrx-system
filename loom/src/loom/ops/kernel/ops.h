@@ -30,7 +30,8 @@ enum {
   LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 9),
   LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 10),
   LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 11),
-  LOOM_OP_KERNEL_COUNT_ = 12,
+  LOOM_OP_KERNEL_WORKITEM_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 12),
+  LOOM_OP_KERNEL_COUNT_ = 13,
 };
 
 // Target-independent cache scope for memory operations.
@@ -95,6 +96,14 @@ typedef enum loom_kernel_barrier_scope_e {
   LOOM_KERNEL_BARRIER_SCOPE_SYSTEM = 4,
   LOOM_KERNEL_BARRIER_SCOPE_COUNT_ = 5,
 } loom_kernel_barrier_scope_t;
+
+// Three-dimensional kernel coordinate axis.
+typedef enum loom_kernel_workitem_id_dimension_e {
+  LOOM_KERNEL_WORKITEM_ID_DIMENSION_X = 0,
+  LOOM_KERNEL_WORKITEM_ID_DIMENSION_Y = 1,
+  LOOM_KERNEL_WORKITEM_ID_DIMENSION_Z = 2,
+  LOOM_KERNEL_WORKITEM_ID_DIMENSION_COUNT_ = 3,
+} loom_kernel_workitem_id_dimension_t;
 
 // LOOM_OP_KERNEL_BARRIER: Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The supported kernel barrier is a workgroup execution barrier over workgroup memory with acquire-release ordering. Async-copy completion is modeled by kernel.async.wait; use kernel.barrier only when invocations must rendezvous before consuming shared memory.
 // kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
@@ -345,6 +354,18 @@ iree_status_t loom_kernel_async_cluster_gather_mask_build(
 iree_status_t loom_kernel_async_cluster_gather_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_WORKITEM_ID: Read one coordinate of the current invocation within its workgroup. The result is a logical index value, not a byte offset; target lowering decides whether the coordinate is carried in scalar, vector, or dedicated target registers.
+// %tid = kernel.workitem.id<x> : index
+LOOM_DEFINE_ISA(loom_kernel_workitem_id_isa, LOOM_OP_KERNEL_WORKITEM_ID)
+LOOM_DEFINE_RESULT(loom_kernel_workitem_id_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_workitem_id_dimension, 0)
+iree_status_t loom_kernel_workitem_id_build(
+    loom_builder_t* builder,
+    uint8_t dimension,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 
 // Returns the vtable array for the kernel dialect.
 const loom_op_vtable_t* const* loom_kernel_dialect_vtables(

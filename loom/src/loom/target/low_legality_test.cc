@@ -172,6 +172,23 @@ TEST_F(TargetLowLegalityTest, AcceptsVectorCfgSourceFunction) {
   EXPECT_TRUE(collector.emissions.empty());
 }
 
+TEST_F(TargetLowLegalityTest, AcceptsKernelWorkitemIdSourceFunction) {
+  ModulePtr module = ParseSource(
+      "func.def @kernel_coordinate() -> (index) {\n"
+      "  %tid = kernel.workitem.id<x> : index\n"
+      "  func.return %tid : index\n"
+      "}\n");
+
+  EmissionCollector collector;
+  loom_target_low_legality_result_t result = {};
+  IREE_ASSERT_OK(Verify(module.get(), &collector, &result));
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_EQ(result.remark_count, 0u);
+  EXPECT_NE(result.descriptor_set, nullptr);
+  EXPECT_TRUE(collector.emissions.empty());
+}
+
 TEST_F(TargetLowLegalityTest, RejectsScfBeforeCfgLowering) {
   ModulePtr module = ParseSource(
       "func.def @structured(%cond: i1, %a: i32, %b: i32) -> (i32) {\n"

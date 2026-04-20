@@ -18,6 +18,7 @@ from loom.assembly import (
     Ref,
     Refs,
     ResultType,
+    TemplateParam,
     TypeOf,
     TypesOf,
     kw,
@@ -28,7 +29,9 @@ from loom.dsl import (
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64,
     I1,
+    INDEX,
     INTEGER,
+    PURE,
     UNKNOWN_EFFECTS,
     VECTOR,
     VIEW,
@@ -121,6 +124,16 @@ KernelOrdering = EnumDef(
     doc="Target-independent memory ordering for kernel synchronization ops.",
 )
 
+KernelDimension = EnumDef(
+    "KernelDimension",
+    [
+        EnumCase("x", 0, doc="X dimension."),
+        EnumCase("y", 1, doc="Y dimension."),
+        EnumCase("z", 2, doc="Z dimension."),
+    ],
+    doc="Three-dimensional kernel coordinate axis.",
+)
+
 KernelAsyncDirection = EnumDef(
     "KernelAsyncDirection",
     [
@@ -154,6 +167,42 @@ def _async_cache_attrs() -> list[AttrDef]:
             doc="Required temporal cache hint for the transfer.",
         ),
     ]
+
+
+# ============================================================================
+# kernel.workitem.id — current invocation coordinate within the workgroup
+# ============================================================================
+
+kernel_workitem_id = Op(
+    name="kernel.workitem.id",
+    group=kernel_ops,
+    doc=(
+        "Read one coordinate of the current invocation within its workgroup. "
+        "The result is a logical index value, not a byte offset; target "
+        "lowering decides whether the coordinate is carried in scalar, vector, "
+        "or dedicated target registers."
+    ),
+    results=[
+        Result("result", INDEX, doc="Current workitem coordinate in the selected dimension."),
+    ],
+    attrs=[
+        AttrDef(
+            "dimension",
+            ATTR_TYPE_ENUM,
+            enum_def=KernelDimension,
+            doc="Coordinate axis to read.",
+        ),
+    ],
+    traits=[PURE],
+    format=[
+        TemplateParam("dimension"),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=[
+        "%tid = kernel.workitem.id<x> : index",
+    ],
+)
 
 
 # ============================================================================
@@ -745,4 +794,5 @@ ALL_KERNEL_OPS: tuple[Op, ...] = (
     kernel_async_tensor_store_from_lds,
     kernel_async_cluster_gather,
     kernel_async_cluster_gather_mask,
+    kernel_workitem_id,
 )

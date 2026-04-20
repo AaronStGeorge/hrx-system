@@ -10,6 +10,7 @@ from loom.dialect.kernel.defs import (
     ALL_KERNEL_OPS,
     ALL_KERNEL_TYPES,
     KernelAsyncDirection,
+    KernelDimension,
     KernelMemorySpace,
     KernelOrdering,
     KernelScope,
@@ -29,6 +30,7 @@ from loom.dialect.kernel.defs import (
     kernel_ops,
     kernel_tensor_lds_descriptor,
     kernel_tensor_lds_descriptor_type,
+    kernel_workitem_id,
 )
 
 __all__ = [
@@ -36,6 +38,7 @@ __all__ = [
     "ALL_KERNEL_OPS",
     "ALL_KERNEL_TYPES",
     "KernelAsyncDirection",
+    "KernelDimension",
     "KernelMemorySpace",
     "KernelOrdering",
     "KernelScope",
@@ -54,4 +57,5 @@ __all__ = [
     "kernel_barrier",
     "kernel_tensor_lds_descriptor",
     "kernel_tensor_lds_descriptor_type",
+    "kernel_workitem_id",
 ]

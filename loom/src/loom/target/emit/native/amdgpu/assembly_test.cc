@@ -568,6 +568,89 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferLoadAddStoreToVmemPackets) {
   EXPECT_TRUE(saw_store);
 }
 
+TEST_F(AmdgpuAssemblyTest,
+       LowersSemanticWorkitemIndexedLoadAddStoreToVmemPackets) {
+  loom_low_lower_result_t lower_result = {};
+  LowerSource("amdgpu-gfx11",
+              "func.def @gfx_source(%input: buffer, %output: buffer) {\n"
+              "  %tid = kernel.workitem.id<x> : index\n"
+              "  %zero = index.constant 0 : offset\n"
+              "  %input_view = buffer.view %input[%zero] : buffer -> "
+              "view<64xi32, #dense>\n"
+              "  %output_view = buffer.view %output[%zero] : buffer -> "
+              "view<64xi32, #dense>\n"
+              "  %loaded = vector.load %input_view[%tid] : "
+              "view<64xi32, #dense> -> vector<1xi32>\n"
+              "  %value = vector.constant 7 : vector<1xi32>\n"
+              "  %sum = vector.addi %loaded, %value : vector<1xi32>\n"
+              "  vector.store %sum, %output_view[%tid] : vector<1xi32>, "
+              "view<64xi32, #dense>\n"
+              "  func.return\n"
+              "}\n",
+              &lower_result);
+  EXPECT_EQ(lower_result.error_count, 0u);
+  ASSERT_NE(lower_result.low_func_op, nullptr);
+  ASSERT_NE(lower_result.abi_adapter_op, nullptr);
+
+  loom_low_verify_options_t verify_options = {
+      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
+      .descriptor_registry = &target_registry_.registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .max_errors = 20,
+  };
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      loom_low_verify_module(module_, &verify_options, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+
+  bool saw_workitem_live_in = false;
+  bool saw_byte_offset = false;
+  bool saw_load = false;
+  bool saw_add = false;
+  bool saw_store = false;
+  uint32_t resource_count = 0;
+  loom_region_t* low_body = loom_low_func_def_body(lower_result.low_func_op);
+  loom_block_t* entry_block = loom_region_entry_block(low_body);
+  loom_op_t* op = nullptr;
+  loom_block_for_each_op(entry_block, op) {
+    if (loom_low_live_in_isa(op)) {
+      saw_workitem_live_in |= StringIdEquals(loom_low_live_in_source(op),
+                                             IREE_SV("amdgpu.workitem_id.x"));
+    } else if (loom_low_resource_isa(op)) {
+      ++resource_count;
+    } else if (loom_low_op_isa(op)) {
+      if (StringIdEquals(loom_low_op_opcode(op),
+                         IREE_SV("amdgpu.v_mul_lo_u32"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 2u);
+        EXPECT_EQ(loom_low_op_results(op).count, 1u);
+        saw_byte_offset = true;
+      } else if (StringIdEquals(loom_low_op_opcode(op),
+                                IREE_SV("amdgpu.buffer_load_dword"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 3u);
+        EXPECT_EQ(loom_low_op_results(op).count, 1u);
+        saw_load = true;
+      } else if (StringIdEquals(loom_low_op_opcode(op),
+                                IREE_SV("amdgpu.v_add_u32"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 2u);
+        EXPECT_EQ(loom_low_op_results(op).count, 1u);
+        saw_add = true;
+      } else if (StringIdEquals(loom_low_op_opcode(op),
+                                IREE_SV("amdgpu.buffer_store_dword"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 4u);
+        EXPECT_EQ(loom_low_op_results(op).count, 0u);
+        saw_store = true;
+      }
+    }
+  }
+  EXPECT_EQ(resource_count, 2u);
+  EXPECT_TRUE(saw_workitem_live_in);
+  EXPECT_TRUE(saw_byte_offset);
+  EXPECT_TRUE(saw_load);
+  EXPECT_TRUE(saw_add);
+  EXPECT_TRUE(saw_store);
+}
+
 TEST_F(AmdgpuAssemblyTest, EmitsPlannedWaitPackets) {
   struct Case {
     const char* preset_key;

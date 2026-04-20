@@ -316,10 +316,36 @@ static iree_status_t TestTryLowerOp(void* user_data,
   }
 }
 
+static iree_status_t TestEmitPreamble(void* user_data,
+                                      loom_low_lower_context_t* context) {
+  (void)user_data;
+  loom_string_id_t source_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(loom_low_lower_context_module(context),
+                                IREE_SV("test.thread_id"), &source_id));
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      MakeRegisterType(context, IREE_SV("test.i32"), &result_type));
+  loom_op_t* live_in_op = nullptr;
+  return loom_low_live_in_build(
+      loom_low_lower_context_builder(context), source_id,
+      loom_make_named_attr_slice(NULL, 0), result_type,
+      loom_low_lower_context_low_function(context)->location, &live_in_op);
+}
+
 static const loom_low_lower_policy_t kTestLowerPolicy = {
     .name = IREE_SVL("test-lower-policy"),
     .map_type = {.fn = TestMapType, .user_data = nullptr},
     .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
+    .can_lower_op = {.fn = TestCanLowerOp, .user_data = nullptr},
+    .try_lower_op = {.fn = TestTryLowerOp, .user_data = nullptr},
+};
+
+static const loom_low_lower_policy_t kTestPreambleLowerPolicy = {
+    .name = IREE_SVL("test-preamble-lower-policy"),
+    .map_type = {.fn = TestMapType, .user_data = nullptr},
+    .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
+    .emit_preamble = {.fn = TestEmitPreamble, .user_data = nullptr},
     .can_lower_op = {.fn = TestCanLowerOp, .user_data = nullptr},
     .try_lower_op = {.fn = TestTryLowerOp, .user_data = nullptr},
 };
@@ -329,6 +355,19 @@ static loom_low_lower_policy_registry_t MakeTestPolicyRegistry() {
       {
           .contract_set_key = IREE_SVL("test.low.core"),
           .policy = &kTestLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_t registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &registry, kEntries, IREE_ARRAYSIZE(kEntries));
+  return registry;
+}
+
+static loom_low_lower_policy_registry_t MakeTestPreamblePolicyRegistry() {
+  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &kTestPreambleLowerPolicy,
       },
   };
   loom_low_lower_policy_registry_t registry = {};
@@ -795,6 +834,44 @@ TEST_F(LowLowerTest, LowersResourceArgumentsWithoutDirectAbiOperands) {
   EXPECT_NE(text.find("semantic_type = buffer"), std::string::npos);
   EXPECT_NE(text.find("operand_count = 0"), std::string::npos);
   EXPECT_EQ(text.find("low.abi.operand"), std::string::npos);
+}
+
+TEST_F(LowLowerTest, EmitsPreambleBeforeResourceImports) {
+  policy_registry_ = MakeTestPreamblePolicyRegistry();
+  IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
+
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseExpandAndLower(
+      "target.preset @test_target {key = \"test-low\", source = "
+      "@resource_entry}\n"
+      "func.def @resource_entry(%buffer: buffer) {\n"
+      "  func.return\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_NE(lower_result.abi_adapter_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+
+  EmissionCollector verify_collector;
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      VerifyLowModule(module.get(), &verify_collector, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+  EXPECT_TRUE(verify_collector.emissions.empty());
+
+  const loom_text_print_options_t print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+  };
+  std::string text;
+  IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
+  const size_t live_in_position = text.find("low.live_in<test.thread_id>");
+  const size_t resource_position = text.find("low.resource");
+  ASSERT_NE(live_in_position, std::string::npos);
+  ASSERT_NE(resource_position, std::string::npos);
+  EXPECT_LT(live_in_position, resource_position);
 }
 
 TEST_F(LowLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {

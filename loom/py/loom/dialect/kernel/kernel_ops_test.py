@@ -11,6 +11,7 @@ from loom.dialect.kernel import (
     ALL_KERNEL_OPS,
     ALL_KERNEL_TYPES,
     KernelAsyncDirection,
+    KernelDimension,
     KernelMemorySpace,
     KernelOrdering,
     KernelScope,
@@ -30,8 +31,9 @@ from loom.dialect.kernel import (
     kernel_ops,
     kernel_tensor_lds_descriptor,
     kernel_tensor_lds_descriptor_type,
+    kernel_workitem_id,
 )
-from loom.dsl import ANY, ATTR_TYPE_ENUM, ATTR_TYPE_I64, I1, INTEGER, UNKNOWN_EFFECTS, VECTOR, VIEW, Op
+from loom.dsl import ANY, ATTR_TYPE_ENUM, ATTR_TYPE_I64, I1, INDEX, INTEGER, PURE, UNKNOWN_EFFECTS, VECTOR, VIEW, Op
 
 
 def _ops() -> dict[str, Op]:
@@ -61,6 +63,7 @@ class TestKernelDialect:
             "kernel.async.tensor.store.from.lds",
             "kernel.async.cluster.gather",
             "kernel.async.cluster.gather.mask",
+            "kernel.workitem.id",
         ]
 
     def test_public_exports_match_registry(self) -> None:
@@ -76,9 +79,21 @@ class TestKernelDialect:
         assert kernel_async_tensor_store_from_lds in ALL_KERNEL_OPS
         assert kernel_async_wait in ALL_KERNEL_OPS
         assert kernel_tensor_lds_descriptor in ALL_KERNEL_OPS
+        assert kernel_workitem_id in ALL_KERNEL_OPS
         assert kernel_async_group_type in ALL_KERNEL_TYPES
         assert kernel_async_token_type in ALL_KERNEL_TYPES
         assert kernel_tensor_lds_descriptor_type in ALL_KERNEL_TYPES
+
+    def test_workitem_id_shape(self) -> None:
+        op = _ops()["kernel.workitem.id"]
+        assert not op.operands
+        assert [result.name for result in op.results] == ["result"]
+        assert op.results[0].type_constraint == INDEX
+        assert [attr.name for attr in op.attrs] == ["dimension"]
+        assert op.attrs[0].attr_type == ATTR_TYPE_ENUM
+        assert op.attrs[0].enum_def is KernelDimension
+        assert PURE in op.traits
+        assert op.is_pure
 
     def test_barrier_has_required_attrs(self) -> None:
         op = _ops()["kernel.barrier"]
@@ -310,6 +325,13 @@ class TestKernelDialect:
         assert [(case.keyword, case.value) for case in KernelAsyncDirection.cases] == [
             ("global_to_workgroup", 0),
             ("workgroup_to_global", 1),
+        ]
+
+    def test_kernel_dimension_values(self) -> None:
+        assert [(case.keyword, case.value) for case in KernelDimension.cases] == [
+            ("x", 0),
+            ("y", 1),
+            ("z", 2),
         ]
 
     def test_async_cache_temporal_values(self) -> None:

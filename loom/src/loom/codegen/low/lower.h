@@ -78,6 +78,17 @@ typedef struct loom_low_lower_map_argument_callback_t {
   void* user_data;
 } loom_low_lower_map_argument_callback_t;
 
+typedef iree_status_t (*loom_low_lower_emit_preamble_fn_t)(
+    void* user_data, loom_low_lower_context_t* context);
+
+typedef struct loom_low_lower_emit_preamble_callback_t {
+  // Optional callback invoked after the low function and entry block are
+  // created, before ABI resources and source body packets are emitted.
+  loom_low_lower_emit_preamble_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_emit_preamble_callback_t;
+
 typedef iree_status_t (*loom_low_lower_can_lower_op_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, bool* out_handled);
@@ -107,6 +118,8 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_map_type_callback_t map_type;
   // Optionally maps source function arguments to non-direct ABI imports.
   loom_low_lower_map_argument_callback_t map_argument;
+  // Optionally emits target live-ins or other structural preamble packets.
+  loom_low_lower_emit_preamble_callback_t emit_preamble;
   // Preflights a non-structural source op without mutating IR.
   loom_low_lower_can_lower_op_callback_t can_lower_op;
   // Emits target-low ops for a preflighted non-structural source op.
@@ -208,8 +221,9 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
 // Returns the module being mutated by the current lowering.
 loom_module_t* loom_low_lower_context_module(loom_low_lower_context_t* context);
 
-// Returns the builder positioned in the current low block. Only valid while a
-// try_lower_op callback is emitting; preflight callbacks must not mutate IR.
+// Returns the builder positioned in the current low block. Only valid while an
+// emit_preamble or try_lower_op callback is emitting; preflight callbacks must
+// not mutate IR.
 loom_builder_t* loom_low_lower_context_builder(
     loom_low_lower_context_t* context);
 
