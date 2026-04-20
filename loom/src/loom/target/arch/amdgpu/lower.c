@@ -537,11 +537,20 @@ static bool loom_amdgpu_memory_access_find_dynamic_axis(
   return true;
 }
 
-static bool loom_amdgpu_memory_access_static_indices_are_zero_except_dynamic(
-    loom_attribute_t static_indices, uint8_t dynamic_axis) {
+static bool loom_amdgpu_memory_access_static_byte_offset(
+    const loom_vector_memory_access_t* vector_access,
+    loom_attribute_t static_indices, uint8_t dynamic_axis,
+    int64_t* out_static_byte_offset) {
+  IREE_ASSERT_ARGUMENT(out_static_byte_offset);
+  *out_static_byte_offset = 0;
   if (static_indices.kind != LOOM_ATTR_I64_ARRAY) {
     return false;
   }
+  if (static_indices.count > LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK) {
+    return false;
+  }
+
+  int64_t static_origin[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {0};
   for (uint16_t i = 0; i < static_indices.count; ++i) {
     if (i == dynamic_axis) {
       if (static_indices.i64_array[i] != INT64_MIN) {
@@ -549,11 +558,25 @@ static bool loom_amdgpu_memory_access_static_indices_are_zero_except_dynamic(
       }
       continue;
     }
-    if (static_indices.i64_array[i] != 0) {
+    if (static_indices.i64_array[i] == INT64_MIN) {
       return false;
     }
+    static_origin[i] = static_indices.i64_array[i];
   }
-  return true;
+  loom_attribute_t static_origin_attr =
+      loom_attr_i64_array(static_origin, static_indices.count);
+  int64_t lane_indices[] = {0};
+  return loom_vector_memory_access_static_lane_byte_offset(
+      vector_access, static_origin_attr, lane_indices,
+      IREE_ARRAYSIZE(lane_indices), out_static_byte_offset);
+}
+
+static bool loom_amdgpu_memory_access_static_byte_offset_is_usable(
+    int64_t static_byte_offset, uint32_t vgpr_count) {
+  if (static_byte_offset < 0) {
+    return false;
+  }
+  return vgpr_count != 4 || (static_byte_offset & 15) == 0;
 }
 
 static bool loom_amdgpu_memory_access_select(
@@ -597,8 +620,8 @@ static bool loom_amdgpu_memory_access_select(
             IREE_ARRAYSIZE(lane_indices), &out_access->static_byte_offset)) {
       return false;
     }
-    if (out_access->vgpr_count == 4 &&
-        (out_access->static_byte_offset & 15) != 0) {
+    if (!loom_amdgpu_memory_access_static_byte_offset_is_usable(
+            out_access->static_byte_offset, out_access->vgpr_count)) {
       return false;
     }
     return true;
@@ -611,10 +634,6 @@ static bool loom_amdgpu_memory_access_select(
   if (!loom_amdgpu_memory_access_find_dynamic_axis(static_indices,
                                                    &dynamic_axis) ||
       dynamic_axis == UINT8_MAX || dynamic_axis >= vector_access.view_rank) {
-    return false;
-  }
-  if (!loom_amdgpu_memory_access_static_indices_are_zero_except_dynamic(
-          static_indices, dynamic_axis)) {
     return false;
   }
   if (!loom_amdgpu_value_is_workitem_id_x(context, dynamic_indices.values[0])) {
@@ -636,9 +655,18 @@ static bool loom_amdgpu_memory_access_select(
   if (out_access->vgpr_count == 4 && (dynamic_index_byte_stride & 15) != 0) {
     return false;
   }
+  int64_t static_byte_offset = 0;
+  if (!loom_amdgpu_memory_access_static_byte_offset(
+          &vector_access, static_indices, dynamic_axis, &static_byte_offset)) {
+    return false;
+  }
+  if (!loom_amdgpu_memory_access_static_byte_offset_is_usable(
+          static_byte_offset, out_access->vgpr_count)) {
+    return false;
+  }
   out_access->dynamic_index = dynamic_indices.values[0];
   out_access->dynamic_index_byte_stride = (uint32_t)dynamic_index_byte_stride;
-  out_access->static_byte_offset = 0;
+  out_access->static_byte_offset = static_byte_offset;
   return true;
 }
 
