@@ -10,7 +10,7 @@
 #define LOOM_TOOLS_IREE_RUN_LOOM_MAIN_H_
 
 #include "iree/base/api.h"
-#include "loom/tooling/execution/hal_backend.h"
+#include "loom/tooling/execution/execution_backend.h"
 #include "loom/tooling/execution/session.h"
 
 #ifdef __cplusplus
@@ -23,8 +23,8 @@ typedef struct iree_run_loom_configuration_t {
   // Target-low descriptor registry package linked into this runner.
   loom_run_initialize_low_descriptor_registry_callback_t
       initialize_low_descriptor_registry;
-  // HAL backend providers linked into this runner.
-  loom_run_hal_backend_registry_t hal_backend_registry;
+  // Execution backends linked into this runner.
+  loom_run_execution_backend_registry_t execution_backend_registry;
 } iree_run_loom_configuration_t;
 
 // Runs the configured iree-run-loom command-line tool.

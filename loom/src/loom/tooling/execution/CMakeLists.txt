@@ -18,12 +18,26 @@ loom_cc_library(
   SRCS
     "candidate.c"
   DEPS
+    ::compile_options
     ::hal_backend
     ::session
     iree::base
-    loom::src::loom::error::diagnostic
     loom::src::loom::target::emit::ireevm::module_archive
     loom::src::loom::target::emit::ireevm::module_compiler
+    loom::src::loom::verify
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    compile_options
+  HDRS
+    "compile_options.h"
+  SRCS
+    "compile_options.c"
+  DEPS
+    iree::base
+    loom::src::loom::error::diagnostic
     loom::src::loom::verify
   PUBLIC
 )
@@ -36,10 +50,23 @@ loom_cc_library(
   SRCS
     "execution_provider.c"
   DEPS
+    ::execution_backend
     ::hal_backend
     ::session
     iree::base
     loom::src::loom::target::low_descriptor_registry
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    execution_backend
+  HDRS
+    "execution_backend.h"
+  SRCS
+    "execution_backend.c"
+  DEPS
+    iree::base
   PUBLIC
 )
 
@@ -79,6 +106,24 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    hal_execution_backend
+  HDRS
+    "hal_execution_backend.h"
+  SRCS
+    "hal_execution_backend.c"
+  DEPS
+    ::candidate
+    ::execution_backend
+    ::hal_backend
+    ::hal_invocation
+    ::hal_runtime
+    ::one_shot
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     hal_invocation
   HDRS
     "hal_invocation.h"
@@ -94,6 +139,22 @@ loom_cc_library(
     iree::tooling::function_io
     iree::tooling::function_util
     iree::vm
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    one_shot
+  HDRS
+    "one_shot.h"
+  SRCS
+    "one_shot.c"
+  DEPS
+    ::compile_options
+    ::hal_invocation
+    ::session
+    ::vm_invocation
+    iree::base
   PUBLIC
 )
 

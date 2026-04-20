@@ -362,6 +362,7 @@ loom_cc_library(
     ::amdgpu_hal_backend
     iree::base
     loom::src::loom::tooling::execution::execution_provider
+    loom::src::loom::tooling::execution::hal_execution_backend
   PUBLIC
 )
 

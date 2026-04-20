@@ -47,8 +47,9 @@ int main(int argc, char** argv) {
       .initialize_low_descriptor_registry =
           loom_run_execution_environment_low_descriptor_registry_callback(
               &environment),
-      .hal_backend_registry =
-          *loom_run_execution_environment_hal_backend_registry(&environment),
+      .execution_backend_registry =
+          *loom_run_execution_environment_execution_backend_registry(
+              &environment),
   };
   int exit_code = iree_run_loom_main(argc, argv, &configuration);
   loom_run_execution_environment_deinitialize(&environment);

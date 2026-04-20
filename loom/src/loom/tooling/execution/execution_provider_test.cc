@@ -30,12 +30,43 @@ const loom_run_hal_backend_t* const kDuplicateFakeHalBackends[] = {
     &kDuplicateFakeHalBackend,
 };
 
+iree_status_t FakeExecutionBackendRunOneShot(
+    const loom_run_execution_backend_t* backend,
+    const loom_run_one_shot_request_t* request) {
+  (void)backend;
+  (void)request;
+  return iree_ok_status();
+}
+
+const loom_run_execution_backend_t kFakeExecutionBackend = {
+    .name = IREE_SVL("fake-execution"),
+    .flags = LOOM_RUN_EXECUTION_BACKEND_FLAG_VM_OPTIONS,
+    .run_one_shot = FakeExecutionBackendRunOneShot,
+};
+
+const loom_run_execution_backend_t kDuplicateFakeExecutionBackend = {
+    .name = IREE_SVL("fake-execution"),
+    .flags = LOOM_RUN_EXECUTION_BACKEND_FLAG_VM_OPTIONS,
+    .run_one_shot = FakeExecutionBackendRunOneShot,
+};
+
+const loom_run_execution_backend_t* const kFakeExecutionBackends[] = {
+    &kFakeExecutionBackend,
+};
+
+const loom_run_execution_backend_t* const kDuplicateFakeExecutionBackends[] = {
+    &kFakeExecutionBackend,
+    &kDuplicateFakeExecutionBackend,
+};
+
 const loom_run_execution_provider_t kCoreTestProvider = {
     .name = IREE_SVL("core-test"),
     .initialize_low_descriptor_registry =
         loom_target_core_test_low_descriptor_registry_initialize,
     .hal_backends = kFakeHalBackends,
     .hal_backend_count = IREE_ARRAYSIZE(kFakeHalBackends),
+    .execution_backends = kFakeExecutionBackends,
+    .execution_backend_count = IREE_ARRAYSIZE(kFakeExecutionBackends),
 };
 
 const loom_run_execution_provider_t kDuplicateCoreTestProvider = {
@@ -46,6 +77,12 @@ const loom_run_execution_provider_t kDuplicateHalProvider = {
     .name = IREE_SVL("duplicate-hal"),
     .hal_backends = kDuplicateFakeHalBackends,
     .hal_backend_count = IREE_ARRAYSIZE(kDuplicateFakeHalBackends),
+};
+
+const loom_run_execution_provider_t kDuplicateExecutionProvider = {
+    .name = IREE_SVL("duplicate-execution"),
+    .execution_backends = kDuplicateFakeExecutionBackends,
+    .execution_backend_count = IREE_ARRAYSIZE(kDuplicateFakeExecutionBackends),
 };
 
 TEST(ExecutionProviderTest, ComposesDescriptorRegistryAndHalBackends) {
@@ -68,6 +105,14 @@ TEST(ExecutionProviderTest, ComposesDescriptorRegistryAndHalBackends) {
   EXPECT_EQ(loom_run_hal_backend_registry_lookup(hal_backend_registry,
                                                  IREE_SV("fake-hal")),
             &kFakeHalBackend);
+
+  const loom_run_execution_backend_registry_t* execution_backend_registry =
+      loom_run_execution_environment_execution_backend_registry(&environment);
+  ASSERT_NE(execution_backend_registry, nullptr);
+  EXPECT_EQ(execution_backend_registry->backend_count, 1u);
+  EXPECT_EQ(loom_run_execution_backend_registry_lookup(
+                execution_backend_registry, IREE_SV("fake-execution")),
+            &kFakeExecutionBackend);
 
   loom_target_low_descriptor_registry_t low_registry = {};
   const loom_run_initialize_low_descriptor_registry_callback_t callback =
@@ -100,6 +145,20 @@ TEST(ExecutionProviderTest, RejectsDuplicateProviderNames) {
 TEST(ExecutionProviderTest, RejectsDuplicateHalBackendNames) {
   const loom_run_execution_provider_t* providers[] = {
       &kDuplicateHalProvider,
+  };
+  const loom_run_execution_provider_set_t provider_set = {
+      .providers = providers,
+      .provider_count = IREE_ARRAYSIZE(providers),
+  };
+  loom_run_execution_environment_t environment = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_run_execution_environment_initialize(&provider_set, &environment));
+}
+
+TEST(ExecutionProviderTest, RejectsDuplicateExecutionBackendNames) {
+  const loom_run_execution_provider_t* providers[] = {
+      &kDuplicateExecutionProvider,
   };
   const loom_run_execution_provider_set_t provider_set = {
       .providers = providers,

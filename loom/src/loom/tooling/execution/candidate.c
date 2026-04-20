@@ -6,22 +6,7 @@
 
 #include "loom/tooling/execution/candidate.h"
 
-#include "loom/error/diagnostic.h"
 #include "loom/target/emit/ireevm/module_compiler.h"
-
-enum {
-  LOOM_RUN_DEFAULT_MAX_COMPILE_ERRORS = 20,
-};
-
-void loom_run_candidate_compile_options_initialize(
-    loom_run_candidate_compile_options_t* out_options) {
-  IREE_ASSERT_ARGUMENT(out_options);
-  *out_options = (loom_run_candidate_compile_options_t){
-      .module_name = IREE_SVL("loom"),
-      .diagnostic_sink = {.fn = loom_diagnostic_stderr_sink},
-      .max_errors = LOOM_RUN_DEFAULT_MAX_COMPILE_ERRORS,
-  };
-}
 
 iree_status_t loom_run_candidate_compile_vm(
     loom_run_module_t* run_module,

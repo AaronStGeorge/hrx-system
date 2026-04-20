@@ -25,6 +25,13 @@ static iree_status_t loom_run_execution_provider_validate(
         "loom execution provider '%.*s' has no HAL backend table",
         (int)provider->name.size, provider->name.data);
   }
+  if (provider->execution_backend_count != 0 &&
+      provider->execution_backends == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "loom execution provider '%.*s' has no execution backend table",
+        (int)provider->name.size, provider->name.data);
+  }
   for (iree_host_size_t i = 0; i < provider->hal_backend_count; ++i) {
     const loom_run_hal_backend_t* backend = provider->hal_backends[i];
     if (backend == NULL) {
@@ -38,6 +45,28 @@ static iree_status_t loom_run_execution_provider_validate(
           IREE_STATUS_INVALID_ARGUMENT,
           "loom execution provider '%.*s' has unnamed HAL backend %" PRIhsz,
           (int)provider->name.size, provider->name.data, i);
+    }
+  }
+  for (iree_host_size_t i = 0; i < provider->execution_backend_count; ++i) {
+    const loom_run_execution_backend_t* backend =
+        provider->execution_backends[i];
+    if (backend == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "loom execution provider '%.*s' has null execution backend %" PRIhsz,
+          (int)provider->name.size, provider->name.data, i);
+    }
+    if (iree_string_view_is_empty(iree_string_view_trim(backend->name))) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "loom execution provider '%.*s' has unnamed "
+                              "execution backend %" PRIhsz,
+                              (int)provider->name.size, provider->name.data, i);
+    }
+    if (backend->run_one_shot == NULL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "loom execution backend '%.*s' has no one-shot "
+                              "run hook",
+                              (int)backend->name.size, backend->name.data);
     }
   }
   return iree_ok_status();
@@ -75,6 +104,25 @@ static iree_status_t loom_run_execution_environment_check_unique_backend_names(
   return iree_ok_status();
 }
 
+static iree_status_t
+loom_run_execution_environment_check_unique_execution_backend_names(
+    const loom_run_execution_environment_t* environment) {
+  for (iree_host_size_t i = 0; i < environment->execution_backend_count; ++i) {
+    const loom_run_execution_backend_t* backend =
+        environment->execution_backends[i];
+    for (iree_host_size_t j = 0; j < i; ++j) {
+      const loom_run_execution_backend_t* existing =
+          environment->execution_backends[j];
+      if (iree_string_view_equal(existing->name, backend->name)) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "duplicate loom execution backend '%.*s'",
+                                (int)backend->name.size, backend->name.data);
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_run_execution_environment_append_hal_backends(
     loom_run_execution_environment_t* environment,
     const loom_run_execution_provider_t* provider) {
@@ -86,6 +134,21 @@ static iree_status_t loom_run_execution_environment_append_hal_backends(
   for (iree_host_size_t i = 0; i < provider->hal_backend_count; ++i) {
     environment->hal_backends[environment->hal_backend_count++] =
         provider->hal_backends[i];
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_run_execution_environment_append_execution_backends(
+    loom_run_execution_environment_t* environment,
+    const loom_run_execution_provider_t* provider) {
+  if (environment->execution_backend_count + provider->execution_backend_count >
+      IREE_ARRAYSIZE(environment->execution_backends)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "loom execution backend capacity exceeded");
+  }
+  for (iree_host_size_t i = 0; i < provider->execution_backend_count; ++i) {
+    environment->execution_backends[environment->execution_backend_count++] =
+        provider->execution_backends[i];
   }
   return iree_ok_status();
 }
@@ -114,13 +177,23 @@ iree_status_t loom_run_execution_environment_initialize(
                                                                   i));
     IREE_RETURN_IF_ERROR(loom_run_execution_environment_append_hal_backends(
         out_environment, provider));
+    IREE_RETURN_IF_ERROR(
+        loom_run_execution_environment_append_execution_backends(
+            out_environment, provider));
   }
   IREE_RETURN_IF_ERROR(
       loom_run_execution_environment_check_unique_backend_names(
           out_environment));
+  IREE_RETURN_IF_ERROR(
+      loom_run_execution_environment_check_unique_execution_backend_names(
+          out_environment));
   loom_run_hal_backend_registry_initialize_from_entries(
       out_environment->hal_backends, out_environment->hal_backend_count,
       &out_environment->hal_backend_registry);
+  loom_run_execution_backend_registry_initialize_from_entries(
+      out_environment->execution_backends,
+      out_environment->execution_backend_count,
+      &out_environment->execution_backend_registry);
   return iree_ok_status();
 }
 
@@ -181,4 +254,11 @@ loom_run_execution_environment_hal_backend_registry(
     const loom_run_execution_environment_t* environment) {
   IREE_ASSERT_ARGUMENT(environment);
   return &environment->hal_backend_registry;
+}
+
+const loom_run_execution_backend_registry_t*
+loom_run_execution_environment_execution_backend_registry(
+    const loom_run_execution_environment_t* environment) {
+  IREE_ASSERT_ARGUMENT(environment);
+  return &environment->execution_backend_registry;
 }

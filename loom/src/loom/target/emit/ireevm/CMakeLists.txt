@@ -165,9 +165,26 @@ loom_cc_library(
   SRCS
     "execution_provider.c"
   DEPS
+    ::execution_backend
     ::low_registry
     iree::base
     loom::src::loom::tooling::execution::execution_provider
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    execution_backend
+  HDRS
+    "execution_backend.h"
+  SRCS
+    "execution_backend.c"
+  DEPS
+    iree::base
+    loom::src::loom::tooling::execution::candidate
+    loom::src::loom::tooling::execution::execution_backend
+    loom::src::loom::tooling::execution::one_shot
+    loom::src::loom::tooling::execution::vm_invocation
   PUBLIC
 )
 

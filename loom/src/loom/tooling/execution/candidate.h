@@ -11,9 +11,9 @@
 
 #include "iree/base/api.h"
 #include "loom/target/emit/ireevm/module_archive.h"
+#include "loom/tooling/execution/compile_options.h"
 #include "loom/tooling/execution/hal_backend.h"
 #include "loom/tooling/execution/session.h"
-#include "loom/verify/verify.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,22 +24,6 @@ typedef enum loom_run_candidate_kind_e {
   LOOM_RUN_CANDIDATE_KIND_VM_ARCHIVE = 1,
   LOOM_RUN_CANDIDATE_KIND_HAL_EXECUTABLE = 2,
 } loom_run_candidate_kind_t;
-
-typedef struct loom_run_candidate_compile_options_t {
-  // VM module name stored in VM bytecode archives. Empty uses "loom".
-  iree_string_view_t module_name;
-  // Optional target.bundle symbol to compile. Empty requires one compatible
-  // target for the selected backend.
-  iree_string_view_t target_symbol;
-  // Diagnostic sink used for verification, lowering, scheduling, and
-  // allocation diagnostics.
-  loom_diagnostic_sink_t diagnostic_sink;
-  // Source resolver used to render carets for op-backed diagnostics.
-  loom_source_resolver_t source_resolver;
-  // Maximum diagnostics to emit before stopping. Zero uses a conservative
-  // default.
-  uint32_t max_errors;
-} loom_run_candidate_compile_options_t;
 
 typedef struct loom_run_candidate_t {
   // Compiled artifact kind held by this candidate.
@@ -55,10 +39,6 @@ typedef struct loom_run_candidate_t {
   // VM bytecode archive produced by the IREE VM compiler path.
   loom_ireevm_module_archive_t vm_archive;
 } loom_run_candidate_t;
-
-// Initializes compile options with stderr diagnostics and a small error cap.
-void loom_run_candidate_compile_options_initialize(
-    loom_run_candidate_compile_options_t* out_options);
 
 // Compiles |run_module| to an IREE VM archive candidate. Compilation may
 // mutate the parsed module by expanding target records and adding lowered IR.

@@ -6,10 +6,18 @@
 
 #include "loom/target/emit/ireevm/execution_provider.h"
 
+#include "loom/target/emit/ireevm/execution_backend.h"
 #include "loom/target/emit/ireevm/low_registry.h"
+
+static const loom_run_execution_backend_t* const
+    kLoomIreeVmExecutionBackends[] = {
+        &loom_ireevm_execution_backend,
+};
 
 const loom_run_execution_provider_t loom_ireevm_execution_provider = {
     .name = IREE_SVL("ireevm"),
     .initialize_low_descriptor_registry =
         loom_ireevm_low_descriptor_registry_initialize,
+    .execution_backends = kLoomIreeVmExecutionBackends,
+    .execution_backend_count = IREE_ARRAYSIZE(kLoomIreeVmExecutionBackends),
 };

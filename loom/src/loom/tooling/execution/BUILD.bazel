@@ -21,11 +21,22 @@ loom_cc_library(
     srcs = ["candidate.c"],
     hdrs = ["candidate.h"],
     deps = [
+        ":compile_options",
         ":hal_backend",
         ":session",
-        "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/target/emit/ireevm:module_archive",
         "//loom/src/loom/target/emit/ireevm:module_compiler",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "compile_options",
+    srcs = ["compile_options.c"],
+    hdrs = ["compile_options.h"],
+    deps = [
+        "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
     ],
@@ -36,9 +47,19 @@ loom_cc_library(
     srcs = ["execution_provider.c"],
     hdrs = ["execution_provider.h"],
     deps = [
+        ":execution_backend",
         ":hal_backend",
         ":session",
         "//loom/src/loom/target:low_descriptor_registry",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "execution_backend",
+    srcs = ["execution_backend.c"],
+    hdrs = ["execution_backend.h"],
+    deps = [
         "//runtime/src/iree/base",
     ],
 )
@@ -72,6 +93,21 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "hal_execution_backend",
+    srcs = ["hal_execution_backend.c"],
+    hdrs = ["hal_execution_backend.h"],
+    deps = [
+        ":candidate",
+        ":execution_backend",
+        ":hal_backend",
+        ":hal_invocation",
+        ":hal_runtime",
+        ":one_shot",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "hal_invocation",
     srcs = ["hal_invocation.c"],
     hdrs = ["hal_invocation.h"],
@@ -85,6 +121,19 @@ loom_cc_library(
         "//runtime/src/iree/tooling:function_io",
         "//runtime/src/iree/tooling:function_util",
         "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_library(
+    name = "one_shot",
+    srcs = ["one_shot.c"],
+    hdrs = ["one_shot.h"],
+    deps = [
+        ":compile_options",
+        ":hal_invocation",
+        ":session",
+        ":vm_invocation",
+        "//runtime/src/iree/base",
     ],
 )
 

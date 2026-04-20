@@ -24,12 +24,10 @@ loom_cc_library(
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
-    loom::src::loom::tooling::execution::candidate
-    loom::src::loom::tooling::execution::hal_backend
-    loom::src::loom::tooling::execution::hal_invocation
-    loom::src::loom::tooling::execution::hal_runtime
+    loom::src::loom::tooling::execution::compile_options
+    loom::src::loom::tooling::execution::execution_backend
+    loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::session
-    loom::src::loom::tooling::execution::vm_invocation
   PUBLIC
 )
 
