@@ -283,7 +283,7 @@ static iree_status_t loom_amdgpu_append_mubuf_store_packet(
   return loom_amdgpu_append_offset_suffix(context);
 }
 
-static iree_status_t loom_amdgpu_append_s_mov_b32_packet(
+static iree_status_t loom_amdgpu_append_mov_b32_const_packet(
     const loom_native_assembly_packet_context_t* context) {
   int64_t value = 0;
   IREE_RETURN_IF_ERROR(
@@ -684,7 +684,7 @@ typedef enum loom_amdgpu_assembly_descriptor_kind_e {
   LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MUBUF_STORE,
   LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MATRIX,
   LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_NAMED_WAIT,
-  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_S_MOV_B32,
+  LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MOV_B32_CONST,
   LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_WAITCNT,
 } loom_amdgpu_assembly_descriptor_kind_t;
 
@@ -712,8 +712,8 @@ static const loom_amdgpu_assembly_descriptor_dispatch_t
          1, 2, NULL},
         {"amdgpu.s_load_dwordx2", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MEMORY, 1, 2,
          NULL},
-        {"amdgpu.s_mov_b32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_S_MOV_B32, 0, 0,
-         NULL},
+        {"amdgpu.s_mov_b32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MOV_B32_CONST, 0,
+         0, NULL},
         {"amdgpu.s_wait_alu", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_NAMED_WAIT, 0, 0,
          "depctr"},
         {"amdgpu.s_wait_idle", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MNEMONIC, 0, 0,
@@ -727,6 +727,8 @@ static const loom_amdgpu_assembly_descriptor_dispatch_t
         {"amdgpu.s_waitcnt_depctr", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_NAMED_WAIT,
          0, 0, "depctr"},
         {"amdgpu.v_add_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2, NULL},
+        {"amdgpu.v_mov_b32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MOV_B32_CONST, 0,
+         0, NULL},
         {"amdgpu.v_mfma_f32_16x16x16_f16",
          LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MATRIX, 0, 0, NULL},
         {"amdgpu.v_mul_lo_u32", LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_BASIC, 1, 2,
@@ -769,8 +771,8 @@ static iree_status_t loom_amdgpu_append_descriptor_dispatch_packet(
     case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_NAMED_WAIT:
       return loom_amdgpu_append_named_wait_packet(
           context, iree_make_cstring_view(row->named_wait_attr));
-    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_S_MOV_B32:
-      return loom_amdgpu_append_s_mov_b32_packet(context);
+    case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_MOV_B32_CONST:
+      return loom_amdgpu_append_mov_b32_const_packet(context);
     case LOOM_AMDGPU_ASSEMBLY_DESCRIPTOR_WAITCNT:
       return loom_amdgpu_append_waitcnt_packet(context);
     default:

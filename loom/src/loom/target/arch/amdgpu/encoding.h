@@ -48,6 +48,8 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_MUBUF = 9,
   // RDNA4 VBUFFER instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER = 10,
+  // Vector one-source 32-bit instruction format with mandatory literal.
+  LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL = 42,
 } loom_amdgpu_encoding_format_t;
 
 typedef struct loom_amdgpu_encoding_bit_range_t {

@@ -201,10 +201,12 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
        MaterializesHalBufferResourceFromKernargPointer) {
   BuildModule(
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
-      "  %value = low.live_in<amdgpu.test_value> : reg<amdgpu.vgpr>\n"
-      "  %vaddr = low.live_in<amdgpu.test_vaddr> : reg<amdgpu.vgpr>\n"
+      "  %value = low.const<amdgpu.v_mov_b32> {imm32 = 42} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.vgpr>\n"
       "  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
-      "  %zero = low.op<amdgpu.s_mov_b32>() {imm32 = 0} : () -> "
+      "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.sgpr>\n"
       "  low.op<amdgpu.buffer_store_dword>(%value, %binding, %vaddr, %zero) "
       "{offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "

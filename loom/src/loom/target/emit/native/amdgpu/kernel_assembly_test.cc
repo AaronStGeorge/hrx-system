@@ -17,7 +17,11 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/hal_resource_materialization.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
+#include "loom/target/arch/amdgpu/wait_packets.h"
+#include "loom/target/arch/amdgpu/wait_plan.h"
+#include "loom/target/ir_records.h"
 #include "loom/target/presets.h"
 #include "loom/target/tool/llvm.h"
 #include "loom/testing/context.h"
@@ -77,9 +81,9 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     return module;
   }
 
-  const loom_op_t* FindFirstLowFunction(loom_module_t* module) {
+  loom_op_t* FindFirstLowFunction(loom_module_t* module) {
     loom_block_t* block = loom_module_block(module);
-    const loom_op_t* op = nullptr;
+    loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
       if (loom_low_func_def_isa(op)) {
         return op;
@@ -143,8 +147,73 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     iree_host_size_t expanded_preset_count = 0;
     IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
                                               &expanded_preset_count));
-    EXPECT_EQ(expanded_preset_count, 1u);
+    ASSERT_EQ(expanded_preset_count, 1u);
     VerifyAndPacketizeCurrentModule(arena, out_packetization);
+  }
+
+  void BuildMaterializedHalResourceSidecarsForPreset(
+      const char* preset_key, const char* target_symbol,
+      const char* function_symbol, const char* body,
+      iree_arena_allocator_t* arena,
+      loom_low_packetization_t* out_packetization) {
+    std::string source = "target.preset @";
+    source += target_symbol;
+    source += " {key = \"";
+    source += preset_key;
+    source += "\", source = @";
+    source += function_symbol;
+    source += "}\n";
+    source += body;
+    ResetModule();
+    module_ = ParseSource(source);
+    ASSERT_NE(module_, nullptr);
+
+    const loom_target_preset_registry_t preset_registry =
+        loom_target_low_descriptor_registry_presets(&target_registry_);
+    iree_host_size_t expanded_preset_count = 0;
+    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
+                                              &expanded_preset_count));
+    EXPECT_EQ(expanded_preset_count, 1u);
+
+    loom_op_t* low_function = FindFirstLowFunction(module_);
+    ASSERT_NE(low_function, nullptr);
+    loom_target_ir_bundle_storage_t bundle_storage = {};
+    IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
+        module_, iree_make_cstring_view(target_symbol), &bundle_storage));
+
+    loom_amdgpu_hal_resource_materialization_result_t materialization = {};
+    IREE_ASSERT_OK(loom_amdgpu_hal_resource_materialize(
+        module_, low_function, &bundle_storage.bundle, &materialization,
+        arena));
+    ASSERT_EQ(materialization.materialized_resource_count, 1u);
+    ASSERT_TRUE(materialization.inserted_kernarg_segment_ptr_live_in);
+
+    const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
+    iree_host_size_t fixed_value_count = 0;
+    IREE_ASSERT_OK(loom_amdgpu_hal_resource_fixed_values_from_low(
+        module_, low_function, &fixed_values, &fixed_value_count, arena));
+    ASSERT_EQ(fixed_value_count, 1u);
+
+    loom_low_verify_options_t verify_options = {
+        .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
+        .descriptor_registry = &target_registry_.registry,
+        .descriptor_requirements =
+            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        .max_errors = 20,
+    };
+    loom_low_verify_result_t verify_result = {};
+    IREE_ASSERT_OK(
+        loom_low_verify_module(module_, &verify_options, &verify_result));
+    ASSERT_EQ(verify_result.error_count, 0u);
+
+    loom_low_packetization_options_t packetization_options = {
+        .descriptor_registry = &target_registry_.registry,
+        .allocation_fixed_values = fixed_values,
+        .allocation_fixed_value_count = fixed_value_count,
+    };
+    IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function,
+                                               &packetization_options, arena,
+                                               out_packetization));
   }
 
   void EmitKernelForPreset(const char* preset_key, const char* target_cpu,
@@ -272,6 +341,72 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsHalBufferResourceMetadata) {
   EXPECT_NE(output.find("          .address_space: global\n"),
             std::string::npos);
 
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
+TEST_F(AmdgpuKernelAssemblyTest,
+       EmitsMaterializedHalBufferStoreKernelForGfx11) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  BuildMaterializedHalResourceSidecarsForPreset(
+      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %value = low.const<amdgpu.v_mov_b32> {imm32 = 42} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+      "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.sgpr>\n"
+      "  low.op<amdgpu.buffer_store_dword>(%value, %binding, %vaddr, %zero) "
+      "{offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.return\n"
+      "}\n"
+      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
+      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
+      "abi_type = reg<amdgpu.sgpr x4>}\n",
+      &sidecar_arena, &packetization);
+
+  loom_amdgpu_wait_plan_t wait_plan = {};
+  IREE_ASSERT_OK(loom_amdgpu_wait_plan_build(&packetization.schedule,
+                                             &sidecar_arena, &wait_plan));
+  loom_amdgpu_wait_packet_plan_t wait_packets = {};
+  IREE_ASSERT_OK(loom_amdgpu_wait_packet_plan_build(&wait_plan, &sidecar_arena,
+                                                    &wait_packets));
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_wait_packets(
+      &packetization.schedule, &packetization.allocation, &wait_packets,
+      &builder, &sidecar_arena));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+
+  const size_t load = output.find("s_load_dwordx2 s");
+  const size_t store = output.find("buffer_store_dword v");
+  const size_t wait_before_store = output.rfind("s_waitcnt", store);
+  const size_t wait_after_store = output.find("s_waitcnt", store);
+  const size_t endpgm = output.find("s_endpgm");
+  EXPECT_NE(output.find("v_mov_b32 v"), std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_kernarg_size 8\n"), std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_user_sgpr_kernarg_segment_ptr 1\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("      .args:\n"), std::string::npos);
+  EXPECT_NE(output.find("        - .name: 'binding0'\n"), std::string::npos);
+  EXPECT_NE(output.find("          .value_kind: global_buffer\n"),
+            std::string::npos);
+  EXPECT_NE(load, std::string::npos);
+  EXPECT_NE(store, std::string::npos);
+  EXPECT_NE(wait_before_store, std::string::npos);
+  EXPECT_NE(wait_after_store, std::string::npos);
+  EXPECT_NE(endpgm, std::string::npos);
+  EXPECT_LT(load, wait_before_store);
+  EXPECT_LT(wait_before_store, store);
+  EXPECT_LT(store, wait_after_store);
+  EXPECT_LT(wait_after_store, endpgm);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
 }

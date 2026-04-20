@@ -162,6 +162,8 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("mubuf");
     case LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER:
       return IREE_SV("vbuffer");
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL:
+      return IREE_SV("vop1_literal");
     default:
       return IREE_SV("unknown");
   }

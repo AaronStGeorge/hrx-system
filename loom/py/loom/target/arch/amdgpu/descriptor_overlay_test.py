@@ -25,6 +25,8 @@ from loom.target.arch.amdgpu.encoding import (
 from loom.target.arch.amdgpu.isa_xml import parse_amdgpu_isa_xml_text
 from loom.target.arch.amdgpu.isa_xml_test import SAMPLE_XML
 from loom.target.low_descriptors import (
+    AsmForm,
+    AsmImmediate,
     DescriptorFlag,
     Immediate,
     ImmediateKind,
@@ -187,6 +189,38 @@ def test_materialize_amdgpu_descriptor_overlays_from_xml_facts() -> None:
     assert descriptors[3].mnemonic == "s_wait_idle"
     assert descriptors[3].encoding_format_id == AMDGPU_ENCODING_FORMAT_SOPP
     assert descriptors[3].encoding_id == 10
+
+
+def test_materialize_uses_explicit_asm_forms() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    asm_forms = (
+        AsmForm(
+            results=("dst",),
+            operands=("rhs",),
+            immediates=(AsmImmediate("literal"),),
+        ),
+    )
+    overlay = AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_add_u32.lit",
+        instruction_name="V_ADD_NC_U32",
+        mnemonic="v_add_u32",
+        encoding_name="VOP2_INST_LITERAL",
+        encoding_condition="has_lit",
+        semantic_tag="integer.add.u32",
+        schedule_class="amdgpu.valu",
+        operands=(
+            AmdgpuOperandOverlay("VDST", _result("dst", _VGPR_ALT)),
+            AmdgpuOperandOverlay("VSRC1", _operand("rhs", _VGPR_ALT)),
+        ),
+        asm_forms=asm_forms,
+        immediate_fields=("LITERAL",),
+        immediates=(_U32_IMMEDIATE,),
+    )
+
+    descriptor = materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+    assert descriptor.asm_forms == asm_forms
+    assert descriptor.asm_forms[0].immediates[0].name is None
 
 
 def test_materialize_rejects_missing_instruction() -> None:

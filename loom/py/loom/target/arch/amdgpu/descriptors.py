@@ -440,6 +440,24 @@ def _v_mul_lo_u32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_mov_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mov_b32",
+        instruction_name="V_MOV_B32",
+        mnemonic="v_mov_b32",
+        encoding_name="VOP1_INST_LITERAL",
+        encoding_condition="has_lit",
+        semantic_tag="integer.const.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(AmdgpuOperandOverlay("VDST", _vgpr_result()),),
+        asm_forms=_asm(results=("dst",), immediates=("imm32",)),
+        immediate_fields=("LITERAL",),
+        immediates=(_U32_IMMEDIATE,),
+        fixed_encoding_fields=(("SRC0", 255),),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _s_buffer_load_dword_overlay(
     offset_field_name: str = "OFFSET", offset_bit_width: int = 21
 ) -> AmdgpuDescriptorOverlay:
@@ -686,6 +704,7 @@ def _gfx950_core_overlay_descriptors(
         (
             _s_add_u32_overlay(),
             _v_add_u32_overlay("V_ADD_U32"),
+            _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _s_load_dwordx2_overlay(),
             _s_buffer_load_dword_overlay(),
@@ -709,6 +728,7 @@ def _gfx11_core_overlay_descriptors(
         (
             _s_add_u32_overlay(),
             _v_add_u32_overlay("V_ADD_NC_U32"),
+            _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _s_load_dwordx2_overlay(),
             _s_buffer_load_dword_overlay(),
@@ -734,6 +754,7 @@ def _gfx12_core_overlay_descriptors(
         (
             _s_add_u32_overlay(),
             _v_add_u32_overlay("V_ADD_NC_U32"),
+            _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
             _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
@@ -766,6 +787,7 @@ def _gfx1250_core_overlay_descriptors(
         (
             _s_add_u32_overlay(),
             _v_add_u32_overlay("V_ADD_NC_U32"),
+            _v_mov_b32_literal_overlay(),
             _v_mul_lo_u32_overlay(),
             _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
             _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),

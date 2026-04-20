@@ -84,9 +84,13 @@ class AmdgpuDescriptorOverlay:
     constraints: tuple[Constraint, ...] = ()
     feature_mask_words: tuple[int, ...] = ()
     flags: tuple[DescriptorFlag, ...] = ()
+    asm_forms: tuple[AsmForm, ...] | None = None
 
 
 def _asm_forms_for_overlay(overlay: AmdgpuDescriptorOverlay) -> tuple[AsmForm, ...]:
+    if overlay.asm_forms is not None:
+        return overlay.asm_forms
+
     results = []
     operands = []
     for operand_overlay in overlay.operands:
