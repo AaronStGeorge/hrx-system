@@ -287,8 +287,12 @@ static iree_status_t loom_pass_tool_build_option_attrs(
       .descriptor = descriptor,
       .attrs = attrs,
   };
-  IREE_RETURN_IF_ERROR(loom_pass_options_parse(
-      descriptor->key, options, loom_pass_tool_parse_option_attr, &context));
+  IREE_RETURN_IF_ERROR(
+      loom_pass_options_parse(descriptor->key, options,
+                              (loom_pass_option_parse_callback_t){
+                                  .fn = loom_pass_tool_parse_option_attr,
+                                  .user_data = &context,
+                              }));
   *out_attrs = loom_make_named_attr_slice(attrs, context.attr_count);
   return iree_ok_status();
 }

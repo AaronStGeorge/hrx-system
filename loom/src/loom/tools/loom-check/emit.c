@@ -9,6 +9,7 @@
 #include "loom/analysis/liveness_json.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_json.h"
+#include "loom/codegen/low/cleanup.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packet_json.h"
 #include "loom/codegen/low/packetization.h"
@@ -1000,8 +1001,8 @@ static iree_status_t loom_check_emit_write_liveness_json(
 }
 
 static iree_status_t loom_check_emit_find_low_func_def(
-    const loom_module_t* module, iree_string_view_t symbol_name,
-    const loom_op_t** out_low_function) {
+    loom_module_t* module, iree_string_view_t symbol_name,
+    loom_op_t** out_low_function) {
   *out_low_function = NULL;
   loom_string_id_t name_id = loom_module_lookup_string(module, symbol_name);
   if (name_id == LOOM_STRING_ID_INVALID) {
@@ -1027,15 +1028,17 @@ static iree_status_t loom_check_emit_find_low_func_def(
 }
 
 static iree_status_t loom_check_emit_write_low_schedule_json(
-    const loom_module_t* module, iree_string_view_t symbol_name,
+    loom_module_t* module, iree_string_view_t symbol_name,
     const loom_low_descriptor_registry_t* descriptor_registry,
     loom_low_schedule_diagnostic_flags_t diagnostic_flags,
     loom_low_schedule_strategy_t strategy, iree_diagnostic_emitter_t emitter,
     bool suppress_output, iree_arena_allocator_t* analysis_arena,
     loom_check_result_t* result) {
-  const loom_op_t* low_function = NULL;
+  loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(
       loom_check_emit_find_low_func_def(module, symbol_name, &low_function));
+  IREE_RETURN_IF_ERROR(loom_low_cleanup_function(module, low_function,
+                                                 descriptor_registry, emitter));
   loom_low_schedule_options_t options = {
       .descriptor_registry = descriptor_registry,
       .emitter = emitter,
@@ -1052,15 +1055,17 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
 }
 
 static iree_status_t loom_check_emit_write_low_allocation_json(
-    const loom_module_t* module, iree_string_view_t symbol_name,
+    loom_module_t* module, iree_string_view_t symbol_name,
     const loom_low_descriptor_registry_t* descriptor_registry,
     const loom_low_allocation_budget_t* budgets, iree_host_size_t budget_count,
     loom_low_allocation_diagnostic_flags_t diagnostic_flags,
     iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* analysis_arena,
     bool suppress_output, loom_check_result_t* result) {
-  const loom_op_t* low_function = NULL;
+  loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(
       loom_check_emit_find_low_func_def(module, symbol_name, &low_function));
+  IREE_RETURN_IF_ERROR(loom_low_cleanup_function(module, low_function,
+                                                 descriptor_registry, emitter));
   loom_low_allocation_options_t options = {
       .descriptor_registry = descriptor_registry,
       .budgets = budgets,
@@ -1078,13 +1083,13 @@ static iree_status_t loom_check_emit_write_low_allocation_json(
 }
 
 static iree_status_t loom_check_emit_write_low_packet_json(
-    const loom_module_t* module, iree_string_view_t symbol_name,
+    loom_module_t* module, iree_string_view_t symbol_name,
     const loom_low_descriptor_registry_t* descriptor_registry,
     loom_low_schedule_strategy_t strategy,
     const loom_low_allocation_budget_t* budgets, iree_host_size_t budget_count,
     iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* analysis_arena,
     bool suppress_output, loom_check_result_t* result) {
-  const loom_op_t* low_function = NULL;
+  loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(
       loom_check_emit_find_low_func_def(module, symbol_name, &low_function));
   loom_low_packetization_options_t packetization_options = {

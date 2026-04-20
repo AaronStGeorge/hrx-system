@@ -250,8 +250,11 @@ iree_status_t loom_low_materialize_allocation_create(
     }
   } else {
     IREE_RETURN_IF_ERROR(loom_pass_options_parse(
-        pass->info->name, options, loom_low_materialize_allocation_parse_option,
-        &context));
+        pass->info->name, options,
+        (loom_pass_option_parse_callback_t){
+            .fn = loom_low_materialize_allocation_parse_option,
+            .user_data = &context,
+        }));
   }
   pass->state = state;
   return iree_ok_status();

@@ -109,7 +109,7 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
         loom_low_verify_module(module_, &verify_options, &verify_result));
     EXPECT_EQ(verify_result.error_count, 0u);
 
-    const loom_op_t* low_function = FindFirstLowFunction(module_);
+    loom_op_t* low_function = FindFirstLowFunction(module_);
     ASSERT_NE(low_function, nullptr);
     loom_low_packetization_options_t packetization_options = {
         .descriptor_registry = &target_registry_.registry,
@@ -229,12 +229,17 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     BuildSidecarsForPreset(
         preset_key, "gfx_target", "loom_kernel",
         "low.func.def target(@gfx_target) @loom_kernel() {\n"
+        "  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : "
+        "reg<amdgpu.sgpr x2>\n"
         "  %c0 = low.op<amdgpu.s_mov_b32>() {imm32 = 7} : () -> "
         "reg<amdgpu.sgpr>\n"
         "  %c1 = low.op<amdgpu.s_mov_b32>() {imm32 = 5} : () -> "
         "reg<amdgpu.sgpr>\n"
         "  %sum = low.op<amdgpu.s_add_u32>(%c0, %c1) : "
         "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+        "  %loaded = low.op<amdgpu.s_load_dwordx2>(%kernarg, %sum) "
+        "{offset = 0} : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>) -> "
+        "reg<amdgpu.sgpr x2>\n"
         "  low.return\n"
         "}\n",
         &sidecar_arena, &packetization);

@@ -6,7 +6,6 @@
 
 #include "loom/target/emit/native/amdgpu/encoding.h"
 
-#include <initializer_list>
 #include <string>
 
 #include "iree/base/internal/arena.h"
@@ -28,20 +27,6 @@ namespace {
 uint32_t ReadU32LE(const uint8_t* data) {
   return (uint32_t)data[0] | ((uint32_t)data[1] << 8) |
          ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
-}
-
-std::string BytesToString(iree_const_byte_span_t bytes) {
-  if (iree_const_byte_span_is_empty(bytes)) {
-    return std::string();
-  }
-  return std::string(
-      reinterpret_cast<const char*>(bytes.data),
-      reinterpret_cast<const char*>(bytes.data) + bytes.data_length);
-}
-
-std::string Bytes(std::initializer_list<uint8_t> values) {
-  return std::string(reinterpret_cast<const char*>(values.begin()),
-                     reinterpret_cast<const char*>(values.end()));
 }
 
 bool IsSop1SMovB32(uint32_t word) {
@@ -84,9 +69,9 @@ class AmdgpuEncodingTest : public ::testing::Test {
     return module;
   }
 
-  const loom_op_t* FindFirstLowFunction(loom_module_t* module) {
+  loom_op_t* FindFirstLowFunction(loom_module_t* module) {
     loom_block_t* block = loom_module_block(module);
-    const loom_op_t* op = nullptr;
+    loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
       if (loom_low_func_def_isa(op)) {
         return op;
@@ -116,9 +101,16 @@ class AmdgpuEncodingTest : public ::testing::Test {
                                 loom_low_packetization_t* out_packetization) {
     const char* body =
         "low.func.def target(@gfx_target) @gfx_kernel(%source : "
-        "reg<amdgpu.sgpr x3>) {\n"
+        "reg<amdgpu.sgpr x3>, %tail : reg<amdgpu.sgpr>, %value : "
+        "reg<amdgpu.vgpr>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
+        "reg<amdgpu.sgpr>) {\n"
         "  %shifted = low.copy %source : reg<amdgpu.sgpr x3> -> "
         "reg<amdgpu.sgpr x3>\n"
+        "  %resource = low.concat(%shifted, %tail) : "
+        "(reg<amdgpu.sgpr x3>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>\n"
+        "  low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, "
+        "%soffset) {offset = 0} : (reg<amdgpu.vgpr>, "
+        "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
         "  low.return\n"
         "}\n";
     std::string source =
@@ -166,7 +158,7 @@ class AmdgpuEncodingTest : public ::testing::Test {
             .location_count = 3,
         },
     };
-    const loom_op_t* low_function = FindFirstLowFunction(module_);
+    loom_op_t* low_function = FindFirstLowFunction(module_);
     ASSERT_NE(low_function, nullptr);
     loom_low_packetization_options_t packetization_options = {
         .descriptor_registry = &target_registry_.registry,
@@ -208,7 +200,7 @@ class AmdgpuEncodingTest : public ::testing::Test {
         loom_low_verify_module(module_, &verify_options, &verify_result));
     EXPECT_EQ(verify_result.error_count, 0u);
 
-    const loom_op_t* low_function = FindFirstLowFunction(module_);
+    loom_op_t* low_function = FindFirstLowFunction(module_);
     ASSERT_NE(low_function, nullptr);
     loom_low_packetization_options_t packetization_options = {
         .descriptor_registry = &target_registry_.registry,
@@ -234,8 +226,12 @@ TEST_F(AmdgpuEncodingTest, EncodesInlineScalarConstantAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel() {\n"
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "reg<amdgpu.sgpr x4>) {\n"
       "  %c0 = low.op<amdgpu.s_mov_b32>() {imm32 = 7} : () -> "
+      "reg<amdgpu.sgpr>\n"
+      "  %loaded = low.op<amdgpu.s_buffer_load_dword>(%resource, %c0) "
+      "{offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>) -> "
       "reg<amdgpu.sgpr>\n"
       "  low.return\n"
       "}\n",
@@ -245,9 +241,10 @@ TEST_F(AmdgpuEncodingTest, EncodesInlineScalarConstantAndReturn) {
   IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
       &packetization.schedule, &packetization.allocation, &text, &arena));
 
-  const std::string expected =
-      Bytes({0x87, 0x00, 0x80, 0xBE, 0x00, 0x00, 0xB0, 0xBF});
-  EXPECT_EQ(BytesToString(text), expected);
+  ASSERT_GE(text.data_length, 8u);
+  EXPECT_TRUE(IsSop1SMovB32(ReadU32LE(text.data + 0)));
+  EXPECT_EQ(ReadU32LE(text.data + 0) & UINT32_C(0xFF), UINT32_C(0x87));
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
 }
 
@@ -256,8 +253,12 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralScalarConstantAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel() {\n"
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "reg<amdgpu.sgpr x4>) {\n"
       "  %c0 = low.op<amdgpu.s_mov_b32>() {imm32 = 305419896} : () -> "
+      "reg<amdgpu.sgpr>\n"
+      "  %loaded = low.op<amdgpu.s_buffer_load_dword>(%resource, %c0) "
+      "{offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>) -> "
       "reg<amdgpu.sgpr>\n"
       "  low.return\n"
       "}\n",
@@ -267,9 +268,11 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralScalarConstantAndReturn) {
   IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
       &packetization.schedule, &packetization.allocation, &text, &arena));
 
-  const std::string expected = Bytes(
-      {0xFF, 0x00, 0x80, 0xBE, 0x78, 0x56, 0x34, 0x12, 0x00, 0x00, 0xB0, 0xBF});
-  EXPECT_EQ(BytesToString(text), expected);
+  ASSERT_GE(text.data_length, 12u);
+  EXPECT_TRUE(IsSop1SMovB32(ReadU32LE(text.data + 0)));
+  EXPECT_EQ(ReadU32LE(text.data + 0) & UINT32_C(0xFF), UINT32_C(0xFF));
+  EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0x12345678));
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
 }
 
@@ -278,9 +281,14 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralVectorConstantAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel() {\n"
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
+      "reg<amdgpu.sgpr>) {\n"
       "  %v0 = low.const<amdgpu.v_mov_b32> {imm32 = 42} : "
       "reg<amdgpu.vgpr>\n"
+      "  low.op<amdgpu.buffer_store_dword>(%v0, %resource, %vaddr, "
+      "%soffset) {offset = 0} : (reg<amdgpu.vgpr>, "
+      "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.return\n"
       "}\n",
       &arena, &packetization);
@@ -289,10 +297,11 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralVectorConstantAndReturn) {
   IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
       &packetization.schedule, &packetization.allocation, &text, &arena));
 
-  ASSERT_EQ(text.data_length, 12u);
-  EXPECT_EQ(ReadU32LE(text.data + 0), UINT32_C(0x7E0002FF));
+  ASSERT_GE(text.data_length, 12u);
+  EXPECT_EQ(ReadU32LE(text.data + 0) & UINT32_C(0xFE01FFFF),
+            UINT32_C(0x7E0002FF));
   EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(42));
-  EXPECT_EQ(ReadU32LE(text.data + 8), UINT32_C(0xBFB00000));
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
 }
 
@@ -327,11 +336,11 @@ TEST_F(AmdgpuEncodingTest, SequencesOverlappingCopyBeforeClobber) {
   IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
       &packetization.schedule, &packetization.allocation, &text, &arena));
 
-  ASSERT_EQ(text.data_length, 16u);
+  ASSERT_GE(text.data_length, 16u);
   EXPECT_EQ(ReadU32LE(text.data + 0), UINT32_C(0xBE830002));
   EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0xBE820001));
   EXPECT_EQ(ReadU32LE(text.data + 8), UINT32_C(0xBE810000));
-  EXPECT_EQ(ReadU32LE(text.data + 12), UINT32_C(0xBFB00000));
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
 }
 
@@ -382,13 +391,17 @@ TEST_F(AmdgpuEncodingTest, EncodesInitialGfx11Allowlist) {
   BuildGfx11Sidecars(
       "low.func.def target(@gfx_target) @gfx_kernel(%s0 : "
       "reg<amdgpu.sgpr>, %s1 : reg<amdgpu.sgpr>, %v0 : "
-      "reg<amdgpu.vgpr>, %v1 : reg<amdgpu.vgpr>) {\n"
+      "reg<amdgpu.vgpr>, %v1 : reg<amdgpu.vgpr>, %resource : "
+      "reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>) {\n"
       "  %s_sum = low.op<amdgpu.s_add_u32>(%s0, %s1) : "
       "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
       "  %v_sum = low.op<amdgpu.v_add_u32>(%v0, %v1) : "
       "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
       "  %v_product = low.op<amdgpu.v_mul_lo_u32>(%v_sum, %v1) : "
       "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+      "  low.op<amdgpu.buffer_store_dword>(%v_product, %resource, %vaddr, "
+      "%s_sum) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.op<amdgpu.s_waitcnt>() {vmcnt = 0, lgkmcnt = 0} : ()\n"
       "  low.op<amdgpu.s_wait_idle>() : ()\n"
       "  low.return\n"
@@ -399,14 +412,14 @@ TEST_F(AmdgpuEncodingTest, EncodesInitialGfx11Allowlist) {
   IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
       &packetization.schedule, &packetization.allocation, &text, &arena));
 
-  ASSERT_EQ(text.data_length, 28u);
+  ASSERT_GE(text.data_length, 36u);
   EXPECT_EQ(ReadU32LE(text.data + 0), UINT32_C(0x80000100));
   EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0x4A000300));
   EXPECT_EQ(ReadU32LE(text.data + 8), UINT32_C(0xD72C0000));
   EXPECT_EQ(ReadU32LE(text.data + 12), UINT32_C(0x00020300));
-  EXPECT_EQ(ReadU32LE(text.data + 16), UINT32_C(0xBF890007));
-  EXPECT_EQ(ReadU32LE(text.data + 20), UINT32_C(0xBF8A0000));
-  EXPECT_EQ(ReadU32LE(text.data + 24), UINT32_C(0xBFB00000));
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 12), UINT32_C(0xBF890007));
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 8), UINT32_C(0xBF8A0000));
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
 }
 

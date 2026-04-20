@@ -162,9 +162,9 @@ class WasmFunctionBodyTest : public ::testing::Test {
     return module;
   }
 
-  const loom_op_t* FindFirstLowFunction(loom_module_t* module) {
+  loom_op_t* FindFirstLowFunction(loom_module_t* module) {
     loom_block_t* block = loom_module_block(module);
-    const loom_op_t* op = nullptr;
+    loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
       if (loom_low_func_def_isa(op)) {
         return op;
@@ -198,7 +198,7 @@ class WasmFunctionBodyTest : public ::testing::Test {
     module_ = ParseSource(source.c_str());
     ASSERT_NE(module_, nullptr);
 
-    const loom_op_t* low_func = FindFirstLowFunction(module_);
+    loom_op_t* low_func = FindFirstLowFunction(module_);
     ASSERT_NE(low_func, nullptr);
     static const loom_low_descriptor_set_t* descriptor_sets[] = {
         loom_wasm_core_simd128_descriptor_set(),

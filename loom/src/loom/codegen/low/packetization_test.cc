@@ -55,15 +55,48 @@ class LowPacketizationTest : public ::testing::Test {
     return module;
   }
 
-  const loom_op_t* FindFirstLowFunction(loom_module_t* module) {
+  loom_op_t* FindFirstLowFunction(loom_module_t* module) {
     loom_block_t* block = loom_module_block(module);
-    const loom_op_t* op = nullptr;
+    loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
       if (loom_low_func_def_isa(op)) {
         return op;
       }
     }
     return nullptr;
+  }
+
+  std::string ModuleString(loom_string_id_t string_id) {
+    if (string_id == LOOM_STRING_ID_INVALID ||
+        string_id >= module_->strings.count) {
+      return std::string();
+    }
+    iree_string_view_t value = module_->strings.entries[string_id];
+    return std::string(value.data, value.size);
+  }
+
+  int CountLowDescriptorOpsWithOpcode(const char* opcode) {
+    loom_op_t* function_op = FindFirstLowFunction(module_);
+    if (function_op == nullptr) {
+      return 0;
+    }
+    int count = 0;
+    loom_region_t* body = loom_low_func_def_body(function_op);
+    for (uint16_t block_index = 0; block_index < body->block_count;
+         ++block_index) {
+      const loom_block_t* block = loom_region_const_block(body, block_index);
+      const loom_op_t* op = nullptr;
+      loom_block_for_each_op(block, op) {
+        if (loom_low_op_isa(op) &&
+            ModuleString(loom_low_op_opcode(op)) == opcode) {
+          ++count;
+        } else if (loom_low_const_isa(op) &&
+                   ModuleString(loom_low_const_opcode(op)) == opcode) {
+          ++count;
+        }
+      }
+    }
+    return count;
   }
 
   void ParseAndVerify(const char* body) {
@@ -119,7 +152,7 @@ TEST_F(LowPacketizationTest, BuildsMatchingScheduleAndAllocationSidecars) {
       "(reg<test.i32>, reg<test.i32>) -> reg<test.i32>\n"
       "  low.return %cmp : reg<test.i32>\n"
       "}\n");
-  const loom_op_t* low_function = FindFirstLowFunction(module_);
+  loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
   iree_arena_allocator_t sidecar_arena;
@@ -152,12 +185,48 @@ TEST_F(LowPacketizationTest, BuildsMatchingScheduleAndAllocationSidecars) {
   iree_arena_deinitialize(&sidecar_arena);
 }
 
+TEST_F(LowPacketizationTest, CleansDeadDescriptorPacketsBeforeScheduling) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @packetized(%lhs : reg<test.i32>) "
+      "-> (reg<test.i32>) {\n"
+      "  %dead_c = low.const<test.const.i32> {i32_value = 7} : "
+      "reg<test.i32>\n"
+      "  %dead_sum = low.op<test.add.i32>(%dead_c, %dead_c) : "
+      "(reg<test.i32>, reg<test.i32>) -> reg<test.i32>\n"
+      "  %live = low.op<test.add.i32>(%lhs, %lhs) : "
+      "(reg<test.i32>, reg<test.i32>) -> reg<test.i32>\n"
+      "  low.return %live : reg<test.i32>\n"
+      "}\n");
+  EXPECT_EQ(CountLowDescriptorOpsWithOpcode("test.const.i32"), 1);
+  EXPECT_EQ(CountLowDescriptorOpsWithOpcode("test.add.i32"), 2);
+  loom_op_t* low_function = FindFirstLowFunction(module_);
+  ASSERT_NE(low_function, nullptr);
+
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  loom_low_packetization_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE,
+  };
+  IREE_ASSERT_OK(loom_low_packetize_function(module_, low_function, &options,
+                                             &sidecar_arena, &packetization));
+
+  EXPECT_EQ(CountLowDescriptorOpsWithOpcode("test.const.i32"), 0);
+  EXPECT_EQ(CountLowDescriptorOpsWithOpcode("test.add.i32"), 1);
+  EXPECT_EQ(packetization.schedule.scheduled_node_count, 2u);
+  IREE_EXPECT_OK(loom_low_packet_validate_sidecars(&packetization.schedule,
+                                                   &packetization.allocation));
+
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
 TEST_F(LowPacketizationTest, RejectsMissingDescriptorRegistry) {
   ParseAndVerify(
       "low.func.def target(@test_target) @packetized() {\n"
       "  low.return\n"
       "}\n");
-  const loom_op_t* low_function = FindFirstLowFunction(module_);
+  loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
   iree_arena_allocator_t sidecar_arena;
@@ -177,7 +246,7 @@ TEST_F(LowPacketizationTest, RejectsNonLowFunction) {
       "low.func.def target(@test_target) @packetized() {\n"
       "  low.return\n"
       "}\n");
-  const loom_op_t* ordinary_function = loom_module_block(module_)->first_op;
+  loom_op_t* ordinary_function = loom_module_block(module_)->first_op;
   ASSERT_NE(ordinary_function, nullptr);
 
   iree_arena_allocator_t sidecar_arena;

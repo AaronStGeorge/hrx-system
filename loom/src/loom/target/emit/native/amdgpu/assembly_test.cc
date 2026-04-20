@@ -65,9 +65,9 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     return module;
   }
 
-  const loom_op_t* FindFirstLowFunction(loom_module_t* module) {
+  loom_op_t* FindFirstLowFunction(loom_module_t* module) {
     loom_block_t* block = loom_module_block(module);
-    const loom_op_t* op = nullptr;
+    loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
       if (loom_low_func_def_isa(op)) {
         return op;
@@ -128,9 +128,16 @@ class AmdgpuAssemblyTest : public ::testing::Test {
                                 loom_low_packetization_t* out_packetization) {
     const char* body =
         "low.func.def target(@gfx11_target) @gfx11_fragment(%source : "
-        "reg<amdgpu.sgpr x3>) {\n"
+        "reg<amdgpu.sgpr x3>, %tail : reg<amdgpu.sgpr>, %value : "
+        "reg<amdgpu.vgpr>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
+        "reg<amdgpu.sgpr>) {\n"
         "  %shifted = low.copy %source : reg<amdgpu.sgpr x3> -> "
         "reg<amdgpu.sgpr x3>\n"
+        "  %resource = low.concat(%shifted, %tail) : "
+        "(reg<amdgpu.sgpr x3>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>\n"
+        "  low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, "
+        "%soffset) {offset = 0} : (reg<amdgpu.vgpr>, "
+        "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
         "  low.return\n"
         "}\n";
     std::string source =
@@ -178,7 +185,7 @@ class AmdgpuAssemblyTest : public ::testing::Test {
             .location_count = 3,
         },
     };
-    const loom_op_t* low_function = FindFirstLowFunction(module_);
+    loom_op_t* low_function = FindFirstLowFunction(module_);
     ASSERT_NE(low_function, nullptr);
     loom_low_packetization_options_t packetization_options = {
         .descriptor_registry = &target_registry_.registry,
@@ -225,7 +232,7 @@ class AmdgpuAssemblyTest : public ::testing::Test {
         loom_low_verify_module(module_, &verify_options, &verify_result));
     EXPECT_EQ(verify_result.error_count, 0u);
 
-    const loom_op_t* low_function = FindFirstLowFunction(module_);
+    loom_op_t* low_function = FindFirstLowFunction(module_);
     ASSERT_NE(low_function, nullptr);
     loom_low_packetization_options_t packetization_options = {
         .descriptor_registry = &target_registry_.registry,
@@ -309,7 +316,7 @@ class AmdgpuAssemblyTest : public ::testing::Test {
         out_packetization));
   }
 
-  void ExpectSourceLoweringEmitsFragment(const char* preset_key) {
+  void ExpectPureSourceLoweringDropsDeadFragment(const char* preset_key) {
     iree_arena_allocator_t sidecar_arena;
     iree_arena_initialize(&block_pool_, &sidecar_arena);
     loom_low_packetization_t packetization = {};
@@ -317,13 +324,11 @@ class AmdgpuAssemblyTest : public ::testing::Test {
         preset_key,
         "func.def @gfx_source(%lhs: i32, %rhs: i32, "
         "%vlhs: vector<1xi32>, %vrhs: vector<1xi32>, "
-        "%flhs: vector<1xf32>, %frhs: vector<1xf32>) "
-        "{\n"
+        "%flhs: vector<1xf32>, %frhs: vector<1xf32>) {\n"
         "  %seven = scalar.constant 7 : i32\n"
         "  %biased = scalar.addi %lhs, %seven : i32\n"
         "  %sum = scalar.addi %biased, %rhs : i32\n"
-        "  %difference = scalar.subi %sum, %seven : "
-        "i32\n"
+        "  %difference = scalar.subi %sum, %seven : i32\n"
         "  %vconst = vector.constant 42 : "
         "vector<1xi32>\n"
         "  %vsum = vector.addi %vlhs, %vrhs : "
@@ -353,17 +358,17 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     const std::string output(iree_string_builder_view(&builder).data,
                              iree_string_builder_view(&builder).size);
     EXPECT_NE(output.find(".Lbb0:"), std::string::npos);
-    EXPECT_NE(output.find("s_mov_b32 s"), std::string::npos);
-    EXPECT_NE(output.find("s_add_u32 s"), std::string::npos);
-    EXPECT_NE(output.find("s_sub_u32 s"), std::string::npos);
-    EXPECT_NE(output.find("v_mov_b32 v"), std::string::npos);
-    EXPECT_NE(output.find("v_add_u32 v"), std::string::npos);
-    EXPECT_NE(output.find("v_sub"), std::string::npos);
-    EXPECT_NE(output.find("v_mul_lo_u32 v"), std::string::npos);
-    EXPECT_NE(output.find("v_add_f32 v"), std::string::npos);
-    EXPECT_NE(output.find("v_sub_f32 v"), std::string::npos);
-    EXPECT_NE(output.find("v_mul_f32 v"), std::string::npos);
-    EXPECT_NE(output.find("v_fma_f32 v"), std::string::npos);
+    EXPECT_EQ(output.find("s_mov_b32 s"), std::string::npos);
+    EXPECT_EQ(output.find("s_add_u32 s"), std::string::npos);
+    EXPECT_EQ(output.find("s_sub_u32 s"), std::string::npos);
+    EXPECT_EQ(output.find("v_mov_b32 v"), std::string::npos);
+    EXPECT_EQ(output.find("v_add_u32 v"), std::string::npos);
+    EXPECT_EQ(output.find("v_sub"), std::string::npos);
+    EXPECT_EQ(output.find("v_mul_lo_u32 v"), std::string::npos);
+    EXPECT_EQ(output.find("v_add_f32 v"), std::string::npos);
+    EXPECT_EQ(output.find("v_sub_f32 v"), std::string::npos);
+    EXPECT_EQ(output.find("v_mul_f32 v"), std::string::npos);
+    EXPECT_EQ(output.find("v_fma_f32 v"), std::string::npos);
     EXPECT_NE(output.find("s_endpgm"), std::string::npos);
     iree_string_builder_deinitialize(&builder);
     iree_arena_deinitialize(&sidecar_arena);
@@ -421,11 +426,18 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
       "  %matrix1 = low.op<amdgpu.v_wmma_f32_16x16x16_f16>(%a, %b, "
       "%matrix0) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>, "
       "reg<amdgpu.vgpr x8>) -> %matrix0 as reg<amdgpu.vgpr x8>\n"
+      "  %binding_offset = low.slice %binding_ptr[0] : "
+      "reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>\n"
+      "  %matrix_low = low.slice %matrix1[0] : reg<amdgpu.vgpr x8> -> "
+      "reg<amdgpu.vgpr x4>\n"
       "  low.op<amdgpu.buffer_store_dword>(%v_mix, %resource, %vaddr, "
-      "%soffset) {offset = 8} : (reg<amdgpu.vgpr>, "
+      "%s_mix) {offset = 8} : (reg<amdgpu.vgpr>, "
       "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.op<amdgpu.buffer_store_b128>(%vmem_b128, %resource, %vaddr, "
-      "%soffset) {offset = 32} : (reg<amdgpu.vgpr x4>, "
+      "%binding_offset) {offset = 32} : (reg<amdgpu.vgpr x4>, "
+      "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.op<amdgpu.buffer_store_b128>(%matrix_low, %resource, %vaddr, "
+      "%soffset) {offset = 48} : (reg<amdgpu.vgpr x4>, "
       "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.op<amdgpu.s_waitcnt>() {vmcnt = 0, lgkmcnt = 0} : ()\n"
       "  low.op<amdgpu.s_waitcnt_depctr>() {depctr = 0} : ()\n"
@@ -932,7 +944,8 @@ TEST_F(AmdgpuAssemblyTest, EmitsMaterializedCopies) {
       "low.func.def target(@gfx11_target) @gfx11_fragment(%s0 : "
       "reg<amdgpu.sgpr>, %s1 : reg<amdgpu.sgpr>, %a : "
       "reg<amdgpu.vgpr x4>, %b : reg<amdgpu.vgpr x4>, %acc : "
-      "reg<amdgpu.vgpr x8>) {\n"
+      "reg<amdgpu.vgpr x8>, %resource : reg<amdgpu.sgpr x4>, "
+      "%vaddr : reg<amdgpu.vgpr>) {\n"
       "  %s_copy = low.copy %s0 : reg<amdgpu.sgpr> -> reg<amdgpu.sgpr>\n"
       "  %s_sum = low.op<amdgpu.s_add_u32>(%s_copy, %s1) : "
       "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
@@ -946,6 +959,11 @@ TEST_F(AmdgpuAssemblyTest, EmitsMaterializedCopies) {
       "  %matrix1 = low.op<amdgpu.v_wmma_f32_16x16x16_f16>(%a, %b, "
       "%matrix0) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>, "
       "reg<amdgpu.vgpr x8>) -> %matrix0 as reg<amdgpu.vgpr x8>\n"
+      "  %matrix_low = low.slice %matrix1[0] : reg<amdgpu.vgpr x8> -> "
+      "reg<amdgpu.vgpr x4>\n"
+      "  low.op<amdgpu.buffer_store_b128>(%matrix_low, %resource, %vaddr, "
+      "%s_second) {offset = 0} : (reg<amdgpu.vgpr x4>, "
+      "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.return\n"
       "}\n",
       &sidecar_arena, &packetization);
@@ -1029,7 +1047,7 @@ TEST_F(AmdgpuAssemblyTest, EmitsConcatRegisterCopies) {
   iree_arena_deinitialize(&sidecar_arena);
 }
 
-TEST_F(AmdgpuAssemblyTest, EmitsFragmentsFromSourceLowering) {
+TEST_F(AmdgpuAssemblyTest, DropsDeadPureFragmentsFromSourceLowering) {
   static constexpr const char* kPresetKeys[] = {
       "amdgpu-gfx950",
       "amdgpu-gfx11",
@@ -1038,7 +1056,7 @@ TEST_F(AmdgpuAssemblyTest, EmitsFragmentsFromSourceLowering) {
   };
   for (const char* preset_key : kPresetKeys) {
     SCOPED_TRACE(preset_key);
-    ExpectSourceLoweringEmitsFragment(preset_key);
+    ExpectPureSourceLoweringDropsDeadFragment(preset_key);
   }
 }
 

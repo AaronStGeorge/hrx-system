@@ -232,6 +232,42 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "cleanup_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/codegen/low:cleanup",
+)
+
+iree_assert_no_dependency(
+    name = "cleanup_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/codegen/low:cleanup",
+)
+
+iree_assert_no_dependency(
+    name = "cleanup_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/codegen/low:cleanup",
+)
+
+iree_assert_no_dependency(
+    name = "cleanup_no_target_registry_dep",
+    dependency = "//loom/src/loom/target:low_descriptor_registry",
+    target = "//loom/src/loom/codegen/low:cleanup",
+)
+
+iree_assert_no_dependency(
+    name = "cleanup_no_test_low_registry_dep",
+    dependency = "//loom/src/loom/target/test:low_registry",
+    target = "//loom/src/loom/codegen/low:cleanup",
+)
+
+iree_assert_no_dependency(
+    name = "cleanup_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/codegen/low:cleanup",
+)
+
+iree_assert_no_dependency(
     name = "packetization_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/codegen/low:packetization",
@@ -688,11 +724,30 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "cleanup",
+    srcs = ["cleanup.c"],
+    hdrs = ["cleanup.h"],
+    deps = [
+        ":descriptors",
+        ":target_binding",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/pass:types",
+        "//loom/src/loom/passes:dce",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "packetization",
     srcs = ["packetization.c"],
     hdrs = ["packetization.h"],
     deps = [
         ":allocation",
+        ":cleanup",
         ":packet",
         ":schedule",
         "//loom/src/loom/error:emitter",

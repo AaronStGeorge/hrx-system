@@ -64,9 +64,9 @@ class X86AssemblyTest : public ::testing::Test {
     return module;
   }
 
-  const loom_op_t* FindFirstLowFunction(loom_module_t* module) {
+  loom_op_t* FindFirstLowFunction(loom_module_t* module) {
     loom_block_t* block = loom_module_block(module);
-    const loom_op_t* op = nullptr;
+    loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
       if (loom_low_func_def_isa(op)) {
         return op;
@@ -126,7 +126,7 @@ class X86AssemblyTest : public ::testing::Test {
         loom_low_verify_module(module_, &verify_options, &verify_result));
     EXPECT_EQ(verify_result.error_count, 0u);
 
-    const loom_op_t* low_function = FindFirstLowFunction(module_);
+    loom_op_t* low_function = FindFirstLowFunction(module_);
     ASSERT_NE(low_function, nullptr);
     loom_low_packetization_options_t packetization_options = {
         .descriptor_registry = &target_registry_.registry,
@@ -254,12 +254,14 @@ TEST_F(X86AssemblyTest, EmitsMaterializedAvx512Copy) {
   loom_low_packetization_t packetization = {};
   BuildSidecars(
       "low.func.def target(@x86_target) @x86_fragment(%lhs : "
-      "reg<x86.zmm>, %rhs : reg<x86.zmm>) {\n"
+      "reg<x86.zmm>, %rhs : reg<x86.zmm>, %base : reg<x86.gpr64>) {\n"
       "  %copy = low.copy %lhs : reg<x86.zmm> -> reg<x86.zmm>\n"
       "  %sum = low.op<x86.avx512.vpaddd.zmm>(%copy, %rhs) : "
       "(reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>\n"
       "  %second = low.op<x86.avx512.vpaddd.zmm>(%lhs, %sum) : "
       "(reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>\n"
+      "  low.op<x86.avx512.vmovdqu32.store.zmm>(%second, %base) "
+      "{disp32 = 128} : (reg<x86.zmm>, reg<x86.gpr64>)\n"
       "  low.return\n"
       "}\n",
       &sidecar_arena, &packetization);
@@ -272,12 +274,13 @@ TEST_F(X86AssemblyTest, EmitsMaterializedAvx512Copy) {
                            iree_string_builder_view(&builder).size);
   EXPECT_NE(output.find("vmovdqa32 zmm"), std::string::npos);
   EXPECT_NE(output.find("vpaddd zmm"), std::string::npos);
+  EXPECT_NE(output.find("vmovdqu32 [rax + 128], zmm"), std::string::npos);
   EXPECT_NE(output.find("ret"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
 }
 
-TEST_F(X86AssemblyTest, EmitsAvx512FragmentFromSourceLowering) {
+TEST_F(X86AssemblyTest, DropsDeadAvx512FragmentFromSourceLowering) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
@@ -303,19 +306,19 @@ TEST_F(X86AssemblyTest, EmitsAvx512FragmentFromSourceLowering) {
   const std::string output(iree_string_builder_view(&builder).data,
                            iree_string_builder_view(&builder).size);
   EXPECT_NE(output.find(".Lbb0:"), std::string::npos);
-  EXPECT_NE(output.find("vpaddd zmm"), std::string::npos);
-  EXPECT_NE(output.find("vpsubd zmm"), std::string::npos);
-  EXPECT_NE(output.find("vpmulld zmm"), std::string::npos);
-  EXPECT_NE(output.find("vaddps zmm"), std::string::npos);
-  EXPECT_NE(output.find("vsubps zmm"), std::string::npos);
-  EXPECT_NE(output.find("vmulps zmm"), std::string::npos);
-  EXPECT_NE(output.find("vfmadd231ps zmm"), std::string::npos);
+  EXPECT_EQ(output.find("vpaddd zmm"), std::string::npos);
+  EXPECT_EQ(output.find("vpsubd zmm"), std::string::npos);
+  EXPECT_EQ(output.find("vpmulld zmm"), std::string::npos);
+  EXPECT_EQ(output.find("vaddps zmm"), std::string::npos);
+  EXPECT_EQ(output.find("vsubps zmm"), std::string::npos);
+  EXPECT_EQ(output.find("vmulps zmm"), std::string::npos);
+  EXPECT_EQ(output.find("vfmadd231ps zmm"), std::string::npos);
   EXPECT_NE(output.find("ret"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
 }
 
-TEST_F(X86AssemblyTest, EmitsPackedDotFragmentFromSourceLowering) {
+TEST_F(X86AssemblyTest, DropsDeadPackedDotFragmentFromSourceLowering) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
@@ -336,7 +339,7 @@ TEST_F(X86AssemblyTest, EmitsPackedDotFragmentFromSourceLowering) {
   const std::string output(iree_string_builder_view(&builder).data,
                            iree_string_builder_view(&builder).size);
   EXPECT_NE(output.find(".Lbb0:"), std::string::npos);
-  EXPECT_NE(output.find("vpdpbusd ymm"), std::string::npos);
+  EXPECT_EQ(output.find("vpdpbusd ymm"), std::string::npos);
   EXPECT_NE(output.find("ret"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);

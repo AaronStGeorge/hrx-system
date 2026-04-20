@@ -284,7 +284,7 @@ class WasmLowerTest : public ::testing::Test {
     EXPECT_TRUE(collector.emissions.empty());
   }
 
-  void Packetize(loom_module_t* module, const loom_op_t* low_function,
+  void Packetize(loom_module_t* module, loom_op_t* low_function,
                  loom_low_packetization_t* out_packetization) {
     ReleaseSidecars();
     iree_arena_initialize(&block_pool_, &sidecar_arena_);

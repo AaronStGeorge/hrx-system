@@ -58,9 +58,9 @@ class LowPacketAsmTest : public ::testing::Test {
     return module;
   }
 
-  const loom_op_t* FindFirstLowFunction(loom_module_t* module) {
+  loom_op_t* FindFirstLowFunction(loom_module_t* module) {
     loom_block_t* block = loom_module_block(module);
-    const loom_op_t* op = nullptr;
+    loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
       if (loom_low_func_def_isa(op)) {
         return op;
@@ -173,7 +173,7 @@ TEST_F(LowPacketAsmTest, FormatsScheduledPacketsWithCanonicalAsmForms) {
       "(reg<test.i32>, reg<test.i32>) -> reg<test.i32>\n"
       "  low.return %cmp : reg<test.i32>\n"
       "}\n");
-  const loom_op_t* low_function = FindFirstLowFunction(module_);
+  loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
   iree_arena_allocator_t sidecar_arena;
@@ -232,7 +232,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralBranches) {
       "^join(%result : reg<test.i32>):\n"
       "  low.return %result : reg<test.i32>\n"
       "}\n");
-  const loom_op_t* low_function = FindFirstLowFunction(module_);
+  loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
   iree_arena_allocator_t sidecar_arena;
@@ -275,7 +275,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralConcat) {
       "reg<test.i32 x2>\n"
       "  low.return %pair : reg<test.i32 x2>\n"
       "}\n");
-  const loom_op_t* low_function = FindFirstLowFunction(module_);
+  loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
   iree_arena_allocator_t sidecar_arena;
@@ -316,7 +316,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralSlice) {
       "  %lane = low.slice %pair[1] : reg<test.i32 x2> -> reg<test.i32>\n"
       "  low.return %lane : reg<test.i32>\n"
       "}\n");
-  const loom_op_t* low_function = FindFirstLowFunction(module_);
+  loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
   iree_arena_allocator_t sidecar_arena;
@@ -355,7 +355,7 @@ TEST_F(LowPacketAsmTest, RejectsMissingValueFormatter) {
       "low.func.def target(@test_target) @packet_asm() {\n"
       "  low.return\n"
       "}\n");
-  const loom_op_t* low_function = FindFirstLowFunction(module_);
+  loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
   iree_arena_allocator_t sidecar_arena;
@@ -384,7 +384,7 @@ TEST_F(LowPacketAsmTest, RejectsInvalidSelectedAsmForms) {
       "low.func.def target(@test_target) @packet_asm() {\n"
       "  low.return\n"
       "}\n");
-  const loom_op_t* low_function = FindFirstLowFunction(module_);
+  loom_op_t* low_function = FindFirstLowFunction(module_);
   ASSERT_NE(low_function, nullptr);
 
   iree_arena_allocator_t sidecar_arena;

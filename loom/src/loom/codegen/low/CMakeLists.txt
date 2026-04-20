@@ -308,6 +308,27 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    cleanup
+  HDRS
+    "cleanup.h"
+  SRCS
+    "cleanup.c"
+  DEPS
+    ::descriptors
+    ::target_binding
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::error::emitter
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+    loom::src::loom::pass::types
+    loom::src::loom::passes::dce
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     packetization
   HDRS
     "packetization.h"
@@ -315,6 +336,7 @@ loom_cc_library(
     "packetization.c"
   DEPS
     ::allocation
+    ::cleanup
     ::packet
     ::schedule
     iree::base

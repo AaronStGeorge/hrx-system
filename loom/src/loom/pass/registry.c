@@ -549,7 +549,10 @@ iree_status_t loom_pass_descriptor_validate_options(
   if (iree_status_is_ok(status) && has_options) {
     status = loom_pass_options_parse(
         info->name, trimmed_options,
-        loom_pass_option_schema_validate_assignment, &context);
+        (loom_pass_option_parse_callback_t){
+            .fn = loom_pass_option_schema_validate_assignment,
+            .user_data = &context,
+        });
   }
   if (iree_status_is_ok(status)) {
     status =
@@ -687,9 +690,12 @@ iree_status_t loom_pass_descriptor_decode_options(
       .decoded_options = decoded_options,
   };
   if (iree_status_is_ok(status) && has_options) {
-    status = loom_pass_options_parse(info->name, trimmed_options,
-                                     loom_pass_option_schema_decode_assignment,
-                                     &context);
+    status = loom_pass_options_parse(
+        info->name, trimmed_options,
+        (loom_pass_option_parse_callback_t){
+            .fn = loom_pass_option_schema_decode_assignment,
+            .user_data = &context,
+        });
   }
   if (iree_status_is_ok(status) && decoded_options) {
     status = loom_pass_option_schema_validate_decoded_required(descriptor,

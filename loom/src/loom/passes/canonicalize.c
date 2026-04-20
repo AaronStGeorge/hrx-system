@@ -131,7 +131,10 @@ iree_status_t loom_canonicalize_create(loom_pass_t* pass,
   } else {
     IREE_RETURN_IF_ERROR(
         loom_pass_options_parse(pass->info->name, options_string,
-                                loom_canonicalize_parse_option, options));
+                                (loom_pass_option_parse_callback_t){
+                                    .fn = loom_canonicalize_parse_option,
+                                    .user_data = options,
+                                }));
   }
   pass->state = options;
   return iree_ok_status();

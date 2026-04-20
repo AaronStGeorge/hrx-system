@@ -102,12 +102,11 @@ iree_status_t loom_pass_pipeline_consume_entry(
 
 iree_status_t loom_pass_options_parse(iree_string_view_t pass_name,
                                       iree_string_view_t options,
-                                      loom_pass_option_parse_fn_t parse,
-                                      void* user_data) {
+                                      loom_pass_option_parse_callback_t parse) {
   if (iree_string_view_is_empty(iree_string_view_trim(options))) {
     return iree_ok_status();
   }
-  IREE_ASSERT_ARGUMENT(parse);
+  IREE_ASSERT_ARGUMENT(parse.fn);
 
   iree_string_view_t remaining = options;
   while (!iree_string_view_is_empty(iree_string_view_trim(remaining))) {
@@ -145,7 +144,7 @@ iree_status_t loom_pass_options_parse(iree_string_view_t pass_name,
           "pass '%.*s' option assignments require non-empty names and values",
           (int)pass_name.size, pass_name.data);
     }
-    IREE_RETURN_IF_ERROR(parse(user_data, name, value));
+    IREE_RETURN_IF_ERROR(parse.fn(parse.user_data, name, value));
   }
   return iree_ok_status();
 }

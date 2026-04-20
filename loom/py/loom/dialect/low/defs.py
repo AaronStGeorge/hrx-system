@@ -50,6 +50,7 @@ from loom.dsl import (
     ATTR_TYPE_I64,
     ATTR_TYPE_TYPE,
     ISOLATED_FROM_ABOVE,
+    PURE,
     REGISTER,
     SYMBOL_DEFINE,
     TERMINATOR,
@@ -548,7 +549,7 @@ low_copy = Op(
     doc="Explicit virtual-register copy used by lowering and allocation.",
     operands=[Operand("source", REGISTER)],
     results=[Result("result", REGISTER)],
-    traits=[UNKNOWN_EFFECTS],
+    traits=[PURE],
     constraints=[
         SameRegisterClass("source", "result"),
     ],
@@ -578,7 +579,7 @@ low_slice = Op(
     ],
     operands=[Operand("source", REGISTER)],
     results=[Result("result", REGISTER)],
-    traits=[UNKNOWN_EFFECTS],
+    traits=[PURE],
     constraints=[
         SameRegisterClass("source", "result"),
     ],
@@ -610,7 +611,7 @@ low_concat = Op(
     doc="Compose one register-range value from ordered register subranges.",
     operands=[Operand("sources", REGISTER, variadic=True)],
     results=[Result("result", REGISTER)],
-    traits=[UNKNOWN_EFFECTS],
+    traits=[PURE],
     constraints=[
         SameRegisterClass("sources", "result"),
         RegisterUnitsSumTo("sources", "result"),
@@ -773,7 +774,7 @@ low_frame_index = Op(
         AttrDef("offset", ATTR_TYPE_I64),
     ],
     results=[Result("result", REGISTER)],
-    traits=[UNKNOWN_EFFECTS],
+    traits=[PURE],
     verify="loom_low_frame_index_verify",
     format=[
         SymbolRef("slot"),
@@ -840,7 +841,7 @@ low_resource = Op(
         ),
     ],
     results=[Result("result", REGISTER)],
-    traits=[UNKNOWN_EFFECTS],
+    traits=[PURE],
     verify="loom_low_resource_verify",
     format=[
         SymbolRef("resource"),
