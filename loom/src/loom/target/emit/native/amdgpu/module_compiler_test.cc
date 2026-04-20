@@ -342,10 +342,20 @@ TEST(AmdgpuModuleCompilerTest, CompilesLowNoopToHalExecutable) {
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION));
+  EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_EMISSION));
+  EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_MEMORY));
   EXPECT_FALSE(iree_string_view_is_empty(report.target_bundle_name));
   EXPECT_FALSE(iree_string_view_is_empty(report.lowered_symbol));
   EXPECT_GT(report.schedule_node_count, 0u);
   EXPECT_GT(report.scheduled_node_count, 0u);
+  EXPECT_GT(report.emitted_instruction_count, 0u);
+  EXPECT_GT(report.emitted_code_byte_count, 0u);
+  EXPECT_EQ(report.emitted_code_storage_byte_count,
+            report.emitted_code_byte_count);
+  EXPECT_EQ(report.private_memory_bytes, 0u);
+  EXPECT_EQ(report.local_memory_bytes, 0u);
   EXPECT_GT(report.artifact_size, 0u);
 
   loom_amdgpu_hal_executable_deinitialize(&executable, iree_allocator_system());

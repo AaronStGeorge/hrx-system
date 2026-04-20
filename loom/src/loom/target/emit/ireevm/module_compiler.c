@@ -291,6 +291,13 @@ iree_status_t loom_ireevm_compile_module_archive(
                                                 &packetization.allocation,
                                                 allocator, &bytecode);
   }
+  if (iree_status_is_ok(status) && report != NULL) {
+    loom_target_compile_report_record_emission(
+        report,
+        packetization.schedule.scheduled_node_count +
+            packetization.schedule.block_count,
+        bytecode.bytecode_length, bytecode.data_length);
+  }
   if (iree_status_is_ok(status)) {
     const loom_ireevm_module_archive_function_t functions[] = {
         {

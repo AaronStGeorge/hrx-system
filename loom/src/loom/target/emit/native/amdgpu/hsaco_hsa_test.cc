@@ -710,8 +710,11 @@ class LowKernelCompiler {
         loom_amdgpu_wait_packet_plan_build(&wait_plan, arena, &wait_packets));
 
     StreamPtr stream = CreateStream();
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_kernel_hsaco_with_wait_packets(
-        &packetization.schedule, &packetization.allocation, &wait_packets,
+    const loom_amdgpu_kernel_hsaco_options_t hsaco_options = {
+        .wait_packets = &wait_packets,
+    };
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_kernel_hsaco(
+        &packetization.schedule, &packetization.allocation, &hsaco_options,
         stream.get(), arena));
     *out_hsaco = StreamBytes(stream.get());
     return iree_ok_status();

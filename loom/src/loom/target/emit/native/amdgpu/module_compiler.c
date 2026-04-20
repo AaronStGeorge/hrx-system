@@ -181,9 +181,12 @@ static iree_status_t loom_amdgpu_module_compile_read_stream_contents(
 
 static iree_status_t loom_amdgpu_module_compile_emit_hsaco(
     const loom_low_packetization_t* packetization,
-    iree_arena_allocator_t* sidecar_arena, iree_allocator_t allocator,
-    iree_const_byte_span_t* out_hsaco) {
+    loom_amdgpu_kernel_hsaco_summary_t* out_summary,
+    iree_const_byte_span_t* out_hsaco, iree_arena_allocator_t* sidecar_arena,
+    iree_allocator_t allocator) {
+  IREE_ASSERT_ARGUMENT(out_summary);
   IREE_ASSERT_ARGUMENT(out_hsaco);
+  *out_summary = (loom_amdgpu_kernel_hsaco_summary_t){0};
   *out_hsaco = iree_const_byte_span_empty();
 
   loom_amdgpu_wait_plan_t wait_plan = {0};
@@ -198,8 +201,12 @@ static iree_status_t loom_amdgpu_module_compile_emit_hsaco(
       IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_WRITABLE |
           IREE_IO_STREAM_MODE_SEEKABLE | IREE_IO_STREAM_MODE_RESIZABLE,
       32 * 1024, allocator, &stream));
-  iree_status_t status = loom_amdgpu_emit_kernel_hsaco_with_wait_packets(
-      &packetization->schedule, &packetization->allocation, &wait_packets,
+  const loom_amdgpu_kernel_hsaco_options_t hsaco_options = {
+      .wait_packets = &wait_packets,
+      .summary = out_summary,
+  };
+  iree_status_t status = loom_amdgpu_emit_kernel_hsaco(
+      &packetization->schedule, &packetization->allocation, &hsaco_options,
       stream, sidecar_arena);
   if (iree_status_is_ok(status)) {
     status = loom_amdgpu_module_compile_read_stream_contents(stream, allocator,
@@ -418,9 +425,18 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
         packetization.allocation.materialized_copy_count);
   }
 
+  loom_amdgpu_kernel_hsaco_summary_t hsaco_summary = {0};
   iree_const_byte_span_t hsaco = iree_const_byte_span_empty();
   iree_status_t status = loom_amdgpu_module_compile_emit_hsaco(
-      &packetization, sidecar_arena, allocator, &hsaco);
+      &packetization, &hsaco_summary, &hsaco, sidecar_arena, allocator);
+  if (iree_status_is_ok(status) && report != NULL) {
+    loom_target_compile_report_record_emission(
+        report, hsaco_summary.instruction_count, hsaco_summary.text_byte_count,
+        hsaco_summary.text_storage_byte_count);
+    loom_target_compile_report_record_memory(
+        report, hsaco_summary.private_segment_fixed_size,
+        hsaco_summary.group_segment_fixed_size);
+  }
 
   iree_string_builder_t target_id_builder;
   iree_string_builder_initialize(allocator, &target_id_builder);

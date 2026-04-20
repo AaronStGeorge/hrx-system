@@ -178,6 +178,8 @@ TEST_F(CandidateTest, CompileVmArchiveCandidate) {
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
   EXPECT_TRUE(iree_all_bits_set(candidate.compile_report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION));
+  EXPECT_TRUE(iree_all_bits_set(candidate.compile_report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_EMISSION));
   EXPECT_FALSE(
       iree_string_view_is_empty(candidate.compile_report.target_bundle_name));
   EXPECT_FALSE(
@@ -185,6 +187,10 @@ TEST_F(CandidateTest, CompileVmArchiveCandidate) {
   EXPECT_GT(candidate.compile_report.schedule_node_count, 0u);
   EXPECT_GT(candidate.compile_report.scheduled_node_count, 0u);
   EXPECT_GT(candidate.compile_report.allocation_assignment_count, 0u);
+  EXPECT_GT(candidate.compile_report.emitted_instruction_count, 0u);
+  EXPECT_GT(candidate.compile_report.emitted_code_byte_count, 0u);
+  EXPECT_GE(candidate.compile_report.emitted_code_storage_byte_count,
+            candidate.compile_report.emitted_code_byte_count);
   EXPECT_EQ(candidate.compile_report.artifact_size,
             candidate.vm_archive.data_length);
   EXPECT_EQ(report.artifact_kind, candidate.compile_report.artifact_kind);

@@ -13,8 +13,11 @@
 static iree_status_t loom_amdgpu_emit_kernel_hsaco_internal(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
-    const loom_amdgpu_wait_packet_plan_t* wait_packets,
-    iree_io_stream_t* stream, iree_arena_allocator_t* scratch_arena) {
+    const loom_amdgpu_kernel_hsaco_options_t* options, iree_io_stream_t* stream,
+    iree_arena_allocator_t* scratch_arena) {
+  if (options != NULL && options->summary != NULL) {
+    *options->summary = (loom_amdgpu_kernel_hsaco_summary_t){0};
+  }
   if (stream == NULL || scratch_arena == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -25,6 +28,8 @@ static iree_status_t loom_amdgpu_emit_kernel_hsaco_internal(
                                                        &record, scratch_arena));
 
   iree_const_byte_span_t text = iree_const_byte_span_empty();
+  const loom_amdgpu_wait_packet_plan_t* wait_packets =
+      options ? options->wait_packets : NULL;
   if (wait_packets != NULL) {
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_encode_instruction_stream_with_wait_packets(
@@ -47,22 +52,29 @@ static iree_status_t loom_amdgpu_emit_kernel_hsaco_internal(
       .kernels = &kernel,
       .kernel_count = 1,
   };
-  return loom_amdgpu_hsaco_write_file(&file, stream, scratch_arena);
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_hsaco_write_file(&file, stream, scratch_arena));
+
+  if (options != NULL && options->summary != NULL) {
+    const uint64_t wait_packet_count =
+        wait_packets ? wait_packets->packet_count : 0;
+    *options->summary = (loom_amdgpu_kernel_hsaco_summary_t){
+        .instruction_count = schedule->scheduled_node_count + wait_packet_count,
+        .text_byte_count = text.data_length,
+        .text_storage_byte_count = text.data_length,
+        .private_segment_fixed_size =
+            record.metadata.private_segment_fixed_size,
+        .group_segment_fixed_size = record.metadata.group_segment_fixed_size,
+    };
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_amdgpu_emit_kernel_hsaco(
     const loom_low_schedule_sidecar_t* schedule,
-    const loom_low_allocation_sidecar_t* allocation, iree_io_stream_t* stream,
-    iree_arena_allocator_t* scratch_arena) {
-  return loom_amdgpu_emit_kernel_hsaco_internal(schedule, allocation, NULL,
-                                                stream, scratch_arena);
-}
-
-iree_status_t loom_amdgpu_emit_kernel_hsaco_with_wait_packets(
-    const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
-    const loom_amdgpu_wait_packet_plan_t* wait_packets,
-    iree_io_stream_t* stream, iree_arena_allocator_t* scratch_arena) {
-  return loom_amdgpu_emit_kernel_hsaco_internal(
-      schedule, allocation, wait_packets, stream, scratch_arena);
+    const loom_amdgpu_kernel_hsaco_options_t* options, iree_io_stream_t* stream,
+    iree_arena_allocator_t* scratch_arena) {
+  return loom_amdgpu_emit_kernel_hsaco_internal(schedule, allocation, options,
+                                                stream, scratch_arena);
 }

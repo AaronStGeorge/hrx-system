@@ -37,6 +37,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION = 1u << 2,
   // Target private/local memory estimates are populated.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_MEMORY = 1u << 3,
+  // Target emission instruction and code-size summaries are populated.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_EMISSION = 1u << 4,
 };
 
 // Structured feedback from one module-to-artifact compilation.
@@ -102,6 +104,12 @@ typedef struct loom_target_compile_report_t {
   uint64_t allocation_coalesced_copy_count;
   // Number of low.copy ops that must remain materialized.
   uint64_t allocation_materialized_copy_count;
+  // Number of target instructions or bytecode opcodes emitted.
+  uint64_t emitted_instruction_count;
+  // Number of semantic target code bytes before target-local padding.
+  uint64_t emitted_code_byte_count;
+  // Number of target code storage bytes including target-local padding.
+  uint64_t emitted_code_storage_byte_count;
   // Estimated target private memory bytes.
   uint64_t private_memory_bytes;
   // Estimated target local/shared memory bytes.
@@ -137,6 +145,16 @@ void loom_target_compile_report_record_allocation(
     loom_target_compile_report_t* report, uint64_t assignment_count,
     uint64_t spill_count, uint64_t spill_plan_count,
     uint64_t coalesced_copy_count, uint64_t materialized_copy_count);
+
+// Records target emission instruction and code-size summary counts in |report|.
+void loom_target_compile_report_record_emission(
+    loom_target_compile_report_t* report, uint64_t instruction_count,
+    uint64_t code_byte_count, uint64_t code_storage_byte_count);
+
+// Records target memory estimates in |report|.
+void loom_target_compile_report_record_memory(
+    loom_target_compile_report_t* report, uint64_t private_memory_bytes,
+    uint64_t local_memory_bytes);
 
 #ifdef __cplusplus
 }  // extern "C"
