@@ -8,6 +8,7 @@
 
 #include "loom/codegen/low/allocation_pass.h"
 #include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower_pass.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/diagnostic.h"
@@ -17,6 +18,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/pass/builtin_registry.h"
+#include "loom/pass/pipeline.h"
 #include "loom/pass/tooling.h"
 #include "loom/target/presets.h"
 #include "loom/testing/diff.h"
@@ -198,6 +200,8 @@ iree_status_t loom_check_environment_initialize_low_lower_policy_registry(
 typedef struct loom_check_pass_pipeline_config_t {
   // Low allocation pass configuration borrowed by matching pipeline entries.
   loom_low_materialize_allocation_pass_config_t* low_allocation_config;
+  // Source-to-low pass configuration borrowed by matching pipeline entries.
+  loom_low_source_to_low_pass_config_t* low_source_to_low_config;
 } loom_check_pass_pipeline_config_t;
 
 static iree_status_t loom_check_configure_pass_instruction(
@@ -214,6 +218,10 @@ static iree_status_t loom_check_configure_pass_instruction(
       iree_string_view_equal(instruction->invoke.descriptor->key,
                              IREE_SV("low-materialize-allocation"))) {
     *out_pass_user_data = config->low_allocation_config;
+  } else if (instruction->kind == LOOM_PASS_PROGRAM_INSTRUCTION_INVOKE &&
+             iree_string_view_equal(instruction->invoke.descriptor->key,
+                                    IREE_SV("source-to-low"))) {
+    *out_pass_user_data = config->low_source_to_low_config;
   }
   return iree_ok_status();
 }
@@ -223,8 +231,52 @@ static bool loom_check_pass_requirement_is_satisfied(
   loom_check_pass_pipeline_config_t* config =
       (loom_check_pass_pipeline_config_t*)user_data;
   return config &&
-         loom_low_materialize_allocation_pass_config_satisfies_requirement(
-             config->low_allocation_config, requirement);
+         (loom_low_materialize_allocation_pass_config_satisfies_requirement(
+              config->low_allocation_config, requirement) ||
+          loom_low_source_to_low_pass_config_satisfies_requirement(
+              config->low_source_to_low_config, requirement));
+}
+
+static bool loom_check_pass_descriptor_declares_requirement(
+    const loom_pass_descriptor_t* descriptor, iree_string_view_t requirement) {
+  if (!descriptor) {
+    return false;
+  }
+  for (uint16_t i = 0; i < descriptor->requirement_count; ++i) {
+    if (iree_string_view_equal(descriptor->requirement_defs[i].key,
+                               requirement)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_check_pipeline_requires_low_lower_policy_registry(
+    iree_string_view_t pipeline, bool* out_required) {
+  IREE_ASSERT_ARGUMENT(out_required);
+  *out_required = false;
+  const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
+  iree_string_view_t remaining = pipeline;
+  while (!iree_string_view_is_empty(iree_string_view_trim(remaining))) {
+    loom_pass_pipeline_entry_spec_t spec = {0};
+    bool has_entry = false;
+    IREE_RETURN_IF_ERROR(
+        loom_pass_pipeline_consume_entry(&remaining, &spec, &has_entry));
+    if (!has_entry) {
+      return iree_ok_status();
+    }
+    const loom_pass_descriptor_t* descriptor = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_pass_registry_lookup(pass_registry, spec.name, &descriptor));
+    if (loom_check_pass_descriptor_declares_requirement(
+            descriptor,
+            IREE_SV(
+                LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_LOWER_POLICY_REGISTRY))) {
+      *out_required = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_check_execute_case(
@@ -302,15 +354,21 @@ iree_status_t loom_check_execute_case(
 static iree_status_t loom_check_run_pipeline(
     iree_string_view_t pipeline, iree_arena_block_pool_t* block_pool,
     iree_diagnostic_emitter_t diagnostic_emitter,
-    const loom_low_descriptor_registry_t* low_descriptor_registry,
+    const loom_target_low_descriptor_registry_t* low_registry,
+    const loom_low_lower_policy_registry_t* low_lower_policy_registry,
     loom_module_t* module) {
   const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
   loom_low_materialize_allocation_pass_config_t
       low_materialize_allocation_config = {
-          .descriptor_registry = low_descriptor_registry,
+          .descriptor_registry = &low_registry->registry,
       };
+  loom_low_source_to_low_pass_config_t low_source_to_low_config = {
+      .descriptor_registry = &low_registry->registry,
+      .policy_registry = low_lower_policy_registry,
+  };
   loom_check_pass_pipeline_config_t pipeline_config = {
       .low_allocation_config = &low_materialize_allocation_config,
+      .low_source_to_low_config = &low_source_to_low_config,
   };
 
   loom_pass_tool_run_options_t options = {
@@ -468,6 +526,8 @@ iree_status_t loom_check_execute_pass(
   }
 
   // Build and run the pass pipeline.
+  loom_low_lower_policy_registry_t low_lower_policy_registry = {0};
+  const loom_low_lower_policy_registry_t* low_lower_policy_registry_ref = NULL;
   loom_source_entry_t source_entry = {0};
   loom_source_table_resolver_t resolver_data = {0};
   status = loom_check_source_resolver_for_case(
@@ -483,10 +543,22 @@ iree_status_t loom_check_execute_pass(
       .fn = loom_check_diagnostic_emitter_capture_emit,
       .user_data = &pass_diagnostic_capture,
   };
+  bool requires_low_lower_policy_registry = false;
+  if (iree_status_is_ok(status)) {
+    status = loom_check_pipeline_requires_low_lower_policy_registry(
+        test_case->pipeline, &requires_low_lower_policy_registry);
+  }
+  if (iree_status_is_ok(status) && requires_low_lower_policy_registry) {
+    status = loom_check_environment_initialize_low_lower_policy_registry(
+        environment, &low_lower_policy_registry);
+    if (iree_status_is_ok(status)) {
+      low_lower_policy_registry_ref = &low_lower_policy_registry;
+    }
+  }
   if (iree_status_is_ok(status)) {
     status = loom_check_run_pipeline(test_case->pipeline, block_pool,
-                                     pass_diagnostic_emitter,
-                                     &low_registry.registry, module);
+                                     pass_diagnostic_emitter, &low_registry,
+                                     low_lower_policy_registry_ref, module);
   }
   if (!iree_status_is_ok(status)) {
     if (pass_diagnostic_capture.emission_count > 0 ||

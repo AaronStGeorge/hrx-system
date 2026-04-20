@@ -6,6 +6,7 @@
 
 #include "loom/pass/pipeline.h"
 
+#include <stdint.h>
 #include <string.h>
 
 iree_status_t loom_pass_pipeline_consume_entry(
@@ -154,13 +155,33 @@ iree_status_t loom_pass_option_parse_uint32(iree_string_view_t pass_name,
                                             iree_string_view_t option_value,
                                             uint32_t* out_value) {
   IREE_ASSERT_ARGUMENT(out_value);
-  uint32_t value = 0;
-  if (!iree_string_view_atoi_uint32(option_value, &value)) {
+  option_value = iree_string_view_trim(option_value);
+  if (iree_string_view_is_empty(option_value)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "pass '%.*s' option '%.*s' expected a uint32 value, got '%.*s'",
         (int)pass_name.size, pass_name.data, (int)option_name.size,
         option_name.data, (int)option_value.size, option_value.data);
+  }
+  uint32_t value = 0;
+  for (iree_host_size_t i = 0; i < option_value.size; ++i) {
+    char c = option_value.data[i];
+    if (c < '0' || c > '9') {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass '%.*s' option '%.*s' expected a uint32 value, got '%.*s'",
+          (int)pass_name.size, pass_name.data, (int)option_name.size,
+          option_name.data, (int)option_value.size, option_value.data);
+    }
+    uint32_t digit = (uint32_t)(c - '0');
+    if (value > (UINT32_MAX - digit) / 10u) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass '%.*s' option '%.*s' value '%.*s' is outside the uint32 range",
+          (int)pass_name.size, pass_name.data, (int)option_name.size,
+          option_name.data, (int)option_value.size, option_value.data);
+    }
+    value = value * 10u + digit;
   }
   *out_value = value;
   return iree_ok_status();

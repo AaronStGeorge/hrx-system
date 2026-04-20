@@ -182,6 +182,12 @@ iree_status_t loom_low_lower_policy_registry_lookup_for_bundle(
     const loom_target_bundle_t* bundle,
     const loom_low_lower_policy_t** out_policy);
 
+// Returns true when |registry| has a lowering policy for |bundle|'s target
+// contract set. This is a selection predicate, not full registry validation.
+bool loom_low_lower_policy_registry_has_bundle(
+    const loom_low_lower_policy_registry_t* registry,
+    const loom_target_bundle_t* bundle);
+
 typedef struct loom_low_lower_options_t {
   // Module-local target.bundle symbol used by the emitted low.func.def.
   loom_symbol_ref_t target_ref;

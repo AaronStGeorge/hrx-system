@@ -1175,19 +1175,8 @@ static iree_status_t loom_check_emit_write_low_packet_json(
 
 static bool loom_check_emit_source_low_policy_registry_has_bundle(
     void* user_data, const loom_target_bundle_t* bundle) {
-  const loom_low_lower_policy_registry_t* registry =
-      (const loom_low_lower_policy_registry_t*)user_data;
-  if (!registry || !bundle || !bundle->config) {
-    return false;
-  }
-  const iree_string_view_t contract_set_key = bundle->config->contract_set_key;
-  for (iree_host_size_t i = 0; i < registry->entry_count; ++i) {
-    if (iree_string_view_equal(registry->entries[i].contract_set_key,
-                               contract_set_key)) {
-      return true;
-    }
-  }
-  return false;
+  return loom_low_lower_policy_registry_has_bundle(
+      (const loom_low_lower_policy_registry_t*)user_data, bundle);
 }
 
 static iree_status_t loom_check_emit_write_source_low_artifacts(

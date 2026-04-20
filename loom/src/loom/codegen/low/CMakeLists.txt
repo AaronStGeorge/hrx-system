@@ -38,6 +38,16 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    pass_requirements
+  HDRS
+    "pass_requirements.h"
+  DEPS
+
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     text_asm
   HDRS
     "text_asm.h"
@@ -198,6 +208,7 @@ loom_cc_library(
     ::allocation
     ::allocation_materialization
     ::descriptors
+    ::pass_requirements
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
@@ -205,6 +216,27 @@ loom_cc_library(
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    lower_pass
+  HDRS
+    "lower_pass.h"
+  SRCS
+    "lower_pass.c"
+  DEPS
+    ::descriptors
+    ::lower
+    ::pass_requirements
+    ::requirements
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::pass::pipeline
+    loom::src::loom::pass::registry
+    loom::src::loom::pass::types
+    loom::src::loom::target::module_compiler
   PUBLIC
 )
 

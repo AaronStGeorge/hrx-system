@@ -401,6 +401,7 @@ loom_cc_test(
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
+        "pass_source_low.loom-test",
         "source_low.loom-test",
     ],
     runner = ":loom-check",

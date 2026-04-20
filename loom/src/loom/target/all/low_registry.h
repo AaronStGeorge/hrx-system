@@ -10,6 +10,7 @@
 #ifndef LOOM_TARGET_ALL_LOW_REGISTRY_H_
 #define LOOM_TARGET_ALL_LOW_REGISTRY_H_
 
+#include "loom/codegen/low/lower.h"
 #include "loom/target/low_descriptor_registry.h"
 
 #ifdef __cplusplus
@@ -18,6 +19,9 @@ extern "C" {
 
 void loom_all_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry);
+
+void loom_all_low_lower_policy_registry_initialize(
+    loom_low_lower_policy_registry_t* out_registry);
 
 #ifdef __cplusplus
 }  // extern "C"

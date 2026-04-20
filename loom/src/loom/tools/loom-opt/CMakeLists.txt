@@ -21,6 +21,7 @@ loom_cc_binary(
     iree::base::tooling::flags
     iree::io::file_handle
     loom::src::loom::codegen::low::allocation_pass
+    loom::src::loom::codegen::low::lower_pass
     loom::src::loom::codegen::low::text_asm
     loom::src::loom::codegen::low::verify
     loom::src::loom::error::diagnostic

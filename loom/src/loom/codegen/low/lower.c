@@ -233,6 +233,25 @@ iree_status_t loom_low_lower_policy_registry_lookup_for_bundle(
       registry, bundle->config->contract_set_key, out_policy);
 }
 
+bool loom_low_lower_policy_registry_has_bundle(
+    const loom_low_lower_policy_registry_t* registry,
+    const loom_target_bundle_t* bundle) {
+  if (!registry || !bundle || !bundle->config) {
+    return false;
+  }
+  iree_string_view_t contract_set_key = bundle->config->contract_set_key;
+  if (iree_string_view_is_empty(iree_string_view_trim(contract_set_key))) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < registry->entry_count; ++i) {
+    if (iree_string_view_equal(registry->entries[i].contract_set_key,
+                               contract_set_key)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static iree_string_view_t loom_low_lower_symbol_name(
     const loom_module_t* module, loom_symbol_ref_t symbol_ref) {
   if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||

@@ -20,18 +20,23 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::lower
     loom::src::loom::target::arch::amdgpu::gfx11_descriptors
     loom::src::loom::target::arch::amdgpu::gfx1250_descriptors
     loom::src::loom::target::arch::amdgpu::gfx12_descriptors
     loom::src::loom::target::arch::amdgpu::gfx950_descriptors
     loom::src::loom::target::arch::amdgpu::low_registry
+    loom::src::loom::target::arch::amdgpu::lower
     loom::src::loom::target::arch::wasm::descriptors
     loom::src::loom::target::arch::wasm::low_registry
     loom::src::loom::target::arch::x86::avx512_descriptors
     loom::src::loom::target::arch::x86::low_registry
+    loom::src::loom::target::arch::x86::lower
     loom::src::loom::target::arch::x86::packed_dot_descriptors
     loom::src::loom::target::emit::ireevm::descriptors
     loom::src::loom::target::emit::ireevm::low_registry
+    loom::src::loom::target::emit::ireevm::lower
+    loom::src::loom::target::emit::wasm::lower
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::types
   PUBLIC

@@ -54,6 +54,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation_pass
     loom::src::loom::codegen::low::cleanup
     loom::src::loom::codegen::low::lower
+    loom::src::loom::codegen::low::lower_pass
     loom::src::loom::codegen::low::packet_json
     loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::schedule
@@ -72,6 +73,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::pass::builtin_registry
+    loom::src::loom::pass::pipeline
     loom::src::loom::pass::tooling
     loom::src::loom::target::emit::llvmir::core
     loom::src::loom::target::emit::llvmir::legality

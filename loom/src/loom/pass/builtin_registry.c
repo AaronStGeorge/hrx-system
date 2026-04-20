@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "loom/codegen/low/allocation_pass.h"
+#include "loom/codegen/low/lower_pass.h"
 #include "loom/passes/branch_fusion.h"
 #include "loom/passes/branch_sink.h"
 #include "loom/passes/canonicalize.h"
@@ -65,6 +66,35 @@ static const loom_pass_requirement_def_t
                 IREE_SVL("Requires an injected target-low descriptor "
                          "registry."),
         },
+};
+
+static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
+    {
+        .name = IREE_SVL("max-errors"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,
+        .minimum_uint32 = 0,
+        .maximum_uint32 = UINT32_MAX,
+    },
+    {
+        .name = IREE_SVL("target"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_STRING,
+    },
+};
+
+static const loom_pass_requirement_def_t kLowSourceToLowRequirements[] = {
+    {
+        .key =
+            IREE_SVL(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
+        .description =
+            IREE_SVL("Requires an injected target-low descriptor registry."),
+    },
+    {
+        .key = IREE_SVL(
+            LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_LOWER_POLICY_REGISTRY),
+        .description =
+            IREE_SVL("Requires an injected source-to-target-low lowering "
+                     "policy registry."),
+    },
 };
 
 static const loom_pass_option_schema_t kRefineBoundariesOptionSchema[] = {
@@ -154,6 +184,16 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("scf-to-cfg"),
         .info = loom_scf_to_cfg_pass_info,
         .function_run = loom_scf_to_cfg_run,
+    },
+    {
+        .key = IREE_SVL("source-to-low"),
+        .info = loom_low_source_to_low_pass_info,
+        .module_run = loom_low_source_to_low_run,
+        .create = loom_low_source_to_low_create,
+        .option_schema = kLowSourceToLowOptionSchema,
+        .option_schema_count = IREE_ARRAYSIZE(kLowSourceToLowOptionSchema),
+        .requirement_defs = kLowSourceToLowRequirements,
+        .requirement_count = IREE_ARRAYSIZE(kLowSourceToLowRequirements),
     },
     {
         .key = IREE_SVL("strip-hints"),

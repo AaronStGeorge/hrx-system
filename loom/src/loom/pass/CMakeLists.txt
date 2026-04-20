@@ -192,6 +192,7 @@ loom_cc_library(
   DEPS
     ::registry
     loom::src::loom::codegen::low::allocation_pass
+    loom::src::loom::codegen::low::lower_pass
     loom::src::loom::passes::branch_fusion
     loom::src::loom::passes::branch_sink
     loom::src::loom::passes::canonicalize

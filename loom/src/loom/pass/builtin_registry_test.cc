@@ -26,6 +26,7 @@ static const iree_string_view_t kExpectedBuiltinPassKeys[] = {
     IREE_SVL("normalize-kernel-resources"),
     IREE_SVL("refine-boundaries"),
     IREE_SVL("scf-to-cfg"),
+    IREE_SVL("source-to-low"),
     IREE_SVL("strip-hints"),
     IREE_SVL("symbol-dce"),
     IREE_SVL("vector-memory-footprint"),
@@ -100,6 +101,22 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_pass_descriptor_validate_options(
                             allocation, IREE_SV("diagnostics=verbose")));
+
+  const loom_pass_descriptor_t* source_to_low =
+      LookupBuiltinPass(IREE_SV("source-to-low"));
+  ASSERT_NE(source_to_low, nullptr);
+  ASSERT_EQ(source_to_low->requirement_count, 2u);
+  EXPECT_TRUE(
+      iree_string_view_equal(source_to_low->requirement_defs[0].key,
+                             IREE_SV("target.low-descriptor-registry")));
+  EXPECT_TRUE(
+      iree_string_view_equal(source_to_low->requirement_defs[1].key,
+                             IREE_SV("target.low-lower-policy-registry")));
+  IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
+      source_to_low, IREE_SV("max-errors=0,target=@vm_target")));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_descriptor_validate_options(
+                            source_to_low, IREE_SV("max-errors=-1")));
 }
 
 }  // namespace

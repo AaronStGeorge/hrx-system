@@ -11,17 +11,13 @@
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/codegen/low/pass_requirements.h"
 #include "loom/ir/ir.h"
 #include "loom/pass/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// Pass requirement satisfied when the driver has selected and injected a
-// target-low descriptor registry for low-codegen passes.
-#define LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY \
-  "target.low-descriptor-registry"
 
 const loom_pass_info_t* loom_low_materialize_allocation_pass_info(void);
 

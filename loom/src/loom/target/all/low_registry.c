@@ -11,13 +11,17 @@
 #include "loom/target/arch/amdgpu/gfx12_descriptors.h"
 #include "loom/target/arch/amdgpu/gfx950_descriptors.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
+#include "loom/target/arch/amdgpu/lower.h"
 #include "loom/target/arch/wasm/descriptors.h"
 #include "loom/target/arch/wasm/low_registry.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/low_registry.h"
+#include "loom/target/arch/x86/lower.h"
 #include "loom/target/arch/x86/packed_dot_descriptors.h"
 #include "loom/target/emit/ireevm/descriptors.h"
 #include "loom/target/emit/ireevm/low_registry.h"
+#include "loom/target/emit/ireevm/lower.h"
+#include "loom/target/emit/wasm/lower.h"
 
 static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {
     loom_ireevm_core_descriptor_set,
@@ -47,4 +51,29 @@ void loom_all_low_descriptor_registry_initialize(
       out_registry, kLowDescriptorSetProviders,
       IREE_ARRAYSIZE(kLowDescriptorSetProviders), kLowTargetBundles,
       IREE_ARRAYSIZE(kLowTargetBundles));
+}
+
+void loom_all_low_lower_policy_registry_initialize(
+    loom_low_lower_policy_registry_t* out_registry) {
+  static loom_low_lower_policy_registry_entry_t kLowLowerPolicyEntries[] = {
+      {.contract_set_key = IREE_SVL("iree.vm.core")},
+      {.contract_set_key = IREE_SVL("wasm.core.simd128")},
+      {.contract_set_key = IREE_SVL("x86.avx512.core")},
+      {.contract_set_key = IREE_SVL("x86.packed_dot.core")},
+      {.contract_set_key = IREE_SVL("amdgpu.gfx950.core")},
+      {.contract_set_key = IREE_SVL("amdgpu.gfx11.core")},
+      {.contract_set_key = IREE_SVL("amdgpu.gfx12.core")},
+      {.contract_set_key = IREE_SVL("amdgpu.gfx1250.core")},
+  };
+  kLowLowerPolicyEntries[0].policy = loom_ireevm_low_lower_policy();
+  kLowLowerPolicyEntries[1].policy = loom_wasm_low_lower_policy();
+  kLowLowerPolicyEntries[2].policy = loom_x86_low_lower_policy();
+  kLowLowerPolicyEntries[3].policy = loom_x86_low_lower_policy();
+  kLowLowerPolicyEntries[4].policy = loom_amdgpu_low_lower_policy();
+  kLowLowerPolicyEntries[5].policy = loom_amdgpu_low_lower_policy();
+  kLowLowerPolicyEntries[6].policy = loom_amdgpu_low_lower_policy();
+  kLowLowerPolicyEntries[7].policy = loom_amdgpu_low_lower_policy();
+  loom_low_lower_policy_registry_initialize_from_entries(
+      out_registry, kLowLowerPolicyEntries,
+      IREE_ARRAYSIZE(kLowLowerPolicyEntries));
 }

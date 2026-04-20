@@ -118,10 +118,22 @@ TEST(PassPipelineParseTest, ParsesUint32OptionValues) {
                                                IREE_SV("max-iterations"),
                                                IREE_SV("42"), &value));
   EXPECT_EQ(value, 42u);
+  IREE_ASSERT_OK(loom_pass_option_parse_uint32(IREE_SV("canonicalize"),
+                                               IREE_SV("max-iterations"),
+                                               IREE_SV("0"), &value));
+  EXPECT_EQ(value, 0u);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_pass_option_parse_uint32(IREE_SV("canonicalize"),
                                                       IREE_SV("max-iterations"),
                                                       IREE_SV("many"), &value));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_option_parse_uint32(IREE_SV("canonicalize"),
+                                                      IREE_SV("max-iterations"),
+                                                      IREE_SV("-1"), &value));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_option_parse_uint32(
+                            IREE_SV("canonicalize"), IREE_SV("max-iterations"),
+                            IREE_SV("4294967296"), &value));
 }
 
 }  // namespace

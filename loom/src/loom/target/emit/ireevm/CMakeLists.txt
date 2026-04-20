@@ -231,6 +231,17 @@ loom_cc_test(
 
 iree_executable_test(
   NAME
+    "pass_source_low"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/pass_source_low.loom-test"
+  SRC
+    ::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
