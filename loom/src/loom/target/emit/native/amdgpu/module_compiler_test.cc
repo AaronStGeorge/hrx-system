@@ -79,6 +79,27 @@ iree_status_t ParseSemanticBufferModule(loom_context_t* context,
                          block_pool, &parse_options, out_module);
 }
 
+iree_status_t ParseSemanticBufferStoreModule(
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    loom_module_t** out_module) {
+  static const char kSource[] =
+      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
+      "@loom_kernel}\n"
+      "func.def @loom_kernel(%output: buffer) {\n"
+      "  %zero = index.constant 0 : offset\n"
+      "  %view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>\n"
+      "  %value = vector.constant 42 : vector<1xi32>\n"
+      "  vector.store %value, %view[0] : vector<1xi32>, view<1xi32, #dense>\n"
+      "  func.return\n"
+      "}\n";
+  loom_text_parse_options_t parse_options = {
+      .max_errors = 20,
+  };
+  return loom_text_parse(iree_make_cstring_view(kSource),
+                         IREE_SV("amdgpu_module_compiler.loom"), context,
+                         block_pool, &parse_options, out_module);
+}
+
 void ExpectHalExecutableHasSingleExport(
     const loom_amdgpu_hal_executable_t& executable,
     const std::string& expected_format, const std::string& expected_symbol,
@@ -157,6 +178,31 @@ TEST(AmdgpuModuleCompilerTest, CompilesSemanticBufferResourceToHalExecutable) {
 
   loom_module_t* module = nullptr;
   IREE_ASSERT_OK(ParseSemanticBufferModule(&context, &block_pool, &module));
+  ASSERT_NE(module, nullptr);
+
+  loom_amdgpu_hal_executable_t executable = {};
+  IREE_ASSERT_OK(loom_amdgpu_compile_hal_executable(
+      module, /*options=*/nullptr, iree_allocator_system(), &executable));
+  ExpectHalExecutableHasSingleExport(executable, "amdgcn-amd-amdhsa--gfx1100",
+                                     "loom_kernel.kd",
+                                     /*expected_binding_count=*/1);
+
+  loom_amdgpu_hal_executable_deinitialize(&executable, iree_allocator_system());
+  loom_module_free(module);
+  loom_context_deinitialize(&context);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+TEST(AmdgpuModuleCompilerTest, CompilesSemanticBufferStoreToHalExecutable) {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
+  loom_context_t context = {};
+  IREE_ASSERT_OK(
+      loom_testing_context_initialize_all(iree_allocator_system(), &context));
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(
+      ParseSemanticBufferStoreModule(&context, &block_pool, &module));
   ASSERT_NE(module, nullptr);
 
   loom_amdgpu_hal_executable_t executable = {};

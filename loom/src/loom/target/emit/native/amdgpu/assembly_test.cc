@@ -98,6 +98,15 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     return loom_symbol_ref_t{.module_id = 0, .symbol_id = symbol_id};
   }
 
+  bool StringIdEquals(loom_string_id_t string_id, iree_string_view_t expected) {
+    if (string_id == LOOM_STRING_ID_INVALID ||
+        string_id >= module_->strings.count) {
+      return false;
+    }
+    return iree_string_view_equal(module_->strings.entries[string_id],
+                                  expected);
+  }
+
   loom_value_id_t FindValueIdByName(const char* name) {
     iree_string_view_t expected_name = iree_make_cstring_view(name);
     for (iree_host_size_t i = 0; i < module_->values.count; ++i) {
@@ -429,6 +438,65 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
   EXPECT_NE(output.find("s_endpgm"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
+}
+
+TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferStoreToVmemPacket) {
+  loom_low_lower_result_t lower_result = {};
+  LowerSource("amdgpu-gfx11",
+              "func.def @gfx_source(%output: buffer) {\n"
+              "  %zero = index.constant 0 : offset\n"
+              "  %view = buffer.view %output[%zero] : buffer -> "
+              "view<1xi32, #dense>\n"
+              "  %value = vector.constant 42 : vector<1xi32>\n"
+              "  vector.store %value, %view[0] : vector<1xi32>, "
+              "view<1xi32, #dense>\n"
+              "  func.return\n"
+              "}\n",
+              &lower_result);
+  EXPECT_EQ(lower_result.error_count, 0u);
+  ASSERT_NE(lower_result.low_func_op, nullptr);
+  ASSERT_NE(lower_result.abi_adapter_op, nullptr);
+
+  loom_low_verify_options_t verify_options = {
+      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
+      .descriptor_registry = &target_registry_.registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .max_errors = 20,
+  };
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      loom_low_verify_module(module_, &verify_options, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+
+  bool saw_resource = false;
+  bool saw_vaddr_zero = false;
+  bool saw_soffset_zero = false;
+  bool saw_store = false;
+  loom_region_t* low_body = loom_low_func_def_body(lower_result.low_func_op);
+  loom_block_t* entry_block = loom_region_entry_block(low_body);
+  loom_op_t* op = nullptr;
+  loom_block_for_each_op(entry_block, op) {
+    if (loom_low_resource_isa(op)) {
+      saw_resource = true;
+    } else if (loom_low_const_isa(op)) {
+      saw_vaddr_zero |= StringIdEquals(loom_low_const_opcode(op),
+                                       IREE_SV("amdgpu.v_mov_b32"));
+      saw_soffset_zero |= StringIdEquals(loom_low_const_opcode(op),
+                                         IREE_SV("amdgpu.s_mov_b32"));
+    } else if (loom_low_op_isa(op)) {
+      if (StringIdEquals(loom_low_op_opcode(op),
+                         IREE_SV("amdgpu.buffer_store_dword"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 4u);
+        EXPECT_EQ(loom_low_op_results(op).count, 0u);
+        saw_store = true;
+      }
+    }
+  }
+  EXPECT_TRUE(saw_resource);
+  EXPECT_TRUE(saw_vaddr_zero);
+  EXPECT_TRUE(saw_soffset_zero);
+  EXPECT_TRUE(saw_store);
 }
 
 TEST_F(AmdgpuAssemblyTest, EmitsPlannedWaitPackets) {

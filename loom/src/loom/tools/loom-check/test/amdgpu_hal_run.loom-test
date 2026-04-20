@@ -18,3 +18,18 @@ low.func.def target(@gfx_target) @loom_kernel() {
 low.abi.resource @binding0 {function = @loom_kernel, kind = hal_buffer_resource, index = 0, semantic_type = hal.buffer, abi_type = reg<amdgpu.sgpr x4>}
 // ----
 [SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&1xi32=0 --expected_binding=1xi32=42
+
+target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+
+func.def @loom_kernel(%output: buffer) {
+  %zero = index.constant 0 : offset
+  %view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %value = vector.constant 42 : vector<1xi32>
+  vector.store %value, %view[0] : vector<1xi32>, view<1xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
