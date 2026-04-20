@@ -32,6 +32,18 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "execution_provider",
+    srcs = ["execution_provider.c"],
+    hdrs = ["execution_provider.h"],
+    deps = [
+        ":hal_backend",
+        ":session",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "hal_backend",
     srcs = ["hal_backend.c"],
     hdrs = ["hal_backend.h"],
@@ -120,6 +132,17 @@ loom_cc_test(
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/target/emit/ireevm:low_registry",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "execution_provider_test",
+    srcs = ["execution_provider_test.cc"],
+    deps = [
+        ":execution_provider",
+        "//loom/src/loom/target:low_descriptor_registry_core_test",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

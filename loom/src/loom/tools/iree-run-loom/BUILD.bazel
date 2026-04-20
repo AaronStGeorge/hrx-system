@@ -27,8 +27,7 @@ _AMDGPU_HAL_COPTS = iree_select({
 
 _AMDGPU_HAL_DEPS = iree_select({
     "//runtime/src/iree/hal/drivers:amdgpu_enabled": [
-        "//loom/src/loom/target/arch/amdgpu:low_registry",
-        "//loom/src/loom/target/arch/amdgpu:amdgpu_hal_backend",
+        "//loom/src/loom/target/arch/amdgpu:execution_provider",
     ],
     "//conditions:default": [],
 })
@@ -63,8 +62,8 @@ loom_cc_binary(
     copts = _AMDGPU_HAL_COPTS,
     deps = [
         ":main",
-        "//loom/src/loom/target/emit/ireevm:low_registry",
-        "//loom/src/loom/tooling/execution:hal_backend",
+        "//loom/src/loom/target/emit/ireevm:execution_provider",
+        "//loom/src/loom/tooling/execution:execution_provider",
         "//runtime/src/iree/base",
     ] + _AMDGPU_HAL_DEPS,
 )

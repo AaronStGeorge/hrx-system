@@ -43,8 +43,8 @@ loom_cc_binary(
   DEPS
     ::main
     iree::base
-    loom::src::loom::target::emit::ireevm::low_registry
-    loom::src::loom::tooling::execution::hal_backend
+    loom::src::loom::target::emit::ireevm::execution_provider
+    loom::src::loom::tooling::execution::execution_provider
 )
 
 iree_lit_test_suite(
@@ -68,8 +68,7 @@ if(IREE_HAL_DRIVER_AMDGPU)
     IREE_RUN_LOOM_HAVE_AMDGPU=1
   )
   target_link_libraries(${_IREE_RUN_LOOM_TARGET} PRIVATE
-    loom::src::loom::target::arch::amdgpu::low_registry
-    loom::src::loom::target::arch::amdgpu::amdgpu_hal_backend
+    loom::src::loom::target::arch::amdgpu::execution_provider
   )
   unset(_IREE_RUN_LOOM_TARGET)
   unset(_IREE_RUN_LOOM_PACKAGE_NAME)

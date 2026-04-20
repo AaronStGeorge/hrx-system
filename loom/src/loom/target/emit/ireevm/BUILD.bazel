@@ -206,6 +206,12 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/tools/loom-check:loom-check-test",
 )
 
+iree_assert_no_dependency(
+    name = "iree_run_loom_main_no_ireevm_execution_provider_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:execution_provider",
+    target = "//loom/src/loom/tools/iree-run-loom:main",
+)
+
 #===------------------------------------------------------------------------===#
 # IREE VM low descriptors
 #===------------------------------------------------------------------------===#
@@ -328,6 +334,17 @@ loom_cc_library(
         ":low_registry",
         ":lower",
         "//loom/src/loom/tools/loom-check:main",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "execution_provider",
+    srcs = ["execution_provider.c"],
+    hdrs = ["execution_provider.h"],
+    deps = [
+        ":low_registry",
+        "//loom/src/loom/tooling/execution:execution_provider",
         "//runtime/src/iree/base",
     ],
 )

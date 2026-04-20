@@ -352,6 +352,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    execution_provider
+  HDRS
+    "execution_provider.h"
+  SRCS
+    "execution_provider.c"
+  DEPS
+    ::low_registry
+    ::amdgpu_hal_backend
+    iree::base
+    loom::src::loom::tooling::execution::execution_provider
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     hal_kernel_abi
   HDRS
     "hal_kernel_abi.h"

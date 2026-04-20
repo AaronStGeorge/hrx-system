@@ -30,6 +30,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    execution_provider
+  HDRS
+    "execution_provider.h"
+  SRCS
+    "execution_provider.c"
+  DEPS
+    ::hal_backend
+    ::session
+    iree::base
+    loom::src::loom::target::low_descriptor_registry
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     hal_backend
   HDRS
     "hal_backend.h"
@@ -134,6 +149,18 @@ loom_cc_test(
     iree::base
     loom::src::loom::ops::op_registry
     loom::src::loom::target::emit::ireevm::low_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    execution_provider_test
+  SRCS
+    "execution_provider_test.cc"
+  DEPS
+    ::execution_provider
+    loom::src::loom::target::low_descriptor_registry_core_test
     iree::testing::gtest
     iree::testing::gtest_main
 )

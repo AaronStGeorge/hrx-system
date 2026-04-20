@@ -157,6 +157,20 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    execution_provider
+  HDRS
+    "execution_provider.h"
+  SRCS
+    "execution_provider.c"
+  DEPS
+    ::low_registry
+    iree::base
+    loom::src::loom::tooling::execution::execution_provider
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     descriptors_test
