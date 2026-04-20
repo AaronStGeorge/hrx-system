@@ -131,6 +131,30 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "module_compiler_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/ireevm:module_compiler",
+)
+
+iree_assert_no_dependency(
+    name = "module_compiler_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/emit/ireevm:module_compiler",
+)
+
+iree_assert_no_dependency(
+    name = "module_compiler_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/ireevm:module_compiler",
+)
+
+iree_assert_no_dependency(
+    name = "module_compiler_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/ireevm:module_compiler",
+)
+
+iree_assert_no_dependency(
     name = "lower_no_descriptors_dep",
     dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
     target = "//loom/src/loom/target/emit/ireevm:lower",
@@ -231,6 +255,30 @@ loom_cc_library(
         "//runtime/src/iree/base/internal/flatcc:building",
         "//runtime/src/iree/schemas:bytecode_module_def_c_fbs",
         "//runtime/src/iree/vm/bytecode/utils",
+    ],
+)
+
+loom_cc_library(
+    name = "module_compiler",
+    srcs = ["module_compiler.c"],
+    hdrs = ["module_compiler.h"],
+    deps = [
+        ":function_bytecode",
+        ":low_registry",
+        ":lower",
+        ":module_archive",
+        "//loom/src/loom/codegen/low:packetization",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:ir_records",
+        "//loom/src/loom/target:presets",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

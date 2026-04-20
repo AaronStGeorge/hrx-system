@@ -83,6 +83,33 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    module_compiler
+  HDRS
+    "module_compiler.h"
+  SRCS
+    "module_compiler.c"
+  DEPS
+    ::function_bytecode
+    ::low_registry
+    ::lower
+    ::module_archive
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::error::diagnostic
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::target
+    loom::src::loom::target::ir_records
+    loom::src::loom::target::presets
+    loom::src::loom::verify
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     lower
   HDRS
     "lower.h"

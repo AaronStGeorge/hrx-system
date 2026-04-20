@@ -1,0 +1,75 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_assert_no_dependency",
+    "loom_cc_binary",
+)
+load("//loom/build_tools/bazel:build_defs.bzl", "iree_lit_test_suite")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_assert_no_dependency(
+    name = "tool_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/tools/iree-run-loom",
+)
+
+iree_assert_no_dependency(
+    name = "tool_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/tools/iree-run-loom",
+)
+
+iree_assert_no_dependency(
+    name = "tool_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/tools/iree-run-loom",
+)
+
+iree_assert_no_dependency(
+    name = "tool_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/tools/iree-run-loom",
+)
+
+loom_cc_binary(
+    name = "iree-run-loom",
+    srcs = ["iree-run-loom.c"],
+    deps = [
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/target/emit/ireevm:low_registry",
+        "//loom/src/loom/target/emit/ireevm:module_compiler",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/tooling:context_util",
+        "//runtime/src/iree/tooling:run_module",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+iree_lit_test_suite(
+    name = "lit_test",
+    srcs = ["iree-run-loom_test.txt"],
+    cfg = "//runtime:lit.cfg.py",
+    tags = ["hostonly"],
+    tools = [
+        ":iree-run-loom",
+        "@llvm-project//llvm:FileCheck",
+    ],
+)
