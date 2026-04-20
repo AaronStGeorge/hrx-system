@@ -125,6 +125,15 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "measurement",
+    srcs = ["measurement.c"],
+    hdrs = ["measurement.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "one_shot",
     srcs = ["one_shot.c"],
     hdrs = ["one_shot.h"],
@@ -207,6 +216,17 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
         "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "measurement_test",
+    srcs = ["measurement_test.cc"],
+    deps = [
+        ":measurement",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

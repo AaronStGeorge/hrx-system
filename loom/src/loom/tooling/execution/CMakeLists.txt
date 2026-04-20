@@ -144,6 +144,18 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    measurement
+  HDRS
+    "measurement.h"
+  SRCS
+    "measurement.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     one_shot
   HDRS
     "one_shot.h"
@@ -238,6 +250,18 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm
+)
+
+loom_cc_test(
+  NAME
+    measurement_test
+  SRCS
+    "measurement_test.cc"
+  DEPS
+    ::measurement
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(
