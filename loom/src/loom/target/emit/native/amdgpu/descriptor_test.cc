@@ -114,6 +114,22 @@ TEST(AmdgpuDescriptorTest, EncodesResourceAndAbiFields) {
   EXPECT_EQ(LoadLeU16(bytes, 56), 0x0c08u);
 }
 
+TEST(AmdgpuDescriptorTest, SupportsGfx11ProcessorVariants) {
+  static const iree_string_view_t processors[] = {
+      IREE_SVL("gfx1100"), IREE_SVL("gfx1101"), IREE_SVL("gfx1102"),
+      IREE_SVL("gfx1103"), IREE_SVL("gfx1150"), IREE_SVL("gfx1151"),
+      IREE_SVL("gfx1152"), IREE_SVL("gfx1153"),
+  };
+  loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(processors); ++i) {
+    loom_amdgpu_kernel_descriptor_t descriptor = {};
+    IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+        processors[i], &metadata, -64, &descriptor));
+    IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_validate_metadata(&descriptor,
+                                                                   &metadata));
+  }
+}
+
 TEST(AmdgpuDescriptorTest, RejectsMetadataMismatch) {
   loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
   loom_amdgpu_kernel_descriptor_t descriptor = {};

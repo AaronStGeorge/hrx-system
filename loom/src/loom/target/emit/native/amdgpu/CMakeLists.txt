@@ -227,4 +227,26 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    hsaco_hsa_test
+  SRCS
+    "hsaco_hsa_test.cc"
+  DEPS
+    ::hsaco
+    hsa_runtime::headers
+    iree::base
+    iree::base::internal
+    iree::base::internal::arena
+    iree::base::internal::dynamic_library
+    iree::io::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "driver=amdgpu"
+    "nodocker"
+  GROUP
+    "iree-loom-amdgpu-tests"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -305,25 +305,35 @@ static iree_status_t loom_amdgpu_hsaco_validate_target_id(
   return iree_ok_status();
 }
 
+typedef struct loom_amdgpu_hsaco_cpu_elf_flags_t {
+  // Target CPU name without target-id feature suffixes.
+  iree_string_view_t target_cpu;
+  // ELF e_flags machine bits for the target CPU.
+  uint32_t flags;
+} loom_amdgpu_hsaco_cpu_elf_flags_t;
+
 static iree_status_t loom_amdgpu_hsaco_elf_flags_for_cpu(
     iree_string_view_t target_cpu, uint32_t* out_flags) {
   IREE_ASSERT_ARGUMENT(out_flags);
   *out_flags = 0;
-  if (iree_string_view_equal(target_cpu, IREE_SV("gfx1100"))) {
-    *out_flags = LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1100;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(target_cpu, IREE_SV("gfx1200"))) {
-    *out_flags = LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1200;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(target_cpu, IREE_SV("gfx1250"))) {
-    *out_flags = LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1250;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(target_cpu, IREE_SV("gfx950"))) {
-    *out_flags = LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX950;
-    return iree_ok_status();
+  static const loom_amdgpu_hsaco_cpu_elf_flags_t cpu_flags[] = {
+      {IREE_SVL("gfx1100"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1100},
+      {IREE_SVL("gfx1101"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1101},
+      {IREE_SVL("gfx1102"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1102},
+      {IREE_SVL("gfx1103"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1103},
+      {IREE_SVL("gfx1150"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1150},
+      {IREE_SVL("gfx1151"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1151},
+      {IREE_SVL("gfx1152"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1152},
+      {IREE_SVL("gfx1153"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1153},
+      {IREE_SVL("gfx1200"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1200},
+      {IREE_SVL("gfx1250"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1250},
+      {IREE_SVL("gfx950"), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX950},
+  };
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(cpu_flags); ++i) {
+    if (iree_string_view_equal(target_cpu, cpu_flags[i].target_cpu)) {
+      *out_flags = cpu_flags[i].flags;
+      return iree_ok_status();
+    }
   }
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                           "AMDGPU HSACO target CPU '%.*s' has no ELF e_flags "

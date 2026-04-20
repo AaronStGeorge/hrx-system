@@ -57,12 +57,27 @@ typedef struct loom_amdgpu_kernel_descriptor_target_t {
   bool has_dx10_clamp_and_ieee_mode;
 } loom_amdgpu_kernel_descriptor_target_t;
 
+static bool loom_amdgpu_kernel_descriptor_is_gfx11_cpu(
+    iree_string_view_t target_cpu) {
+  static const iree_string_view_t gfx11_processors[] = {
+      IREE_SVL("gfx1100"), IREE_SVL("gfx1101"), IREE_SVL("gfx1102"),
+      IREE_SVL("gfx1103"), IREE_SVL("gfx1150"), IREE_SVL("gfx1151"),
+      IREE_SVL("gfx1152"), IREE_SVL("gfx1153"),
+  };
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(gfx11_processors); ++i) {
+    if (iree_string_view_equal(target_cpu, gfx11_processors[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static iree_status_t loom_amdgpu_kernel_descriptor_resolve_target(
     iree_string_view_t target_cpu,
     loom_amdgpu_kernel_descriptor_target_t* out_target) {
   IREE_ASSERT_ARGUMENT(out_target);
   *out_target = (loom_amdgpu_kernel_descriptor_target_t){0};
-  if (iree_string_view_equal(target_cpu, IREE_SV("gfx1100"))) {
+  if (loom_amdgpu_kernel_descriptor_is_gfx11_cpu(target_cpu)) {
     *out_target = (loom_amdgpu_kernel_descriptor_target_t){
         .vgpr_encoding_granule_wave32 = 8,
         .vgpr_encoding_granule_wave64 = 4,
@@ -199,7 +214,7 @@ static iree_status_t loom_amdgpu_kernel_descriptor_validate(
           LOOM_AMDGPU_COMPUTE_PGM_RSRC2_USER_SGPR_COUNT_WIDTH)) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU kernel descriptor user SGPR count exceeds gfx1100 capacity");
+        "AMDGPU kernel descriptor user SGPR count exceeds target capacity");
   }
   if (out_target->has_architected_flat_scratch &&
       descriptor->enable_sgpr_private_segment_buffer) {
