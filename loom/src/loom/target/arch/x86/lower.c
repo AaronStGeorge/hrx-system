@@ -434,11 +434,8 @@ static iree_status_t loom_x86_low_result_type(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op,
                                               loom_value_id_t source_result,
                                               loom_type_t* out_low_type) {
-  IREE_RETURN_IF_ERROR(loom_low_lower_map_type(
-      context, source_op,
-      loom_module_value_type(loom_low_lower_context_module(context),
-                             source_result),
-      out_low_type));
+  IREE_RETURN_IF_ERROR(loom_low_lower_map_value(context, source_op,
+                                                source_result, out_low_type));
   if (!loom_type_is_register(*out_low_type)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "x86 source type did not map to a register");

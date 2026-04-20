@@ -43,6 +43,19 @@ typedef struct loom_low_lower_map_type_callback_t {
   void* user_data;
 } loom_low_lower_map_type_callback_t;
 
+typedef iree_status_t (*loom_low_lower_map_value_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_value_id_t source_value_id,
+    loom_type_t source_type, loom_type_t* out_low_type);
+
+typedef struct loom_low_lower_map_value_callback_t {
+  // Optional callback invoked to map one concrete source SSA value to a low
+  // register type. Missing uses |map_type|.
+  loom_low_lower_map_value_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_map_value_callback_t;
+
 typedef enum loom_low_lower_abi_argument_kind_e {
   // Source argument is passed as a low function block argument.
   LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT = 0,
@@ -116,6 +129,9 @@ typedef struct loom_low_lower_policy_t {
   iree_string_view_t name;
   // Maps source semantic types to target-low register types.
   loom_low_lower_map_type_callback_t map_type;
+  // Optionally maps concrete source SSA values to target-low register types
+  // when type alone does not determine the target register class.
+  loom_low_lower_map_value_callback_t map_value;
   // Optionally maps source function arguments to non-direct ABI imports.
   loom_low_lower_map_argument_callback_t map_argument;
   // Optionally emits target live-ins or other structural preamble packets.
@@ -249,6 +265,14 @@ iree_status_t loom_low_lower_map_type(loom_low_lower_context_t* context,
                                       const loom_op_t* source_op,
                                       loom_type_t source_type,
                                       loom_type_t* out_low_type);
+
+// Maps |source_value_id|'s type through the active policy. A policy that
+// rejects a user value emits a diagnostic and returns loom_type_none() in
+// |out_low_type|.
+iree_status_t loom_low_lower_map_value(loom_low_lower_context_t* context,
+                                       const loom_op_t* source_op,
+                                       loom_value_id_t source_value_id,
+                                       loom_type_t* out_low_type);
 
 // Looks up the low SSA value already bound to |source_value_id|.
 iree_status_t loom_low_lower_lookup_value(loom_low_lower_context_t* context,

@@ -444,6 +444,8 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_SCALAR_EXTF:
     case LOOM_OP_SCALAR_EXTSI:
     case LOOM_OP_SCALAR_EXTUI:
+    case LOOM_OP_SCALAR_FMAF:
+    case LOOM_OP_SCALAR_FMAI:
     case LOOM_OP_SCALAR_FPTOUI:
     case LOOM_OP_SCALAR_FPTOSI:
     case LOOM_OP_SCALAR_FPTRUNC:
@@ -483,6 +485,7 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_VECTOR_FPTRUNC:
     case LOOM_OP_VECTOR_FROM_ELEMENTS:
     case LOOM_OP_VECTOR_FMAF:
+    case LOOM_OP_VECTOR_FMAI:
     case LOOM_OP_VECTOR_INSERT:
     case LOOM_OP_VECTOR_LOAD:
     case LOOM_OP_VECTOR_MULF:

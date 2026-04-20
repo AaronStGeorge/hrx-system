@@ -371,6 +371,31 @@ iree_status_t loom_low_lower_map_type(loom_low_lower_context_t* context,
   return iree_ok_status();
 }
 
+iree_status_t loom_low_lower_map_value(loom_low_lower_context_t* context,
+                                       const loom_op_t* source_op,
+                                       loom_value_id_t source_value_id,
+                                       loom_type_t* out_low_type) {
+  if (!out_low_type) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low type output is required");
+  }
+  *out_low_type = loom_type_none();
+  if (source_value_id >= context->module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "source value %u is out of range",
+                            (unsigned)source_value_id);
+  }
+  const loom_type_t source_type =
+      loom_module_value_type(context->module, source_value_id);
+  if (context->policy->map_value.fn == NULL) {
+    return loom_low_lower_map_type(context, source_op, source_type,
+                                   out_low_type);
+  }
+  return context->policy->map_value.fn(context->policy->map_value.user_data,
+                                       context, source_op, source_value_id,
+                                       source_type, out_low_type);
+}
+
 static iree_status_t loom_low_lower_map_direct_argument(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_argument_id,
@@ -380,10 +405,8 @@ static iree_status_t loom_low_lower_map_direct_argument(
       .abi_type = loom_type_none(),
       .resource_semantic_type = loom_type_none(),
   };
-  return loom_low_lower_map_type(
-      context, source_op,
-      loom_module_value_type(context->module, source_argument_id),
-      &out_argument->abi_type);
+  return loom_low_lower_map_value(context, source_op, source_argument_id,
+                                  &out_argument->abi_type);
 }
 
 static iree_status_t loom_low_lower_map_argument(
@@ -847,17 +870,17 @@ static iree_status_t loom_low_lower_create_abi_adapter_records(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_lower_check_mapped_type(
+static iree_status_t loom_low_lower_check_mapped_value(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_type_t source_type, loom_type_t* out_low_type) {
+    loom_value_id_t source_value_id, loom_type_t* out_low_type) {
   uint32_t previous_error_count = context->result->error_count;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_map_type(context, source_op, source_type, out_low_type));
+  IREE_RETURN_IF_ERROR(loom_low_lower_map_value(context, source_op,
+                                                source_value_id, out_low_type));
   if (loom_low_lower_type_is_none(*out_low_type)) {
     if (context->result->error_count == previous_error_count) {
       IREE_RETURN_IF_ERROR(loom_low_lower_emit_reject(
-          context, source_op, IREE_SV("type"), IREE_SV("<unknown>"),
-          IREE_SV("target-low type policy did not produce a register type")));
+          context, source_op, IREE_SV("value"), IREE_SV("<unknown>"),
+          IREE_SV("target-low value policy did not produce a register type")));
     }
   }
   return iree_ok_status();
@@ -871,9 +894,8 @@ static iree_status_t loom_low_lower_check_function_signature(
       loom_op_const_results(context->source_function.op);
   for (uint16_t i = 0; i < context->source_function.op->result_count; ++i) {
     loom_type_t low_type = loom_type_none();
-    IREE_RETURN_IF_ERROR(loom_low_lower_check_mapped_type(
-        context, context->source_function.op,
-        loom_module_value_type(context->module, result_ids[i]), &low_type));
+    IREE_RETURN_IF_ERROR(loom_low_lower_check_mapped_value(
+        context, context->source_function.op, result_ids[i], &low_type));
   }
 
   uint16_t predicate_count = 0;
@@ -944,9 +966,8 @@ static iree_status_t loom_low_lower_preflight_body(
     if (block_index != 0) {
       for (uint16_t i = 0; i < block->arg_count; ++i) {
         loom_type_t low_type = loom_type_none();
-        IREE_RETURN_IF_ERROR(loom_low_lower_check_mapped_type(
-            context, context->source_function.op,
-            loom_module_value_type(context->module, block->arg_ids[i]),
+        IREE_RETURN_IF_ERROR(loom_low_lower_check_mapped_value(
+            context, context->source_function.op, block->arg_ids[i],
             &low_type));
         if (loom_low_lower_should_stop(context)) {
           return iree_ok_status();
@@ -1007,10 +1028,9 @@ static iree_status_t loom_low_lower_map_signature_types(
     const loom_value_id_t* result_ids =
         loom_op_const_results(context->source_function.op);
     for (uint16_t i = 0; i < result_count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_low_lower_map_type(
-          context, context->source_function.op,
-          loom_module_value_type(context->module, result_ids[i]),
-          &result_types[i]));
+      IREE_RETURN_IF_ERROR(
+          loom_low_lower_map_value(context, context->source_function.op,
+                                   result_ids[i], &result_types[i]));
       if (loom_low_lower_type_is_none(result_types[i])) {
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
@@ -1131,11 +1151,9 @@ static iree_status_t loom_low_lower_map_blocks(
     for (uint16_t arg_index = 0; arg_index < source_block->arg_count;
          ++arg_index) {
       loom_type_t low_type = loom_type_none();
-      IREE_RETURN_IF_ERROR(loom_low_lower_map_type(
+      IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
           context, context->source_function.op,
-          loom_module_value_type(context->module,
-                                 source_block->arg_ids[arg_index]),
-          &low_type));
+          source_block->arg_ids[arg_index], &low_type));
       if (loom_low_lower_type_is_none(low_type)) {
         return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                                 "preflight accepted an unmapped block type");

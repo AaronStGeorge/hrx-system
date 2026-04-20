@@ -77,6 +77,34 @@ func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
 
 // ====
 // REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=1,2,3,4 --binding=&4xi32=0 --expected_binding=4xi32=1,2,3,4 --expected_binding=4xi32=8,1,6,4
+
+target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+
+func.def @loom_kernel(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
+  %lane0_input = vector.extract %loaded[0] : vector<4xi32> -> i32
+  %lane1_input = vector.extract %loaded[1] : vector<4xi32> -> i32
+  %lane2_input = vector.extract %loaded[2] : vector<4xi32> -> i32
+  %lane3 = vector.extract %loaded[3] : vector<4xi32> -> i32
+  %seven = scalar.constant 7 : i32
+  %one = scalar.constant 1 : i32
+  %two = scalar.constant 2 : i32
+  %lane0 = scalar.addi %lane0_input, %seven : i32
+  %lane1 = scalar.subi %lane1_input, %one : i32
+  %lane2 = scalar.muli %lane2_input, %two : i32
+  %result = vector.from_elements %lane0, %lane1, %lane2, %lane3 : vector<4xi32>
+  vector.store %result, %output_view[0] : vector<4xi32>, view<4xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xf32=1,2,3,4 --binding=&4xf32=5,6,7,8 --binding=&4xf32=0 --expected_binding=4xf32=1,2,3,4 --expected_binding=4xf32=5,6,7,8 --expected_binding=4xf32=35,60,91,128
 
 target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
@@ -95,6 +123,39 @@ func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
   %biased = vector.addf %fma, %bias : vector<4xf32>
   %adjusted = vector.subf %biased, %bias : vector<4xf32>
   vector.store %adjusted, %output_view[0] : vector<4xf32>, view<4xf32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xf32=1,2,3,4 --binding=&4xf32=5,6,7,8 --binding=&4xf32=0 --expected_binding=4xf32=1,2,3,4 --expected_binding=4xf32=5,6,7,8 --expected_binding=4xf32=6,12,-4,32.5
+
+target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+
+func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs[%zero] : buffer -> view<4xf32, #dense>
+  %rhs_view = buffer.view %rhs[%zero] : buffer -> view<4xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<4xf32, #dense>
+  %lhs_loaded = vector.load %lhs_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %rhs_loaded = vector.load %rhs_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %lhs0 = vector.extract %lhs_loaded[0] : vector<4xf32> -> f32
+  %rhs0 = vector.extract %rhs_loaded[0] : vector<4xf32> -> f32
+  %lane0 = scalar.addf %lhs0, %rhs0 : f32
+  %lhs1 = vector.extract %lhs_loaded[1] : vector<4xf32> -> f32
+  %rhs1 = vector.extract %rhs_loaded[1] : vector<4xf32> -> f32
+  %lane1 = scalar.mulf %lhs1, %rhs1 : f32
+  %lhs2 = vector.extract %lhs_loaded[2] : vector<4xf32> -> f32
+  %rhs2 = vector.extract %rhs_loaded[2] : vector<4xf32> -> f32
+  %lane2 = scalar.subf %lhs2, %rhs2 : f32
+  %lhs3 = vector.extract %lhs_loaded[3] : vector<4xf32> -> f32
+  %rhs3 = vector.extract %rhs_loaded[3] : vector<4xf32> -> f32
+  %bias = scalar.constant 0.5 : f32
+  %lane3 = scalar.fmaf %lhs3, %rhs3, %bias : f32
+  %result = vector.from_elements %lane0, %lane1, %lane2, %lane3 : vector<4xf32>
+  vector.store %result, %output_view[0] : vector<4xf32>, view<4xf32, #dense>
   func.return
 }
 // ----

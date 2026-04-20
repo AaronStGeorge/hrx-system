@@ -246,3 +246,111 @@ low.abi.resource @loom_f32_kernel__low__abi_resource1 {abi_type = reg<amdgpu.sgp
 low.abi.resource @loom_f32_kernel__low__abi_resource2 {abi_type = reg<amdgpu.sgpr x4>, function = @loom_f32_kernel__low, index = 2, kind = hal_buffer_resource, semantic_type = hal.buffer}
 
 low.abi.adapter @loom_f32_kernel__low__abi {callee = @loom_f32_kernel__low, conversion = mapped, operand_count = 0, result_count = 0}
+
+// ====
+// RUN: emit source-low @gfx11_scalarized_f32_target
+target.preset @gfx11_scalarized_f32_target {key = "amdgpu-gfx11", source = @loom_scalarized_f32_kernel}
+
+func.def @loom_scalarized_f32_kernel(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero_offset = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero_offset] : buffer -> view<64x4xf32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero_offset] : buffer -> view<64x4xf32, #dense>
+  %output_view = buffer.view %output[%zero_offset] : buffer -> view<64x4xf32, #dense>
+  %lhs = vector.load %lhs_view[%tid, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %rhs = vector.load %rhs_view[%tid, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %lhs0 = vector.extract %lhs[0] : vector<4xf32> -> f32
+  %rhs0 = vector.extract %rhs[0] : vector<4xf32> -> f32
+  %lane0 = scalar.addf %lhs0, %rhs0 : f32
+  %lhs1 = vector.extract %lhs[1] : vector<4xf32> -> f32
+  %rhs1 = vector.extract %rhs[1] : vector<4xf32> -> f32
+  %lane1 = scalar.mulf %lhs1, %rhs1 : f32
+  %lhs2 = vector.extract %lhs[2] : vector<4xf32> -> f32
+  %rhs2 = vector.extract %rhs[2] : vector<4xf32> -> f32
+  %lane2 = scalar.subf %lhs2, %rhs2 : f32
+  %lhs3 = vector.extract %lhs[3] : vector<4xf32> -> f32
+  %rhs3 = vector.extract %rhs[3] : vector<4xf32> -> f32
+  %bias = scalar.constant 0.5 : f32
+  %lane3 = scalar.fmaf %lhs3, %rhs3, %bias : f32
+  %result = vector.from_elements %lane0, %lane1, %lane2, %lane3 : vector<4xf32>
+  vector.store %result, %output_view[%tid, 0] : vector<4xf32>, view<64x4xf32, #dense>
+  func.return
+}
+
+// ----
+target.snapshot @gfx11_scalarized_f32_target__snapshot {artifact_format = elf, codegen_format = low_native, data_layout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9", default_pointer_bitwidth = 64, index_bitwidth = 32, memory_space_constant = 4, memory_space_descriptor = 7, memory_space_generic = 0, memory_space_global = 1, memory_space_host = 4294967295, memory_space_private = 5, memory_space_workgroup = 3, offset_bitwidth = 64, target_cpu = "gfx1100", target_features = "", target_triple = "amdgcn-amd-amdhsa"}
+
+target.export @gfx11_scalarized_f32_target__export {abi = hal_kernel, export_symbol = "loom_scalarized_f32_kernel", hal_binding_alignment = 16, hal_buffer_resource_flags = 159744, hal_flat_workgroup_size_max = 64, hal_flat_workgroup_size_min = 64, hal_workgroup_size_x = 64, hal_workgroup_size_y = 1, hal_workgroup_size_z = 1, linkage = default, source = @loom_scalarized_f32_kernel}
+
+target.config @gfx11_scalarized_f32_target__config {contract_feature_bits = 0, contract_set_key = "amdgpu.gfx11.core"}
+
+target.bundle @gfx11_scalarized_f32_target {config = @gfx11_scalarized_f32_target__config, export_plan = @gfx11_scalarized_f32_target__export, snapshot = @gfx11_scalarized_f32_target__snapshot}
+
+func.def @loom_scalarized_f32_kernel(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero_offset = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero_offset] : buffer -> view<64x4xf32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero_offset] : buffer -> view<64x4xf32, #dense>
+  %output_view = buffer.view %output[%zero_offset] : buffer -> view<64x4xf32, #dense>
+  %lhs = vector.load %lhs_view[%tid, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %rhs = vector.load %rhs_view[%tid, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %lhs0 = vector.extract %lhs[0] : vector<4xf32> -> f32
+  %rhs0 = vector.extract %rhs[0] : vector<4xf32> -> f32
+  %lane0 = scalar.addf %lhs0, %rhs0 : f32
+  %lhs1 = vector.extract %lhs[1] : vector<4xf32> -> f32
+  %rhs1 = vector.extract %rhs[1] : vector<4xf32> -> f32
+  %lane1 = scalar.mulf %lhs1, %rhs1 : f32
+  %lhs2 = vector.extract %lhs[2] : vector<4xf32> -> f32
+  %rhs2 = vector.extract %rhs[2] : vector<4xf32> -> f32
+  %lane2 = scalar.subf %lhs2, %rhs2 : f32
+  %lhs3 = vector.extract %lhs[3] : vector<4xf32> -> f32
+  %rhs3 = vector.extract %rhs[3] : vector<4xf32> -> f32
+  %bias = scalar.constant 0.5 : f32
+  %lane3 = scalar.fmaf %lhs3, %rhs3, %bias : f32
+  %result = vector.from_elements %lane0, %lane1, %lane2, %lane3 : vector<4xf32>
+  vector.store %result, %output_view[%tid, 0] : vector<4xf32>, view<64x4xf32, #dense>
+  func.return
+}
+
+low.func.def target(@gfx11_scalarized_f32_target) @loom_scalarized_f32_kernel__low() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %lhs_view = low.resource @loom_scalarized_f32_kernel__low__abi_resource0 : reg<amdgpu.sgpr x4>
+  %rhs_view = low.resource @loom_scalarized_f32_kernel__low__abi_resource1 : reg<amdgpu.sgpr x4>
+  %output_view = low.resource @loom_scalarized_f32_kernel__low__abi_resource2 : reg<amdgpu.sgpr x4>
+  %zero_offset = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %29 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
+  %30 = low.op<amdgpu.v_mul_lo_u32>(%tid, %29) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %31 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %lhs = low.op<amdgpu.buffer_load_b128>(%lhs_view, %30, %31) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>
+  %33 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
+  %34 = low.op<amdgpu.v_mul_lo_u32>(%tid, %33) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %35 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %rhs = low.op<amdgpu.buffer_load_b128>(%rhs_view, %34, %35) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>
+  %lhs0 = low.slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %rhs0 = low.slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %lane0 = low.op<amdgpu.v_add_f32>(%lhs0, %rhs0) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %lhs1 = low.slice %lhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %rhs1 = low.slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %lane1 = low.op<amdgpu.v_mul_f32>(%lhs1, %rhs1) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %lhs2 = low.slice %lhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %rhs2 = low.slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %lane2 = low.op<amdgpu.v_sub_f32>(%lhs2, %rhs2) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %lhs3 = low.slice %lhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %rhs3 = low.slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %bias = low.const<amdgpu.v_mov_b32> {imm32 = 1056964608} : reg<amdgpu.vgpr>
+  %lane3 = low.op<amdgpu.v_fma_f32>(%lhs3, %rhs3, %bias) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %result = low.concat(%lane0, %lane1, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %51 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
+  %52 = low.op<amdgpu.v_mul_lo_u32>(%tid, %51) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %53 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  low.op<amdgpu.buffer_store_b128>(%result, %output_view, %52, %53) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+low.abi.resource @loom_scalarized_f32_kernel__low__abi_resource0 {abi_type = reg<amdgpu.sgpr x4>, function = @loom_scalarized_f32_kernel__low, index = 0, kind = hal_buffer_resource, semantic_type = hal.buffer}
+
+low.abi.resource @loom_scalarized_f32_kernel__low__abi_resource1 {abi_type = reg<amdgpu.sgpr x4>, function = @loom_scalarized_f32_kernel__low, index = 1, kind = hal_buffer_resource, semantic_type = hal.buffer}
+
+low.abi.resource @loom_scalarized_f32_kernel__low__abi_resource2 {abi_type = reg<amdgpu.sgpr x4>, function = @loom_scalarized_f32_kernel__low, index = 2, kind = hal_buffer_resource, semantic_type = hal.buffer}
+
+low.abi.adapter @loom_scalarized_f32_kernel__low__abi {callee = @loom_scalarized_f32_kernel__low, conversion = mapped, operand_count = 0, result_count = 0}

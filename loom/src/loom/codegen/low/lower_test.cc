@@ -224,10 +224,8 @@ static iree_status_t TestLowerScalarConstant(loom_low_lower_context_t* context,
                                 IREE_SV("i32_value"), &value_name_id));
 
   loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_low_lower_map_type(
-      context, source_op,
-      loom_module_value_type(loom_low_lower_context_module(context),
-                             loom_scalar_constant_result(source_op)),
+  IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
+      context, source_op, loom_scalar_constant_result(source_op),
       &result_type));
   if (!loom_type_is_register(result_type)) {
     return iree_make_status(
@@ -265,11 +263,8 @@ static iree_status_t TestLowerBinaryOp(loom_low_lower_context_t* context,
       loom_low_lower_lookup_value(context, source_rhs, &low_operands[1]));
 
   loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_low_lower_map_type(
-      context, source_op,
-      loom_module_value_type(loom_low_lower_context_module(context),
-                             source_result),
-      &result_type));
+  IREE_RETURN_IF_ERROR(loom_low_lower_map_value(context, source_op,
+                                                source_result, &result_type));
   if (!loom_type_is_register(result_type)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
