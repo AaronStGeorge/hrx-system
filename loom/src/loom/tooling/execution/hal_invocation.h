@@ -31,13 +31,24 @@ typedef struct loom_run_hal_invocation_options_t {
 } loom_run_hal_invocation_options_t;
 
 typedef struct loom_run_hal_binding_specs_t {
-  // Binding value specs in HAL binding ordinal order.
+  // Textual binding value specs in HAL binding ordinal order.
   const iree_string_view_t* values;
   // Calling-convention character for each binding value spec.
   const char* conventions;
   // Number of entries in |values| and |conventions|.
   iree_host_size_t count;
 } loom_run_hal_binding_specs_t;
+
+typedef struct loom_run_hal_invocation_plan_t {
+  // HAL executable entry point and dispatch geometry.
+  loom_run_hal_invocation_options_t options;
+  // Plan-owned materialized binding values in HAL binding ordinal order.
+  iree_vm_list_t* bindings;
+  // Plan-owned optional expected binding values compared after dispatch.
+  iree_vm_list_t* expected_bindings;
+  // Maximum number of output elements to format.
+  iree_host_size_t max_output_element_count;
+} loom_run_hal_invocation_plan_t;
 
 typedef struct loom_run_hal_invocation_request_t {
   // Initialized HAL runtime that owns the device used for dispatch.
@@ -46,9 +57,9 @@ typedef struct loom_run_hal_invocation_request_t {
   const loom_run_hal_executable_t* executable;
   // HAL dispatch entry point and workgroup count.
   loom_run_hal_invocation_options_t options;
-  // Input/output binding specs parsed before dispatch.
+  // Textual input/output binding specs parsed before dispatch.
   loom_run_hal_binding_specs_t bindings;
-  // Optional expected binding specs compared after dispatch.
+  // Optional textual expected binding specs compared after dispatch.
   loom_run_hal_binding_specs_t expected_bindings;
   // Maximum number of output elements to format for human-readable output.
   iree_host_size_t max_output_element_count;
@@ -68,6 +79,14 @@ void loom_run_hal_invocation_options_initialize(
 // Initializes a request to dispatch entry point 0 over one workgroup.
 void loom_run_hal_invocation_request_initialize(
     loom_run_hal_invocation_request_t* out_request);
+
+// Initializes an empty invocation plan.
+void loom_run_hal_invocation_plan_initialize(
+    loom_run_hal_invocation_plan_t* out_plan);
+
+// Releases storage owned by |plan|.
+void loom_run_hal_invocation_plan_deinitialize(
+    loom_run_hal_invocation_plan_t* plan);
 
 // Initializes an invocation result. Must be paired with
 // loom_run_hal_invocation_result_deinitialize().
@@ -95,6 +114,25 @@ iree_status_t loom_run_hal_invocation_execute(
     const loom_run_hal_runtime_t* runtime,
     const loom_run_hal_executable_t* executable, iree_vm_list_t* binding_list,
     const loom_run_hal_invocation_options_t* options);
+
+// Parses textual binding specs into a reusable typed invocation plan.
+iree_status_t loom_run_hal_invocation_plan_prepare_from_specs(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_invocation_options_t* options,
+    const loom_run_hal_binding_specs_t* bindings,
+    const loom_run_hal_binding_specs_t* expected_bindings,
+    iree_host_size_t max_output_element_count, iree_allocator_t allocator,
+    loom_run_hal_invocation_plan_t* out_plan);
+
+// Dispatches |executable| using |plan| and records either formatted outputs or
+// expected comparison diagnostics in |result|. The plan bindings are cloned
+// before dispatch so host-transfer helpers cannot mutate the plan's list
+// container.
+iree_status_t loom_run_hal_invocation_run_plan(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_executable_t* executable,
+    const loom_run_hal_invocation_plan_t* plan, iree_allocator_t allocator,
+    loom_run_hal_invocation_result_t* result);
 
 // Transfers dispatch bindings back to host-visible storage for inspection.
 iree_status_t loom_run_hal_transfer_bindings_to_host(

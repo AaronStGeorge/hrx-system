@@ -47,6 +47,25 @@ void loom_run_vm_invocation_options_initialize(
   };
 }
 
+void loom_run_vm_invocation_plan_initialize(
+    loom_run_vm_invocation_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_run_vm_invocation_plan_t){
+      .output_mode = LOOM_RUN_VM_OUTPUT_PLAN_MODE_FORMAT_ALL,
+      .max_output_element_count = LOOM_RUN_VM_DEFAULT_MAX_OUTPUT_ELEMENT_COUNT,
+  };
+}
+
+void loom_run_vm_invocation_plan_deinitialize(
+    loom_run_vm_invocation_plan_t* plan) {
+  if (plan == NULL) {
+    return;
+  }
+  iree_vm_list_release(plan->expected_outputs);
+  iree_vm_list_release(plan->inputs);
+  *plan = (loom_run_vm_invocation_plan_t){0};
+}
+
 void loom_run_vm_invocation_request_initialize(
     loom_run_vm_invocation_request_t* out_request) {
   IREE_ASSERT_ARGUMENT(out_request);
@@ -88,6 +107,58 @@ static iree_string_view_list_t loom_run_vm_value_specs_list(
       .count = specs->count,
       .values = specs->values,
   };
+}
+
+iree_status_t loom_run_vm_invocation_plan_prepare_from_specs(
+    const loom_run_vm_invocation_plan_prepare_request_t* request,
+    iree_allocator_t allocator, loom_run_vm_invocation_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(request);
+  IREE_ASSERT_ARGUMENT(request->options);
+  IREE_ASSERT_ARGUMENT(out_plan);
+  loom_run_vm_invocation_plan_initialize(out_plan);
+  IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
+      &request->options->inputs, IREE_SV("VM input")));
+  IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
+      &request->options->outputs, IREE_SV("VM output")));
+  IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
+      &request->options->expected_outputs, IREE_SV("expected VM output")));
+
+  iree_hal_allocator_t* heap_allocator = NULL;
+  iree_status_t status = iree_tooling_parse_variants(
+      request->arguments_cconv,
+      loom_run_vm_value_specs_list(&request->options->inputs), request->device,
+      request->device_allocator, allocator, &out_plan->inputs);
+  if (iree_status_is_ok(status) &&
+      request->options->expected_outputs.count != 0) {
+    status = iree_hal_allocator_create_heap(IREE_SV("heap"), allocator,
+                                            allocator, &heap_allocator);
+  }
+  if (iree_status_is_ok(status) &&
+      request->options->expected_outputs.count != 0) {
+    status = iree_tooling_parse_variants(
+        request->results_cconv,
+        loom_run_vm_value_specs_list(&request->options->expected_outputs),
+        request->device, heap_allocator, allocator,
+        &out_plan->expected_outputs);
+  }
+  if (iree_status_is_ok(status)) {
+    out_plan->max_output_element_count =
+        request->options->max_output_element_count == 0
+            ? LOOM_RUN_VM_DEFAULT_MAX_OUTPUT_ELEMENT_COUNT
+            : request->options->max_output_element_count;
+    if (request->options->expected_outputs.count != 0) {
+      out_plan->output_mode = LOOM_RUN_VM_OUTPUT_PLAN_MODE_COMPARE_EXPECTED;
+    } else if (request->options->outputs.count != 0) {
+      out_plan->output_mode = LOOM_RUN_VM_OUTPUT_PLAN_MODE_WRITE_SPECS;
+      out_plan->output_specs = request->options->outputs;
+    } else {
+      out_plan->output_mode = LOOM_RUN_VM_OUTPUT_PLAN_MODE_FORMAT_ALL;
+    }
+  } else {
+    loom_run_vm_invocation_plan_deinitialize(out_plan);
+  }
+  iree_hal_allocator_release(heap_allocator);
+  return status;
 }
 
 static iree_status_t loom_run_vm_load_archive_module(
@@ -192,80 +263,83 @@ static iree_status_t loom_run_vm_write_outputs_to_result(
 }
 
 static iree_status_t loom_run_vm_process_outputs(
-    const loom_run_vm_invocation_options_t* options, iree_string_view_t cconv,
-    iree_hal_device_t* device, iree_vm_list_t* outputs,
+    const loom_run_vm_invocation_plan_t* plan, iree_vm_list_t* outputs,
     iree_allocator_t allocator, loom_run_vm_invocation_result_t* result) {
-  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(plan);
   IREE_ASSERT_ARGUMENT(outputs);
   IREE_ASSERT_ARGUMENT(result);
 
-  const iree_host_size_t max_output_element_count =
-      options->max_output_element_count == 0
-          ? LOOM_RUN_VM_DEFAULT_MAX_OUTPUT_ELEMENT_COUNT
-          : options->max_output_element_count;
-  if (options->expected_outputs.count == 0) {
-    if (options->outputs.count == 0) {
+  switch (plan->output_mode) {
+    case LOOM_RUN_VM_OUTPUT_PLAN_MODE_FORMAT_ALL:
       return iree_tooling_format_variants(IREE_SV("result"), outputs,
-                                          max_output_element_count,
+                                          plan->max_output_element_count,
                                           &result->output);
-    }
-    return loom_run_vm_write_outputs_to_result(outputs, &options->outputs,
-                                               max_output_element_count,
-                                               allocator, result);
+    case LOOM_RUN_VM_OUTPUT_PLAN_MODE_WRITE_SPECS:
+      return loom_run_vm_write_outputs_to_result(outputs, &plan->output_specs,
+                                                 plan->max_output_element_count,
+                                                 allocator, result);
+    case LOOM_RUN_VM_OUTPUT_PLAN_MODE_COMPARE_EXPECTED:
+      break;
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown VM output plan mode %d",
+                              (int)plan->output_mode);
+  }
+  if (plan->expected_outputs == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "VM expected output comparison requires values");
   }
 
-  iree_hal_allocator_t* heap_allocator = NULL;
-  iree_vm_list_t* expected_list = NULL;
-
-  iree_status_t status = iree_hal_allocator_create_heap(
-      IREE_SV("heap"), allocator, allocator, &heap_allocator);
-  if (iree_status_is_ok(status)) {
-    status = iree_tooling_parse_variants(
-        cconv, loom_run_vm_value_specs_list(&options->expected_outputs), device,
-        heap_allocator, allocator, &expected_list);
+  iree_status_t status = iree_ok_status();
+  const bool did_match = iree_tooling_compare_variant_lists_and_append(
+      plan->expected_outputs, outputs, allocator, &result->output);
+  if (did_match) {
+    status = iree_string_builder_append_cstring(
+        &result->output,
+        "[SUCCESS] all function outputs matched their expected values.\n");
   }
-  if (iree_status_is_ok(status)) {
-    const bool did_match = iree_tooling_compare_variant_lists_and_append(
-        expected_list, outputs, allocator, &result->output);
-    if (did_match) {
-      status = iree_string_builder_append_cstring(
-          &result->output,
-          "[SUCCESS] all function outputs matched their expected values.\n");
-    }
-    result->exit_code = did_match ? 0 : 1;
-  }
-
-  iree_vm_list_release(expected_list);
-  iree_hal_allocator_release(heap_allocator);
+  result->exit_code = did_match ? 0 : 1;
   return status;
 }
 
-static iree_status_t loom_run_vm_invoke_function(
-    const loom_run_vm_invocation_options_t* options, iree_vm_context_t* context,
+iree_status_t loom_run_vm_invocation_invoke_plan(
+    const loom_run_vm_invocation_plan_t* plan, iree_vm_context_t* context,
     iree_vm_function_t function, iree_hal_device_t* device,
     iree_hal_allocator_t* device_allocator, iree_allocator_t allocator,
     loom_run_vm_invocation_result_t* result) {
-  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(plan);
   IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(device_allocator);
   IREE_ASSERT_ARGUMENT(result);
-
-  iree_vm_function_signature_t signature =
-      iree_vm_function_signature(&function);
-  iree_string_view_t arguments_cconv = iree_string_view_empty();
-  iree_string_view_t results_cconv = iree_string_view_empty();
-  iree_status_t status = iree_vm_function_call_get_cconv_fragments(
-      &signature, &arguments_cconv, &results_cconv);
+  iree_string_builder_reset(&result->output);
+  result->exit_code = 0;
+  if (plan->inputs == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "VM invocation plan requires inputs");
+  }
+  if (plan->output_mode == LOOM_RUN_VM_OUTPUT_PLAN_MODE_WRITE_SPECS) {
+    IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
+        &plan->output_specs, IREE_SV("VM output")));
+  } else if (plan->output_mode ==
+             LOOM_RUN_VM_OUTPUT_PLAN_MODE_COMPARE_EXPECTED) {
+    if (plan->expected_outputs == NULL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "VM expected output comparison requires values");
+    }
+  } else if (plan->output_mode != LOOM_RUN_VM_OUTPUT_PLAN_MODE_FORMAT_ALL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown VM output plan mode %d",
+                            (int)plan->output_mode);
+  }
+  if (device != NULL && device_allocator == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "VM device invocation requires a HAL allocator");
+  }
 
   iree_vm_list_t* inputs = NULL;
   iree_hal_fence_t* finish_fence = NULL;
   iree_vm_list_t* outputs = NULL;
 
-  if (iree_status_is_ok(status)) {
-    status = iree_tooling_parse_variants(
-        arguments_cconv, loom_run_vm_value_specs_list(&options->inputs), device,
-        device_allocator, allocator, &inputs);
-  }
+  iree_status_t status = iree_vm_list_clone(plan->inputs, allocator, &inputs);
   if (iree_status_is_ok(status) && device == NULL) {
     iree_string_view_t model = iree_vm_function_lookup_attr_by_name(
         &function, IREE_SV("iree.abi.model"));
@@ -310,13 +384,48 @@ static iree_status_t loom_run_vm_invoke_function(
                                             /*signal_fence=*/NULL);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_run_vm_process_outputs(options, results_cconv, device,
-                                         outputs, allocator, result);
+    status = loom_run_vm_process_outputs(plan, outputs, allocator, result);
   }
 
   iree_vm_list_release(outputs);
   iree_hal_fence_release(finish_fence);
   iree_vm_list_release(inputs);
+  return status;
+}
+
+static iree_status_t loom_run_vm_invoke_function(
+    const loom_run_vm_invocation_options_t* options, iree_vm_context_t* context,
+    iree_vm_function_t function, iree_hal_device_t* device,
+    iree_hal_allocator_t* device_allocator, iree_allocator_t allocator,
+    loom_run_vm_invocation_result_t* result) {
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(result);
+
+  iree_vm_function_signature_t signature =
+      iree_vm_function_signature(&function);
+  iree_string_view_t arguments_cconv = iree_string_view_empty();
+  iree_string_view_t results_cconv = iree_string_view_empty();
+  iree_status_t status = iree_vm_function_call_get_cconv_fragments(
+      &signature, &arguments_cconv, &results_cconv);
+
+  loom_run_vm_invocation_plan_t plan = {0};
+  if (iree_status_is_ok(status)) {
+    const loom_run_vm_invocation_plan_prepare_request_t prepare_request = {
+        .options = options,
+        .arguments_cconv = arguments_cconv,
+        .results_cconv = results_cconv,
+        .device = device,
+        .device_allocator = device_allocator,
+    };
+    status = loom_run_vm_invocation_plan_prepare_from_specs(&prepare_request,
+                                                            allocator, &plan);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_run_vm_invocation_invoke_plan(
+        &plan, context, function, device, device_allocator, allocator, result);
+  }
+  loom_run_vm_invocation_plan_deinitialize(&plan);
   return status;
 }
 
@@ -329,12 +438,6 @@ iree_status_t loom_run_vm_invocation_run(
   IREE_ASSERT_ARGUMENT(result);
   iree_string_builder_reset(&result->output);
   result->exit_code = 0;
-  IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
-      &request->options.inputs, IREE_SV("VM input")));
-  IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
-      &request->options.outputs, IREE_SV("VM output")));
-  IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
-      &request->options.expected_outputs, IREE_SV("expected VM output")));
 
   iree_vm_module_t* module = NULL;
   iree_vm_context_t* context = NULL;

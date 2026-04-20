@@ -8,11 +8,28 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "iree/vm/api.h"
 
 namespace loom {
 namespace {
 
-TEST(HalInvocationTest, RequestInitializeDefaultsToSingleWorkgroup) {
+iree_vm_instance_t* hal_invocation_test_vm_instance = nullptr;
+
+class HalInvocationTest : public ::testing::Test {
+ protected:
+  static void SetUpTestSuite() {
+    IREE_ASSERT_OK(iree_vm_instance_create(IREE_VM_TYPE_CAPACITY_DEFAULT,
+                                           iree_allocator_system(),
+                                           &hal_invocation_test_vm_instance));
+  }
+
+  static void TearDownTestSuite() {
+    iree_vm_instance_release(hal_invocation_test_vm_instance);
+    hal_invocation_test_vm_instance = nullptr;
+  }
+};
+
+TEST_F(HalInvocationTest, RequestInitializeDefaultsToSingleWorkgroup) {
   loom_run_hal_invocation_request_t request = {};
   loom_run_hal_invocation_request_initialize(&request);
 
@@ -22,7 +39,7 @@ TEST(HalInvocationTest, RequestInitializeDefaultsToSingleWorkgroup) {
   EXPECT_EQ(request.options.workgroup_count[2], 1u);
 }
 
-TEST(HalInvocationTest, ResultOwnsOutputBuilder) {
+TEST_F(HalInvocationTest, ResultOwnsOutputBuilder) {
   loom_run_hal_invocation_result_t result = {};
   loom_run_hal_invocation_result_initialize(iree_allocator_system(), &result);
 
@@ -33,7 +50,7 @@ TEST(HalInvocationTest, ResultOwnsOutputBuilder) {
   loom_run_hal_invocation_result_deinitialize(&result);
 }
 
-TEST(HalInvocationTest, RunRejectsTooManyBindingsBeforeDeviceUse) {
+TEST_F(HalInvocationTest, RunRejectsTooManyBindingsBeforeDeviceUse) {
   loom_run_hal_runtime_t runtime = {};
   loom_run_hal_executable_t executable = {};
   loom_run_hal_invocation_request_t request = {};
@@ -52,7 +69,7 @@ TEST(HalInvocationTest, RunRejectsTooManyBindingsBeforeDeviceUse) {
   loom_run_hal_invocation_result_deinitialize(&result);
 }
 
-TEST(HalInvocationTest, RunRejectsMissingBindingStorageBeforeDeviceUse) {
+TEST_F(HalInvocationTest, RunRejectsMissingBindingStorageBeforeDeviceUse) {
   loom_run_hal_runtime_t runtime = {};
   loom_run_hal_executable_t executable = {};
   loom_run_hal_invocation_request_t request = {};
@@ -71,7 +88,8 @@ TEST(HalInvocationTest, RunRejectsMissingBindingStorageBeforeDeviceUse) {
   loom_run_hal_invocation_result_deinitialize(&result);
 }
 
-TEST(HalInvocationTest, RunRejectsExpectedBindingCountMismatchBeforeDeviceUse) {
+TEST_F(HalInvocationTest,
+       RunRejectsExpectedBindingCountMismatchBeforeDeviceUse) {
   loom_run_hal_runtime_t runtime = {};
   loom_run_hal_executable_t executable = {};
   iree_string_view_t bindings[] = {IREE_SV("&4xi32")};
@@ -105,7 +123,7 @@ TEST(HalInvocationTest, RunRejectsExpectedBindingCountMismatchBeforeDeviceUse) {
   loom_run_hal_invocation_result_deinitialize(&result);
 }
 
-TEST(HalInvocationTest, RunRequiresInitializedRuntime) {
+TEST_F(HalInvocationTest, RunRequiresInitializedRuntime) {
   loom_run_hal_runtime_t runtime = {};
   loom_run_hal_executable_t executable = {};
   loom_run_hal_invocation_request_t request = {};
@@ -121,6 +139,36 @@ TEST(HalInvocationTest, RunRequiresInitializedRuntime) {
       loom_run_hal_invocation_run(&request, iree_allocator_system(), &result));
 
   loom_run_hal_invocation_result_deinitialize(&result);
+}
+
+TEST_F(HalInvocationTest,
+       RunPlanRejectsExpectedBindingCountMismatchBeforeDeviceUse) {
+  loom_run_hal_runtime_t runtime = {};
+  loom_run_hal_executable_t executable = {};
+  loom_run_hal_invocation_plan_t plan = {};
+  loom_run_hal_invocation_plan_initialize(&plan);
+
+  const iree_vm_type_def_t value_type =
+      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
+  IREE_ASSERT_OK(iree_vm_list_create(value_type, 2, iree_allocator_system(),
+                                     &plan.bindings));
+  IREE_ASSERT_OK(iree_vm_list_create(value_type, 2, iree_allocator_system(),
+                                     &plan.expected_bindings));
+  iree_vm_value_t value = iree_vm_value_make_i32(0);
+  IREE_ASSERT_OK(iree_vm_list_push_value(plan.bindings, &value));
+  IREE_ASSERT_OK(iree_vm_list_push_value(plan.expected_bindings, &value));
+  IREE_ASSERT_OK(iree_vm_list_push_value(plan.expected_bindings, &value));
+
+  loom_run_hal_invocation_result_t result = {};
+  loom_run_hal_invocation_result_initialize(iree_allocator_system(), &result);
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_run_hal_invocation_run_plan(&runtime, &executable, &plan,
+                                       iree_allocator_system(), &result));
+
+  loom_run_hal_invocation_result_deinitialize(&result);
+  loom_run_hal_invocation_plan_deinitialize(&plan);
 }
 
 }  // namespace

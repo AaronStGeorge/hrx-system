@@ -184,5 +184,69 @@ TEST_F(VmInvocationTest, RunFormatsOutputsWhenNoExpectationIsProvided) {
   loom_run_module_deinitialize(&module);
 }
 
+TEST_F(VmInvocationTest, PlanPrepareFromSpecsMaterializesExpectedOutputs) {
+  iree_string_view_t inputs[] = {IREE_SV("0"), IREE_SV("21")};
+  iree_string_view_t expected_outputs[] = {IREE_SV("42")};
+
+  loom_run_vm_invocation_options_t options = {};
+  loom_run_vm_invocation_options_initialize(&options);
+  options.inputs = (loom_run_vm_value_specs_t){
+      .values = inputs,
+      .count = IREE_ARRAYSIZE(inputs),
+  };
+  options.expected_outputs = (loom_run_vm_value_specs_t){
+      .values = expected_outputs,
+      .count = IREE_ARRAYSIZE(expected_outputs),
+  };
+
+  const loom_run_vm_invocation_plan_prepare_request_t prepare_request = {
+      .options = &options,
+      .arguments_cconv = IREE_SV("ii"),
+      .results_cconv = IREE_SV("i"),
+  };
+  loom_run_vm_invocation_plan_t plan = {};
+
+  IREE_ASSERT_OK(loom_run_vm_invocation_plan_prepare_from_specs(
+      &prepare_request, iree_allocator_system(), &plan));
+  EXPECT_EQ(plan.output_mode, LOOM_RUN_VM_OUTPUT_PLAN_MODE_COMPARE_EXPECTED);
+  EXPECT_EQ(iree_vm_list_size(plan.inputs), IREE_ARRAYSIZE(inputs));
+  EXPECT_EQ(iree_vm_list_size(plan.expected_outputs),
+            IREE_ARRAYSIZE(expected_outputs));
+
+  loom_run_vm_invocation_plan_deinitialize(&plan);
+}
+
+TEST_F(VmInvocationTest, PlanPrepareUsesOutputSpecsAsMaterializationPolicy) {
+  iree_string_view_t inputs[] = {IREE_SV("50"), IREE_SV("8")};
+  iree_string_view_t outputs[] = {IREE_SV("-")};
+
+  loom_run_vm_invocation_options_t options = {};
+  loom_run_vm_invocation_options_initialize(&options);
+  options.inputs = (loom_run_vm_value_specs_t){
+      .values = inputs,
+      .count = IREE_ARRAYSIZE(inputs),
+  };
+  options.outputs = (loom_run_vm_value_specs_t){
+      .values = outputs,
+      .count = IREE_ARRAYSIZE(outputs),
+  };
+
+  const loom_run_vm_invocation_plan_prepare_request_t prepare_request = {
+      .options = &options,
+      .arguments_cconv = IREE_SV("ii"),
+      .results_cconv = IREE_SV("i"),
+  };
+  loom_run_vm_invocation_plan_t plan = {};
+
+  IREE_ASSERT_OK(loom_run_vm_invocation_plan_prepare_from_specs(
+      &prepare_request, iree_allocator_system(), &plan));
+  EXPECT_EQ(plan.output_mode, LOOM_RUN_VM_OUTPUT_PLAN_MODE_WRITE_SPECS);
+  EXPECT_EQ(iree_vm_list_size(plan.inputs), IREE_ARRAYSIZE(inputs));
+  EXPECT_EQ(plan.output_specs.count, IREE_ARRAYSIZE(outputs));
+  EXPECT_EQ(plan.expected_outputs, nullptr);
+
+  loom_run_vm_invocation_plan_deinitialize(&plan);
+}
+
 }  // namespace
 }  // namespace loom
