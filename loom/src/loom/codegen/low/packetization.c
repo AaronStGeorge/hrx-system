@@ -27,6 +27,18 @@ iree_status_t loom_low_packetize_function(
         "low allocation budgets are required when allocation_budget_count is "
         "non-zero");
   }
+  if (options->allocation_fixed_value_count > 0 &&
+      !options->allocation_fixed_values) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low allocation fixed values are required when "
+                            "allocation_fixed_value_count is non-zero");
+  }
+  if (options->allocation_reserved_range_count > 0 &&
+      !options->allocation_reserved_ranges) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low allocation reserved ranges are required when "
+                            "allocation_reserved_range_count is non-zero");
+  }
   if (!loom_low_func_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.func.def");
@@ -47,6 +59,10 @@ iree_status_t loom_low_packetize_function(
       .descriptor_registry = options->descriptor_registry,
       .budgets = options->allocation_budgets,
       .budget_count = options->allocation_budget_count,
+      .fixed_values = options->allocation_fixed_values,
+      .fixed_value_count = options->allocation_fixed_value_count,
+      .reserved_ranges = options->allocation_reserved_ranges,
+      .reserved_range_count = options->allocation_reserved_range_count,
       .emitter = options->emitter,
       .diagnostic_flags = options->allocation_diagnostic_flags,
   };

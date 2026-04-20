@@ -73,6 +73,39 @@ typedef struct loom_low_allocation_budget_t {
   uint32_t max_units;
 } loom_low_allocation_budget_t;
 
+// Fixed physical location for one SSA value.
+//
+// Fixed values model ABI or target live-ins/outs that enter allocation as
+// ordinary SSA values but must occupy a specific target-visible location while
+// live. The location is reusable outside the value's live interval.
+typedef struct loom_low_allocation_fixed_value_t {
+  // SSA value forced to the fixed location.
+  loom_value_id_t value_id;
+  // Target-visible fixed location kind.
+  loom_low_allocation_location_kind_t location_kind;
+  // Base physical register or target ID.
+  uint32_t location_base;
+  // Number of contiguous units fixed at |location_base|.
+  uint32_t location_count;
+} loom_low_allocation_fixed_value_t;
+
+// Whole-function location range owned by target machinery.
+//
+// Reserved ranges model architectural state that is never allocatable for
+// ordinary values in the current low function, such as special registers or
+// permanently reserved target IDs. Use fixed values instead for ABI live-ins
+// whose registers can be reused after their last use.
+typedef struct loom_low_allocation_reserved_range_t {
+  // Stable register-class name such as "amdgpu.sgpr" or "x86.gpr".
+  iree_string_view_t register_class;
+  // Target-visible reserved location kind.
+  loom_low_allocation_location_kind_t location_kind;
+  // First physical register or target ID in the reserved range.
+  uint32_t location_base;
+  // Number of contiguous units reserved at |location_base|.
+  uint32_t location_count;
+} loom_low_allocation_reserved_range_t;
+
 // Assignment for one liveness interval.
 typedef struct loom_low_allocation_assignment_t {
   // SSA value represented by this assignment.
@@ -147,6 +180,14 @@ typedef struct loom_low_allocation_options_t {
   const loom_low_allocation_budget_t* budgets;
   // Number of entries in |budgets|.
   iree_host_size_t budget_count;
+  // Fixed locations for precolored SSA values.
+  const loom_low_allocation_fixed_value_t* fixed_values;
+  // Number of entries in |fixed_values|.
+  iree_host_size_t fixed_value_count;
+  // Whole-function target-owned location ranges.
+  const loom_low_allocation_reserved_range_t* reserved_ranges;
+  // Number of entries in |reserved_ranges|.
+  iree_host_size_t reserved_range_count;
   // Structured diagnostic emitter for allocation failures and feedback.
   iree_diagnostic_emitter_t emitter;
   // Optional structured allocation feedback to emit.

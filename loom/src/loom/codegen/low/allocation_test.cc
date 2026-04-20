@@ -136,12 +136,33 @@ class LowAllocationTest : public ::testing::Test {
           &allocation.assignments[i];
       const loom_value_t* value =
           loom_module_value(module_, assignment->value_id);
+      if (value->name_id == LOOM_STRING_ID_INVALID ||
+          value->name_id >= module_->strings.count) {
+        continue;
+      }
       iree_string_view_t value_name = module_->strings.entries[value->name_id];
       if (iree_string_view_equal(value_name, expected_name)) {
         return assignment;
       }
     }
     return nullptr;
+  }
+
+  loom_value_id_t FindValueIdByName(const char* name) {
+    iree_string_view_t expected_name = iree_make_cstring_view(name);
+    for (iree_host_size_t i = 0; i < module_->values.count; ++i) {
+      const loom_value_t* value =
+          loom_module_value(module_, (loom_value_id_t)i);
+      if (value->name_id == LOOM_STRING_ID_INVALID ||
+          value->name_id >= module_->strings.count) {
+        continue;
+      }
+      iree_string_view_t value_name = module_->strings.entries[value->name_id];
+      if (iree_string_view_equal(value_name, expected_name)) {
+        return (loom_value_id_t)i;
+      }
+    }
+    return LOOM_VALUE_ID_INVALID;
   }
 
   void ExpectSameLocation(const loom_low_allocation_assignment_t* lhs,
@@ -154,6 +175,30 @@ class LowAllocationTest : public ::testing::Test {
     EXPECT_EQ(lhs->location_kind, rhs->location_kind);
     EXPECT_EQ(lhs->location_base, rhs->location_base);
     EXPECT_EQ(lhs->location_count, rhs->location_count);
+  }
+
+  void ExpectPhysicalLocation(
+      const loom_low_allocation_assignment_t* assignment,
+      uint32_t location_base, uint32_t location_count) {
+    ASSERT_NE(assignment, nullptr);
+    EXPECT_EQ(assignment->location_kind,
+              LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER);
+    EXPECT_EQ(assignment->location_base, location_base);
+    EXPECT_EQ(assignment->location_count, location_count);
+  }
+
+  bool AssignmentOverlapsPhysicalLocation(
+      const loom_low_allocation_assignment_t* assignment,
+      uint32_t location_base, uint32_t location_count) {
+    if (assignment->location_kind !=
+        LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
+      return false;
+    }
+    uint64_t assignment_end =
+        (uint64_t)assignment->location_base + assignment->location_count;
+    uint64_t location_end = (uint64_t)location_base + location_count;
+    return assignment->location_base < location_end &&
+           location_base < assignment_end;
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -199,6 +244,131 @@ TEST_F(LowAllocationTest, RejectsTiedResultWhenOperandSpills) {
   iree_status_t status =
       AllocateFirstLowFunctionWithOptions(&options, &allocation);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+}
+
+TEST_F(LowAllocationTest, FixedValueLocationIsReusableAfterLastUse) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%fixed : reg<test.phys>, "
+      "%rhs : reg<test.phys>) -> (reg<test.phys>) {\n"
+      "  %dead = low.op<test.add.phys>(%fixed, %rhs) : (reg<test.phys>, "
+      "reg<test.phys>) -> reg<test.phys>\n"
+      "  %later = low.op<test.add.phys>(%rhs, %rhs) : (reg<test.phys>, "
+      "reg<test.phys>) -> reg<test.phys>\n"
+      "  low.return %later : reg<test.phys>\n"
+      "}\n");
+  loom_value_id_t fixed_value_id = FindValueIdByName("fixed");
+  ASSERT_NE(fixed_value_id, LOOM_VALUE_ID_INVALID);
+  const loom_low_allocation_fixed_value_t fixed_value = {
+      .value_id = fixed_value_id,
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .location_base = 0,
+      .location_count = 1,
+  };
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .fixed_values = &fixed_value,
+      .fixed_value_count = 1,
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+
+  ExpectPhysicalLocation(FindAssignmentByName(allocation, "fixed"), 0, 1);
+  ExpectPhysicalLocation(FindAssignmentByName(allocation, "later"), 0, 1);
+}
+
+TEST_F(LowAllocationTest, FutureFixedValueBlocksOverlappingOrdinaryValue) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%lhs : reg<test.phys>, "
+      "%rhs : reg<test.phys>) -> (reg<test.phys>, reg<test.phys>) {\n"
+      "  %late = low.op<test.add.phys>(%rhs, %rhs) : (reg<test.phys>, "
+      "reg<test.phys>) -> reg<test.phys>\n"
+      "  low.return %lhs, %late : reg<test.phys>, reg<test.phys>\n"
+      "}\n");
+  loom_value_id_t late_value_id = FindValueIdByName("late");
+  ASSERT_NE(late_value_id, LOOM_VALUE_ID_INVALID);
+  const loom_low_allocation_fixed_value_t fixed_value = {
+      .value_id = late_value_id,
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .location_base = 0,
+      .location_count = 1,
+  };
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .fixed_values = &fixed_value,
+      .fixed_value_count = 1,
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+
+  ExpectPhysicalLocation(FindAssignmentByName(allocation, "late"), 0, 1);
+  const loom_low_allocation_assignment_t* lhs_assignment =
+      FindAssignmentByName(allocation, "lhs");
+  ASSERT_NE(lhs_assignment, nullptr);
+  EXPECT_FALSE(AssignmentOverlapsPhysicalLocation(lhs_assignment, 0, 1));
+}
+
+TEST_F(LowAllocationTest, ReservedRangeBlocksWholeFunction) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%lhs : reg<test.phys>, "
+      "%rhs : reg<test.phys>) -> (reg<test.phys>) {\n"
+      "  %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, "
+      "reg<test.phys>) -> reg<test.phys>\n"
+      "  low.return %sum : reg<test.phys>\n"
+      "}\n");
+  const loom_low_allocation_reserved_range_t reserved_range = {
+      .register_class = IREE_SV("test.phys"),
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .location_base = 0,
+      .location_count = 1,
+  };
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .reserved_ranges = &reserved_range,
+      .reserved_range_count = 1,
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+
+  for (iree_host_size_t i = 0; i < allocation.assignment_count; ++i) {
+    EXPECT_FALSE(
+        AssignmentOverlapsPhysicalLocation(&allocation.assignments[i], 0, 1));
+  }
+}
+
+TEST_F(LowAllocationTest, RejectsOverlappingReservedRanges) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%lhs : reg<test.phys>, "
+      "%rhs : reg<test.phys>) -> (reg<test.phys>) {\n"
+      "  %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, "
+      "reg<test.phys>) -> reg<test.phys>\n"
+      "  low.return %sum : reg<test.phys>\n"
+      "}\n");
+  const loom_low_allocation_reserved_range_t reserved_ranges[] = {
+      {
+          .register_class = IREE_SV("test.phys"),
+          .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+          .location_base = 0,
+          .location_count = 2,
+      },
+      {
+          .register_class = IREE_SV("test.phys"),
+          .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+          .location_base = 1,
+          .location_count = 1,
+      },
+  };
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .reserved_ranges = reserved_ranges,
+      .reserved_range_count = IREE_ARRAYSIZE(reserved_ranges),
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      AllocateFirstLowFunctionWithOptions(&options, &allocation));
 }
 
 }  // namespace

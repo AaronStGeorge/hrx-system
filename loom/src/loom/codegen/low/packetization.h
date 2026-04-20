@@ -38,6 +38,14 @@ typedef struct loom_low_packetization_options_t {
   const loom_low_allocation_budget_t* allocation_budgets;
   // Number of entries in |allocation_budgets|.
   iree_host_size_t allocation_budget_count;
+  // Fixed locations for precolored SSA values passed to allocation.
+  const loom_low_allocation_fixed_value_t* allocation_fixed_values;
+  // Number of entries in |allocation_fixed_values|.
+  iree_host_size_t allocation_fixed_value_count;
+  // Whole-function target-owned location ranges passed to allocation.
+  const loom_low_allocation_reserved_range_t* allocation_reserved_ranges;
+  // Number of entries in |allocation_reserved_ranges|.
+  iree_host_size_t allocation_reserved_range_count;
   // Optional structured allocation feedback to emit.
   loom_low_allocation_diagnostic_flags_t allocation_diagnostic_flags;
   // Structured diagnostic emitter shared by scheduling and allocation.
