@@ -124,6 +124,8 @@ _ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS = frozenset(
     )
 )
 _ADDRESS_OFFSET_IMMEDIATE_FIELD_NAMES = frozenset(("offset", "offset0", "offset1"))
+_GLOBAL_SADDR_OFF = 0x7C
+_GLOBAL_GFX950_SADDR_OFF = 0x7F
 
 _SGPR_ALT = (RegClassAlt(_REG_SGPR),)
 _VGPR_ALT = (RegClassAlt(_REG_VGPR),)
@@ -527,6 +529,21 @@ def _named_offset_immediate(
     )
 
 
+def _signed_offset_immediate(
+    bit_width: int,
+    *,
+    encoding_id: int = _ADDRESS_OFFSET_BYTE_ENCODING_ID,
+) -> Immediate:
+    return Immediate(
+        "offset",
+        ImmediateKind.SIGNED,
+        bit_width=bit_width,
+        encoding_id=encoding_id,
+        signed_min=-(2 ** (bit_width - 1)),
+        unsigned_max=(2 ** (bit_width - 1)) - 1,
+    )
+
+
 _IGNORE_SCC_OUTPUT = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_SSRC_SPECIAL_SCC",
     data_format_name="FMT_NUM_B1",
@@ -606,6 +623,54 @@ def _ignore_workgroup_memory(
             else "modeled-by-workgroup-write-effect"
         ),
     )
+
+
+def _ignore_global_read_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay:
+    match width_bits:
+        case 32:
+            return _IGNORE_GLOBAL_READ_MEMORY
+        case 64:
+            return _IGNORE_GLOBAL_READ_MEMORY_B64
+        case 128:
+            return _IGNORE_GLOBAL_READ_MEMORY_B128
+        case _:
+            raise ValueError(f"unsupported global read width {width_bits}")
+
+
+def _ignore_global_write_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay:
+    match width_bits:
+        case 32:
+            return _IGNORE_GLOBAL_WRITE_MEMORY
+        case 64:
+            return _IGNORE_GLOBAL_WRITE_MEMORY_B64
+        case 128:
+            return _IGNORE_GLOBAL_WRITE_MEMORY_B128
+        case _:
+            raise ValueError(f"unsupported global write width {width_bits}")
+
+
+def _global_read_effect(width_bits: int) -> Effect:
+    match width_bits:
+        case 32:
+            return _GLOBAL_LOAD_EFFECT
+        case 64:
+            return _GLOBAL_LOAD_B64_EFFECT
+        case 128:
+            return _GLOBAL_LOAD_B128_EFFECT
+        case _:
+            raise ValueError(f"unsupported global read width {width_bits}")
+
+
+def _global_write_effect(width_bits: int) -> Effect:
+    match width_bits:
+        case 32:
+            return _GLOBAL_STORE_EFFECT
+        case 64:
+            return _GLOBAL_STORE_B64_EFFECT
+        case 128:
+            return _GLOBAL_STORE_B128_EFFECT
+        case _:
+            raise ValueError(f"unsupported global write width {width_bits}")
 
 
 def _implicit_m0_input() -> AmdgpuImplicitOperandOverlay:
@@ -1313,6 +1378,144 @@ def _buffer_store_128_overlay(
     )
 
 
+def _global_load_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    saddr_off: int,
+    width_bits: int,
+    units: int,
+    implicit_m0: bool = False,
+) -> AmdgpuDescriptorOverlay:
+    implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
+        _ignore_global_read_memory(width_bits),
+    )
+    if implicit_m0:
+        implicit_operands += (_implicit_m0_input(),)
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=f"memory.load.u{width_bits}",
+        schedule_class=_SCHEDULE_VMEM_LOAD,
+        operands=(
+            AmdgpuOperandOverlay(data_field_name, _vgpr_result(units=units)),
+            AmdgpuOperandOverlay(address_field_name, _vgpr_operand("addr", units=2)),
+        ),
+        implicit_operands=implicit_operands,
+        immediate_fields=(offset_field_name,),
+        immediates=(_signed_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=(("SADDR", saddr_off),),
+        effects=(_global_read_effect(width_bits),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=(),
+    )
+
+
+def _global_store_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    saddr_off: int,
+    width_bits: int,
+    units: int,
+    implicit_m0: bool = False,
+) -> AmdgpuDescriptorOverlay:
+    implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
+        _ignore_global_write_memory(width_bits),
+    )
+    if implicit_m0:
+        implicit_operands += (_implicit_m0_input(),)
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=f"memory.store.u{width_bits}",
+        schedule_class=_SCHEDULE_VMEM_STORE,
+        operands=(
+            AmdgpuOperandOverlay(address_field_name, _vgpr_operand("addr", units=2)),
+            AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value", units=units)),
+        ),
+        implicit_operands=implicit_operands,
+        immediate_fields=(offset_field_name,),
+        immediates=(_signed_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=(("SADDR", saddr_off),),
+        effects=(_global_write_effect(width_bits),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=(),
+    )
+
+
+def _global_memory_overlays(
+    *,
+    instruction_suffixes: tuple[str, str, str],
+    mnemonic_suffixes: tuple[str, str, str],
+    encoding_name: str,
+    address_field_name: str,
+    load_data_field_name: str,
+    store_data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    saddr_off: int,
+    implicit_m0: bool = False,
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    widths = ((32, 1), (64, 2), (128, 4))
+    return (
+        *(
+            _global_load_overlay(
+                descriptor_key=f"amdgpu.global_load_b{width_bits}",
+                instruction_name=f"GLOBAL_LOAD_{instruction_suffix}",
+                mnemonic=f"global_load_{mnemonic_suffix}",
+                encoding_name=encoding_name,
+                address_field_name=address_field_name,
+                data_field_name=load_data_field_name,
+                offset_field_name=offset_field_name,
+                offset_bit_width=offset_bit_width,
+                saddr_off=saddr_off,
+                width_bits=width_bits,
+                units=units,
+                implicit_m0=implicit_m0,
+            )
+            for (width_bits, units), instruction_suffix, mnemonic_suffix in zip(
+                widths, instruction_suffixes, mnemonic_suffixes, strict=True
+            )
+        ),
+        *(
+            _global_store_overlay(
+                descriptor_key=f"amdgpu.global_store_b{width_bits}",
+                instruction_name=f"GLOBAL_STORE_{instruction_suffix}",
+                mnemonic=f"global_store_{mnemonic_suffix}",
+                encoding_name=encoding_name,
+                address_field_name=address_field_name,
+                data_field_name=store_data_field_name,
+                offset_field_name=offset_field_name,
+                offset_bit_width=offset_bit_width,
+                saddr_off=saddr_off,
+                width_bits=width_bits,
+                units=units,
+                implicit_m0=implicit_m0,
+            )
+            for (width_bits, units), instruction_suffix, mnemonic_suffix in zip(
+                widths, instruction_suffixes, mnemonic_suffixes, strict=True
+            )
+        ),
+    )
+
+
 def _ds_read_overlay(
     *,
     width_bits: int,
@@ -1850,6 +2053,18 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
         ),
+        *_global_memory_overlays(
+            instruction_suffixes=("DWORD", "DWORDX2", "DWORDX4"),
+            mnemonic_suffixes=("dword", "dwordx2", "dwordx4"),
+            encoding_name="ENC_FLAT_GLBL",
+            address_field_name="ADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="DATA",
+            offset_field_name="OFFSET",
+            offset_bit_width=13,
+            saddr_off=_GLOBAL_GFX950_SADDR_OFF,
+            implicit_m0=True,
+        ),
         *_ds_memory_overlays(),
         _v_mfma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
@@ -1900,6 +2115,17 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         _buffer_store_128_overlay(
             encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
+        *_global_memory_overlays(
+            instruction_suffixes=("B32", "B64", "B128"),
+            mnemonic_suffixes=("b32", "b64", "b128"),
+            encoding_name="ENC_FLAT_GLOBAL",
+            address_field_name="ADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="DATA",
+            offset_field_name="OFFSET",
+            offset_bit_width=13,
+            saddr_off=_GLOBAL_SADDR_OFF,
         ),
         *_ds_memory_overlays(),
         _v_wmma_f32_16x16x16_f16_overlay(),
@@ -1967,6 +2193,17 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+        ),
+        *_global_memory_overlays(
+            instruction_suffixes=("B32", "B64", "B128"),
+            mnemonic_suffixes=("b32", "b64", "b128"),
+            encoding_name="ENC_VGLOBAL",
+            address_field_name="VADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="VSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            saddr_off=_GLOBAL_SADDR_OFF,
         ),
         *_ds_memory_overlays(
             encoding_name="ENC_VDS",
@@ -2037,6 +2274,17 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+        ),
+        *_global_memory_overlays(
+            instruction_suffixes=("B32", "B64", "B128"),
+            mnemonic_suffixes=("b32", "b64", "b128"),
+            encoding_name="ENC_VGLOBAL",
+            address_field_name="VADDR",
+            load_data_field_name="VDST",
+            store_data_field_name="VSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            saddr_off=_GLOBAL_SADDR_OFF,
         ),
         *_ds_memory_overlays(
             encoding_name="ENC_VDS",

@@ -572,6 +572,46 @@ static iree_status_t loom_amdgpu_append_mubuf_store_packet(
   return loom_amdgpu_append_offset_suffix(context);
 }
 
+static bool loom_amdgpu_descriptor_uses_global_pointer_format(
+    const loom_low_descriptor_t* descriptor) {
+  switch (descriptor->encoding_format_id) {
+    case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLBL:
+    case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLOBAL:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_amdgpu_append_global_load_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "off"));
+  return loom_amdgpu_append_offset_suffix(context);
+}
+
+static iree_status_t loom_amdgpu_append_global_store_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "off"));
+  return loom_amdgpu_append_offset_suffix(context);
+}
+
 static iree_status_t loom_amdgpu_append_waitcnt_packet(
     const loom_native_assembly_packet_context_t* context) {
   int64_t vmcnt = 0;
@@ -1076,6 +1116,10 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
         descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER) {
       return has_read_effect ? loom_amdgpu_append_mubuf_load_packet(context)
                              : loom_amdgpu_append_mubuf_store_packet(context);
+    }
+    if (loom_amdgpu_descriptor_uses_global_pointer_format(descriptor)) {
+      return has_read_effect ? loom_amdgpu_append_global_load_packet(context)
+                             : loom_amdgpu_append_global_store_packet(context);
     }
     const loom_op_t* op = context->packet->node->op;
     return loom_amdgpu_append_memory_packet(context, descriptor->result_count,

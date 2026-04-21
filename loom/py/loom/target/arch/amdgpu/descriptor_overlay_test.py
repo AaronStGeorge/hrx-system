@@ -282,6 +282,34 @@ def test_materialize_rejects_missing_encoding() -> None:
         materialize_amdgpu_descriptor_overlay(spec, overlay)
 
 
+def test_materialize_accepts_exact_duplicate_encoding_rows() -> None:
+    encoding_start = SAMPLE_XML.index(
+        "          <InstructionEncoding>\n"
+        "            <EncodingName>ENC_SOP2</EncodingName>"
+    )
+    encoding_end = SAMPLE_XML.index(
+        "          </InstructionEncoding>", encoding_start
+    ) + len("          </InstructionEncoding>\n")
+    duplicate_xml = (
+        SAMPLE_XML[:encoding_end]
+        + SAMPLE_XML[encoding_start:encoding_end]
+        + SAMPLE_XML[encoding_end:]
+    )
+    spec = parse_amdgpu_isa_xml_text(duplicate_xml, source_name="duplicate.xml")
+
+    descriptor = materialize_amdgpu_descriptor_overlay(
+        spec,
+        _s_add_u32_overlay(
+            "amdgpu.s_add_u32",
+            mnemonic="s_add_u32",
+            implicit_operands=(_IGNORE_SCC_OUTPUT,),
+        ),
+    )
+
+    assert descriptor.key == "amdgpu.s_add_u32"
+    assert descriptor.encoding_id == 0
+
+
 def test_materialize_rejects_operand_role_mismatch() -> None:
     spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
     overlay = _s_add_u32_overlay(

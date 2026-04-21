@@ -72,6 +72,22 @@ buffer_store_b64
 s_endpgm
 
 // ====
+// RUN: emit amdgpu-assembly @gfx11_global_pointer waits=none
+target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_global_pointer}
+
+low.func.def target(@gfx11_target) @gfx11_global_pointer(%addr : reg<amdgpu.vgpr x2>) {
+  %loaded = low.op<amdgpu.global_load_b128>(%addr) {offset = -16} : (reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr x4>
+  low.op<amdgpu.global_store_b128>(%addr, %loaded) {offset = 32} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x4>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  global_load_b128 v[4:7], v[0:1], off offset:-16
+  global_store_b128 v[0:1], v[4:7], off offset:32
+  s_endpgm
+
+// ====
 // RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_barrier
 target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_lds_barrier}
 

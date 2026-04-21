@@ -239,11 +239,15 @@ def _select_instruction_encoding(
             f"'{overlay.encoding_condition}' on instruction '{instruction.name}'"
         )
     if len(matches) > 1:
-        raise AmdgpuDescriptorOverlayError(
-            f"descriptor overlay '{overlay.descriptor_key}' found duplicate "
-            f"encoding '{overlay.encoding_name}' condition "
-            f"'{overlay.encoding_condition}' on instruction '{instruction.name}'"
-        )
+        first_match = matches[0]
+        if any(match != first_match for match in matches[1:]):
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' found "
+                f"conflicting duplicate encoding '{overlay.encoding_name}' "
+                f"condition '{overlay.encoding_condition}' on instruction "
+                f"'{instruction.name}'"
+            )
+        return first_match
     return matches[0]
 
 
