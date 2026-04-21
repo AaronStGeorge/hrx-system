@@ -969,6 +969,7 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
     case LOOM_AMDGPU_ENCODING_FORMAT_SMEM:
     case LOOM_AMDGPU_ENCODING_FORMAT_MUBUF:
     case LOOM_AMDGPU_ENCODING_FORMAT_DS:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VDS:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL:
       return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
     default: {

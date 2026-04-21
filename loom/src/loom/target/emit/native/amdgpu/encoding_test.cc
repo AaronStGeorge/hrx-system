@@ -618,29 +618,46 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11Ds2AddrMemoryAndReturn) {
   iree_arena_deinitialize(&arena);
 }
 
-TEST_F(AmdgpuEncodingTest, EncodesGfx11DsAddtidMemoryAndReturn) {
-  iree_arena_allocator_t arena;
-  iree_arena_initialize(&block_pool_, &arena);
-  loom_low_packetization_t packetization = {};
-  BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%m0 : reg<amdgpu.m0>, "
-      "%value : reg<amdgpu.vgpr>) {\n"
-      "  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 16} : "
-      "(reg<amdgpu.m0>) -> reg<amdgpu.vgpr>\n"
-      "  low.op<amdgpu.ds_write_addtid_b32>(%value, %m0) {offset = 20} : "
-      "(reg<amdgpu.vgpr>, reg<amdgpu.m0>)\n"
-      "  low.return\n"
-      "}\n",
-      &arena, &packetization);
+TEST_F(AmdgpuEncodingTest, EncodesDsAddtidMemoryForCurrentAmdgpuFamilies) {
+  struct Case {
+    // Target preset used to select the low descriptor set.
+    const char* preset_key;
+    // Expected little-endian SOPP instruction word for `s_endpgm 0`.
+    uint32_t expected_return_word;
+  };
+  const Case cases[] = {
+      {"amdgpu-gfx950", UINT32_C(0xBF810000)},
+      {"amdgpu-gfx11", UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx12", UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx1250", UINT32_C(0xBFB00000)},
+  };
+  for (const Case& test_case : cases) {
+    SCOPED_TRACE(test_case.preset_key);
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool_, &arena);
+    loom_low_packetization_t packetization = {};
+    BuildSidecarsForPreset(
+        test_case.preset_key,
+        "low.func.def target(@gfx_target) @gfx_kernel(%m0 : reg<amdgpu.m0>, "
+        "%value : reg<amdgpu.vgpr>) {\n"
+        "  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 16} : "
+        "(reg<amdgpu.m0>) -> reg<amdgpu.vgpr>\n"
+        "  low.op<amdgpu.ds_write_addtid_b32>(%value, %m0) {offset = 20} : "
+        "(reg<amdgpu.vgpr>, reg<amdgpu.m0>)\n"
+        "  low.return\n"
+        "}\n",
+        &arena, &packetization);
 
-  iree_const_byte_span_t text = iree_const_byte_span_empty();
-  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
-      &packetization.schedule, &packetization.allocation, &text, &arena));
+    iree_const_byte_span_t text = iree_const_byte_span_empty();
+    IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+        &packetization.schedule, &packetization.allocation, &text, &arena));
 
-  ASSERT_GT(text.data_length, 4u);
-  EXPECT_EQ(text.data_length % 4, 0u);
-  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
-  iree_arena_deinitialize(&arena);
+    ASSERT_GT(text.data_length, 4u);
+    EXPECT_EQ(text.data_length % 4, 0u);
+    EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4),
+              test_case.expected_return_word);
+    iree_arena_deinitialize(&arena);
+  }
 }
 
 TEST_F(AmdgpuEncodingTest, EncodesReturnForCurrentAmdgpuFamilies) {
@@ -677,13 +694,19 @@ TEST_F(AmdgpuEncodingTest, EncodesReturnForCurrentAmdgpuFamilies) {
   }
 }
 
-TEST_F(AmdgpuEncodingTest, RejectsDescriptorPacketsOutsideImplementedProfile) {
+TEST_F(AmdgpuEncodingTest, RejectsUnsupportedDescriptorPacketFormat) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildSidecarsForPreset("amdgpu-gfx12",
-                         "low.func.def target(@gfx_target) @gfx_kernel() {\n"
-                         "  low.op<amdgpu.s_wait_idle>() : ()\n"
+                         "low.func.def target(@gfx_target) "
+                         "@gfx_kernel(%resource : reg<amdgpu.sgpr x4>, "
+                         "%vaddr : reg<amdgpu.vgpr>, %soffset : "
+                         "reg<amdgpu.sgpr>) {\n"
+                         "  %loaded = low.op<amdgpu.buffer_load_dword>("
+                         "%resource, %vaddr, %soffset) {offset = 0} : "
+                         "(reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, "
+                         "reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>\n"
                          "  low.return\n"
                          "}\n",
                          &arena, &packetization);

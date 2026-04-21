@@ -46,7 +46,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
   EXPECT_TRUE(iree_string_view_equal(descriptor_set->low_preset_key,
                                      IREE_SV("amdgpu-gfx950")));
   EXPECT_NE(descriptor_set->s_endpgm_opcode, 0u);
-  EXPECT_FALSE(descriptor_set->supports_descriptor_packet_encoding);
+  EXPECT_TRUE(descriptor_set->supports_descriptor_packet_encoding);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpMatrixOnlyProcessor) {

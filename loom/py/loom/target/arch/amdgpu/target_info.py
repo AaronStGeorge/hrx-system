@@ -78,7 +78,7 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         key="amdgpu.gfx1250.core",
         low_preset_key="amdgpu-gfx1250",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE,
-        supports_descriptor_packet_encoding=False,
+        supports_descriptor_packet_encoding=True,
     ),
     AmdgpuDescriptorSetInfo(
         key="amdgpu.gfx11.core",
@@ -90,13 +90,13 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         key="amdgpu.gfx12.core",
         low_preset_key="amdgpu-gfx12",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE,
-        supports_descriptor_packet_encoding=False,
+        supports_descriptor_packet_encoding=True,
     ),
     AmdgpuDescriptorSetInfo(
         key="amdgpu.gfx950.core",
         low_preset_key="amdgpu-gfx950",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX9_GFX10_GFX13_OPCODE,
-        supports_descriptor_packet_encoding=False,
+        supports_descriptor_packet_encoding=True,
     ),
 )
 

@@ -659,6 +659,69 @@ loom_target_table_cc_library(
     ],
 )
 
+loom_target_table_cc_library(
+    name = "gfx12_encoding_tables",
+    args = [
+        "--target=gfx12",
+        "--descriptor-set-key=amdgpu.gfx12.core",
+        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
+        "--public-header=loom/target/arch/amdgpu/gfx12_encoding_tables.h",
+    ],
+    cmake_generator = _AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_ENCODING_TABLE_GENERATOR_DEPS,
+    exclude_from_cmake_all = True,
+    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
+    header = "gfx12_encoding_tables.h",
+    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
+    source = "gfx12_encoding_tables.c",
+    deps = [
+        ":encoding_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_target_table_cc_library(
+    name = "gfx1250_encoding_tables",
+    args = [
+        "--target=gfx1250",
+        "--descriptor-set-key=amdgpu.gfx1250.core",
+        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
+        "--public-header=loom/target/arch/amdgpu/gfx1250_encoding_tables.h",
+    ],
+    cmake_generator = _AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_ENCODING_TABLE_GENERATOR_DEPS,
+    exclude_from_cmake_all = True,
+    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
+    header = "gfx1250_encoding_tables.h",
+    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
+    source = "gfx1250_encoding_tables.c",
+    deps = [
+        ":encoding_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_target_table_cc_library(
+    name = "gfx950_encoding_tables",
+    args = [
+        "--target=gfx950",
+        "--descriptor-set-key=amdgpu.gfx950.core",
+        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_cdna4.xml)",
+        "--public-header=loom/target/arch/amdgpu/gfx950_encoding_tables.h",
+    ],
+    cmake_generator = _AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_ENCODING_TABLE_GENERATOR_DEPS,
+    exclude_from_cmake_all = True,
+    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
+    header = "gfx950_encoding_tables.h",
+    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_cdna4.xml"],
+    source = "gfx950_encoding_tables.c",
+    deps = [
+        ":encoding_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_cc_library(
     name = "encoding",
     srcs = ["encoding.c"],
@@ -666,6 +729,9 @@ loom_cc_library(
     deps = [
         ":encoding_defs",
         ":gfx11_encoding_tables",
+        ":gfx1250_encoding_tables",
+        ":gfx12_encoding_tables",
+        ":gfx950_encoding_tables",
         "//runtime/src/iree/base",
     ],
 )

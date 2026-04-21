@@ -100,6 +100,84 @@ loom_target_table_cc_library(
   EXCLUDE_FROM_ALL
 )
 
+loom_target_table_cc_library(
+  NAME
+    gfx12_encoding_tables
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
+  SOURCE
+    "gfx12_encoding_tables.c"
+  HEADER
+    "gfx12_encoding_tables.h"
+  ARGS
+    "--target=gfx12"
+    "--descriptor-set-key=amdgpu.gfx12.core"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+    "--public-header=loom/target/arch/amdgpu/gfx12_encoding_tables.h"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+    "loom_amdgpu_isa_xml"
+  DEPS
+    ::encoding_defs
+    iree::base
+  EXCLUDE_FROM_ALL
+)
+
+loom_target_table_cc_library(
+  NAME
+    gfx1250_encoding_tables
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
+  SOURCE
+    "gfx1250_encoding_tables.c"
+  HEADER
+    "gfx1250_encoding_tables.h"
+  ARGS
+    "--target=gfx1250"
+    "--descriptor-set-key=amdgpu.gfx1250.core"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+    "--public-header=loom/target/arch/amdgpu/gfx1250_encoding_tables.h"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+    "loom_amdgpu_isa_xml"
+  DEPS
+    ::encoding_defs
+    iree::base
+  EXCLUDE_FROM_ALL
+)
+
+loom_target_table_cc_library(
+  NAME
+    gfx950_encoding_tables
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
+  SOURCE
+    "gfx950_encoding_tables.c"
+  HEADER
+    "gfx950_encoding_tables.h"
+  ARGS
+    "--target=gfx950"
+    "--descriptor-set-key=amdgpu.gfx950.core"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
+    "--public-header=loom/target/arch/amdgpu/gfx950_encoding_tables.h"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
+    "loom_amdgpu_isa_xml"
+  DEPS
+    ::encoding_defs
+    iree::base
+  EXCLUDE_FROM_ALL
+)
+
 loom_cc_library(
   NAME
     encoding
@@ -110,6 +188,9 @@ loom_cc_library(
   DEPS
     ::encoding_defs
     ::gfx11_encoding_tables
+    ::gfx1250_encoding_tables
+    ::gfx12_encoding_tables
+    ::gfx950_encoding_tables
     iree::base
   PUBLIC
 )

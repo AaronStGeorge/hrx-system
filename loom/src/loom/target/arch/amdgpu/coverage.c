@@ -25,9 +25,12 @@
    LOOM_TARGET_COVERAGE_PHASE_SCHEDULE | LOOM_TARGET_COVERAGE_PHASE_ALLOCATE | \
    LOOM_TARGET_COVERAGE_PHASE_TEXT_EMIT)
 
-#define LOOM_AMDGPU_AUTHORED_LOW_GFX11_PHASES \
-  (LOOM_AMDGPU_AUTHORED_LOW_TEXT_PHASES |     \
+#define LOOM_AMDGPU_AUTHORED_LOW_BINARY_PHASES \
+  (LOOM_AMDGPU_AUTHORED_LOW_TEXT_PHASES |      \
    LOOM_TARGET_COVERAGE_PHASE_BINARY_ENCODE)
+
+#define LOOM_AMDGPU_AUTHORED_LOW_GFX11_PHASES \
+  LOOM_AMDGPU_AUTHORED_LOW_BINARY_PHASES
 
 #define LOOM_AMDGPU_NATIVE_LOW_TEXT_PHASES \
   (LOOM_AMDGPU_AUTHORED_LOW_TEXT_PHASES |  \
@@ -188,18 +191,15 @@ static const loom_target_coverage_row_t kLoomAmdgpuTargetCoverageRows[] = {
     LOOM_AMDGPU_GFX11_ROW(
         "memory.workgroup", "ds-addtid", LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
         LOOM_AMDGPU_AUTHORED_LOW_GFX11_PHASES, "source-lower-addtid-missing"),
-    LOOM_AMDGPU_GFX12_ROW("memory.workgroup", "ds-addtid",
-                          LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
-                          LOOM_AMDGPU_AUTHORED_LOW_TEXT_PHASES,
-                          "source-lower-binary-encode-missing"),
-    LOOM_AMDGPU_GFX1250_ROW("memory.workgroup", "ds-addtid",
-                            LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
-                            LOOM_AMDGPU_AUTHORED_LOW_TEXT_PHASES,
-                            "source-lower-binary-encode-missing"),
-    LOOM_AMDGPU_GFX950_ROW("memory.workgroup", "ds-addtid",
-                           LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
-                           LOOM_AMDGPU_AUTHORED_LOW_TEXT_PHASES,
-                           "source-lower-binary-encode-missing"),
+    LOOM_AMDGPU_GFX12_ROW(
+        "memory.workgroup", "ds-addtid", LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
+        LOOM_AMDGPU_AUTHORED_LOW_BINARY_PHASES, "source-lower-addtid-missing"),
+    LOOM_AMDGPU_GFX1250_ROW(
+        "memory.workgroup", "ds-addtid", LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
+        LOOM_AMDGPU_AUTHORED_LOW_BINARY_PHASES, "source-lower-addtid-missing"),
+    LOOM_AMDGPU_GFX950_ROW(
+        "memory.workgroup", "ds-addtid", LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
+        LOOM_AMDGPU_AUTHORED_LOW_BINARY_PHASES, "source-lower-addtid-missing"),
 
     LOOM_AMDGPU_GFX11_ROW("memory.crosslane", "ds-permute-bpermute-swizzle",
                           LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,

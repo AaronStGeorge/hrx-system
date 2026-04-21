@@ -9,6 +9,9 @@
 #include <inttypes.h>
 
 #include "loom/target/arch/amdgpu/gfx11_encoding_tables.h"
+#include "loom/target/arch/amdgpu/gfx1250_encoding_tables.h"
+#include "loom/target/arch/amdgpu/gfx12_encoding_tables.h"
+#include "loom/target/arch/amdgpu/gfx950_encoding_tables.h"
 
 #define LOOM_AMDGPU_SISRC_LITERAL UINT16_C(255)
 #define LOOM_AMDGPU_VGPR_SRC_BASE UINT16_C(0x100)
@@ -192,11 +195,17 @@ bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id) {
 const loom_amdgpu_encoding_table_t*
 loom_amdgpu_encoding_table_for_descriptor_set(
     iree_string_view_t descriptor_set_key) {
-  const loom_amdgpu_encoding_table_t* gfx11_table =
-      loom_amdgpu_gfx11_encoding_table();
-  if (iree_string_view_equal(descriptor_set_key,
-                             gfx11_table->descriptor_set_key)) {
-    return gfx11_table;
+  const loom_amdgpu_encoding_table_t* tables[] = {
+      loom_amdgpu_gfx950_encoding_table(),
+      loom_amdgpu_gfx11_encoding_table(),
+      loom_amdgpu_gfx12_encoding_table(),
+      loom_amdgpu_gfx1250_encoding_table(),
+  };
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(tables); ++i) {
+    const loom_amdgpu_encoding_table_t* table = tables[i];
+    if (iree_string_view_equal(descriptor_set_key, table->descriptor_set_key)) {
+      return table;
+    }
   }
   return NULL;
 }
