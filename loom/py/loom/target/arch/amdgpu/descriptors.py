@@ -422,33 +422,15 @@ _GLOBAL_STORE_B128_EFFECT = Effect(
     width_bits=128,
 )
 
-_WORKGROUP_LOAD_EFFECT = Effect(
-    EffectKind.READ,
-    memory_space=MemorySpace.WORKGROUP,
-    flags=(EffectFlag.DEPENDENCY,),
-    width_bits=32,
-)
 
-_WORKGROUP_LOAD_B128_EFFECT = Effect(
-    EffectKind.READ,
-    memory_space=MemorySpace.WORKGROUP,
-    flags=(EffectFlag.DEPENDENCY,),
-    width_bits=128,
-)
+def _workgroup_memory_effect(kind: EffectKind, width_bits: int) -> Effect:
+    return Effect(
+        kind,
+        memory_space=MemorySpace.WORKGROUP,
+        flags=(EffectFlag.DEPENDENCY,),
+        width_bits=width_bits,
+    )
 
-_WORKGROUP_STORE_EFFECT = Effect(
-    EffectKind.WRITE,
-    memory_space=MemorySpace.WORKGROUP,
-    flags=(EffectFlag.DEPENDENCY,),
-    width_bits=32,
-)
-
-_WORKGROUP_STORE_B128_EFFECT = Effect(
-    EffectKind.WRITE,
-    memory_space=MemorySpace.WORKGROUP,
-    flags=(EffectFlag.DEPENDENCY,),
-    width_bits=128,
-)
 
 _WORKGROUP_BARRIER_EFFECT = Effect(
     EffectKind.BARRIER,
@@ -564,41 +546,22 @@ _IGNORE_GLOBAL_WRITE_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
     ignore_reason="modeled-by-global-write-effect",
 )
 
-_IGNORE_WORKGROUP_READ_MEMORY = AmdgpuImplicitOperandOverlay(
-    operand_type="OPR_DSMEM",
-    data_format_name="FMT_NUM_B32",
-    size_bits=32,
-    is_input=True,
-    is_output=False,
-    ignore_reason="modeled-by-workgroup-read-effect",
-)
 
-_IGNORE_WORKGROUP_READ_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
-    operand_type="OPR_DSMEM",
-    data_format_name="FMT_NUM_B128",
-    size_bits=128,
-    is_input=True,
-    is_output=False,
-    ignore_reason="modeled-by-workgroup-read-effect",
-)
-
-_IGNORE_WORKGROUP_WRITE_MEMORY = AmdgpuImplicitOperandOverlay(
-    operand_type="OPR_DSMEM",
-    data_format_name="FMT_NUM_B32",
-    size_bits=32,
-    is_input=False,
-    is_output=True,
-    ignore_reason="modeled-by-workgroup-write-effect",
-)
-
-_IGNORE_WORKGROUP_WRITE_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
-    operand_type="OPR_DSMEM",
-    data_format_name="FMT_NUM_B128",
-    size_bits=128,
-    is_input=False,
-    is_output=True,
-    ignore_reason="modeled-by-workgroup-write-effect",
-)
+def _ignore_workgroup_memory(
+    *, width_bits: int, is_input: bool
+) -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_DSMEM",
+        data_format_name=f"FMT_NUM_B{width_bits}",
+        size_bits=width_bits,
+        is_input=is_input,
+        is_output=not is_input,
+        ignore_reason=(
+            "modeled-by-workgroup-read-effect"
+            if is_input
+            else "modeled-by-workgroup-write-effect"
+        ),
+    )
 
 
 def _s_add_u32_overlay() -> AmdgpuDescriptorOverlay:
@@ -1227,102 +1190,62 @@ def _buffer_store_128_overlay(
     )
 
 
-def _ds_read_b32_overlay(
+def _ds_read_overlay(
     *,
+    width_bits: int,
+    units: int,
     encoding_name: str = "ENC_DS",
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
 ) -> AmdgpuDescriptorOverlay:
+    suffix = f"b{width_bits}"
     return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.ds_read_b32",
-        instruction_name="DS_READ_B32",
-        mnemonic="ds_read_b32",
+        descriptor_key=f"amdgpu.ds_read_{suffix}",
+        instruction_name=f"DS_READ_{suffix.upper()}",
+        mnemonic=f"ds_read_{suffix}",
         encoding_name=encoding_name,
-        semantic_tag="memory.workgroup.load.u32",
+        semantic_tag=f"memory.workgroup.load.u{width_bits}",
         schedule_class=_SCHEDULE_LDS_LOAD,
         operands=(
-            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=units)),
             AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
         ),
-        implicit_operands=(_IGNORE_WORKGROUP_READ_MEMORY,),
+        implicit_operands=(
+            _ignore_workgroup_memory(width_bits=width_bits, is_input=True),
+        ),
         immediate_fields=("OFFSET0",),
         immediates=(_offset_immediate(8),),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_WORKGROUP_LOAD_EFFECT,),
+        effects=(_workgroup_memory_effect(EffectKind.READ, width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
 
-def _ds_read_b128_overlay(
+def _ds_write_overlay(
     *,
+    width_bits: int,
+    units: int,
     encoding_name: str = "ENC_DS",
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
 ) -> AmdgpuDescriptorOverlay:
+    suffix = f"b{width_bits}"
     return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.ds_read_b128",
-        instruction_name="DS_READ_B128",
-        mnemonic="ds_read_b128",
+        descriptor_key=f"amdgpu.ds_write_{suffix}",
+        instruction_name=f"DS_WRITE_{suffix.upper()}",
+        mnemonic=f"ds_write_{suffix}",
         encoding_name=encoding_name,
-        semantic_tag="memory.workgroup.load.u128",
-        schedule_class=_SCHEDULE_LDS_LOAD,
-        operands=(
-            AmdgpuOperandOverlay("VDST", _vgpr_result(units=4)),
-            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
-        ),
-        implicit_operands=(_IGNORE_WORKGROUP_READ_MEMORY_B128,),
-        immediate_fields=("OFFSET0",),
-        immediates=(_offset_immediate(8),),
-        fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_WORKGROUP_LOAD_B128_EFFECT,),
-        flags=(DescriptorFlag.SIDE_EFFECTING,),
-    )
-
-
-def _ds_write_b32_overlay(
-    *,
-    encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
-) -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.ds_write_b32",
-        instruction_name="DS_WRITE_B32",
-        mnemonic="ds_write_b32",
-        encoding_name=encoding_name,
-        semantic_tag="memory.workgroup.store.u32",
+        semantic_tag=f"memory.workgroup.store.u{width_bits}",
         schedule_class=_SCHEDULE_LDS_STORE,
         operands=(
             AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
-            AmdgpuOperandOverlay("DATA0", _vgpr_operand("value")),
+            AmdgpuOperandOverlay("DATA0", _vgpr_operand("value", units=units)),
         ),
-        implicit_operands=(_IGNORE_WORKGROUP_WRITE_MEMORY,),
+        implicit_operands=(
+            _ignore_workgroup_memory(width_bits=width_bits, is_input=False),
+        ),
         immediate_fields=("OFFSET0",),
         immediates=(_offset_immediate(8),),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_WORKGROUP_STORE_EFFECT,),
-        flags=(DescriptorFlag.SIDE_EFFECTING,),
-    )
-
-
-def _ds_write_b128_overlay(
-    *,
-    encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
-) -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.ds_write_b128",
-        instruction_name="DS_WRITE_B128",
-        mnemonic="ds_write_b128",
-        encoding_name=encoding_name,
-        semantic_tag="memory.workgroup.store.u128",
-        schedule_class=_SCHEDULE_LDS_STORE,
-        operands=(
-            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
-            AmdgpuOperandOverlay("DATA0", _vgpr_operand("value", units=4)),
-        ),
-        implicit_operands=(_IGNORE_WORKGROUP_WRITE_MEMORY_B128,),
-        immediate_fields=("OFFSET0",),
-        immediates=(_offset_immediate(8),),
-        fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_WORKGROUP_STORE_B128_EFFECT,),
+        effects=(_workgroup_memory_effect(EffectKind.WRITE, width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
@@ -1332,22 +1255,25 @@ def _ds_memory_overlays(
     encoding_name: str = "ENC_DS",
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    widths = ((32, 1), (64, 2), (96, 3), (128, 4))
     return (
-        _ds_read_b32_overlay(
-            encoding_name=encoding_name,
-            fixed_encoding_fields=fixed_encoding_fields,
+        *(
+            _ds_read_overlay(
+                width_bits=width_bits,
+                units=units,
+                encoding_name=encoding_name,
+                fixed_encoding_fields=fixed_encoding_fields,
+            )
+            for width_bits, units in widths
         ),
-        _ds_read_b128_overlay(
-            encoding_name=encoding_name,
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _ds_write_b32_overlay(
-            encoding_name=encoding_name,
-            fixed_encoding_fields=fixed_encoding_fields,
-        ),
-        _ds_write_b128_overlay(
-            encoding_name=encoding_name,
-            fixed_encoding_fields=fixed_encoding_fields,
+        *(
+            _ds_write_overlay(
+                width_bits=width_bits,
+                units=units,
+                encoding_name=encoding_name,
+                fixed_encoding_fields=fixed_encoding_fields,
+            )
+            for width_bits, units in widths
         ),
     )
 

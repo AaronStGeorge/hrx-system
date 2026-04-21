@@ -628,6 +628,16 @@ loom_cc_library(
     deps = ["//runtime/src/iree/base"],
 )
 
+loom_cc_library(
+    name = "descriptor_test_util",
+    testonly = True,
+    hdrs = ["descriptor_test_util.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/testing:gtest",
+    ],
+)
+
 loom_target_table_cc_library(
     name = "gfx11_encoding_tables",
     args = [
@@ -680,6 +690,7 @@ loom_cc_test(
     name = "gfx11_descriptors_test",
     srcs = ["gfx11_descriptors_test.cc"],
     deps = [
+        ":descriptor_test_util",
         ":encoding_defs",
         ":gfx11_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
@@ -710,6 +721,7 @@ loom_cc_test(
     name = "gfx12_descriptors_test",
     srcs = ["gfx12_descriptors_test.cc"],
     deps = [
+        ":descriptor_test_util",
         ":encoding_defs",
         ":gfx12_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
@@ -738,6 +750,7 @@ loom_cc_test(
     name = "gfx1250_descriptors_test",
     srcs = ["gfx1250_descriptors_test.cc"],
     deps = [
+        ":descriptor_test_util",
         ":encoding_defs",
         ":gfx1250_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
@@ -766,6 +779,7 @@ loom_cc_test(
     name = "gfx950_descriptors_test",
     srcs = ["gfx950_descriptors_test.cc"],
     deps = [
+        ":descriptor_test_util",
         ":encoding_defs",
         ":gfx950_descriptors",
         "//loom/src/loom/codegen/low:descriptors",

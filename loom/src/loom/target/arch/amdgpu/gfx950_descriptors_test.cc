@@ -12,11 +12,13 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/text_asm_test_util.h"
+#include "loom/target/arch/amdgpu/descriptor_test_util.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 
 namespace loom {
 namespace {
 
+using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
 using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
@@ -177,41 +179,24 @@ TEST(AmdgpuDescriptorsTest, Gfx950CoreDescriptorLookupUsesStableKeys) {
       &descriptor_set->effects[store_64_descriptor->effect_start];
   EXPECT_EQ(store_64_effect->width_bits, 64u);
 
-  const loom_low_descriptor_t* ds_read_128_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.ds_read_b128"));
-  ASSERT_NE(ds_read_128_descriptor, nullptr);
-  EXPECT_EQ(ds_read_128_descriptor->operand_count, 2u);
-  EXPECT_EQ(ds_read_128_descriptor->result_count, 1u);
-  EXPECT_EQ(ds_read_128_descriptor->effect_count, 1u);
-  EXPECT_EQ(ds_read_128_descriptor->encoding_format_id,
-            LOOM_AMDGPU_ENCODING_FORMAT_DS);
-  const loom_low_operand_t* ds_read_128_operands =
-      &descriptor_set->operands[ds_read_128_descriptor->operand_start];
-  EXPECT_EQ(ds_read_128_operands[0].unit_count, 4u);
-  EXPECT_EQ(ds_read_128_operands[1].unit_count, 1u);
-  const loom_low_effect_t* ds_read_128_effect =
-      &descriptor_set->effects[ds_read_128_descriptor->effect_start];
-  EXPECT_EQ(ds_read_128_effect->kind, LOOM_LOW_EFFECT_KIND_READ);
-  EXPECT_EQ(ds_read_128_effect->memory_space, LOOM_LOW_MEMORY_SPACE_WORKGROUP);
-  EXPECT_EQ(ds_read_128_effect->width_bits, 128u);
-
-  const loom_low_descriptor_t* ds_write_128_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.ds_write_b128"));
-  ASSERT_NE(ds_write_128_descriptor, nullptr);
-  EXPECT_EQ(ds_write_128_descriptor->operand_count, 2u);
-  EXPECT_EQ(ds_write_128_descriptor->result_count, 0u);
-  EXPECT_EQ(ds_write_128_descriptor->effect_count, 1u);
-  EXPECT_EQ(ds_write_128_descriptor->encoding_format_id,
-            LOOM_AMDGPU_ENCODING_FORMAT_DS);
-  const loom_low_operand_t* ds_write_128_operands =
-      &descriptor_set->operands[ds_write_128_descriptor->operand_start];
-  EXPECT_EQ(ds_write_128_operands[0].unit_count, 1u);
-  EXPECT_EQ(ds_write_128_operands[1].unit_count, 4u);
-  const loom_low_effect_t* ds_write_128_effect =
-      &descriptor_set->effects[ds_write_128_descriptor->effect_start];
-  EXPECT_EQ(ds_write_128_effect->kind, LOOM_LOW_EFFECT_KIND_WRITE);
-  EXPECT_EQ(ds_write_128_effect->memory_space, LOOM_LOW_MEMORY_SPACE_WORKGROUP);
-  EXPECT_EQ(ds_write_128_effect->width_bits, 128u);
+  ExpectAmdgpuDsMemoryDescriptor(descriptor_set, IREE_SV("amdgpu.ds_read_b64"),
+                                 LOOM_LOW_EFFECT_KIND_READ, 2u, 64u,
+                                 LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  ExpectAmdgpuDsMemoryDescriptor(descriptor_set, IREE_SV("amdgpu.ds_read_b96"),
+                                 LOOM_LOW_EFFECT_KIND_READ, 3u, 96u,
+                                 LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  ExpectAmdgpuDsMemoryDescriptor(descriptor_set, IREE_SV("amdgpu.ds_read_b128"),
+                                 LOOM_LOW_EFFECT_KIND_READ, 4u, 128u,
+                                 LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  ExpectAmdgpuDsMemoryDescriptor(descriptor_set, IREE_SV("amdgpu.ds_write_b64"),
+                                 LOOM_LOW_EFFECT_KIND_WRITE, 2u, 64u,
+                                 LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  ExpectAmdgpuDsMemoryDescriptor(descriptor_set, IREE_SV("amdgpu.ds_write_b96"),
+                                 LOOM_LOW_EFFECT_KIND_WRITE, 3u, 96u,
+                                 LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  ExpectAmdgpuDsMemoryDescriptor(
+      descriptor_set, IREE_SV("amdgpu.ds_write_b128"),
+      LOOM_LOW_EFFECT_KIND_WRITE, 4u, 128u, LOOM_AMDGPU_ENCODING_FORMAT_DS);
 
   const loom_low_descriptor_t* barrier_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_barrier"));

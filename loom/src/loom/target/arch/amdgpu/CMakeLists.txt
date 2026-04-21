@@ -62,6 +62,18 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    descriptor_test_util
+  HDRS
+    "descriptor_test_util.h"
+  DEPS
+    loom::src::loom::codegen::low::descriptors
+    iree::testing::gtest
+  TESTONLY
+  PUBLIC
+)
+
 loom_target_table_cc_library(
   NAME
     gfx11_encoding_tables
@@ -134,6 +146,7 @@ loom_cc_test(
   SRCS
     "gfx11_descriptors_test.cc"
   DEPS
+    ::descriptor_test_util
     ::encoding_defs
     ::gfx11_descriptors
     loom::src::loom::codegen::low::descriptors
@@ -175,6 +188,7 @@ loom_cc_test(
   SRCS
     "gfx12_descriptors_test.cc"
   DEPS
+    ::descriptor_test_util
     ::encoding_defs
     ::gfx12_descriptors
     loom::src::loom::codegen::low::descriptors
@@ -214,6 +228,7 @@ loom_cc_test(
   SRCS
     "gfx1250_descriptors_test.cc"
   DEPS
+    ::descriptor_test_util
     ::encoding_defs
     ::gfx1250_descriptors
     loom::src::loom::codegen::low::descriptors
@@ -253,6 +268,7 @@ loom_cc_test(
   SRCS
     "gfx950_descriptors_test.cc"
   DEPS
+    ::descriptor_test_util
     ::encoding_defs
     ::gfx950_descriptors
     loom::src::loom::codegen::low::descriptors
