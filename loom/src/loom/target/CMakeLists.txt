@@ -49,6 +49,24 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    artifact_plan
+  HDRS
+    "artifact_plan.h"
+  SRCS
+    "artifact_plan.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::ir
+    loom::src::loom::ops::function_symbol_facts
+    loom::src::loom::ops::target
+    loom::src::loom::util::call_graph
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     ir_records
   HDRS
     "ir_records.h"
@@ -229,6 +247,26 @@ loom_cc_test(
     "records_test.cc"
   DEPS
     ::records
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    artifact_plan_test
+  SRCS
+    "artifact_plan_test.cc"
+  DEPS
+    ::artifact_plan
+    ::preset_registry
+    ::types
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::target
+    loom::src::loom::util::call_graph
     iree::testing::gtest
     iree::testing::gtest_main
 )

@@ -48,6 +48,21 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "artifact_plan",
+    srcs = ["artifact_plan.c"],
+    hdrs = ["artifact_plan.h"],
+    deps = [
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:function_symbol_facts",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/util:call_graph",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "ir_records",
     srcs = ["ir_records.c"],
     hdrs = ["ir_records.h"],
@@ -197,6 +212,25 @@ loom_cc_test(
     srcs = ["records_test.cc"],
     deps = [
         ":records",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "artifact_plan_test",
+    srcs = ["artifact_plan_test.cc"],
+    deps = [
+        ":artifact_plan",
+        ":preset_registry",
+        ":types",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/util:call_graph",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
