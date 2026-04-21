@@ -526,6 +526,44 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   VerifyModule();
 }
 
+TEST_F(AmdgpuHalResourceMaterializationTest,
+       FixesWorkgroupIdYZLiveInsAfterKernargUserSgprs) {
+  BuildModule(
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %kernarg = "
+      "low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE
+      "> : reg<amdgpu.sgpr x2>\n"
+      "  %bid_y = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Y_SOURCE
+      "> : reg<amdgpu.sgpr>\n"
+      "  %bid_z = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Z_SOURCE
+      "> : reg<amdgpu.sgpr>\n"
+      "  low.return\n"
+      "}\n",
+      "");
+
+  loom_op_t* function_op = FindFirstLowFunction();
+  ASSERT_NE(function_op, nullptr);
+  loom_target_ir_bundle_storage_t bundle_storage = {};
+  BuildBundle(&bundle_storage);
+  const loom_low_descriptor_set_t* descriptor_set =
+      SelectDescriptorSet(&bundle_storage.bundle);
+
+  const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
+  iree_host_size_t fixed_value_count = 0;
+  IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
+      module_, function_op, descriptor_set, &fixed_values, &fixed_value_count,
+      &arena_));
+  ASSERT_EQ(fixed_value_count, 3u);
+  EXPECT_EQ(fixed_values[0].location_base, 0u);
+  EXPECT_EQ(fixed_values[0].location_count, 2u);
+  EXPECT_EQ(fixed_values[1].location_base, 3u);
+  EXPECT_EQ(fixed_values[1].location_count, 1u);
+  EXPECT_EQ(fixed_values[2].location_base, 4u);
+  EXPECT_EQ(fixed_values[2].location_count, 1u);
+
+  VerifyModule();
+}
+
 TEST_F(AmdgpuHalResourceMaterializationTest, RejectsUnsupportedResourceShape) {
   BuildModule(
       "low.func.def target(@gfx_target) @loom_kernel() {\n"

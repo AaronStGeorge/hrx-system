@@ -16,6 +16,15 @@ func.def @workitem_coordinates() -> (index, index, index) {
 
 // ====
 
+func.def @workgroup_coordinates() -> (index, index, index) {
+  %x = kernel.workgroup.id<x> : index
+  %y = kernel.workgroup.id<y> : index
+  %z = kernel.workgroup.id<z> : index
+  func.return %x, %y, %z : index, index, index
+}
+
+// ====
+
 func.def @async_copy_global_to_workgroup(%source_buffer: buffer, %byte_offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset

@@ -737,6 +737,40 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemYZToAbiLiveIns) {
   EXPECT_TRUE(saw_workitem_z_live_in);
 }
 
+TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkgroupYZToAbiLiveIns) {
+  loom_low_lower_result_t lower_result = {};
+  LowerSource("amdgpu-gfx11",
+              "func.def @gfx_source() {\n"
+              "  %bid_y0 = kernel.workgroup.id<y> : index\n"
+              "  %bid_z = kernel.workgroup.id<z> : index\n"
+              "  %bid_y1 = kernel.workgroup.id<y> : index\n"
+              "  func.return\n"
+              "}\n",
+              &lower_result);
+  EXPECT_EQ(lower_result.error_count, 0u);
+  ASSERT_NE(lower_result.low_func_op, nullptr);
+
+  bool saw_workgroup_y_live_in = false;
+  bool saw_workgroup_z_live_in = false;
+  uint32_t live_in_count = 0;
+  loom_region_t* low_body = loom_low_func_def_body(lower_result.low_func_op);
+  loom_block_t* entry_block = loom_region_entry_block(low_body);
+  loom_op_t* op = nullptr;
+  loom_block_for_each_op(entry_block, op) {
+    if (!loom_low_live_in_isa(op)) {
+      continue;
+    }
+    ++live_in_count;
+    saw_workgroup_y_live_in |= StringIdEquals(loom_low_live_in_source(op),
+                                              IREE_SV("amdgpu.workgroup_id.y"));
+    saw_workgroup_z_live_in |= StringIdEquals(loom_low_live_in_source(op),
+                                              IREE_SV("amdgpu.workgroup_id.z"));
+  }
+  EXPECT_EQ(live_in_count, 2u);
+  EXPECT_TRUE(saw_workgroup_y_live_in);
+  EXPECT_TRUE(saw_workgroup_z_live_in);
+}
+
 TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideCopyToB128Packets) {
   loom_low_lower_result_t lower_result = {};
   LowerSource("amdgpu-gfx11",

@@ -30,6 +30,7 @@ from loom.dialect.kernel.defs import (
     kernel_ops,
     kernel_tensor_lds_descriptor,
     kernel_tensor_lds_descriptor_type,
+    kernel_workgroup_id,
     kernel_workitem_id,
 )
 
@@ -57,5 +58,6 @@ __all__ = [
     "kernel_barrier",
     "kernel_tensor_lds_descriptor",
     "kernel_tensor_lds_descriptor_type",
+    "kernel_workgroup_id",
     "kernel_workitem_id",
 ]

@@ -31,7 +31,8 @@ enum {
   LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 10),
   LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 11),
   LOOM_OP_KERNEL_WORKITEM_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 12),
-  LOOM_OP_KERNEL_COUNT_ = 13,
+  LOOM_OP_KERNEL_WORKGROUP_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 13),
+  LOOM_OP_KERNEL_COUNT_ = 14,
 };
 
 // Target-independent cache scope for memory operations.
@@ -65,6 +66,14 @@ typedef enum loom_kernel_direction_e {
   LOOM_KERNEL_DIRECTION_COUNT_ = 2,
 } loom_kernel_direction_t;
 
+// Three-dimensional kernel coordinate axis.
+typedef enum loom_kernel_dimension_e {
+  LOOM_KERNEL_DIMENSION_X = 0,
+  LOOM_KERNEL_DIMENSION_Y = 1,
+  LOOM_KERNEL_DIMENSION_Z = 2,
+  LOOM_KERNEL_DIMENSION_COUNT_ = 3,
+} loom_kernel_dimension_t;
+
 // Target-independent memory space fenced by a kernel synchronization op.
 typedef enum loom_kernel_barrier_memory_space_e {
   LOOM_KERNEL_BARRIER_MEMORY_SPACE_UNKNOWN = 0,
@@ -96,14 +105,6 @@ typedef enum loom_kernel_barrier_scope_e {
   LOOM_KERNEL_BARRIER_SCOPE_SYSTEM = 4,
   LOOM_KERNEL_BARRIER_SCOPE_COUNT_ = 5,
 } loom_kernel_barrier_scope_t;
-
-// Three-dimensional kernel coordinate axis.
-typedef enum loom_kernel_workitem_id_dimension_e {
-  LOOM_KERNEL_WORKITEM_ID_DIMENSION_X = 0,
-  LOOM_KERNEL_WORKITEM_ID_DIMENSION_Y = 1,
-  LOOM_KERNEL_WORKITEM_ID_DIMENSION_Z = 2,
-  LOOM_KERNEL_WORKITEM_ID_DIMENSION_COUNT_ = 3,
-} loom_kernel_workitem_id_dimension_t;
 
 // LOOM_OP_KERNEL_BARRIER: Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The supported kernel barrier is a workgroup execution barrier over workgroup memory with acquire-release ordering. Async-copy completion is modeled by kernel.async.wait; use kernel.barrier only when invocations must rendezvous before consuming shared memory.
 // kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
@@ -361,6 +362,18 @@ LOOM_DEFINE_ISA(loom_kernel_workitem_id_isa, LOOM_OP_KERNEL_WORKITEM_ID)
 LOOM_DEFINE_RESULT(loom_kernel_workitem_id_result, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_kernel_workitem_id_dimension, 0)
 iree_status_t loom_kernel_workitem_id_build(
+    loom_builder_t* builder,
+    uint8_t dimension,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_KERNEL_WORKGROUP_ID: Read one coordinate of the current workgroup within the dispatch grid. The result is a logical index value; target lowering decides whether the coordinate is carried in scalar registers, ABI state, or target-specific builtin values.
+// %bid = kernel.workgroup.id<x> : index
+LOOM_DEFINE_ISA(loom_kernel_workgroup_id_isa, LOOM_OP_KERNEL_WORKGROUP_ID)
+LOOM_DEFINE_RESULT(loom_kernel_workgroup_id_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_workgroup_id_dimension, 0)
+iree_status_t loom_kernel_workgroup_id_build(
     loom_builder_t* builder,
     uint8_t dimension,
     loom_type_t result_type,

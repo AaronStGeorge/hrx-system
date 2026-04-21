@@ -31,6 +31,7 @@ from loom.dialect.kernel import (
     kernel_ops,
     kernel_tensor_lds_descriptor,
     kernel_tensor_lds_descriptor_type,
+    kernel_workgroup_id,
     kernel_workitem_id,
 )
 from loom.dsl import ANY, ATTR_TYPE_ENUM, ATTR_TYPE_I64, I1, INDEX, INTEGER, PURE, UNKNOWN_EFFECTS, VECTOR, VIEW, Op
@@ -64,10 +65,12 @@ class TestKernelDialect:
             "kernel.async.cluster.gather",
             "kernel.async.cluster.gather.mask",
             "kernel.workitem.id",
+            "kernel.workgroup.id",
         ]
 
     def test_public_exports_match_registry(self) -> None:
         assert kernel_barrier in ALL_KERNEL_OPS
+        assert kernel_workgroup_id in ALL_KERNEL_OPS
         assert kernel_async_cluster_gather in ALL_KERNEL_OPS
         assert kernel_async_cluster_gather_mask in ALL_KERNEL_OPS
         assert kernel_async_copy in ALL_KERNEL_OPS
@@ -86,6 +89,17 @@ class TestKernelDialect:
 
     def test_workitem_id_shape(self) -> None:
         op = _ops()["kernel.workitem.id"]
+        assert not op.operands
+        assert [result.name for result in op.results] == ["result"]
+        assert op.results[0].type_constraint == INDEX
+        assert [attr.name for attr in op.attrs] == ["dimension"]
+        assert op.attrs[0].attr_type == ATTR_TYPE_ENUM
+        assert op.attrs[0].enum_def is KernelDimension
+        assert PURE in op.traits
+        assert op.is_pure
+
+    def test_workgroup_id_shape(self) -> None:
+        op = _ops()["kernel.workgroup.id"]
         assert not op.operands
         assert [result.name for result in op.results] == ["result"]
         assert op.results[0].type_constraint == INDEX

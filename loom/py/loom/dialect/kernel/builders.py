@@ -201,7 +201,7 @@ class KernelBuilders:
         _operands.append(predicate)
         return cast(ValueRef, self._b.build("kernel.async.cluster.gather.mask", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def id(self, *, dimension: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def workitem_id(self, *, dimension: str, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Read one coordinate of the current invocation within its workgroup. The result is a logical index value, not a byte offset; target lowering decides whether the coordinate is carried in scalar, vector, or dedicated target registers.
 
         Example::
@@ -212,3 +212,15 @@ class KernelBuilders:
         _regions: list[Region] = []
         _attributes["dimension"] = dimension
         return cast(ValueRef, self._b.build("kernel.workitem.id", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def workgroup_id(self, *, dimension: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Read one coordinate of the current workgroup within the dispatch grid. The result is a logical index value; target lowering decides whether the coordinate is carried in scalar registers, ABI state, or target-specific builtin values.
+
+        Example::
+            %bid = kernel.workgroup.id<x> : index
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["dimension"] = dimension
+        return cast(ValueRef, self._b.build("kernel.workgroup.id", _operands, results=results, attributes=_attributes, regions=_regions))

@@ -206,6 +206,42 @@ kernel_workitem_id = Op(
 
 
 # ============================================================================
+# kernel.workgroup.id — current workgroup coordinate within the dispatch grid
+# ============================================================================
+
+kernel_workgroup_id = Op(
+    name="kernel.workgroup.id",
+    group=kernel_ops,
+    doc=(
+        "Read one coordinate of the current workgroup within the dispatch "
+        "grid. The result is a logical index value; target lowering decides "
+        "whether the coordinate is carried in scalar registers, ABI state, or "
+        "target-specific builtin values."
+    ),
+    results=[
+        Result("result", INDEX, doc="Current workgroup coordinate in the selected dimension."),
+    ],
+    attrs=[
+        AttrDef(
+            "dimension",
+            ATTR_TYPE_ENUM,
+            enum_def=KernelDimension,
+            doc="Coordinate axis to read.",
+        ),
+    ],
+    traits=[PURE],
+    format=[
+        TemplateParam("dimension"),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=[
+        "%bid = kernel.workgroup.id<x> : index",
+    ],
+)
+
+
+# ============================================================================
 # kernel.tensor.lds.descriptor — AMDGPU tensor-memory dgroup bundle
 # ============================================================================
 
@@ -795,4 +831,5 @@ ALL_KERNEL_OPS: tuple[Op, ...] = (
     kernel_async_cluster_gather,
     kernel_async_cluster_gather_mask,
     kernel_workitem_id,
+    kernel_workgroup_id,
 )

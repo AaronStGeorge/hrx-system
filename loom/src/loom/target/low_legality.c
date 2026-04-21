@@ -416,6 +416,7 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_INDEX_MUL:
     case LOOM_OP_INDEX_REM:
     case LOOM_OP_INDEX_SUB:
+    case LOOM_OP_KERNEL_WORKGROUP_ID:
     case LOOM_OP_KERNEL_WORKITEM_ID:
     case LOOM_OP_LOW_BR:
     case LOOM_OP_LOW_COND_BR:

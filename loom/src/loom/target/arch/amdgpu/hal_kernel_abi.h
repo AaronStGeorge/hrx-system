@@ -34,6 +34,16 @@ extern "C" {
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE \
   "amdgpu.kernarg_segment_ptr"
 
+// Stable low.live_in source spelling for workgroup_id.x in the first system
+// SGPR after enabled user SGPRs.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_X_SOURCE "amdgpu.workgroup_id.x"
+
+// Stable low.live_in source spelling for workgroup_id.y after workgroup_id.x.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Y_SOURCE "amdgpu.workgroup_id.y"
+
+// Stable low.live_in source spelling for workgroup_id.z after workgroup_id.x/y.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Z_SOURCE "amdgpu.workgroup_id.z"
+
 // Stable low.live_in source spelling for workitem_id.x in v0.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE "amdgpu.workitem_id.x"
 
@@ -95,6 +105,18 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
 bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
 
+// Returns true if |value_id| is defined by the workgroup_id.x live-in.
+bool loom_amdgpu_hal_kernel_abi_is_workgroup_id_x_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
+// Returns true if |value_id| is defined by the workgroup_id.y live-in.
+bool loom_amdgpu_hal_kernel_abi_is_workgroup_id_y_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
+// Returns true if |value_id| is defined by the workgroup_id.z live-in.
+bool loom_amdgpu_hal_kernel_abi_is_workgroup_id_z_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
 // Returns true if |value_id| is defined by the workitem_id.x live-in.
 bool loom_amdgpu_hal_kernel_abi_is_workitem_id_x_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
@@ -111,8 +133,9 @@ bool loom_amdgpu_hal_kernel_abi_is_workitem_id_z_live_in(
 // allocation.
 //
 // The returned array is arena-owned. The current ABI fixes the kernarg segment
-// pointer live-in to s[0:1] and workitem_id.x/y/z live-ins to v0/v1/v2 when
-// present.
+// pointer live-in to s[0:1], workgroup_id.x/y/z live-ins to the SGPRs
+// immediately following enabled user SGPRs, and workitem_id.x/y/z live-ins to
+// v0/v1/v2 when present.
 iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
     const loom_module_t* module, const loom_op_t* function_op,
     const loom_low_descriptor_set_t* descriptor_set,

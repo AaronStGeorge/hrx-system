@@ -37,11 +37,23 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder, "  .amdhsa_user_sgpr_kernarg_segment_ptr %u\n",
       record->abi_layout.uses_kernarg_segment_ptr ? 1u : 0u));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder,
-      "  .amdhsa_system_sgpr_workgroup_id_x 0\n"
-      "  .amdhsa_system_sgpr_workgroup_id_y 0\n"
-      "  .amdhsa_system_sgpr_workgroup_id_z 0\n"));
+      "  .amdhsa_system_sgpr_workgroup_id_x %u\n"
+      "  .amdhsa_system_sgpr_workgroup_id_y %u\n"
+      "  .amdhsa_system_sgpr_workgroup_id_z %u\n",
+      iree_any_bit_set(record->descriptor_flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X)
+          ? 1u
+          : 0u,
+      iree_any_bit_set(record->descriptor_flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Y)
+          ? 1u
+          : 0u,
+      iree_any_bit_set(record->descriptor_flags,
+                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Z)
+          ? 1u
+          : 0u));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder, "  .amdhsa_system_vgpr_workitem_id %" PRIu32 "\n",
       record->system_vgpr_workitem_id));

@@ -36,6 +36,17 @@ typedef struct loom_amdgpu_kernel_record_workitem_id_t {
   iree_string_view_t label;
 } loom_amdgpu_kernel_record_workitem_id_t;
 
+typedef struct loom_amdgpu_kernel_record_workgroup_id_t {
+  // Predicate identifying the ABI live-in value.
+  bool (*is_live_in)(const loom_module_t* module, loom_value_id_t value_id);
+  // SGPR offset from the first enabled system SGPR.
+  uint32_t expected_location_offset;
+  // Kernel descriptor flag that requests this initialized system SGPR.
+  loom_amdgpu_kernel_descriptor_flags_t descriptor_flag;
+  // Diagnostic label for this workgroup-id dimension.
+  iree_string_view_t label;
+} loom_amdgpu_kernel_record_workgroup_id_t;
+
 static bool loom_amdgpu_kernel_record_symbol_ref_equal(loom_symbol_ref_t lhs,
                                                        loom_symbol_ref_t rhs) {
   return lhs.module_id == rhs.module_id && lhs.symbol_id == rhs.symbol_id;
@@ -374,10 +385,33 @@ static iree_status_t loom_amdgpu_kernel_record_validate_kernarg_live_in(
 }
 
 static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
-    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_sidecar_t* allocation, uint32_t system_sgpr_base,
     loom_amdgpu_kernel_descriptor_flags_t* out_flags) {
   IREE_ASSERT_ARGUMENT(out_flags);
   *out_flags = 0;
+  static const loom_amdgpu_kernel_record_workgroup_id_t workgroup_ids[] = {
+      {
+          .is_live_in = loom_amdgpu_hal_kernel_abi_is_workgroup_id_x_live_in,
+          .expected_location_offset = 0,
+          .descriptor_flag =
+              LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X,
+          .label = IREE_SVL("workgroup_id.x"),
+      },
+      {
+          .is_live_in = loom_amdgpu_hal_kernel_abi_is_workgroup_id_y_live_in,
+          .expected_location_offset = 1,
+          .descriptor_flag =
+              LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Y,
+          .label = IREE_SVL("workgroup_id.y"),
+      },
+      {
+          .is_live_in = loom_amdgpu_hal_kernel_abi_is_workgroup_id_z_live_in,
+          .expected_location_offset = 2,
+          .descriptor_flag =
+              LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Z,
+          .label = IREE_SVL("workgroup_id.z"),
+      },
+  };
   static const loom_amdgpu_kernel_record_workitem_id_t workitem_ids[] = {
       {
           .is_live_in = loom_amdgpu_hal_kernel_abi_is_workitem_id_x_live_in,
@@ -401,6 +435,7 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
           .label = IREE_SVL("workitem_id.z"),
       },
   };
+  bool found_workgroup_ids[IREE_ARRAYSIZE(workgroup_ids)] = {0};
   bool found_workitem_ids[IREE_ARRAYSIZE(workitem_ids)] = {0};
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
@@ -409,6 +444,31 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
         assignment->location_kind !=
             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
       continue;
+    }
+    for (iree_host_size_t j = 0; j < IREE_ARRAYSIZE(workgroup_ids); ++j) {
+      if (!workgroup_ids[j].is_live_in(allocation->module,
+                                       assignment->value_id)) {
+        continue;
+      }
+      if (found_workgroup_ids[j]) {
+        return iree_make_status(
+            IREE_STATUS_ALREADY_EXISTS,
+            "AMDGPU kernel emission found duplicate %.*s live-ins",
+            (int)workgroup_ids[j].label.size, workgroup_ids[j].label.data);
+      }
+      found_workgroup_ids[j] = true;
+      const uint32_t expected_location_base =
+          system_sgpr_base + workgroup_ids[j].expected_location_offset;
+      if (assignment->location_base != expected_location_base ||
+          assignment->location_count != 1) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "AMDGPU kernel emission requires the %.*s live-in to be fixed to "
+            "s%" PRIu32,
+            (int)workgroup_ids[j].label.size, workgroup_ids[j].label.data,
+            expected_location_base);
+      }
+      *out_flags |= workgroup_ids[j].descriptor_flag;
     }
     for (iree_host_size_t j = 0; j < IREE_ARRAYSIZE(workitem_ids); ++j) {
       if (!workitem_ids[j].is_live_in(allocation->module,
@@ -433,6 +493,16 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
       }
       *out_flags |= workitem_ids[j].descriptor_flag;
     }
+  }
+  if (iree_any_bit_set(
+          *out_flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Z)) {
+    *out_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X |
+                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Y;
+  } else if (iree_any_bit_set(
+                 *out_flags,
+                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_Y)) {
+    *out_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X;
   }
   if (iree_any_bit_set(
           *out_flags,
@@ -527,18 +597,18 @@ iree_status_t loom_amdgpu_kernel_record_build(
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_kernarg_live_in(
       allocation, abi_layout));
 
+  const uint32_t user_sgpr_count =
+      abi_layout->uses_kernarg_segment_ptr
+          ? LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT
+          : 0;
   loom_amdgpu_kernel_descriptor_flags_t descriptor_flags = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_descriptor_flags(
-      allocation, &descriptor_flags));
+      allocation, user_sgpr_count, &descriptor_flags));
   uint32_t system_vgpr_workitem_id = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(
           descriptor_flags, &system_vgpr_workitem_id));
 
-  const uint32_t user_sgpr_count =
-      abi_layout->uses_kernarg_segment_ptr
-          ? LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT
-          : 0;
   const uint32_t next_free_sgpr =
       register_usage.next_free_sgpr > user_sgpr_count
           ? register_usage.next_free_sgpr
