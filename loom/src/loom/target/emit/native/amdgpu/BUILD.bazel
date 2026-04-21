@@ -478,6 +478,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:schedule",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amdgpu:encoding",
         "//loom/src/loom/target/arch/amdgpu:wait_packets",
         "//loom/src/loom/target/emit/native:assembly",
         "//runtime/src/iree/base",
