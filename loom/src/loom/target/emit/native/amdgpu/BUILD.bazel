@@ -532,10 +532,23 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "slot_layout",
+    srcs = ["slot_layout.c"],
+    hdrs = ["slot_layout.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "encoding",
     srcs = ["encoding.c"],
     hdrs = ["encoding.h"],
     deps = [
+        ":slot_layout",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:move_sequence",
         "//loom/src/loom/codegen/low:packet",
@@ -558,6 +571,7 @@ loom_cc_library(
     deps = [
         ":descriptor",
         ":metadata",
+        ":slot_layout",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/codegen/low:schedule",

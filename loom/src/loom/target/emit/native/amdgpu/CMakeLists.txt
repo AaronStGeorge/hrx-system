@@ -92,12 +92,28 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    slot_layout
+  HDRS
+    "slot_layout.h"
+  SRCS
+    "slot_layout.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     encoding
   HDRS
     "encoding.h"
   SRCS
     "encoding.c"
   DEPS
+    ::slot_layout
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
@@ -123,6 +139,7 @@ loom_cc_library(
   DEPS
     ::descriptor
     ::metadata
+    ::slot_layout
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
