@@ -31,6 +31,9 @@ typedef struct loom_test_record_symbol_facts_t {
   // Optional lane count, or -1 when absent.
   int64_t lanes;
 
+  // Lane bias supplied by the optional injected test resource.
+  int64_t lane_bias;
+
   // Optional dependency symbol, or loom_symbol_ref_null() when absent.
   loom_symbol_ref_t dependency_symbol;
 
@@ -38,8 +41,22 @@ typedef struct loom_test_record_symbol_facts_t {
   const loom_symbol_facts_base_t* dependency_facts;
 } loom_test_record_symbol_facts_t;
 
+// Test resource consumed by test.record symbol fact computation.
+typedef struct loom_test_record_symbol_fact_resource_t {
+  // Lane bias added when a record requests resource-derived facts.
+  int64_t lane_bias;
+} loom_test_record_symbol_fact_resource_t;
+
 // Fact domain attached to test.record generated symbol metadata.
 extern const loom_symbol_fact_domain_t loom_test_record_symbol_fact_domain;
+
+// Pointer key for loom_test_record_symbol_fact_resource_t resources.
+extern const uint8_t loom_test_record_symbol_fact_resource_key;
+
+// Looks up the injected test.record resource through a symbol fact context.
+iree_status_t loom_test_record_symbol_fact_context_lookup_resource(
+    loom_symbol_fact_context_t* context,
+    const loom_test_record_symbol_fact_resource_t** out_resource);
 
 // Casts generic symbol facts to test.record facts, returning NULL on mismatch.
 const loom_test_record_symbol_facts_t* loom_test_record_symbol_facts_cast(

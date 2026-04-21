@@ -70,6 +70,22 @@ static iree_status_t loom_test_record_symbol_fact_compute(
     }
     facts->lanes = loom_attr_as_i64(*attr);
   }
+  if (loom_test_record_dict_lookup(module, dict, IREE_SV("use_resource"),
+                                   &attr)) {
+    if (attr->kind != LOOM_ATTR_BOOL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "test.record use_resource fact must be a bool");
+    }
+    if (loom_attr_as_bool(*attr)) {
+      const loom_test_record_symbol_fact_resource_t* resource = NULL;
+      IREE_RETURN_IF_ERROR(loom_test_record_symbol_fact_context_lookup_resource(
+          context, &resource));
+      facts->lane_bias = resource->lane_bias;
+      if (facts->lanes >= 0) {
+        facts->lanes += resource->lane_bias;
+      }
+    }
+  }
   if (loom_test_record_dict_lookup(module, dict, IREE_SV("depends"), &attr)) {
     if (attr->kind != LOOM_ATTR_SYMBOL) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -87,6 +103,20 @@ static iree_status_t loom_test_record_symbol_fact_compute(
 const loom_symbol_fact_domain_t loom_test_record_symbol_fact_domain = {
     .compute = loom_test_record_symbol_fact_compute,
 };
+
+const uint8_t loom_test_record_symbol_fact_resource_key = 0;
+
+iree_status_t loom_test_record_symbol_fact_context_lookup_resource(
+    loom_symbol_fact_context_t* context,
+    const loom_test_record_symbol_fact_resource_t** out_resource) {
+  IREE_ASSERT_ARGUMENT(out_resource);
+  *out_resource = NULL;
+  const void* resource = NULL;
+  IREE_RETURN_IF_ERROR(loom_symbol_fact_context_lookup_resource(
+      context, &loom_test_record_symbol_fact_resource_key, &resource));
+  *out_resource = (const loom_test_record_symbol_fact_resource_t*)resource;
+  return iree_ok_status();
+}
 
 const loom_test_record_symbol_facts_t* loom_test_record_symbol_facts_cast(
     const loom_symbol_facts_base_t* facts) {

@@ -214,5 +214,43 @@ test.record @second {lanes = 2}
   EXPECT_EQ(second_facts->lanes, 2);
 }
 
+TEST_F(SymbolFactsTest, DomainsCanUseInjectedResources) {
+  const loom_test_record_symbol_fact_resource_t resource = {
+      .lane_bias = 8,
+  };
+  const loom_symbol_fact_resource_t resources[] = {{
+      .key = &loom_test_record_symbol_fact_resource_key,
+      .value = &resource,
+  }};
+  const loom_symbol_fact_table_options_t options = {
+      .resources = loom_make_symbol_fact_resource_list(
+          resources, IREE_ARRAYSIZE(resources)),
+  };
+  loom_symbol_fact_table_initialize_with_options(&fact_table_, &options,
+                                                 &analysis_arena_);
+
+  ModulePtr module = ParseModule(R"(
+test.record @target {lanes = 64, use_resource = true}
+)");
+  const loom_test_record_symbol_facts_t* facts =
+      LookupRecord(module.get(), IREE_SV("target"));
+  EXPECT_EQ(facts->lane_bias, 8);
+  EXPECT_EQ(facts->lanes, 72);
+}
+
+TEST_F(SymbolFactsTest, MissingInjectedResourceFailsLoudly) {
+  ModulePtr module = ParseModule(R"(
+test.record @target {lanes = 64, use_resource = true}
+)");
+
+  const loom_symbol_facts_base_t* facts = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_NOT_FOUND,
+      loom_symbol_fact_table_lookup(&fact_table_, module.get(),
+                                    FindSymbol(module.get(), IREE_SV("target")),
+                                    &facts));
+  EXPECT_EQ(facts, nullptr);
+}
+
 }  // namespace
 }  // namespace loom

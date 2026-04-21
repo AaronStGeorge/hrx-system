@@ -24,7 +24,12 @@ extern "C" {
 
 typedef struct loom_symbol_fact_context_t loom_symbol_fact_context_t;
 typedef struct loom_symbol_fact_domain_t loom_symbol_fact_domain_t;
+typedef struct loom_symbol_fact_resource_list_t
+    loom_symbol_fact_resource_list_t;
+typedef struct loom_symbol_fact_resource_t loom_symbol_fact_resource_t;
 typedef struct loom_symbol_fact_table_t loom_symbol_fact_table_t;
+typedef struct loom_symbol_fact_table_options_t
+    loom_symbol_fact_table_options_t;
 typedef struct loom_symbol_facts_base_t loom_symbol_facts_base_t;
 
 // Generic symbol fact flags shared by all domains.
@@ -58,6 +63,51 @@ typedef struct loom_symbol_fact_domain_t {
   loom_symbol_fact_compute_fn_t compute;
 } loom_symbol_fact_domain_t;
 
+// Injected resource available to symbol fact domains during computation.
+typedef struct loom_symbol_fact_resource_t {
+  // Process-local pointer key owned by the resource provider.
+  const void* key;
+
+  // Borrowed typed resource payload owned by the provider.
+  const void* value;
+} loom_symbol_fact_resource_t;
+
+// Borrowed list of injected symbol fact resources.
+typedef struct loom_symbol_fact_resource_list_t {
+  // Borrowed resource entries.
+  const loom_symbol_fact_resource_t* values;
+
+  // Number of resource entries in values.
+  iree_host_size_t count;
+} loom_symbol_fact_resource_list_t;
+
+static inline loom_symbol_fact_resource_list_t
+loom_symbol_fact_resource_list_empty(void) {
+  loom_symbol_fact_resource_list_t list = {0};
+  return list;
+}
+
+static inline loom_symbol_fact_resource_list_t
+loom_make_symbol_fact_resource_list(const loom_symbol_fact_resource_t* values,
+                                    iree_host_size_t count) {
+  loom_symbol_fact_resource_list_t list = {
+      .values = count > 0 ? values : NULL,
+      .count = count,
+  };
+  return list;
+}
+
+static inline bool loom_symbol_fact_resource_list_is_empty(
+    loom_symbol_fact_resource_list_t list) {
+  return list.count == 0;
+}
+
+// Configuration for a symbol fact table.
+typedef struct loom_symbol_fact_table_options_t {
+  // Borrowed resources visible to fact domains during computation.
+  loom_symbol_fact_resource_list_t resources;
+} loom_symbol_fact_table_options_t;
+
 // Dense per-module symbol-fact table.
 //
 // A zero-initialized table is valid. Call initialize to attach an arena before
@@ -66,6 +116,9 @@ typedef struct loom_symbol_fact_domain_t {
 typedef struct loom_symbol_fact_table_t {
   // Module whose symbols are cached in this table, or NULL before first lookup.
   const loom_module_t* module;
+
+  // Borrowed resources visible to fact domains during computation.
+  loom_symbol_fact_resource_list_t resources;
 
   // Arena used for table storage and domain-owned fact payloads.
   iree_arena_allocator_t* arena;
@@ -88,6 +141,12 @@ typedef struct loom_symbol_fact_table_t {
 void loom_symbol_fact_table_initialize(loom_symbol_fact_table_t* table,
                                        iree_arena_allocator_t* arena);
 
+// Initializes |table| with explicit options.
+void loom_symbol_fact_table_initialize_with_options(
+    loom_symbol_fact_table_t* table,
+    const loom_symbol_fact_table_options_t* options,
+    iree_arena_allocator_t* arena);
+
 // Clears cached facts while preserving allocated table capacity.
 void loom_symbol_fact_table_reset(loom_symbol_fact_table_t* table);
 
@@ -106,6 +165,11 @@ iree_status_t loom_symbol_fact_table_lookup_ref(
 iree_status_t loom_symbol_fact_context_allocate(
     loom_symbol_fact_context_t* context, iree_host_size_t byte_length,
     void** out_ptr);
+
+// Looks up an injected resource by provider-owned pointer key.
+iree_status_t loom_symbol_fact_context_lookup_resource(
+    loom_symbol_fact_context_t* context, const void* key,
+    const void** out_value);
 
 // Recursively looks up another symbol's facts while computing a domain payload.
 iree_status_t loom_symbol_fact_context_lookup(

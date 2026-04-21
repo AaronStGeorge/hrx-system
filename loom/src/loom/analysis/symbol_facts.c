@@ -27,9 +27,18 @@ struct loom_symbol_fact_context_t {
 
 void loom_symbol_fact_table_initialize(loom_symbol_fact_table_t* table,
                                        iree_arena_allocator_t* arena) {
+  loom_symbol_fact_table_initialize_with_options(table, NULL, arena);
+}
+
+void loom_symbol_fact_table_initialize_with_options(
+    loom_symbol_fact_table_t* table,
+    const loom_symbol_fact_table_options_t* options,
+    iree_arena_allocator_t* arena) {
   IREE_ASSERT_ARGUMENT(table);
   IREE_ASSERT_ARGUMENT(arena);
   memset(table, 0, sizeof(*table));
+  table->resources =
+      options ? options->resources : loom_symbol_fact_resource_list_empty();
   table->arena = arena;
 }
 
@@ -187,6 +196,32 @@ iree_status_t loom_symbol_fact_context_allocate(
   IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_ARGUMENT(out_ptr);
   return iree_arena_allocate(context->table->arena, byte_length, out_ptr);
+}
+
+iree_status_t loom_symbol_fact_context_lookup_resource(
+    loom_symbol_fact_context_t* context, const void* key,
+    const void** out_value) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(key);
+  IREE_ASSERT_ARGUMENT(out_value);
+  *out_value = NULL;
+
+  loom_symbol_fact_resource_list_t resources = context->table->resources;
+  if (resources.count > 0 && !resources.values) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "symbol fact resource list has null values");
+  }
+  for (iree_host_size_t i = 0; i < resources.count; ++i) {
+    if (resources.values[i].key != key) continue;
+    if (!resources.values[i].value) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "symbol fact resource has null value");
+    }
+    *out_value = resources.values[i].value;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_NOT_FOUND,
+                          "symbol fact resource is not available");
 }
 
 iree_status_t loom_symbol_fact_context_lookup(
