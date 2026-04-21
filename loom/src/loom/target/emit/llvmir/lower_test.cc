@@ -99,8 +99,10 @@ class LlvmIrLowerTest : public ::testing::Test {
     loom_op_t* func_op = NULL;
     IREE_ASSERT_OK(loom_func_def_build(
         &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
-        LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, symbol, arg_types, 2, result_types,
-        1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+        LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, loom_symbol_ref_null(), 0,
+        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+        loom_named_attr_slice_empty(), symbol, arg_types, 2, result_types, 1,
+        NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
 
     loom_func_like_t func = loom_func_like_cast(module_, func_op);
     uint16_t arg_count = 0;
@@ -129,10 +131,12 @@ class LlvmIrLowerTest : public ::testing::Test {
     loom_type_t arg_types[3] = {input_type, input_type, result_type};
     loom_symbol_ref_t symbol = MakeSymbol(IREE_SV("dot4_s8s8"));
     loom_op_t* func_op = NULL;
-    IREE_ASSERT_OK(loom_func_def_build(&module_builder_, 0, 0, 0, 0, symbol,
-                                       arg_types, IREE_ARRAYSIZE(arg_types),
-                                       &result_type, 1, NULL, 0, NULL, 0,
-                                       LOOM_LOCATION_UNKNOWN, &func_op));
+    IREE_ASSERT_OK(loom_func_def_build(
+        &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+        loom_named_attr_slice_empty(), symbol, arg_types,
+        IREE_ARRAYSIZE(arg_types), &result_type, 1, NULL, 0, NULL, 0,
+        LOOM_LOCATION_UNKNOWN, &func_op));
 
     loom_func_like_t func = loom_func_like_cast(module_, func_op);
     uint16_t arg_count = 0;

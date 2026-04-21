@@ -98,8 +98,10 @@ class CallGraphTest : public ::testing::Test {
     loom_symbol_ref_t callee = add_symbol(name);
     loom_op_t* func_op = NULL;
     IREE_CHECK_OK(loom_low_func_def_build(
-        &module_builder_, 0, 0, 0, 0, 0, 0, target_ref_, callee, NULL, 0, NULL,
-        0, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+        &module_builder_, 0, 0, 0, 0, 0, 0, target_ref_, 0,
+        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+        loom_named_attr_slice_empty(), callee, NULL, 0, NULL, 0, NULL, 0, NULL,
+        0, LOOM_LOCATION_UNKNOWN, &func_op));
     loom_func_like_t func_like = loom_func_like_cast(module_, func_op);
     loom_region_t* body = loom_func_like_body(func_like);
     return {(uint16_t)callee.symbol_id, func_op, body};

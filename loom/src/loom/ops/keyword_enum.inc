@@ -40,3 +40,5 @@
   LOOM_KW_SCHEDULE = 31,  // "schedule"
   LOOM_KW_SOURCE = 32,  // "source"
   LOOM_KW_PRESET = 33,  // "preset"
+  LOOM_KW_ABI = 34,  // "abi"
+  LOOM_KW_EXPORT = 35,  // "export"

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/ops/func_like_facts.h"
+#include "loom/ops/function_symbol_facts.h"
 
 #include <memory>
 
@@ -89,7 +89,7 @@ static const loom_target_preset_registry_t kPresetRegistry = {
     .target_bundle_count = IREE_ARRAYSIZE(kPresetBundles),
 };
 
-class FuncLikeFactsTest : public ::testing::Test {
+class FunctionSymbolFactsTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
@@ -116,7 +116,7 @@ class FuncLikeFactsTest : public ::testing::Test {
     loom_module_t* module = nullptr;
     loom_text_parse_options_t options = {};
     IREE_CHECK_OK(loom_text_parse(iree_make_cstring_view(source),
-                                  IREE_SV("func_like_facts_test.loom"),
+                                  IREE_SV("function_symbol_facts_test.loom"),
                                   &context_, &block_pool_, &options, &module));
     return ModulePtr(module);
   }
@@ -130,13 +130,13 @@ class FuncLikeFactsTest : public ::testing::Test {
     return symbol_id;
   }
 
-  const loom_func_like_symbol_facts_t* LookupFuncLike(
+  const loom_function_symbol_facts_t* LookupFunction(
       const loom_module_t* module, iree_string_view_t name) {
     const loom_symbol_facts_base_t* base_facts = nullptr;
     IREE_CHECK_OK(loom_symbol_fact_table_lookup(
         &fact_table_, module, FindSymbol(module, name), &base_facts));
-    const loom_func_like_symbol_facts_t* facts =
-        loom_func_like_symbol_facts_cast(base_facts);
+    const loom_function_symbol_facts_t* facts =
+        loom_function_symbol_facts_cast(base_facts);
     IREE_ASSERT(facts != nullptr);
     return facts;
   }
@@ -157,16 +157,16 @@ class FuncLikeFactsTest : public ::testing::Test {
   loom_symbol_fact_resource_t resources_[1];
 };
 
-TEST_F(FuncLikeFactsTest, SourceFunctionFactsRemainTargetIndependent) {
+TEST_F(FunctionSymbolFactsTest, SourceFunctionFactsRemainTargetIndependent) {
   ModulePtr module = ParseModule(R"(
 func.def public device @semantic() {
   func.return
 }
 )");
 
-  const loom_func_like_symbol_facts_t* facts =
-      LookupFuncLike(module.get(), IREE_SV("semantic"));
-  EXPECT_EQ(facts->base.domain, &loom_func_like_symbol_fact_domain);
+  const loom_function_symbol_facts_t* facts =
+      LookupFunction(module.get(), IREE_SV("semantic"));
+  EXPECT_EQ(facts->base.domain, &loom_function_symbol_fact_domain);
   EXPECT_EQ(facts->base.symbol_kind, LOOM_SYMBOL_FUNC_DEF);
   EXPECT_TRUE(facts->has_body);
   EXPECT_EQ(facts->visibility, 1);
@@ -179,7 +179,7 @@ func.def public device @semantic() {
   EXPECT_EQ(facts->target_bundle, nullptr);
 }
 
-TEST_F(FuncLikeFactsTest, LowFunctionResolvesTargetProfile) {
+TEST_F(FunctionSymbolFactsTest, LowFunctionResolvesTargetProfile) {
   ModulePtr module = ParseModule(R"(
 target.profile @wasm preset("test.profile")
 
@@ -188,8 +188,8 @@ low.func.def target(@wasm) @kernel() {
 }
 )");
 
-  const loom_func_like_symbol_facts_t* facts =
-      LookupFuncLike(module.get(), IREE_SV("kernel"));
+  const loom_function_symbol_facts_t* facts =
+      LookupFunction(module.get(), IREE_SV("kernel"));
   EXPECT_TRUE(iree_string_view_equal(facts->name, IREE_SV("kernel")));
   EXPECT_TRUE(loom_symbol_ref_is_valid(facts->target_symbol));
   ASSERT_NE(facts->target_profile, nullptr);
@@ -200,7 +200,62 @@ low.func.def target(@wasm) @kernel() {
   EXPECT_TRUE(iree_string_view_is_empty(facts->export_plan.export_symbol));
 }
 
-TEST_F(FuncLikeFactsTest, TargetMustResolveToTargetProfileFacts) {
+TEST_F(FunctionSymbolFactsTest, FunctionOwnedContractOverridesPreset) {
+  ModulePtr module = ParseModule(R"(
+target.profile @wasm preset("test.profile")
+
+low.func.def target(@wasm) abi(hal_kernel, {
+  hal_binding_alignment = 16,
+  hal_workgroup_size_x = 8,
+  hal_workgroup_size_y = 4,
+  hal_workgroup_size_z = 2,
+  hal_flat_workgroup_size_min = 32,
+  hal_flat_workgroup_size_max = 64,
+  hal_buffer_resource_flags = 7
+}) export("dispatch", {linkage = "dso_local", ordinal = 5}) @kernel() {
+  low.return
+}
+)");
+
+  const loom_function_symbol_facts_t* facts =
+      LookupFunction(module.get(), IREE_SV("kernel"));
+  ASSERT_NE(facts->target_profile, nullptr);
+  ASSERT_NE(facts->target_bundle, nullptr);
+  EXPECT_TRUE(facts->exports);
+  EXPECT_EQ(facts->export_plan.abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
+  EXPECT_EQ(facts->export_plan.linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
+  EXPECT_TRUE(
+      iree_string_view_equal(facts->export_plan.name, IREE_SV("kernel")));
+  EXPECT_TRUE(iree_string_view_equal(facts->export_plan.export_symbol,
+                                     IREE_SV("dispatch")));
+  EXPECT_EQ(facts->export_plan.hal_kernel.binding_alignment, 16u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.x, 8u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.y, 4u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.z, 2u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.flat_workgroup_size_min, 32u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.flat_workgroup_size_max, 64u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.buffer_resource_flags, 7u);
+  EXPECT_TRUE(facts->has_export_ordinal);
+  EXPECT_EQ(facts->export_ordinal, 5u);
+}
+
+TEST_F(FunctionSymbolFactsTest, ContractRequiresTargetProfile) {
+  ModulePtr module = ParseModule(R"(
+func.def abi(wasm_function) @semantic() {
+  func.return
+}
+)");
+
+  const loom_symbol_facts_base_t* base_facts = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_symbol_fact_table_lookup(
+          &fact_table_, module.get(),
+          FindSymbol(module.get(), IREE_SV("semantic")), &base_facts));
+  EXPECT_EQ(base_facts, nullptr);
+}
+
+TEST_F(FunctionSymbolFactsTest, TargetMustResolveToTargetProfileFacts) {
   ModulePtr module = ParseModule(R"(
 target.config @not_profile {contract_set_key = "test", contract_feature_bits = 0}
 

@@ -122,6 +122,8 @@ KEYWORD_MAP: dict[str, str] = {
     "schedule": "LOOM_KW_SCHEDULE",
     "source": "LOOM_KW_SOURCE",
     "preset": "LOOM_KW_PRESET",
+    "abi": "LOOM_KW_ABI",
+    "export": "LOOM_KW_EXPORT",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The
@@ -721,6 +723,10 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
         fields=(
             InterfaceFieldSpec("callee", "callee_attr_index", "attr"),
             InterfaceFieldSpec("target", "target_attr_index", "attr"),
+            InterfaceFieldSpec("abi", "abi_attr_index", "attr"),
+            InterfaceFieldSpec("abi_attrs", "abi_attrs_attr_index", "attr"),
+            InterfaceFieldSpec("export_symbol", "export_symbol_attr_index", "attr"),
+            InterfaceFieldSpec("export_attrs", "export_attrs_attr_index", "attr"),
             InterfaceFieldSpec("visibility", "visibility_attr_index", "attr"),
             InterfaceFieldSpec("cc", "cc_attr_index", "attr"),
             InterfaceFieldSpec("purity", "purity_attr_index", "attr"),
@@ -1618,12 +1624,14 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                     append_attr_param(name)
 
                 case SymbolRef(field=name):
+                    attr_def = op.attr(name)
                     params.append(
                         {
                             "name": name,
                             "kind": "symbol",
                             "c_type": "loom_symbol_ref_t",
                             "attr_index": _resolve_attr_index(op, name, "builder"),
+                            "optional": (attr_def.optional if attr_def else False),
                         }
                     )
                     covered_attrs.add(name)
@@ -1820,6 +1828,8 @@ def _optional_param_uses_build_flag(param: dict[str, object]) -> bool:
     """Returns true if an optional builder param needs an explicit presence bit."""
     if not param.get("optional"):
         return False
+    if param["kind"] == "symbol":
+        return True
     if param["kind"] != "attr":
         return False
     return param.get("attr_type") in _BUILD_FLAG_OPTIONAL_ATTR_TYPES
@@ -1882,7 +1892,7 @@ def _build_c_param_list(params: list[dict[str, object]], layout: FieldLayout, pr
             case "descriptor_ref":
                 c_params.append(f"{param['c_type']} {param['name']}")
             case "symbol":
-                c_params.append(f"loom_symbol_ref_t {param['name']}")
+                c_params.append(f"{opt}loom_symbol_ref_t {param['name']}")
             case "index_list":
                 c_params.append(f"const loom_value_id_t* {param['dynamic_field']}")
                 c_params.append(f"iree_host_size_t {param['dynamic_field']}_count")
@@ -2257,7 +2267,13 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
             lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array((int64_t*){static_field}, (uint16_t){static_field}_count);")
         elif param["kind"] == "symbol":
             idx = param["attr_index"]
-            lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_symbol({param['name']});")
+            optional_flag = _build_flag_bit_name(prefix, param) if _optional_param_uses_build_flag(param) else ""
+            if optional_flag:
+                lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
+                lines.append(f"    loom_op_attrs(*out_op)[{idx}] = loom_attr_symbol({param['name']});")
+                lines.append("  }")
+            else:
+                lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_symbol({param['name']});")
         elif param["kind"] == "attr":
             idx = param["attr_index"]
             attr_type = param["attr_type"]

@@ -123,6 +123,11 @@ typedef struct loom_named_attr_slice_t {
   iree_host_size_t count;
 } loom_named_attr_slice_t;
 
+static inline loom_named_attr_slice_t loom_named_attr_slice_empty(void) {
+  loom_named_attr_slice_t slice = {0};
+  return slice;
+}
+
 static inline loom_named_attr_slice_t loom_make_named_attr_slice(
     const loom_named_attr_t* entries, iree_host_size_t count) {
   loom_named_attr_slice_t slice = {

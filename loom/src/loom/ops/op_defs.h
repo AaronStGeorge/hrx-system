@@ -972,6 +972,18 @@ loom_symbol_ref_t loom_func_like_callee(loom_func_like_t func);
 // |func| has no target contract.
 loom_symbol_ref_t loom_func_like_target(loom_func_like_t func);
 
+// Returns the target ABI enum value, or 0 if |func| has no explicit ABI.
+uint8_t loom_func_like_abi(loom_func_like_t func);
+
+// Returns the target ABI payload attrs, or an empty slice if absent.
+loom_named_attr_slice_t loom_func_like_abi_attrs(loom_func_like_t func);
+
+// Returns the export symbol string ID, or LOOM_STRING_ID_INVALID if absent.
+loom_string_id_t loom_func_like_export_symbol(loom_func_like_t func);
+
+// Returns the export payload attrs, or an empty slice if absent.
+loom_named_attr_slice_t loom_func_like_export_attrs(loom_func_like_t func);
+
 // Returns the function argument value IDs and their count. For ops
 // with a body region, args are the entry block's block arguments.
 // For declaration-style ops, args are stored as the op's operands.

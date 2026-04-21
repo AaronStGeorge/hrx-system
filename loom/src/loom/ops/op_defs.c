@@ -542,6 +542,48 @@ loom_symbol_ref_t loom_func_like_target(loom_func_like_t func) {
       loom_op_attrs(func.op)[func.vtable->target_attr_index]);
 }
 
+uint8_t loom_func_like_abi(loom_func_like_t func) {
+  if (!func.vtable || func.vtable->abi_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return 0;
+  }
+  loom_attribute_t attr = loom_op_attrs(func.op)[func.vtable->abi_attr_index];
+  if (loom_attr_is_absent(attr)) {
+    return 0;
+  }
+  return loom_attr_as_enum(attr);
+}
+
+loom_named_attr_slice_t loom_func_like_abi_attrs(loom_func_like_t func) {
+  if (!func.vtable ||
+      func.vtable->abi_attrs_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return loom_named_attr_slice_empty();
+  }
+  return loom_attr_as_dict(
+      loom_op_attrs(func.op)[func.vtable->abi_attrs_attr_index]);
+}
+
+loom_string_id_t loom_func_like_export_symbol(loom_func_like_t func) {
+  if (!func.vtable ||
+      func.vtable->export_symbol_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return LOOM_STRING_ID_INVALID;
+  }
+  loom_attribute_t attr =
+      loom_op_attrs(func.op)[func.vtable->export_symbol_attr_index];
+  if (loom_attr_is_absent(attr)) {
+    return LOOM_STRING_ID_INVALID;
+  }
+  return loom_attr_as_string_id(attr);
+}
+
+loom_named_attr_slice_t loom_func_like_export_attrs(loom_func_like_t func) {
+  if (!func.vtable ||
+      func.vtable->export_attrs_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return loom_named_attr_slice_empty();
+  }
+  return loom_attr_as_dict(
+      loom_op_attrs(func.op)[func.vtable->export_attrs_attr_index]);
+}
+
 const loom_value_id_t* loom_func_like_arg_ids(loom_func_like_t func,
                                               uint16_t* out_count) {
   if (!func.vtable) {

@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -18,13 +18,32 @@ loom_cc_library(
         "builders.c",
         "canonicalize.c",
         "tables.c",
+        "verify.c",
     ],
     hdrs = ["ops.h"],
     deps = [
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops:func_like_facts",
+        "//loom/src/loom/ops:function_contract_verify",
+        "//loom/src/loom/ops:function_symbol_facts",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/rewrite:rewriter",
+    ],
+)
+
+loom_cc_test(
+    name = "verify_test",
+    srcs = ["verify_test.cc"],
+    deps = [
+        ":func",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/testing:context",
+        "//loom/src/loom/testing:diagnostic_matchers",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )

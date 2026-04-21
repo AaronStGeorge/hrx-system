@@ -31,11 +31,11 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    func_like_facts
+    function_symbol_facts
   HDRS
-    "func_like_facts.h"
+    "function_symbol_facts.h"
   SRCS
-    "func_like_facts.c"
+    "function_symbol_facts.c"
   DEPS
     ::op_defs
     iree::base
@@ -46,13 +46,29 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    function_contract_verify
+  HDRS
+    "function_contract_verify.h"
+  SRCS
+    "function_contract_verify.c"
+  DEPS
+    ::op_defs
+    iree::base
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
-    func_like_facts_test
+    function_symbol_facts_test
   SRCS
-    "func_like_facts_test.cc"
+    "function_symbol_facts_test.cc"
   DEPS
-    ::func_like_facts
+    ::function_symbol_facts
     ::op_registry
     iree::base::internal::arena
     loom::src::loom::analysis::symbol_facts

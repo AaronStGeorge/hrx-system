@@ -40,3 +40,5 @@
     [LOOM_KW_SCHEDULE] = (const uint8_t*)"\x08" "schedule",
     [LOOM_KW_SOURCE] = (const uint8_t*)"\x06" "source",
     [LOOM_KW_PRESET] = (const uint8_t*)"\x06" "preset",
+    [LOOM_KW_ABI] = (const uint8_t*)"\x03" "abi",
+    [LOOM_KW_EXPORT] = (const uint8_t*)"\x06" "export",

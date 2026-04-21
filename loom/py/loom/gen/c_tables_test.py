@@ -14,10 +14,12 @@ from loom.assembly import (
     BlockRef,
     Flags,
     OperandDict,
+    OptionalGroup,
     Ref,
     Region,
     ResultType,
     ResultTypeList,
+    SymbolRef,
     TemplateParam,
     TypesOf,
 )
@@ -205,6 +207,26 @@ def test_generate_builders_use_explicit_flags_for_optional_scalar_attrs() -> Non
     assert "loom_test_optional_build_flags_t build_flags" in builders_c
     assert ("iree_any_bit_set(build_flags, LOOM_TEST_OPTIONAL_BUILD_FLAG_HAS_PRIORITY)") in builders_c
     assert "priority != 0" not in builders_c
+
+
+def test_generate_builders_use_explicit_flags_for_optional_symbol_refs() -> None:
+    op = Op(
+        "test.targeted",
+        group=Dialect("test"),
+        attrs=[AttrDef("target", "symbol", optional=True)],
+        format=[OptionalGroup([SymbolRef("target")], anchor="target")],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+    builders_c = generate_builders_c("test", [op])
+
+    assert "enum loom_test_targeted_build_flag_bits_e {" in ops_h
+    assert "LOOM_TEST_TARGETED_BUILD_FLAG_HAS_TARGET = 1u << 0," in ops_h
+    assert "loom_test_targeted_build_flags_t build_flags" in ops_h
+    assert "loom_optional loom_symbol_ref_t target" in ops_h
+    assert "loom_test_targeted_build_flags_t build_flags" in builders_c
+    assert ("iree_any_bit_set(build_flags, LOOM_TEST_TARGETED_BUILD_FLAG_HAS_TARGET)") in builders_c
+    assert "loom_op_attrs(*out_op)[0] = loom_attr_symbol(target);" in builders_c
 
 
 def test_generate_builders_keep_count_guard_for_optional_aggregate_attrs() -> None:

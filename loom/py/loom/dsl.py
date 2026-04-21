@@ -2595,6 +2595,14 @@ class FuncLikeInterface(NamedTuple):
     callee: str
     # Optional symbol ref attr naming the resolved target profile.
     target: str | None = None
+    # Optional ABI enum attr for concrete target-bound functions.
+    abi: str | None = None
+    # Optional ABI payload dictionary attr.
+    abi_attrs: str | None = None
+    # Optional exported symbol string attr.
+    export_symbol: str | None = None
+    # Optional export payload dictionary attr.
+    export_attrs: str | None = None
     # Visibility enum attr (e.g., public). None if not applicable.
     visibility: str | None = None
     # Calling convention enum attr. None if not applicable.

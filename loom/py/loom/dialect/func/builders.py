@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import builtins
+from collections.abc import Mapping
 from typing import Any, cast
 
 from loom.builder import IRBuilder, TiedResultSpec, ValueRef
@@ -25,6 +26,11 @@ class FuncBuilders:
         visibility: str | None = None,
         cc: str | None = None,
         purity: str | None = None,
+        target: str,
+        abi: str | None = None,
+        abi_attrs: Mapping[str, Any] | None = None,
+        export_symbol: str | None = None,
+        export_attrs: Mapping[str, Any] | None = None,
         callee: str,
         args: list[ValueRef] | None = None,
         results: list[Type | TiedResultSpec],
@@ -48,6 +54,15 @@ class FuncBuilders:
             _attributes["cc"] = cc
         if purity is not None:
             _attributes["purity"] = purity
+        _attributes["target"] = target
+        if abi is not None:
+            _attributes["abi"] = abi
+        if abi_attrs is not None:
+            _attributes["abi_attrs"] = abi_attrs
+        if export_symbol is not None:
+            _attributes["export_symbol"] = export_symbol
+        if export_attrs is not None:
+            _attributes["export_attrs"] = export_attrs
         _attributes["callee"] = callee
         if args is not None:
             _func_args.extend(args)
@@ -65,6 +80,11 @@ class FuncBuilders:
         import_symbol: str | None = None,
         cc: str | None = None,
         purity: str | None = None,
+        target: str,
+        abi: str | None = None,
+        abi_attrs: Mapping[str, Any] | None = None,
+        export_symbol: str | None = None,
+        export_attrs: Mapping[str, Any] | None = None,
         callee: str,
         args: list[ValueRef] | None = None,
         results: list[Type | TiedResultSpec],
@@ -89,6 +109,15 @@ class FuncBuilders:
             _attributes["cc"] = cc
         if purity is not None:
             _attributes["purity"] = purity
+        _attributes["target"] = target
+        if abi is not None:
+            _attributes["abi"] = abi
+        if abi_attrs is not None:
+            _attributes["abi_attrs"] = abi_attrs
+        if export_symbol is not None:
+            _attributes["export_symbol"] = export_symbol
+        if export_attrs is not None:
+            _attributes["export_attrs"] = export_attrs
         _attributes["callee"] = callee
         if args is not None:
             _func_args.extend(args)

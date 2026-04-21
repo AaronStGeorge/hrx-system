@@ -697,8 +697,10 @@ iree_status_t loom_test_gen_module(loom_test_gen_t* gen,
     loom_op_t* decl_op = NULL;
     IREE_RETURN_IF_ERROR(loom_func_decl_build(
         &builder, 0, 0, LOOM_STRING_ID_INVALID, LOOM_STRING_ID_INVALID, 0, 0,
-        sig->ref, sig->arg_types, sig->arg_count, sig->result_types,
-        sig->result_count, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &decl_op));
+        loom_symbol_ref_null(), 0, loom_named_attr_slice_empty(),
+        LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), sig->ref,
+        sig->arg_types, sig->arg_count, sig->result_types, sig->result_count,
+        NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &decl_op));
     signature_count++;
   }
 
@@ -721,7 +723,9 @@ iree_status_t loom_test_gen_module(loom_test_gen_t* gen,
 
     loom_op_t* def_op = NULL;
     IREE_RETURN_IF_ERROR(loom_func_def_build(
-        &builder, 0, 0, 0, 0, sig->ref, sig->arg_types, sig->arg_count,
+        &builder, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+        loom_named_attr_slice_empty(), sig->ref, sig->arg_types, sig->arg_count,
         sig->result_types, sig->result_count, NULL, 0, NULL, 0,
         LOOM_LOCATION_UNKNOWN, &def_op));
     signature_count++;

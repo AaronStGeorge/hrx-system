@@ -8,6 +8,7 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/function_contract_verify.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/successor_verify.h"
 #include "loom/ops/target/ops.h"
@@ -1073,6 +1074,7 @@ iree_status_t loom_low_cond_br_verify(const loom_module_t* module,
 iree_status_t loom_low_func_def_verify(const loom_module_t* module,
                                        const loom_op_t* op,
                                        iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_function_contract_verify(module, op, emitter));
   IREE_RETURN_IF_ERROR(
       loom_low_verify_function_exactness_modes(module, op, emitter));
   return loom_low_verify_function_preamble(module, op, emitter);
@@ -1081,6 +1083,7 @@ iree_status_t loom_low_func_def_verify(const loom_module_t* module,
 iree_status_t loom_low_func_decl_verify(const loom_module_t* module,
                                         const loom_op_t* op,
                                         iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_function_contract_verify(module, op, emitter));
   IREE_RETURN_IF_ERROR(
       loom_low_verify_function_exactness_modes(module, op, emitter));
   return loom_low_verify_decl_code_import(module, op, emitter);

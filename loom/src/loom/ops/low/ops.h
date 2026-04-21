@@ -39,6 +39,17 @@ enum {
   LOOM_OP_LOW_COUNT_ = 18,
 };
 
+// Callable or package ABI used by an export plan.
+typedef enum loom_low_abi_e {
+  LOOM_LOW_ABI_UNKNOWN = 0,
+  LOOM_LOW_ABI_OBJECT_FUNCTION = 1,
+  LOOM_LOW_ABI_HAL_KERNEL = 2,
+  LOOM_LOW_ABI_VM_MODULE_FUNCTION = 3,
+  LOOM_LOW_ABI_SHADER_ENTRY_POINT = 4,
+  LOOM_LOW_ABI_WASM_FUNCTION = 5,
+  LOOM_LOW_ABI_COUNT_ = 6,
+} loom_low_abi_t;
+
 // Function visibility. Absent (0) means private (module-internal).
 typedef enum loom_low_visibility_e {
   LOOM_LOW_VISIBILITY_PUBLIC = 1,
@@ -112,11 +123,15 @@ LOOM_DEFINE_ISA(loom_low_func_def_isa, LOOM_OP_LOW_FUNC_DEF)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_func_def_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_def_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_def_target, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_visibility, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_cc, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_purity, 4)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_allocation, 5)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_schedule, 6)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_abi, 2)
+LOOM_DEFINE_ATTR_DICT(loom_low_func_def_abi_attrs, 3)
+LOOM_DEFINE_ATTR_STRING(loom_low_func_def_export_symbol, 4)
+LOOM_DEFINE_ATTR_DICT(loom_low_func_def_export_attrs, 5)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_visibility, 6)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_cc, 7)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_purity, 8)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_allocation, 9)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_schedule, 10)
 LOOM_DEFINE_REGION(loom_low_func_def_body, 0)
 enum loom_low_func_def_build_flag_bits_e {
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
@@ -124,6 +139,8 @@ enum loom_low_func_def_build_flag_bits_e {
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_PURITY = 1u << 2,
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_ALLOCATION = 1u << 3,
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_SCHEDULE = 1u << 4,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_ABI = 1u << 5,
+  LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 6,
 };
 typedef uint32_t loom_low_func_def_build_flags_t;
 iree_status_t loom_low_func_def_build(
@@ -135,6 +152,10 @@ iree_status_t loom_low_func_def_build(
     loom_optional uint8_t allocation,
     loom_optional uint8_t schedule,
     loom_symbol_ref_t target,
+    loom_optional uint8_t abi,
+    loom_optional loom_named_attr_slice_t abi_attrs,
+    loom_optional loom_string_id_t export_symbol,
+    loom_optional loom_named_attr_slice_t export_attrs,
     loom_symbol_ref_t callee,
     const loom_type_t* arg_types,
     iree_host_size_t arg_types_count,
@@ -157,13 +178,17 @@ LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_func_decl_args, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_func_decl_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_decl_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_decl_target, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_visibility, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_cc, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_purity, 4)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_allocation, 5)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_schedule, 6)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_import_kind, 8)
-LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_code_symbol, 9)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_abi, 2)
+LOOM_DEFINE_ATTR_DICT(loom_low_func_decl_abi_attrs, 3)
+LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_export_symbol, 4)
+LOOM_DEFINE_ATTR_DICT(loom_low_func_decl_export_attrs, 5)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_visibility, 6)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_cc, 7)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_purity, 8)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_allocation, 9)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_schedule, 10)
+LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_import_kind, 12)
+LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_code_symbol, 13)
 enum loom_low_func_decl_build_flag_bits_e {
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CC = 1u << 1,
@@ -172,6 +197,8 @@ enum loom_low_func_decl_build_flag_bits_e {
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_SCHEDULE = 1u << 4,
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_KIND = 1u << 5,
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CODE_SYMBOL = 1u << 6,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_ABI = 1u << 7,
+  LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 8,
 };
 typedef uint32_t loom_low_func_decl_build_flags_t;
 iree_status_t loom_low_func_decl_build(
@@ -185,6 +212,10 @@ iree_status_t loom_low_func_decl_build(
     loom_optional uint8_t import_kind,
     loom_optional loom_string_id_t code_symbol,
     loom_symbol_ref_t target,
+    loom_optional uint8_t abi,
+    loom_optional loom_named_attr_slice_t abi_attrs,
+    loom_optional loom_string_id_t export_symbol,
+    loom_optional loom_named_attr_slice_t export_attrs,
     loom_symbol_ref_t callee,
     const loom_type_t* arg_types,
     iree_host_size_t arg_types_count,

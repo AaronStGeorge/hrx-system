@@ -36,9 +36,9 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "func_like_facts",
-    srcs = ["func_like_facts.c"],
-    hdrs = ["func_like_facts.h"],
+    name = "function_symbol_facts",
+    srcs = ["function_symbol_facts.c"],
+    hdrs = ["function_symbol_facts.h"],
     deps = [
         ":op_defs",
         "//loom/src/loom/analysis:symbol_facts",
@@ -49,11 +49,24 @@ loom_cc_library(
     ],
 )
 
-loom_cc_test(
-    name = "func_like_facts_test",
-    srcs = ["func_like_facts_test.cc"],
+loom_cc_library(
+    name = "function_contract_verify",
+    srcs = ["function_contract_verify.c"],
+    hdrs = ["function_contract_verify.h"],
     deps = [
-        ":func_like_facts",
+        ":op_defs",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "function_symbol_facts_test",
+    srcs = ["function_symbol_facts_test.cc"],
+    deps = [
+        ":function_symbol_facts",
         ":op_registry",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/format/text:parser",

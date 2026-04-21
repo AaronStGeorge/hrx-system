@@ -31,6 +31,7 @@ from loom.assembly import (
     LPAREN,
     RPAREN,
     Attr,
+    AttrDict,
     FormatElement,
     FuncArgs,
     OpRef,
@@ -44,6 +45,7 @@ from loom.assembly import (
     TypesOf,
     kw,
 )
+from loom.dialect.target.defs import ExportAbiKind
 from loom.dsl import (
     ANY,
     ISOLATED_FROM_ABOVE,
@@ -116,6 +118,43 @@ _MODIFIER_FORMAT: list[FormatElement] = [
     OptionalGroup([Attr("purity")], anchor="purity"),
 ]
 
+_TARGET_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [kw("target"), GLUE, LPAREN, SymbolRef("target"), GLUE, RPAREN],
+        anchor="target",
+    ),
+]
+
+_ABI_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [
+            kw("abi"),
+            GLUE,
+            LPAREN,
+            Attr("abi"),
+            OptionalGroup([COMMA, AttrDict("abi_attrs")], anchor="abi_attrs"),
+            GLUE,
+            RPAREN,
+        ],
+        anchor="abi",
+    ),
+]
+
+_EXPORT_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [
+            kw("export"),
+            GLUE,
+            LPAREN,
+            Attr("export_symbol"),
+            OptionalGroup([COMMA, AttrDict("export_attrs")], anchor="export_attrs"),
+            GLUE,
+            RPAREN,
+        ],
+        anchor="export_symbol",
+    ),
+]
+
 # Additional import modifier for func.decl only:
 #   func.decl import("module") @name(...)
 #   func.decl public import("module", "original") @alias(...)
@@ -162,6 +201,25 @@ _MODIFIER_ATTRS = [
     AttrDef("predicates", "predicate_list", optional=True),
 ]
 
+_CONTRACT_ATTRS = [
+    AttrDef(
+        "target",
+        "symbol",
+        optional=True,
+        symbol_ref=SymbolReference("target profile", ["record"]),
+    ),
+    AttrDef(
+        "abi",
+        "enum",
+        enum_def=ExportAbiKind,
+        optional=True,
+        open_enum=True,
+    ),
+    AttrDef("abi_attrs", "dict", optional=True),
+    AttrDef("export_symbol", "string", optional=True),
+    AttrDef("export_attrs", "dict", optional=True),
+]
+
 # func.decl adds import attrs to the shared modifier set.
 _DECL_ATTRS = [
     AttrDef("callee", "symbol"),
@@ -170,6 +228,7 @@ _DECL_ATTRS = [
     AttrDef("import_symbol", "string", optional=True),
     AttrDef("cc", "enum", enum_def=CallingConv, optional=True),
     AttrDef("purity", "enum", enum_def=Purity, optional=True),
+    *_CONTRACT_ATTRS,
     AttrDef("predicates", "predicate_list", optional=True),
 ]
 
@@ -186,6 +245,15 @@ _FUNC_LIKE_COMMON: dict[str, Any] = dict(
     predicates="predicates",
 )
 
+_FUNC_LIKE_CONTRACT: dict[str, Any] = dict(
+    **_FUNC_LIKE_COMMON,
+    target="target",
+    abi="abi",
+    abi_attrs="abi_attrs",
+    export_symbol="export_symbol",
+    export_attrs="export_attrs",
+)
+
 # ============================================================================
 # func.def — function definition
 # ============================================================================
@@ -195,19 +263,23 @@ func_def = Op(
     group=func_ops,
     doc="Function definition. Callable by name via func.call.",
     traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
-    attrs=list(_MODIFIER_ATTRS),
+    attrs=[*_MODIFIER_ATTRS, *_CONTRACT_ATTRS],
     symbol_def=SymbolDefinition(
         field="callee",
         name="function",
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
-        fact_domain="loom_func_like_symbol_fact_domain",
+        fact_domain="loom_function_symbol_fact_domain",
     ),
     results=[Result("results", ANY, variadic=True)],
     regions=[RegionDef("body", doc="Function body.", terminator="func.return")],
-    interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, body="body")],
+    interfaces=[FuncLikeInterface(**_FUNC_LIKE_CONTRACT, body="body")],
+    verify="loom_func_def_verify",
     format=[
         *_MODIFIER_FORMAT,
+        *_TARGET_FORMAT,
+        *_ABI_FORMAT,
+        *_EXPORT_FORMAT,
         *_SIGNATURE_FORMAT,
         Region("body"),
     ],
@@ -233,15 +305,19 @@ func_decl = Op(
         name="function",
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DECL",
-        fact_domain="loom_func_like_symbol_fact_domain",
+        fact_domain="loom_function_symbol_fact_domain",
     ),
     results=[Result("results", ANY, variadic=True)],
-    interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, args_as_operands=True)],
+    interfaces=[FuncLikeInterface(**_FUNC_LIKE_CONTRACT, args_as_operands=True)],
+    verify="loom_func_decl_verify",
     format=[
         OptionalGroup([Attr("visibility")], anchor="visibility"),
         *_IMPORT_FORMAT,
         OptionalGroup([Attr("cc")], anchor="cc"),
         OptionalGroup([Attr("purity")], anchor="purity"),
+        *_TARGET_FORMAT,
+        *_ABI_FORMAT,
+        *_EXPORT_FORMAT,
         *_SIGNATURE_FORMAT,
     ],
     examples=[

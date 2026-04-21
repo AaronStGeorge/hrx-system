@@ -847,6 +847,19 @@ typedef struct loom_func_like_vtable_t {
   // Index of the optional target profile attr. LOOM_ATTR_INDEX_NONE if absent.
   uint8_t target_attr_index;
 
+  // Index of the optional target ABI enum attr. LOOM_ATTR_INDEX_NONE if absent.
+  uint8_t abi_attr_index;
+
+  // Index of the optional target ABI payload dict. LOOM_ATTR_INDEX_NONE if
+  // absent.
+  uint8_t abi_attrs_attr_index;
+
+  // Index of the optional export symbol attr. LOOM_ATTR_INDEX_NONE if absent.
+  uint8_t export_symbol_attr_index;
+
+  // Index of the optional export payload dict. LOOM_ATTR_INDEX_NONE if absent.
+  uint8_t export_attrs_attr_index;
+
   // Indices of optional enum attrs. LOOM_ATTR_INDEX_NONE if absent.
   uint8_t visibility_attr_index;
   uint8_t cc_attr_index;

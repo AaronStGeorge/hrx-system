@@ -49,6 +49,17 @@ typedef enum loom_func_purity_e {
   LOOM_FUNC_PURITY_COUNT_ = 2,
 } loom_func_purity_t;
 
+// Callable or package ABI used by an export plan.
+typedef enum loom_func_abi_e {
+  LOOM_FUNC_ABI_UNKNOWN = 0,
+  LOOM_FUNC_ABI_OBJECT_FUNCTION = 1,
+  LOOM_FUNC_ABI_HAL_KERNEL = 2,
+  LOOM_FUNC_ABI_VM_MODULE_FUNCTION = 3,
+  LOOM_FUNC_ABI_SHADER_ENTRY_POINT = 4,
+  LOOM_FUNC_ABI_WASM_FUNCTION = 5,
+  LOOM_FUNC_ABI_COUNT_ = 6,
+} loom_func_abi_t;
+
 // LOOM_OP_FUNC_DEF: Function definition. Callable by name via func.call.
 // func.def @negate(%input: f32) -> (f32) {
 //   func.return %input : f32
@@ -59,11 +70,19 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_func_def_callee, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_func_def_visibility, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_func_def_cc, 2)
 LOOM_DEFINE_ATTR_ENUM(loom_func_def_purity, 3)
+LOOM_DEFINE_ATTR_SYMBOL(loom_func_def_target, 5)
+LOOM_DEFINE_ATTR_ENUM(loom_func_def_abi, 6)
+LOOM_DEFINE_ATTR_DICT(loom_func_def_abi_attrs, 7)
+LOOM_DEFINE_ATTR_STRING(loom_func_def_export_symbol, 8)
+LOOM_DEFINE_ATTR_DICT(loom_func_def_export_attrs, 9)
 LOOM_DEFINE_REGION(loom_func_def_body, 0)
 enum loom_func_def_build_flag_bits_e {
   LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
   LOOM_FUNC_DEF_BUILD_FLAG_HAS_CC = 1u << 1,
   LOOM_FUNC_DEF_BUILD_FLAG_HAS_PURITY = 1u << 2,
+  LOOM_FUNC_DEF_BUILD_FLAG_HAS_TARGET = 1u << 3,
+  LOOM_FUNC_DEF_BUILD_FLAG_HAS_ABI = 1u << 4,
+  LOOM_FUNC_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 5,
 };
 typedef uint32_t loom_func_def_build_flags_t;
 iree_status_t loom_func_def_build(
@@ -72,6 +91,11 @@ iree_status_t loom_func_def_build(
     loom_optional uint8_t visibility,
     loom_optional uint8_t cc,
     loom_optional uint8_t purity,
+    loom_optional loom_symbol_ref_t target,
+    loom_optional uint8_t abi,
+    loom_optional loom_named_attr_slice_t abi_attrs,
+    loom_optional loom_string_id_t export_symbol,
+    loom_optional loom_named_attr_slice_t export_attrs,
     loom_symbol_ref_t callee,
     const loom_type_t* arg_types,
     iree_host_size_t arg_types_count,
@@ -83,6 +107,9 @@ iree_status_t loom_func_def_build(
     iree_host_size_t predicates_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_func_def_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_FUNC_DECL: External function declaration. Callable by name via func.call.
 // func.decl @extern_matmul(%a: tensor<[%M]xf32>, %b: tensor<[%K]xf32>) -> (tensor<[%M]xf32>)
@@ -94,12 +121,20 @@ LOOM_DEFINE_ATTR_STRING(loom_func_decl_import_module, 2)
 LOOM_DEFINE_ATTR_STRING(loom_func_decl_import_symbol, 3)
 LOOM_DEFINE_ATTR_ENUM(loom_func_decl_cc, 4)
 LOOM_DEFINE_ATTR_ENUM(loom_func_decl_purity, 5)
+LOOM_DEFINE_ATTR_SYMBOL(loom_func_decl_target, 6)
+LOOM_DEFINE_ATTR_ENUM(loom_func_decl_abi, 7)
+LOOM_DEFINE_ATTR_DICT(loom_func_decl_abi_attrs, 8)
+LOOM_DEFINE_ATTR_STRING(loom_func_decl_export_symbol, 9)
+LOOM_DEFINE_ATTR_DICT(loom_func_decl_export_attrs, 10)
 enum loom_func_decl_build_flag_bits_e {
   LOOM_FUNC_DECL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
   LOOM_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_MODULE = 1u << 1,
   LOOM_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_SYMBOL = 1u << 2,
   LOOM_FUNC_DECL_BUILD_FLAG_HAS_CC = 1u << 3,
   LOOM_FUNC_DECL_BUILD_FLAG_HAS_PURITY = 1u << 4,
+  LOOM_FUNC_DECL_BUILD_FLAG_HAS_TARGET = 1u << 5,
+  LOOM_FUNC_DECL_BUILD_FLAG_HAS_ABI = 1u << 6,
+  LOOM_FUNC_DECL_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 7,
 };
 typedef uint32_t loom_func_decl_build_flags_t;
 iree_status_t loom_func_decl_build(
@@ -110,6 +145,11 @@ iree_status_t loom_func_decl_build(
     loom_optional loom_string_id_t import_symbol,
     loom_optional uint8_t cc,
     loom_optional uint8_t purity,
+    loom_optional loom_symbol_ref_t target,
+    loom_optional uint8_t abi,
+    loom_optional loom_named_attr_slice_t abi_attrs,
+    loom_optional loom_string_id_t export_symbol,
+    loom_optional loom_named_attr_slice_t export_attrs,
     loom_symbol_ref_t callee,
     const loom_type_t* arg_types,
     iree_host_size_t arg_types_count,
@@ -121,6 +161,9 @@ iree_status_t loom_func_decl_build(
     iree_host_size_t predicates_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_func_decl_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_FUNC_TEMPLATE: Constraint-matched visible implementation of an abstract op.
 // func.template<tile.contract> device @vnni_q8(%w: tensor<[%M]xi8>, %x: tensor<[%K]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)] {

@@ -19,13 +19,33 @@ loom_cc_library(
     "builders.c"
     "canonicalize.c"
     "tables.c"
+    "verify.c"
   DEPS
     loom::src::loom::error::error_defs
     loom::src::loom::ir
-    loom::src::loom::ops::func_like_facts
+    loom::src::loom::ops::function_contract_verify
+    loom::src::loom::ops::function_symbol_facts
     loom::src::loom::ops::op_defs
     loom::src::loom::rewrite::rewriter
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    verify_test
+  SRCS
+    "verify_test.cc"
+  DEPS
+    ::func
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::testing::context
+    loom::src::loom::testing::diagnostic_matchers
+    loom::src::loom::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

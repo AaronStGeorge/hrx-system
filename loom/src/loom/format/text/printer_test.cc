@@ -1163,10 +1163,11 @@ TEST_F(PrintOpTest, FuncDefOp) {
   loom_type_t arg_types[] = {f32};
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(
-      loom_func_def_build(&builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY, 1,
-                          0, 0, callee, arg_types, 1, result_types, 1, NULL, 0,
-                          NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_func_def_build(
+      &builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY, 1, 0, 0,
+      loom_symbol_ref_null(), 0, loom_named_attr_slice_empty(),
+      LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), callee, arg_types,
+      1, result_types, 1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "func.def public @entry(%0: f32) -> (f32) {\n"
             "}\n");

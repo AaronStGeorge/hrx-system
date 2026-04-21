@@ -46,6 +46,7 @@ from loom.assembly import (
     kw,
 )
 from loom.dialect.func.defs import CallingConv, Purity, Visibility
+from loom.dialect.target.defs import ExportAbiKind
 from loom.dsl import (
     ANY,
     ATTR_TYPE_ENUM,
@@ -194,6 +195,16 @@ _FUNC_COMMON_ATTRS = [
         "symbol",
         symbol_ref=SymbolReference("record", ["record"]),
     ),
+    AttrDef(
+        "abi",
+        ATTR_TYPE_ENUM,
+        enum_def=ExportAbiKind,
+        optional=True,
+        open_enum=True,
+    ),
+    AttrDef("abi_attrs", "dict", optional=True),
+    AttrDef("export_symbol", "string", optional=True),
+    AttrDef("export_attrs", "dict", optional=True),
     AttrDef("visibility", "enum", enum_def=Visibility, optional=True),
     AttrDef("cc", "enum", enum_def=CallingConv, optional=True),
     AttrDef("purity", "enum", enum_def=Purity, optional=True),
@@ -228,6 +239,36 @@ _FUNC_TARGET_FORMAT: list[FormatElement] = [
     SymbolRef("target"),
     GLUE,
     RPAREN,
+]
+
+_FUNC_ABI_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [
+            kw("abi"),
+            GLUE,
+            LPAREN,
+            Attr("abi"),
+            OptionalGroup([COMMA, AttrDict("abi_attrs")], anchor="abi_attrs"),
+            GLUE,
+            RPAREN,
+        ],
+        anchor="abi",
+    ),
+]
+
+_FUNC_EXPORT_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [
+            kw("export"),
+            GLUE,
+            LPAREN,
+            Attr("export_symbol"),
+            OptionalGroup([COMMA, AttrDict("export_attrs")], anchor="export_attrs"),
+            GLUE,
+            RPAREN,
+        ],
+        anchor="export_symbol",
+    ),
 ]
 
 _FUNC_IMPORT_FORMAT: list[FormatElement] = [
@@ -266,6 +307,10 @@ _FUNC_SIGNATURE_FORMAT: list[FormatElement] = [
 _FUNC_LIKE_COMMON: dict[str, Any] = dict(
     callee="callee",
     target="target",
+    abi="abi",
+    abi_attrs="abi_attrs",
+    export_symbol="export_symbol",
+    export_attrs="export_attrs",
     visibility="visibility",
     cc="cc",
     purity="purity",
@@ -287,7 +332,7 @@ low_func_def = Op(
         name="function",
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
-        fact_domain="loom_func_like_symbol_fact_domain",
+        fact_domain="loom_function_symbol_fact_domain",
     ),
     results=[Result("results", REGISTER, variadic=True)],
     regions=[RegionDef("body", doc="Low function body.", terminator="low.return")],
@@ -301,6 +346,8 @@ low_func_def = Op(
     format=[
         *_FUNC_MODIFIER_FORMAT,
         *_FUNC_TARGET_FORMAT,
+        *_FUNC_ABI_FORMAT,
+        *_FUNC_EXPORT_FORMAT,
         *_FUNC_SIGNATURE_FORMAT,
         Region("body", syntax="low.asm.optional"),
     ],
@@ -326,7 +373,7 @@ low_func_decl = Op(
         name="function",
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DECL",
-        fact_domain="loom_func_like_symbol_fact_domain",
+        fact_domain="loom_function_symbol_fact_domain",
     ),
     results=[Result("results", REGISTER, variadic=True)],
     interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, args_as_operands=True)],
@@ -335,6 +382,8 @@ low_func_decl = Op(
         *_FUNC_MODIFIER_FORMAT,
         *_FUNC_IMPORT_FORMAT,
         *_FUNC_TARGET_FORMAT,
+        *_FUNC_ABI_FORMAT,
+        *_FUNC_EXPORT_FORMAT,
         *_FUNC_SIGNATURE_FORMAT,
     ],
     examples=[

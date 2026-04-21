@@ -974,10 +974,12 @@ static iree_status_t loom_low_lower_create_function_op(
   IREE_RETURN_IF_ERROR(loom_low_func_def_build(
       &context->builder, build_flags, visibility, cc, purity,
       /*allocation=*/0, /*schedule=*/0, context->options->target_ref,
+      /*abi=*/0, loom_named_attr_slice_empty(),
+      /*export_symbol=*/LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(),
       low_func_ref, arg_types, arg_count, result_types, result_count,
-      /*tied_results=*/NULL, /*tied_result_count=*/0,
-      /*predicates=*/NULL, /*predicates_count=*/0,
-      context->source_function.op->location, &context->low_func_op));
+      /*tied_results=*/NULL, /*tied_result_count=*/0, /*predicates=*/NULL,
+      /*predicates_count=*/0, context->source_function.op->location,
+      &context->low_func_op));
 
   loom_region_t* low_body = loom_low_func_def_body(context->low_func_op);
   low_body->flags = source_body->flags;
