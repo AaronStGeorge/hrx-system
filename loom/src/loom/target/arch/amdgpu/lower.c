@@ -673,6 +673,21 @@ static bool loom_amdgpu_module_value_is_workitem_id_x(
              LOOM_KERNEL_DIMENSION_X;
 }
 
+static bool loom_amdgpu_module_value_is_workgroup_id(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  if (value_id >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return false;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  return defining_op && loom_kernel_workgroup_id_isa(defining_op) &&
+         loom_kernel_workgroup_id_dimension(defining_op) <
+             LOOM_KERNEL_DIMENSION_COUNT_;
+}
+
 typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
 
 #define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIBE_FAILED ((uint32_t)1u << 0)
@@ -707,6 +722,10 @@ typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
   ((uint32_t)1u << 19)
 #define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_MEMORY_SPACE ((uint32_t)1u << 20)
 #define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_ROOT ((uint32_t)1u << 21)
+#define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_SCALAR_DYNAMIC_STRIDE \
+  ((uint32_t)1u << 22)
+#define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_DYNAMIC_INDEX_SOURCE \
+  ((uint32_t)1u << 23)
 
 typedef struct loom_amdgpu_memory_access_diagnostic_t {
   // Rejection bits explaining why an access is not legal for this target.
@@ -721,6 +740,12 @@ typedef enum loom_amdgpu_memory_address_form_e {
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR = 2,
 } loom_amdgpu_memory_address_form_t;
 
+typedef enum loom_amdgpu_memory_dynamic_index_kind_e {
+  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE = 0,
+  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR = 1,
+  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET = 2,
+} loom_amdgpu_memory_dynamic_index_kind_t;
+
 typedef struct loom_amdgpu_memory_access_t {
   // Target-independent storage space selected from source view facts.
   loom_value_fact_memory_space_t memory_space;
@@ -730,12 +755,14 @@ typedef struct loom_amdgpu_memory_access_t {
   loom_amdgpu_memory_address_form_t address_form;
   // Byte count of one addressed vector lane.
   uint32_t element_byte_count;
-  // Dynamic view-axis index used to compute the VADDR register, or invalid for
-  // a purely static access.
+  // Dynamic view-axis index used to compute a target address operand, or
+  // invalid for a purely static access.
   loom_value_id_t dynamic_index;
-  // Byte stride multiplied by dynamic_index to compute VADDR.
+  // Target operand path used for the dynamic index.
+  loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
+  // Byte stride multiplied by dynamic_index before adding it to VADDR/SOFFSET.
   uint32_t dynamic_index_byte_stride;
-  // Power-of-two shift used to compute VADDR, or
+  // Power-of-two shift used to compute the dynamic byte offset, or
   // LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE when multiplication or a
   // static-zero VADDR is required.
   uint32_t dynamic_index_byte_shift;
@@ -812,13 +839,27 @@ static iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE)) {
     return IREE_SV(
         "AMDGPU buffer memory lowering currently requires dynamic "
-        "indices to come from kernel.workitem.id<x>");
+        "indices to come from kernel.workitem.id<x> or kernel.workgroup.id");
   }
   if (iree_any_bit_set(rejection_bits,
                        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_STRIDE)) {
     return IREE_SV(
         "AMDGPU buffer memory lowering requires a non-negative "
         "32-bit dynamic byte stride");
+  }
+  if (iree_any_bit_set(
+          rejection_bits,
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_SCALAR_DYNAMIC_STRIDE)) {
+    return IREE_SV(
+        "AMDGPU scalar dynamic buffer offsets currently require a "
+        "power-of-two dynamic byte stride");
+  }
+  if (iree_any_bit_set(
+          rejection_bits,
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_DYNAMIC_INDEX_SOURCE)) {
+    return IREE_SV(
+        "AMDGPU workgroup memory lowering currently requires dynamic "
+        "indices to come from kernel.workitem.id<x>");
   }
   if (iree_any_bit_set(
           rejection_bits,
@@ -1505,6 +1546,7 @@ static bool loom_amdgpu_memory_access_select(
       .root_value_id = LOOM_VALUE_ID_INVALID,
       .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
       .dynamic_index = LOOM_VALUE_ID_INVALID,
+      .dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE,
       .dynamic_index_byte_shift = LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE,
       .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
   };
@@ -1599,8 +1641,13 @@ static bool loom_amdgpu_memory_access_select(
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_AXIS;
       return false;
     }
-    if (!loom_amdgpu_module_value_is_workitem_id_x(module,
-                                                   dynamic_indices.values[0])) {
+    const bool dynamic_index_is_workitem_x =
+        loom_amdgpu_module_value_is_workitem_id_x(module,
+                                                  dynamic_indices.values[0]);
+    const bool dynamic_index_is_workgroup_id =
+        loom_amdgpu_module_value_is_workgroup_id(module,
+                                                 dynamic_indices.values[0]);
+    if (!dynamic_index_is_workitem_x && !dynamic_index_is_workgroup_id) {
       out_diagnostic->rejection_bits |=
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE;
       return false;
@@ -1641,11 +1688,20 @@ static bool loom_amdgpu_memory_access_select(
             &static_byte_offset)) {
       return false;
     }
+    if (dynamic_index_is_workgroup_id &&
+        out_access->memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+      out_diagnostic->rejection_bits |=
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_DYNAMIC_INDEX_SOURCE;
+      return false;
+    }
     if (!loom_amdgpu_memory_access_static_byte_offset_is_usable(
             static_byte_offset, out_access->vgpr_count, out_diagnostic)) {
       return false;
     }
     out_access->dynamic_index = dynamic_indices.values[0];
+    out_access->dynamic_index_kind =
+        dynamic_index_is_workgroup_id ? LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET
+                                      : LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR;
     out_access->dynamic_index_byte_stride = (uint32_t)dynamic_index_byte_stride;
     if (loom_amdgpu_u32_is_power_of_two((uint32_t)dynamic_index_byte_stride)) {
       uint32_t dynamic_index_byte_shift = 0;
@@ -1655,6 +1711,15 @@ static bool loom_amdgpu_memory_access_select(
         ++dynamic_index_byte_shift;
       }
       out_access->dynamic_index_byte_shift = dynamic_index_byte_shift;
+    }
+    if (out_access->dynamic_index_kind ==
+            LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET &&
+        dynamic_index_byte_stride != 1 &&
+        out_access->dynamic_index_byte_shift ==
+            LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE) {
+      out_diagnostic->rejection_bits |=
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_SCALAR_DYNAMIC_STRIDE;
+      return false;
     }
     out_access->static_byte_offset = static_byte_offset;
   }
@@ -3227,6 +3292,16 @@ static iree_status_t loom_amdgpu_emit_memory_vaddr(
                                       LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, 0,
                                       vgpr_type, out_low_vaddr);
   }
+  if (access->dynamic_index_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET) {
+    if (low_base_addr != LOOM_VALUE_ID_INVALID) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU scalar dynamic offsets are only supported for buffer memory");
+    }
+    return loom_amdgpu_emit_const_u32(context, source_op,
+                                      LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, 0,
+                                      vgpr_type, out_low_vaddr);
+  }
 
   loom_value_id_t low_index = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
@@ -3279,6 +3354,65 @@ static iree_status_t loom_amdgpu_emit_memory_vaddr(
       IREE_ARRAYSIZE(add_operands), loom_make_named_attr_slice(NULL, 0),
       &vgpr_type, 1, &low_add_op));
   *out_low_vaddr = loom_value_slice_get(loom_low_op_results(low_add_op), 0);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_emit_memory_soffset(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_t* access,
+    loom_value_id_t* out_low_soffset) {
+  IREE_ASSERT_ARGUMENT(out_low_soffset);
+  *out_low_soffset = LOOM_VALUE_ID_INVALID;
+  loom_type_t sgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
+  if (access->dynamic_index_kind != LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET) {
+    return loom_amdgpu_emit_const_u32(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32,
+        access->scalar_byte_offset, sgpr_type, out_low_soffset);
+  }
+
+  loom_value_id_t low_index = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, access->dynamic_index, &low_index));
+  loom_value_id_t low_dynamic_offset = low_index;
+  if (access->dynamic_index_byte_stride != 1) {
+    if (access->dynamic_index_byte_shift ==
+        LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "preflight accepted AMDGPU scalar dynamic offset with a "
+          "non-power-of-two byte stride");
+    }
+    loom_value_id_t low_shift = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32,
+        access->dynamic_index_byte_shift, sgpr_type, &low_shift));
+    loom_value_id_t shift_operands[] = {low_index, low_shift};
+    loom_op_t* low_shift_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_S_LSHL_B32,
+        shift_operands, IREE_ARRAYSIZE(shift_operands),
+        loom_make_named_attr_slice(NULL, 0), &sgpr_type, 1, &low_shift_op));
+    low_dynamic_offset =
+        loom_value_slice_get(loom_low_op_results(low_shift_op), 0);
+  }
+
+  if (access->scalar_byte_offset == 0) {
+    *out_low_soffset = low_dynamic_offset;
+    return iree_ok_status();
+  }
+
+  loom_value_id_t low_static_offset = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32,
+      access->scalar_byte_offset, sgpr_type, &low_static_offset));
+  loom_value_id_t add_operands[] = {low_dynamic_offset, low_static_offset};
+  loom_op_t* low_add_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_S_ADD_U32, add_operands,
+      IREE_ARRAYSIZE(add_operands), loom_make_named_attr_slice(NULL, 0),
+      &sgpr_type, 1, &low_add_op));
+  *out_low_soffset = loom_value_slice_get(loom_low_op_results(low_add_op), 0);
   return iree_ok_status();
 }
 
@@ -3376,12 +3510,9 @@ static iree_status_t loom_amdgpu_lower_vector_load(
         loom_value_slice_get(loom_low_op_results(low_op), 0));
   }
 
-  loom_type_t sgpr_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
   loom_value_id_t low_soffset = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32,
-      access.scalar_byte_offset, sgpr_type, &low_soffset));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_soffset(context, source_op,
+                                                       &access, &low_soffset));
   loom_value_id_t operands[] = {
       low_resource,
       low_vaddr,
@@ -3471,12 +3602,9 @@ static iree_status_t loom_amdgpu_lower_vector_store(
         /*result_types=*/NULL, /*result_count=*/0, &low_op);
   }
 
-  loom_type_t sgpr_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
   loom_value_id_t low_soffset = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32,
-      access.scalar_byte_offset, sgpr_type, &low_soffset));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_soffset(context, source_op,
+                                                       &access, &low_soffset));
   loom_value_id_t operands[] = {
       low_value,
       low_resource,

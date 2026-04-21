@@ -771,6 +771,66 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkgroupYZToAbiLiveIns) {
   EXPECT_TRUE(saw_workgroup_z_live_in);
 }
 
+TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkgroupIndexedStoreToScalarOffset) {
+  loom_low_lower_result_t lower_result = {};
+  LowerSource("amdgpu-gfx11",
+              "func.def @gfx_source(%output: buffer) {\n"
+              "  %bid = kernel.workgroup.id<x> : index\n"
+              "  %zero = index.constant 0 : offset\n"
+              "  %view = buffer.view %output[%zero] : buffer -> "
+              "view<4xi32, #dense>\n"
+              "  %value = vector.constant 42 : vector<1xi32>\n"
+              "  vector.store %value, %view[%bid] : vector<1xi32>, "
+              "view<4xi32, #dense>\n"
+              "  func.return\n"
+              "}\n",
+              &lower_result);
+  EXPECT_EQ(lower_result.error_count, 0u);
+  ASSERT_NE(lower_result.low_func_op, nullptr);
+
+  loom_low_verify_options_t verify_options = {
+      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
+      .descriptor_registry = &target_registry_.registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .max_errors = 20,
+  };
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      loom_low_verify_module(module_, &verify_options, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+
+  bool saw_workgroup_live_in = false;
+  bool saw_scalar_shift = false;
+  bool saw_vaddr_zero = false;
+  bool saw_store = false;
+  loom_region_t* low_body = loom_low_func_def_body(lower_result.low_func_op);
+  loom_block_t* entry_block = loom_region_entry_block(low_body);
+  loom_op_t* op = nullptr;
+  loom_block_for_each_op(entry_block, op) {
+    if (loom_low_live_in_isa(op)) {
+      saw_workgroup_live_in |= StringIdEquals(loom_low_live_in_source(op),
+                                              IREE_SV("amdgpu.workgroup_id.x"));
+    } else if (loom_low_const_isa(op)) {
+      saw_vaddr_zero |= StringIdEquals(loom_low_const_opcode(op),
+                                       IREE_SV("amdgpu.v_mov_b32"));
+    } else if (loom_low_op_isa(op)) {
+      saw_scalar_shift |=
+          StringIdEquals(loom_low_op_opcode(op), IREE_SV("amdgpu.s_lshl_b32"));
+      if (StringIdEquals(loom_low_op_opcode(op),
+                         IREE_SV("amdgpu.buffer_store_dword"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 4u);
+        EXPECT_EQ(loom_low_op_results(op).count, 0u);
+        saw_store = true;
+      }
+    }
+  }
+  EXPECT_TRUE(saw_workgroup_live_in);
+  EXPECT_TRUE(saw_scalar_shift);
+  EXPECT_TRUE(saw_vaddr_zero);
+  EXPECT_TRUE(saw_store);
+}
+
 TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideCopyToB128Packets) {
   loom_low_lower_result_t lower_result = {};
   LowerSource("amdgpu-gfx11",

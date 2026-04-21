@@ -48,6 +48,55 @@ static const loom_check_run_provider_t* const kLoomAmdgpuCheckRunProviders[] = {
 };
 #endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 
+#if !LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
+static bool loom_amdgpu_check_requirement_is_hal(
+    iree_string_view_t requirement) {
+  return iree_string_view_equal(requirement, IREE_SV("amdgpu-hal")) ||
+         iree_string_view_equal(requirement, IREE_SV("amdgpu-hal-b128"));
+}
+
+static bool loom_amdgpu_check_unavailable_hal_requirement_matches(
+    const loom_check_requirement_provider_t* provider,
+    iree_string_view_t requirement) {
+  (void)provider;
+  return loom_amdgpu_check_requirement_is_hal(requirement);
+}
+
+static iree_status_t loom_amdgpu_check_unavailable_hal_requirement_query(
+    const loom_check_requirement_provider_t* provider,
+    const loom_check_environment_t* environment, iree_string_view_t requirement,
+    iree_allocator_t allocator) {
+  (void)provider;
+  (void)environment;
+  (void)allocator;
+  if (loom_amdgpu_check_requirement_is_hal(requirement)) {
+    return iree_make_status(
+        IREE_STATUS_UNAVAILABLE,
+        "AMDGPU HAL loom-check provider is not linked into this binary");
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown AMDGPU loom-check requirement '%.*s'",
+                          (int)requirement.size, requirement.data);
+}
+
+static iree_status_t loom_amdgpu_check_unavailable_hal_requirement_append_names(
+    const loom_check_requirement_provider_t* provider,
+    iree_string_builder_t* builder) {
+  (void)provider;
+  return iree_string_builder_append_cstring(builder,
+                                            "amdgpu-hal, amdgpu-hal-b128");
+}
+
+static const loom_check_requirement_provider_t
+    kLoomAmdgpuCheckUnavailableHalRequirementProvider = {
+        .name = IREE_SVL("amdgpu.unavailable_hal"),
+        .match = loom_amdgpu_check_unavailable_hal_requirement_matches,
+        .query = loom_amdgpu_check_unavailable_hal_requirement_query,
+        .append_names =
+            loom_amdgpu_check_unavailable_hal_requirement_append_names,
+};
+#endif  // !LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
+
 static const loom_check_emit_provider_t* const kLoomAmdgpuCheckEmitProviders[] =
     {
         &loom_amdgpu_native_loom_check_emit_provider,
@@ -67,6 +116,11 @@ static const loom_target_low_legality_provider_t* const
 static const loom_check_requirement_provider_t* const
     kLoomAmdgpuCheckRequirementProviders[] = {
         &loom_amdgpu_loom_check_requirement_provider,
+};
+#else
+static const loom_check_requirement_provider_t* const
+    kLoomAmdgpuCheckRequirementProviders[] = {
+        &kLoomAmdgpuCheckUnavailableHalRequirementProvider,
 };
 #endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 
@@ -88,8 +142,8 @@ const loom_check_provider_t loom_amdgpu_check_provider = {
 #if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
     .run_providers = kLoomAmdgpuCheckRunProviders,
     .run_provider_count = IREE_ARRAYSIZE(kLoomAmdgpuCheckRunProviders),
+#endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
     .requirement_providers = kLoomAmdgpuCheckRequirementProviders,
     .requirement_provider_count =
         IREE_ARRAYSIZE(kLoomAmdgpuCheckRequirementProviders),
-#endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 };

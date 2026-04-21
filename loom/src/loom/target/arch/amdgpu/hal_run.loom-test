@@ -37,6 +37,22 @@ func.def @loom_kernel(%input: buffer, %output: buffer) {
 [SUCCESS] all HAL bindings matched their expected values.
 
 // ====
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=4,1,1 --binding=&4xi32=0 --expected_binding=4xi32=42,42,42,42
+
+target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+
+func.def @loom_kernel(%output: buffer) {
+  %bid = kernel.workgroup.id<x> : index
+  %zero = index.constant 0 : offset
+  %view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>
+  %value = vector.constant 42 : vector<1xi32>
+  vector.store %value, %view[%bid] : vector<1xi32>, view<4xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=5,6,7,8 --binding=&4xi32=0 --expected_binding=4xi32=5,6,7,8 --expected_binding=4xi32=5,6,7,8
 
