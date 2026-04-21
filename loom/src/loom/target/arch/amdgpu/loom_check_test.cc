@@ -30,6 +30,11 @@ iree_status_t InitializeAmdgpuLowLowerPolicyRegistry(
   return iree_ok_status();
 }
 
+const loom_target_low_legality_provider_t* const kAmdgpuLowLegalityProviders[] =
+    {
+        &loom_amdgpu_low_legality_provider_storage,
+};
+
 const loom_check_environment_t kAmdgpuLoomCheckEnvironment = {
     .register_context =
         {
@@ -45,6 +50,11 @@ const loom_check_environment_t kAmdgpuLoomCheckEnvironment = {
         {
             .fn = InitializeAmdgpuLowLowerPolicyRegistry,
             .user_data = nullptr,
+        },
+    .low_legality_provider_list =
+        {
+            .count = IREE_ARRAYSIZE(kAmdgpuLowLegalityProviders),
+            .values = kAmdgpuLowLegalityProviders,
         },
 };
 
@@ -125,6 +135,41 @@ static std::string AmdgpuB128CopySource(iree_string_view_t target_symbol,
       "}\n"
       "// ----\n";
   return source;
+}
+
+static std::string AmdgpuGfx11SourceLowCase(const char* body) {
+  std::string source =
+      "// RUN: emit source-low @gfx11_target output=none\n"
+      "target.preset @gfx11_target {key = \"amdgpu-gfx11\", source = @case}\n"
+      "\n"
+      "func.def @case(%input: buffer, %output: buffer) {\n";
+  source += body;
+  source +=
+      "  func.return\n"
+      "}\n"
+      "// ----\n";
+  return source;
+}
+
+static void ExpectAmdgpuSourceLowRejects(
+    ::loom::testing::LoomCheckHarness* harness, const std::string& source,
+    const char* expected_detail) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      harness->ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("amdgpu_source_low.loom-test"), &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL)
+      << harness->ActualOutputString(result) << "\n"
+      << harness->DetailString(result) << "\n"
+      << harness->DiagnosticJsonString(result);
+  EXPECT_GT(result.diagnostic_count, 0u);
+  const std::string diagnostic_json = harness->DiagnosticJsonString(result);
+  EXPECT_NE(diagnostic_json.find("\"error_id\":\"ERR_BACKEND_001\""),
+            std::string::npos)
+      << diagnostic_json;
+  EXPECT_NE(diagnostic_json.find(expected_detail), std::string::npos)
+      << diagnostic_json;
+  loom_check_result_deinitialize(&result);
 }
 
 TEST_F(AmdgpuLoomCheckTest, DescriptorManifestUsesGfx11RegistryPackage) {
@@ -288,6 +333,59 @@ TEST_F(AmdgpuLoomCheckTest,
         << target_key;
     loom_check_result_deinitialize(&result);
   }
+}
+
+TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsNonZeroBufferViewByteOffset) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "  %base = index.constant 4 : offset\n"
+      "  %view = buffer.view %input[%base] : buffer -> view<4xi32, #dense>\n");
+  ExpectAmdgpuSourceLowRejects(
+      &harness_, source,
+      "AMDGPU HAL buffer views currently require exact zero byte offsets");
+}
+
+TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsMisalignedB128StaticOffset) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "  %zero = index.constant 0 : offset\n"
+      "  %view = buffer.view %input[%zero] : buffer -> view<8xi32, #dense>\n"
+      "  %loaded = vector.load %view[1] : view<8xi32, #dense> -> "
+      "vector<4xi32>\n"
+      "  vector.store %loaded, %view[0] : vector<4xi32>, "
+      "view<8xi32, #dense>\n");
+  ExpectAmdgpuSourceLowRejects(
+      &harness_, source,
+      "128-bit AMDGPU buffer memory accesses currently require 16-byte "
+      "aligned static byte offsets");
+}
+
+TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsOutOfRangeBufferImmediate) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "  %zero = index.constant 0 : offset\n"
+      "  %view = buffer.view %input[%zero] : buffer -> view<2048xi32, #dense>\n"
+      "  %loaded = vector.load %view[1200] : view<2048xi32, #dense> -> "
+      "vector<1xi32>\n"
+      "  vector.store %loaded, %view[0] : vector<1xi32>, "
+      "view<2048xi32, #dense>\n");
+  ExpectAmdgpuSourceLowRejects(
+      &harness_, source,
+      "AMDGPU buffer memory static byte offset is outside the selected "
+      "descriptor's immediate range");
+}
+
+TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsNonWorkitemDynamicIndex) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "  %zero = index.constant 0 : offset\n"
+      "  %index = index.constant 0 : index\n"
+      "  %view = buffer.view %input[%zero] : buffer -> "
+      "view<64x4xi32, #dense>\n"
+      "  %loaded = vector.load %view[%index, 0] : "
+      "view<64x4xi32, #dense> -> vector<4xi32>\n"
+      "  vector.store %loaded, %view[0, 0] : vector<4xi32>, "
+      "view<64x4xi32, #dense>\n");
+  ExpectAmdgpuSourceLowRejects(
+      &harness_, source,
+      "AMDGPU buffer memory lowering currently requires dynamic indices to "
+      "come from kernel.workitem.id<x>");
 }
 
 TEST_F(AmdgpuLoomCheckTest, AllocationJsonUsesGfx11PhysicalRegisterClasses) {

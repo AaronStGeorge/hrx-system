@@ -58,6 +58,11 @@ static const loom_target_coverage_provider_t* const
         &loom_amdgpu_target_coverage_provider,
 };
 
+static const loom_target_low_legality_provider_t* const
+    kLoomAmdgpuLowLegalityProviders[] = {
+        &loom_amdgpu_low_legality_provider_storage,
+};
+
 #if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 static const loom_check_requirement_provider_t* const
     kLoomAmdgpuCheckRequirementProviders[] = {
@@ -71,6 +76,11 @@ const loom_check_provider_t loom_amdgpu_check_provider = {
         loom_amdgpu_low_descriptor_registry_initialize,
     .initialize_low_lower_policy_registry =
         loom_amdgpu_low_lower_policy_registry_initialize,
+    .low_legality_provider_list =
+        {
+            .count = IREE_ARRAYSIZE(kLoomAmdgpuLowLegalityProviders),
+            .values = kLoomAmdgpuLowLegalityProviders,
+        },
     .emit_providers = kLoomAmdgpuCheckEmitProviders,
     .emit_provider_count = IREE_ARRAYSIZE(kLoomAmdgpuCheckEmitProviders),
     .coverage_providers = kLoomAmdgpuCoverageProviders,

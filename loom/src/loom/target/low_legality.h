@@ -8,10 +8,10 @@
 //
 // This verifier runs before source-to-low lowering. It checks the source
 // function against the selected target bundle and linked low descriptor set,
-// then gives target-family providers a hook to accept or reject explicit
-// target contracts such as packed dot or matrix ops. User IR failures are
-// reported through structured backend diagnostics; infrastructure and
-// compiler-configuration failures are returned as status.
+// then gives target-family providers a hook to accept or reject target-owned
+// source contracts such as memory-addressing forms, packed dot, or matrix ops.
+// User IR failures are reported through structured backend diagnostics;
+// infrastructure and compiler-configuration failures are returned as status.
 
 #ifndef LOOM_TARGET_LOW_LEGALITY_H_
 #define LOOM_TARGET_LOW_LEGALITY_H_

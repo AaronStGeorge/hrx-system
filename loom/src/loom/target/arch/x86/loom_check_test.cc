@@ -30,6 +30,10 @@ iree_status_t InitializeX86LowLowerPolicyRegistry(
   return iree_ok_status();
 }
 
+const loom_target_low_legality_provider_t* const kX86LowLegalityProviders[] = {
+    &loom_x86_low_legality_provider_storage,
+};
+
 const loom_check_environment_t kX86LoomCheckEnvironment = {
     .register_context =
         {
@@ -45,6 +49,11 @@ const loom_check_environment_t kX86LoomCheckEnvironment = {
         {
             .fn = InitializeX86LowLowerPolicyRegistry,
             .user_data = nullptr,
+        },
+    .low_legality_provider_list =
+        {
+            .count = IREE_ARRAYSIZE(kX86LowLegalityProviders),
+            .values = kX86LowLegalityProviders,
         },
 };
 

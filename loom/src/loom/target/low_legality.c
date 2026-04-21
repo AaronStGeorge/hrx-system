@@ -388,19 +388,6 @@ static iree_status_t loom_target_low_legality_try_provider_op(
   return iree_ok_status();
 }
 
-static iree_status_t loom_target_low_legality_verify_provider_contract_op(
-    loom_target_low_legality_context_t* context, const loom_op_t* op) {
-  bool handled = false;
-  IREE_RETURN_IF_ERROR(
-      loom_target_low_legality_try_provider_op(context, op, &handled));
-  if (handled) {
-    return iree_ok_status();
-  }
-  return loom_target_low_legality_reject(
-      context, NULL, op, IREE_SV("op"), loom_op_name(context->module, op),
-      IREE_SV("op requires an explicit target-low contract provider"));
-}
-
 static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
   switch (kind) {
     case LOOM_OP_BUFFER_ALLOCA:
@@ -529,6 +516,13 @@ static iree_status_t loom_target_low_legality_verify_op(
   IREE_RETURN_IF_ERROR(
       loom_target_low_legality_verify_op_value_types(context, op));
 
+  bool provider_handled = false;
+  IREE_RETURN_IF_ERROR(
+      loom_target_low_legality_try_provider_op(context, op, &provider_handled));
+  if (provider_handled) {
+    return iree_ok_status();
+  }
+
   switch (op->kind) {
     case LOOM_OP_FUNC_DEF:
     case LOOM_OP_FUNC_DECL:
@@ -546,7 +540,9 @@ static iree_status_t loom_target_low_legality_verify_op(
     case LOOM_OP_VECTOR_DOT4F8:
     case LOOM_OP_VECTOR_DOT4I:
     case LOOM_OP_VECTOR_DOT8I4:
-      return loom_target_low_legality_verify_provider_contract_op(context, op);
+      return loom_target_low_legality_reject(
+          context, NULL, op, IREE_SV("op"), loom_op_name(context->module, op),
+          IREE_SV("op requires an explicit target-low contract provider"));
     case LOOM_OP_SCF_IF:
     case LOOM_OP_SCF_FOR:
     case LOOM_OP_SCF_WHILE:

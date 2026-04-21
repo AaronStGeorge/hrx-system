@@ -18,6 +18,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/testing/context.h"
@@ -277,6 +278,60 @@ TEST_F(TargetLowLegalityTest, RejectsTargetContractWithoutProvider) {
   EXPECT_EQ(emission.string_params[4], "op");
   EXPECT_EQ(emission.string_params[5], "vector.dot4i");
   EXPECT_NE(emission.string_params[6].find("provider"), std::string::npos);
+}
+
+static iree_status_t RejectScalarAddiContract(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  if (op->kind != LOOM_OP_SCALAR_ADDI) {
+    *out_handled = false;
+    return iree_ok_status();
+  }
+  *out_handled = true;
+  return loom_target_low_legality_reject(
+      context, provider, op, IREE_SV("op"), IREE_SV("scalar.addi"),
+      IREE_SV("test provider rejected scalar.addi"));
+}
+
+TEST_F(TargetLowLegalityTest, ProviderMayClaimCoreSourceOp) {
+  ModulePtr module = ParseSource(
+      "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n");
+
+  const loom_target_low_legality_provider_t provider = {
+      .name = IREE_SVL("test-provider"),
+      .try_verify_op = RejectScalarAddiContract,
+  };
+  const loom_target_low_legality_provider_t* providers[] = {&provider};
+  const loom_target_low_legality_provider_list_t provider_list =
+      loom_target_low_legality_provider_list_make(providers,
+                                                  IREE_ARRAYSIZE(providers));
+  EmissionCollector collector;
+  const loom_target_low_legality_options_t options = {
+      .bundle = bundle_,
+      .descriptor_registry = &registry_.registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .provider_list = provider_list,
+      .emitter = collector.emitter(),
+  };
+  loom_target_low_legality_result_t result = {};
+  IREE_ASSERT_OK(loom_target_low_verify_function_legality(
+      module.get(), FirstFunction(module.get()), &options, &result));
+
+  ASSERT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  const CollectedEmission& emission = collector.emissions[0];
+  EXPECT_EQ(emission.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1));
+  ASSERT_EQ(emission.string_params.size(), 7u);
+  EXPECT_EQ(emission.string_params[3], "add");
+  EXPECT_EQ(emission.string_params[4], "op");
+  EXPECT_EQ(emission.string_params[5], "scalar.addi");
+  EXPECT_EQ(emission.string_params[6], "test provider rejected scalar.addi");
 }
 
 static iree_status_t RecordDot4iContract(

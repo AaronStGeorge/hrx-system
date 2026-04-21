@@ -31,6 +31,14 @@ extern "C" {
 // layout contracts and are not guessed here.
 const loom_low_lower_policy_t* loom_amdgpu_low_lower_policy(void);
 
+// Returns the AMDGPU source legality provider for target-low lowering.
+const loom_target_low_legality_provider_t* loom_amdgpu_low_legality_provider(
+    void);
+
+// Storage for static provider-list construction.
+extern const loom_target_low_legality_provider_t
+    loom_amdgpu_low_legality_provider_storage;
+
 // Initializes a target-owned registry mapping AMDGPU target-contract keys to
 // their source-to-low lowering policies.
 void loom_amdgpu_low_lower_policy_registry_initialize(
