@@ -1,0 +1,14 @@
+// RUN: emit wasm-module-validate @wasm_memory export=wasm_memory
+// REQUIRES: wasm-validate
+target.preset @wasm_target {key = "wasm-simd128", source = @wasm_memory}
+
+low.func.def target(@wasm_target) @wasm_memory(%addr: reg<wasm.i32>, %lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %loaded = low.op<wasm.v128.load>(%addr) : (reg<wasm.i32>) -> reg<wasm.v128>
+  %sum = low.op<wasm.i32x4.add>(%loaded, %lhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  low.op<wasm.v128.store>(%addr, %sum) : (reg<wasm.i32>, reg<wasm.v128>)
+  %out = low.op<wasm.i32x4.mul>(%sum, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  low.return %out : reg<wasm.v128>
+}
+
+// ----
+wasm module validated: wasm_memory

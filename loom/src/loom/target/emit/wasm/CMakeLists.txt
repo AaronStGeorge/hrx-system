@@ -106,6 +106,8 @@ loom_cc_library(
   DEPS
     ::module_binary
     iree::base
+    iree::io::file_handle
+    loom::src::loom::target::tool::process
     loom::src::loom::tools::loom-check::execute
     loom::src::loom::util::json
     loom::src::loom::util::stream
@@ -117,6 +119,17 @@ iree_executable_test(
     "test_module_summary"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/module_summary.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "test_module_validate"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/module_validate.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

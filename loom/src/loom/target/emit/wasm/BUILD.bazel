@@ -218,10 +218,12 @@ loom_cc_library(
     hdrs = ["loom_check.h"],
     deps = [
         ":module_binary",
+        "//loom/src/loom/target/tool:process",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/io:file_handle",
     ],
 )
 
@@ -229,6 +231,7 @@ loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
         "test/module_summary.loom-test",
+        "test/module_validate.loom-test",
     ],
 )
 
