@@ -41,7 +41,7 @@ TEST(AmdgpuCoverageTest, FormatsRepresentativeRows) {
   const std::string json(iree_string_builder_buffer(&builder),
                          iree_string_builder_size(&builder));
   EXPECT_NE(json.find("\"target\":\"amdgpu-gfx11\""), std::string::npos);
-  EXPECT_NE(json.find("\"semantic\":\"buffer-b128-load-store\""),
+  EXPECT_NE(json.find("\"semantic\":\"buffer-b32-b64-b128-load-store\""),
             std::string::npos);
   EXPECT_NE(json.find("\"semantic\":\"ds-b32-b128-load-store\""),
             std::string::npos);

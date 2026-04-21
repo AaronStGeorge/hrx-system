@@ -122,6 +122,19 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
   EXPECT_NE(load_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
 
+  const loom_low_descriptor_t* load_64_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_load_b64"));
+  ASSERT_NE(load_64_descriptor, nullptr);
+  EXPECT_EQ(load_64_descriptor->operand_count, 4u);
+  EXPECT_EQ(load_64_descriptor->result_count, 1u);
+  EXPECT_EQ(load_64_descriptor->effect_count, 1u);
+  const loom_low_operand_t* load_64_operands =
+      &descriptor_set->operands[load_64_descriptor->operand_start];
+  EXPECT_EQ(load_64_operands[0].unit_count, 2u);
+  const loom_low_effect_t* load_64_effect =
+      &descriptor_set->effects[load_64_descriptor->effect_start];
+  EXPECT_EQ(load_64_effect->width_bits, 64u);
+
   const loom_low_descriptor_t* load_128_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_load_b128"));
   ASSERT_NE(load_128_descriptor, nullptr);
@@ -151,6 +164,19 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
       &descriptor_set->effects[store_128_descriptor->effect_start];
   EXPECT_EQ(store_128_effect->kind, LOOM_LOW_EFFECT_KIND_WRITE);
   EXPECT_EQ(store_128_effect->width_bits, 128u);
+
+  const loom_low_descriptor_t* store_64_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_store_b64"));
+  ASSERT_NE(store_64_descriptor, nullptr);
+  EXPECT_EQ(store_64_descriptor->operand_count, 4u);
+  EXPECT_EQ(store_64_descriptor->result_count, 0u);
+  EXPECT_EQ(store_64_descriptor->effect_count, 1u);
+  const loom_low_operand_t* store_64_operands =
+      &descriptor_set->operands[store_64_descriptor->operand_start];
+  EXPECT_EQ(store_64_operands[0].unit_count, 2u);
+  const loom_low_effect_t* store_64_effect =
+      &descriptor_set->effects[store_64_descriptor->effect_start];
+  EXPECT_EQ(store_64_effect->width_bits, 64u);
 
   const loom_low_descriptor_t* ds_read_128_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.ds_read_b128"));
