@@ -440,6 +440,58 @@ TEST_F(AmdgpuEncodingTest, EncodesInitialGfx11Allowlist) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest,
+       EncodesScalarAndVectorBasicsForCurrentAmdgpuFamilies) {
+  struct Case {
+    // Target preset used to select the low descriptor set.
+    const char* preset_key;
+    // Expected little-endian SOPP instruction word for `s_endpgm 0`.
+    uint32_t expected_return_word;
+  };
+  const Case cases[] = {
+      {"amdgpu-gfx950", UINT32_C(0xBF810000)},
+      {"amdgpu-gfx11", UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx12", UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx1250", UINT32_C(0xBFB00000)},
+  };
+  for (const Case& test_case : cases) {
+    SCOPED_TRACE(test_case.preset_key);
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool_, &arena);
+    loom_low_packetization_t packetization = {};
+    BuildSidecarsForPreset(
+        test_case.preset_key,
+        "low.func.def target(@gfx_target) @gfx_kernel(%s0 : "
+        "reg<amdgpu.sgpr>, %v0 : "
+        "reg<amdgpu.vgpr>, %v1 : reg<amdgpu.vgpr>, %resource : "
+        "reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : "
+        "reg<amdgpu.vgpr>) {\n"
+        "  %loaded = low.op<amdgpu.s_buffer_load_dword>(%resource, "
+        "%soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, "
+        "reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+        "  %s_sum = low.op<amdgpu.s_add_u32>(%s0, %loaded) : "
+        "(reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>\n"
+        "  %v_sum = low.op<amdgpu.v_add_u32>(%v0, %v1) : "
+        "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+        "  low.op<amdgpu.buffer_store_dword>(%v_sum, %resource, %vaddr, "
+        "%s_sum) {offset = 0} : (reg<amdgpu.vgpr>, "
+        "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+        "  low.return\n"
+        "}\n",
+        &arena, &packetization);
+
+    iree_const_byte_span_t text = iree_const_byte_span_empty();
+    IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+        &packetization.schedule, &packetization.allocation, &text, &arena));
+
+    ASSERT_GT(text.data_length, 4u);
+    EXPECT_EQ(text.data_length % 4, 0u);
+    EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4),
+              test_case.expected_return_word);
+    iree_arena_deinitialize(&arena);
+  }
+}
+
 TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufStoreAndReturn) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
@@ -523,6 +575,65 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufB128LoadStoreAndReturn) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest, EncodesBufferB128ForCurrentAmdgpuFamilies) {
+  struct Case {
+    // Target preset used to select the low descriptor set.
+    const char* preset_key;
+    // Descriptor key for a 128-bit buffer load on this descriptor set.
+    const char* load_key;
+    // Descriptor key for a 128-bit buffer store on this descriptor set.
+    const char* store_key;
+    // Expected little-endian SOPP instruction word for `s_endpgm 0`.
+    uint32_t expected_return_word;
+  };
+  const Case cases[] = {
+      {"amdgpu-gfx950", "amdgpu.buffer_load_dwordx4",
+       "amdgpu.buffer_store_dwordx4", UINT32_C(0xBF810000)},
+      {"amdgpu-gfx11", "amdgpu.buffer_load_b128", "amdgpu.buffer_store_b128",
+       UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx12", "amdgpu.buffer_load_b128", "amdgpu.buffer_store_b128",
+       UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx1250", "amdgpu.buffer_load_b128", "amdgpu.buffer_store_b128",
+       UINT32_C(0xBFB00000)},
+  };
+  for (const Case& test_case : cases) {
+    SCOPED_TRACE(test_case.preset_key);
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool_, &arena);
+    loom_low_packetization_t packetization = {};
+    std::string body =
+        "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+        "reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
+        "reg<amdgpu.sgpr>) {\n"
+        "  %loaded = low.op<";
+    body += test_case.load_key;
+    body +=
+        ">(%resource, %vaddr, %soffset) {offset = 16} : "
+        "(reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> "
+        "reg<amdgpu.vgpr x4>\n"
+        "  low.op<";
+    body += test_case.store_key;
+    body +=
+        ">(%loaded, %resource, %vaddr, %soffset) {offset = 32} : "
+        "(reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, "
+        "reg<amdgpu.sgpr>)\n"
+        "  low.return\n"
+        "}\n";
+    BuildSidecarsForPreset(test_case.preset_key, body.c_str(), &arena,
+                           &packetization);
+
+    iree_const_byte_span_t text = iree_const_byte_span_empty();
+    IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+        &packetization.schedule, &packetization.allocation, &text, &arena));
+
+    ASSERT_GE(text.data_length, 20u);
+    EXPECT_EQ(text.data_length % 4, 0u);
+    EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4),
+              test_case.expected_return_word);
+    iree_arena_deinitialize(&arena);
+  }
+}
+
 TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufB64LoadStoreAndReturn) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
@@ -548,6 +659,60 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufB64LoadStoreAndReturn) {
   ASSERT_GE(text.data_length, 12u);
   EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuEncodingTest, EncodesDsMemoryForCurrentAmdgpuFamilies) {
+  struct Case {
+    // Target preset used to select the low descriptor set.
+    const char* preset_key;
+    // Expected little-endian SOPP instruction word for `s_endpgm 0`.
+    uint32_t expected_return_word;
+  };
+  const Case cases[] = {
+      {"amdgpu-gfx950", UINT32_C(0xBF810000)},
+      {"amdgpu-gfx11", UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx12", UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx1250", UINT32_C(0xBFB00000)},
+  };
+  for (const Case& test_case : cases) {
+    SCOPED_TRACE(test_case.preset_key);
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool_, &arena);
+    loom_low_packetization_t packetization = {};
+    BuildSidecarsForPreset(
+        test_case.preset_key,
+        "low.func.def target(@gfx_target) @gfx_kernel(%addr : "
+        "reg<amdgpu.vgpr>) {\n"
+        "  %loaded32 = low.op<amdgpu.ds_read_b32>(%addr) {offset = 4} : "
+        "(reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+        "  low.op<amdgpu.ds_write_b32>(%addr, %loaded32) {offset = 4} : "
+        "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)\n"
+        "  %loaded64 = low.op<amdgpu.ds_read_b64>(%addr) {offset = 8} : "
+        "(reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>\n"
+        "  low.op<amdgpu.ds_write_b64>(%addr, %loaded64) {offset = 8} : "
+        "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>)\n"
+        "  %loaded96 = low.op<amdgpu.ds_read_b96>(%addr) {offset = 12} : "
+        "(reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>\n"
+        "  low.op<amdgpu.ds_write_b96>(%addr, %loaded96) {offset = 12} : "
+        "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr x3>)\n"
+        "  %loaded128 = low.op<amdgpu.ds_read_b128>(%addr) {offset = 16} : "
+        "(reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>\n"
+        "  low.op<amdgpu.ds_write_b128>(%addr, %loaded128) {offset = 16} : "
+        "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>)\n"
+        "  low.return\n"
+        "}\n",
+        &arena, &packetization);
+
+    iree_const_byte_span_t text = iree_const_byte_span_empty();
+    IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+        &packetization.schedule, &packetization.allocation, &text, &arena));
+
+    ASSERT_GT(text.data_length, 4u);
+    EXPECT_EQ(text.data_length % 4, 0u);
+    EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4),
+              test_case.expected_return_word);
+    iree_arena_deinitialize(&arena);
+  }
 }
 
 TEST_F(AmdgpuEncodingTest, EncodesGfx11DsMemoryBarrierAndReturn) {
@@ -698,18 +863,16 @@ TEST_F(AmdgpuEncodingTest, RejectsUnsupportedDescriptorPacketFormat) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
-  BuildSidecarsForPreset("amdgpu-gfx12",
-                         "low.func.def target(@gfx_target) "
-                         "@gfx_kernel(%resource : reg<amdgpu.sgpr x4>, "
-                         "%vaddr : reg<amdgpu.vgpr>, %soffset : "
-                         "reg<amdgpu.sgpr>) {\n"
-                         "  %loaded = low.op<amdgpu.buffer_load_dword>("
-                         "%resource, %vaddr, %soffset) {offset = 0} : "
-                         "(reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, "
-                         "reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>\n"
-                         "  low.return\n"
-                         "}\n",
-                         &arena, &packetization);
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel(%a : "
+      "reg<amdgpu.vgpr x4>, %b : reg<amdgpu.vgpr x4>, %acc : "
+      "reg<amdgpu.vgpr x8>) -> (reg<amdgpu.vgpr x8>) {\n"
+      "  %out = low.op<amdgpu.v_wmma_f32_16x16x16_f16>(%a, %b, %acc) : "
+      "(reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x8>) "
+      "-> reg<amdgpu.vgpr x8>\n"
+      "  low.return %out : reg<amdgpu.vgpr x8>\n"
+      "}\n",
+      &arena, &packetization);
 
   iree_const_byte_span_t text = iree_const_byte_span_empty();
   iree_status_t status = loom_amdgpu_encode_instruction_stream(
