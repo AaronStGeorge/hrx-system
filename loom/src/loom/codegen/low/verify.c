@@ -1204,18 +1204,12 @@ static iree_status_t loom_low_verify_packet(
     iree_string_view_t opcode, uint16_t opcode_attr_index) {
   const loom_low_descriptor_set_t* descriptor_set =
       function_state->target->descriptor_set;
-  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  iree_status_t lookup_status = loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, opcode, &descriptor_ordinal);
-  if (!iree_status_is_ok(lookup_status)) {
-    if (iree_status_is_not_found(lookup_status)) {
-      iree_status_free(lookup_status);
-      return loom_low_verify_emit_missing_descriptor(function_state, op, opcode,
-                                                     opcode_attr_index);
-    }
-    return iree_status_annotate_f(lookup_status,
-                                  "failed to look up low descriptor '%.*s'",
-                                  (int)opcode.size, opcode.data);
+  const uint64_t descriptor_id = loom_low_descriptor_stable_id_from_key(opcode);
+  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
+      descriptor_set, descriptor_id);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return loom_low_verify_emit_missing_descriptor(function_state, op, opcode,
+                                                   opcode_attr_index);
   }
 
   const loom_low_descriptor_t* descriptor =

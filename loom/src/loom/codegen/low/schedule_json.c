@@ -73,6 +73,27 @@ static iree_status_t loom_low_schedule_json_write_nullable_string(
   return loom_json_write_escaped_string(stream, value);
 }
 
+static iree_status_t loom_low_schedule_json_descriptor_key(
+    const loom_low_schedule_sidecar_t* sidecar,
+    const loom_low_schedule_node_t* node, iree_string_view_t* out_key) {
+  IREE_ASSERT_ARGUMENT(out_key);
+  *out_key = iree_string_view_empty();
+  if (node->descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_ok_status();
+  }
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(sidecar->target.descriptor_set,
+                                            node->descriptor_ordinal);
+  if (descriptor == NULL) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "schedule node references descriptor ordinal %" PRIu32,
+        node->descriptor_ordinal);
+  }
+  return loom_low_descriptor_set_string(sidecar->target.descriptor_set,
+                                        descriptor->key_string_offset, out_key);
+}
+
 iree_status_t loom_low_schedule_format_json(
     const loom_low_schedule_sidecar_t* sidecar,
     iree_string_builder_t* builder) {
@@ -147,8 +168,11 @@ iree_status_t loom_low_schedule_format_json(
         &stream, loom_op_name(sidecar->module, node->op)));
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(&stream, ",\"descriptor\":"));
-    IREE_RETURN_IF_ERROR(loom_low_schedule_json_write_nullable_string(
-        &stream, node->descriptor_key));
+    iree_string_view_t descriptor_key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(
+        loom_low_schedule_json_descriptor_key(sidecar, node, &descriptor_key));
+    IREE_RETURN_IF_ERROR(
+        loom_low_schedule_json_write_nullable_string(&stream, descriptor_key));
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(&stream, ",\"schedule_class\":"));
     IREE_RETURN_IF_ERROR(loom_low_schedule_json_write_nullable_string(

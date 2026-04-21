@@ -850,8 +850,6 @@ static_assert(FEATURE_STRING_END == sizeof(kFeatureTestStrings) - 1,
 #define FEATURE_STRING_OFFSET(field) \
   static_cast<loom_bstring_table_offset_t>(FEATURE_STRING_##field)
 
-#define FEATURE_DESCRIPTOR_ID_ADD_I32 UINT64_C(1)
-
 struct FeatureTestTables {
   loom_low_descriptor_t descriptors[1];
   loom_low_descriptor_ref_t descriptor_refs[1];
@@ -931,7 +929,8 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
 
   tables->descriptors[0].key_string_offset =
       FEATURE_STRING_OFFSET(descriptor_add);
-  tables->descriptors[0].stable_id = FEATURE_DESCRIPTOR_ID_ADD_I32;
+  tables->descriptors[0].stable_id =
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.add.i32"));
   tables->descriptors[0].mnemonic_string_offset =
       FEATURE_STRING_OFFSET(mnemonic_add);
   tables->descriptors[0].semantic_tag_string_offset =
@@ -947,7 +946,7 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
   tables->descriptor_refs[0].key_string_offset =
       FEATURE_STRING_OFFSET(descriptor_add);
   tables->descriptor_refs[0].descriptor_ordinal = 0;
-  tables->descriptor_id_refs[0].stable_id = FEATURE_DESCRIPTOR_ID_ADD_I32;
+  tables->descriptor_id_refs[0].stable_id = tables->descriptors[0].stable_id;
   tables->descriptor_id_refs[0].descriptor_ordinal = 0;
 
   tables->set.abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION;

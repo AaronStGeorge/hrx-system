@@ -749,6 +749,9 @@ const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_ordinal);
 
+// Returns the durable descriptor identity derived from a descriptor key.
+uint64_t loom_low_descriptor_stable_id_from_key(iree_string_view_t key);
+
 // Returns an asm form row by ordinal, or NULL when |asm_form_ordinal| is out of
 // bounds.
 const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(

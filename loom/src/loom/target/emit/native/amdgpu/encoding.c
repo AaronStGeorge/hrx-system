@@ -505,9 +505,14 @@ static iree_status_t loom_amdgpu_v_mov_b32_opcode(
     const loom_low_descriptor_set_t* descriptor_set, uint16_t* out_opcode) {
   IREE_ASSERT_ARGUMENT(out_opcode);
   *out_opcode = 0;
-  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, IREE_SV("amdgpu.v_mov_b32"), &descriptor_ordinal));
+  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
+      descriptor_set,
+      loom_low_descriptor_stable_id_from_key(IREE_SV("amdgpu.v_mov_b32")));
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "AMDGPU native encoding descriptor "
+                            "'amdgpu.v_mov_b32' is missing");
+  }
   const loom_low_descriptor_t* descriptor =
       loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
   if (descriptor == NULL) {

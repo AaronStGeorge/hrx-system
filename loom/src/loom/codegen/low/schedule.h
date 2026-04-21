@@ -93,8 +93,8 @@ typedef struct loom_low_schedule_node_t {
   loom_trait_flags_t traits;
   // Descriptor ordinal for descriptor-backed nodes, or NONE.
   uint32_t descriptor_ordinal;
-  // Borrowed descriptor key for descriptor-backed nodes.
-  iree_string_view_t descriptor_key;
+  // Stable descriptor ID for descriptor-backed nodes, or NONE.
+  uint64_t descriptor_id;
   // Schedule-class id for descriptor-backed nodes, or NONE.
   uint16_t schedule_class_id;
   // Borrowed schedule-class name for descriptor-backed nodes.

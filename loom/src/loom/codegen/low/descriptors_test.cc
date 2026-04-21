@@ -76,9 +76,6 @@ static_assert(TEST_STRING_END == sizeof(kTestStrings) - 1,
 #define TEST_STRING_OFFSET(field) \
   static_cast<loom_bstring_table_offset_t>(TEST_STRING_##field)
 
-#define TEST_DESCRIPTOR_ID_CONST_I32 UINT64_C(1)
-#define TEST_DESCRIPTOR_ID_ADD_I32 UINT64_C(2)
-
 struct TestTables {
   loom_low_descriptor_t descriptors[2];
   loom_low_descriptor_ref_t descriptor_refs[2];
@@ -192,7 +189,8 @@ void InitializeTestTables(TestTables* tables) {
 
   tables->descriptors[0].key_string_offset =
       TEST_STRING_OFFSET(descriptor_const);
-  tables->descriptors[0].stable_id = TEST_DESCRIPTOR_ID_CONST_I32;
+  tables->descriptors[0].stable_id =
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.const.i32"));
   tables->descriptors[0].mnemonic_string_offset =
       TEST_STRING_OFFSET(mnemonic_const);
   tables->descriptors[0].semantic_tag_string_offset =
@@ -208,7 +206,8 @@ void InitializeTestTables(TestTables* tables) {
       LOOM_LOW_ASM_FORM_ORDINAL_NONE;
 
   tables->descriptors[1].key_string_offset = TEST_STRING_OFFSET(descriptor_add);
-  tables->descriptors[1].stable_id = TEST_DESCRIPTOR_ID_ADD_I32;
+  tables->descriptors[1].stable_id =
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.add.i32"));
   tables->descriptors[1].mnemonic_string_offset =
       TEST_STRING_OFFSET(mnemonic_add);
   tables->descriptors[1].semantic_tag_string_offset =
@@ -229,9 +228,9 @@ void InitializeTestTables(TestTables* tables) {
   tables->descriptor_refs[1].key_string_offset =
       TEST_STRING_OFFSET(descriptor_const);
   tables->descriptor_refs[1].descriptor_ordinal = 0;
-  tables->descriptor_id_refs[0].stable_id = TEST_DESCRIPTOR_ID_CONST_I32;
+  tables->descriptor_id_refs[0].stable_id = tables->descriptors[0].stable_id;
   tables->descriptor_id_refs[0].descriptor_ordinal = 0;
-  tables->descriptor_id_refs[1].stable_id = TEST_DESCRIPTOR_ID_ADD_I32;
+  tables->descriptor_id_refs[1].stable_id = tables->descriptors[1].stable_id;
   tables->descriptor_id_refs[1].descriptor_ordinal = 1;
 
   tables->set.abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION;
@@ -568,7 +567,7 @@ TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
   EXPECT_EQ(descriptor_ordinal, 1u);
 
   descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
-      &tables.set, TEST_DESCRIPTOR_ID_ADD_I32);
+      &tables.set, tables.descriptors[1].stable_id);
   EXPECT_EQ(descriptor_ordinal, 1u);
 
   const loom_low_descriptor_t* descriptor =
@@ -1135,9 +1134,9 @@ TEST(LowDescriptorsTest, RejectsUnsortedDescriptorReferences) {
 TEST(LowDescriptorsTest, RejectsUnsortedDescriptorIdReferences) {
   TestTables tables;
   InitializeTestTables(&tables);
-  tables.descriptor_id_refs[0].stable_id = TEST_DESCRIPTOR_ID_ADD_I32;
+  tables.descriptor_id_refs[0].stable_id = tables.descriptors[1].stable_id;
   tables.descriptor_id_refs[0].descriptor_ordinal = 1;
-  tables.descriptor_id_refs[1].stable_id = TEST_DESCRIPTOR_ID_CONST_I32;
+  tables.descriptor_id_refs[1].stable_id = tables.descriptors[0].stable_id;
   tables.descriptor_id_refs[1].descriptor_ordinal = 0;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);

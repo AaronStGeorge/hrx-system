@@ -344,16 +344,26 @@ static iree_status_t loom_low_schedule_emit_pressure_diagnostics(
   return iree_ok_status();
 }
 
-static iree_string_view_t loom_low_schedule_node_diagnostic_label(
+static iree_status_t loom_low_schedule_node_diagnostic_label(
     const loom_low_schedule_build_state_t* state,
-    const loom_low_schedule_node_t* node) {
-  if (node && !iree_string_view_is_empty(node->descriptor_key)) {
-    return node->descriptor_key;
+    const loom_low_schedule_node_t* node, iree_string_view_t* out_label) {
+  IREE_ASSERT_ARGUMENT(out_label);
+  *out_label = IREE_SV("<unknown>");
+  if (node == NULL) {
+    return iree_ok_status();
   }
-  if (node) {
-    return loom_op_name(state->module, node->op);
+  if (node->descriptor_ordinal != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    const loom_low_descriptor_t* descriptor =
+        loom_low_descriptor_set_descriptor_at(state->target.descriptor_set,
+                                              node->descriptor_ordinal);
+    if (descriptor != NULL) {
+      return loom_low_descriptor_set_string(state->target.descriptor_set,
+                                            descriptor->key_string_offset,
+                                            out_label);
+    }
   }
-  return IREE_SV("<unknown>");
+  *out_label = loom_op_name(state->module, node->op);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_schedule_emit_candidate_decision(
@@ -374,6 +384,12 @@ static iree_status_t loom_low_schedule_emit_candidate_decision(
   if (decision->block_index < state->body->block_count) {
     block = state->blocks[decision->block_index].block;
   }
+  iree_string_view_t chosen_label = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_schedule_node_diagnostic_label(
+      state, chosen_node, &chosen_label));
+  iree_string_view_t rejected_label = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_schedule_node_diagnostic_label(
+      state, rejected_node, &rejected_label));
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_low_diagnostic_target_key(&state->target)),
       loom_param_string(loom_low_diagnostic_export_name(&state->target)),
@@ -383,10 +399,8 @@ static iree_status_t loom_low_schedule_emit_candidate_decision(
       loom_param_string(loom_low_diagnostic_block_name(state->module, block)),
       loom_param_u32(decision->scheduled_ordinal),
       loom_param_u32(decision->ready_candidate_count),
-      loom_param_string(
-          loom_low_schedule_node_diagnostic_label(state, chosen_node)),
-      loom_param_string(
-          loom_low_schedule_node_diagnostic_label(state, rejected_node)),
+      loom_param_string(chosen_label),
+      loom_param_string(rejected_label),
       loom_param_u64(decision->chosen_projected_live_units),
       loom_param_u64(decision->chosen_killed_live_units),
       loom_param_u64(decision->chosen_produced_live_units),
@@ -541,8 +555,9 @@ static iree_status_t loom_low_schedule_emit_hazard_gap(
   if (hazard_gap->consumer_node < state->scheduled_node_count) {
     consumer_node = &state->nodes[hazard_gap->consumer_node];
   }
-  iree_string_view_t descriptor_key =
-      consumer_node ? consumer_node->descriptor_key : iree_string_view_empty();
+  iree_string_view_t descriptor_key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_schedule_node_diagnostic_label(
+      state, consumer_node, &descriptor_key));
   char reference_buffer[32];
   iree_string_view_t reference_name = loom_low_schedule_hazard_reference_name(
       hazard_gap, reference_buffer, sizeof(reference_buffer));
@@ -599,27 +614,16 @@ static iree_status_t loom_low_schedule_resolve_descriptor(
   }
   iree_string_view_t opcode =
       loom_low_schedule_module_string(state->module, opcode_id);
-  node->descriptor_key = opcode;
+  node->descriptor_id = loom_low_descriptor_stable_id_from_key(opcode);
 
-  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  iree_status_t lookup_status = loom_low_descriptor_set_lookup_descriptor(
-      state->target.descriptor_set, opcode, &descriptor_ordinal);
-  if (!iree_status_is_ok(lookup_status)) {
-    if (!iree_status_is_not_found(lookup_status)) {
-      return iree_status_annotate_f(lookup_status,
-                                    "failed to look up low descriptor '%.*s'",
-                                    (int)opcode.size, opcode.data);
-    }
-    iree_status_free(lookup_status);
+  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
+      state->target.descriptor_set, node->descriptor_id);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     IREE_RETURN_IF_ERROR(
         loom_low_schedule_emit_missing_descriptor(state, op, opcode));
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low schedule descriptor '%.*s' is not available",
                             (int)opcode.size, opcode.data);
-  }
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return iree_make_status(IREE_STATUS_INTERNAL,
-                            "low descriptor lookup returned no descriptor");
   }
 
   const loom_low_descriptor_t* descriptor =
@@ -863,6 +867,7 @@ static iree_status_t loom_low_schedule_fill_nodes(
           .kind = LOOM_LOW_SCHEDULE_NODE_STRUCTURAL,
           .traits = loom_op_effective_traits(state->module, op),
           .descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE,
+          .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
           .schedule_class_id = LOOM_LOW_SCHEDULE_CLASS_NONE,
       };
       if (loom_low_schedule_op_is_terminator(state->module, op)) {

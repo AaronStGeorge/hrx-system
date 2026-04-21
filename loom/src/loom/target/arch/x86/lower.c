@@ -330,9 +330,13 @@ static iree_status_t loom_x86_select_packed_dot_descriptor(
     return iree_ok_status();
   }
 
-  uint32_t descriptor_ordinal = 0;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_lookup_descriptor(
-      descriptor_set, descriptor->name, &descriptor_ordinal));
+  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
+      descriptor_set, loom_low_descriptor_stable_id_from_key(descriptor->name));
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "x86 packed-dot descriptor '%.*s' is missing",
+                            (int)descriptor->name.size, descriptor->name.data);
+  }
   *out_descriptor = descriptor;
   return iree_ok_status();
 }

@@ -659,8 +659,12 @@ static iree_status_t loom_low_packet_json_write_packet(
       stream, loom_op_name(schedule->module, node->op)));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"descriptor\":"));
-  IREE_RETURN_IF_ERROR(loom_low_packet_json_write_string_view_or_null(
-      node->descriptor_key, stream));
+  if (descriptor) {
+    IREE_RETURN_IF_ERROR(loom_low_packet_json_write_descriptor_string_or_null(
+        descriptor_set, descriptor->key_string_offset, stream));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
+  }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"descriptor_ordinal\":"));
   IREE_RETURN_IF_ERROR(loom_low_packet_json_write_nullable_u32(

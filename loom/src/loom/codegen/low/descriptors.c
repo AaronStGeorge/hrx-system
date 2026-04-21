@@ -131,6 +131,16 @@ static iree_status_t loom_low_verify_non_empty_required_string(
   return iree_ok_status();
 }
 
+uint64_t loom_low_descriptor_stable_id_from_key(iree_string_view_t key) {
+  uint64_t value = UINT64_C(0xCBF29CE484222325);
+  for (iree_host_size_t i = 0; i < key.size; ++i) {
+    value ^= (uint8_t)key.data[i];
+    value *= UINT64_C(0x100000001B3);
+  }
+  value &= UINT64_C(0x7FFFFFFFFFFFFFFF);
+  return value == LOOM_LOW_DESCRIPTOR_ID_NONE ? UINT64_C(1) : value;
+}
+
 static iree_status_t loom_low_verify_tables_present(
     const loom_low_descriptor_set_t* descriptor_set) {
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
@@ -995,13 +1005,26 @@ static iree_status_t loom_low_verify_descriptor(
                                       LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE |
                                       LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO,
                                   "descriptor", descriptor_index));
-  IREE_RETURN_IF_ERROR(loom_low_verify_required_string(
-      descriptor_set, descriptor->key_string_offset, "descriptor.key"));
+  iree_string_view_t descriptor_key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
+      descriptor_set, descriptor->key_string_offset, "descriptor.key",
+      &descriptor_key));
   if (descriptor->stable_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor %" PRIu32
                             " has no stable descriptor ID",
                             descriptor_index);
+  }
+  const uint64_t expected_stable_id =
+      loom_low_descriptor_stable_id_from_key(descriptor_key);
+  if (descriptor->stable_id != expected_stable_id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor %" PRIu32
+                            " key '%.*s' stable ID "
+                            "0x%016" PRIx64 " should be 0x%016" PRIx64,
+                            descriptor_index, (int)descriptor_key.size,
+                            descriptor_key.data, descriptor->stable_id,
+                            expected_stable_id);
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_optional_string(
       descriptor_set, descriptor->mnemonic_string_offset,

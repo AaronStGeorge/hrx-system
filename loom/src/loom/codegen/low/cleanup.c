@@ -60,12 +60,14 @@ static iree_status_t loom_low_cleanup_deadness_query(
     return iree_ok_status();
   }
 
-  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  IREE_RETURN_IF_ERROR(iree_status_annotate_f(
-      loom_low_descriptor_set_lookup_descriptor(context->descriptor_set, opcode,
-                                                &descriptor_ordinal),
-      "failed to look up low descriptor '%.*s'", (int)opcode.size,
-      opcode.data));
+  const uint64_t descriptor_id = loom_low_descriptor_stable_id_from_key(opcode);
+  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
+      context->descriptor_set, descriptor_id);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "failed to look up low descriptor '%.*s'",
+                            (int)opcode.size, opcode.data);
+  }
   const loom_low_descriptor_t* descriptor =
       loom_low_descriptor_set_descriptor_at(context->descriptor_set,
                                             descriptor_ordinal);
