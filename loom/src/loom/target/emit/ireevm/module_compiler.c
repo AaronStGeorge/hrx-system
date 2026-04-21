@@ -93,7 +93,7 @@ static iree_string_view_t loom_ireevm_module_compile_export_name(
   if (!iree_string_view_is_empty(export_plan->export_symbol)) {
     return export_plan->export_symbol;
   }
-  return entry->function_name;
+  return entry->func_name;
 }
 
 static iree_status_t loom_ireevm_module_compile_symbol_name(
@@ -216,7 +216,7 @@ iree_status_t loom_ireevm_compile_module_archive(
         report, &entry.bundle_storage.bundle);
   }
   if (iree_status_is_ok(status)) {
-    source_function = entry.function;
+    source_function = entry.func;
   }
   if (iree_status_is_ok(status) &&
       source_function.op->kind != LOOM_OP_FUNC_DEF) {

@@ -186,10 +186,10 @@ func.def target(@wasm) abi(wasm_function) @unused() {
   EXPECT_EQ(plan.entry_count, 1u);
   EXPECT_EQ(plan.entry_symbol_ids[0],
             FindSymbol(module.get(), IREE_SV("entry")));
-  EXPECT_EQ(plan.function_count, 2u);
-  EXPECT_EQ(plan.function_symbol_ids[0],
+  EXPECT_EQ(plan.func_count, 2u);
+  EXPECT_EQ(plan.func_symbol_ids[0],
             FindSymbol(module.get(), IREE_SV("entry")));
-  EXPECT_EQ(plan.function_symbol_ids[1],
+  EXPECT_EQ(plan.func_symbol_ids[1],
             FindSymbol(module.get(), IREE_SV("helper")));
 }
 
@@ -244,8 +244,8 @@ func.decl import("env") @external()
       &call_graph, &analysis_arena_, &plan));
 
   EXPECT_EQ(plan.entry_count, 1u);
-  EXPECT_EQ(plan.function_count, 1u);
-  EXPECT_EQ(plan.function_symbol_ids[0],
+  EXPECT_EQ(plan.func_count, 1u);
+  EXPECT_EQ(plan.func_symbol_ids[0],
             FindSymbol(module.get(), IREE_SV("entry")));
 }
 

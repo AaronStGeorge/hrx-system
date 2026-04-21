@@ -31,11 +31,11 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    function_symbol_facts
+    func_symbol_facts
   HDRS
-    "function_symbol_facts.h"
+    "func_symbol_facts.h"
   SRCS
-    "function_symbol_facts.c"
+    "func_symbol_facts.c"
   DEPS
     ::op_defs
     iree::base
@@ -64,11 +64,11 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
-    function_symbol_facts_test
+    func_symbol_facts_test
   SRCS
-    "function_symbol_facts_test.cc"
+    "func_symbol_facts_test.cc"
   DEPS
-    ::function_symbol_facts
+    ::func_symbol_facts
     ::op_registry
     iree::base::internal::arena
     loom::src::loom::analysis::symbol_facts

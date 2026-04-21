@@ -7,8 +7,8 @@
 // Target artifact compile-unit planning.
 //
 // Artifact plans are derived data: target.artifact symbols describe packaging,
-// exported function facts assign entry points to artifacts, and the call graph
-// provides private helper closure. Artifacts never own entry lists in IR.
+// exported func facts assign entry points to artifacts, and the call graph
+// provides private func closure. Artifacts never own entry lists in IR.
 
 #ifndef LOOM_TARGET_ARTIFACT_PLAN_H_
 #define LOOM_TARGET_ARTIFACT_PLAN_H_
@@ -32,17 +32,17 @@ typedef struct loom_target_artifact_plan_t {
   // Resolved artifact facts for artifact_symbol.
   const loom_target_artifact_symbol_facts_t* artifact_facts;
 
-  // Exported entry function symbol IDs assigned to artifact_symbol.
+  // Exported entry func symbol IDs assigned to artifact_symbol.
   const loom_symbol_id_t* entry_symbol_ids;
 
-  // Number of entry function symbol IDs.
+  // Number of entry func symbol IDs.
   uint16_t entry_count;
 
-  // Body function symbol IDs included in the artifact compile unit.
-  const loom_symbol_id_t* function_symbol_ids;
+  // Body func symbol IDs included in the artifact compile unit.
+  const loom_symbol_id_t* func_symbol_ids;
 
-  // Number of body function symbol IDs.
-  uint16_t function_count;
+  // Number of body func symbol IDs.
+  uint16_t func_count;
 } loom_target_artifact_plan_t;
 
 // Builds a compile-unit plan for one target.artifact.

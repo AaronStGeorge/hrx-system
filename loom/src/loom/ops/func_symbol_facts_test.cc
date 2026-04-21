@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/ops/function_symbol_facts.h"
+#include "loom/ops/func_symbol_facts.h"
 
 #include <memory>
 
@@ -89,7 +89,7 @@ static const loom_target_preset_registry_t kPresetRegistry = {
     .target_bundle_count = IREE_ARRAYSIZE(kPresetBundles),
 };
 
-class FunctionSymbolFactsTest : public ::testing::Test {
+class FuncSymbolFactsTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
@@ -116,7 +116,7 @@ class FunctionSymbolFactsTest : public ::testing::Test {
     loom_module_t* module = nullptr;
     loom_text_parse_options_t options = {};
     IREE_CHECK_OK(loom_text_parse(iree_make_cstring_view(source),
-                                  IREE_SV("function_symbol_facts_test.loom"),
+                                  IREE_SV("func_symbol_facts_test.loom"),
                                   &context_, &block_pool_, &options, &module));
     return ModulePtr(module);
   }
@@ -130,13 +130,13 @@ class FunctionSymbolFactsTest : public ::testing::Test {
     return symbol_id;
   }
 
-  const loom_function_symbol_facts_t* LookupFunction(
-      const loom_module_t* module, iree_string_view_t name) {
+  const loom_func_symbol_facts_t* LookupFunc(const loom_module_t* module,
+                                             iree_string_view_t name) {
     const loom_symbol_facts_base_t* base_facts = nullptr;
     IREE_CHECK_OK(loom_symbol_fact_table_lookup(
         &fact_table_, module, FindSymbol(module, name), &base_facts));
-    const loom_function_symbol_facts_t* facts =
-        loom_function_symbol_facts_cast(base_facts);
+    const loom_func_symbol_facts_t* facts =
+        loom_func_symbol_facts_cast(base_facts);
     IREE_ASSERT(facts != nullptr);
     return facts;
   }
@@ -157,16 +157,16 @@ class FunctionSymbolFactsTest : public ::testing::Test {
   loom_symbol_fact_resource_t resources_[1];
 };
 
-TEST_F(FunctionSymbolFactsTest, SourceFunctionFactsRemainTargetIndependent) {
+TEST_F(FuncSymbolFactsTest, SourceFuncFactsRemainTargetIndependent) {
   ModulePtr module = ParseModule(R"(
 func.def public device @semantic() {
   func.return
 }
 )");
 
-  const loom_function_symbol_facts_t* facts =
-      LookupFunction(module.get(), IREE_SV("semantic"));
-  EXPECT_EQ(facts->base.domain, &loom_function_symbol_fact_domain);
+  const loom_func_symbol_facts_t* facts =
+      LookupFunc(module.get(), IREE_SV("semantic"));
+  EXPECT_EQ(facts->base.domain, &loom_func_symbol_fact_domain);
   EXPECT_EQ(facts->base.symbol_kind, LOOM_SYMBOL_FUNC_DEF);
   EXPECT_TRUE(facts->has_body);
   EXPECT_EQ(facts->visibility, 1);
@@ -179,13 +179,13 @@ func.def public device @semantic() {
   EXPECT_EQ(facts->target_bundle, nullptr);
 }
 
-TEST_F(FunctionSymbolFactsTest, DeclarationFactsCarryImportContract) {
+TEST_F(FuncSymbolFactsTest, DeclarationFactsCarryImportContract) {
   ModulePtr module = ParseModule(R"(
 func.decl import("env", "do.work") @do_work(%arg0: i32) -> (i32)
 )");
 
-  const loom_function_symbol_facts_t* facts =
-      LookupFunction(module.get(), IREE_SV("do_work"));
+  const loom_func_symbol_facts_t* facts =
+      LookupFunc(module.get(), IREE_SV("do_work"));
   EXPECT_FALSE(facts->has_body);
   EXPECT_TRUE(facts->imports);
   EXPECT_TRUE(iree_string_view_equal(facts->import_module, IREE_SV("env")));
@@ -194,19 +194,19 @@ func.decl import("env", "do.work") @do_work(%arg0: i32) -> (i32)
   EXPECT_EQ(facts->result_count, 1);
 }
 
-TEST_F(FunctionSymbolFactsTest, ImportSymbolDefaultsToDeclarationName) {
+TEST_F(FuncSymbolFactsTest, ImportSymbolDefaultsToDeclarationName) {
   ModulePtr module = ParseModule(R"(
 func.decl import("env") @do_work(%arg0: i32) -> (i32)
 )");
 
-  const loom_function_symbol_facts_t* facts =
-      LookupFunction(module.get(), IREE_SV("do_work"));
+  const loom_func_symbol_facts_t* facts =
+      LookupFunc(module.get(), IREE_SV("do_work"));
   EXPECT_TRUE(facts->imports);
   EXPECT_TRUE(iree_string_view_equal(facts->import_module, IREE_SV("env")));
   EXPECT_TRUE(iree_string_view_equal(facts->import_symbol, IREE_SV("do_work")));
 }
 
-TEST_F(FunctionSymbolFactsTest, LowFunctionResolvesTargetProfile) {
+TEST_F(FuncSymbolFactsTest, LowFuncResolvesTargetProfile) {
   ModulePtr module = ParseModule(R"(
 target.profile @wasm preset("test.profile")
 
@@ -215,8 +215,8 @@ low.func.def target(@wasm) @kernel() {
 }
 )");
 
-  const loom_function_symbol_facts_t* facts =
-      LookupFunction(module.get(), IREE_SV("kernel"));
+  const loom_func_symbol_facts_t* facts =
+      LookupFunc(module.get(), IREE_SV("kernel"));
   EXPECT_TRUE(iree_string_view_equal(facts->name, IREE_SV("kernel")));
   EXPECT_TRUE(loom_symbol_ref_is_valid(facts->target_symbol));
   ASSERT_NE(facts->target_profile, nullptr);
@@ -227,7 +227,7 @@ low.func.def target(@wasm) @kernel() {
   EXPECT_TRUE(iree_string_view_is_empty(facts->export_plan.export_symbol));
 }
 
-TEST_F(FunctionSymbolFactsTest, FunctionOwnedContractOverridesPreset) {
+TEST_F(FuncSymbolFactsTest, FuncOwnedContractOverridesPreset) {
   ModulePtr module = ParseModule(R"(
 target.profile @wasm preset("test.profile")
 
@@ -244,8 +244,8 @@ low.func.def target(@wasm) abi(hal_kernel, {
 }
 )");
 
-  const loom_function_symbol_facts_t* facts =
-      LookupFunction(module.get(), IREE_SV("kernel"));
+  const loom_func_symbol_facts_t* facts =
+      LookupFunc(module.get(), IREE_SV("kernel"));
   ASSERT_NE(facts->target_profile, nullptr);
   ASSERT_NE(facts->target_bundle, nullptr);
   EXPECT_TRUE(facts->exports);
@@ -266,7 +266,7 @@ low.func.def target(@wasm) abi(hal_kernel, {
   EXPECT_EQ(facts->export_ordinal, 5u);
 }
 
-TEST_F(FunctionSymbolFactsTest, ContractRequiresTargetProfile) {
+TEST_F(FuncSymbolFactsTest, ContractRequiresTargetProfile) {
   ModulePtr module = ParseModule(R"(
 func.def abi(wasm_function) @semantic() {
   func.return
@@ -282,7 +282,7 @@ func.def abi(wasm_function) @semantic() {
   EXPECT_EQ(base_facts, nullptr);
 }
 
-TEST_F(FunctionSymbolFactsTest, TargetMustResolveToTargetProfileFacts) {
+TEST_F(FuncSymbolFactsTest, TargetMustResolveToTargetProfileFacts) {
   ModulePtr module = ParseModule(R"(
 target.config @not_profile {contract_set_key = "test", contract_feature_bits = 0}
 

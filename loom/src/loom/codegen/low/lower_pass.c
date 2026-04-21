@@ -15,7 +15,7 @@
 #include "loom/pass/registry.h"
 
 typedef struct loom_low_source_to_low_pass_state_t {
-  // Optional module-local source function symbol selected by the pass.
+  // Optional module-local source func symbol selected by the pass.
   iree_string_view_t function_symbol;
   // Maximum number of lowering diagnostics emitted before stopping.
   uint32_t max_errors;
@@ -32,8 +32,7 @@ typedef struct loom_low_source_to_low_parse_context_t {
 
 static const loom_pass_option_def_t kLowSourceToLowOptions[] = {
     {IREE_SVL("function"),
-     IREE_SVL(
-         "Optional source function symbol to lower, with or without '@'.")},
+     IREE_SVL("Optional source func symbol to lower, with or without '@'.")},
     {IREE_SVL("max-errors"),
      IREE_SVL("Maximum number of source-to-low diagnostics to emit; zero "
               "means no limit.")},
@@ -47,14 +46,14 @@ enum {
 
 static const loom_pass_statistic_def_t kLowSourceToLowStatistics[] = {
     {IREE_SVL("errors"), IREE_SVL("Number of lowering errors emitted.")},
-    {IREE_SVL("functions"), IREE_SVL("Number of source functions lowered.")},
+    {IREE_SVL("functions"), IREE_SVL("Number of source funcs lowered.")},
     {IREE_SVL("remarks"), IREE_SVL("Number of lowering remarks emitted.")},
 };
 
 static const loom_pass_info_t loom_low_source_to_low_pass_info_storage = {
     .name = IREE_SVL("source-to-low"),
     .description =
-        IREE_SVL("Lower one target-profiled source function to target-low IR."),
+        IREE_SVL("Lower one target-profiled source func to target-low IR."),
     .kind = LOOM_PASS_MODULE,
     .option_defs = kLowSourceToLowOptions,
     .option_count = IREE_ARRAYSIZE(kLowSourceToLowOptions),
@@ -198,14 +197,14 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
   loom_low_source_selection_t selection = {0};
   const loom_low_source_selection_options_t selection_options = {
-      .function_symbol_name =
+      .func_symbol_name =
           state ? state->function_symbol : iree_string_view_empty(),
       .descriptor_registry = config->descriptor_registry,
       .policy_registry = config->policy_registry,
       .lowering_kind = IREE_SV("source-to-low"),
   };
   loom_low_lower_result_t lower_result = {0};
-  iree_status_t status = loom_low_select_source_function(
+  iree_status_t status = loom_low_select_source_func(
       module, &selection_options, &selection_arena, &selection);
   if (iree_status_is_ok(status)) {
     const loom_low_lower_options_t lower_options = {
@@ -219,7 +218,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .emitter = pass->diagnostic_emitter,
         .max_errors = state ? state->max_errors : 20,
     };
-    status = loom_low_lower_function(module, selection.function, &lower_options,
+    status = loom_low_lower_function(module, selection.func, &lower_options,
                                      &lower_result);
   }
   iree_arena_deinitialize(&selection_arena);

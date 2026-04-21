@@ -36,9 +36,9 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "function_symbol_facts",
-    srcs = ["function_symbol_facts.c"],
-    hdrs = ["function_symbol_facts.h"],
+    name = "func_symbol_facts",
+    srcs = ["func_symbol_facts.c"],
+    hdrs = ["func_symbol_facts.h"],
     deps = [
         ":op_defs",
         "//loom/src/loom/analysis:symbol_facts",
@@ -63,10 +63,10 @@ loom_cc_library(
 )
 
 loom_cc_test(
-    name = "function_symbol_facts_test",
-    srcs = ["function_symbol_facts_test.cc"],
+    name = "func_symbol_facts_test",
+    srcs = ["func_symbol_facts_test.cc"],
     deps = [
-        ":function_symbol_facts",
+        ":func_symbol_facts",
         ":op_registry",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/format/text:parser",

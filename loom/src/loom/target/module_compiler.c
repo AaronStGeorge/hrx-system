@@ -11,7 +11,7 @@
 #include "loom/analysis/symbol_facts.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
-#include "loom/ops/function_symbol_facts.h"
+#include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/target/facts.h"
 
@@ -237,34 +237,33 @@ static iree_status_t loom_target_module_compile_initialize_fact_table(
   return iree_ok_status();
 }
 
-static iree_status_t loom_target_module_compile_lookup_function_facts(
+static iree_status_t loom_target_module_compile_lookup_func_facts(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
     loom_symbol_id_t symbol_id,
-    const loom_function_symbol_facts_t** out_function_facts) {
+    const loom_func_symbol_facts_t** out_func_facts) {
   const loom_symbol_facts_base_t* base_facts = NULL;
   IREE_RETURN_IF_ERROR(loom_symbol_fact_table_lookup(fact_table, module,
                                                      symbol_id, &base_facts));
-  *out_function_facts = loom_function_symbol_facts_cast(base_facts);
+  *out_func_facts = loom_func_symbol_facts_cast(base_facts);
   return iree_ok_status();
 }
 
 static void loom_target_module_compile_entry_from_facts(
     const loom_module_t* module, loom_symbol_id_t symbol_id,
-    const loom_function_symbol_facts_t* function_facts,
+    const loom_func_symbol_facts_t* func_facts,
     loom_target_module_compile_entry_t* out_entry) {
-  out_entry->function =
-      loom_func_like_cast(module, function_facts->function_op);
-  out_entry->function_name = function_facts->name;
-  out_entry->function_ref = (loom_symbol_ref_t){
+  out_entry->func = loom_func_like_cast(module, func_facts->func_op);
+  out_entry->func_name = func_facts->name;
+  out_entry->func_ref = (loom_symbol_ref_t){
       .module_id = 0,
       .symbol_id = symbol_id,
   };
-  out_entry->target_ref = function_facts->target_symbol;
-  out_entry->bundle_storage.snapshot = *function_facts->target_bundle->snapshot;
-  out_entry->bundle_storage.export_plan = function_facts->export_plan;
-  out_entry->bundle_storage.config = *function_facts->target_bundle->config;
+  out_entry->target_ref = func_facts->target_symbol;
+  out_entry->bundle_storage.snapshot = *func_facts->target_bundle->snapshot;
+  out_entry->bundle_storage.export_plan = func_facts->export_plan;
+  out_entry->bundle_storage.config = *func_facts->target_bundle->config;
   out_entry->bundle_storage.bundle = (loom_target_bundle_t){
-      .name = function_facts->target_bundle->name,
+      .name = func_facts->target_bundle->name,
       .snapshot = &out_entry->bundle_storage.snapshot,
       .export_plan = &out_entry->bundle_storage.export_plan,
       .config = &out_entry->bundle_storage.config,
@@ -286,38 +285,36 @@ static iree_status_t loom_target_module_compile_try_entry(
     bool require_compatible, bool* out_compatible,
     loom_target_module_compile_entry_t* out_entry) {
   *out_compatible = false;
-  const loom_function_symbol_facts_t* function_facts = NULL;
-  IREE_RETURN_IF_ERROR(loom_target_module_compile_lookup_function_facts(
-      module, fact_table, symbol_id, &function_facts));
-  if (!function_facts || !function_facts->has_body) {
+  const loom_func_symbol_facts_t* func_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_lookup_func_facts(
+      module, fact_table, symbol_id, &func_facts));
+  if (!func_facts || !func_facts->has_body) {
     if (!require_compatible) {
       return iree_ok_status();
     }
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "entry symbol is not a function with a body");
+                            "entry symbol is not a func with a body");
   }
-  if (function_facts->target_bundle == NULL) {
+  if (func_facts->target_bundle == NULL) {
     if (!require_compatible) {
       return iree_ok_status();
     }
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "entry function @%.*s must declare a target profile",
-        (int)function_facts->name.size, function_facts->name.data);
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "entry func @%.*s must declare a target profile",
+                            (int)func_facts->name.size, func_facts->name.data);
   }
 
   loom_target_module_compile_entry_t entry = {0};
-  loom_target_module_compile_entry_from_facts(module, symbol_id, function_facts,
+  loom_target_module_compile_entry_from_facts(module, symbol_id, func_facts,
                                               &entry);
   if (!predicate(predicate_user_data, &entry)) {
     if (!require_compatible) {
       return iree_ok_status();
     }
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "entry function @%.*s is not compatible with %.*s",
-                            (int)function_facts->name.size,
-                            function_facts->name.data, (int)entry_kind.size,
-                            entry_kind.data);
+                            "entry func @%.*s is not compatible with %.*s",
+                            (int)func_facts->name.size, func_facts->name.data,
+                            (int)entry_kind.size, entry_kind.data);
   }
 
   loom_target_module_compile_assign_entry(&entry, out_entry);
@@ -368,13 +365,13 @@ static iree_status_t loom_target_module_compile_select_single_entry(
   if (candidate_count == 0) {
     return iree_make_status(
         IREE_STATUS_NOT_FOUND,
-        "module contains no %.*s-compatible function with a target profile",
+        "module contains no %.*s-compatible func with a target profile",
         (int)entry_kind.size, entry_kind.data);
   }
   if (candidate_count > 1) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "module contains %" PRIhsz
-                            " %.*s-compatible functions; select one by symbol",
+                            " %.*s-compatible funcs; select one by symbol",
                             candidate_count, (int)entry_kind.size,
                             entry_kind.data);
   }

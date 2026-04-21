@@ -68,7 +68,7 @@ static iree_status_t loom_amdgpu_module_compile_append_descriptor_symbol(
   if (!iree_string_view_is_empty(export_plan->export_symbol)) {
     symbol = export_plan->export_symbol;
   } else {
-    symbol = entry->function_name;
+    symbol = entry->func_name;
   }
   if (iree_string_view_is_empty(symbol)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -267,11 +267,11 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
       target_options, LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
   loom_op_t* low_function_op = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_module_compile_select_low_function(
-      module, low_registry, entry, entry->function, diagnostic_emitter,
-      max_errors, &low_function_op));
+      module, low_registry, entry, entry->func, diagnostic_emitter, max_errors,
+      &low_function_op));
   if (report != NULL) {
-    loom_symbol_ref_t lowered_ref = entry->function_ref;
-    if (low_function_op != entry->function.op) {
+    loom_symbol_ref_t lowered_ref = entry->func_ref;
+    if (low_function_op != entry->func.op) {
       lowered_ref =
           loom_func_like_callee(loom_func_like_cast(module, low_function_op));
     }

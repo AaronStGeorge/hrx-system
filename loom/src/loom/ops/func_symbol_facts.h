@@ -4,15 +4,15 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Function symbol facts.
+// Func symbol facts.
 //
-// These facts are the dense, direct-indexed function context shared by source
-// functions and target-low functions. Dialects expose structure through the
+// These facts are the dense, direct-indexed func context shared by source funcs
+// and target-low funcs. Dialects expose structure through the
 // FuncLike interface; passes consume this payload instead of walking attrs or
 // looking for companion global records.
 
-#ifndef LOOM_OPS_FUNCTION_SYMBOL_FACTS_H_
-#define LOOM_OPS_FUNCTION_SYMBOL_FACTS_H_
+#ifndef LOOM_OPS_FUNC_SYMBOL_FACTS_H_
+#define LOOM_OPS_FUNC_SYMBOL_FACTS_H_
 
 #include "iree/base/api.h"
 #include "loom/analysis/symbol_facts.h"
@@ -23,34 +23,34 @@
 extern "C" {
 #endif
 
-typedef struct loom_function_symbol_facts_t loom_function_symbol_facts_t;
+typedef struct loom_func_symbol_facts_t loom_func_symbol_facts_t;
 typedef struct loom_target_profile_symbol_facts_t
     loom_target_profile_symbol_facts_t;
 
-// Resolved function symbol payload.
-typedef struct loom_function_symbol_facts_t {
+// Resolved func symbol payload.
+typedef struct loom_func_symbol_facts_t {
   // Common symbol-fact header.
   loom_symbol_facts_base_t base;
 
-  // Defining function op.
-  loom_op_t* function_op;
+  // Defining func op.
+  loom_op_t* func_op;
 
-  // Module-local symbol reference for the function definition.
+  // Module-local symbol reference for the func definition.
   loom_symbol_ref_t symbol;
 
-  // Borrowed function symbol name from the module string table.
+  // Borrowed func symbol name from the module string table.
   iree_string_view_t name;
 
-  // Visibility enum value from the function interface.
+  // Visibility enum value from the func interface.
   uint8_t visibility;
 
-  // Calling convention enum value from the function interface.
+  // Calling convention enum value from the func interface.
   uint8_t calling_convention;
 
-  // Purity enum value from the function interface.
+  // Purity enum value from the func interface.
   uint8_t purity;
 
-  // True when the function op owns an implementation body.
+  // True when the func op owns an implementation body.
   bool has_body;
 
   // Borrowed argument value IDs in signature order.
@@ -65,7 +65,7 @@ typedef struct loom_function_symbol_facts_t {
   // Number of result value IDs.
   uint16_t result_count;
 
-  // True when the function is an external import declaration.
+  // True when the func is an external import declaration.
   bool imports;
 
   // Borrowed import module name for external declarations, or empty.
@@ -77,16 +77,16 @@ typedef struct loom_function_symbol_facts_t {
   // Module-local target profile symbol, or null for target-independent funcs.
   loom_symbol_ref_t target_symbol;
 
-  // Resolved target profile facts, or NULL for target-independent functions.
+  // Resolved target profile facts, or NULL for target-independent funcs.
   const loom_target_profile_symbol_facts_t* target_profile;
 
-  // Effective target bundle, or NULL for target-independent functions.
+  // Effective target bundle, or NULL for target-independent funcs.
   const loom_target_bundle_t* target_bundle;
 
   // Effective ABI/export plan. Valid when target_bundle is non-NULL.
   loom_target_export_plan_t export_plan;
 
-  // True when the function declares an artifact/package export.
+  // True when the func declares an artifact/package export.
   bool exports;
 
   // Artifact/package symbol from export attrs, or null when unassigned.
@@ -97,17 +97,17 @@ typedef struct loom_function_symbol_facts_t {
 
   // Export ordinal within artifact_symbol when has_export_ordinal is true.
   uint32_t export_ordinal;
-} loom_function_symbol_facts_t;
+} loom_func_symbol_facts_t;
 
-// Symbol fact domain used by generated function symbol descriptors.
-extern const loom_symbol_fact_domain_t loom_function_symbol_fact_domain;
+// Symbol fact domain used by generated func symbol descriptors.
+extern const loom_symbol_fact_domain_t loom_func_symbol_fact_domain;
 
-// Casts generic symbol facts to function facts when domains match.
-const loom_function_symbol_facts_t* loom_function_symbol_facts_cast(
+// Casts generic symbol facts to func facts when domains match.
+const loom_func_symbol_facts_t* loom_func_symbol_facts_cast(
     const loom_symbol_facts_base_t* facts);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // LOOM_OPS_FUNCTION_SYMBOL_FACTS_H_
+#endif  // LOOM_OPS_FUNC_SYMBOL_FACTS_H_

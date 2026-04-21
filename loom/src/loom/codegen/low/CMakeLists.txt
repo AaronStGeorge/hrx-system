@@ -479,7 +479,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::src::loom::analysis::symbol_facts
     loom::src::loom::ir
-    loom::src::loom::ops::function_symbol_facts
+    loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::target
     loom::src::loom::target::preset_registry
   PUBLIC

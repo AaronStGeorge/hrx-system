@@ -7,7 +7,7 @@
 // Shared module-to-target compilation helpers.
 //
 // These utilities own target-neutral mechanics that every concrete backend
-// needs: generic and low verification, function-entry selection, function-owned
+// needs: generic and low verification, func-entry selection, func-owned
 // target profile resolution, and diagnostic emission with source ranges.
 
 #ifndef LOOM_TARGET_MODULE_COMPILER_H_
@@ -26,8 +26,8 @@ extern "C" {
 #endif
 
 typedef struct loom_target_module_compile_options_t {
-  // Optional function symbol to compile. Empty requires exactly one compatible
-  // function with a target profile. A leading '@' is accepted for command-line
+  // Optional func symbol to compile. Empty requires exactly one compatible
+  // func with a target profile. A leading '@' is accepted for command-line
   // ergonomics.
   iree_string_view_t entry_symbol;
   // Diagnostic sink used for verification, lowering, scheduling, and
@@ -41,16 +41,16 @@ typedef struct loom_target_module_compile_options_t {
 } loom_target_module_compile_options_t;
 
 typedef struct loom_target_module_compile_entry_t {
-  // Source or low entry function selected for this compilation.
-  loom_func_like_t function;
-  // Borrowed selected function symbol name.
-  iree_string_view_t function_name;
-  // Module-local symbol reference for |function|.
-  loom_symbol_ref_t function_ref;
-  // Module-local target.profile symbol referenced by |function|.
+  // Source or low entry func selected for this compilation.
+  loom_func_like_t func;
+  // Borrowed selected func symbol name.
+  iree_string_view_t func_name;
+  // Module-local symbol reference for |func|.
+  loom_symbol_ref_t func_ref;
+  // Module-local target.profile symbol referenced by |func|.
   loom_symbol_ref_t target_ref;
-  // Materialized target bundle selected by |function|. The export plan is the
-  // function-owned effective export plan, not a profile-global backreference.
+  // Materialized target bundle selected by |func|. The export plan is the
+  // func-owned effective export plan, not a profile-global backreference.
   loom_target_ir_bundle_storage_t bundle_storage;
 } loom_target_module_compile_entry_t;
 
@@ -107,7 +107,7 @@ iree_status_t loom_target_module_compile_find_symbol_by_name(
     const loom_module_t* module, iree_string_view_t symbol_name,
     uint16_t* out_symbol_id);
 
-// Selects either the named function entry or the only compatible function entry
+// Selects either the named func entry or the only compatible func entry
 // according to |predicate|.
 iree_status_t loom_target_module_compile_select_entry(
     const loom_module_t* module,

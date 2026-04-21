@@ -23,8 +23,8 @@ loom_cc_library(
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::function_contract_verify
-    loom::src::loom::ops::function_symbol_facts
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::successor_verify
     loom::src::loom::ops::target

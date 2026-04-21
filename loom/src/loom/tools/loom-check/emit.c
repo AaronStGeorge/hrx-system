@@ -72,8 +72,8 @@ typedef struct loom_check_emit_request_t {
   loom_check_emit_format_t format;
   // Canonical/user-facing emit target name used in diagnostics.
   iree_string_view_t emit_target_name;
-  // Module-local source function symbol name used by source-low lowering.
-  iree_string_view_t source_low_function_symbol_name;
+  // Module-local source func symbol name used by source-low lowering.
+  iree_string_view_t source_low_func_symbol_name;
   // Module-local function symbol name used by analysis dumps.
   iree_string_view_t analysis_symbol_name;
   // Low descriptor set used by descriptor-manifest dumps.
@@ -499,7 +499,7 @@ static iree_status_t loom_check_emit_parse_request(
   *out_request = (loom_check_emit_request_t){
       .format = LOOM_CHECK_EMIT_LIVENESS_JSON,
       .emit_target_name = IREE_SV("emit"),
-      .source_low_function_symbol_name = iree_string_view_empty(),
+      .source_low_func_symbol_name = iree_string_view_empty(),
       .analysis_symbol_name = iree_string_view_empty(),
       .low_descriptor_set = NULL,
       .low_descriptor_set_key = iree_string_view_empty(),
@@ -644,16 +644,14 @@ static iree_status_t loom_check_emit_parse_request(
     symbol_name = iree_string_view_trim(symbol_name);
     option_text = iree_string_view_trim(option_text);
     if (!iree_string_view_starts_with(symbol_name, IREE_SV("@"))) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "source-low requires a source function symbol name");
-    }
-    out_request->source_low_function_symbol_name =
-        iree_string_view_substr(symbol_name, 1, IREE_HOST_SIZE_MAX);
-    if (iree_string_view_is_empty(
-            out_request->source_low_function_symbol_name)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "source function symbol name is required");
+                              "source-low requires a source func symbol name");
+    }
+    out_request->source_low_func_symbol_name =
+        iree_string_view_substr(symbol_name, 1, IREE_HOST_SIZE_MAX);
+    if (iree_string_view_is_empty(out_request->source_low_func_symbol_name)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "source func symbol name is required");
     }
     IREE_RETURN_IF_ERROR(
         loom_check_emit_parse_source_low_options(option_text, out_request));
@@ -1022,13 +1020,13 @@ static iree_status_t loom_check_emit_write_source_low_text(
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
   loom_low_source_selection_t selection = {0};
   const loom_low_source_selection_options_t selection_options = {
-      .function_symbol_name = request->source_low_function_symbol_name,
+      .func_symbol_name = request->source_low_func_symbol_name,
       .descriptor_registry = &low_registry->registry,
       .policy_registry = policy_registry,
       .lowering_kind = IREE_SV("source-to-low"),
   };
   loom_low_lower_result_t lower_result = {0};
-  iree_status_t status = loom_low_select_source_function(
+  iree_status_t status = loom_low_select_source_func(
       module, &selection_options, &selection_arena, &selection);
   if (iree_status_is_ok(status)) {
     const loom_low_lower_options_t lower_options = {
@@ -1043,7 +1041,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
         .emitter = loom_target_module_compile_emitter(&pass_emitter),
         .max_errors = 20,
     };
-    status = loom_low_lower_function(module, selection.function, &lower_options,
+    status = loom_low_lower_function(module, selection.func, &lower_options,
                                      &lower_result);
   }
   iree_arena_deinitialize(&selection_arena);
