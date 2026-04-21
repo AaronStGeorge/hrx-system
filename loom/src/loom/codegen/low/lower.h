@@ -285,6 +285,16 @@ iree_status_t loom_low_lower_bind_value(loom_low_lower_context_t* context,
                                         loom_value_id_t source_value_id,
                                         loom_value_id_t low_value_id);
 
+// Interns a descriptor-set register-class spelling in the low module.
+iree_status_t loom_low_lower_register_class_string_id(
+    loom_low_lower_context_t* context, uint16_t reg_class_id,
+    loom_string_id_t* out_string_id);
+
+// Creates a target-low register type from a descriptor-set register-class ID.
+iree_status_t loom_low_lower_make_register_type(
+    loom_low_lower_context_t* context, uint16_t reg_class_id,
+    uint32_t unit_count, loom_type_t* out_type);
+
 // Emits a descriptor-backed low.op selected by stable descriptor ID.
 //
 // The selected descriptor set on |context| is the authority for converting the

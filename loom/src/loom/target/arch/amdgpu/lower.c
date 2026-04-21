@@ -142,48 +142,45 @@ static bool loom_amdgpu_value_is_32bit_view(loom_low_lower_context_t* context,
 }
 
 static iree_status_t loom_amdgpu_make_register_type(
-    loom_low_lower_context_t* context, iree_string_view_t register_class,
+    loom_low_lower_context_t* context, uint16_t reg_class_id,
     uint32_t unit_count, loom_type_t* out_type) {
-  loom_string_id_t register_class_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(loom_low_lower_context_module(context),
-                                register_class, &register_class_id));
-  *out_type = loom_type_register(register_class_id, unit_count);
-  return iree_ok_status();
+  return loom_low_lower_make_register_type(context, reg_class_id, unit_count,
+                                           out_type);
 }
 
 static iree_status_t loom_amdgpu_make_sgpr_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
-  return loom_amdgpu_make_register_type(context, IREE_SV("amdgpu.sgpr"), 1,
-                                        out_type);
+  return loom_amdgpu_make_register_type(
+      context, AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR, 1, out_type);
 }
 
 static iree_status_t loom_amdgpu_make_sgpr_range_type(
     loom_low_lower_context_t* context, uint32_t unit_count,
     loom_type_t* out_type) {
-  return loom_amdgpu_make_register_type(context, IREE_SV("amdgpu.sgpr"),
-                                        unit_count, out_type);
+  return loom_amdgpu_make_register_type(
+      context, AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR, unit_count,
+      out_type);
 }
 
 static iree_status_t loom_amdgpu_make_vgpr_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
-  return loom_amdgpu_make_register_type(context, IREE_SV("amdgpu.vgpr"), 1,
-                                        out_type);
+  return loom_amdgpu_make_register_type(
+      context, AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR, 1, out_type);
 }
 
-static bool loom_amdgpu_low_type_register_class_is(
-    loom_low_lower_context_t* context, loom_type_t type,
-    iree_string_view_t expected_register_class) {
+static iree_status_t loom_amdgpu_low_type_register_class_is(
+    loom_low_lower_context_t* context, loom_type_t type, uint16_t reg_class_id,
+    bool* out_match) {
+  IREE_ASSERT_ARGUMENT(out_match);
+  *out_match = false;
   if (!loom_type_is_register(type)) {
-    return false;
+    return iree_ok_status();
   }
-  loom_string_id_t register_class_id = loom_type_register_class_id(type);
-  loom_module_t* module = loom_low_lower_context_module(context);
-  if (register_class_id >= module->strings.count) {
-    return false;
-  }
-  return iree_string_view_equal(module->strings.entries[register_class_id],
-                                expected_register_class);
+  loom_string_id_t expected_class_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_register_class_string_id(
+      context, reg_class_id, &expected_class_id));
+  *out_match = loom_type_register_class_id(type) == expected_class_id;
+  return iree_ok_status();
 }
 
 static bool loom_amdgpu_value_prefers_vgpr(loom_low_lower_context_t* context,
@@ -282,8 +279,8 @@ static iree_status_t loom_amdgpu_map_type(void* user_data,
   }
   if (loom_amdgpu_type_is_vector_4xi32(source_type) ||
       loom_amdgpu_type_is_vector_4xf32(source_type)) {
-    return loom_amdgpu_make_register_type(context, IREE_SV("amdgpu.vgpr"), 4,
-                                          out_low_type);
+    return loom_amdgpu_make_register_type(
+        context, AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR, 4, out_low_type);
   }
   return loom_low_lower_emit_reject(
       context, source_op, IREE_SV("type"), IREE_SV("source"),
@@ -1155,8 +1152,10 @@ static iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
 
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_type_t low_type = loom_module_value_type(module, low_value);
-  if (loom_amdgpu_low_type_register_class_is(context, low_type,
-                                             IREE_SV("amdgpu.vgpr"))) {
+  bool is_vgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+      context, low_type, AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR, &is_vgpr));
+  if (is_vgpr) {
     *out_low_value = low_value;
     return iree_ok_status();
   }
@@ -1578,8 +1577,11 @@ static iree_status_t loom_amdgpu_lower_i32_binary_op(
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
       context, source_op, source_result, &result_type));
-  if (loom_amdgpu_low_type_register_class_is(context, result_type,
-                                             IREE_SV("amdgpu.vgpr"))) {
+  bool result_is_vgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+      context, result_type, AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR,
+      &result_is_vgpr));
+  if (result_is_vgpr) {
     const loom_value_id_t first_source =
         swap_vector_operands ? source_rhs : source_lhs;
     const loom_value_id_t second_source =

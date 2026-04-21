@@ -26,6 +26,19 @@ typedef struct loom_low_allocation_build_state_t {
   loom_region_t* body;
   // Resolved target selected by the low function.
   loom_low_resolved_target_t target;
+  // Descriptor register-class IDs indexed by module string ID.
+  uint16_t* descriptor_reg_class_ids;
+  // Number of entries in |descriptor_reg_class_ids|.
+  iree_host_size_t descriptor_reg_class_id_count;
+  // Resolved explicit per-class register budgets.
+  struct loom_low_allocation_resolved_budget_t* resolved_budgets;
+  // Number of entries in |resolved_budgets|.
+  iree_host_size_t resolved_budget_count;
+  // Resolved whole-function target-owned location ranges.
+  struct loom_low_allocation_resolved_reserved_range_t*
+      resolved_reserved_ranges;
+  // Number of entries in |resolved_reserved_ranges|.
+  iree_host_size_t resolved_reserved_range_count;
   // Liveness analysis for |body|.
   loom_liveness_analysis_t liveness;
   // Mutable assignment records being built.
@@ -52,7 +65,27 @@ typedef struct loom_low_allocation_build_state_t {
   iree_host_size_t materialized_copy_count;
 } loom_low_allocation_build_state_t;
 
+typedef struct loom_low_allocation_resolved_budget_t {
+  // Descriptor-set-local register class ID.
+  uint16_t descriptor_reg_class_id;
+  // Maximum allocation units available for the class.
+  uint32_t max_units;
+} loom_low_allocation_resolved_budget_t;
+
+typedef struct loom_low_allocation_resolved_reserved_range_t {
+  // Descriptor-set-local register class ID.
+  uint16_t descriptor_reg_class_id;
+  // Target-visible reserved location kind.
+  loom_low_allocation_location_kind_t location_kind;
+  // First physical register or target ID in the reserved range.
+  uint32_t location_base;
+  // Number of contiguous units reserved at |location_base|.
+  uint32_t location_count;
+} loom_low_allocation_resolved_reserved_range_t;
+
 typedef struct loom_low_allocation_class_capacity_t {
+  // Descriptor-set-local register class ID.
+  uint16_t descriptor_reg_class_id;
   // Location kind used for this class.
   loom_low_allocation_location_kind_t location_kind;
   // Maximum allocation units when |is_bounded| is true.
@@ -233,31 +266,13 @@ static void loom_low_allocation_sort_intervals(
   }
 }
 
-static bool loom_low_allocation_budget_matches(
-    const loom_module_t* module, loom_liveness_value_class_t value_class,
-    iree_string_view_t register_class) {
-  if (value_class.type_kind != LOOM_TYPE_REGISTER) {
-    return false;
-  }
-  iree_string_view_t value_register_class =
-      loom_low_allocation_module_string(module, value_class.register_class_id);
-  return iree_string_view_equal(value_register_class, register_class);
-}
-
-static bool loom_low_allocation_register_class_matches(
-    const loom_module_t* module, loom_liveness_value_class_t value_class,
-    iree_string_view_t register_class) {
-  return loom_low_allocation_budget_matches(module, value_class,
-                                            register_class);
-}
-
 static bool loom_low_allocation_lookup_budget(
-    const loom_low_allocation_build_state_t* state,
-    loom_liveness_value_class_t value_class, uint32_t* out_max_units) {
-  for (iree_host_size_t i = 0; i < state->options->budget_count; ++i) {
-    const loom_low_allocation_budget_t* budget = &state->options->budgets[i];
-    if (!loom_low_allocation_budget_matches(state->module, value_class,
-                                            budget->register_class)) {
+    const loom_low_allocation_build_state_t* state, uint16_t reg_class_id,
+    uint32_t* out_max_units) {
+  for (iree_host_size_t i = 0; i < state->resolved_budget_count; ++i) {
+    const loom_low_allocation_resolved_budget_t* budget =
+        &state->resolved_budgets[i];
+    if (budget->descriptor_reg_class_id != reg_class_id) {
       continue;
     }
     *out_max_units = budget->max_units;
@@ -268,7 +283,12 @@ static bool loom_low_allocation_lookup_budget(
 
 static iree_status_t loom_low_allocation_lookup_descriptor_register_class(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t name,
-    const loom_low_reg_class_t** out_reg_class, bool* out_found) {
+    uint16_t* out_reg_class_id, const loom_low_reg_class_t** out_reg_class,
+    bool* out_found) {
+  IREE_ASSERT_ARGUMENT(out_reg_class_id);
+  IREE_ASSERT_ARGUMENT(out_reg_class);
+  IREE_ASSERT_ARGUMENT(out_found);
+  *out_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
   *out_reg_class = NULL;
   *out_found = false;
   if (!descriptor_set) {
@@ -280,6 +300,7 @@ static iree_status_t loom_low_allocation_lookup_descriptor_register_class(
     IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
         descriptor_set, reg_class->name_string_offset, &reg_class_name));
     if (iree_string_view_equal(reg_class_name, name)) {
+      *out_reg_class_id = (uint16_t)i;
       *out_reg_class = reg_class;
       *out_found = true;
       return iree_ok_status();
@@ -288,19 +309,45 @@ static iree_status_t loom_low_allocation_lookup_descriptor_register_class(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_require_descriptor_register_class(
-    const loom_low_allocation_build_state_t* state, iree_string_view_t name,
+static iree_status_t loom_low_allocation_resolve_descriptor_register_class(
+    const loom_low_allocation_build_state_t* state,
+    loom_liveness_value_class_t value_class, uint16_t* out_reg_class_id,
     const loom_low_reg_class_t** out_reg_class) {
-  bool found_reg_class = false;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_lookup_descriptor_register_class(
-      state->target.descriptor_set, name, out_reg_class, &found_reg_class));
-  if (!found_reg_class) {
+  if (out_reg_class_id) {
+    *out_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  }
+  if (out_reg_class) {
+    *out_reg_class = NULL;
+  }
+  if (value_class.type_kind != LOOM_TYPE_REGISTER ||
+      value_class.register_class_id == LOOM_STRING_ID_INVALID ||
+      value_class.register_class_id >= state->descriptor_reg_class_id_count) {
+    iree_string_view_t register_class = loom_low_allocation_module_string(
+        state->module, value_class.register_class_id);
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low allocation value class '%.*s' is not a descriptor register class",
+        (int)register_class.size, register_class.data);
+  }
+  const uint16_t reg_class_id =
+      state->descriptor_reg_class_ids[value_class.register_class_id];
+  if (reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
+      reg_class_id >= state->target.descriptor_set->reg_class_count) {
+    iree_string_view_t register_class = loom_low_allocation_module_string(
+        state->module, value_class.register_class_id);
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "low allocation register class '%.*s' is not defined by descriptor set "
         "'%.*s'",
-        (int)name.size, name.data, (int)state->target.descriptor_set_key.size,
+        (int)register_class.size, register_class.data,
+        (int)state->target.descriptor_set_key.size,
         state->target.descriptor_set_key.data);
+  }
+  if (out_reg_class_id) {
+    *out_reg_class_id = reg_class_id;
+  }
+  if (out_reg_class) {
+    *out_reg_class = &state->target.descriptor_set->reg_classes[reg_class_id];
   }
   return iree_ok_status();
 }
@@ -315,19 +362,96 @@ loom_low_allocation_reg_class_location_kind(
   return LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
 }
 
+static iree_status_t loom_low_allocation_initialize_register_class_map(
+    loom_low_allocation_build_state_t* state) {
+  state->descriptor_reg_class_id_count = state->module->strings.count;
+  if (state->descriptor_reg_class_id_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->arena, state->descriptor_reg_class_id_count,
+      sizeof(*state->descriptor_reg_class_ids),
+      (void**)&state->descriptor_reg_class_ids));
+  for (iree_host_size_t i = 0; i < state->descriptor_reg_class_id_count; ++i) {
+    state->descriptor_reg_class_ids[i] = LOOM_LOW_REG_CLASS_NONE;
+  }
+  for (uint32_t i = 0; i < state->target.descriptor_set->reg_class_count; ++i) {
+    const loom_low_reg_class_t* reg_class =
+        &state->target.descriptor_set->reg_classes[i];
+    iree_string_view_t reg_class_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+        state->target.descriptor_set, reg_class->name_string_offset,
+        &reg_class_name));
+    for (iree_host_size_t string_id = 0;
+         string_id < state->module->strings.count; ++string_id) {
+      if (!iree_string_view_equal(state->module->strings.entries[string_id],
+                                  reg_class_name)) {
+        continue;
+      }
+      state->descriptor_reg_class_ids[string_id] = (uint16_t)i;
+      break;
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_resolve_budgets(
+    loom_low_allocation_build_state_t* state) {
+  if (state->options->budget_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->arena, state->options->budget_count,
+      sizeof(*state->resolved_budgets), (void**)&state->resolved_budgets));
+  for (iree_host_size_t i = 0; i < state->options->budget_count; ++i) {
+    const loom_low_allocation_budget_t* budget = &state->options->budgets[i];
+    uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+    const loom_low_reg_class_t* reg_class = NULL;
+    bool found_reg_class = false;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_lookup_descriptor_register_class(
+        state->target.descriptor_set, budget->register_class, &reg_class_id,
+        &reg_class, &found_reg_class));
+    (void)reg_class;
+    if (!found_reg_class) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "unknown low allocation budget register class '%.*s' for descriptor "
+          "set '%.*s'",
+          (int)budget->register_class.size, budget->register_class.data,
+          (int)state->target.descriptor_set_key.size,
+          state->target.descriptor_set_key.data);
+    }
+    for (iree_host_size_t j = 0; j < state->resolved_budget_count; ++j) {
+      if (state->resolved_budgets[j].descriptor_reg_class_id != reg_class_id) {
+        continue;
+      }
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "duplicate low allocation budget register class '%.*s'",
+          (int)budget->register_class.size, budget->register_class.data);
+    }
+    state->resolved_budgets[state->resolved_budget_count++] =
+        (loom_low_allocation_resolved_budget_t){
+            .descriptor_reg_class_id = reg_class_id,
+            .max_units = budget->max_units,
+        };
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_class_capacity(
     const loom_low_allocation_build_state_t* state,
     loom_liveness_value_class_t value_class,
     loom_low_allocation_class_capacity_t* out_capacity) {
-  iree_string_view_t register_class_name = loom_low_allocation_module_string(
-      state->module, value_class.register_class_id);
+  uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
   const loom_low_reg_class_t* reg_class = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_require_descriptor_register_class(
-      state, register_class_name, &reg_class));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_descriptor_register_class(
+      state, value_class, &reg_class_id, &reg_class));
 
   uint32_t budget_units = 0;
-  if (loom_low_allocation_lookup_budget(state, value_class, &budget_units)) {
+  if (loom_low_allocation_lookup_budget(state, reg_class_id, &budget_units)) {
     *out_capacity = (loom_low_allocation_class_capacity_t){
+        .descriptor_reg_class_id = reg_class_id,
         .location_kind = loom_low_allocation_reg_class_location_kind(reg_class),
         .max_units = budget_units,
         .alloc_unit_bits = reg_class->alloc_unit_bits,
@@ -340,6 +464,7 @@ static iree_status_t loom_low_allocation_class_capacity(
 
   if (reg_class->physical_count > 0) {
     *out_capacity = (loom_low_allocation_class_capacity_t){
+        .descriptor_reg_class_id = reg_class_id,
         .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
         .max_units = reg_class->physical_count,
         .alloc_unit_bits = reg_class->alloc_unit_bits,
@@ -351,6 +476,7 @@ static iree_status_t loom_low_allocation_class_capacity(
   }
 
   *out_capacity = (loom_low_allocation_class_capacity_t){
+      .descriptor_reg_class_id = reg_class_id,
       .location_kind = LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
       .max_units = UINT32_MAX,
       .alloc_unit_bits = reg_class->alloc_unit_bits,
@@ -418,38 +544,6 @@ static iree_status_t loom_low_allocation_validate_physical_bounds(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_validate_budgets(
-    const loom_low_allocation_build_state_t* state) {
-  for (iree_host_size_t i = 0; i < state->options->budget_count; ++i) {
-    const loom_low_allocation_budget_t* budget = &state->options->budgets[i];
-    const loom_low_reg_class_t* reg_class = NULL;
-    bool found_reg_class = false;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_lookup_descriptor_register_class(
-        state->target.descriptor_set, budget->register_class, &reg_class,
-        &found_reg_class));
-    (void)reg_class;
-    if (!found_reg_class) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "unknown low allocation budget register class '%.*s' for descriptor "
-          "set '%.*s'",
-          (int)budget->register_class.size, budget->register_class.data,
-          (int)state->target.descriptor_set_key.size,
-          state->target.descriptor_set_key.data);
-    }
-    for (iree_host_size_t j = 0; j < i; ++j) {
-      if (iree_string_view_equal(state->options->budgets[j].register_class,
-                                 budget->register_class)) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "duplicate low allocation budget register class '%.*s'",
-            (int)budget->register_class.size, budget->register_class.data);
-      }
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_allocation_validate_option_shapes(
     const loom_low_allocation_options_t* options) {
   if (options->budget_count > 0 && !options->budgets) {
@@ -472,8 +566,15 @@ static iree_status_t loom_low_allocation_validate_option_shapes(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_validate_reserved_ranges(
-    const loom_low_allocation_build_state_t* state) {
+static iree_status_t loom_low_allocation_resolve_reserved_ranges(
+    loom_low_allocation_build_state_t* state) {
+  if (state->options->reserved_range_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->arena, state->options->reserved_range_count,
+      sizeof(*state->resolved_reserved_ranges),
+      (void**)&state->resolved_reserved_ranges));
   for (iree_host_size_t i = 0; i < state->options->reserved_range_count; ++i) {
     const loom_low_allocation_reserved_range_t* reserved_range =
         &state->options->reserved_ranges[i];
@@ -486,11 +587,12 @@ static iree_status_t loom_low_allocation_validate_reserved_ranges(
         reserved_range->location_kind, reserved_range->location_base,
         reserved_range->location_count, IREE_SV("reserved range")));
 
+    uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
     const loom_low_reg_class_t* reg_class = NULL;
     bool found_reg_class = false;
     IREE_RETURN_IF_ERROR(loom_low_allocation_lookup_descriptor_register_class(
         state->target.descriptor_set, reserved_range->register_class,
-        &reg_class, &found_reg_class));
+        &reg_class_id, &reg_class, &found_reg_class));
     if (!found_reg_class) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
@@ -504,12 +606,12 @@ static iree_status_t loom_low_allocation_validate_reserved_ranges(
     IREE_RETURN_IF_ERROR(loom_low_allocation_validate_physical_bounds(
         reg_class, reserved_range->location_kind, reserved_range->location_base,
         reserved_range->location_count, IREE_SV("reserved range")));
-    for (iree_host_size_t j = 0; j < i; ++j) {
-      const loom_low_allocation_reserved_range_t* existing =
-          &state->options->reserved_ranges[j];
+    for (iree_host_size_t j = 0; j < state->resolved_reserved_range_count;
+         ++j) {
+      const loom_low_allocation_resolved_reserved_range_t* existing =
+          &state->resolved_reserved_ranges[j];
       if (reserved_range->location_kind != existing->location_kind ||
-          !iree_string_view_equal(reserved_range->register_class,
-                                  existing->register_class)) {
+          reg_class_id != existing->descriptor_reg_class_id) {
         continue;
       }
       if (loom_low_allocation_location_range_overlaps(
@@ -520,6 +622,13 @@ static iree_status_t loom_low_allocation_validate_reserved_ranges(
             "low allocation reserved ranges %zu and %zu overlap", j, i);
       }
     }
+    state->resolved_reserved_ranges[state->resolved_reserved_range_count++] =
+        (loom_low_allocation_resolved_reserved_range_t){
+            .descriptor_reg_class_id = reg_class_id,
+            .location_kind = reserved_range->location_kind,
+            .location_base = reserved_range->location_base,
+            .location_count = reserved_range->location_count,
+        };
   }
   return iree_ok_status();
 }
@@ -566,11 +675,9 @@ static iree_status_t loom_low_allocation_validate_fixed_values(
           alignment);
     }
 
-    iree_string_view_t register_class_name = loom_low_allocation_module_string(
-        state->module, interval->value_class.register_class_id);
     const loom_low_reg_class_t* reg_class = NULL;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_require_descriptor_register_class(
-        state, register_class_name, &reg_class));
+    IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_descriptor_register_class(
+        state, interval->value_class, NULL, &reg_class));
     IREE_RETURN_IF_ERROR(loom_low_allocation_validate_physical_bounds(
         reg_class, fixed_value->location_kind, fixed_value->location_base,
         fixed_value->location_count, IREE_SV("fixed value")));
@@ -634,19 +741,16 @@ static bool loom_low_allocation_fixed_value_conflicts(
 }
 
 static bool loom_low_allocation_reserved_range_conflicts(
-    const loom_low_allocation_build_state_t* state,
-    const loom_liveness_interval_t* interval,
+    const loom_low_allocation_build_state_t* state, uint16_t reg_class_id,
     loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
     uint32_t location_count) {
-  for (iree_host_size_t i = 0; i < state->options->reserved_range_count; ++i) {
-    const loom_low_allocation_reserved_range_t* reserved_range =
-        &state->options->reserved_ranges[i];
+  for (iree_host_size_t i = 0; i < state->resolved_reserved_range_count; ++i) {
+    const loom_low_allocation_resolved_reserved_range_t* reserved_range =
+        &state->resolved_reserved_ranges[i];
     if (reserved_range->location_kind != location_kind) {
       continue;
     }
-    if (!loom_low_allocation_register_class_matches(
-            state->module, interval->value_class,
-            reserved_range->register_class)) {
+    if (reserved_range->descriptor_reg_class_id != reg_class_id) {
       continue;
     }
     if (loom_low_allocation_location_range_overlaps(
@@ -660,12 +764,13 @@ static bool loom_low_allocation_reserved_range_conflicts(
 
 static bool loom_low_allocation_candidate_conflicts(
     const loom_low_allocation_build_state_t* state,
-    const loom_liveness_interval_t* interval,
+    const loom_liveness_interval_t* interval, uint16_t reg_class_id,
     loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
     uint32_t location_count, loom_value_id_t ignored_value_id) {
   loom_low_allocation_assignment_t candidate = {
       .value_id = interval->value_id,
       .value_class = interval->value_class,
+      .descriptor_reg_class_id = reg_class_id,
       .start_point = interval->start_point,
       .end_point = interval->end_point,
       .unit_count = interval->unit_count,
@@ -681,8 +786,7 @@ static bool loom_low_allocation_candidate_conflicts(
     if (existing->location_kind != location_kind) {
       continue;
     }
-    if (!loom_liveness_value_class_equal(existing->value_class,
-                                         interval->value_class)) {
+    if (existing->descriptor_reg_class_id != reg_class_id) {
       continue;
     }
     if (!loom_low_allocation_interval_overlaps(existing, &candidate)) {
@@ -698,14 +802,14 @@ static bool loom_low_allocation_candidate_conflicts(
     return true;
   }
   if (loom_low_allocation_reserved_range_conflicts(
-          state, interval, location_kind, location_base, location_count)) {
+          state, reg_class_id, location_kind, location_base, location_count)) {
     return true;
   }
   return false;
 }
 
 static uint32_t loom_low_allocation_unbounded_search_limit(
-    const loom_low_allocation_build_state_t* state,
+    const loom_low_allocation_build_state_t* state, uint16_t reg_class_id,
     loom_liveness_value_class_t value_class,
     loom_low_allocation_location_kind_t location_kind) {
   uint32_t max_end = 0;
@@ -714,8 +818,7 @@ static uint32_t loom_low_allocation_unbounded_search_limit(
     if (assignment->location_kind != location_kind) {
       continue;
     }
-    if (!loom_liveness_value_class_equal(assignment->value_class,
-                                         value_class)) {
+    if (assignment->descriptor_reg_class_id != reg_class_id) {
       continue;
     }
     uint64_t assignment_end =
@@ -749,14 +852,13 @@ static uint32_t loom_low_allocation_unbounded_search_limit(
       max_end = (uint32_t)fixed_value_end;
     }
   }
-  for (iree_host_size_t i = 0; i < state->options->reserved_range_count; ++i) {
-    const loom_low_allocation_reserved_range_t* reserved_range =
-        &state->options->reserved_ranges[i];
+  for (iree_host_size_t i = 0; i < state->resolved_reserved_range_count; ++i) {
+    const loom_low_allocation_resolved_reserved_range_t* reserved_range =
+        &state->resolved_reserved_ranges[i];
     if (reserved_range->location_kind != location_kind) {
       continue;
     }
-    if (!loom_low_allocation_register_class_matches(
-            state->module, value_class, reserved_range->register_class)) {
+    if (reserved_range->descriptor_reg_class_id != reg_class_id) {
       continue;
     }
     uint64_t reserved_range_end = (uint64_t)reserved_range->location_base +
@@ -784,13 +886,15 @@ static bool loom_low_allocation_find_location(
     last_base = capacity.max_units - interval->unit_count;
   } else {
     last_base = loom_low_allocation_unbounded_search_limit(
-        state, interval->value_class, capacity.location_kind);
+        state, capacity.descriptor_reg_class_id, interval->value_class,
+        capacity.location_kind);
   }
 
   const uint32_t alignment = loom_low_allocation_interval_alignment(interval);
   for (uint32_t base = 0; base <= last_base;) {
     if (!loom_low_allocation_candidate_conflicts(
-            state, interval, capacity.location_kind, base, interval->unit_count,
+            state, interval, capacity.descriptor_reg_class_id,
+            capacity.location_kind, base, interval->unit_count,
             LOOM_VALUE_ID_INVALID)) {
       *out_base = base;
       return true;
@@ -876,7 +980,7 @@ static bool loom_low_allocation_assignment_locations_equal(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
   return lhs->location_kind == rhs->location_kind &&
-         loom_liveness_value_class_equal(lhs->value_class, rhs->value_class) &&
+         lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id &&
          lhs->location_base == rhs->location_base &&
          lhs->location_count == rhs->location_count;
 }
@@ -981,9 +1085,9 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
         "low tied result does not match operand allocation class");
   }
   if (loom_low_allocation_candidate_conflicts(
-          state, interval, operand_assignment->location_kind,
-          operand_assignment->location_base, operand_assignment->location_count,
-          tied_operand_id)) {
+          state, interval, operand_assignment->descriptor_reg_class_id,
+          operand_assignment->location_kind, operand_assignment->location_base,
+          operand_assignment->location_count, tied_operand_id)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "low tied result cannot share the operand location without "
@@ -994,6 +1098,8 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
       (loom_low_allocation_assignment_t){
           .value_id = interval->value_id,
           .value_class = interval->value_class,
+          .descriptor_reg_class_id =
+              operand_assignment->descriptor_reg_class_id,
           .start_point = interval->start_point,
           .end_point = interval->end_point,
           .unit_count = interval->unit_count,
@@ -1018,8 +1124,11 @@ static iree_status_t loom_low_allocation_assign_fixed_interval(
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "allocation sidecar exceeds uint32_t range");
   }
+  uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_descriptor_register_class(
+      state, interval->value_class, &reg_class_id, NULL));
   if (loom_low_allocation_candidate_conflicts(
-          state, interval, fixed_value->location_kind,
+          state, interval, reg_class_id, fixed_value->location_kind,
           fixed_value->location_base, fixed_value->location_count,
           interval->value_id)) {
     return iree_make_status(
@@ -1032,6 +1141,7 @@ static iree_status_t loom_low_allocation_assign_fixed_interval(
       (loom_low_allocation_assignment_t){
           .value_id = interval->value_id,
           .value_class = interval->value_class,
+          .descriptor_reg_class_id = reg_class_id,
           .start_point = interval->start_point,
           .end_point = interval->end_point,
           .unit_count = interval->unit_count,
@@ -1193,6 +1303,7 @@ static iree_status_t loom_low_allocation_assign_intervals(
     *assignment = (loom_low_allocation_assignment_t){
         .value_id = interval->value_id,
         .value_class = interval->value_class,
+        .descriptor_reg_class_id = capacity.descriptor_reg_class_id,
         .start_point = interval->start_point,
         .end_point = interval->end_point,
         .unit_count = interval->unit_count,
@@ -1228,7 +1339,7 @@ static bool loom_low_allocation_assignment_pair_conflicts(
   if (lhs->location_kind != rhs->location_kind) {
     return false;
   }
-  if (!loom_liveness_value_class_equal(lhs->value_class, rhs->value_class)) {
+  if (lhs->descriptor_reg_class_id != rhs->descriptor_reg_class_id) {
     return false;
   }
   return loom_low_allocation_interval_overlaps(lhs, rhs) &&
@@ -1341,6 +1452,7 @@ static iree_status_t loom_low_allocation_verify_tied_result_assignments(
 }
 
 static iree_status_t loom_low_allocation_verify_assignment(
+    const loom_low_allocation_sidecar_t* sidecar,
     const loom_low_allocation_assignment_t* assignment,
     iree_host_size_t assignment_index) {
   if (!loom_low_allocation_location_kind_is_known(assignment->location_kind)) {
@@ -1364,6 +1476,15 @@ static iree_status_t loom_low_allocation_verify_assignment(
         IREE_STATUS_OUT_OF_RANGE,
         "allocation assignment %zu location range exceeds uint32_t",
         assignment_index);
+  }
+  if (assignment->descriptor_reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
+      assignment->descriptor_reg_class_id >=
+          sidecar->target.descriptor_set->reg_class_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "allocation assignment %zu has invalid descriptor register class ID "
+        "%" PRIu16,
+        assignment_index, assignment->descriptor_reg_class_id);
   }
   return iree_ok_status();
 }
@@ -1506,6 +1627,11 @@ iree_status_t loom_low_allocation_verify_sidecar(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation sidecar low.func.def is required");
   }
+  if (!sidecar->target.descriptor_set) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "allocation sidecar target descriptor set is "
+                            "required");
+  }
   loom_region_t* body = loom_low_func_def_body(sidecar->function_op);
   if (!body) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1530,7 +1656,8 @@ iree_status_t loom_low_allocation_verify_sidecar(
   iree_host_size_t spill_count = 0;
   for (iree_host_size_t i = 0; i < sidecar->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* lhs = &sidecar->assignments[i];
-    IREE_RETURN_IF_ERROR(loom_low_allocation_verify_assignment(lhs, i));
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_verify_assignment(sidecar, lhs, i));
     if (lhs->location_kind == LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT) {
       ++spill_count;
     }
@@ -1604,6 +1731,32 @@ iree_status_t loom_low_allocation_verify_sidecar(
         "allocation sidecar copy counters do not match copy decisions");
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_low_allocation_assignment_register_class_name(
+    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_assignment_t* assignment,
+    iree_string_view_t* out_register_class_name) {
+  IREE_ASSERT_ARGUMENT(sidecar);
+  IREE_ASSERT_ARGUMENT(sidecar->target.descriptor_set);
+  IREE_ASSERT_ARGUMENT(assignment);
+  IREE_ASSERT_ARGUMENT(out_register_class_name);
+  *out_register_class_name = iree_string_view_empty();
+  if (assignment->descriptor_reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
+      assignment->descriptor_reg_class_id >=
+          sidecar->target.descriptor_set->reg_class_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation assignment %" PRIu32
+        " has invalid descriptor register class ID %" PRIu16,
+        assignment->value_id, assignment->descriptor_reg_class_id);
+  }
+  const loom_low_reg_class_t* reg_class =
+      &sidecar->target.descriptor_set
+           ->reg_classes[assignment->descriptor_reg_class_id];
+  return loom_low_descriptor_set_string(sidecar->target.descriptor_set,
+                                        reg_class->name_string_offset,
+                                        out_register_class_name);
 }
 
 static iree_status_t loom_low_allocation_emit_predicted_spills(
@@ -1749,8 +1902,10 @@ iree_status_t loom_low_allocate_function(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low function target did not resolve");
   }
-  IREE_RETURN_IF_ERROR(loom_low_allocation_validate_budgets(&state));
-  IREE_RETURN_IF_ERROR(loom_low_allocation_validate_reserved_ranges(&state));
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_initialize_register_class_map(&state));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_budgets(&state));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_reserved_ranges(&state));
 
   IREE_RETURN_IF_ERROR(
       loom_liveness_analyze_region(module, state.body, arena, &state.liveness));

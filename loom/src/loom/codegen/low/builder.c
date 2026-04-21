@@ -11,6 +11,50 @@
 
 #include "loom/ir/module.h"
 
+iree_status_t loom_low_build_register_class_string_id(
+    loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
+    uint16_t reg_class_id, loom_string_id_t* out_string_id) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(descriptor_set);
+  IREE_ASSERT_ARGUMENT(out_string_id);
+  *out_string_id = LOOM_STRING_ID_INVALID;
+  if (reg_class_id >= descriptor_set->reg_class_count) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "target-low register class ID %" PRIu16
+                            " is not present in the selected descriptor set",
+                            reg_class_id);
+  }
+
+  const loom_low_reg_class_t* reg_class =
+      &descriptor_set->reg_classes[reg_class_id];
+  iree_string_view_t reg_class_name = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+      descriptor_set, reg_class->name_string_offset, &reg_class_name));
+  if (iree_string_view_is_empty(reg_class_name)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low register class ID %" PRIu16
+                            " has no register class name",
+                            reg_class_id);
+  }
+  return loom_module_intern_string(module, reg_class_name, out_string_id);
+}
+
+iree_status_t loom_low_build_register_type(
+    loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
+    uint16_t reg_class_id, uint32_t unit_count, loom_type_t* out_type) {
+  IREE_ASSERT_ARGUMENT(out_type);
+  *out_type = loom_type_none();
+  if (unit_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "register type unit count must be non-zero");
+  }
+  loom_string_id_t reg_class_string_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_build_register_class_string_id(
+      module, descriptor_set, reg_class_id, &reg_class_string_id));
+  *out_type = loom_type_register(reg_class_string_id, unit_count);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_build_descriptor_opcode_id(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
     uint64_t descriptor_id, loom_string_id_t* out_opcode_id) {

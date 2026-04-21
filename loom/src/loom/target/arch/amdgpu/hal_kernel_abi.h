@@ -81,6 +81,7 @@ typedef struct loom_amdgpu_hal_kernel_abi_layout_t {
 iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
     const loom_module_t* module, const loom_op_t* function_op,
     const loom_target_bundle_t* target_bundle,
+    const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_hal_kernel_abi_layout_t* out_layout,
     iree_arena_allocator_t* arena);
 
@@ -99,6 +100,7 @@ bool loom_amdgpu_hal_kernel_abi_is_workitem_id_x_live_in(
 // pointer live-in to s[0:1] and the workitem_id.x live-in to v0 when present.
 iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
     const loom_module_t* module, const loom_op_t* function_op,
+    const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_allocation_fixed_value_t** out_fixed_values,
     iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena);
 

@@ -224,6 +224,14 @@ def _descriptor_id_define(c_enum_prefix: str, descriptor_key: str) -> str:
     return f"#define {_descriptor_id_constant_name(c_enum_prefix, descriptor_key)} {_hex_u64_literal(descriptor_stable_id(descriptor_key))}"
 
 
+def _reg_class_id_constant_name(c_enum_prefix: str, reg_class_name: str) -> str:
+    return f"{c_enum_prefix}_REG_CLASS_ID_{_c_identifier(reg_class_name).upper()}"
+
+
+def _reg_class_id_define(c_enum_prefix: str, reg_class_name: str, reg_class_id: int) -> str:
+    return f"#define {_reg_class_id_constant_name(c_enum_prefix, reg_class_name)} {reg_class_id}u"
+
+
 def _encoding_id_expr(value: int) -> str:
     return "LOOM_LOW_ID_NONE" if value == LOW_DESCRIPTOR_ENCODING_ID_NONE else str(value)
 
@@ -834,6 +842,9 @@ def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         "",
     ]
     lines.extend(_descriptor_id_define(spec.c_enum_prefix, descriptor.key) for descriptor in compiled.descriptors)
+    if compiled.reg_classes:
+        lines.append("")
+        lines.extend(_reg_class_id_define(spec.c_enum_prefix, reg_class.name, i) for i, reg_class in enumerate(compiled.reg_classes))
     lines.append("")
     lines.extend(
         [

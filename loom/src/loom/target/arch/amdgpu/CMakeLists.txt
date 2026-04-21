@@ -421,6 +421,10 @@ loom_cc_library(
   SRCS
     "hal_kernel_abi.c"
   DEPS
+    ::gfx11_descriptors_ids
+    ::gfx1250_descriptors_ids
+    ::gfx12_descriptors_ids
+    ::gfx950_descriptors_ids
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
@@ -458,6 +462,7 @@ loom_cc_test(
   SRCS
     "hal_kernel_abi_test.cc"
   DEPS
+    ::gfx11_descriptors
     ::hal_kernel_abi
     iree::base
     iree::base::internal::arena
@@ -606,6 +611,10 @@ loom_cc_library(
   SRCS
     "occupancy.c"
   DEPS
+    ::gfx11_descriptors_ids
+    ::gfx1250_descriptors_ids
+    ::gfx12_descriptors_ids
+    ::gfx950_descriptors_ids
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation

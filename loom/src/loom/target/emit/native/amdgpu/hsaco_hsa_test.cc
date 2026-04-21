@@ -682,7 +682,8 @@ class LowKernelCompiler {
     const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
     iree_host_size_t fixed_value_count = 0;
     IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-        module_, low_function, &fixed_values, &fixed_value_count, arena));
+        module_, low_function, descriptor_set, &fixed_values,
+        &fixed_value_count, arena));
 
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,

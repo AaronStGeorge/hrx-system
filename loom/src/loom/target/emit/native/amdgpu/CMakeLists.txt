@@ -26,6 +26,8 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::encoding
+    loom::src::loom::target::arch::amdgpu::gfx11_descriptors_ids
+    loom::src::loom::target::arch::amdgpu::gfx950_descriptors_ids
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::emit::native::assembly
   PUBLIC
@@ -105,6 +107,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::encoding
+    loom::src::loom::target::arch::amdgpu::gfx11_descriptors_ids
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::wait_packets
   PUBLIC
@@ -127,6 +130,8 @@ loom_cc_library(
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::gfx11_descriptors_ids
+    loom::src::loom::target::arch::amdgpu::gfx950_descriptors_ids
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::target_info
   PUBLIC

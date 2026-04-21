@@ -112,6 +112,8 @@ typedef struct loom_low_allocation_assignment_t {
   loom_value_id_t value_id;
   // Pressure/allocation class for |value_id|.
   loom_liveness_value_class_t value_class;
+  // Descriptor-set-local register class ID for |value_class|.
+  uint16_t descriptor_reg_class_id;
   // First live program point covered by this assignment.
   uint32_t start_point;
   // One-past-last live program point covered by this assignment.
@@ -131,7 +133,7 @@ static inline bool loom_low_allocation_assignments_share_storage(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
   return lhs->location_kind == rhs->location_kind &&
-         loom_liveness_value_class_equal(lhs->value_class, rhs->value_class);
+         lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id;
 }
 
 // Returns true when two same-length assignment subranges name the same units.
@@ -281,6 +283,12 @@ iree_status_t loom_low_allocate_function(
 // eventual storage reuse policy.
 iree_status_t loom_low_allocation_verify_sidecar(
     const loom_low_allocation_sidecar_t* sidecar);
+
+// Resolves the descriptor-set register class spelling for |assignment|.
+iree_status_t loom_low_allocation_assignment_register_class_name(
+    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_assignment_t* assignment,
+    iree_string_view_t* out_register_class_name);
 
 #ifdef __cplusplus
 }  // extern "C"

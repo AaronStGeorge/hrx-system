@@ -130,6 +130,7 @@ loom_cc_library(
   DEPS
     ::avx512_descriptors_ids
     ::packed_dot_contract
+    ::packed_dot_descriptors_ids
     ::packed_dot_vector
     iree::base
     loom::src::loom::codegen::low::descriptors

@@ -374,6 +374,22 @@ const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
   return context->descriptor_set;
 }
 
+iree_status_t loom_low_lower_register_class_string_id(
+    loom_low_lower_context_t* context, uint16_t reg_class_id,
+    loom_string_id_t* out_string_id) {
+  IREE_ASSERT_ARGUMENT(context);
+  return loom_low_build_register_class_string_id(
+      context->module, context->descriptor_set, reg_class_id, out_string_id);
+}
+
+iree_status_t loom_low_lower_make_register_type(
+    loom_low_lower_context_t* context, uint16_t reg_class_id,
+    uint32_t unit_count, loom_type_t* out_type) {
+  IREE_ASSERT_ARGUMENT(context);
+  return loom_low_build_register_type(context->module, context->descriptor_set,
+                                      reg_class_id, unit_count, out_type);
+}
+
 iree_status_t loom_low_lower_emit_descriptor_op(
     loom_low_lower_context_t* context, uint64_t descriptor_id,
     const loom_value_id_t* operands, iree_host_size_t operand_count,

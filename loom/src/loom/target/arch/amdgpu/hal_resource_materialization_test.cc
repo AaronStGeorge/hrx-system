@@ -277,7 +277,8 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
   iree_host_size_t fixed_value_count = 0;
   IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-      module_, function_op, &fixed_values, &fixed_value_count, &arena_));
+      module_, function_op, descriptor_set, &fixed_values, &fixed_value_count,
+      &arena_));
   ASSERT_EQ(fixed_value_count, 1u);
   EXPECT_EQ(fixed_values[0].location_kind,
             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER);
@@ -342,11 +343,16 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   ASSERT_NE(function_op, nullptr);
   VerifyModule();
   EXPECT_EQ(CountLowDescriptorOpsWithOpcode("amdgpu.s_mov_b32"), 2);
+  loom_target_ir_bundle_storage_t bundle_storage = {};
+  BuildBundle(&bundle_storage);
+  const loom_low_descriptor_set_t* descriptor_set =
+      SelectDescriptorSet(&bundle_storage.bundle);
 
   const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
   iree_host_size_t fixed_value_count = 0;
   IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-      module_, function_op, &fixed_values, &fixed_value_count, &arena_));
+      module_, function_op, descriptor_set, &fixed_values, &fixed_value_count,
+      &arena_));
   loom_low_packetization_options_t packetization_options = {
       .descriptor_registry = &target_registry_.registry,
       .allocation_fixed_values = fixed_values,
@@ -391,7 +397,8 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
   iree_host_size_t fixed_value_count = 0;
   IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-      module_, function_op, &fixed_values, &fixed_value_count, &arena_));
+      module_, function_op, descriptor_set, &fixed_values, &fixed_value_count,
+      &arena_));
   EXPECT_EQ(fixed_value_count, 0u);
   EXPECT_EQ(fixed_values, nullptr);
 }
@@ -407,11 +414,16 @@ TEST_F(AmdgpuHalResourceMaterializationTest, FixesWorkitemIdXLiveInToVgprZero) {
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
+  loom_target_ir_bundle_storage_t bundle_storage = {};
+  BuildBundle(&bundle_storage);
+  const loom_low_descriptor_set_t* descriptor_set =
+      SelectDescriptorSet(&bundle_storage.bundle);
 
   const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
   iree_host_size_t fixed_value_count = 0;
   IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-      module_, function_op, &fixed_values, &fixed_value_count, &arena_));
+      module_, function_op, descriptor_set, &fixed_values, &fixed_value_count,
+      &arena_));
   ASSERT_EQ(fixed_value_count, 1u);
   EXPECT_EQ(fixed_values[0].location_kind,
             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER);

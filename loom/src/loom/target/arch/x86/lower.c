@@ -12,6 +12,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/packed_dot_contract.h"
+#include "loom/target/arch/x86/packed_dot_descriptors.h"
 #include "loom/target/arch/x86/packed_dot_vector.h"
 
 #define LOOM_X86_CONTRACT_SET_AVX512_CORE IREE_SV("x86.avx512.core")
@@ -121,31 +122,33 @@ static bool loom_x86_value_is_vector_16xf32(loom_low_lower_context_t* context,
       loom_module_value_type(loom_low_lower_context_module(context), value_id));
 }
 
-static iree_status_t loom_x86_make_register_type(
-    loom_low_lower_context_t* context, iree_string_view_t register_class,
-    loom_type_t* out_type) {
-  loom_string_id_t register_class_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(loom_low_lower_context_module(context),
-                                register_class, &register_class_id));
-  *out_type = loom_type_register(register_class_id, 1);
-  return iree_ok_status();
-}
-
 static iree_status_t loom_x86_make_vector_register_type(
     loom_low_lower_context_t* context, uint32_t vector_bit_width,
     loom_type_t* out_type) {
-  switch (vector_bit_width) {
-    case 128:
-      return loom_x86_make_register_type(context, IREE_SV("x86.xmm"), out_type);
-    case 256:
-      return loom_x86_make_register_type(context, IREE_SV("x86.ymm"), out_type);
-    case 512:
-      return loom_x86_make_register_type(context, IREE_SV("x86.zmm"), out_type);
-    default:
-      *out_type = loom_type_none();
-      return iree_ok_status();
+  const iree_string_view_t contract_set_key =
+      loom_x86_lower_contract_set_key(context);
+  if (loom_x86_contract_set_key_is_avx512_core(contract_set_key)) {
+    if (vector_bit_width == 512) {
+      return loom_low_lower_make_register_type(
+          context, X86_AVX512_CORE_REG_CLASS_ID_X86_ZMM, 1, out_type);
+    }
+  } else if (loom_x86_contract_set_key_is_packed_dot_core(contract_set_key)) {
+    switch (vector_bit_width) {
+      case 128:
+        return loom_low_lower_make_register_type(
+            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_XMM, 1, out_type);
+      case 256:
+        return loom_low_lower_make_register_type(
+            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_YMM, 1, out_type);
+      case 512:
+        return loom_low_lower_make_register_type(
+            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_ZMM, 1, out_type);
+      default:
+        break;
+    }
   }
+  *out_type = loom_type_none();
+  return iree_ok_status();
 }
 
 static iree_status_t loom_x86_map_type(void* user_data,

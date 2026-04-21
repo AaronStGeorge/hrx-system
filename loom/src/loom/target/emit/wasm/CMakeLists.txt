@@ -31,7 +31,9 @@ loom_cc_library(
     "types.c"
   DEPS
     iree::base
+    loom::src::loom::codegen::low::descriptors
     loom::src::loom::ir
+    loom::src::loom::target::arch::wasm::descriptors_ids
   PUBLIC
 )
 

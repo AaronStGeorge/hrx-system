@@ -10,12 +10,51 @@
 
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/x86/avx512_descriptors.h"
+#include "loom/target/arch/x86/packed_dot_descriptors.h"
 #include "loom/target/emit/native/assembly.h"
 
 static const char* const kX86Gpr64Names[] = {
     "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
     "r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",
 };
+
+typedef enum loom_x86_descriptor_set_kind_e {
+  LOOM_X86_DESCRIPTOR_SET_AVX512_CORE = 0,
+  LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE = 1,
+} loom_x86_descriptor_set_kind_t;
+
+typedef enum loom_x86_register_class_kind_e {
+  LOOM_X86_REGISTER_CLASS_GPR64 = 0,
+  LOOM_X86_REGISTER_CLASS_XMM = 1,
+  LOOM_X86_REGISTER_CLASS_YMM = 2,
+  LOOM_X86_REGISTER_CLASS_ZMM = 3,
+  LOOM_X86_REGISTER_CLASS_K = 4,
+} loom_x86_register_class_kind_t;
+
+typedef struct loom_x86_assembly_state_t {
+  // Descriptor-set family selected for this fragment.
+  loom_x86_descriptor_set_kind_t descriptor_set_kind;
+} loom_x86_assembly_state_t;
+
+static iree_status_t loom_x86_resolve_descriptor_set_kind(
+    const loom_low_schedule_sidecar_t* schedule,
+    loom_x86_descriptor_set_kind_t* out_kind) {
+  if (iree_string_view_equal(schedule->target.descriptor_set_key,
+                             IREE_SV("x86.avx512.core"))) {
+    *out_kind = LOOM_X86_DESCRIPTOR_SET_AVX512_CORE;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(schedule->target.descriptor_set_key,
+                             IREE_SV("x86.packed_dot.core"))) {
+    *out_kind = LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                          "x86 assembly descriptor set '%.*s' is unsupported",
+                          (int)schedule->target.descriptor_set_key.size,
+                          schedule->target.descriptor_set_key.data);
+}
 
 static iree_status_t loom_x86_descriptor_key(
     const loom_native_assembly_packet_context_t* context,
@@ -54,12 +93,58 @@ static bool loom_x86_assignments_match(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
   return lhs->location_kind == rhs->location_kind &&
-         loom_liveness_value_class_equal(lhs->value_class, rhs->value_class) &&
+         lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id &&
          lhs->location_base == rhs->location_base &&
          lhs->location_count == rhs->location_count;
 }
 
+static iree_status_t loom_x86_register_class_kind(
+    const loom_x86_assembly_state_t* state,
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_allocation_assignment_t* assignment,
+    loom_x86_register_class_kind_t* out_kind) {
+  switch (state->descriptor_set_kind) {
+    case LOOM_X86_DESCRIPTOR_SET_AVX512_CORE:
+      switch (assignment->descriptor_reg_class_id) {
+        case X86_AVX512_CORE_REG_CLASS_ID_X86_GPR64:
+          *out_kind = LOOM_X86_REGISTER_CLASS_GPR64;
+          return iree_ok_status();
+        case X86_AVX512_CORE_REG_CLASS_ID_X86_ZMM:
+          *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
+          return iree_ok_status();
+        case X86_AVX512_CORE_REG_CLASS_ID_X86_K:
+          *out_kind = LOOM_X86_REGISTER_CLASS_K;
+          return iree_ok_status();
+        default:
+          break;
+      }
+      break;
+    case LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE:
+      switch (assignment->descriptor_reg_class_id) {
+        case X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_XMM:
+          *out_kind = LOOM_X86_REGISTER_CLASS_XMM;
+          return iree_ok_status();
+        case X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_YMM:
+          *out_kind = LOOM_X86_REGISTER_CLASS_YMM;
+          return iree_ok_status();
+        case X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_ZMM:
+          *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
+          return iree_ok_status();
+        default:
+          break;
+      }
+      break;
+  }
+  iree_string_view_t register_class = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+      context->allocation, assignment, &register_class));
+  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                          "x86 assembly register class '%.*s' is unsupported",
+                          (int)register_class.size, register_class.data);
+}
+
 static iree_status_t loom_x86_append_assignment(
+    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context,
     const loom_low_allocation_assignment_t* assignment) {
   if (assignment->location_kind !=
@@ -75,9 +160,10 @@ static iree_status_t loom_x86_append_assignment(
                             " is not supported",
                             assignment->value_id);
   }
-  iree_string_view_t register_class = loom_native_assembly_module_string(
-      context->allocation->module, assignment->value_class.register_class_id);
-  if (iree_string_view_equal(register_class, IREE_SV("x86.gpr64"))) {
+  loom_x86_register_class_kind_t register_class_kind = 0;
+  IREE_RETURN_IF_ERROR(loom_x86_register_class_kind(state, context, assignment,
+                                                    &register_class_kind));
+  if (register_class_kind == LOOM_X86_REGISTER_CLASS_GPR64) {
     if (assignment->location_base >= IREE_ARRAYSIZE(kX86Gpr64Names)) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "x86 GPR index %" PRIu32 " is out of range",
@@ -86,37 +172,39 @@ static iree_status_t loom_x86_append_assignment(
     return iree_string_builder_append_cstring(
         context->builder, kX86Gpr64Names[assignment->location_base]);
   }
-  if (iree_string_view_equal(register_class, IREE_SV("x86.xmm"))) {
+  if (register_class_kind == LOOM_X86_REGISTER_CLASS_XMM) {
     return iree_string_builder_append_format(context->builder, "xmm%" PRIu32,
                                              assignment->location_base);
   }
-  if (iree_string_view_equal(register_class, IREE_SV("x86.ymm"))) {
+  if (register_class_kind == LOOM_X86_REGISTER_CLASS_YMM) {
     return iree_string_builder_append_format(context->builder, "ymm%" PRIu32,
                                              assignment->location_base);
   }
-  if (iree_string_view_equal(register_class, IREE_SV("x86.zmm"))) {
+  if (register_class_kind == LOOM_X86_REGISTER_CLASS_ZMM) {
     return iree_string_builder_append_format(context->builder, "zmm%" PRIu32,
                                              assignment->location_base);
   }
-  if (iree_string_view_equal(register_class, IREE_SV("x86.k"))) {
+  if (register_class_kind == LOOM_X86_REGISTER_CLASS_K) {
     return iree_string_builder_append_format(context->builder, "k%" PRIu32,
                                              assignment->location_base);
   }
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "x86 assembly register class '%.*s' is unsupported",
-                          (int)register_class.size, register_class.data);
+                          "x86 assembly register class kind %u is unsupported",
+                          (unsigned)register_class_kind);
 }
 
 static iree_status_t loom_x86_append_value(
+    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context,
     loom_value_id_t value_id) {
   const loom_low_allocation_assignment_t* assignment = NULL;
   IREE_RETURN_IF_ERROR(
       loom_x86_find_assignment(context, value_id, &assignment));
-  return loom_x86_append_assignment(context, assignment);
+  return loom_x86_append_assignment(state, context, assignment);
 }
 
 static iree_status_t loom_x86_append_result(
+    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context,
     iree_host_size_t result_index) {
   const loom_op_t* op = context->packet->node->op;
@@ -124,11 +212,12 @@ static iree_status_t loom_x86_append_result(
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "x86 assembly result index is out of range");
   }
-  return loom_x86_append_value(context,
+  return loom_x86_append_value(state, context,
                                loom_op_const_results(op)[result_index]);
 }
 
 static iree_status_t loom_x86_append_operand(
+    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context,
     iree_host_size_t operand_index) {
   const loom_op_t* op = context->packet->node->op;
@@ -136,7 +225,7 @@ static iree_status_t loom_x86_append_operand(
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "x86 assembly operand index is out of range");
   }
-  return loom_x86_append_value(context,
+  return loom_x86_append_value(state, context,
                                loom_op_const_operands(op)[operand_index]);
 }
 
@@ -161,11 +250,12 @@ static iree_status_t loom_x86_read_packet_i64_attr(
 }
 
 static iree_status_t loom_x86_append_memory_operand(
+    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context,
     loom_value_id_t base_value_id, int64_t displacement) {
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, "["));
-  IREE_RETURN_IF_ERROR(loom_x86_append_value(context, base_value_id));
+  IREE_RETURN_IF_ERROR(loom_x86_append_value(state, context, base_value_id));
   if (displacement > 0) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         context->builder, " + %" PRId64, displacement));
@@ -178,20 +268,22 @@ static iree_status_t loom_x86_append_memory_operand(
 }
 
 static iree_status_t loom_x86_append_binary_vector_packet(
+    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context) {
   IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
-  IREE_RETURN_IF_ERROR(loom_x86_append_result(context, 0));
+  IREE_RETURN_IF_ERROR(loom_x86_append_result(state, context, 0));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
-  IREE_RETURN_IF_ERROR(loom_x86_append_operand(context, 0));
+  IREE_RETURN_IF_ERROR(loom_x86_append_operand(state, context, 0));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
-  return loom_x86_append_operand(context, 1);
+  return loom_x86_append_operand(state, context, 1);
 }
 
 static iree_status_t loom_x86_append_tied_ternary_packet(
+    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context) {
   const loom_op_t* op = context->packet->node->op;
   const loom_low_allocation_assignment_t* result_assignment = NULL;
@@ -208,13 +300,13 @@ static iree_status_t loom_x86_append_tied_ternary_packet(
   IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
-  IREE_RETURN_IF_ERROR(loom_x86_append_result(context, 0));
+  IREE_RETURN_IF_ERROR(loom_x86_append_result(state, context, 0));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
-  IREE_RETURN_IF_ERROR(loom_x86_append_operand(context, 1));
+  IREE_RETURN_IF_ERROR(loom_x86_append_operand(state, context, 1));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
-  return loom_x86_append_operand(context, 2);
+  return loom_x86_append_operand(state, context, 2);
 }
 
 static iree_status_t loom_x86_descriptor_has_constraint(
@@ -308,6 +400,7 @@ static iree_status_t loom_x86_descriptor_uses_tied_ternary_form(
 }
 
 static iree_status_t loom_x86_append_load_packet(
+    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context) {
   int64_t displacement = 0;
   IREE_RETURN_IF_ERROR(
@@ -316,14 +409,15 @@ static iree_status_t loom_x86_append_load_packet(
   IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
-  IREE_RETURN_IF_ERROR(loom_x86_append_result(context, 0));
+  IREE_RETURN_IF_ERROR(loom_x86_append_result(state, context, 0));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
-  return loom_x86_append_memory_operand(context, loom_op_const_operands(op)[0],
-                                        displacement);
+  return loom_x86_append_memory_operand(
+      state, context, loom_op_const_operands(op)[0], displacement);
 }
 
 static iree_status_t loom_x86_append_store_packet(
+    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context) {
   int64_t displacement = 0;
   IREE_RETURN_IF_ERROR(
@@ -333,26 +427,28 @@ static iree_status_t loom_x86_append_store_packet(
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_x86_append_memory_operand(
-      context, loom_op_const_operands(op)[1], displacement));
+      state, context, loom_op_const_operands(op)[1], displacement));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
-  return loom_x86_append_operand(context, 0);
+  return loom_x86_append_operand(state, context, 0);
 }
 
 static iree_status_t loom_x86_append_move_packet(
+    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context) {
   IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
-  IREE_RETURN_IF_ERROR(loom_x86_append_result(context, 0));
+  IREE_RETURN_IF_ERROR(loom_x86_append_result(state, context, 0));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
-  return loom_x86_append_operand(context, 0);
+  return loom_x86_append_operand(state, context, 0);
 }
 
 static iree_status_t loom_x86_append_copy_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
-  (void)user_data;
+  const loom_x86_assembly_state_t* state =
+      (const loom_x86_assembly_state_t*)user_data;
   const loom_op_t* op = context->packet->node->op;
   const loom_low_allocation_assignment_t* source_assignment = NULL;
   IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
@@ -364,13 +460,14 @@ static iree_status_t loom_x86_append_copy_packet(
     return iree_ok_status();
   }
 
-  iree_string_view_t source_register_class = loom_native_assembly_module_string(
-      context->allocation->module,
-      source_assignment->value_class.register_class_id);
-  iree_string_view_t result_register_class = loom_native_assembly_module_string(
-      context->allocation->module,
-      result_assignment->value_class.register_class_id);
-  if (!iree_string_view_equal(source_register_class, result_register_class)) {
+  if (source_assignment->descriptor_reg_class_id !=
+      result_assignment->descriptor_reg_class_id) {
+    iree_string_view_t source_register_class = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+        context->allocation, source_assignment, &source_register_class));
+    iree_string_view_t result_register_class = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+        context->allocation, result_assignment, &result_register_class));
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "x86 assembly copy between register classes '%.*s' and '%.*s' is "
@@ -379,34 +476,39 @@ static iree_status_t loom_x86_append_copy_packet(
         (int)result_register_class.size, result_register_class.data);
   }
 
-  if (iree_string_view_equal(result_register_class, IREE_SV("x86.xmm")) ||
-      iree_string_view_equal(result_register_class, IREE_SV("x86.ymm")) ||
-      iree_string_view_equal(result_register_class, IREE_SV("x86.zmm"))) {
-    IREE_RETURN_IF_ERROR(
-        iree_string_builder_append_cstring(context->builder, "vmovdqa32 "));
-  } else if (iree_string_view_equal(result_register_class,
-                                    IREE_SV("x86.gpr64"))) {
-    IREE_RETURN_IF_ERROR(
-        iree_string_builder_append_cstring(context->builder, "mov "));
-  } else if (iree_string_view_equal(result_register_class, IREE_SV("x86.k"))) {
-    IREE_RETURN_IF_ERROR(
-        iree_string_builder_append_cstring(context->builder, "kmovq "));
-  } else {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "x86 assembly copy register class '%.*s' is "
-                            "unsupported",
-                            (int)result_register_class.size,
-                            result_register_class.data);
+  loom_x86_register_class_kind_t register_class_kind = 0;
+  IREE_RETURN_IF_ERROR(loom_x86_register_class_kind(
+      state, context, result_assignment, &register_class_kind));
+  switch (register_class_kind) {
+    case LOOM_X86_REGISTER_CLASS_XMM:
+    case LOOM_X86_REGISTER_CLASS_YMM:
+    case LOOM_X86_REGISTER_CLASS_ZMM: {
+      IREE_RETURN_IF_ERROR(
+          iree_string_builder_append_cstring(context->builder, "vmovdqa32 "));
+      break;
+    }
+    case LOOM_X86_REGISTER_CLASS_GPR64: {
+      IREE_RETURN_IF_ERROR(
+          iree_string_builder_append_cstring(context->builder, "mov "));
+      break;
+    }
+    case LOOM_X86_REGISTER_CLASS_K: {
+      IREE_RETURN_IF_ERROR(
+          iree_string_builder_append_cstring(context->builder, "kmovq "));
+      break;
+    }
   }
-  IREE_RETURN_IF_ERROR(loom_x86_append_assignment(context, result_assignment));
+  IREE_RETURN_IF_ERROR(
+      loom_x86_append_assignment(state, context, result_assignment));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
-  return loom_x86_append_assignment(context, source_assignment);
+  return loom_x86_append_assignment(state, context, source_assignment);
 }
 
 static iree_status_t loom_x86_append_descriptor_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
-  (void)user_data;
+  const loom_x86_assembly_state_t* state =
+      (const loom_x86_assembly_state_t*)user_data;
   const loom_low_descriptor_set_t* descriptor_set =
       context->schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
@@ -426,25 +528,25 @@ static iree_status_t loom_x86_append_descriptor_packet(
                             (int)key.size, key.data);
   }
   if (has_read_effect) {
-    return loom_x86_append_load_packet(context);
+    return loom_x86_append_load_packet(state, context);
   }
   if (has_write_effect) {
-    return loom_x86_append_store_packet(context);
+    return loom_x86_append_store_packet(state, context);
   }
   bool uses_tied_ternary_form = false;
   IREE_RETURN_IF_ERROR(loom_x86_descriptor_uses_tied_ternary_form(
       context, &uses_tied_ternary_form));
   if (uses_tied_ternary_form) {
-    return loom_x86_append_tied_ternary_packet(context);
+    return loom_x86_append_tied_ternary_packet(state, context);
   }
   const loom_op_t* op = context->packet->node->op;
   if (descriptor->result_count == 1 && descriptor->operand_count == 3 &&
       op->result_count == 1 && op->operand_count == 2) {
-    return loom_x86_append_binary_vector_packet(context);
+    return loom_x86_append_binary_vector_packet(state, context);
   }
   if (descriptor->result_count == 1 && descriptor->operand_count == 2 &&
       op->result_count == 1 && op->operand_count == 1) {
-    return loom_x86_append_move_packet(context);
+    return loom_x86_append_move_packet(state, context);
   }
   iree_string_view_t key = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_x86_descriptor_key(context, &key));
@@ -480,34 +582,6 @@ static iree_status_t loom_x86_append_branch_packet(
       context->schedule, loom_low_br_dest(op), context->builder);
 }
 
-static const loom_native_assembly_structural_packet_callback_t
-    kLoomX86AssemblyStructuralPacketCallbacks[] = {
-        {
-            .op_kind = LOOM_OP_LOW_COPY,
-            .append_packet =
-                {
-                    .fn = loom_x86_append_copy_packet,
-                    .user_data = NULL,
-                },
-        },
-        {
-            .op_kind = LOOM_OP_LOW_RETURN,
-            .append_packet =
-                {
-                    .fn = loom_x86_append_return_packet,
-                    .user_data = NULL,
-                },
-        },
-        {
-            .op_kind = LOOM_OP_LOW_BR,
-            .append_packet =
-                {
-                    .fn = loom_x86_append_branch_packet,
-                    .user_data = NULL,
-                },
-        },
-};
-
 iree_status_t loom_x86_emit_assembly_fragment(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
@@ -525,15 +599,45 @@ iree_status_t loom_x86_emit_assembly_fragment(
                             "x86 assembly emitter received target '%.*s'",
                             (int)target_key.size, target_key.data);
   }
+  loom_x86_assembly_state_t state = {0};
+  IREE_RETURN_IF_ERROR(loom_x86_resolve_descriptor_set_kind(
+      schedule, &state.descriptor_set_kind));
+  const loom_native_assembly_structural_packet_callback_t
+      structural_packet_callbacks[] = {
+          {
+              .op_kind = LOOM_OP_LOW_COPY,
+              .append_packet =
+                  {
+                      .fn = loom_x86_append_copy_packet,
+                      .user_data = &state,
+                  },
+          },
+          {
+              .op_kind = LOOM_OP_LOW_RETURN,
+              .append_packet =
+                  {
+                      .fn = loom_x86_append_return_packet,
+                      .user_data = NULL,
+                  },
+          },
+          {
+              .op_kind = LOOM_OP_LOW_BR,
+              .append_packet =
+                  {
+                      .fn = loom_x86_append_branch_packet,
+                      .user_data = NULL,
+                  },
+          },
+      };
   const loom_native_assembly_format_options_t options = {
       .append_descriptor_packet =
           {
               .fn = loom_x86_append_descriptor_packet,
-              .user_data = NULL,
+              .user_data = &state,
           },
-      .structural_packet_callbacks = kLoomX86AssemblyStructuralPacketCallbacks,
+      .structural_packet_callbacks = structural_packet_callbacks,
       .structural_packet_callback_count =
-          IREE_ARRAYSIZE(kLoomX86AssemblyStructuralPacketCallbacks),
+          IREE_ARRAYSIZE(structural_packet_callbacks),
   };
   return loom_native_assembly_format_fragment(schedule, allocation, &options,
                                               builder);

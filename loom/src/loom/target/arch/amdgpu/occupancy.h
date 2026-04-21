@@ -48,6 +48,8 @@ typedef struct loom_amdgpu_occupancy_options_t {
 typedef struct loom_amdgpu_occupancy_register_class_t {
   // Stable register-class name such as "amdgpu.vgpr".
   iree_string_view_t register_class;
+  // Descriptor-set-local register class ID for |register_class|.
+  uint16_t descriptor_reg_class_id;
   // Highest allocated physical register unit plus one.
   uint32_t allocated_units;
   // Allocation units rounded according to the occupancy model.

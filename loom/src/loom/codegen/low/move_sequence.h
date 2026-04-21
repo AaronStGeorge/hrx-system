@@ -22,6 +22,8 @@ typedef struct loom_low_move_location_t {
   loom_low_allocation_location_kind_t location_kind;
   // Storage class for the unit.
   loom_liveness_value_class_t value_class;
+  // Descriptor-set-local register class ID for |value_class|.
+  uint16_t descriptor_reg_class_id;
   // Physical register, target ID, or spill slot ordinal.
   uint32_t location;
 } loom_low_move_location_t;

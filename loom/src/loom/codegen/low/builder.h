@@ -21,6 +21,20 @@
 extern "C" {
 #endif
 
+// Interns the descriptor-set register-class spelling in |module|.
+//
+// |reg_class_id| is descriptor-set-local, not a module string ID. The returned
+// string ID is suitable for constructing reg<...> types while keeping lowering
+// code keyed on generated register-class ID constants.
+iree_status_t loom_low_build_register_class_string_id(
+    loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
+    uint16_t reg_class_id, loom_string_id_t* out_string_id);
+
+// Creates a reg<...> type selected by descriptor-set register-class ID.
+iree_status_t loom_low_build_register_type(
+    loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
+    uint16_t reg_class_id, uint32_t unit_count, loom_type_t* out_type);
+
 // Emits a descriptor-backed low.op selected by stable descriptor ID.
 //
 // |descriptor_set| is the selected target-low descriptor set and is used to

@@ -307,6 +307,7 @@ loom_cc_library(
     deps = [
         ":avx512_descriptors_ids",
         ":packed_dot_contract",
+        ":packed_dot_descriptors_ids",
         ":packed_dot_vector",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:lower",

@@ -62,8 +62,8 @@ enum {
 };
 
 typedef struct loom_wasm_local_entry_t {
-  // Register-class string ID from allocation.value_class.
-  loom_string_id_t register_class_id;
+  // Descriptor-set-local register class ID from allocation.
+  uint16_t descriptor_reg_class_id;
   // Class-local target-id assignment base from allocation.
   uint32_t location_base;
   // Wasm value type stored in this local.
@@ -181,11 +181,11 @@ static iree_status_t loom_wasm_local_layout_reserve_types(
 }
 
 static loom_wasm_local_entry_t* loom_wasm_local_layout_find_entry(
-    loom_wasm_local_layout_t* layout, loom_string_id_t register_class_id,
+    loom_wasm_local_layout_t* layout, uint16_t descriptor_reg_class_id,
     uint32_t location_base) {
   for (iree_host_size_t i = 0; i < layout->entry_count; ++i) {
     loom_wasm_local_entry_t* entry = &layout->entries[i];
-    if (entry->register_class_id == register_class_id &&
+    if (entry->descriptor_reg_class_id == descriptor_reg_class_id &&
         entry->location_base == location_base) {
       return entry;
     }
@@ -208,13 +208,13 @@ static iree_status_t loom_wasm_local_layout_append_type(
 }
 
 static iree_status_t loom_wasm_local_layout_add_entry(
-    loom_wasm_local_layout_t* layout, loom_string_id_t register_class_id,
+    loom_wasm_local_layout_t* layout, uint16_t descriptor_reg_class_id,
     uint32_t location_base, loom_wasm_value_type_t value_type,
     uint32_t local_index) {
   IREE_RETURN_IF_ERROR(
       loom_wasm_local_layout_reserve_entries(layout, layout->entry_count + 1));
   layout->entries[layout->entry_count++] = (loom_wasm_local_entry_t){
-      .register_class_id = register_class_id,
+      .descriptor_reg_class_id = descriptor_reg_class_id,
       .location_base = location_base,
       .value_type = value_type,
       .local_index = local_index,
@@ -244,9 +244,8 @@ static iree_status_t loom_wasm_validate_target_id_assignment(
         "Wasm value %u is not allocated as a register value",
         (unsigned)assignment->value_id);
   }
-  return loom_wasm_value_type_from_register_class(
-      allocation->module, assignment->value_class.register_class_id,
-      out_value_type);
+  return loom_wasm_value_type_from_descriptor_register_class(
+      assignment->descriptor_reg_class_id, out_value_type);
 }
 
 static iree_status_t loom_wasm_lookup_assignment(
@@ -283,8 +282,7 @@ static iree_status_t loom_wasm_local_layout_add_parameter(
   }
 
   loom_wasm_local_entry_t* existing = loom_wasm_local_layout_find_entry(
-      layout, assignment->value_class.register_class_id,
-      assignment->location_base);
+      layout, assignment->descriptor_reg_class_id, assignment->location_base);
   if (existing) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -293,8 +291,8 @@ static iree_status_t loom_wasm_local_layout_add_parameter(
         existing->local_index, parameter_index, assignment->location_base);
   }
   return loom_wasm_local_layout_add_entry(
-      layout, assignment->value_class.register_class_id,
-      assignment->location_base, value_type, parameter_index);
+      layout, assignment->descriptor_reg_class_id, assignment->location_base,
+      value_type, parameter_index);
 }
 
 static iree_status_t loom_wasm_local_layout_add_assignment(
@@ -305,8 +303,7 @@ static iree_status_t loom_wasm_local_layout_add_assignment(
   IREE_RETURN_IF_ERROR(loom_wasm_validate_target_id_assignment(
       allocation, assignment, &value_type));
   loom_wasm_local_entry_t* existing = loom_wasm_local_layout_find_entry(
-      layout, assignment->value_class.register_class_id,
-      assignment->location_base);
+      layout, assignment->descriptor_reg_class_id, assignment->location_base);
   if (existing) {
     if (existing->value_type != value_type) {
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -320,8 +317,8 @@ static iree_status_t loom_wasm_local_layout_add_assignment(
   IREE_RETURN_IF_ERROR(
       loom_wasm_local_layout_append_type(layout, value_type, &local_index));
   return loom_wasm_local_layout_add_entry(
-      layout, assignment->value_class.register_class_id,
-      assignment->location_base, value_type, local_index);
+      layout, assignment->descriptor_reg_class_id, assignment->location_base,
+      value_type, local_index);
 }
 
 static iree_status_t loom_wasm_build_local_layout(
@@ -366,7 +363,7 @@ static iree_status_t loom_wasm_lookup_local(
   IREE_RETURN_IF_ERROR(loom_wasm_lookup_assignment(state->allocation, value_id,
                                                    &assignment, &value_type));
   loom_wasm_local_entry_t* entry = loom_wasm_local_layout_find_entry(
-      &state->locals, assignment->value_class.register_class_id,
+      &state->locals, assignment->descriptor_reg_class_id,
       assignment->location_base);
   if (!entry) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,

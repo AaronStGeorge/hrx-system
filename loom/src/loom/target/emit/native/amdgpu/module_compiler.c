@@ -386,8 +386,8 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
   const loom_low_allocation_fixed_value_t* fixed_values = NULL;
   iree_host_size_t fixed_value_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-      module, low_function_op, &fixed_values, &fixed_value_count,
-      sidecar_arena));
+      module, low_function_op, descriptor_set, &fixed_values,
+      &fixed_value_count, sidecar_arena));
 
   IREE_RETURN_IF_ERROR(loom_target_module_compile_verify_module(
       module, target_options, LOOM_AMDGPU_MODULE_COMPILE_DEFAULT_MAX_ERRORS));

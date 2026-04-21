@@ -64,13 +64,16 @@ static iree_status_t loom_wasm_module_write_name(
 }
 
 static iree_status_t loom_wasm_module_write_value_type_list(
-    const loom_module_t* module, const loom_value_id_t* value_ids,
-    uint32_t value_count, loom_wasm_binary_writer_t* writer) {
+    const loom_module_t* module,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_value_id_t* value_ids, uint32_t value_count,
+    loom_wasm_binary_writer_t* writer) {
   IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u32_leb(writer, value_count));
   for (uint32_t i = 0; i < value_count; ++i) {
     loom_wasm_value_type_t value_type = 0;
-    IREE_RETURN_IF_ERROR(
-        loom_wasm_value_type_from_value(module, value_ids[i], &value_type));
+    IREE_RETURN_IF_ERROR(loom_wasm_value_type_from_register_type(
+        module, descriptor_set, loom_module_value_type(module, value_ids[i]),
+        &value_type));
     IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u8(writer, value_type));
   }
   return iree_ok_status();
@@ -95,9 +98,11 @@ static iree_status_t loom_wasm_module_write_type_section_payload(
   IREE_RETURN_IF_ERROR(
       loom_wasm_binary_write_u8(payload_writer, LOOM_WASM_FUNCTION_TYPE));
   IREE_RETURN_IF_ERROR(loom_wasm_module_write_value_type_list(
-      schedule->module, parameters, parameter_count, payload_writer));
+      schedule->module, schedule->target.descriptor_set, parameters,
+      parameter_count, payload_writer));
   return loom_wasm_module_write_value_type_list(
-      schedule->module, results.values, results.count, payload_writer);
+      schedule->module, schedule->target.descriptor_set, results.values,
+      results.count, payload_writer);
 }
 
 static iree_status_t loom_wasm_module_write_type_section(

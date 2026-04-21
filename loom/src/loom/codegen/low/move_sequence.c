@@ -13,7 +13,7 @@ bool loom_low_move_locations_equal(const loom_low_move_location_t* lhs,
                                    const loom_low_move_location_t* rhs) {
   return lhs->location_kind == rhs->location_kind &&
          lhs->location == rhs->location &&
-         loom_liveness_value_class_equal(lhs->value_class, rhs->value_class);
+         lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id;
 }
 
 iree_status_t loom_low_move_location_from_assignment_unit(
@@ -38,6 +38,7 @@ iree_status_t loom_low_move_location_from_assignment_unit(
   *out_location = (loom_low_move_location_t){
       .location_kind = assignment->location_kind,
       .value_class = assignment->value_class,
+      .descriptor_reg_class_id = assignment->descriptor_reg_class_id,
       .location = assignment->location_base + unit_index,
   };
   return iree_ok_status();

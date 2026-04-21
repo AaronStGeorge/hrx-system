@@ -11,6 +11,8 @@
 
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
+#include "loom/target/arch/amdgpu/gfx950_descriptors.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 #define LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT 2u
@@ -268,36 +270,35 @@ static iree_status_t loom_amdgpu_kernel_record_collect_register_usage(
                               " has an empty physical register range",
                               assignment->value_id);
     }
-    if (assignment->value_class.register_class_id == LOOM_STRING_ID_INVALID ||
-        assignment->value_class.register_class_id >=
-            allocation->module->strings.count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "AMDGPU kernel emission value %" PRIu32
-                              " has no register-class string",
-                              assignment->value_id);
-    }
-    iree_string_view_t register_class =
-        allocation->module->strings
-            .entries[assignment->value_class.register_class_id];
-    if (iree_string_view_equal(register_class, IREE_SV("amdgpu.sgpr"))) {
+    if (assignment->descriptor_reg_class_id ==
+        AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_update_high_water(
           assignment->location_base, assignment->location_count,
           &out_usage->next_free_sgpr));
       continue;
     }
-    if (iree_string_view_equal(register_class, IREE_SV("amdgpu.vgpr"))) {
+    if (assignment->descriptor_reg_class_id ==
+        AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_update_high_water(
           assignment->location_base, assignment->location_count,
           &out_usage->next_free_vgpr));
       continue;
     }
-    if (iree_string_view_starts_with(register_class, IREE_SV("amdgpu."))) {
+    if (assignment->descriptor_reg_class_id ==
+        AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_AGPR) {
       return iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
-          "AMDGPU kernel emission register class '%.*s' requires additional "
-          "kernel descriptor metadata",
-          (int)register_class.size, register_class.data);
+          "AMDGPU kernel emission register class 'amdgpu.agpr' requires "
+          "additional kernel descriptor metadata");
     }
+    iree_string_view_t register_class = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+        allocation, assignment, &register_class));
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU kernel emission register class '%.*s' requires additional "
+        "kernel descriptor metadata",
+        (int)register_class.size, register_class.data);
   }
   return iree_ok_status();
 }
@@ -442,8 +443,8 @@ iree_status_t loom_amdgpu_kernel_record_build(
   } else {
     IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_layout_from_low(
         schedule->module, schedule->function_op,
-        &schedule->target.bundle_storage.bundle, &derived_abi_layout,
-        scratch_arena));
+        &schedule->target.bundle_storage.bundle,
+        schedule->target.descriptor_set, &derived_abi_layout, scratch_arena));
     abi_layout = &derived_abi_layout;
   }
 

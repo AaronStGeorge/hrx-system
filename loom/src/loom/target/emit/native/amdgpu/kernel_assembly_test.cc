@@ -205,7 +205,8 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
     iree_host_size_t fixed_value_count = 0;
     IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-        module_, low_function, &fixed_values, &fixed_value_count, arena));
+        module_, low_function, descriptor_set, &fixed_values,
+        &fixed_value_count, arena));
     ASSERT_EQ(fixed_value_count, expected_fixed_value_count);
 
     loom_low_verify_options_t verify_options = {

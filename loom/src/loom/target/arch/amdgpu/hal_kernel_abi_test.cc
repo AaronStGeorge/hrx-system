@@ -14,6 +14,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
 #include "loom/target/ir_records.h"
 #include "loom/testing/context.h"
 
@@ -112,7 +113,8 @@ class AmdgpuHalKernelAbiTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
         module_, IREE_SV("gfx_target"), &storage));
     IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_layout_from_low(
-        module_, function_op, &storage.bundle, out_layout, &arena_));
+        module_, function_op, &storage.bundle,
+        loom_amdgpu_gfx11_core_descriptor_set(), out_layout, &arena_));
   }
 
   iree_arena_block_pool_t block_pool_ = {};
@@ -185,7 +187,8 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsDuplicateBindingIndex) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_ALREADY_EXISTS,
       loom_amdgpu_hal_kernel_abi_layout_from_low(
-          module_, function_op, &storage.bundle, &layout, &arena_));
+          module_, function_op, &storage.bundle,
+          loom_amdgpu_gfx11_core_descriptor_set(), &layout, &arena_));
 }
 
 TEST_F(AmdgpuHalKernelAbiTest, RejectsMissingDenseBindingIndex) {
@@ -206,7 +209,8 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsMissingDenseBindingIndex) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_amdgpu_hal_kernel_abi_layout_from_low(
-          module_, function_op, &storage.bundle, &layout, &arena_));
+          module_, function_op, &storage.bundle,
+          loom_amdgpu_gfx11_core_descriptor_set(), &layout, &arena_));
 }
 
 TEST_F(AmdgpuHalKernelAbiTest, RejectsWrongAbiType) {
@@ -227,7 +231,8 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsWrongAbiType) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_amdgpu_hal_kernel_abi_layout_from_low(
-          module_, function_op, &storage.bundle, &layout, &arena_));
+          module_, function_op, &storage.bundle,
+          loom_amdgpu_gfx11_core_descriptor_set(), &layout, &arena_));
 }
 
 TEST_F(AmdgpuHalKernelAbiTest, RejectsWrongImportKind) {
@@ -248,7 +253,8 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsWrongImportKind) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_amdgpu_hal_kernel_abi_layout_from_low(
-          module_, function_op, &storage.bundle, &layout, &arena_));
+          module_, function_op, &storage.bundle,
+          loom_amdgpu_gfx11_core_descriptor_set(), &layout, &arena_));
 }
 
 TEST_F(AmdgpuHalKernelAbiTest, RejectsExportSourceMismatch) {
@@ -267,7 +273,8 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsExportSourceMismatch) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,
       loom_amdgpu_hal_kernel_abi_layout_from_low(
-          module_, function_op, &storage.bundle, &layout, &arena_));
+          module_, function_op, &storage.bundle,
+          loom_amdgpu_gfx11_core_descriptor_set(), &layout, &arena_));
 }
 
 }  // namespace

@@ -926,6 +926,10 @@ loom_cc_library(
     srcs = ["hal_kernel_abi.c"],
     hdrs = ["hal_kernel_abi.h"],
     deps = [
+        ":gfx11_descriptors_ids",
+        ":gfx1250_descriptors_ids",
+        ":gfx12_descriptors_ids",
+        ":gfx950_descriptors_ids",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
@@ -958,6 +962,7 @@ loom_cc_test(
     name = "hal_kernel_abi_test",
     srcs = ["hal_kernel_abi_test.cc"],
     deps = [
+        ":gfx11_descriptors",
         ":hal_kernel_abi",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
@@ -1077,6 +1082,10 @@ loom_cc_library(
     srcs = ["occupancy.c"],
     hdrs = ["occupancy.h"],
     deps = [
+        ":gfx11_descriptors_ids",
+        ":gfx1250_descriptors_ids",
+        ":gfx12_descriptors_ids",
+        ":gfx950_descriptors_ids",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/error:error_defs",

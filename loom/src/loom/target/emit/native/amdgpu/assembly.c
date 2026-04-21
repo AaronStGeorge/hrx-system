@@ -12,6 +12,8 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/encoding.h"
+#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
+#include "loom/target/arch/amdgpu/gfx950_descriptors.h"
 #include "loom/target/emit/native/assembly.h"
 
 #define LOOM_AMDGPU_INLINE_MOVE_COUNT 16u
@@ -60,7 +62,7 @@ static bool loom_amdgpu_assignments_match(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
   return lhs->location_kind == rhs->location_kind &&
-         loom_liveness_value_class_equal(lhs->value_class, rhs->value_class) &&
+         lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id &&
          lhs->location_base == rhs->location_base &&
          lhs->location_count == rhs->location_count;
 }
@@ -95,17 +97,21 @@ static iree_status_t loom_amdgpu_append_assignment(
                             " has an empty physical register range",
                             assignment->value_id);
   }
-  iree_string_view_t register_class = loom_native_assembly_module_string(
-      context->allocation->module, assignment->value_class.register_class_id);
-  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.sgpr"))) {
+  if (assignment->descriptor_reg_class_id ==
+      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
     return loom_amdgpu_append_register_range(context, "s", assignment);
   }
-  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.vgpr"))) {
+  if (assignment->descriptor_reg_class_id ==
+      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
     return loom_amdgpu_append_register_range(context, "v", assignment);
   }
-  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.agpr"))) {
+  if (assignment->descriptor_reg_class_id ==
+      AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_AGPR) {
     return loom_amdgpu_append_register_range(context, "acc", assignment);
   }
+  iree_string_view_t register_class = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+      context->allocation, assignment, &register_class));
   return iree_make_status(
       IREE_STATUS_UNIMPLEMENTED,
       "AMDGPU assembly register class '%.*s' is unsupported",
@@ -121,24 +127,25 @@ static iree_status_t loom_amdgpu_append_move_location(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU assembly move location is not physically allocated");
   }
-  iree_string_view_t register_class = loom_native_assembly_module_string(
-      context->allocation->module, location->value_class.register_class_id);
-  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.sgpr"))) {
+  if (location->descriptor_reg_class_id ==
+      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
     return iree_string_builder_append_format(context->builder, "s%" PRIu32,
                                              location->location);
   }
-  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.vgpr"))) {
+  if (location->descriptor_reg_class_id ==
+      AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
     return iree_string_builder_append_format(context->builder, "v%" PRIu32,
                                              location->location);
   }
-  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.agpr"))) {
+  if (location->descriptor_reg_class_id ==
+      AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_AGPR) {
     return iree_string_builder_append_format(context->builder, "acc%" PRIu32,
                                              location->location);
   }
   return iree_make_status(
       IREE_STATUS_UNIMPLEMENTED,
-      "AMDGPU assembly register class '%.*s' is unsupported",
-      (int)register_class.size, register_class.data);
+      "AMDGPU assembly descriptor register class ID %" PRIu16 " is unsupported",
+      location->descriptor_reg_class_id);
 }
 
 static iree_status_t loom_amdgpu_append_value(
@@ -600,19 +607,20 @@ static iree_status_t loom_amdgpu_append_wait_packets_before_packet(
 }
 
 static iree_status_t loom_amdgpu_copy_mnemonic(
-    iree_string_view_t register_class, iree_string_view_t* out_mnemonic) {
-  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.sgpr"))) {
+    uint16_t descriptor_reg_class_id, iree_string_view_t* out_mnemonic) {
+  if (descriptor_reg_class_id == AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
     *out_mnemonic = IREE_SV("s_mov_b32");
     return iree_ok_status();
   }
-  if (iree_string_view_equal(register_class, IREE_SV("amdgpu.vgpr"))) {
+  if (descriptor_reg_class_id == AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
     *out_mnemonic = IREE_SV("v_mov_b32");
     return iree_ok_status();
   }
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "AMDGPU assembly copy register class '%.*s' is "
-                          "unsupported",
-                          (int)register_class.size, register_class.data);
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "AMDGPU assembly copy descriptor register class ID %" PRIu16
+      " is unsupported",
+      descriptor_reg_class_id);
 }
 
 typedef struct loom_amdgpu_assembly_move_state_t {
@@ -699,13 +707,14 @@ static iree_status_t loom_amdgpu_append_copy_packet(
         "AMDGPU assembly copy register range exceeds uint32_t");
   }
 
-  iree_string_view_t source_register_class = loom_native_assembly_module_string(
-      context->allocation->module,
-      source_assignment->value_class.register_class_id);
-  iree_string_view_t result_register_class = loom_native_assembly_module_string(
-      context->allocation->module,
-      result_assignment->value_class.register_class_id);
-  if (!iree_string_view_equal(source_register_class, result_register_class)) {
+  if (source_assignment->descriptor_reg_class_id !=
+      result_assignment->descriptor_reg_class_id) {
+    iree_string_view_t source_register_class = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+        context->allocation, source_assignment, &source_register_class));
+    iree_string_view_t result_register_class = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+        context->allocation, result_assignment, &result_register_class));
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "AMDGPU assembly copy between register classes '%.*s' and '%.*s' is "
@@ -715,8 +724,8 @@ static iree_status_t loom_amdgpu_append_copy_packet(
   }
 
   iree_string_view_t mnemonic = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_copy_mnemonic(result_register_class, &mnemonic));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_copy_mnemonic(
+      result_assignment->descriptor_reg_class_id, &mnemonic));
 
   loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
   loom_low_move_t* moves = inline_moves;
@@ -789,13 +798,14 @@ static iree_status_t loom_amdgpu_append_slice_packet(
         "AMDGPU assembly slice result range exceeds the source range");
   }
 
-  iree_string_view_t source_register_class = loom_native_assembly_module_string(
-      context->allocation->module,
-      source_assignment->value_class.register_class_id);
-  iree_string_view_t result_register_class = loom_native_assembly_module_string(
-      context->allocation->module,
-      result_assignment->value_class.register_class_id);
-  if (!iree_string_view_equal(source_register_class, result_register_class)) {
+  if (source_assignment->descriptor_reg_class_id !=
+      result_assignment->descriptor_reg_class_id) {
+    iree_string_view_t source_register_class = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+        context->allocation, source_assignment, &source_register_class));
+    iree_string_view_t result_register_class = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+        context->allocation, result_assignment, &result_register_class));
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "AMDGPU assembly slice between register classes '%.*s' and '%.*s' is "
@@ -805,8 +815,8 @@ static iree_status_t loom_amdgpu_append_slice_packet(
   }
 
   iree_string_view_t mnemonic = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_copy_mnemonic(result_register_class, &mnemonic));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_copy_mnemonic(
+      result_assignment->descriptor_reg_class_id, &mnemonic));
 
   const uint32_t move_count = result_assignment->location_count;
   loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
@@ -851,12 +861,9 @@ static iree_status_t loom_amdgpu_append_concat_packet(
         "AMDGPU assembly concat requires a non-empty physical result range");
   }
 
-  iree_string_view_t result_register_class = loom_native_assembly_module_string(
-      context->allocation->module,
-      result_assignment->value_class.register_class_id);
   iree_string_view_t mnemonic = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_copy_mnemonic(result_register_class, &mnemonic));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_copy_mnemonic(
+      result_assignment->descriptor_reg_class_id, &mnemonic));
 
   const uint32_t move_count = result_assignment->location_count;
   loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
@@ -885,11 +892,20 @@ static iree_status_t loom_amdgpu_append_concat_packet(
           "AMDGPU assembly concat requires non-empty physical source ranges");
       break;
     }
-    iree_string_view_t source_register_class =
-        loom_native_assembly_module_string(
-            context->allocation->module,
-            source_assignment->value_class.register_class_id);
-    if (!iree_string_view_equal(source_register_class, result_register_class)) {
+    if (source_assignment->descriptor_reg_class_id !=
+        result_assignment->descriptor_reg_class_id) {
+      iree_string_view_t source_register_class = iree_string_view_empty();
+      status = loom_low_allocation_assignment_register_class_name(
+          context->allocation, source_assignment, &source_register_class);
+      if (!iree_status_is_ok(status)) {
+        break;
+      }
+      iree_string_view_t result_register_class = iree_string_view_empty();
+      status = loom_low_allocation_assignment_register_class_name(
+          context->allocation, result_assignment, &result_register_class);
+      if (!iree_status_is_ok(status)) {
+        break;
+      }
       status = iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
           "AMDGPU assembly concat between register classes '%.*s' and '%.*s' "

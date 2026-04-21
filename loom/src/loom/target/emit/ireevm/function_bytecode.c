@@ -243,9 +243,10 @@ static iree_status_t loom_ireevm_validate_i32_register_assignment(
         "VM bytecode value %u is not allocated as a register value",
         (unsigned)assignment->value_id);
   }
-  iree_string_view_t register_class = loom_ireevm_module_string(
-      allocation->module, assignment->value_class.register_class_id);
-  if (!iree_string_view_equal(register_class, IREE_SV("vm.i32"))) {
+  if (assignment->descriptor_reg_class_id != IREE_VM_CORE_REG_CLASS_ID_VM_I32) {
+    iree_string_view_t register_class = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+        allocation, assignment, &register_class));
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "VM bytecode emission only supports vm.i32 values, got '%.*s'",

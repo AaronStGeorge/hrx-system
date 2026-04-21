@@ -53,22 +53,14 @@ static bool loom_wasm_value_is_vector_4xf32(loom_low_lower_context_t* context,
 
 static iree_status_t loom_wasm_make_i32_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
-  loom_string_id_t register_class_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(loom_low_lower_context_module(context),
-                                IREE_SV("wasm.i32"), &register_class_id));
-  *out_type = loom_type_register(register_class_id, 1);
-  return iree_ok_status();
+  return loom_low_lower_make_register_type(
+      context, WASM_CORE_SIMD128_REG_CLASS_ID_WASM_I32, 1, out_type);
 }
 
 static iree_status_t loom_wasm_make_v128_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
-  loom_string_id_t register_class_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(loom_low_lower_context_module(context),
-                                IREE_SV("wasm.v128"), &register_class_id));
-  *out_type = loom_type_register(register_class_id, 1);
-  return iree_ok_status();
+  return loom_low_lower_make_register_type(
+      context, WASM_CORE_SIMD128_REG_CLASS_ID_WASM_V128, 1, out_type);
 }
 
 static iree_status_t loom_wasm_map_type(void* user_data,
