@@ -14,6 +14,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/cfg/ops.h"
+#include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
@@ -808,6 +809,20 @@ static bool loom_low_lower_op_is_structural(loom_op_kind_t kind) {
   }
 }
 
+static bool loom_low_lower_op_is_source_metadata(loom_op_kind_t kind) {
+  switch (kind) {
+    case LOOM_OP_ENCODING_ASSUME_SPEC:
+    case LOOM_OP_ENCODING_DEFINE:
+    case LOOM_OP_ENCODING_LAYOUT_ASSUME_DENSE:
+    case LOOM_OP_ENCODING_LAYOUT_ASSUME_STRIDED:
+    case LOOM_OP_ENCODING_LAYOUT_DENSE:
+    case LOOM_OP_ENCODING_LAYOUT_STRIDED:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static iree_status_t loom_low_lower_preflight_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   if (source_op->region_count != 0) {
@@ -818,6 +833,9 @@ static iree_status_t loom_low_lower_preflight_op(
                 "source lowering"));
   }
   if (loom_low_lower_op_is_structural(source_op->kind)) {
+    return iree_ok_status();
+  }
+  if (loom_low_lower_op_is_source_metadata(source_op->kind)) {
     return iree_ok_status();
   }
 
@@ -1233,6 +1251,9 @@ static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
         break;
       }
       if (!handled) {
+        if (loom_low_lower_op_is_source_metadata(source_op->kind)) {
+          continue;
+        }
         status = context->policy->try_lower_op.fn(
             context->policy->try_lower_op.user_data, context, source_op,
             &handled);
@@ -1304,6 +1325,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
         .descriptor_requirements = options->descriptor_requirements,
         .provider_list = options->legality_provider_list,
         .fact_table = &context.fact_table,
+        .diagnostic_flags = options->legality_diagnostic_flags,
         .emitter = options->emitter,
         .max_errors = options->max_errors,
     };

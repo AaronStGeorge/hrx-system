@@ -205,6 +205,8 @@ typedef struct loom_low_lower_options_t {
   loom_low_descriptor_requirement_flags_t descriptor_requirements;
   // Optional target-specific legality providers forwarded to source legality.
   loom_target_low_legality_provider_list_t legality_provider_list;
+  // Optional source legality feedback diagnostics forwarded to providers.
+  loom_target_low_legality_diagnostic_flags_t legality_diagnostic_flags;
   // Target lowering policy for descriptor and type choices.
   const loom_low_lower_policy_t* policy;
   // Optional suffix appended to the source function symbol. Empty uses "__low".

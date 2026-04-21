@@ -3406,6 +3406,42 @@ static const loom_error_def_t loom_err_backend_016 = {
     .param_count = 11,
 };
 
+static const loom_error_param_def_t loom_err_backend_017_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"memory_space", LOOM_PARAM_STRING},
+    {"operation_kind", LOOM_PARAM_STRING},
+    {"packet_key", LOOM_PARAM_STRING},
+    {"decision", LOOM_PARAM_STRING},
+    {"element_bytes", LOOM_PARAM_U32},
+    {"vector_lanes", LOOM_PARAM_U32},
+    {"dynamic_stride_bytes", LOOM_PARAM_U32},
+    {"vector_lane_stride_bytes", LOOM_PARAM_U32},
+    {"bank_stride_words", LOOM_PARAM_U32},
+    {"bank_conflict_degree", LOOM_PARAM_U32},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_017 = {
+    .error_id = "ERR_BACKEND_017",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 17,
+    .summary = "Target memory access decision recorded.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "{decision} {operation_kind} memory packet '{packet_key}' for "
+        "'@{function_name}' in {memory_space}: element {element_bytes} "
+        "byte(s), vector lanes {vector_lanes}, dynamic stride "
+        "{dynamic_stride_bytes} byte(s), vector lane stride "
+        "{vector_lane_stride_bytes} byte(s), bank stride {bank_stride_words} "
+        "word(s), conflict degree {bank_conflict_degree}: {reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_017_params,
+    .param_count = 15,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -3464,7 +3500,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_backend_006,   &loom_err_backend_007,   &loom_err_backend_008,
     &loom_err_backend_009,   &loom_err_backend_010,   &loom_err_backend_011,
     &loom_err_backend_012,   &loom_err_backend_013,   &loom_err_backend_014,
-    &loom_err_backend_015,   &loom_err_backend_016,
+    &loom_err_backend_015,   &loom_err_backend_016,   &loom_err_backend_017,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

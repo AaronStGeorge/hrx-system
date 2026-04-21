@@ -436,6 +436,40 @@ ERR_BACKEND_016 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_017: Target memory access selection was recorded.
+ERR_BACKEND_017 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=17,
+    severity=Severity.REMARK,
+    summary="Target memory access decision recorded.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "{decision} {operation_kind} memory packet '{packet_key}' for "
+        "'@{function_name}' in {memory_space}: element {element_bytes} "
+        "byte(s), vector lanes {vector_lanes}, dynamic stride "
+        "{dynamic_stride_bytes} byte(s), vector lane stride "
+        "{vector_lane_stride_bytes} byte(s), bank stride {bank_stride_words} "
+        "word(s), conflict degree {bank_conflict_degree}: {reason}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("memory_space", ParamKind.STRING),
+        ErrorParam("operation_kind", ParamKind.STRING),
+        ErrorParam("packet_key", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("element_bytes", ParamKind.U32),
+        ErrorParam("vector_lanes", ParamKind.U32),
+        ErrorParam("dynamic_stride_bytes", ParamKind.U32),
+        ErrorParam("vector_lane_stride_bytes", ParamKind.U32),
+        ErrorParam("bank_stride_words", ParamKind.U32),
+        ErrorParam("bank_conflict_degree", ParamKind.U32),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_001,
     ERR_BACKEND_002,
@@ -453,4 +487,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_014,
     ERR_BACKEND_015,
     ERR_BACKEND_016,
+    ERR_BACKEND_017,
 )

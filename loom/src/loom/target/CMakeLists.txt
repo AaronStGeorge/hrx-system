@@ -170,6 +170,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::buffer
     loom::src::loom::ops::cfg
+    loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::ops::index
     loom::src::loom::ops::kernel

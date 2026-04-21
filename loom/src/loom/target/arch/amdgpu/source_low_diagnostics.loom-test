@@ -1,0 +1,62 @@
+// RUN: emit source-low @gfx11_lds_b32_diagnostics_target diagnostics=memory output=none
+target.preset @gfx11_lds_b32_diagnostics_target {key = "amdgpu-gfx11", source = @lds_b32_diagnostics}
+
+func.def @lds_b32_diagnostics(%output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  // REMARK@+1: BACKEND/017 "selected store memory packet 'amdgpu.ds_write_b32'" "dynamic stride 4 byte(s)" "conflict degree 1" "bank-conflict-free"
+  vector.store %one, %scratch_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  // REMARK@+1: BACKEND/017 "selected load memory packet 'amdgpu.ds_read_b32'" "dynamic stride 4 byte(s)" "conflict degree 1" "bank-conflict-free"
+  %loaded = vector.load %scratch_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  func.return
+}
+// ----
+
+// ====
+// RUN: emit source-low @gfx11_lds_padded_diagnostics_target diagnostics=memory output=none
+target.preset @gfx11_lds_padded_diagnostics_target {key = "amdgpu-gfx11", source = @lds_padded_diagnostics}
+
+func.def @lds_padded_diagnostics(%output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 2048 : offset
+  %layout = encoding.layout.strided [5, 1] : encoding<layout>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64x4xi32, %layout>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
+  %one = vector.constant 1 : vector<4xi32>
+  // REMARK@+1: BACKEND/017 "selected store memory packet 'amdgpu.ds_write_b128'" "dynamic stride 20 byte(s)" "conflict degree 1" "padded-bank-conflict-free"
+  vector.store %one, %scratch_view[%tid, 0] : vector<4xi32>, view<64x4xi32, %layout>
+  // REMARK@+1: BACKEND/017 "selected load memory packet 'amdgpu.ds_read_b128'" "dynamic stride 20 byte(s)" "conflict degree 1" "padded-bank-conflict-free"
+  %loaded = vector.load %scratch_view[%tid, 0] : view<64x4xi32, %layout> -> vector<4xi32>
+  vector.store %loaded, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  func.return
+}
+// ----
+
+// ====
+// RUN: emit source-low @gfx11_lds_conflict_risk_diagnostics_target diagnostics=memory output=none
+target.preset @gfx11_lds_conflict_risk_diagnostics_target {key = "amdgpu-gfx11", source = @lds_conflict_risk_diagnostics}
+
+func.def @lds_conflict_risk_diagnostics(%output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 1024 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64x4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
+  %one = vector.constant 1 : vector<4xi32>
+  // REMARK@+1: BACKEND/017 "selected store memory packet 'amdgpu.ds_write_b128'" "dynamic stride 16 byte(s)" "conflict degree 4" "bank-conflict-risk"
+  vector.store %one, %scratch_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  // REMARK@+1: BACKEND/017 "selected load memory packet 'amdgpu.ds_read_b128'" "dynamic stride 16 byte(s)" "conflict degree 4" "bank-conflict-risk"
+  %loaded = vector.load %scratch_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  func.return
+}
+// ----

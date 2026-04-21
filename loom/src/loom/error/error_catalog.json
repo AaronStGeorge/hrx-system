@@ -5041,5 +5041,92 @@
         "kind_name": "U32"
       }
     ]
+  },
+  {
+    "error_id": "ERR_BACKEND_017",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 17,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Target memory access decision recorded.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' {decision} {operation_kind} memory packet '{packet_key}' for '@{function_name}' in {memory_space}: element {element_bytes} byte(s), vector lanes {vector_lanes}, dynamic stride {dynamic_stride_bytes} byte(s), vector lane stride {vector_lane_stride_bytes} byte(s), bank stride {bank_stride_words} word(s), conflict degree {bank_conflict_degree}: {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "memory_space",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "operation_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "packet_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "decision",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "element_bytes",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "vector_lanes",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "dynamic_stride_bytes",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "vector_lane_stride_bytes",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "bank_stride_words",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "bank_conflict_degree",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
   }
 ]

@@ -14,6 +14,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/cfg/ops.h"
+#include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
@@ -190,6 +191,41 @@ iree_status_t loom_target_low_legality_record_contract(
       IREE_ARRAYSIZE(params));
 }
 
+iree_status_t loom_target_low_legality_record_memory_access(
+    loom_target_low_legality_context_t* context,
+    const loom_target_low_legality_provider_t* provider, const loom_op_t* op,
+    iree_string_view_t memory_space, iree_string_view_t operation_kind,
+    iree_string_view_t packet_key, iree_string_view_t decision,
+    uint32_t element_bytes, uint32_t vector_lanes,
+    uint32_t dynamic_stride_bytes, uint32_t vector_lane_stride_bytes,
+    uint32_t bank_stride_words, uint32_t bank_conflict_degree,
+    iree_string_view_t reason) {
+  (void)provider;
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(
+          loom_target_low_legality_target_key(context->options->bundle)),
+      loom_param_string(
+          loom_target_low_legality_export_name(context->options->bundle)),
+      loom_param_string(
+          loom_target_low_legality_config_key(context->options->bundle)),
+      loom_param_string(loom_target_low_legality_function_name(context)),
+      loom_param_string(memory_space),
+      loom_param_string(operation_kind),
+      loom_param_string(packet_key),
+      loom_param_string(decision),
+      loom_param_u32(element_bytes),
+      loom_param_u32(vector_lanes),
+      loom_param_u32(dynamic_stride_bytes),
+      loom_param_u32(vector_lane_stride_bytes),
+      loom_param_u32(bank_stride_words),
+      loom_param_u32(bank_conflict_degree),
+      loom_param_string(reason),
+  };
+  return loom_target_low_legality_emit(
+      context, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 17), params,
+      IREE_ARRAYSIZE(params));
+}
+
 const loom_module_t* loom_target_low_legality_module(
     const loom_target_low_legality_context_t* context) {
   return context->module;
@@ -213,6 +249,12 @@ const loom_low_descriptor_set_t* loom_target_low_legality_descriptor_set(
 const loom_value_fact_table_t* loom_target_low_legality_fact_table(
     const loom_target_low_legality_context_t* context) {
   return context->fact_table;
+}
+
+loom_target_low_legality_diagnostic_flags_t
+loom_target_low_legality_diagnostic_flags(
+    const loom_target_low_legality_context_t* context) {
+  return context->options->diagnostic_flags;
 }
 
 static bool loom_target_low_legality_codegen_format_is_low(
@@ -286,6 +328,13 @@ static iree_status_t loom_target_low_legality_validate_options(
   }
   IREE_RETURN_IF_ERROR(
       loom_target_low_legality_provider_list_verify(options->provider_list));
+  if (iree_any_bit_set(options->diagnostic_flags,
+                       ~LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low legality diagnostics use unknown "
+                            "flag bits 0x%08x",
+                            (unsigned)options->diagnostic_flags);
+  }
   return loom_target_low_descriptor_set_select_for_bundle(
       options->descriptor_registry, options->bundle,
       options->descriptor_requirements, out_descriptor_set);
@@ -328,7 +377,7 @@ static iree_status_t loom_target_low_legality_verify_type(
     return loom_target_low_legality_verify_scalar_type(context, op, type);
   }
   if (loom_type_is_buffer(type) || loom_type_is_view(type) ||
-      loom_type_is_register(type)) {
+      loom_type_is_register(type) || loom_type_is_encoding(type)) {
     return iree_ok_status();
   }
   if (loom_type_is_vector(type)) {
@@ -405,6 +454,12 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_BUFFER_VIEW:
     case LOOM_OP_CFG_BR:
     case LOOM_OP_CFG_COND_BR:
+    case LOOM_OP_ENCODING_ASSUME_SPEC:
+    case LOOM_OP_ENCODING_DEFINE:
+    case LOOM_OP_ENCODING_LAYOUT_ASSUME_DENSE:
+    case LOOM_OP_ENCODING_LAYOUT_ASSUME_STRIDED:
+    case LOOM_OP_ENCODING_LAYOUT_DENSE:
+    case LOOM_OP_ENCODING_LAYOUT_STRIDED:
     case LOOM_OP_FUNC_CALL:
     case LOOM_OP_FUNC_RETURN:
     case LOOM_OP_INDEX_ADD:

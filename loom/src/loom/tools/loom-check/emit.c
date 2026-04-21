@@ -102,6 +102,10 @@ typedef struct loom_check_emit_request_t {
   bool has_low_schedule_strategy_option;
   // Source-low text output form.
   loom_check_emit_source_low_output_t source_low_output;
+  // Source-low legality diagnostics requested by the RUN line.
+  loom_target_low_legality_diagnostic_flags_t source_low_diagnostic_flags;
+  // True once a source-low diagnostics option has been parsed.
+  bool has_source_low_diagnostics_option;
 } loom_check_emit_request_t;
 
 static iree_status_t loom_check_emit_parse_low_allocation_budget(
@@ -221,6 +225,29 @@ static iree_status_t loom_check_emit_parse_source_low_option(
   iree_string_view_split(token, '=', &name, &value);
   name = iree_string_view_trim(name);
   value = iree_string_view_trim(value);
+  if (iree_string_view_equal(name, IREE_SV("diagnostics"))) {
+    if (request->has_source_low_diagnostics_option) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "duplicate source-low option 'diagnostics'");
+    }
+    if (iree_string_view_equal(value, IREE_SV("none"))) {
+      request->source_low_diagnostic_flags = 0;
+    } else if (iree_string_view_equal(value, IREE_SV("memory"))) {
+      request->source_low_diagnostic_flags =
+          LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS;
+    } else if (iree_string_view_equal(value, IREE_SV("all"))) {
+      request->source_low_diagnostic_flags =
+          LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL;
+    } else {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "source-low option 'diagnostics' expected 'none', 'memory', or "
+          "'all', got '%.*s'",
+          (int)value.size, value.data);
+    }
+    request->has_source_low_diagnostics_option = true;
+    return iree_ok_status();
+  }
   if (!iree_string_view_equal(name, IREE_SV("output"))) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown source-low option '%.*s'", (int)name.size,
@@ -1009,6 +1036,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
       .descriptor_requirements =
           LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
       .legality_provider_list = legality_provider_list,
+      .legality_diagnostic_flags = request->source_low_diagnostic_flags,
       .policy = policy,
       .emitter = loom_target_module_compile_emitter(&pass_emitter),
       .max_errors = 20,

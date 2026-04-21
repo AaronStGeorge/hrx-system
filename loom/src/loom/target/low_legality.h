@@ -33,6 +33,15 @@ typedef struct loom_target_low_legality_context_t
 typedef struct loom_target_low_legality_provider_t
     loom_target_low_legality_provider_t;
 
+typedef uint32_t loom_target_low_legality_diagnostic_flags_t;
+
+// Emit target memory-access selection remarks from providers that support them.
+#define LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS ((uint32_t)1u << 0)
+
+// All target-low legality diagnostic flags known to this header.
+#define LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_ALL \
+  LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS
+
 typedef iree_status_t (*loom_target_low_legality_try_op_fn_t)(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
@@ -96,6 +105,10 @@ typedef struct loom_target_low_legality_options_t {
   // Optional caller-owned facts for |function|. When omitted, legality
   // computes a transient table in its scratch arena.
   const loom_value_fact_table_t* fact_table;
+  // Optional target-specific feedback diagnostics to emit during source
+  // legality. Zero keeps legality quiet except for errors and provider-owned
+  // mandatory contract remarks.
+  loom_target_low_legality_diagnostic_flags_t diagnostic_flags;
   // Structured diagnostic emitter for user legality failures and remarks.
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting the walk. Zero means no
@@ -145,6 +158,11 @@ const loom_low_descriptor_set_t* loom_target_low_legality_descriptor_set(
 const loom_value_fact_table_t* loom_target_low_legality_fact_table(
     const loom_target_low_legality_context_t* context);
 
+// Returns the optional feedback diagnostics requested by the caller.
+loom_target_low_legality_diagnostic_flags_t
+loom_target_low_legality_diagnostic_flags(
+    const loom_target_low_legality_context_t* context);
+
 // Emits ERR_BACKEND_001 for an unsupported legality subject.
 iree_status_t loom_target_low_legality_reject(
     loom_target_low_legality_context_t* context,
@@ -157,6 +175,17 @@ iree_status_t loom_target_low_legality_record_contract(
     loom_target_low_legality_context_t* context,
     const loom_target_low_legality_provider_t* provider, const loom_op_t* op,
     iree_string_view_t contract_key, iree_string_view_t decision,
+    iree_string_view_t reason);
+
+// Emits ERR_BACKEND_017 for a target memory-access selection decision.
+iree_status_t loom_target_low_legality_record_memory_access(
+    loom_target_low_legality_context_t* context,
+    const loom_target_low_legality_provider_t* provider, const loom_op_t* op,
+    iree_string_view_t memory_space, iree_string_view_t operation_kind,
+    iree_string_view_t packet_key, iree_string_view_t decision,
+    uint32_t element_bytes, uint32_t vector_lanes,
+    uint32_t dynamic_stride_bytes, uint32_t vector_lane_stride_bytes,
+    uint32_t bank_stride_words, uint32_t bank_conflict_degree,
     iree_string_view_t reason);
 
 #ifdef __cplusplus
