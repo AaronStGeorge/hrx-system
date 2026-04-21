@@ -93,6 +93,8 @@ typedef struct loom_low_allocation_class_capacity_t {
   uint16_t alloc_unit_bits;
   // Storage space used when this class spills.
   loom_low_spill_slot_space_t spill_slot_space;
+  // True when values in this class can be assigned to spill slots.
+  bool is_spillable;
   // True when |max_units| is a hard allocation budget.
   bool is_bounded;
 } loom_low_allocation_class_capacity_t;
@@ -387,6 +389,8 @@ static iree_status_t loom_low_allocation_class_capacity(
       state, value_class, &reg_class_id, &reg_class));
 
   uint32_t budget_units = 0;
+  const bool is_spillable =
+      !iree_any_bit_set(reg_class->flags, LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
   if (loom_low_allocation_lookup_budget(state, reg_class_id, &budget_units)) {
     *out_capacity = (loom_low_allocation_class_capacity_t){
         .descriptor_reg_class_id = reg_class_id,
@@ -395,6 +399,7 @@ static iree_status_t loom_low_allocation_class_capacity(
         .alloc_unit_bits = reg_class->alloc_unit_bits,
         .spill_slot_space =
             (loom_low_spill_slot_space_t)reg_class->spill_slot_space,
+        .is_spillable = is_spillable,
         .is_bounded = true,
     };
     return iree_ok_status();
@@ -408,6 +413,7 @@ static iree_status_t loom_low_allocation_class_capacity(
         .alloc_unit_bits = reg_class->alloc_unit_bits,
         .spill_slot_space =
             (loom_low_spill_slot_space_t)reg_class->spill_slot_space,
+        .is_spillable = is_spillable,
         .is_bounded = true,
     };
     return iree_ok_status();
@@ -420,6 +426,7 @@ static iree_status_t loom_low_allocation_class_capacity(
       .alloc_unit_bits = reg_class->alloc_unit_bits,
       .spill_slot_space =
           (loom_low_spill_slot_space_t)reg_class->spill_slot_space,
+      .is_spillable = is_spillable,
       .is_bounded = false,
   };
   return iree_ok_status();
@@ -1235,6 +1242,19 @@ static iree_status_t loom_low_allocation_assign_intervals(
     uint32_t location_base = 0;
     bool assigned = loom_low_allocation_find_location(state, interval, capacity,
                                                       &location_base);
+    if (!assigned && !capacity.is_spillable) {
+      const loom_low_descriptor_set_t* descriptor_set =
+          state->target.descriptor_set;
+      const loom_low_reg_class_t* reg_class =
+          &descriptor_set->reg_classes[capacity.descriptor_reg_class_id];
+      iree_string_view_t reg_class_name = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+          descriptor_set, reg_class->name_string_offset, &reg_class_name));
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "allocation exhausted unspillable register class '%.*s'",
+          (int)reg_class_name.size, reg_class_name.data);
+    }
 
     loom_low_allocation_assignment_t* assignment =
         &state->assignments[state->assignment_count];

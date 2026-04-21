@@ -47,6 +47,7 @@ _REG_I64 = "test.i64"
 _REG_PTR = "test.ptr"
 _REG_V4I32 = "test.v4i32"
 _REG_PHYS = "test.phys"
+_REG_SPECIAL = "test.special"
 
 _RESOURCE_SCALAR = "test.scalar"
 _RESOURCE_VECTOR = "test.vector"
@@ -69,6 +70,7 @@ _I32_I64_ALT = (RegClassAlt(_REG_I32), RegClassAlt(_REG_I64))
 _PTR_ALT = (RegClassAlt(_REG_PTR),)
 _V4I32_ALT = (RegClassAlt(_REG_V4I32),)
 _PHYS_ALT = (RegClassAlt(_REG_PHYS),)
+_SPECIAL_ALT = (RegClassAlt(_REG_SPECIAL),)
 
 
 def _asm(
@@ -129,6 +131,14 @@ def _phys_result(field_name: str = "dst") -> Operand:
 
 def _phys_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _PHYS_ALT)
+
+
+def _special_result(field_name: str = "dst") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _SPECIAL_ALT)
+
+
+def _special_operand(field_name: str) -> Operand:
+    return Operand(field_name, OperandRole.OPERAND, _SPECIAL_ALT)
 
 
 _I32_VALUE_IMMEDIATE = Immediate(
@@ -234,6 +244,13 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=32,
+        ),
+        RegClass(
+            _REG_SPECIAL,
+            32,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
         ),
     ),
     resources=(
@@ -390,6 +407,19 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             operands=(_phys_result(), _phys_operand("lhs"), _phys_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_VECTOR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.add.special",
+            mnemonic="test.add.special",
+            semantic_tag="test.special.add",
+            operands=(
+                _special_result(),
+                _special_operand("lhs"),
+                _special_operand("rhs"),
+            ),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SCALAR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(

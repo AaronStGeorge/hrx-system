@@ -83,6 +83,7 @@ TEST(TestLowDescriptorsTest, StableKeysCoverGenericLowBehaviors) {
       {IREE_SV("test.ambiguous"), 1, 1, 0},
       {IREE_SV("test.add.v4i32"), 3, 1, 0},
       {IREE_SV("test.add.phys"), 3, 1, 0},
+      {IREE_SV("test.add.special"), 3, 1, 0},
       {IREE_SV("test.tied.any"), 2, 1, 0},
       {IREE_SV("test.load.v4i32"), 2, 1, 1},
       {IREE_SV("test.store.v4i32"), 2, 0, 1},
@@ -153,6 +154,27 @@ TEST(TestLowDescriptorsTest, PhysicalClassHasTargetVisiblePressureBudget) {
     EXPECT_EQ(reg_class->spill_slot_space, LOOM_LOW_SPILL_SLOT_SPACE_STACK);
   }
   EXPECT_TRUE(found_physical_class);
+}
+
+TEST(TestLowDescriptorsTest, SpecialPhysicalClassIsUnspillable) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_test_low_core_descriptor_set();
+
+  bool found_special_class = false;
+  for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {
+    const loom_low_reg_class_t* reg_class = &descriptor_set->reg_classes[i];
+    if (ToString(descriptor_set, reg_class->name_string_offset) !=
+        "test.special") {
+      continue;
+    }
+    found_special_class = true;
+    EXPECT_EQ(reg_class->alloc_unit_bits, 32u);
+    EXPECT_EQ(reg_class->physical_count, 1u);
+    EXPECT_NE(reg_class->flags & LOOM_LOW_REG_CLASS_FLAG_PHYSICAL, 0u);
+    EXPECT_NE(reg_class->flags & LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE, 0u);
+    EXPECT_EQ(reg_class->spill_slot_space, LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE);
+  }
+  EXPECT_TRUE(found_special_class);
 }
 
 TEST(TestLowDescriptorsTest, AsmFormsExposeGenericAndSpirvLikePackets) {

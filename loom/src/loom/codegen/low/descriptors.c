@@ -1204,7 +1204,8 @@ static iree_status_t loom_low_verify_reg_class(
   IREE_RETURN_IF_ERROR(loom_low_verify_known_flags(
       reg_class->flags,
       LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY | LOOM_LOW_REG_CLASS_FLAG_PHYSICAL |
-          LOOM_LOW_REG_CLASS_FLAG_REFERENCE,
+          LOOM_LOW_REG_CLASS_FLAG_REFERENCE |
+          LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE,
       "register class", reg_class_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_required_string(
       descriptor_set, reg_class->name_string_offset, "reg_class.name"));
@@ -1753,6 +1754,7 @@ static const loom_low_manifest_flag_name_t kLoomLowRegClassFlagNames[] = {
     {LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY, "virtual_only"},
     {LOOM_LOW_REG_CLASS_FLAG_PHYSICAL, "physical"},
     {LOOM_LOW_REG_CLASS_FLAG_REFERENCE, "reference"},
+    {LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE, "unspillable"},
 };
 
 static const loom_low_manifest_flag_name_t kLoomLowRegClassAltFlagNames[] = {

@@ -19,6 +19,7 @@ namespace loom {
 namespace {
 
 using ::loom::testing::ExpectAmdgpuDs2AddrMemoryDescriptors;
+using ::loom::testing::ExpectAmdgpuDsAddtidMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
 using ::loom::testing::LowFuncAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmRoundTripHarness;
@@ -54,7 +55,7 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorSetVerifies) {
   EXPECT_GE(descriptor_set->descriptor_count, 10u);
   EXPECT_EQ(descriptor_set->descriptor_ref_count,
             descriptor_set->descriptor_count);
-  EXPECT_EQ(descriptor_set->reg_class_count, 2u);
+  EXPECT_EQ(descriptor_set->reg_class_count, 3u);
   EXPECT_GE(descriptor_set->schedule_class_count, 7u);
   EXPECT_GE(descriptor_set->resource_count, 7u);
   for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {
@@ -248,6 +249,8 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
       LOOM_LOW_EFFECT_KIND_WRITE, 4u, 128u, LOOM_AMDGPU_ENCODING_FORMAT_DS);
   ExpectAmdgpuDs2AddrMemoryDescriptors(descriptor_set,
                                        LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  ExpectAmdgpuDsAddtidMemoryDescriptors(descriptor_set,
+                                        LOOM_AMDGPU_ENCODING_FORMAT_DS);
 
   const loom_low_descriptor_t* barrier_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_barrier"));

@@ -423,7 +423,36 @@ def test_materialize_maps_implicit_xml_operand_to_low_operand() -> None:
     assert descriptor.operands[-1] == scc_operand
 
 
-def test_materialize_rejects_implicit_mapping_without_implicit_role() -> None:
+def test_materialize_maps_implicit_xml_operand_to_explicit_low_operand() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    scc_operand = Operand(
+        "scc",
+        OperandRole.RESOURCE,
+        _SGPR_ALT,
+        flags=(OperandFlag.IMPLICIT,),
+        unit_count=1,
+    )
+    overlay = _s_add_u32_overlay(
+        "amdgpu.s_add_u32.scc_explicit",
+        implicit_operands=(
+            AmdgpuImplicitOperandOverlay(
+                operand_type="OPR_SSRC_SPECIAL_SCC",
+                descriptor_operand=scc_operand,
+                data_format_name="FMT_NUM_B1",
+                size_bits=1,
+                is_input=False,
+                is_output=True,
+            ),
+        ),
+    )
+
+    descriptor = materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+    assert descriptor.operands[-1] == scc_operand
+    assert descriptor.asm_forms[0].operands == ("lhs", "rhs")
+
+
+def test_materialize_rejects_implicit_mapping_with_invalid_low_role() -> None:
     spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
     overlay = _s_add_u32_overlay(
         "amdgpu.bad_implicit_mapping_role",
@@ -432,7 +461,7 @@ def test_materialize_rejects_implicit_mapping_without_implicit_role() -> None:
                 operand_type="OPR_SSRC_SPECIAL_SCC",
                 descriptor_operand=Operand(
                     "scc",
-                    OperandRole.OPERAND,
+                    OperandRole.RESULT,
                     _SGPR_ALT,
                     flags=(OperandFlag.IMPLICIT,),
                 ),
@@ -443,7 +472,7 @@ def test_materialize_rejects_implicit_mapping_without_implicit_role() -> None:
 
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
-        match="without implicit role",
+        match="with invalid low role",
     ):
         materialize_amdgpu_descriptor_overlay(spec, overlay)
 

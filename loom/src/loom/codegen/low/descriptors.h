@@ -73,7 +73,8 @@ typedef enum loom_low_operand_role_e {
 // Bitset of descriptor operand flags.
 typedef uint16_t loom_low_operand_flags_t;
 
-// Operand is implicit in assembly or bytecode but participates in semantics.
+// Operand is omitted from the target assembly spelling but participates in low
+// semantics. Rows with role IMPLICIT are also omitted from low packet operands.
 #define LOOM_LOW_OPERAND_FLAG_IMPLICIT ((uint16_t)1u << 0)
 // Operand is tied to another operand by a constraint row.
 #define LOOM_LOW_OPERAND_FLAG_TIED ((uint16_t)1u << 1)
@@ -101,6 +102,8 @@ typedef uint16_t loom_low_reg_class_flags_t;
 #define LOOM_LOW_REG_CLASS_FLAG_PHYSICAL ((uint16_t)1u << 1)
 // Register class contains reference-counted or GC-visible references.
 #define LOOM_LOW_REG_CLASS_FLAG_REFERENCE ((uint16_t)1u << 2)
+// Register class cannot be represented in spill storage.
+#define LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE ((uint16_t)1u << 3)
 
 typedef enum loom_low_spill_slot_space_e {
   // Unknown or uninitialized spill storage space.

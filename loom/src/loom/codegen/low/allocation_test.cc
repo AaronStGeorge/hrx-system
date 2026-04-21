@@ -241,9 +241,27 @@ TEST_F(LowAllocationTest, RejectsTiedResultWhenOperandSpills) {
       .budget_count = 1,
   };
   loom_low_allocation_sidecar_t allocation = {};
-  iree_status_t status =
-      AllocateFirstLowFunctionWithOptions(&options, &allocation);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      AllocateFirstLowFunctionWithOptions(&options, &allocation));
+}
+
+TEST_F(LowAllocationTest, RejectsUnspillableRegisterClassExhaustion) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%lhs : "
+      "reg<test.special>, %rhs : reg<test.special>) -> "
+      "(reg<test.special>) {\n"
+      "  %sum = low.op<test.add.special>(%lhs, %rhs) : "
+      "(reg<test.special>, reg<test.special>) -> reg<test.special>\n"
+      "  low.return %sum : reg<test.special>\n"
+      "}\n");
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      AllocateFirstLowFunctionWithOptions(&options, &allocation));
 }
 
 TEST_F(LowAllocationTest, FixedValueLocationIsReusableAfterLastUse) {

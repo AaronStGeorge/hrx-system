@@ -118,3 +118,18 @@ ds_write2st64_b32
 ds_read2st64_b64
 ds_write2st64_b64
 s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_addtid waits=none
+target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_lds_addtid}
+
+low.func.def target(@gfx11_target) @gfx11_lds_addtid(%m0 : reg<amdgpu.m0>, %value : reg<amdgpu.vgpr>) {
+  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 16} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_write_addtid_b32>(%value, %m0) {offset = 20} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
+  low.return
+}
+
+// ----
+ds_read_addtid_b32
+ds_write_addtid_b32
+s_endpgm

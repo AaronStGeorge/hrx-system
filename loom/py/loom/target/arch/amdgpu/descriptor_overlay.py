@@ -97,6 +97,8 @@ def _asm_forms_for_overlay(overlay: AmdgpuDescriptorOverlay) -> tuple[AsmForm, .
         operand = operand_overlay.descriptor_operand
         if operand.role is OperandRole.RESULT:
             results.append(operand.field_name)
+        elif OperandFlag.IMPLICIT in operand.flags:
+            continue
         elif operand.role in (
             OperandRole.OPERAND,
             OperandRole.PREDICATE,
@@ -425,11 +427,17 @@ def _validate_implicit_operand_decision(
         )
     descriptor_operand = implicit_overlay.descriptor_operand
     if descriptor_operand.role is not OperandRole.IMPLICIT:
-        raise AmdgpuDescriptorOverlayError(
-            f"descriptor overlay '{overlay.descriptor_key}' maps implicit XML "
-            f"operand {_format_implicit_xml_operand(xml_operand)} to low operand "
-            f"'{descriptor_operand.field_name}' without implicit role"
+        explicit_low_roles = (
+            OperandRole.OPERAND,
+            OperandRole.PREDICATE,
+            OperandRole.RESOURCE,
         )
+        if descriptor_operand.role not in explicit_low_roles:
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' maps implicit XML "
+                f"operand {_format_implicit_xml_operand(xml_operand)} to low operand "
+                f"'{descriptor_operand.field_name}' with invalid low role"
+            )
     if OperandFlag.IMPLICIT not in descriptor_operand.flags:
         raise AmdgpuDescriptorOverlayError(
             f"descriptor overlay '{overlay.descriptor_key}' maps implicit XML "

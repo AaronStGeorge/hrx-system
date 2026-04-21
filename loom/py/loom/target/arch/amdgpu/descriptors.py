@@ -43,6 +43,7 @@ from loom.target.low_descriptors import (
     MemorySpace,
     ModelQuality,
     Operand,
+    OperandFlag,
     OperandRole,
     RegClass,
     RegClassAlt,
@@ -58,6 +59,7 @@ from loom.target.low_descriptors import (
 _REG_SGPR = "amdgpu.sgpr"
 _REG_VGPR = "amdgpu.vgpr"
 _REG_AGPR = "amdgpu.agpr"
+_REG_M0 = "amdgpu.m0"
 
 _RESOURCE_SALU = "amdgpu.salu"
 _RESOURCE_VALU = "amdgpu.valu"
@@ -118,6 +120,7 @@ _VGPR_AGPR_CONST_ALT = (
     RegClassAlt(_REG_AGPR),
     RegClassAlt(None, flags=(RegClassAltFlag.IMMEDIATE,)),
 )
+_M0_ALT = (RegClassAlt(_REG_M0, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 
 
 def _matrix_hazards(resource: str) -> tuple[Hazard, ...]:
@@ -247,6 +250,16 @@ def _sgpr_operand(field_name: str, *, units: int = 1) -> Operand:
 
 def _sgpr_resource(field_name: str, *, units: int = 1) -> Operand:
     return Operand(field_name, OperandRole.RESOURCE, _SGPR_ALT, unit_count=units)
+
+
+def _m0_implicit_resource(field_name: str = "m0") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.RESOURCE,
+        _M0_ALT,
+        flags=(OperandFlag.IMPLICIT,),
+        unit_count=1,
+    )
 
 
 def _vgpr_result(field_name: str = "dst", *, units: int = 1) -> Operand:
@@ -565,6 +578,17 @@ def _ignore_workgroup_memory(
             if is_input
             else "modeled-by-workgroup-write-effect"
         ),
+    )
+
+
+def _implicit_m0_input() -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_SDST_M0",
+        descriptor_operand=_m0_implicit_resource(),
+        data_format_name="FMT_NUM_B32",
+        size_bits=32,
+        is_input=True,
+        is_output=False,
     )
 
 
@@ -1365,6 +1389,56 @@ def _ds_stride64_write2_overlay(
     )
 
 
+def _ds_read_addtid_b32_overlay(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ds_read_addtid_b32",
+        instruction_name="DS_READ_ADDTID_B32",
+        mnemonic="ds_read_addtid_b32",
+        encoding_name=encoding_name,
+        semantic_tag="memory.workgroup.load.addtid.u32",
+        schedule_class=_SCHEDULE_LDS_LOAD,
+        operands=(AmdgpuOperandOverlay("VDST", _vgpr_result()),),
+        implicit_operands=(
+            _ignore_workgroup_memory(width_bits=32, is_input=True),
+            _implicit_m0_input(),
+        ),
+        immediate_fields=("OFFSET0",),
+        immediates=(_offset_immediate(8),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_workgroup_memory_effect(EffectKind.READ, 32),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _ds_write_addtid_b32_overlay(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ds_write_addtid_b32",
+        instruction_name="DS_WRITE_ADDTID_B32",
+        mnemonic="ds_write_addtid_b32",
+        encoding_name=encoding_name,
+        semantic_tag="memory.workgroup.store.addtid.u32",
+        schedule_class=_SCHEDULE_LDS_STORE,
+        operands=(AmdgpuOperandOverlay("DATA0", _vgpr_operand("value")),),
+        implicit_operands=(
+            _ignore_workgroup_memory(width_bits=32, is_input=False),
+            _implicit_m0_input(),
+        ),
+        immediate_fields=("OFFSET0",),
+        immediates=(_offset_immediate(8),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_workgroup_memory_effect(EffectKind.WRITE, 32),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _ds_fixed_fields_without_offset1(
     fixed_encoding_fields: tuple[tuple[str, int], ...],
 ) -> tuple[tuple[str, int], ...]:
@@ -1439,6 +1513,14 @@ def _ds_memory_overlays(
                 fixed_encoding_fields=two_addr_fixed_encoding_fields,
             )
             for width_bits, units in two_addr_widths
+        ),
+        _ds_read_addtid_b32_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+        _ds_write_addtid_b32_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
         ),
     )
 
@@ -1872,6 +1954,13 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=256,
         ),
+        RegClass(
+            _REG_M0,
+            32,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
+        ),
     ),
     resources=(
         *_common_scalar_vector_memory_resources(),
@@ -1940,6 +2029,13 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=1024,
+        ),
+        RegClass(
+            _REG_M0,
+            32,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
         ),
     ),
     resources=(
@@ -2026,6 +2122,13 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=1024,
+        ),
+        RegClass(
+            _REG_M0,
+            32,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
         ),
     ),
     resources=(
@@ -2121,6 +2224,13 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=1024,
+        ),
+        RegClass(
+            _REG_M0,
+            32,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
         ),
     ),
     resources=(

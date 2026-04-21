@@ -618,6 +618,31 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11Ds2AddrMemoryAndReturn) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest, EncodesGfx11DsAddtidMemoryAndReturn) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel(%m0 : reg<amdgpu.m0>, "
+      "%value : reg<amdgpu.vgpr>) {\n"
+      "  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 16} : "
+      "(reg<amdgpu.m0>) -> reg<amdgpu.vgpr>\n"
+      "  low.op<amdgpu.ds_write_addtid_b32>(%value, %m0) {offset = 20} : "
+      "(reg<amdgpu.vgpr>, reg<amdgpu.m0>)\n"
+      "  low.return\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_GT(text.data_length, 4u);
+  EXPECT_EQ(text.data_length % 4, 0u);
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(AmdgpuEncodingTest, EncodesReturnForCurrentAmdgpuFamilies) {
   struct Case {
     // Target preset used to select the low descriptor set.
