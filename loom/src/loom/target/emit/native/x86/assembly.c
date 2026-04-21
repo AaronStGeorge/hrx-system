@@ -249,6 +249,35 @@ static iree_status_t loom_x86_descriptor_has_constraint(
   return iree_ok_status();
 }
 
+static iree_status_t loom_x86_descriptor_has_effect(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, loom_low_effect_kind_t kind,
+    bool* out_has_effect) {
+  *out_has_effect = false;
+  if (descriptor->effect_count == 0) {
+    return iree_ok_status();
+  }
+  if (descriptor->effect_start > descriptor_set->effect_count ||
+      descriptor->effect_count >
+          descriptor_set->effect_count - descriptor->effect_start) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "x86 descriptor effect range is out of range");
+  }
+  if (descriptor_set->effects == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "x86 descriptor effects table is missing");
+  }
+  for (uint16_t i = 0; i < descriptor->effect_count; ++i) {
+    const loom_low_effect_t* effect =
+        &descriptor_set->effects[descriptor->effect_start + i];
+    if (effect->kind == kind) {
+      *out_has_effect = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_x86_descriptor_uses_tied_ternary_form(
     const loom_native_assembly_packet_context_t* context,
     bool* out_uses_tied_ternary_form) {
@@ -375,50 +404,32 @@ static iree_status_t loom_x86_append_copy_packet(
   return loom_x86_append_assignment(context, source_assignment);
 }
 
-typedef iree_status_t (*loom_x86_assembly_descriptor_append_fn_t)(
-    const loom_native_assembly_packet_context_t* context);
-
-typedef struct loom_x86_assembly_descriptor_dispatch_t {
-  const char* key;
-  loom_x86_assembly_descriptor_append_fn_t append_packet;
-} loom_x86_assembly_descriptor_dispatch_t;
-
-static const loom_x86_assembly_descriptor_dispatch_t
-    kLoomX86AssemblyDescriptorDispatch[] = {
-        {"x86.avx512.kandq", loom_x86_append_binary_vector_packet},
-        {"x86.avx512.mov.gpr64", loom_x86_append_move_packet},
-        {"x86.avx512.vmovdqu32.load.zmm", loom_x86_append_load_packet},
-        {"x86.avx512.vmovdqu32.store.zmm", loom_x86_append_store_packet},
-        {"x86.avx512.vaddps.zmm", loom_x86_append_binary_vector_packet},
-        {"x86.avx512.vmulps.zmm", loom_x86_append_binary_vector_packet},
-        {"x86.avx512.vsubps.zmm", loom_x86_append_binary_vector_packet},
-        {"x86.avx512.vpaddd.zmm", loom_x86_append_binary_vector_packet},
-        {"x86.avx512.vpmulld.zmm", loom_x86_append_binary_vector_packet},
-        {"x86.avx512.vpsubd.zmm", loom_x86_append_binary_vector_packet},
-};
-
-static const loom_x86_assembly_descriptor_dispatch_t*
-loom_x86_find_descriptor_dispatch(iree_string_view_t key) {
-  for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(kLoomX86AssemblyDescriptorDispatch); ++i) {
-    const loom_x86_assembly_descriptor_dispatch_t* dispatch =
-        &kLoomX86AssemblyDescriptorDispatch[i];
-    if (iree_string_view_equal(key, iree_make_cstring_view(dispatch->key))) {
-      return dispatch;
-    }
-  }
-  return NULL;
-}
-
 static iree_status_t loom_x86_append_descriptor_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
-  iree_string_view_t key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_x86_descriptor_key(context, &key));
-  const loom_x86_assembly_descriptor_dispatch_t* dispatch =
-      loom_x86_find_descriptor_dispatch(key);
-  if (dispatch != NULL) {
-    return dispatch->append_packet(context);
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  bool has_read_effect = false;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_has_effect(
+      descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_READ, &has_read_effect));
+  bool has_write_effect = false;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_has_effect(
+      descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_WRITE,
+      &has_write_effect));
+  if (has_read_effect && has_write_effect) {
+    iree_string_view_t key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_x86_descriptor_key(context, &key));
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "x86 assembly descriptor '%.*s' has both read and "
+                            "write effects",
+                            (int)key.size, key.data);
+  }
+  if (has_read_effect) {
+    return loom_x86_append_load_packet(context);
+  }
+  if (has_write_effect) {
+    return loom_x86_append_store_packet(context);
   }
   bool uses_tied_ternary_form = false;
   IREE_RETURN_IF_ERROR(loom_x86_descriptor_uses_tied_ternary_form(
@@ -426,6 +437,17 @@ static iree_status_t loom_x86_append_descriptor_packet(
   if (uses_tied_ternary_form) {
     return loom_x86_append_tied_ternary_packet(context);
   }
+  const loom_op_t* op = context->packet->node->op;
+  if (descriptor->result_count == 1 && descriptor->operand_count == 3 &&
+      op->result_count == 1 && op->operand_count == 2) {
+    return loom_x86_append_binary_vector_packet(context);
+  }
+  if (descriptor->result_count == 1 && descriptor->operand_count == 2 &&
+      op->result_count == 1 && op->operand_count == 1) {
+    return loom_x86_append_move_packet(context);
+  }
+  iree_string_view_t key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_key(context, &key));
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                           "x86 assembly descriptor '%.*s' is unsupported",
                           (int)key.size, key.data);
