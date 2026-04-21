@@ -26,6 +26,8 @@ typedef struct loom_low_source_to_low_pass_config_t {
   const loom_low_descriptor_registry_t* descriptor_registry;
   // Selected source-to-target-low lowering policy registry.
   const loom_low_lower_policy_registry_t* policy_registry;
+  // Optional target-specific legality providers forwarded to source legality.
+  loom_target_low_legality_provider_list_t legality_provider_list;
 } loom_low_source_to_low_pass_config_t;
 
 // Returns true if |config| satisfies a requirement declared by the

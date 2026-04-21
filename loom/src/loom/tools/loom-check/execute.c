@@ -376,6 +376,7 @@ static iree_status_t loom_check_run_pipeline(
     iree_diagnostic_emitter_t diagnostic_emitter,
     const loom_target_low_descriptor_registry_t* low_registry,
     const loom_low_lower_policy_registry_t* low_lower_policy_registry,
+    loom_target_low_legality_provider_list_t low_legality_provider_list,
     loom_module_t* module) {
   const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
   loom_low_materialize_allocation_pass_config_t
@@ -385,6 +386,7 @@ static iree_status_t loom_check_run_pipeline(
   loom_low_source_to_low_pass_config_t low_source_to_low_config = {
       .descriptor_registry = &low_registry->registry,
       .policy_registry = low_lower_policy_registry,
+      .legality_provider_list = low_legality_provider_list,
   };
   loom_check_pass_pipeline_config_t pipeline_config = {
       .low_allocation_config = &low_materialize_allocation_config,
@@ -576,9 +578,10 @@ iree_status_t loom_check_execute_pass(
     }
   }
   if (iree_status_is_ok(status)) {
-    status = loom_check_run_pipeline(test_case->pipeline, block_pool,
-                                     pass_diagnostic_emitter, &low_registry,
-                                     low_lower_policy_registry_ref, module);
+    status = loom_check_run_pipeline(
+        test_case->pipeline, block_pool, pass_diagnostic_emitter, &low_registry,
+        low_lower_policy_registry_ref, environment->low_legality_provider_list,
+        module);
   }
   if (!iree_status_is_ok(status)) {
     if (pass_diagnostic_capture.emission_count > 0 ||

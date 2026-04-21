@@ -38,7 +38,7 @@
 //                           [diagnostics=...] [output=json|none]
 //                           [class=units...].
 //                           Source lowering tests use source-low @target
-//                           [output=module|low]. Linked providers may add
+//                           [output=module|low|none]. Linked providers may add
 //                           target-specific emit forms.
 //                           Low schedule diagnostics are one of none,
 //                           pressure, resources, hazards, candidates, model,

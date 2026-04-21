@@ -42,6 +42,7 @@ typedef enum loom_check_emit_format_e {
 typedef enum loom_check_emit_source_low_output_e {
   LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_MODULE = 0,
   LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW = 1,
+  LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_NONE = 2,
 } loom_check_emit_source_low_output_t;
 
 #define LOOM_CHECK_LOW_ALLOCATION_MAX_BUDGETS 8
@@ -233,10 +234,13 @@ static iree_status_t loom_check_emit_parse_source_low_option(
     request->source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_MODULE;
   } else if (iree_string_view_equal(value, IREE_SV("low"))) {
     request->source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW;
+  } else if (iree_string_view_equal(value, IREE_SV("none"))) {
+    request->source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_NONE;
   } else {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "source-low option 'output' expected 'module' or 'low', got '%.*s'",
+        "source-low option 'output' expected 'module', 'low', or 'none', got "
+        "'%.*s'",
         (int)value.size, value.data);
   }
   request->has_output_option = true;
@@ -964,6 +968,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
     loom_module_t* module, const loom_check_emit_request_t* request,
     const loom_target_low_descriptor_registry_t* low_registry,
     const loom_low_lower_policy_registry_t* policy_registry,
+    loom_target_low_legality_provider_list_t legality_provider_list,
     loom_source_resolver_t source_resolver,
     loom_check_diagnostic_collector_t* diagnostic_collector,
     loom_check_result_t* result) {
@@ -1003,6 +1008,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
       .descriptor_registry = &low_registry->registry,
       .descriptor_requirements =
           LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .legality_provider_list = legality_provider_list,
       .policy = policy,
       .emitter = loom_target_module_compile_emitter(&pass_emitter),
       .max_errors = 20,
@@ -1025,6 +1031,9 @@ static iree_status_t loom_check_emit_write_source_low_text(
       LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &verifier_emitter,
       20));
 
+  if (request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_NONE) {
+    return iree_ok_status();
+  }
   if (request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
     return loom_check_emit_write_source_low_artifacts(module,
                                                       &result->actual_output);
@@ -1339,6 +1348,7 @@ iree_status_t loom_check_execute_emit(
     if (iree_status_is_ok(status)) {
       status = loom_check_emit_write_source_low_text(
           module, &request, &low_registry, &policy_registry,
+          environment->low_legality_provider_list,
           (loom_source_resolver_t){.fn = loom_source_table_resolve,
                                    .user_data = &resolver_data},
           &diagnostic_collector, result);

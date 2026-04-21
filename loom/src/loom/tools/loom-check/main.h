@@ -42,6 +42,8 @@ typedef struct loom_check_provider_t {
   // Optional function that initializes a source-to-low lowering policy package.
   loom_check_low_lower_policy_registry_initializer_t
       initialize_low_lower_policy_registry;
+  // Optional target-low source legality providers contributed by this provider.
+  loom_target_low_legality_provider_list_t low_legality_provider_list;
   // Optional emit provider table contributed by this provider.
   const loom_check_emit_provider_t* const* emit_providers;
   // Number of entries in |emit_providers|.

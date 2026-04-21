@@ -1,0 +1,72 @@
+// RUN: emit source-low @gfx11_i32_row_mix_target output=none
+target.preset @gfx11_i32_row_mix_target {key = "amdgpu-gfx11", source = @amdgpu_i32_row_mix}
+
+func.def @amdgpu_i32_row_mix(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64x4xi32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64x4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
+  %lhs = vector.load %lhs_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  %rhs = vector.load %rhs_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  %sum = vector.addi %lhs, %rhs : vector<4xi32>
+  %product = vector.muli %sum, %rhs : vector<4xi32>
+  %result = vector.subi %product, %lhs : vector<4xi32>
+  vector.store %result, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  func.return
+}
+// ----
+
+// ====
+// RUN: emit source-low @gfx11_f32_micro_tile_target output=none
+target.preset @gfx11_f32_micro_tile_target {key = "amdgpu-gfx11", source = @amdgpu_f32_micro_tile}
+
+func.def @amdgpu_f32_micro_tile(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64x4xf32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64x4xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xf32, #dense>
+  %lhs = vector.load %lhs_view[%tid, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %rhs = vector.load %rhs_view[%tid, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %product = vector.mulf %lhs, %rhs : vector<4xf32>
+  %bias = vector.constant 1.0 : vector<4xf32>
+  %result = vector.fmaf %lhs, %rhs, %product : vector<4xf32>
+  %biased = vector.addf %result, %bias : vector<4xf32>
+  vector.store %biased, %output_view[%tid, 0] : vector<4xf32>, view<64x4xf32, #dense>
+  func.return
+}
+// ----
+
+// ====
+// RUN: emit source-low @gfx11_q4_decode_shape_target output=none
+target.preset @gfx11_q4_decode_shape_target {key = "amdgpu-gfx11", source = @amdgpu_q4_decode_shape}
+
+func.def @amdgpu_q4_decode_shape(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
+  %packed = vector.load %input_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  %mask = vector.constant 15 : vector<4xi32>
+  %shift = vector.constant 4 : vector<4xi32>
+  %low_nibble = vector.andi %packed, %mask : vector<4xi32>
+  %high_shifted = vector.shrui %packed, %shift : vector<4xi32>
+  %high_nibble = vector.andi %high_shifted, %mask : vector<4xi32>
+  %low_shifted = vector.shli %low_nibble, %shift : vector<4xi32>
+  %swapped = vector.ori %low_shifted, %high_nibble : vector<4xi32>
+  vector.store %swapped, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  func.return
+}
+// ----
+
+// ====
+// RUN: emit source-low @gfx11_dot_gap_target output=none
+// XFAIL: AMDGPU source-to-low does not yet select MFMA/WMMA-style dot contracts.
+target.preset @gfx11_dot_gap_target {key = "amdgpu-gfx11", source = @amdgpu_dot_gap}
+
+func.def @amdgpu_dot_gap(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  func.return %dot : vector<1xi32>
+}
+// ----

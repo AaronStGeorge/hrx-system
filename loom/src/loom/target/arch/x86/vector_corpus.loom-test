@@ -1,0 +1,36 @@
+// RUN: emit source-low @x86_avx512_axpy_target output=none
+target.preset @x86_avx512_axpy_target {key = "x86-avx512", source = @x86_axpy16}
+
+func.def @x86_axpy16(%lhs: vector<16xf32>, %rhs: vector<16xf32>, %acc: vector<16xf32>) -> (vector<16xf32>) {
+  %product = vector.mulf %lhs, %rhs : vector<16xf32>
+  %sum = vector.addf %product, %acc : vector<16xf32>
+  %result = vector.fmaf %lhs, %rhs, %sum : vector<16xf32>
+  func.return %result : vector<16xf32>
+}
+// ----
+
+// ====
+// RUN: emit source-low @x86_packed_dot_target output=none
+target.preset @x86_packed_dot_target {key = "x86-packed-dot", source = @x86_dot4i_gemv_step}
+
+func.def @x86_dot4i_gemv_step(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
+  // REMARK@+1: BACKEND/002 "selected x86 packed-dot descriptor"
+  %dot = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
+  func.return %dot : vector<8xi32>
+}
+// ----
+
+// ====
+// RUN: emit source-low @x86_memory_gap_target output=none
+// XFAIL: x86 source-to-low does not yet model object ABI memory arguments.
+target.preset @x86_memory_gap_target {key = "x86-avx512", source = @x86_memory_gap}
+
+func.def @x86_memory_gap(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<16xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<16xf32, #dense>
+  %loaded = vector.load %input_view[0] : view<16xf32, #dense> -> vector<16xf32>
+  vector.store %loaded, %output_view[0] : vector<16xf32>, view<16xf32, #dense>
+  func.return
+}
+// ----

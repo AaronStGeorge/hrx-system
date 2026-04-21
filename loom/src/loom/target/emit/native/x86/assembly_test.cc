@@ -165,14 +165,17 @@ class X86AssemblyTest : public ::testing::Test {
     const loom_target_low_legality_provider_t* legality_providers[] = {
         loom_x86_low_legality_provider(),
     };
+    const loom_target_low_legality_provider_list_t legality_provider_list = {
+        .count = IREE_ARRAYSIZE(legality_providers),
+        .values = legality_providers,
+    };
     const loom_low_lower_options_t lower_options = {
         .target_ref = SymbolRef(module_, IREE_SV("x86_target")),
         .bundle = &bundle_storage.bundle,
         .descriptor_registry = &target_registry_.registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        .legality_providers = legality_providers,
-        .legality_provider_count = IREE_ARRAYSIZE(legality_providers),
+        .legality_provider_list = legality_provider_list,
         .policy = policy,
         .max_errors = 20,
     };

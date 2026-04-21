@@ -99,6 +99,25 @@ static bool loom_target_low_legality_should_stop(
          context->result->error_count >= context->options->max_errors;
 }
 
+iree_status_t loom_target_low_legality_provider_list_verify(
+    loom_target_low_legality_provider_list_t list) {
+  if (list.count == 0) {
+    return iree_ok_status();
+  }
+  if (list.values == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low legality provider list is required");
+  }
+  for (iree_host_size_t i = 0; i < list.count; ++i) {
+    const loom_target_low_legality_provider_t* provider = list.values[i];
+    if (provider == NULL || provider->try_verify_op == NULL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "target-low legality provider is invalid");
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_target_low_legality_emit(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     const loom_error_def_t* error, const loom_diagnostic_param_t* params,
@@ -255,17 +274,8 @@ static iree_status_t loom_target_low_legality_validate_options(
         "non-zero",
         (int)options->bundle->name.size, options->bundle->name.data);
   }
-  if (options->provider_count != 0 && options->providers == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low legality providers are required");
-  }
-  for (iree_host_size_t i = 0; i < options->provider_count; ++i) {
-    const loom_target_low_legality_provider_t* provider = options->providers[i];
-    if (provider == NULL || provider->try_verify_op == NULL) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "target-low legality provider is invalid");
-    }
-  }
+  IREE_RETURN_IF_ERROR(
+      loom_target_low_legality_provider_list_verify(options->provider_list));
   return loom_target_low_descriptor_set_select_for_bundle(
       options->descriptor_registry, options->bundle,
       options->descriptor_requirements, out_descriptor_set);
@@ -364,9 +374,9 @@ static iree_status_t loom_target_low_legality_try_provider_op(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled) {
   *out_handled = false;
-  for (iree_host_size_t i = 0; i < context->options->provider_count; ++i) {
+  for (iree_host_size_t i = 0; i < context->options->provider_list.count; ++i) {
     const loom_target_low_legality_provider_t* provider =
-        context->options->providers[i];
+        context->options->provider_list.values[i];
     bool handled = false;
     IREE_RETURN_IF_ERROR(
         provider->try_verify_op(provider, context, op, &handled));

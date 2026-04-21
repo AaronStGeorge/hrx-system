@@ -529,6 +529,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "vector_corpus"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "hal_run"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/hal_run.loom-test"

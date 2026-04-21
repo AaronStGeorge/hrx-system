@@ -699,9 +699,10 @@ static const loom_low_lower_policy_t kX86LowLowerPolicy = {
     .try_lower_op = {.fn = loom_x86_try_lower_op, .user_data = NULL},
 };
 
-static const loom_target_low_legality_provider_t kX86LowLegalityProvider = {
-    .name = IREE_SVL("x86"),
-    .try_verify_op = loom_x86_low_legality_try_verify_op,
+const loom_target_low_legality_provider_t
+    loom_x86_low_legality_provider_storage = {
+        .name = IREE_SVL("x86"),
+        .try_verify_op = loom_x86_low_legality_try_verify_op,
 };
 
 const loom_low_lower_policy_t* loom_x86_low_lower_policy(void) {
@@ -710,7 +711,7 @@ const loom_low_lower_policy_t* loom_x86_low_lower_policy(void) {
 
 const loom_target_low_legality_provider_t* loom_x86_low_legality_provider(
     void) {
-  return &kX86LowLegalityProvider;
+  return &loom_x86_low_legality_provider_storage;
 }
 
 void loom_x86_low_lower_policy_registry_initialize(

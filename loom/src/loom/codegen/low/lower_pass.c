@@ -223,6 +223,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
       .descriptor_registry = config->descriptor_registry,
       .descriptor_requirements =
           LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .legality_provider_list = config->legality_provider_list,
       .policy = policy,
       .emitter = pass->diagnostic_emitter,
       .max_errors = state ? state->max_errors : 20,

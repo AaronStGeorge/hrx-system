@@ -1,0 +1,47 @@
+// RUN: emit source-low @wasm_i32_mix_target output=none
+target.preset @wasm_i32_mix_target {key = "wasm-simd128", source = @wasm_i32_mix4}
+
+func.def @wasm_i32_mix4(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> (vector<4xi32>) {
+  %sum = vector.addi %lhs, %rhs : vector<4xi32>
+  %product = vector.muli %sum, %rhs : vector<4xi32>
+  %result = vector.subi %product, %lhs : vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+// ----
+
+// ====
+// RUN: emit source-low @wasm_f32_mix_target output=none
+target.preset @wasm_f32_mix_target {key = "wasm-simd128", source = @wasm_f32_mix4}
+
+func.def @wasm_f32_mix4(%lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4xf32>) {
+  %product = vector.mulf %lhs, %rhs : vector<4xf32>
+  %result = vector.addf %product, %rhs : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+
+// ====
+// RUN: emit source-low @wasm_memory_gap_target output=none
+// XFAIL: Wasm source-to-low does not yet lower vector memory accesses.
+target.preset @wasm_memory_gap_target {key = "wasm-simd128", source = @wasm_memory_gap}
+
+func.def @wasm_memory_gap(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[0] : vector<4xi32>, view<4xi32, #dense>
+  func.return
+}
+// ----
+
+// ====
+// RUN: emit source-low @wasm_dot_gap_target output=none
+// XFAIL: Wasm SIMD128 source-to-low does not yet lower vector dot/reduction forms.
+target.preset @wasm_dot_gap_target {key = "wasm-simd128", source = @wasm_dot_gap}
+
+func.def @wasm_dot_gap(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  func.return %dot : vector<1xi32>
+}
+// ----

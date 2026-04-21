@@ -37,6 +37,17 @@ struct ModuleDeleter {
 
 using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
 
+static iree_status_t IgnoreProviderOp(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  (void)provider;
+  (void)context;
+  (void)op;
+  *out_handled = false;
+  return iree_ok_status();
+}
+
 struct EmissionCollector {
   std::vector<CollectedEmission> emissions;
 
@@ -68,6 +79,34 @@ struct EmissionCollector {
     return iree_ok_status();
   }
 };
+
+TEST(TargetLowLegalityProviderListTest, Empty) {
+  const loom_target_low_legality_provider_list_t list =
+      loom_target_low_legality_provider_list_empty();
+  EXPECT_TRUE(loom_target_low_legality_provider_list_is_empty(list));
+  IREE_EXPECT_OK(loom_target_low_legality_provider_list_verify(list));
+}
+
+TEST(TargetLowLegalityProviderListTest, VerifiesValues) {
+  const loom_target_low_legality_provider_t provider = {
+      .name = IREE_SVL("test-provider"),
+      .try_verify_op = IgnoreProviderOp,
+  };
+  const loom_target_low_legality_provider_t* values[] = {&provider};
+  const loom_target_low_legality_provider_list_t list = {
+      .count = IREE_ARRAYSIZE(values),
+      .values = values,
+  };
+  EXPECT_FALSE(loom_target_low_legality_provider_list_is_empty(list));
+  IREE_EXPECT_OK(loom_target_low_legality_provider_list_verify(list));
+}
+
+TEST(TargetLowLegalityProviderListTest, RejectsMissingValues) {
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_target_low_legality_provider_list_verify(
+          (loom_target_low_legality_provider_list_t){.count = 1}));
+}
 
 class TargetLowLegalityTest : public ::testing::Test {
  protected:
@@ -269,14 +308,17 @@ TEST_F(TargetLowLegalityTest, ProviderRecordsContractDecision) {
       .try_verify_op = RecordDot4iContract,
   };
   const loom_target_low_legality_provider_t* providers[] = {&provider};
+  const loom_target_low_legality_provider_list_t provider_list = {
+      .count = IREE_ARRAYSIZE(providers),
+      .values = providers,
+  };
   EmissionCollector collector;
   const loom_target_low_legality_options_t options = {
       .bundle = bundle_,
       .descriptor_registry = &registry_.registry,
       .descriptor_requirements =
           LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-      .providers = providers,
-      .provider_count = IREE_ARRAYSIZE(providers),
+      .provider_list = provider_list,
       .emitter = collector.emitter(),
   };
   loom_target_low_legality_result_t result = {};

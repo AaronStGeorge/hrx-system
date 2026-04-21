@@ -538,6 +538,7 @@ enum {
   LOOM_CHECK_PROVIDER_DESCRIPTOR_SET_PROVIDER_CAPACITY = 256,
   LOOM_CHECK_PROVIDER_TARGET_BUNDLE_CAPACITY = 256,
   LOOM_CHECK_PROVIDER_LOW_LOWER_POLICY_CAPACITY = 128,
+  LOOM_CHECK_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_EMIT_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_RUN_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_REQUIREMENT_PROVIDER_CAPACITY = 64,
@@ -562,6 +563,12 @@ typedef struct loom_check_provider_environment_state_t {
       low_lower_policy_entries[LOOM_CHECK_PROVIDER_LOW_LOWER_POLICY_CAPACITY];
   // Number of entries in |low_lower_policy_entries|.
   iree_host_size_t low_lower_policy_entry_count;
+  // Target-low source legality provider table assembled once for the
+  // environment.
+  const loom_target_low_legality_provider_t* low_legality_providers
+      [LOOM_CHECK_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY];
+  // Number of entries in |low_legality_providers|.
+  iree_host_size_t low_legality_provider_count;
   // Emit provider table assembled once for the environment.
   const loom_check_emit_provider_t*
       emit_providers[LOOM_CHECK_PROVIDER_EMIT_PROVIDER_CAPACITY];
@@ -621,6 +628,26 @@ static iree_status_t loom_check_provider_validate(
                             "loom-check provider '%.*s' has no coverage "
                             "provider table",
                             (int)provider->name.size, provider->name.data);
+  }
+  IREE_RETURN_IF_ERROR(loom_target_low_legality_provider_list_verify(
+      provider->low_legality_provider_list));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_provider_append_low_legality_providers(
+    loom_check_provider_environment_state_t* state,
+    const loom_check_provider_t* provider) {
+  if (state->low_legality_provider_count +
+          provider->low_legality_provider_list.count >
+      IREE_ARRAYSIZE(state->low_legality_providers)) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "loom-check low legality provider capacity exceeded");
+  }
+  for (iree_host_size_t i = 0; i < provider->low_legality_provider_list.count;
+       ++i) {
+    state->low_legality_providers[state->low_legality_provider_count++] =
+        provider->low_legality_provider_list.values[i];
   }
   return iree_ok_status();
 }
@@ -705,6 +732,8 @@ static iree_status_t loom_check_provider_environment_state_initialize(
   for (iree_host_size_t i = 0; i < provider_set->provider_count; ++i) {
     const loom_check_provider_t* provider = provider_set->providers[i];
     IREE_RETURN_IF_ERROR(loom_check_provider_validate(provider, i));
+    IREE_RETURN_IF_ERROR(
+        loom_check_provider_append_low_legality_providers(out_state, provider));
     IREE_RETURN_IF_ERROR(
         loom_check_provider_append_emit_providers(out_state, provider));
     IREE_RETURN_IF_ERROR(
@@ -819,6 +848,11 @@ int loom_check_provider_main(int argc, char** argv,
           {
               .fn = loom_check_provider_initialize_low_lower_policy_registry,
               .user_data = &state,
+          },
+      .low_legality_provider_list =
+          {
+              .count = state.low_legality_provider_count,
+              .values = state.low_legality_providers,
           },
       .emit_providers =
           {

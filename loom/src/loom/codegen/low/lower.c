@@ -621,10 +621,8 @@ static iree_status_t loom_low_lower_validate_options(
                             "low descriptor registry is required");
   }
   IREE_RETURN_IF_ERROR(loom_low_lower_policy_verify(options->policy));
-  if (options->legality_provider_count != 0 && !options->legality_providers) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "legality provider table is required");
-  }
+  IREE_RETURN_IF_ERROR(loom_target_low_legality_provider_list_verify(
+      options->legality_provider_list));
   return iree_ok_status();
 }
 
@@ -1415,8 +1413,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
       .bundle = options->bundle,
       .descriptor_registry = options->descriptor_registry,
       .descriptor_requirements = options->descriptor_requirements,
-      .providers = options->legality_providers,
-      .provider_count = options->legality_provider_count,
+      .provider_list = options->legality_provider_list,
       .emitter = options->emitter,
       .max_errors = options->max_errors,
   };

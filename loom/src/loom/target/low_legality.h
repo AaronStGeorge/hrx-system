@@ -45,6 +45,29 @@ struct loom_target_low_legality_provider_t {
   loom_target_low_legality_try_op_fn_t try_verify_op;
 };
 
+typedef struct loom_target_low_legality_provider_list_t {
+  // Total number of values in the list.
+  iree_host_size_t count;
+  // Value list or NULL if no values.
+  const loom_target_low_legality_provider_t* const* values;
+} loom_target_low_legality_provider_list_t;
+
+// Returns an empty source legality provider list.
+static inline loom_target_low_legality_provider_list_t
+loom_target_low_legality_provider_list_empty(void) {
+  return (loom_target_low_legality_provider_list_t){0, NULL};
+}
+
+// Returns true if |list| has no source legality providers.
+static inline bool loom_target_low_legality_provider_list_is_empty(
+    loom_target_low_legality_provider_list_t list) {
+  return list.count == 0;
+}
+
+// Verifies that |list| is internally well-formed.
+iree_status_t loom_target_low_legality_provider_list_verify(
+    loom_target_low_legality_provider_list_t list);
+
 typedef struct loom_target_low_legality_options_t {
   // Target bundle selected for this source-to-low lowering attempt.
   const loom_target_bundle_t* bundle;
@@ -55,9 +78,7 @@ typedef struct loom_target_low_legality_options_t {
   // the set.
   loom_low_descriptor_requirement_flags_t descriptor_requirements;
   // Optional target-specific source legality providers.
-  const loom_target_low_legality_provider_t* const* providers;
-  // Number of provider pointers in |providers|.
-  iree_host_size_t provider_count;
+  loom_target_low_legality_provider_list_t provider_list;
   // Structured diagnostic emitter for user legality failures and remarks.
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting the walk. Zero means no
