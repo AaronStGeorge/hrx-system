@@ -14,6 +14,7 @@
 #include "iree/base/api.h"
 #include "loom/ops/test/registry.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
+#include "loom/target/test/coverage.h"
 #include "loom/tools/loom-check/main.h"
 
 static iree_status_t loom_check_test_register_context(void* user_data,
@@ -31,6 +32,11 @@ static iree_status_t loom_check_test_initialize_low_descriptor_registry(
   return iree_ok_status();
 }
 
+static const loom_target_coverage_provider_t* const
+    kLoomCheckTestCoverageProviders[] = {
+        &loom_test_target_coverage_provider,
+};
+
 static const loom_check_environment_t kLoomCheckTestEnvironment = {
     .register_context =
         {
@@ -41,6 +47,11 @@ static const loom_check_environment_t kLoomCheckTestEnvironment = {
         {
             .fn = loom_check_test_initialize_low_descriptor_registry,
             .user_data = NULL,
+        },
+    .coverage_providers =
+        {
+            .providers = kLoomCheckTestCoverageProviders,
+            .provider_count = IREE_ARRAYSIZE(kLoomCheckTestCoverageProviders),
         },
 };
 

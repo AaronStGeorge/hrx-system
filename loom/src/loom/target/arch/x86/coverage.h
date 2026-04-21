@@ -1,0 +1,25 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// x86 target-low coverage provider.
+
+#ifndef LOOM_TARGET_ARCH_X86_COVERAGE_H_
+#define LOOM_TARGET_ARCH_X86_COVERAGE_H_
+
+#include "loom/target/coverage.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// x86 target-low execution coverage rows.
+extern const loom_target_coverage_provider_t loom_x86_target_coverage_provider;
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // LOOM_TARGET_ARCH_X86_COVERAGE_H_

@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
+#include "loom/target/test/coverage.h"
 #include "loom/testing/context.h"
 #include "loom/tools/loom-check/check.h"
 
@@ -105,6 +106,10 @@ const loom_check_emit_provider_t* const kTestEmitProviders[] = {
     &kTestEmitProvider,
 };
 
+const loom_target_coverage_provider_t* const kTestCoverageProviders[] = {
+    &loom_test_target_coverage_provider,
+};
+
 const loom_check_environment_t kExecuteTestEnvironment = {
     .register_context =
         {
@@ -115,6 +120,11 @@ const loom_check_environment_t kExecuteTestEnvironment = {
         {
             .fn = InitializeTestLowDescriptorRegistry,
             .user_data = nullptr,
+        },
+    .coverage_providers =
+        {
+            .providers = kTestCoverageProviders,
+            .provider_count = IREE_ARRAYSIZE(kTestCoverageProviders),
         },
 };
 
@@ -138,6 +148,11 @@ const loom_check_environment_t kExecuteTestProviderEnvironment = {
         {
             .providers = kTestRequirementProviders,
             .provider_count = IREE_ARRAYSIZE(kTestRequirementProviders),
+        },
+    .coverage_providers =
+        {
+            .providers = kTestCoverageProviders,
+            .provider_count = IREE_ARRAYSIZE(kTestCoverageProviders),
         },
 };
 
@@ -1077,6 +1092,24 @@ TEST_F(ExecuteTest, EmitTargetLowRegistryManifestUsesRegistryPackage) {
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   const std::string actual_output = ActualOutputString(result);
   EXPECT_FALSE(actual_output.empty());
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitTargetCoverageManifestUsesLinkedProviders) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit target-coverage-manifest\n"
+                   "func.def @unused() {\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string actual_output = ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"provider\":\"test\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor_set\":\"test.low.core\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"gap\":\"test-target-only\""),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

@@ -280,6 +280,19 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    coverage
+  HDRS
+    "coverage.h"
+  SRCS
+    "coverage.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::coverage
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     lower
   HDRS
     "lower.h"
@@ -342,12 +355,25 @@ loom_cc_library(
   SRCS
     "check_provider.c"
   DEPS
+    ::coverage
     ::low_registry
     ::lower
     iree::base
     loom::src::loom::target::emit::native::amdgpu::loom_check
     loom::src::loom::tools::loom-check::main
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    coverage_test
+  SRCS
+    "coverage_test.cc"
+  DEPS
+    ::coverage
+    loom::src::loom::target::coverage
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 iree_package_name(_LOOM_AMDGPU_PACKAGE_NAME)

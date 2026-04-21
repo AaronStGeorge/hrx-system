@@ -164,6 +164,12 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "target_coverage_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target:coverage",
+)
+
+iree_assert_no_dependency(
     name = "gfx950_descriptors_no_matrix_contract_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
     target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
@@ -784,6 +790,16 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "coverage",
+    srcs = ["coverage.c"],
+    hdrs = ["coverage.h"],
+    deps = [
+        "//loom/src/loom/target:coverage",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "lower",
     srcs = ["lower.c"],
     hdrs = ["lower.h"],
@@ -839,6 +855,7 @@ loom_cc_library(
         "//conditions:default": [],
     }),
     deps = [
+        ":coverage",
         ":low_registry",
         ":lower",
         "//loom/src/loom/target/emit/native/amdgpu:loom_check",
@@ -852,6 +869,17 @@ loom_cc_library(
         ],
         "//conditions:default": [],
     }),
+)
+
+loom_cc_test(
+    name = "coverage_test",
+    srcs = ["coverage_test.cc"],
+    deps = [
+        ":coverage",
+        "//loom/src/loom/target:coverage",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
 )
 
 iree_cmake_extra_content(

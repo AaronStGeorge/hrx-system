@@ -15,6 +15,7 @@
 #if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 #include "loom/target/arch/amdgpu/loom_check_requirements.h"
 #endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
+#include "loom/target/arch/amdgpu/coverage.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
 #if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
@@ -52,6 +53,11 @@ static const loom_check_emit_provider_t* const kLoomAmdgpuCheckEmitProviders[] =
         &loom_amdgpu_native_loom_check_emit_provider,
 };
 
+static const loom_target_coverage_provider_t* const
+    kLoomAmdgpuCoverageProviders[] = {
+        &loom_amdgpu_target_coverage_provider,
+};
+
 #if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 static const loom_check_requirement_provider_t* const
     kLoomAmdgpuCheckRequirementProviders[] = {
@@ -67,6 +73,8 @@ const loom_check_provider_t loom_amdgpu_check_provider = {
         loom_amdgpu_low_lower_policy_registry_initialize,
     .emit_providers = kLoomAmdgpuCheckEmitProviders,
     .emit_provider_count = IREE_ARRAYSIZE(kLoomAmdgpuCheckEmitProviders),
+    .coverage_providers = kLoomAmdgpuCoverageProviders,
+    .coverage_provider_count = IREE_ARRAYSIZE(kLoomAmdgpuCoverageProviders),
 #if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
     .run_providers = kLoomAmdgpuCheckRunProviders,
     .run_provider_count = IREE_ARRAYSIZE(kLoomAmdgpuCheckRunProviders),

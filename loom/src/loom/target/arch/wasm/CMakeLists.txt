@@ -48,17 +48,44 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    coverage
+  HDRS
+    "coverage.h"
+  SRCS
+    "coverage.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::coverage
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     check_provider
   HDRS
     "check_provider.h"
   SRCS
     "check_provider.c"
   DEPS
+    ::coverage
     ::low_registry
     iree::base
+    loom::src::loom::target::emit::wasm::loom_check
     loom::src::loom::target::emit::wasm::lower
     loom::src::loom::tools::loom-check::main
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    coverage_test
+  SRCS
+    "coverage_test.cc"
+  DEPS
+    ::coverage
+    loom::src::loom::target::coverage
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

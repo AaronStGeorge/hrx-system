@@ -1,0 +1,195 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/target/emit/native/x86/loom_check.h"
+
+#include "loom/target/emit/native/x86/assembly.h"
+#include "loom/tools/loom-check/low_emit.h"
+
+typedef enum loom_x86_loom_check_emit_format_e {
+  LOOM_X86_LOOM_CHECK_EMIT_ASSEMBLY = 0,
+  LOOM_X86_LOOM_CHECK_EMIT_ASSEMBLY_MNEMONICS = 1,
+} loom_x86_loom_check_emit_format_t;
+
+typedef struct loom_x86_loom_check_emit_options_t {
+  // Output format selected by the emit target name.
+  loom_x86_loom_check_emit_format_t format;
+  // Module-local low.func.def symbol selected by the RUN line.
+  iree_string_view_t function_symbol_name;
+  // Candidate selection strategy used by low packetization.
+  loom_low_schedule_strategy_t schedule_strategy;
+  // True once a strategy option has been parsed.
+  bool has_schedule_strategy_option;
+  // Low allocation budget overrides parsed from target options.
+  loom_low_allocation_budget_t
+      allocation_budgets[LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_BUDGETS];
+  // Number of entries in |allocation_budgets|.
+  iree_host_size_t allocation_budget_count;
+} loom_x86_loom_check_emit_options_t;
+
+static bool loom_x86_loom_check_emit_provider_matches(
+    const loom_check_emit_provider_t* provider,
+    iree_string_view_t target_name) {
+  (void)provider;
+  return iree_string_view_equal(target_name, IREE_SV("x86-assembly")) ||
+         iree_string_view_equal(target_name, IREE_SV("x86-asm")) ||
+         iree_string_view_equal(target_name,
+                                IREE_SV("x86-assembly-mnemonics")) ||
+         iree_string_view_equal(target_name, IREE_SV("x86-asm-mnemonics"));
+}
+
+static iree_status_t loom_x86_loom_check_parse_emit_format(
+    iree_string_view_t target_name,
+    loom_x86_loom_check_emit_format_t* out_format) {
+  IREE_ASSERT_ARGUMENT(out_format);
+  if (iree_string_view_equal(target_name, IREE_SV("x86-assembly")) ||
+      iree_string_view_equal(target_name, IREE_SV("x86-asm"))) {
+    *out_format = LOOM_X86_LOOM_CHECK_EMIT_ASSEMBLY;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(target_name, IREE_SV("x86-assembly-mnemonics")) ||
+      iree_string_view_equal(target_name, IREE_SV("x86-asm-mnemonics"))) {
+    *out_format = LOOM_X86_LOOM_CHECK_EMIT_ASSEMBLY_MNEMONICS;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown x86 native emit target '%.*s'",
+                          (int)target_name.size, target_name.data);
+}
+
+static iree_status_t loom_x86_loom_check_parse_key_value_option(
+    iree_string_view_t token, loom_x86_loom_check_emit_options_t* options,
+    bool* out_matched) {
+  IREE_ASSERT_ARGUMENT(out_matched);
+  *out_matched = false;
+  iree_string_view_t name = iree_string_view_empty();
+  iree_string_view_t value = iree_string_view_empty();
+  iree_string_view_split(token, '=', &name, &value);
+  name = iree_string_view_trim(name);
+  value = iree_string_view_trim(value);
+  if (iree_string_view_equal(name, IREE_SV("strategy"))) {
+    if (options->has_schedule_strategy_option) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "duplicate x86 assembly option 'strategy'");
+    }
+    IREE_RETURN_IF_ERROR(loom_check_low_emit_parse_schedule_strategy(
+        value, IREE_SV("x86 assembly"), &options->schedule_strategy));
+    options->has_schedule_strategy_option = true;
+    *out_matched = true;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_x86_loom_check_parse_option(
+    iree_string_view_t token, loom_x86_loom_check_emit_options_t* options) {
+  bool matched = false;
+  IREE_RETURN_IF_ERROR(
+      loom_x86_loom_check_parse_key_value_option(token, options, &matched));
+  if (matched) {
+    return iree_ok_status();
+  }
+  return loom_check_low_emit_parse_allocation_budget(
+      token, IREE_SV("x86 assembly"), options->allocation_budgets,
+      IREE_ARRAYSIZE(options->allocation_budgets),
+      &options->allocation_budget_count);
+}
+
+static iree_status_t loom_x86_loom_check_parse_emit_options(
+    const loom_check_emit_provider_request_t* request,
+    loom_x86_loom_check_emit_options_t* out_options) {
+  IREE_ASSERT_ARGUMENT(out_options);
+  *out_options = (loom_x86_loom_check_emit_options_t){
+      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
+  };
+  IREE_RETURN_IF_ERROR(loom_x86_loom_check_parse_emit_format(
+      request->target_name, &out_options->format));
+
+  iree_string_view_t symbol_name = iree_string_view_empty();
+  iree_string_view_t option_text = iree_string_view_empty();
+  iree_string_view_split(request->target_options, ' ', &symbol_name,
+                         &option_text);
+  symbol_name = iree_string_view_trim(symbol_name);
+  option_text = iree_string_view_trim(option_text);
+  if (!iree_string_view_starts_with(symbol_name, IREE_SV("@"))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "x86 assembly requires a low function symbol name");
+  }
+  out_options->function_symbol_name =
+      iree_string_view_substr(symbol_name, 1, IREE_HOST_SIZE_MAX);
+  if (iree_string_view_is_empty(out_options->function_symbol_name)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "x86 assembly low function symbol name is "
+                            "required");
+  }
+
+  while (!iree_string_view_is_empty(option_text)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t remaining = iree_string_view_empty();
+    iree_string_view_split(option_text, ' ', &token, &remaining);
+    token = iree_string_view_trim(token);
+    if (!iree_string_view_is_empty(token)) {
+      IREE_RETURN_IF_ERROR(
+          loom_x86_loom_check_parse_option(token, out_options));
+    }
+    option_text = iree_string_view_trim(remaining);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_x86_loom_check_emit_assembly(
+    const loom_low_packetization_t* packetization,
+    iree_string_builder_t* builder) {
+  return loom_x86_emit_assembly_fragment(&packetization->schedule,
+                                         &packetization->allocation, builder);
+}
+
+static iree_status_t loom_x86_loom_check_emit_provider_execute(
+    const loom_check_emit_provider_t* provider,
+    const loom_check_emit_provider_request_t* request) {
+  (void)provider;
+  loom_x86_loom_check_emit_options_t options;
+  IREE_RETURN_IF_ERROR(
+      loom_x86_loom_check_parse_emit_options(request, &options));
+
+  loom_low_packetization_t packetization = {0};
+  IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
+      request, options.function_symbol_name, options.schedule_strategy,
+      options.allocation_budgets, options.allocation_budget_count,
+      &packetization));
+
+  if (options.format == LOOM_X86_LOOM_CHECK_EMIT_ASSEMBLY) {
+    return loom_x86_loom_check_emit_assembly(&packetization,
+                                             &request->result->actual_output);
+  }
+
+  iree_string_builder_t assembly_builder;
+  iree_string_builder_initialize(request->host_allocator, &assembly_builder);
+  iree_status_t status =
+      loom_x86_loom_check_emit_assembly(&packetization, &assembly_builder);
+  if (iree_status_is_ok(status)) {
+    status = loom_check_low_emit_write_assembly_mnemonics(
+        iree_string_builder_view(&assembly_builder),
+        &request->result->actual_output);
+  }
+  iree_string_builder_deinitialize(&assembly_builder);
+  return status;
+}
+
+static iree_status_t loom_x86_loom_check_emit_provider_append_names(
+    const loom_check_emit_provider_t* provider,
+    iree_string_builder_t* builder) {
+  (void)provider;
+  return iree_string_builder_append_cstring(
+      builder,
+      "x86-assembly, x86-asm, x86-assembly-mnemonics, x86-asm-mnemonics");
+}
+
+const loom_check_emit_provider_t loom_x86_native_loom_check_emit_provider = {
+    .name = IREE_SVL("x86-native"),
+    .match = loom_x86_loom_check_emit_provider_matches,
+    .execute = loom_x86_loom_check_emit_provider_execute,
+    .append_names = loom_x86_loom_check_emit_provider_append_names,
+};

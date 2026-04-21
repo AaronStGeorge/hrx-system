@@ -28,6 +28,31 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    loom_check
+  HDRS
+    "loom_check.h"
+  SRCS
+    "loom_check.c"
+  DEPS
+    ::assembly
+    iree::base
+    loom::src::loom::tools::loom-check::execute
+  PUBLIC
+)
+
+iree_executable_test(
+  NAME
+    "test_assembly"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
 loom_cc_test(
   NAME
     assembly_test

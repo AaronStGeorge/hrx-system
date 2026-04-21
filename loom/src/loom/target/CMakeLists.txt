@@ -22,6 +22,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    coverage
+  HDRS
+    "coverage.h"
+  SRCS
+    "coverage.c"
+  DEPS
+    iree::base
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     records
   HDRS
     "records.h"
@@ -213,6 +227,17 @@ loom_cc_test(
     "records_test.cc"
   DEPS
     ::records
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    coverage_test
+  SRCS
+    "coverage_test.cc"
+  DEPS
+    ::coverage
     iree::testing::gtest
     iree::testing::gtest_main
 )

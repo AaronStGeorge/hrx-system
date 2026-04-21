@@ -421,7 +421,8 @@ int loom_check_main(int argc, char** argv,
       "              Core targets include liveness-json, low-schedule-json,\n"
       "              low-allocation-json, low-packet-json,\n"
       "              low-descriptor-manifest, target-low-registry-manifest,\n"
-      "              and source-low. Linked providers may add more.\n"
+      "              target-coverage-manifest, and source-low. Linked\n"
+      "              providers may add more.\n"
       "  run <args>  Execute input with a linked run provider and compare "
       "output.\n"
       "\n"
@@ -540,6 +541,7 @@ enum {
   LOOM_CHECK_PROVIDER_EMIT_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_RUN_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_REQUIREMENT_PROVIDER_CAPACITY = 64,
+  LOOM_CHECK_PROVIDER_COVERAGE_PROVIDER_CAPACITY = 64,
 };
 
 typedef struct loom_check_provider_environment_state_t {
@@ -575,6 +577,11 @@ typedef struct loom_check_provider_environment_state_t {
       requirement_providers[LOOM_CHECK_PROVIDER_REQUIREMENT_PROVIDER_CAPACITY];
   // Number of entries in |requirement_providers|.
   iree_host_size_t requirement_provider_count;
+  // Coverage provider table assembled once for the environment.
+  const loom_target_coverage_provider_t*
+      coverage_providers[LOOM_CHECK_PROVIDER_COVERAGE_PROVIDER_CAPACITY];
+  // Number of entries in |coverage_providers|.
+  iree_host_size_t coverage_provider_count;
 } loom_check_provider_environment_state_t;
 
 static iree_status_t loom_check_provider_validate(
@@ -605,6 +612,13 @@ static iree_status_t loom_check_provider_validate(
       provider->requirement_providers == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "loom-check provider '%.*s' has no requirement "
+                            "provider table",
+                            (int)provider->name.size, provider->name.data);
+  }
+  if (provider->coverage_provider_count != 0 &&
+      provider->coverage_providers == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "loom-check provider '%.*s' has no coverage "
                             "provider table",
                             (int)provider->name.size, provider->name.data);
   }
@@ -657,6 +671,21 @@ static iree_status_t loom_check_provider_append_requirement_providers(
   return iree_ok_status();
 }
 
+static iree_status_t loom_check_provider_append_coverage_providers(
+    loom_check_provider_environment_state_t* state,
+    const loom_check_provider_t* provider) {
+  if (state->coverage_provider_count + provider->coverage_provider_count >
+      IREE_ARRAYSIZE(state->coverage_providers)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "loom-check coverage provider capacity exceeded");
+  }
+  for (iree_host_size_t i = 0; i < provider->coverage_provider_count; ++i) {
+    state->coverage_providers[state->coverage_provider_count++] =
+        provider->coverage_providers[i];
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_provider_environment_state_initialize(
     const loom_check_provider_set_t* provider_set,
     loom_check_provider_environment_state_t* out_state) {
@@ -682,8 +711,14 @@ static iree_status_t loom_check_provider_environment_state_initialize(
         loom_check_provider_append_run_providers(out_state, provider));
     IREE_RETURN_IF_ERROR(
         loom_check_provider_append_requirement_providers(out_state, provider));
+    IREE_RETURN_IF_ERROR(
+        loom_check_provider_append_coverage_providers(out_state, provider));
   }
-  return iree_ok_status();
+  const loom_target_coverage_provider_set_t coverage_provider_set = {
+      .providers = out_state->coverage_providers,
+      .provider_count = out_state->coverage_provider_count,
+  };
+  return loom_target_coverage_provider_set_verify(&coverage_provider_set);
 }
 
 static iree_status_t loom_check_provider_initialize_low_descriptor_registry(
@@ -799,6 +834,11 @@ int loom_check_provider_main(int argc, char** argv,
           {
               .providers = state.requirement_providers,
               .provider_count = state.requirement_provider_count,
+          },
+      .coverage_providers =
+          {
+              .providers = state.coverage_providers,
+              .provider_count = state.coverage_provider_count,
           },
   };
   return loom_check_main(argc, argv, &environment);

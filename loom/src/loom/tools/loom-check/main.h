@@ -54,6 +54,11 @@ typedef struct loom_check_provider_t {
   const loom_check_requirement_provider_t* const* requirement_providers;
   // Number of entries in |requirement_providers|.
   iree_host_size_t requirement_provider_count;
+  // Optional target execution coverage provider table contributed by this
+  // provider.
+  const loom_target_coverage_provider_t* const* coverage_providers;
+  // Number of entries in |coverage_providers|.
+  iree_host_size_t coverage_provider_count;
 } loom_check_provider_t;
 
 // Static provider table linked into a loom-check binary or embedding.

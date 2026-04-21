@@ -10,6 +10,10 @@ load(
     "loom_cc_library",
     "loom_cc_test",
 )
+load(
+    "//loom/build_tools/bazel:loom_check.bzl",
+    "loom_check_test_suite",
+)
 
 package(
     default_visibility = ["//visibility:public"],
@@ -46,6 +50,36 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "loom_check_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/emit/native/x86:loom_check",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/native/x86:loom_check",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/emit/native/x86:loom_check",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/emit/native/x86:loom_check",
+)
+
+iree_assert_no_dependency(
+    name = "loom_check_no_low_registry_dep",
+    dependency = "//loom/src/loom/target/arch/x86:low_registry",
+    target = "//loom/src/loom/target/emit/native/x86:loom_check",
+)
+
+iree_assert_no_dependency(
     name = "iree_run_loom_main_no_x86_assembly_dep",
     dependency = "//loom/src/loom/target/emit/native/x86:assembly",
     target = "//loom/src/loom/tools/iree-run-loom:main",
@@ -67,6 +101,24 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target/emit/native:assembly",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "loom_check",
+    srcs = ["loom_check.c"],
+    hdrs = ["loom_check.h"],
+    deps = [
+        ":assembly",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_check_test_suite(
+    name = "loom_check_file_test",
+    srcs = [
+        "test/assembly.loom-test",
     ],
 )
 

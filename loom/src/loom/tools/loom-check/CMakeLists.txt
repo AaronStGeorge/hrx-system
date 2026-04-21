@@ -30,11 +30,13 @@ loom_cc_library(
   HDRS
     "diagnostics.h"
     "execute.h"
+    "low_emit.h"
     "requirements.h"
   SRCS
     "diagnostics.c"
     "emit.c"
     "execute.c"
+    "low_emit.c"
     "requirements.c"
     "roundtrip.c"
     "run.c"
@@ -75,6 +77,7 @@ loom_cc_library(
     loom::src::loom::pass::builtin_registry
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::tooling
+    loom::src::loom::target::coverage
     loom::src::loom::target::ir_records
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::module_compiler
@@ -166,6 +169,7 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::target::low_descriptor_registry_core_test
+    loom::src::loom::target::test::coverage
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
@@ -235,6 +239,7 @@ loom_cc_library(
     iree::io::file_handle
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::op_registry
+    loom::src::loom::target::coverage
     loom::src::loom::util::stream
   PUBLIC
 )
@@ -277,6 +282,7 @@ loom_cc_binary(
     iree::base
     loom::src::loom::ops::test
     loom::src::loom::target::low_descriptor_registry_core_test
+    loom::src::loom::target::test::coverage
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

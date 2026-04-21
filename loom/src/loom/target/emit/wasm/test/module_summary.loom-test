@@ -1,0 +1,9 @@
+// RUN: emit wasm-module-summary @wasm_fragment export=wasm_fragment
+target.preset @wasm_target {key = "wasm-simd128", source = @wasm_fragment}
+
+low.func.def target(@wasm_target) @wasm_fragment(%lhs : reg<wasm.v128>, %rhs : reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %sum = low.op<wasm.i32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  low.return %sum : reg<wasm.v128>
+}
+// ----
+{"format":"loom.wasm.module.summary.v0","version":1,"export":"wasm_fragment","memory":false,"sections":["type","function","export","code"]}
