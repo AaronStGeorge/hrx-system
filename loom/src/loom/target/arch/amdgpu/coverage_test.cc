@@ -44,7 +44,7 @@ TEST(AmdgpuCoverageTest, FormatsRepresentativeRows) {
   EXPECT_NE(json.find("\"semantic\":\"buffer-b32-b64-b128-load-store\""),
             std::string::npos);
   EXPECT_NE(json.find("\"target\":\"amdgpu-gfx950\""), std::string::npos);
-  EXPECT_NE(json.find("\"gap\":\"source-lower-buffer-width-alias-missing\""),
+  EXPECT_EQ(json.find("\"gap\":\"source-lower-buffer-width-alias-missing\""),
             std::string::npos);
   EXPECT_NE(json.find("\"semantic\":\"ds-b32-b128-load-store\""),
             std::string::npos);

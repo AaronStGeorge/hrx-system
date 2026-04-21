@@ -6,6 +6,7 @@
 
 #include "loom/target/arch/amdgpu/lower.h"
 
+#include <inttypes.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -18,6 +19,7 @@
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/amdgpu/gfx11_descriptors.h"
+#include "loom/target/arch/amdgpu/gfx950_descriptors.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 
 #define LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES 4u
@@ -723,24 +725,161 @@ static bool loom_amdgpu_store_memory_access_select(
       out_access);
 }
 
+typedef enum loom_amdgpu_buffer_memory_kind_e {
+  LOOM_AMDGPU_BUFFER_MEMORY_LOAD = 0,
+  LOOM_AMDGPU_BUFFER_MEMORY_STORE = 1,
+} loom_amdgpu_buffer_memory_kind_t;
+
+typedef struct loom_amdgpu_buffer_memory_descriptor_family_t {
+  // Number of VGPR lanes moved by the memory packet.
+  uint32_t vgpr_count;
+  // Direction of the memory packet.
+  loom_amdgpu_buffer_memory_kind_t kind;
+  // Candidate descriptor stable IDs ordered by preference.
+  const uint64_t* descriptor_ids;
+  // Number of entries in descriptor_ids.
+  iree_host_size_t descriptor_id_count;
+} loom_amdgpu_buffer_memory_descriptor_family_t;
+
+static bool loom_amdgpu_select_buffer_memory_descriptor_id(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_memory_access_t* access,
+    loom_amdgpu_buffer_memory_kind_t kind, uint64_t* out_descriptor_id) {
+  IREE_ASSERT_ARGUMENT(out_descriptor_id);
+  *out_descriptor_id = 0;
+  // The GFX11 constants name descriptor-key stable IDs that are shared by
+  // GFX11/GFX12/GFX1250 descriptor sets for the same low op key.
+  static const uint64_t kLoadB32DescriptorIds[] = {
+      AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_LOAD_DWORD,
+  };
+  static const uint64_t kLoadB64DescriptorIds[] = {
+      AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_LOAD_B64,
+      AMDGPU_GFX950_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_LOAD_DWORDX2,
+  };
+  static const uint64_t kLoadB128DescriptorIds[] = {
+      AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_LOAD_B128,
+      AMDGPU_GFX950_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_LOAD_DWORDX4,
+  };
+  static const uint64_t kStoreB32DescriptorIds[] = {
+      AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_STORE_DWORD,
+  };
+  static const uint64_t kStoreB64DescriptorIds[] = {
+      AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_STORE_B64,
+      AMDGPU_GFX950_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_STORE_DWORDX2,
+  };
+  static const uint64_t kStoreB128DescriptorIds[] = {
+      AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_STORE_B128,
+      AMDGPU_GFX950_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_STORE_DWORDX4,
+  };
+  static const loom_amdgpu_buffer_memory_descriptor_family_t kFamilies[] = {
+      {
+          .vgpr_count = 1,
+          .kind = LOOM_AMDGPU_BUFFER_MEMORY_LOAD,
+          .descriptor_ids = kLoadB32DescriptorIds,
+          .descriptor_id_count = IREE_ARRAYSIZE(kLoadB32DescriptorIds),
+      },
+      {
+          .vgpr_count = 2,
+          .kind = LOOM_AMDGPU_BUFFER_MEMORY_LOAD,
+          .descriptor_ids = kLoadB64DescriptorIds,
+          .descriptor_id_count = IREE_ARRAYSIZE(kLoadB64DescriptorIds),
+      },
+      {
+          .vgpr_count = 4,
+          .kind = LOOM_AMDGPU_BUFFER_MEMORY_LOAD,
+          .descriptor_ids = kLoadB128DescriptorIds,
+          .descriptor_id_count = IREE_ARRAYSIZE(kLoadB128DescriptorIds),
+      },
+      {
+          .vgpr_count = 1,
+          .kind = LOOM_AMDGPU_BUFFER_MEMORY_STORE,
+          .descriptor_ids = kStoreB32DescriptorIds,
+          .descriptor_id_count = IREE_ARRAYSIZE(kStoreB32DescriptorIds),
+      },
+      {
+          .vgpr_count = 2,
+          .kind = LOOM_AMDGPU_BUFFER_MEMORY_STORE,
+          .descriptor_ids = kStoreB64DescriptorIds,
+          .descriptor_id_count = IREE_ARRAYSIZE(kStoreB64DescriptorIds),
+      },
+      {
+          .vgpr_count = 4,
+          .kind = LOOM_AMDGPU_BUFFER_MEMORY_STORE,
+          .descriptor_ids = kStoreB128DescriptorIds,
+          .descriptor_id_count = IREE_ARRAYSIZE(kStoreB128DescriptorIds),
+      },
+  };
+
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kFamilies); ++i) {
+    const loom_amdgpu_buffer_memory_descriptor_family_t* family = &kFamilies[i];
+    if (family->vgpr_count != access->vgpr_count || family->kind != kind) {
+      continue;
+    }
+    for (iree_host_size_t j = 0; j < family->descriptor_id_count; ++j) {
+      const uint64_t descriptor_id = family->descriptor_ids[j];
+      if (loom_low_descriptor_set_lookup_descriptor_by_id(descriptor_set,
+                                                          descriptor_id) ==
+          LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+        continue;
+      }
+      *out_descriptor_id = descriptor_id;
+      return true;
+    }
+    return false;
+  }
+  return false;
+}
+
+static iree_status_t loom_amdgpu_require_buffer_memory_descriptor_id(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_memory_access_t* access,
+    loom_amdgpu_buffer_memory_kind_t kind, uint64_t* out_descriptor_id) {
+  IREE_ASSERT_ARGUMENT(out_descriptor_id);
+  if (loom_amdgpu_select_buffer_memory_descriptor_id(context, access, kind,
+                                                     out_descriptor_id)) {
+    return iree_ok_status();
+  }
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  iree_string_view_t descriptor_set_key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset, &descriptor_set_key));
+  const char* kind_name =
+      kind == LOOM_AMDGPU_BUFFER_MEMORY_LOAD ? "load" : "store";
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "AMDGPU descriptor set '%.*s' has no buffer %s descriptor for %" PRIu32
+      "-bit vector memory access",
+      (int)descriptor_set_key.size, descriptor_set_key.data, kind_name,
+      access->vgpr_count * 32u);
+}
+
 static bool loom_amdgpu_can_lower_vector_load(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op) {
   loom_amdgpu_memory_access_t access;
+  uint64_t descriptor_id = 0;
   return loom_amdgpu_value_is_32bit_view(context,
                                          loom_vector_load_view(source_op)) &&
          loom_amdgpu_value_is_vector_1x32_or_4x32(
              context, loom_vector_load_result(source_op)) &&
-         loom_amdgpu_load_memory_access_select(context, source_op, &access);
+         loom_amdgpu_load_memory_access_select(context, source_op, &access) &&
+         loom_amdgpu_select_buffer_memory_descriptor_id(
+             context, &access, LOOM_AMDGPU_BUFFER_MEMORY_LOAD, &descriptor_id);
 }
 
 static bool loom_amdgpu_can_lower_vector_store(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   loom_amdgpu_memory_access_t access;
+  uint64_t descriptor_id = 0;
   return loom_amdgpu_value_is_vector_1x32_or_4x32(
              context, loom_vector_store_value(source_op)) &&
          loom_amdgpu_value_is_32bit_view(context,
                                          loom_vector_store_view(source_op)) &&
-         loom_amdgpu_store_memory_access_select(context, source_op, &access);
+         loom_amdgpu_store_memory_access_select(context, source_op, &access) &&
+         loom_amdgpu_select_buffer_memory_descriptor_id(
+             context, &access, LOOM_AMDGPU_BUFFER_MEMORY_STORE, &descriptor_id);
 }
 
 static bool loom_amdgpu_can_lower_i32_binary(loom_low_lower_context_t* context,
@@ -2021,20 +2160,6 @@ static iree_status_t loom_amdgpu_emit_memory_vaddr(
   return iree_ok_status();
 }
 
-static uint64_t loom_amdgpu_buffer_load_descriptor_id(
-    const loom_amdgpu_memory_access_t* access) {
-  return access->vgpr_count == 4
-             ? AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_LOAD_B128
-             : AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_LOAD_DWORD;
-}
-
-static uint64_t loom_amdgpu_buffer_store_descriptor_id(
-    const loom_amdgpu_memory_access_t* access) {
-  return access->vgpr_count == 4
-             ? AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_STORE_B128
-             : AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_BUFFER_STORE_DWORD;
-}
-
 static iree_status_t loom_amdgpu_lower_vector_load(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
@@ -2077,9 +2202,11 @@ static iree_status_t loom_amdgpu_lower_vector_load(
       },
   };
   loom_op_t* low_op = NULL;
+  uint64_t descriptor_id = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_require_buffer_memory_descriptor_id(
+      context, &access, LOOM_AMDGPU_BUFFER_MEMORY_LOAD, &descriptor_id));
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-      context, source_op, loom_amdgpu_buffer_load_descriptor_id(&access),
-      operands, IREE_ARRAYSIZE(operands),
+      context, source_op, descriptor_id, operands, IREE_ARRAYSIZE(operands),
       loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)), &result_type, 1,
       &low_op));
   return loom_low_lower_bind_value(
@@ -2129,9 +2256,11 @@ static iree_status_t loom_amdgpu_lower_vector_store(
       },
   };
   loom_op_t* low_op = NULL;
+  uint64_t descriptor_id = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_require_buffer_memory_descriptor_id(
+      context, &access, LOOM_AMDGPU_BUFFER_MEMORY_STORE, &descriptor_id));
   return loom_amdgpu_emit_low_op(
-      context, source_op, loom_amdgpu_buffer_store_descriptor_id(&access),
-      operands, IREE_ARRAYSIZE(operands),
+      context, source_op, descriptor_id, operands, IREE_ARRAYSIZE(operands),
       loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)),
       /*result_types=*/NULL, /*result_count=*/0, &low_op);
 }

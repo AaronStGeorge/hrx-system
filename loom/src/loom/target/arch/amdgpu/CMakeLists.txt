@@ -303,6 +303,7 @@ loom_cc_library(
     "lower.c"
   DEPS
     ::gfx11_descriptors_ids
+    ::gfx950_descriptors_ids
     ::hal_kernel_abi
     iree::base
     loom::src::loom::codegen::low::lower

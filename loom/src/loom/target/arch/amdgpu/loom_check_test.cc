@@ -98,6 +98,35 @@ constexpr const char* kAmdgpuGfx11MixedLowFunction =
     "reg<amdgpu.vgpr>, reg<amdgpu.vgpr x8>\n"
     "}\n";
 
+static std::string AmdgpuB128CopySource(iree_string_view_t target_symbol,
+                                        iree_string_view_t target_key) {
+  std::string source = "// RUN: emit source-low @";
+  source.append(target_symbol.data, target_symbol.size);
+  source += " output=low\n";
+  source += "target.preset @";
+  source.append(target_symbol.data, target_symbol.size);
+  source += " {key = \"";
+  source.append(target_key.data, target_key.size);
+  source +=
+      "\", source = @copy_b128}\n"
+      "\n"
+      "func.def @copy_b128(%input: buffer, %output: buffer) {\n"
+      "  %tid = kernel.workitem.id<x> : index\n"
+      "  %zero = index.constant 0 : offset\n"
+      "  %input_view = buffer.view %input[%zero] : buffer -> "
+      "view<64x4xi32, #dense>\n"
+      "  %output_view = buffer.view %output[%zero] : buffer -> "
+      "view<64x4xi32, #dense>\n"
+      "  %loaded = vector.load %input_view[%tid, 0] : "
+      "view<64x4xi32, #dense> -> vector<4xi32>\n"
+      "  vector.store %loaded, %output_view[%tid, 0] : "
+      "vector<4xi32>, view<64x4xi32, #dense>\n"
+      "  func.return\n"
+      "}\n"
+      "// ----\n";
+  return source;
+}
+
 TEST_F(AmdgpuLoomCheckTest, DescriptorManifestUsesGfx11RegistryPackage) {
   loom_check_result_t result;
   IREE_ASSERT_OK(harness_.ExecuteFirst(
@@ -185,6 +214,80 @@ TEST_F(AmdgpuLoomCheckTest, ScheduleJsonUsesGfx11ResourcesAndLiveness) {
   EXPECT_NE(actual_output.find("\"register_class\":\"amdgpu.vgpr\""),
             std::string::npos);
   loom_check_result_deinitialize(&result);
+}
+
+TEST_F(AmdgpuLoomCheckTest,
+       SourceLowerSelectsTargetLegalB128BufferDescriptorNames) {
+  struct B128Case {
+    // Symbol name for the target preset under test.
+    iree_string_view_t target_symbol;
+    // Target preset key that selects the descriptor set.
+    iree_string_view_t target_key;
+    // Load packet spelling expected after source lowering.
+    const char* expected_load;
+    // Store packet spelling expected after source lowering.
+    const char* expected_store;
+    // Load packet spelling that must not be selected for this target.
+    const char* forbidden_load;
+    // Store packet spelling that must not be selected for this target.
+    const char* forbidden_store;
+  };
+  const B128Case cases[] = {
+      {
+          .target_symbol = IREE_SV("gfx11_copy_b128_target"),
+          .target_key = IREE_SV("amdgpu-gfx11"),
+          .expected_load = "low.op<amdgpu.buffer_load_b128>",
+          .expected_store = "low.op<amdgpu.buffer_store_b128>",
+          .forbidden_load = "low.op<amdgpu.buffer_load_dwordx4>",
+          .forbidden_store = "low.op<amdgpu.buffer_store_dwordx4>",
+      },
+      {
+          .target_symbol = IREE_SV("gfx12_copy_b128_target"),
+          .target_key = IREE_SV("amdgpu-gfx12"),
+          .expected_load = "low.op<amdgpu.buffer_load_b128>",
+          .expected_store = "low.op<amdgpu.buffer_store_b128>",
+          .forbidden_load = "low.op<amdgpu.buffer_load_dwordx4>",
+          .forbidden_store = "low.op<amdgpu.buffer_store_dwordx4>",
+      },
+      {
+          .target_symbol = IREE_SV("gfx1250_copy_b128_target"),
+          .target_key = IREE_SV("amdgpu-gfx1250"),
+          .expected_load = "low.op<amdgpu.buffer_load_b128>",
+          .expected_store = "low.op<amdgpu.buffer_store_b128>",
+          .forbidden_load = "low.op<amdgpu.buffer_load_dwordx4>",
+          .forbidden_store = "low.op<amdgpu.buffer_store_dwordx4>",
+      },
+      {
+          .target_symbol = IREE_SV("gfx950_copy_b128_target"),
+          .target_key = IREE_SV("amdgpu-gfx950"),
+          .expected_load = "low.op<amdgpu.buffer_load_dwordx4>",
+          .expected_store = "low.op<amdgpu.buffer_store_dwordx4>",
+          .forbidden_load = "low.op<amdgpu.buffer_load_b128>",
+          .forbidden_store = "low.op<amdgpu.buffer_store_b128>",
+      },
+  };
+  for (const B128Case& test_case : cases) {
+    loom_check_result_t result;
+    std::string source =
+        AmdgpuB128CopySource(test_case.target_symbol, test_case.target_key);
+    IREE_ASSERT_OK(harness_.ExecuteFirst(
+        iree_make_string_view(source.data(), source.size()),
+        IREE_SV("amdgpu_source_low.loom-test"), &result));
+    EXPECT_TRUE(result.has_actual_output);
+    EXPECT_EQ(result.diagnostic_count, 0u);
+    const std::string output = harness_.ActualOutputString(result);
+    const std::string target_key(test_case.target_key.data,
+                                 test_case.target_key.size);
+    EXPECT_NE(output.find(test_case.expected_load), std::string::npos)
+        << target_key;
+    EXPECT_NE(output.find(test_case.expected_store), std::string::npos)
+        << target_key;
+    EXPECT_EQ(output.find(test_case.forbidden_load), std::string::npos)
+        << target_key;
+    EXPECT_EQ(output.find(test_case.forbidden_store), std::string::npos)
+        << target_key;
+    loom_check_result_deinitialize(&result);
+  }
 }
 
 TEST_F(AmdgpuLoomCheckTest, AllocationJsonUsesGfx11PhysicalRegisterClasses) {

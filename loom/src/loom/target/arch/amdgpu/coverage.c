@@ -101,8 +101,8 @@ static const loom_target_coverage_row_t kLoomAmdgpuTargetCoverageRows[] = {
                             "validation-run-provider-optional"),
     LOOM_AMDGPU_GFX950_ROW("memory.global", "buffer-b32-b64-b128-load-store",
                            LOOM_AMDGPU_EXECUTABLE_LOW_PHASES,
-                           LOOM_AMDGPU_AUTHORED_LOW_PHASES,
-                           "source-lower-buffer-width-alias-missing"),
+                           LOOM_AMDGPU_NATIVE_LOW_PHASES,
+                           "validation-run-provider-optional"),
 
     LOOM_AMDGPU_GFX11_ROW("memory.global", "global-flat-scratch-generic",
                           LOOM_AMDGPU_NATIVE_LOW_PHASES,
