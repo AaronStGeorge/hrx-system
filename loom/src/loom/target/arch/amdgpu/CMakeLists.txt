@@ -557,10 +557,7 @@ loom_cc_library(
   SRCS
     "hal_kernel_abi.c"
   DEPS
-    ::gfx11_descriptors_ids
-    ::gfx1250_descriptors_ids
-    ::gfx12_descriptors_ids
-    ::gfx950_descriptors_ids
+    ::descriptor_ids
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation

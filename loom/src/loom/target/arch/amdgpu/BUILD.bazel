@@ -296,6 +296,30 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_gfx11_descriptors_ids_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors_ids",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_gfx12_descriptors_ids_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors_ids",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_gfx1250_descriptors_ids_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors_ids",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
+    name = "hal_kernel_abi_no_gfx950_descriptors_ids_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors_ids",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
+)
+
+iree_assert_no_dependency(
     name = "hal_resource_materialization_no_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
     target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
@@ -1085,10 +1109,7 @@ loom_cc_library(
     srcs = ["hal_kernel_abi.c"],
     hdrs = ["hal_kernel_abi.h"],
     deps = [
-        ":gfx11_descriptors_ids",
-        ":gfx1250_descriptors_ids",
-        ":gfx12_descriptors_ids",
-        ":gfx950_descriptors_ids",
+        ":descriptor_ids",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:register_class_map",
         "//loom/src/loom/ir",

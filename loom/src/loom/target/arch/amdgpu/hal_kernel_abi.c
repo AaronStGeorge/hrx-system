@@ -12,10 +12,7 @@
 #include "loom/codegen/low/register_class_map.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
-#include "loom/target/arch/amdgpu/gfx1250_descriptors.h"
-#include "loom/target/arch/amdgpu/gfx12_descriptors.h"
-#include "loom/target/arch/amdgpu/gfx950_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptor_ids.h"
 
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT 3u
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_MAX_FIXED_VALUE_COUNT \
@@ -147,45 +144,17 @@ typedef enum loom_amdgpu_hal_kernel_abi_reg_class_e {
   LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_VGPR = 1,
 } loom_amdgpu_hal_kernel_abi_reg_class_t;
 
-static iree_status_t loom_amdgpu_hal_kernel_abi_descriptor_reg_class_id(
-    const loom_low_descriptor_set_t* descriptor_set,
+static iree_status_t loom_amdgpu_hal_kernel_abi_reg_class_id(
     loom_amdgpu_hal_kernel_abi_reg_class_t reg_class,
     uint16_t* out_descriptor_reg_class_id) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
   IREE_ASSERT_ARGUMENT(out_descriptor_reg_class_id);
-
-  uint16_t sgpr_id = LOOM_LOW_REG_CLASS_NONE;
-  uint16_t vgpr_id = LOOM_LOW_REG_CLASS_NONE;
-  switch (descriptor_set->stable_id) {
-    case AMDGPU_GFX11_CORE_DESCRIPTOR_SET_ID:
-      sgpr_id = AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR;
-      vgpr_id = AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR;
-      break;
-    case AMDGPU_GFX12_CORE_DESCRIPTOR_SET_ID:
-      sgpr_id = AMDGPU_GFX12_CORE_REG_CLASS_ID_AMDGPU_SGPR;
-      vgpr_id = AMDGPU_GFX12_CORE_REG_CLASS_ID_AMDGPU_VGPR;
-      break;
-    case AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_ID:
-      sgpr_id = AMDGPU_GFX1250_CORE_REG_CLASS_ID_AMDGPU_SGPR;
-      vgpr_id = AMDGPU_GFX1250_CORE_REG_CLASS_ID_AMDGPU_VGPR;
-      break;
-    case AMDGPU_GFX950_CORE_DESCRIPTOR_SET_ID:
-      sgpr_id = AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_SGPR;
-      vgpr_id = AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_VGPR;
-      break;
-    default:
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "AMDGPU HAL kernel ABI does not support "
-                              "descriptor set stable ID 0x%016" PRIx64,
-                              descriptor_set->stable_id);
-  }
 
   switch (reg_class) {
     case LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR:
-      *out_descriptor_reg_class_id = sgpr_id;
+      *out_descriptor_reg_class_id = LOOM_AMDGPU_REG_CLASS_ID_SGPR;
       return iree_ok_status();
     case LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_VGPR:
-      *out_descriptor_reg_class_id = vgpr_id;
+      *out_descriptor_reg_class_id = LOOM_AMDGPU_REG_CLASS_ID_VGPR;
       return iree_ok_status();
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -205,8 +174,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_descriptor_reg_class(
     *out_descriptor_reg_class = NULL;
   }
   uint16_t descriptor_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_descriptor_reg_class_id(
-      descriptor_set, reg_class, &descriptor_reg_class_id));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_reg_class_id(
+      reg_class, &descriptor_reg_class_id));
   if (descriptor_reg_class_id >= descriptor_set->reg_class_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
