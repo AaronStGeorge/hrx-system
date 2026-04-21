@@ -722,6 +722,8 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
         vtable_field="func_like",
         fields=(
             InterfaceFieldSpec("callee", "callee_attr_index", "attr"),
+            InterfaceFieldSpec("import_module", "import_module_attr_index", "attr"),
+            InterfaceFieldSpec("import_symbol", "import_symbol_attr_index", "attr"),
             InterfaceFieldSpec("target", "target_attr_index", "attr"),
             InterfaceFieldSpec("abi", "abi_attr_index", "attr"),
             InterfaceFieldSpec("abi_attrs", "abi_attrs_attr_index", "attr"),

@@ -534,6 +534,32 @@ loom_symbol_ref_t loom_func_like_callee(loom_func_like_t func) {
       loom_op_attrs(func.op)[func.vtable->callee_attr_index]);
 }
 
+loom_string_id_t loom_func_like_import_module(loom_func_like_t func) {
+  if (!func.vtable ||
+      func.vtable->import_module_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return LOOM_STRING_ID_INVALID;
+  }
+  loom_attribute_t attr =
+      loom_op_attrs(func.op)[func.vtable->import_module_attr_index];
+  if (loom_attr_is_absent(attr)) {
+    return LOOM_STRING_ID_INVALID;
+  }
+  return loom_attr_as_string_id(attr);
+}
+
+loom_string_id_t loom_func_like_import_symbol(loom_func_like_t func) {
+  if (!func.vtable ||
+      func.vtable->import_symbol_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return LOOM_STRING_ID_INVALID;
+  }
+  loom_attribute_t attr =
+      loom_op_attrs(func.op)[func.vtable->import_symbol_attr_index];
+  if (loom_attr_is_absent(attr)) {
+    return LOOM_STRING_ID_INVALID;
+  }
+  return loom_attr_as_string_id(attr);
+}
+
 loom_symbol_ref_t loom_func_like_target(loom_func_like_t func) {
   if (!func.vtable || func.vtable->target_attr_index == LOOM_ATTR_INDEX_NONE) {
     return loom_symbol_ref_null();

@@ -65,6 +65,15 @@ typedef struct loom_function_symbol_facts_t {
   // Number of result value IDs.
   uint16_t result_count;
 
+  // True when the function is an external import declaration.
+  bool imports;
+
+  // Borrowed import module name for external declarations, or empty.
+  iree_string_view_t import_module;
+
+  // Borrowed import symbol name for external declarations, or empty.
+  iree_string_view_t import_symbol;
+
   // Module-local target profile symbol, or null for target-independent funcs.
   loom_symbol_ref_t target_symbol;
 

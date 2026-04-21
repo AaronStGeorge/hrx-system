@@ -2593,6 +2593,10 @@ class FuncLikeInterface(NamedTuple):
 
     # Symbol ref attr that names this function (required).
     callee: str
+    # Optional import module string attr for external declarations.
+    import_module: str | None = None
+    # Optional import symbol string attr for external declarations.
+    import_symbol: str | None = None
     # Optional symbol ref attr naming the resolved target profile.
     target: str | None = None
     # Optional ABI enum attr for concrete target-bound functions.

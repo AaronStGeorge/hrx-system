@@ -179,6 +179,33 @@ func.def public device @semantic() {
   EXPECT_EQ(facts->target_bundle, nullptr);
 }
 
+TEST_F(FunctionSymbolFactsTest, DeclarationFactsCarryImportContract) {
+  ModulePtr module = ParseModule(R"(
+func.decl import("env", "do.work") @do_work(%arg0: i32) -> (i32)
+)");
+
+  const loom_function_symbol_facts_t* facts =
+      LookupFunction(module.get(), IREE_SV("do_work"));
+  EXPECT_FALSE(facts->has_body);
+  EXPECT_TRUE(facts->imports);
+  EXPECT_TRUE(iree_string_view_equal(facts->import_module, IREE_SV("env")));
+  EXPECT_TRUE(iree_string_view_equal(facts->import_symbol, IREE_SV("do.work")));
+  EXPECT_EQ(facts->argument_count, 1);
+  EXPECT_EQ(facts->result_count, 1);
+}
+
+TEST_F(FunctionSymbolFactsTest, ImportSymbolDefaultsToDeclarationName) {
+  ModulePtr module = ParseModule(R"(
+func.decl import("env") @do_work(%arg0: i32) -> (i32)
+)");
+
+  const loom_function_symbol_facts_t* facts =
+      LookupFunction(module.get(), IREE_SV("do_work"));
+  EXPECT_TRUE(facts->imports);
+  EXPECT_TRUE(iree_string_view_equal(facts->import_module, IREE_SV("env")));
+  EXPECT_TRUE(iree_string_view_equal(facts->import_symbol, IREE_SV("do_work")));
+}
+
 TEST_F(FunctionSymbolFactsTest, LowFunctionResolvesTargetProfile) {
   ModulePtr module = ParseModule(R"(
 target.profile @wasm preset("test.profile")

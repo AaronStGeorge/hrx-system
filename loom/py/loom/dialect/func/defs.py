@@ -254,6 +254,12 @@ _FUNC_LIKE_CONTRACT: dict[str, Any] = dict(
     export_attrs="export_attrs",
 )
 
+_FUNC_LIKE_DECL_CONTRACT: dict[str, Any] = dict(
+    **_FUNC_LIKE_CONTRACT,
+    import_module="import_module",
+    import_symbol="import_symbol",
+)
+
 # ============================================================================
 # func.def — function definition
 # ============================================================================
@@ -308,7 +314,7 @@ func_decl = Op(
         fact_domain="loom_function_symbol_fact_domain",
     ),
     results=[Result("results", ANY, variadic=True)],
-    interfaces=[FuncLikeInterface(**_FUNC_LIKE_CONTRACT, args_as_operands=True)],
+    interfaces=[FuncLikeInterface(**_FUNC_LIKE_DECL_CONTRACT, args_as_operands=True)],
     verify="loom_func_decl_verify",
     format=[
         OptionalGroup([Attr("visibility")], anchor="visibility"),

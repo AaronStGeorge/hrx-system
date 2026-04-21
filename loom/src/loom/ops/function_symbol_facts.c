@@ -195,6 +195,28 @@ static iree_status_t loom_function_symbol_resolve_target_profile(
   return iree_ok_status();
 }
 
+static iree_status_t loom_function_symbol_apply_imports(
+    const loom_module_t* module, loom_func_like_t function,
+    loom_function_symbol_facts_t* facts) {
+  loom_string_id_t import_module_id = loom_func_like_import_module(function);
+  loom_string_id_t import_symbol_id = loom_func_like_import_symbol(function);
+  facts->imports = import_module_id != LOOM_STRING_ID_INVALID ||
+                   import_symbol_id != LOOM_STRING_ID_INVALID;
+  if (import_module_id != LOOM_STRING_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(loom_function_symbol_string_from_id(
+        module, import_module_id, IREE_SV("import_module"),
+        &facts->import_module));
+  }
+  if (import_symbol_id != LOOM_STRING_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(loom_function_symbol_string_from_id(
+        module, import_symbol_id, IREE_SV("import_symbol"),
+        &facts->import_symbol));
+  } else if (facts->imports) {
+    facts->import_symbol = facts->name;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_function_symbol_fact_compute(
     const loom_symbol_fact_domain_t* domain,
     loom_symbol_fact_context_t* context, const loom_module_t* module,
@@ -236,6 +258,8 @@ static iree_status_t loom_function_symbol_fact_compute(
       loom_func_like_arg_ids(function, &facts->argument_count);
   facts->result_ids = loom_op_const_results(function.op);
   facts->result_count = function.op->result_count;
+  IREE_RETURN_IF_ERROR(
+      loom_function_symbol_apply_imports(module, function, facts));
   facts->target_symbol = loom_func_like_target(function);
   IREE_RETURN_IF_ERROR(loom_function_symbol_resolve_target_profile(
       context, facts->target_symbol, &facts->target_profile));

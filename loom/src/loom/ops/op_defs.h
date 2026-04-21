@@ -968,6 +968,14 @@ uint8_t loom_func_like_cc(loom_func_like_t func);
 // |func| is not valid.
 loom_symbol_ref_t loom_func_like_callee(loom_func_like_t func);
 
+// Returns the import module string ID for a func-like op, or
+// LOOM_STRING_ID_INVALID if absent.
+loom_string_id_t loom_func_like_import_module(loom_func_like_t func);
+
+// Returns the import symbol string ID for a func-like op, or
+// LOOM_STRING_ID_INVALID if absent.
+loom_string_id_t loom_func_like_import_symbol(loom_func_like_t func);
+
 // Returns the target profile symbol ref for a func-like op, or null if
 // |func| has no target contract.
 loom_symbol_ref_t loom_func_like_target(loom_func_like_t func);

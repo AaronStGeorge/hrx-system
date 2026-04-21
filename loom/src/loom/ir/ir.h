@@ -844,6 +844,14 @@ typedef struct loom_func_like_vtable_t {
   // Index of the symbol ref attr that names this function.
   uint8_t callee_attr_index;
 
+  // Index of the optional import module string attr. LOOM_ATTR_INDEX_NONE if
+  // absent.
+  uint8_t import_module_attr_index;
+
+  // Index of the optional import symbol string attr. LOOM_ATTR_INDEX_NONE if
+  // absent.
+  uint8_t import_symbol_attr_index;
+
   // Index of the optional target profile attr. LOOM_ATTR_INDEX_NONE if absent.
   uint8_t target_attr_index;
 
