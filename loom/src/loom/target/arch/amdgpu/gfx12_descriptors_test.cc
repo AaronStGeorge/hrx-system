@@ -16,6 +16,7 @@
 namespace loom {
 namespace {
 
+using ::loom::testing::ExpectAmdgpuDs2AddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
 
 const loom_low_descriptor_t* LookupDescriptor(
@@ -193,6 +194,8 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorLookupUsesStableKeys) {
   ExpectAmdgpuDsMemoryDescriptor(
       descriptor_set, IREE_SV("amdgpu.ds_write_b128"),
       LOOM_LOW_EFFECT_KIND_WRITE, 4u, 128u, LOOM_AMDGPU_ENCODING_FORMAT_VDS);
+  ExpectAmdgpuDs2AddrMemoryDescriptors(descriptor_set,
+                                       LOOM_AMDGPU_ENCODING_FORMAT_VDS);
 
   const loom_low_descriptor_t* load_wait_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_loadcnt"));

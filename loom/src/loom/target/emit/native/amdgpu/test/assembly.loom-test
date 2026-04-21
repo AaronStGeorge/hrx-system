@@ -91,3 +91,30 @@ ds_write_b96
 ds_read_b64
 ds_read_b96
 s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_2addr waits=none
+target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_lds_2addr}
+
+low.func.def target(@gfx11_target) @gfx11_lds_2addr(%addr : reg<amdgpu.vgpr>, %value32a : reg<amdgpu.vgpr>, %value32b : reg<amdgpu.vgpr>, %value64a : reg<amdgpu.vgpr x2>, %value64b : reg<amdgpu.vgpr x2>) {
+  %loaded32 = low.op<amdgpu.ds_read2_b32>(%addr) {offset0 = 1, offset1 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.ds_write2_b32>(%addr, %value32a, %value32b) {offset0 = 1, offset1 = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
+  %loaded64 = low.op<amdgpu.ds_read2_b64>(%addr) {offset0 = 3, offset1 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  low.op<amdgpu.ds_write2_b64>(%addr, %value64a, %value64b) {offset0 = 3, offset1 = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>)
+  %loaded32st64 = low.op<amdgpu.ds_read2st64_b32>(%addr) {offset0 = 5, offset1 = 6} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.ds_write2st64_b32>(%addr, %value32a, %value32b) {offset0 = 5, offset1 = 6} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
+  %loaded64st64 = low.op<amdgpu.ds_read2st64_b64>(%addr) {offset0 = 7, offset1 = 8} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  low.op<amdgpu.ds_write2st64_b64>(%addr, %value64a, %value64b) {offset0 = 7, offset1 = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>)
+  low.return
+}
+
+// ----
+ds_read2_b32
+ds_write2_b32
+ds_read2_b64
+ds_write2_b64
+ds_read2st64_b32
+ds_write2st64_b32
+ds_read2st64_b64
+ds_write2st64_b64
+s_endpgm

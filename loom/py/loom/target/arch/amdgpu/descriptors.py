@@ -475,8 +475,12 @@ _PSEUDO_DEAD_REMOVABLE_FLAGS = (DescriptorFlag.DEAD_REMOVABLE, DescriptorFlag.PS
 
 
 def _offset_immediate(bit_width: int) -> Immediate:
+    return _named_offset_immediate("offset", bit_width)
+
+
+def _named_offset_immediate(field_name: str, bit_width: int) -> Immediate:
     return Immediate(
-        "offset",
+        field_name,
         ImmediateKind.UNSIGNED,
         bit_width=bit_width,
         unsigned_max=(2**bit_width) - 1,
@@ -1250,12 +1254,137 @@ def _ds_write_overlay(
     )
 
 
+def _ds_read2_overlay(
+    *,
+    element_width_bits: int,
+    value_units: int,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+) -> AmdgpuDescriptorOverlay:
+    suffix = f"b{element_width_bits}"
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.ds_read2_{suffix}",
+        instruction_name=f"DS_READ2_{suffix.upper()}",
+        mnemonic=f"ds_read2_{suffix}",
+        encoding_name=encoding_name,
+        semantic_tag=f"memory.workgroup.load2.u{element_width_bits}",
+        schedule_class=_SCHEDULE_LDS_LOAD,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=value_units * 2)),
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+        ),
+        implicit_operands=(
+            _ignore_workgroup_memory(width_bits=element_width_bits, is_input=True),
+        ),
+        immediate_fields=("OFFSET0", "OFFSET1"),
+        immediates=(
+            _named_offset_immediate("offset0", 8),
+            _named_offset_immediate("offset1", 8),
+        ),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_workgroup_memory_effect(EffectKind.READ, element_width_bits * 2),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _ds_write2_overlay(
+    *,
+    element_width_bits: int,
+    value_units: int,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+) -> AmdgpuDescriptorOverlay:
+    suffix = f"b{element_width_bits}"
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.ds_write2_{suffix}",
+        instruction_name=f"DS_WRITE2_{suffix.upper()}",
+        mnemonic=f"ds_write2_{suffix}",
+        encoding_name=encoding_name,
+        semantic_tag=f"memory.workgroup.store2.u{element_width_bits}",
+        schedule_class=_SCHEDULE_LDS_STORE,
+        operands=(
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+            AmdgpuOperandOverlay("DATA0", _vgpr_operand("value0", units=value_units)),
+            AmdgpuOperandOverlay("DATA1", _vgpr_operand("value1", units=value_units)),
+        ),
+        implicit_operands=(
+            _ignore_workgroup_memory(width_bits=element_width_bits, is_input=False),
+        ),
+        immediate_fields=("OFFSET0", "OFFSET1"),
+        immediates=(
+            _named_offset_immediate("offset0", 8),
+            _named_offset_immediate("offset1", 8),
+        ),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_workgroup_memory_effect(EffectKind.WRITE, element_width_bits * 2),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _ds_stride64_read2_overlay(
+    *,
+    element_width_bits: int,
+    value_units: int,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+) -> AmdgpuDescriptorOverlay:
+    suffix = f"b{element_width_bits}"
+    return replace(
+        _ds_read2_overlay(
+            element_width_bits=element_width_bits,
+            value_units=value_units,
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+        descriptor_key=f"amdgpu.ds_read2st64_{suffix}",
+        instruction_name=f"DS_READ2ST64_{suffix.upper()}",
+        mnemonic=f"ds_read2st64_{suffix}",
+        semantic_tag=f"memory.workgroup.load2.stride64.u{element_width_bits}",
+    )
+
+
+def _ds_stride64_write2_overlay(
+    *,
+    element_width_bits: int,
+    value_units: int,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+) -> AmdgpuDescriptorOverlay:
+    suffix = f"b{element_width_bits}"
+    return replace(
+        _ds_write2_overlay(
+            element_width_bits=element_width_bits,
+            value_units=value_units,
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+        descriptor_key=f"amdgpu.ds_write2st64_{suffix}",
+        instruction_name=f"DS_WRITE2ST64_{suffix.upper()}",
+        mnemonic=f"ds_write2st64_{suffix}",
+        semantic_tag=f"memory.workgroup.store2.stride64.u{element_width_bits}",
+    )
+
+
+def _ds_fixed_fields_without_offset1(
+    fixed_encoding_fields: tuple[tuple[str, int], ...],
+) -> tuple[tuple[str, int], ...]:
+    return tuple(
+        fixed_field
+        for fixed_field in fixed_encoding_fields
+        if fixed_field[0] != "OFFSET1"
+    )
+
+
 def _ds_memory_overlays(
     *,
     encoding_name: str = "ENC_DS",
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     widths = ((32, 1), (64, 2), (96, 3), (128, 4))
+    two_addr_widths = ((32, 1), (64, 2))
+    two_addr_fixed_encoding_fields = _ds_fixed_fields_without_offset1(
+        fixed_encoding_fields
+    )
     return (
         *(
             _ds_read_overlay(
@@ -1274,6 +1403,42 @@ def _ds_memory_overlays(
                 fixed_encoding_fields=fixed_encoding_fields,
             )
             for width_bits, units in widths
+        ),
+        *(
+            _ds_read2_overlay(
+                element_width_bits=width_bits,
+                value_units=units,
+                encoding_name=encoding_name,
+                fixed_encoding_fields=two_addr_fixed_encoding_fields,
+            )
+            for width_bits, units in two_addr_widths
+        ),
+        *(
+            _ds_stride64_read2_overlay(
+                element_width_bits=width_bits,
+                value_units=units,
+                encoding_name=encoding_name,
+                fixed_encoding_fields=two_addr_fixed_encoding_fields,
+            )
+            for width_bits, units in two_addr_widths
+        ),
+        *(
+            _ds_write2_overlay(
+                element_width_bits=width_bits,
+                value_units=units,
+                encoding_name=encoding_name,
+                fixed_encoding_fields=two_addr_fixed_encoding_fields,
+            )
+            for width_bits, units in two_addr_widths
+        ),
+        *(
+            _ds_stride64_write2_overlay(
+                element_width_bits=width_bits,
+                value_units=units,
+                encoding_name=encoding_name,
+                fixed_encoding_fields=two_addr_fixed_encoding_fields,
+            )
+            for width_bits, units in two_addr_widths
         ),
     )
 

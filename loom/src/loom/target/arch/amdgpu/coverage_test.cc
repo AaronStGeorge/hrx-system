@@ -50,6 +50,11 @@ TEST(AmdgpuCoverageTest, FormatsRepresentativeRows) {
             std::string::npos);
   EXPECT_NE(json.find("\"semantic\":\"ds-b64-b96-read-write\""),
             std::string::npos);
+  EXPECT_NE(json.find("\"semantic\":\"ds-read2-write2-stride64\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"semantic\":\"ds-addtid\""), std::string::npos);
+  EXPECT_NE(json.find("\"gap\":\"descriptor-special-register-m0-missing\""),
+            std::string::npos);
   EXPECT_EQ(json.find("\"gap\":\"descriptor-workgroup-widths-missing\""),
             std::string::npos);
   EXPECT_NE(json.find("\"semantic\":\"global-load-lds-async-tdm\""),

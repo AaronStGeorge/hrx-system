@@ -460,13 +460,39 @@ static iree_status_t loom_amdgpu_append_basic_packet(
                                                 operand_count);
 }
 
-static iree_status_t loom_amdgpu_append_offset_suffix(
+static iree_status_t loom_amdgpu_append_memory_immediate_suffixes(
     const loom_native_assembly_packet_context_t* context) {
-  int64_t offset = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_read_packet_i64_attr(context, IREE_SV("offset"), &offset));
-  return iree_string_builder_append_format(context->builder, " offset:%" PRId64,
-                                           offset);
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  if (descriptor->immediate_count == 0) {
+    return iree_ok_status();
+  }
+  if (descriptor->immediate_start > descriptor_set->immediate_count ||
+      descriptor->immediate_count >
+          descriptor_set->immediate_count - descriptor->immediate_start) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU assembly descriptor immediate range is out of range");
+  }
+  if (descriptor_set->immediates == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU assembly descriptor immediates table is "
+                            "missing");
+  }
+  for (uint16_t i = 0; i < descriptor->immediate_count; ++i) {
+    const loom_low_immediate_t* immediate =
+        &descriptor_set->immediates[descriptor->immediate_start + i];
+    iree_string_view_t name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+        descriptor_set, immediate->field_name_string_offset, &name));
+    int64_t value = 0;
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_read_packet_i64_attr(context, name, &value));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        context->builder, " %.*s:%" PRId64, (int)name.size, name.data, value));
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_append_memory_packet(
@@ -474,7 +500,16 @@ static iree_status_t loom_amdgpu_append_memory_packet(
     iree_host_size_t result_count, iree_host_size_t operand_count) {
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_append_basic_packet(context, result_count, operand_count));
-  return loom_amdgpu_append_offset_suffix(context);
+  return loom_amdgpu_append_memory_immediate_suffixes(context);
+}
+
+static iree_status_t loom_amdgpu_append_offset_suffix(
+    const loom_native_assembly_packet_context_t* context) {
+  int64_t offset = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_read_packet_i64_attr(context, IREE_SV("offset"), &offset));
+  return iree_string_builder_append_format(context->builder, " offset:%" PRId64,
+                                           offset);
 }
 
 static iree_status_t loom_amdgpu_append_mubuf_load_packet(
