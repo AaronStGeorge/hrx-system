@@ -342,13 +342,54 @@ TEST_F(AmdgpuLoomCheckTest,
   }
 }
 
-TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsNonZeroBufferViewByteOffset) {
+TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsDynamicBufferViewByteOffset) {
   const std::string source = AmdgpuGfx11SourceLowCase(
-      "  %base = index.constant 4 : offset\n"
+      "  %lhs = index.constant 4 : offset\n"
+      "  %rhs = index.constant 8 : offset\n"
+      "  %base = index.add %lhs, %rhs : offset\n"
       "  %view = buffer.view %input[%base] : buffer -> view<4xi32, #dense>\n");
   ExpectAmdgpuSourceLowRejects(
       &harness_, source,
-      "AMDGPU HAL buffer views currently require exact zero byte offsets");
+      "AMDGPU HAL buffer views currently require exact non-negative static "
+      "byte offsets");
+}
+
+TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsNegativeBufferViewByteOffset) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "  %base = index.constant -4 : offset\n"
+      "  %view = buffer.view %input[%base] : buffer -> view<4xi32, #dense>\n");
+  ExpectAmdgpuSourceLowRejects(
+      &harness_, source,
+      "AMDGPU HAL buffer views currently require exact non-negative static "
+      "byte offsets");
+}
+
+TEST_F(AmdgpuLoomCheckTest, SourceLowerFoldsStaticBufferViewByteOffset) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "low",
+      "  %base = index.constant 16 : offset\n"
+      "  %zero = index.constant 0 : offset\n"
+      "  %input_view = buffer.view %input[%base] : buffer -> "
+      "view<8xi32, #dense>\n"
+      "  %output_view = buffer.view %output[%zero] : buffer -> "
+      "view<8xi32, #dense>\n"
+      "  %loaded = vector.load %input_view[1] : view<8xi32, #dense> -> "
+      "vector<1xi32>\n"
+      "  vector.store %loaded, %output_view[0] : vector<1xi32>, "
+      "view<8xi32, #dense>\n");
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("amdgpu_source_low.loom-test"), &result));
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("low.op<amdgpu.buffer_load_dword>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("{offset = 20}"), std::string::npos)
+      << actual_output;
+  loom_check_result_deinitialize(&result);
 }
 
 TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsMisalignedB128StaticOffset) {
