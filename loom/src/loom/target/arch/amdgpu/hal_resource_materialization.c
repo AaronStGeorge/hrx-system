@@ -12,7 +12,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/rewrite/rewriter.h"
-#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 
 static iree_string_view_t loom_amdgpu_hal_resource_string_or_empty(
@@ -31,8 +31,8 @@ static iree_status_t loom_amdgpu_hal_resource_make_sgpr_type(
   *out_type = loom_type_none();
   loom_type_t type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_build_register_type(
-      module, descriptor_set, AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR,
-      unit_count, &type));
+      module, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR, unit_count,
+      &type));
   return loom_module_intern_type(module, type, out_type);
 }
 
@@ -47,7 +47,7 @@ static iree_status_t loom_amdgpu_hal_resource_type_is_sgpr_range(
   }
   loom_string_id_t expected_class_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_build_register_class_string_id(
-      module, descriptor_set, AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR,
+      module, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
       &expected_class_id));
   *out_match = loom_type_register_class_id(type) == expected_class_id;
   return iree_ok_status();
@@ -224,8 +224,7 @@ static iree_status_t loom_amdgpu_hal_resource_build_s_mov_b32(
       rewriter->module, IREE_SV("imm32"), value, &attr));
   loom_op_t* const_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_build_descriptor_const(
-      &rewriter->builder, descriptor_set,
-      AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_S_MOV_B32,
+      &rewriter->builder, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32,
       loom_make_named_attr_slice(&attr, 1), sgpr_type, location, &const_op));
   *out_value = loom_low_const_result(const_op);
   return iree_ok_status();
@@ -246,7 +245,7 @@ static iree_status_t loom_amdgpu_hal_resource_build_pointer_load(
   loom_op_t* load_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_build_descriptor_op(
       &rewriter->builder, descriptor_set,
-      AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_S_LOAD_DWORDX2, operands,
+      LOOM_AMDGPU_DESCRIPTOR_ID_S_LOAD_DWORDX2, operands,
       IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(&attr, 1),
       result_types, IREE_ARRAYSIZE(result_types), /*tied_results=*/NULL,
       /*tied_result_count=*/0, location, &load_op));

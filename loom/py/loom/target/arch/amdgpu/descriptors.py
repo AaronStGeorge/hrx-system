@@ -1669,255 +1669,257 @@ def _s_barrier_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _s_add_u32_overlay(),
+        _s_sub_u32_overlay(),
+        _v_add_u32_overlay("V_ADD_U32"),
+        _v_sub_u32_overlay("V_SUB_U32", "v_sub_u32"),
+        _v_mov_b32_literal_overlay(),
+        _v_mul_lo_u32_overlay(),
+        *_i32_bitwise_shift_overlays(),
+        _v_add_f32_overlay(),
+        _v_sub_f32_overlay(),
+        _v_mul_f32_overlay(),
+        _v_fma_f32_overlay(),
+        _s_load_dwordx2_overlay(),
+        _s_buffer_load_dword_overlay(),
+        _s_buffer_load_64_overlay(
+            descriptor_key="amdgpu.s_buffer_load_dwordx2",
+            instruction_name="S_BUFFER_LOAD_DWORDX2",
+            mnemonic="s_buffer_load_dwordx2",
+        ),
+        _buffer_load_dword_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
+        _buffer_load_64_overlay(
+            descriptor_key="amdgpu.buffer_load_dwordx2",
+            instruction_name="BUFFER_LOAD_DWORDX2",
+            mnemonic="buffer_load_dwordx2",
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+        ),
+        _buffer_load_128_overlay(
+            descriptor_key="amdgpu.buffer_load_dwordx4",
+            instruction_name="BUFFER_LOAD_DWORDX4",
+            mnemonic="buffer_load_dwordx4",
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+        ),
+        _buffer_store_dword_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
+        _buffer_store_64_overlay(
+            descriptor_key="amdgpu.buffer_store_dwordx2",
+            instruction_name="BUFFER_STORE_DWORDX2",
+            mnemonic="buffer_store_dwordx2",
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+        ),
+        _buffer_store_128_overlay(
+            descriptor_key="amdgpu.buffer_store_dwordx4",
+            instruction_name="BUFFER_STORE_DWORDX4",
+            mnemonic="buffer_store_dwordx4",
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+        ),
+        *_ds_memory_overlays(),
+        _v_mfma_f32_16x16x16_f16_overlay(),
+        _s_barrier_overlay(),
+        _s_waitcnt_overlay(),
+    )
+
+
 def _gfx950_core_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
-    return materialize_amdgpu_descriptor_overlays(
-        spec,
-        (
-            _s_add_u32_overlay(),
-            _s_sub_u32_overlay(),
-            _v_add_u32_overlay("V_ADD_U32"),
-            _v_sub_u32_overlay("V_SUB_U32", "v_sub_u32"),
-            _v_mov_b32_literal_overlay(),
-            _v_mul_lo_u32_overlay(),
-            *_i32_bitwise_shift_overlays(),
-            _v_add_f32_overlay(),
-            _v_sub_f32_overlay(),
-            _v_mul_f32_overlay(),
-            _v_fma_f32_overlay(),
-            _s_load_dwordx2_overlay(),
-            _s_buffer_load_dword_overlay(),
-            _s_buffer_load_64_overlay(
-                descriptor_key="amdgpu.s_buffer_load_dwordx2",
-                instruction_name="S_BUFFER_LOAD_DWORDX2",
-                mnemonic="s_buffer_load_dwordx2",
-            ),
-            _buffer_load_dword_overlay(
-                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-            ),
-            _buffer_load_64_overlay(
-                descriptor_key="amdgpu.buffer_load_dwordx2",
-                instruction_name="BUFFER_LOAD_DWORDX2",
-                mnemonic="buffer_load_dwordx2",
-                encoding_name="ENC_MUBUF",
-                resource_field_name="SRSRC",
-            ),
-            _buffer_load_128_overlay(
-                descriptor_key="amdgpu.buffer_load_dwordx4",
-                instruction_name="BUFFER_LOAD_DWORDX4",
-                mnemonic="buffer_load_dwordx4",
-                encoding_name="ENC_MUBUF",
-                resource_field_name="SRSRC",
-            ),
-            _buffer_store_dword_overlay(
-                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-            ),
-            _buffer_store_64_overlay(
-                descriptor_key="amdgpu.buffer_store_dwordx2",
-                instruction_name="BUFFER_STORE_DWORDX2",
-                mnemonic="buffer_store_dwordx2",
-                encoding_name="ENC_MUBUF",
-                resource_field_name="SRSRC",
-            ),
-            _buffer_store_128_overlay(
-                descriptor_key="amdgpu.buffer_store_dwordx4",
-                instruction_name="BUFFER_STORE_DWORDX4",
-                mnemonic="buffer_store_dwordx4",
-                encoding_name="ENC_MUBUF",
-                resource_field_name="SRSRC",
-            ),
-            *_ds_memory_overlays(),
-            _v_mfma_f32_16x16x16_f16_overlay(),
-            _s_barrier_overlay(),
-            _s_waitcnt_overlay(),
+    return materialize_amdgpu_descriptor_overlays(spec, _gfx950_core_overlays())
+
+
+def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _s_add_u32_overlay(),
+        _s_sub_u32_overlay(),
+        _v_add_u32_overlay("V_ADD_NC_U32"),
+        _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
+        _v_mov_b32_literal_overlay(),
+        _v_mul_lo_u32_overlay(),
+        *_i32_bitwise_shift_overlays(),
+        _v_add_f32_overlay(),
+        _v_sub_f32_overlay(),
+        _v_mul_f32_overlay(),
+        _v_fma_f32_overlay(),
+        _s_load_dwordx2_overlay(),
+        _s_buffer_load_dword_overlay(),
+        _s_buffer_load_64_overlay(),
+        _buffer_load_dword_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
         ),
+        _buffer_load_64_overlay(encoding_name="ENC_MUBUF", resource_field_name="SRSRC"),
+        _buffer_load_128_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
+        _buffer_store_dword_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
+        _buffer_store_64_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
+        _buffer_store_128_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
+        *_ds_memory_overlays(),
+        _v_wmma_f32_16x16x16_f16_overlay(),
+        _s_barrier_overlay(),
+        _s_waitcnt_overlay(),
+        _s_waitcnt_depctr_overlay(),
+        _s_wait_idle_overlay(),
     )
 
 
 def _gfx11_core_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
-    return materialize_amdgpu_descriptor_overlays(
-        spec,
-        (
-            _s_add_u32_overlay(),
-            _s_sub_u32_overlay(),
-            _v_add_u32_overlay("V_ADD_NC_U32"),
-            _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
-            _v_mov_b32_literal_overlay(),
-            _v_mul_lo_u32_overlay(),
-            *_i32_bitwise_shift_overlays(),
-            _v_add_f32_overlay(),
-            _v_sub_f32_overlay(),
-            _v_mul_f32_overlay(),
-            _v_fma_f32_overlay(),
-            _s_load_dwordx2_overlay(),
-            _s_buffer_load_dword_overlay(),
-            _s_buffer_load_64_overlay(),
-            _buffer_load_dword_overlay(
-                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-            ),
-            _buffer_load_64_overlay(
-                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-            ),
-            _buffer_load_128_overlay(
-                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-            ),
-            _buffer_store_dword_overlay(
-                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-            ),
-            _buffer_store_64_overlay(
-                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-            ),
-            _buffer_store_128_overlay(
-                encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
-            ),
-            *_ds_memory_overlays(),
-            _v_wmma_f32_16x16x16_f16_overlay(),
-            _s_barrier_overlay(),
-            _s_waitcnt_overlay(),
-            _s_waitcnt_depctr_overlay(),
-            _s_wait_idle_overlay(),
+    return materialize_amdgpu_descriptor_overlays(spec, _gfx11_core_overlays())
+
+
+def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _s_add_u32_overlay(),
+        _s_sub_u32_overlay(),
+        _v_add_u32_overlay("V_ADD_NC_U32"),
+        _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
+        _v_mov_b32_literal_overlay(),
+        _v_mul_lo_u32_overlay(),
+        *_i32_bitwise_shift_overlays(),
+        _v_add_f32_overlay(),
+        _v_sub_f32_overlay(),
+        _v_mul_f32_overlay(),
+        _v_fma_f32_overlay(),
+        _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
+        _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
+        _s_buffer_load_64_overlay(offset_field_name="IOFFSET", offset_bit_width=24),
+        _buffer_load_dword_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
         ),
+        _buffer_load_64_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+        ),
+        _buffer_load_128_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+        ),
+        _buffer_store_dword_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+        ),
+        _buffer_store_64_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+        ),
+        _buffer_store_128_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+        ),
+        *_ds_memory_overlays(
+            encoding_name="ENC_VDS",
+            fixed_encoding_fields=(("OFFSET1", 0),),
+        ),
+        _v_wmma_f32_16x16x16_f16_overlay(),
+        _s_wait_loadcnt_overlay(),
+        _s_wait_storecnt_overlay(),
+        _s_wait_alu_overlay(),
+        _s_wait_idle_overlay(),
     )
 
 
 def _gfx12_core_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
-    return materialize_amdgpu_descriptor_overlays(
-        spec,
-        (
-            _s_add_u32_overlay(),
-            _s_sub_u32_overlay(),
-            _v_add_u32_overlay("V_ADD_NC_U32"),
-            _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
-            _v_mov_b32_literal_overlay(),
-            _v_mul_lo_u32_overlay(),
-            *_i32_bitwise_shift_overlays(),
-            _v_add_f32_overlay(),
-            _v_sub_f32_overlay(),
-            _v_mul_f32_overlay(),
-            _v_fma_f32_overlay(),
-            _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
-            _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
-            _s_buffer_load_64_overlay(offset_field_name="IOFFSET", offset_bit_width=24),
-            _buffer_load_dword_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            _buffer_load_64_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            _buffer_load_128_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            _buffer_store_dword_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            _buffer_store_64_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            _buffer_store_128_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            *_ds_memory_overlays(
-                encoding_name="ENC_VDS",
-                fixed_encoding_fields=(("OFFSET1", 0),),
-            ),
-            _v_wmma_f32_16x16x16_f16_overlay(),
-            _s_wait_loadcnt_overlay(),
-            _s_wait_storecnt_overlay(),
-            _s_wait_alu_overlay(),
-            _s_wait_idle_overlay(),
+    return materialize_amdgpu_descriptor_overlays(spec, _gfx12_core_overlays())
+
+
+def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _s_add_u32_overlay(),
+        _s_sub_u32_overlay(),
+        _v_add_u32_overlay("V_ADD_NC_U32"),
+        _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
+        _v_mov_b32_literal_overlay(),
+        _v_mul_lo_u32_overlay(),
+        *_i32_bitwise_shift_overlays(),
+        _v_add_f32_overlay(),
+        _v_sub_f32_overlay(),
+        _v_mul_f32_overlay(),
+        _v_fma_f32_overlay(),
+        _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
+        _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
+        _s_buffer_load_64_overlay(offset_field_name="IOFFSET", offset_bit_width=24),
+        _buffer_load_dword_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
         ),
+        _buffer_load_64_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+        ),
+        _buffer_load_128_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+        ),
+        _buffer_store_dword_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+        ),
+        _buffer_store_64_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+        ),
+        _buffer_store_128_overlay(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+        ),
+        *_ds_memory_overlays(
+            encoding_name="ENC_VDS",
+            fixed_encoding_fields=(("OFFSET1", 0),),
+        ),
+        _s_wait_loadcnt_overlay(),
+        _s_wait_storecnt_overlay(),
+        _s_wait_alu_overlay(),
+        _s_wait_idle_overlay(),
     )
 
 
 def _gfx1250_core_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
-    return materialize_amdgpu_descriptor_overlays(
-        spec,
-        (
-            _s_add_u32_overlay(),
-            _s_sub_u32_overlay(),
-            _v_add_u32_overlay("V_ADD_NC_U32"),
-            _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
-            _v_mov_b32_literal_overlay(),
-            _v_mul_lo_u32_overlay(),
-            *_i32_bitwise_shift_overlays(),
-            _v_add_f32_overlay(),
-            _v_sub_f32_overlay(),
-            _v_mul_f32_overlay(),
-            _v_fma_f32_overlay(),
-            _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
-            _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
-            _s_buffer_load_64_overlay(offset_field_name="IOFFSET", offset_bit_width=24),
-            _buffer_load_dword_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            _buffer_load_64_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            _buffer_load_128_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            _buffer_store_dword_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            _buffer_store_64_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            _buffer_store_128_overlay(
-                encoding_name="ENC_VBUFFER",
-                resource_field_name="RSRC",
-                offset_field_name="IOFFSET",
-                offset_bit_width=24,
-            ),
-            *_ds_memory_overlays(
-                encoding_name="ENC_VDS",
-                fixed_encoding_fields=(("OFFSET1", 0),),
-            ),
-            _s_wait_loadcnt_overlay(),
-            _s_wait_storecnt_overlay(),
-            _s_wait_alu_overlay(),
-            _s_wait_idle_overlay(),
-        ),
-    )
+    return materialize_amdgpu_descriptor_overlays(spec, _gfx1250_core_overlays())
 
 
 _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
@@ -2436,6 +2438,62 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
 )
+
+
+def _amdgpu_core_descriptor_set_bases() -> tuple[DescriptorSet, ...]:
+    return (
+        _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE,
+        _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE,
+    )
+
+
+def _amdgpu_descriptor_id_key_set() -> set[str]:
+    keys: set[str] = set()
+    for descriptor_set in _amdgpu_core_descriptor_set_bases():
+        keys.update(descriptor.key for descriptor in descriptor_set.descriptors)
+    for overlays in (
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        keys.update(overlay.descriptor_key for overlay in overlays)
+    return keys
+
+
+def amdgpu_descriptor_id_keys() -> tuple[str, ...]:
+    """Returns descriptor keys known to the AMDGPU target family."""
+
+    return tuple(sorted(_amdgpu_descriptor_id_key_set()))
+
+
+def amdgpu_common_reg_class_ids() -> tuple[tuple[str, int], ...]:
+    """Returns descriptor-set-local register-class IDs shared by all AMDGPU sets."""
+
+    result: list[tuple[str, int]] = []
+    for reg_class_name in (_REG_SGPR, _REG_VGPR):
+        expected_reg_class_id: int | None = None
+        for descriptor_set in _amdgpu_core_descriptor_set_bases():
+            reg_class_id = next(
+                i
+                for i, reg_class in enumerate(descriptor_set.reg_classes)
+                if reg_class.name == reg_class_name
+            )
+            if expected_reg_class_id is None:
+                expected_reg_class_id = reg_class_id
+            elif expected_reg_class_id != reg_class_id:
+                raise ValueError(
+                    f"AMDGPU common register class '{reg_class_name}' has "
+                    "inconsistent descriptor-set-local IDs"
+                )
+        if expected_reg_class_id is None:
+            raise ValueError(
+                f"AMDGPU common register class '{reg_class_name}' is missing"
+            )
+        result.append((reg_class_name, expected_reg_class_id))
+    return tuple(result)
 
 
 def _with_overlay_descriptors(

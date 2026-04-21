@@ -218,6 +218,18 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "descriptor_ids_no_gfx11_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:descriptor_ids",
+)
+
+iree_assert_no_dependency(
+    name = "descriptor_ids_no_gfx950_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:descriptor_ids",
+)
+
+iree_assert_no_dependency(
     name = "target_low_legality_no_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
     target = "//loom/src/loom/target:low_legality",
@@ -226,6 +238,18 @@ iree_assert_no_dependency(
 iree_assert_no_dependency(
     name = "lower_no_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/arch/amdgpu:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_gfx11_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_gfx950_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
     target = "//loom/src/loom/target/arch/amdgpu:lower",
 )
 
@@ -274,6 +298,18 @@ iree_assert_no_dependency(
 iree_assert_no_dependency(
     name = "hal_resource_materialization_no_low_registry_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "hal_resource_materialization_no_gfx11_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "hal_resource_materialization_no_gfx950_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
     target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
 )
 
@@ -605,6 +641,19 @@ _AMDGPU_DESCRIPTOR_GENERATOR_DEPS = [
     "//loom/py/loom:target/low_descriptors.py",
 ]
 
+_AMDGPU_DESCRIPTOR_ID_GENERATOR = "//loom/py/loom:amdgpu_descriptor_ids"
+
+_AMDGPU_DESCRIPTOR_ID_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_descriptor_ids.py"
+
+_AMDGPU_DESCRIPTOR_ID_GENERATOR_DEPS = [
+    "//loom/py/loom:gen/amdgpu_descriptor_ids.py",
+    "//loom/py/loom:target/arch/amdgpu/descriptor_overlay.py",
+    "//loom/py/loom:target/arch/amdgpu/descriptors.py",
+    "//loom/py/loom:target/arch/amdgpu/encoding.py",
+    "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
+    "//loom/py/loom:target/low_descriptors.py",
+]
+
 _AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom:amdgpu_encoding_tables"
 
 _AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_encoding_tables.py"
@@ -636,6 +685,18 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/testing:gtest",
     ],
+)
+
+loom_target_table_cc_library(
+    name = "descriptor_ids",
+    args = [
+        "--public-header=loom/target/arch/amdgpu/descriptor_ids.h",
+    ],
+    cmake_generator = _AMDGPU_DESCRIPTOR_ID_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_DESCRIPTOR_ID_GENERATOR_DEPS,
+    generator = _AMDGPU_DESCRIPTOR_ID_GENERATOR,
+    header = "descriptor_ids.h",
+    source = "descriptor_ids.c",
 )
 
 loom_target_table_cc_library(
@@ -856,6 +917,21 @@ loom_cc_test(
     ],
 )
 
+loom_cc_test(
+    name = "descriptor_ids_test",
+    srcs = ["descriptor_ids_test.cc"],
+    deps = [
+        ":descriptor_ids",
+        ":gfx11_descriptors",
+        ":gfx1250_descriptors",
+        ":gfx12_descriptors",
+        ":gfx950_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
@@ -887,8 +963,7 @@ loom_cc_library(
     srcs = ["lower.c"],
     hdrs = ["lower.h"],
     deps = [
-        ":gfx11_descriptors_ids",
-        ":gfx950_descriptors_ids",
+        ":descriptor_ids",
         ":hal_kernel_abi",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ir",
@@ -1028,7 +1103,7 @@ loom_cc_library(
     srcs = ["hal_resource_materialization.c"],
     hdrs = ["hal_resource_materialization.h"],
     deps = [
-        ":gfx11_descriptors_ids",
+        ":descriptor_ids",
         ":hal_kernel_abi",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:builder",

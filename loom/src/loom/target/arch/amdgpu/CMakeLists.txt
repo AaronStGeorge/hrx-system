@@ -76,6 +76,26 @@ loom_cc_library(
 
 loom_target_table_cc_library(
   NAME
+    descriptor_ids
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptor_ids.py"
+  SOURCE
+    "descriptor_ids.c"
+  HEADER
+    "descriptor_ids.h"
+  ARGS
+    "--public-header=loom/target/arch/amdgpu/descriptor_ids.h"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_descriptor_ids.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+)
+
+loom_target_table_cc_library(
+  NAME
     gfx11_encoding_tables
   GENERATOR
     "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
@@ -359,6 +379,22 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    descriptor_ids_test
+  SRCS
+    "descriptor_ids_test.cc"
+  DEPS
+    ::descriptor_ids
+    ::gfx11_descriptors
+    ::gfx1250_descriptors
+    ::gfx12_descriptors
+    ::gfx950_descriptors
+    loom::src::loom::codegen::low::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     low_registry
@@ -399,8 +435,7 @@ loom_cc_library(
   SRCS
     "lower.c"
   DEPS
-    ::gfx11_descriptors_ids
-    ::gfx950_descriptors_ids
+    ::descriptor_ids
     ::hal_kernel_abi
     iree::base
     loom::src::loom::codegen::low::lower
@@ -543,7 +578,7 @@ loom_cc_library(
   SRCS
     "hal_resource_materialization.c"
   DEPS
-    ::gfx11_descriptors_ids
+    ::descriptor_ids
     ::hal_kernel_abi
     iree::base
     iree::base::internal::arena
