@@ -137,9 +137,12 @@ static std::string AmdgpuB128CopySource(iree_string_view_t target_symbol,
   return source;
 }
 
-static std::string AmdgpuGfx11SourceLowCase(const char* body) {
-  std::string source =
-      "// RUN: emit source-low @gfx11_target output=none\n"
+static std::string AmdgpuGfx11SourceLowCase(const char* output,
+                                            const char* body) {
+  std::string source = "// RUN: emit source-low @gfx11_target output=";
+  source += output;
+  source +=
+      "\n"
       "target.preset @gfx11_target {key = \"amdgpu-gfx11\", source = @case}\n"
       "\n"
       "func.def @case(%input: buffer, %output: buffer) {\n";
@@ -149,6 +152,10 @@ static std::string AmdgpuGfx11SourceLowCase(const char* body) {
       "}\n"
       "// ----\n";
   return source;
+}
+
+static std::string AmdgpuGfx11SourceLowCase(const char* body) {
+  return AmdgpuGfx11SourceLowCase("none", body);
 }
 
 static void ExpectAmdgpuSourceLowRejects(
@@ -358,18 +365,46 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsMisalignedB128StaticOffset) {
       "aligned static byte offsets");
 }
 
-TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsOutOfRangeBufferImmediate) {
+TEST_F(AmdgpuLoomCheckTest, SourceLowerSplitsStaticOffsetIntoSoffset) {
   const std::string source = AmdgpuGfx11SourceLowCase(
+      "low",
       "  %zero = index.constant 0 : offset\n"
       "  %view = buffer.view %input[%zero] : buffer -> view<2048xi32, #dense>\n"
       "  %loaded = vector.load %view[1200] : view<2048xi32, #dense> -> "
       "vector<1xi32>\n"
       "  vector.store %loaded, %view[0] : vector<1xi32>, "
       "view<2048xi32, #dense>\n");
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("amdgpu_source_low.loom-test"), &result));
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("low.const<amdgpu.s_mov_b32> {imm32 = 705}"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("low.op<amdgpu.buffer_load_dword>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("{offset = 4095}"), std::string::npos)
+      << actual_output;
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsOutOfRangeStaticBufferOffset) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "  %zero = index.constant 0 : offset\n"
+      "  %view = buffer.view %input[%zero] : buffer -> "
+      "view<1073742849xi32, #dense>\n"
+      "  %loaded = vector.load %view[1073742848] : "
+      "view<1073742849xi32, #dense> -> vector<1xi32>\n"
+      "  vector.store %loaded, %view[0] : vector<1xi32>, "
+      "view<1073742849xi32, #dense>\n");
   ExpectAmdgpuSourceLowRejects(
       &harness_, source,
       "AMDGPU buffer memory static byte offset is outside the selected "
-      "descriptor's immediate range");
+      "descriptor's immediate plus scalar SOFFSET range");
 }
 
 TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsNonWorkitemDynamicIndex) {

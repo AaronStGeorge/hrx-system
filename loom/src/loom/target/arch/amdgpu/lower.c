@@ -588,8 +588,12 @@ typedef struct loom_amdgpu_memory_access_t {
   loom_value_id_t dynamic_index;
   // Byte stride multiplied by dynamic_index to compute VADDR.
   uint32_t dynamic_index_byte_stride;
-  // Static byte offset encoded in the descriptor offset immediate.
+  // Total static byte offset selected from the source view access.
   int64_t static_byte_offset;
+  // Static byte offset encoded in the descriptor offset immediate.
+  uint32_t immediate_byte_offset;
+  // Static byte offset materialized through the scalar SOFFSET operand.
+  uint32_t scalar_byte_offset;
   // Number of 32-bit VGPR lanes moved by the selected memory packet.
   uint32_t vgpr_count;
   // Stable descriptor ID selected for the active descriptor set.
@@ -706,8 +710,8 @@ static iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
           rejection_bits,
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_RANGE)) {
     return IREE_SV(
-        "AMDGPU buffer memory static byte offset is outside the "
-        "selected descriptor's immediate range");
+        "AMDGPU buffer memory static byte offset is outside the selected "
+        "descriptor's immediate plus scalar SOFFSET range");
   }
   return IREE_SV("AMDGPU buffer memory access is not target-legal");
 }
@@ -914,6 +918,33 @@ static bool loom_amdgpu_buffer_memory_offset_immediate_range(
   return true;
 }
 
+static bool loom_amdgpu_memory_access_split_static_offset(
+    loom_amdgpu_memory_access_t* access, uint64_t offset_unsigned_max,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  if (access->static_byte_offset < 0) {
+    diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_NEGATIVE_STATIC_OFFSET;
+    return false;
+  }
+
+  const uint64_t static_byte_offset = (uint64_t)access->static_byte_offset;
+  uint64_t immediate_byte_offset =
+      iree_min(static_byte_offset, offset_unsigned_max);
+  if (access->vgpr_count == 4) {
+    immediate_byte_offset &= ~UINT64_C(15);
+  }
+  const uint64_t scalar_byte_offset =
+      static_byte_offset - immediate_byte_offset;
+  if (scalar_byte_offset > UINT32_MAX) {
+    diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_RANGE;
+    return false;
+  }
+  access->immediate_byte_offset = (uint32_t)immediate_byte_offset;
+  access->scalar_byte_offset = (uint32_t)scalar_byte_offset;
+  return true;
+}
+
 static bool loom_amdgpu_memory_access_select(
     const loom_module_t* module,
     const loom_low_descriptor_set_t* descriptor_set,
@@ -1059,12 +1090,8 @@ static bool loom_amdgpu_memory_access_select(
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_IMMEDIATE;
     return false;
   }
-  if ((uint64_t)out_access->static_byte_offset > offset_unsigned_max) {
-    out_diagnostic->rejection_bits |=
-        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_RANGE;
-    return false;
-  }
-  return true;
+  return loom_amdgpu_memory_access_split_static_offset(
+      out_access, offset_unsigned_max, out_diagnostic);
 }
 
 static bool loom_amdgpu_load_memory_access_select(
@@ -2413,8 +2440,8 @@ static iree_status_t loom_amdgpu_lower_vector_load(
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
   loom_value_id_t low_soffset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_S_MOV_B32, 0,
-      sgpr_type, &low_soffset));
+      context, source_op, AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_S_MOV_B32,
+      access.scalar_byte_offset, sgpr_type, &low_soffset));
 
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
@@ -2431,7 +2458,7 @@ static iree_status_t loom_amdgpu_lower_vector_load(
   loom_named_attr_t attrs[] = {
       {
           .name_id = offset_id,
-          .value = loom_attr_i64(access.static_byte_offset),
+          .value = loom_attr_i64(access.immediate_byte_offset),
       },
   };
   loom_op_t* low_op = NULL;
@@ -2468,8 +2495,8 @@ static iree_status_t loom_amdgpu_lower_vector_store(
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
   loom_value_id_t low_soffset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_S_MOV_B32, 0,
-      sgpr_type, &low_soffset));
+      context, source_op, AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_S_MOV_B32,
+      access.scalar_byte_offset, sgpr_type, &low_soffset));
 
   loom_string_id_t offset_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
@@ -2483,7 +2510,7 @@ static iree_status_t loom_amdgpu_lower_vector_store(
   loom_named_attr_t attrs[] = {
       {
           .name_id = offset_id,
-          .value = loom_attr_i64(access.static_byte_offset),
+          .value = loom_attr_i64(access.immediate_byte_offset),
       },
   };
   loom_op_t* low_op = NULL;
