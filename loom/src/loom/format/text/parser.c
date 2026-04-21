@@ -2678,10 +2678,13 @@ static iree_status_t loom_parse_low_asm_named_immediates(
   loom_attribute_t dict_attr = {0};
   uint32_t errors_before = parser->error_count;
   IREE_RETURN_IF_ERROR(loom_parse_attr_dict(parser, &dict_attr));
-  if (parser->error_count > errors_before) return iree_ok_status();
+  if (parser->error_count > errors_before) {
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
-      parsed_spans, &parser->parser_arena, LOOM_LOCATION_FIELD_ATTRIBUTE, 1,
-      dict_token, parser->tokenizer.consumed_end_line,
+      parsed_spans, &parser->parser_arena, LOOM_LOCATION_FIELD_ATTRIBUTE,
+      packet->immediate_attribute_field_index, dict_token,
+      parser->tokenizer.consumed_end_line,
       parser->tokenizer.consumed_end_column));
 
   loom_named_attr_slice_t parsed_attrs = loom_attr_as_dict(dict_attr);
@@ -2756,8 +2759,9 @@ static iree_status_t loom_parse_low_asm_positional_immediates(
     IREE_RETURN_IF_ERROR(loom_low_asm_append_immediate_attr(
         parser, immediate.field_name, value, &attrs[i]));
     IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
-        parsed_spans, &parser->parser_arena, LOOM_LOCATION_FIELD_ATTRIBUTE, 1,
-        immediate_token, parser->tokenizer.consumed_end_line,
+        parsed_spans, &parser->parser_arena, LOOM_LOCATION_FIELD_ATTRIBUTE,
+        packet->immediate_attribute_field_index, immediate_token,
+        parser->tokenizer.consumed_end_line,
         parser->tokenizer.consumed_end_column));
   }
   return iree_ok_status();

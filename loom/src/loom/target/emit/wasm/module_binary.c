@@ -64,23 +64,61 @@ static iree_status_t loom_wasm_module_write_name(
 }
 
 static iree_status_t loom_wasm_module_write_value_type_list(
-    const loom_module_t* module,
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_sidecar_t* allocation,
     const loom_value_id_t* value_ids, uint32_t value_count,
     loom_wasm_binary_writer_t* writer) {
   IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u32_leb(writer, value_count));
   for (uint32_t i = 0; i < value_count; ++i) {
+    const loom_low_allocation_assignment_t* assignment =
+        loom_low_packet_find_assignment(allocation, value_ids[i], NULL);
+    if (!assignment) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "Wasm signature value %u has no allocation",
+                              (unsigned)value_ids[i]);
+    }
+    if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "Wasm signature value %u is not allocated as a register value",
+          (unsigned)value_ids[i]);
+    }
+    if (assignment->unit_count != 1) {
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "Wasm signature value %u requires %u allocation units",
+          (unsigned)value_ids[i], assignment->unit_count);
+    }
     loom_wasm_value_type_t value_type = 0;
-    IREE_RETURN_IF_ERROR(loom_wasm_value_type_from_register_type(
-        module, descriptor_set, loom_module_value_type(module, value_ids[i]),
-        &value_type));
+    IREE_RETURN_IF_ERROR(loom_wasm_value_type_from_descriptor_register_class(
+        assignment->descriptor_reg_class_id, &value_type));
     IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u8(writer, value_type));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_module_find_return_values(
+    const loom_low_schedule_sidecar_t* schedule,
+    loom_value_slice_t* out_return_values) {
+  IREE_ASSERT_ARGUMENT(out_return_values);
+  *out_return_values = (loom_value_slice_t){0};
+  for (iree_host_size_t i = 0; i < schedule->node_count; ++i) {
+    const loom_op_t* op = schedule->nodes[i].op;
+    if (!loom_low_return_isa(op)) {
+      continue;
+    }
+    if (out_return_values->values != NULL) {
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "Wasm module emission supports a single low.return terminator");
+    }
+    *out_return_values = loom_low_return_values(op);
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_wasm_module_write_type_section_payload(
     const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation,
     loom_wasm_binary_writer_t* payload_writer) {
   loom_func_like_t function =
       loom_func_like_cast(schedule->module, (loom_op_t*)schedule->function_op);
@@ -93,25 +131,34 @@ static iree_status_t loom_wasm_module_write_type_section_payload(
   const loom_value_id_t* parameters =
       loom_func_like_arg_ids(function, &parameter_count);
   loom_value_slice_t results = loom_low_func_def_results(schedule->function_op);
+  loom_value_slice_t return_values = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_module_find_return_values(schedule, &return_values));
+  if (return_values.count != results.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm function returns %u value(s) but declares "
+                            "%u result(s)",
+                            (unsigned)return_values.count,
+                            (unsigned)results.count);
+  }
 
   IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u32_leb(payload_writer, 1));
   IREE_RETURN_IF_ERROR(
       loom_wasm_binary_write_u8(payload_writer, LOOM_WASM_FUNCTION_TYPE));
   IREE_RETURN_IF_ERROR(loom_wasm_module_write_value_type_list(
-      schedule->module, schedule->target.descriptor_set, parameters,
-      parameter_count, payload_writer));
+      allocation, parameters, parameter_count, payload_writer));
   return loom_wasm_module_write_value_type_list(
-      schedule->module, schedule->target.descriptor_set, results.values,
-      results.count, payload_writer);
+      allocation, return_values.values, return_values.count, payload_writer);
 }
 
 static iree_status_t loom_wasm_module_write_type_section(
     const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation,
     loom_wasm_binary_writer_t* module_writer, iree_allocator_t allocator) {
   loom_wasm_binary_writer_t payload_writer;
   loom_wasm_binary_writer_initialize(allocator, &payload_writer);
-  iree_status_t status =
-      loom_wasm_module_write_type_section_payload(schedule, &payload_writer);
+  iree_status_t status = loom_wasm_module_write_type_section_payload(
+      schedule, allocation, &payload_writer);
   if (iree_status_is_ok(status)) {
     status = loom_wasm_module_write_section(
         module_writer, LOOM_WASM_SECTION_TYPE, &payload_writer);
@@ -292,8 +339,8 @@ iree_status_t loom_wasm_emit_single_function_module(
     status = loom_wasm_module_write_header(&module_writer);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_wasm_module_write_type_section(schedule, &module_writer,
-                                                 allocator);
+    status = loom_wasm_module_write_type_section(schedule, allocation,
+                                                 &module_writer, allocator);
   }
   if (iree_status_is_ok(status)) {
     status = loom_wasm_module_write_function_section(&module_writer, allocator);

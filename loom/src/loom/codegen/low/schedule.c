@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "loom/codegen/low/diagnostics.h"
+#include "loom/codegen/low/register_class_map.h"
 #include "loom/codegen/low/requirements.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
@@ -31,10 +32,8 @@ typedef struct loom_low_schedule_build_state_t {
   loom_region_t* body;
   // Resolved target bundle and descriptor set for the low function.
   loom_low_resolved_target_t target;
-  // Descriptor register-class IDs indexed by module string ID.
-  uint16_t* descriptor_reg_class_ids;
-  // Number of entries in |descriptor_reg_class_ids|.
-  iree_host_size_t descriptor_reg_class_id_count;
+  // Descriptor register-class lookup map for module register types.
+  loom_low_register_class_map_t register_class_map;
   // Schedule block records indexed by region block ordinal.
   loom_low_schedule_block_t* blocks;
   // Schedule node records indexed by scheduler node ordinal.
@@ -215,39 +214,6 @@ static bool loom_low_schedule_interval_contains_point(
   return interval->start_point <= point && point < interval->end_point;
 }
 
-static iree_status_t loom_low_schedule_initialize_register_class_map(
-    loom_low_schedule_build_state_t* state) {
-  state->descriptor_reg_class_id_count = state->module->strings.count;
-  if (state->descriptor_reg_class_id_count == 0) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, state->descriptor_reg_class_id_count,
-      sizeof(*state->descriptor_reg_class_ids),
-      (void**)&state->descriptor_reg_class_ids));
-  for (iree_host_size_t i = 0; i < state->descriptor_reg_class_id_count; ++i) {
-    state->descriptor_reg_class_ids[i] = LOOM_LOW_REG_CLASS_NONE;
-  }
-  for (uint32_t i = 0; i < state->target.descriptor_set->reg_class_count; ++i) {
-    const loom_low_reg_class_t* reg_class =
-        &state->target.descriptor_set->reg_classes[i];
-    iree_string_view_t reg_class_name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        state->target.descriptor_set, reg_class->name_string_offset,
-        &reg_class_name));
-    for (iree_host_size_t string_id = 0;
-         string_id < state->module->strings.count; ++string_id) {
-      if (!iree_string_view_equal(state->module->strings.entries[string_id],
-                                  reg_class_name)) {
-        continue;
-      }
-      state->descriptor_reg_class_ids[string_id] = (uint16_t)i;
-      break;
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_schedule_pressure_budget_for_class(
     const loom_low_schedule_build_state_t* state,
     loom_liveness_value_class_t value_class, uint32_t* out_budget,
@@ -258,18 +224,16 @@ static iree_status_t loom_low_schedule_pressure_budget_for_class(
       !state->target.descriptor_set) {
     return iree_ok_status();
   }
-  if (value_class.register_class_id == LOOM_STRING_ID_INVALID ||
-      value_class.register_class_id >= state->descriptor_reg_class_id_count) {
+  uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  const loom_low_reg_class_t* reg_class = NULL;
+  bool found_reg_class = false;
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_string_id(
+      &state->register_class_map, value_class.register_class_id, &reg_class_id,
+      &reg_class, &found_reg_class));
+  if (!found_reg_class) {
     return iree_ok_status();
   }
-  const uint16_t reg_class_id =
-      state->descriptor_reg_class_ids[value_class.register_class_id];
-  if (reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
-      reg_class_id >= state->target.descriptor_set->reg_class_count) {
-    return iree_ok_status();
-  }
-  const loom_low_reg_class_t* reg_class =
-      &state->target.descriptor_set->reg_classes[reg_class_id];
+  (void)reg_class_id;
   if (reg_class->physical_count == 0) {
     return iree_ok_status();
   }
@@ -1781,7 +1745,8 @@ iree_status_t loom_low_schedule_function(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low function target did not resolve");
   }
-  IREE_RETURN_IF_ERROR(loom_low_schedule_initialize_register_class_map(&state));
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
+      module, state.target.descriptor_set, arena, &state.register_class_map));
 
   iree_host_size_t node_count = 0;
   loom_low_schedule_count_nodes(state.body, &node_count);

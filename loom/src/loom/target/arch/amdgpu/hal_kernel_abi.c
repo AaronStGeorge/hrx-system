@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/register_class_map.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/gfx11_descriptors.h"
@@ -157,60 +158,59 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_descriptor_reg_class_id(
   }
 }
 
-static iree_status_t loom_amdgpu_hal_kernel_abi_register_class_string_id(
-    const loom_module_t* module,
+static iree_status_t loom_amdgpu_hal_kernel_abi_descriptor_reg_class(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_hal_kernel_abi_reg_class_t reg_class,
-    loom_string_id_t* out_string_id) {
-  IREE_ASSERT_ARGUMENT(out_string_id);
+    uint16_t* out_descriptor_reg_class_id,
+    const loom_low_reg_class_t** out_descriptor_reg_class) {
+  IREE_ASSERT_ARGUMENT(out_descriptor_reg_class_id);
+  *out_descriptor_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  if (out_descriptor_reg_class) {
+    *out_descriptor_reg_class = NULL;
+  }
   uint16_t descriptor_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_descriptor_reg_class_id(
       descriptor_set, reg_class, &descriptor_reg_class_id));
-  const loom_low_reg_class_t* descriptor_reg_class =
-      &descriptor_set->reg_classes[descriptor_reg_class_id];
-  iree_string_view_t descriptor_class_name = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_reg_class->name_string_offset,
-      &descriptor_class_name));
-  for (iree_host_size_t i = 0; i < module->strings.count; ++i) {
-    if (!iree_string_view_equal(module->strings.entries[i],
-                                descriptor_class_name)) {
-      continue;
-    }
-    if (i > UINT32_MAX) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "AMDGPU HAL kernel ABI register class string ID overflows");
-    }
-    *out_string_id = (loom_string_id_t)i;
-    return iree_ok_status();
+  if (descriptor_reg_class_id >= descriptor_set->reg_class_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU HAL kernel ABI descriptor register-class ID %" PRIu16
+        " is out of range",
+        descriptor_reg_class_id);
   }
-  return iree_make_status(
-      IREE_STATUS_FAILED_PRECONDITION,
-      "AMDGPU HAL kernel ABI register class '%.*s' is not interned in module",
-      (int)descriptor_class_name.size, descriptor_class_name.data);
+  *out_descriptor_reg_class_id = descriptor_reg_class_id;
+  if (out_descriptor_reg_class) {
+    *out_descriptor_reg_class =
+        &descriptor_set->reg_classes[descriptor_reg_class_id];
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_verify_register_value(
-    const loom_module_t* module,
-    const loom_low_descriptor_set_t* descriptor_set, loom_value_id_t value_id,
-    loom_amdgpu_hal_kernel_abi_reg_class_t reg_class, uint32_t unit_count,
-    iree_string_view_t label) {
+    const loom_module_t* module, const loom_low_register_class_map_t* map,
+    loom_value_id_t value_id, loom_amdgpu_hal_kernel_abi_reg_class_t reg_class,
+    uint32_t unit_count, iree_string_view_t label) {
   if (value_id >= module->values.count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU HAL kernel ABI %.*s value id %" PRIu32
                             " is invalid",
                             (int)label.size, label.data, value_id);
   }
-  loom_string_id_t expected_class_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_register_class_string_id(
-      module, descriptor_set, reg_class, &expected_class_id));
+  uint16_t expected_class_id = LOOM_LOW_REG_CLASS_NONE;
+  const loom_low_reg_class_t* expected_class = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_descriptor_reg_class(
+      map->descriptor_set, reg_class, &expected_class_id, &expected_class));
   loom_type_t type = loom_module_value_type(module, value_id);
-  if (!loom_type_is_register(type) ||
-      loom_type_register_class_id(type) != expected_class_id ||
+  uint16_t actual_class_id = LOOM_LOW_REG_CLASS_NONE;
+  bool found_actual_class = false;
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
+      map, type, &actual_class_id, NULL, &found_actual_class));
+  if (!found_actual_class || actual_class_id != expected_class_id ||
       loom_type_register_unit_count(type) != unit_count) {
-    iree_string_view_t expected_class_name =
-        loom_amdgpu_hal_kernel_abi_string_or_empty(module, expected_class_id);
+    iree_string_view_t expected_class_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+        map->descriptor_set, expected_class->name_string_offset,
+        &expected_class_name));
     if (unit_count == 1) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
@@ -309,25 +309,27 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_validate_semantic_type(
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_validate_abi_type(
-    const loom_module_t* module,
-    const loom_low_descriptor_set_t* descriptor_set, loom_type_t abi_type,
-    iree_string_view_t resource_name) {
-  loom_string_id_t sgpr_string_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_register_class_string_id(
-      module, descriptor_set, LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR,
-      &sgpr_string_id));
+    const loom_module_t* module, const loom_low_register_class_map_t* map,
+    loom_type_t abi_type, iree_string_view_t resource_name) {
   if (!loom_type_is_register(abi_type)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU HAL resource '%.*s' ABI type must be reg<amdgpu.sgpr x4>",
         (int)resource_name.size, resource_name.data);
   }
+  uint16_t sgpr_class_id = LOOM_LOW_REG_CLASS_NONE;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_descriptor_reg_class(
+      map->descriptor_set, LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR,
+      &sgpr_class_id, NULL));
+  uint16_t abi_class_id = LOOM_LOW_REG_CLASS_NONE;
+  bool found_abi_class = false;
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
+      map, abi_type, &abi_class_id, NULL, &found_abi_class));
   iree_string_view_t register_class =
       loom_amdgpu_hal_kernel_abi_string_or_empty(
           module, loom_type_register_class_id(abi_type));
   uint32_t unit_count = loom_type_register_unit_count(abi_type);
-  if (loom_type_register_class_id(abi_type) != sgpr_string_id ||
-      unit_count != 4) {
+  if (!found_abi_class || abi_class_id != sgpr_class_id || unit_count != 4) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU HAL resource '%.*s' ABI type must be reg<amdgpu.sgpr x4>, "
@@ -358,8 +360,7 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_format_resource_name(
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_validate_resource_import(
-    const loom_module_t* module,
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_module_t* module, const loom_low_register_class_map_t* map,
     const loom_op_t* resource_op, iree_string_view_t resource_name) {
   if (loom_low_resource_import_kind(resource_op) !=
       LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE) {
@@ -380,13 +381,12 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_validate_resource_import(
       module, semantic_type, resource_name));
   loom_type_t abi_type =
       loom_module_value_type(module, loom_low_resource_result(resource_op));
-  return loom_amdgpu_hal_kernel_abi_validate_abi_type(module, descriptor_set,
-                                                      abi_type, resource_name);
+  return loom_amdgpu_hal_kernel_abi_validate_abi_type(module, map, abi_type,
+                                                      resource_name);
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_resource_from_import(
-    const loom_module_t* module,
-    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_module_t* module, const loom_low_register_class_map_t* map,
     const loom_op_t* resource_op,
     loom_amdgpu_hal_kernarg_resource_t* out_resource,
     iree_arena_allocator_t* arena) {
@@ -404,7 +404,7 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_resource_from_import(
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_format_resource_name(
       (uint32_t)binding_index, &resource_name, arena));
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_validate_resource_import(
-      module, descriptor_set, resource_op, resource_name));
+      module, map, resource_op, resource_name));
 
   uint64_t kernarg_offset =
       (uint64_t)binding_index *
@@ -499,6 +499,10 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
         resource_count, max_binding_index);
   }
 
+  loom_low_register_class_map_t register_class_map = {0};
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
+      module, descriptor_set, arena, &register_class_map));
+
   loom_amdgpu_hal_kernarg_resource_t* resources = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, resource_count, sizeof(*resources), (void**)&resources));
@@ -515,7 +519,7 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
 
       loom_amdgpu_hal_kernarg_resource_t resource = {0};
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_resource_from_import(
-          module, descriptor_set, resource_op, &resource, arena));
+          module, &register_class_map, resource_op, &resource, arena));
       if (resources[resource.binding_index].resource_op != NULL) {
         return iree_make_status(IREE_STATUS_ALREADY_EXISTS,
                                 "AMDGPU HAL resource binding index %" PRIu32
@@ -590,6 +594,10 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
   loom_value_id_t kernarg_ptr = LOOM_VALUE_ID_INVALID;
   loom_value_id_t workitem_id_x = LOOM_VALUE_ID_INVALID;
 
+  loom_low_register_class_map_t register_class_map = {0};
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
+      module, descriptor_set, arena, &register_class_map));
+
   const loom_block_t* entry_block = loom_region_const_entry_block(body);
   const loom_op_t* op = NULL;
   loom_block_for_each_op(entry_block, op) {
@@ -609,7 +617,7 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
       }
       kernarg_ptr = loom_low_live_in_result(op);
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_register_value(
-          module, descriptor_set, kernarg_ptr,
+          module, &register_class_map, kernarg_ptr,
           LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 2,
           IREE_SV("kernarg segment pointer live-in")));
       local_fixed_values[local_fixed_value_count++] =
@@ -631,7 +639,7 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
       }
       workitem_id_x = loom_low_live_in_result(op);
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_register_value(
-          module, descriptor_set, workitem_id_x,
+          module, &register_class_map, workitem_id_x,
           LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_VGPR, 1,
           IREE_SV("workitem_id.x live-in")));
       local_fixed_values[local_fixed_value_count++] =

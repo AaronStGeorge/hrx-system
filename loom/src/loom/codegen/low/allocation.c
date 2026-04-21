@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "loom/codegen/low/diagnostics.h"
+#include "loom/codegen/low/register_class_map.h"
 #include "loom/codegen/low/requirements.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
@@ -26,10 +27,8 @@ typedef struct loom_low_allocation_build_state_t {
   loom_region_t* body;
   // Resolved target selected by the low function.
   loom_low_resolved_target_t target;
-  // Descriptor register-class IDs indexed by module string ID.
-  uint16_t* descriptor_reg_class_ids;
-  // Number of entries in |descriptor_reg_class_ids|.
-  iree_host_size_t descriptor_reg_class_id_count;
+  // Descriptor register-class lookup map for module register types.
+  loom_low_register_class_map_t register_class_map;
   // Resolved explicit per-class register budgets.
   struct loom_low_allocation_resolved_budget_t* resolved_budgets;
   // Number of entries in |resolved_budgets|.
@@ -281,34 +280,6 @@ static bool loom_low_allocation_lookup_budget(
   return false;
 }
 
-static iree_status_t loom_low_allocation_lookup_descriptor_register_class(
-    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t name,
-    uint16_t* out_reg_class_id, const loom_low_reg_class_t** out_reg_class,
-    bool* out_found) {
-  IREE_ASSERT_ARGUMENT(out_reg_class_id);
-  IREE_ASSERT_ARGUMENT(out_reg_class);
-  IREE_ASSERT_ARGUMENT(out_found);
-  *out_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-  *out_reg_class = NULL;
-  *out_found = false;
-  if (!descriptor_set) {
-    return iree_ok_status();
-  }
-  for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {
-    const loom_low_reg_class_t* reg_class = &descriptor_set->reg_classes[i];
-    iree_string_view_t reg_class_name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, reg_class->name_string_offset, &reg_class_name));
-    if (iree_string_view_equal(reg_class_name, name)) {
-      *out_reg_class_id = (uint16_t)i;
-      *out_reg_class = reg_class;
-      *out_found = true;
-      return iree_ok_status();
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_allocation_resolve_descriptor_register_class(
     const loom_low_allocation_build_state_t* state,
     loom_liveness_value_class_t value_class, uint16_t* out_reg_class_id,
@@ -320,8 +291,7 @@ static iree_status_t loom_low_allocation_resolve_descriptor_register_class(
     *out_reg_class = NULL;
   }
   if (value_class.type_kind != LOOM_TYPE_REGISTER ||
-      value_class.register_class_id == LOOM_STRING_ID_INVALID ||
-      value_class.register_class_id >= state->descriptor_reg_class_id_count) {
+      value_class.register_class_id == LOOM_STRING_ID_INVALID) {
     iree_string_view_t register_class = loom_low_allocation_module_string(
         state->module, value_class.register_class_id);
     return iree_make_status(
@@ -329,10 +299,13 @@ static iree_status_t loom_low_allocation_resolve_descriptor_register_class(
         "low allocation value class '%.*s' is not a descriptor register class",
         (int)register_class.size, register_class.data);
   }
-  const uint16_t reg_class_id =
-      state->descriptor_reg_class_ids[value_class.register_class_id];
-  if (reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
-      reg_class_id >= state->target.descriptor_set->reg_class_count) {
+  uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  const loom_low_reg_class_t* reg_class = NULL;
+  bool found_reg_class = false;
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_string_id(
+      &state->register_class_map, value_class.register_class_id, &reg_class_id,
+      &reg_class, &found_reg_class));
+  if (!found_reg_class) {
     iree_string_view_t register_class = loom_low_allocation_module_string(
         state->module, value_class.register_class_id);
     return iree_make_status(
@@ -347,7 +320,7 @@ static iree_status_t loom_low_allocation_resolve_descriptor_register_class(
     *out_reg_class_id = reg_class_id;
   }
   if (out_reg_class) {
-    *out_reg_class = &state->target.descriptor_set->reg_classes[reg_class_id];
+    *out_reg_class = reg_class;
   }
   return iree_ok_status();
 }
@@ -362,39 +335,6 @@ loom_low_allocation_reg_class_location_kind(
   return LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
 }
 
-static iree_status_t loom_low_allocation_initialize_register_class_map(
-    loom_low_allocation_build_state_t* state) {
-  state->descriptor_reg_class_id_count = state->module->strings.count;
-  if (state->descriptor_reg_class_id_count == 0) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, state->descriptor_reg_class_id_count,
-      sizeof(*state->descriptor_reg_class_ids),
-      (void**)&state->descriptor_reg_class_ids));
-  for (iree_host_size_t i = 0; i < state->descriptor_reg_class_id_count; ++i) {
-    state->descriptor_reg_class_ids[i] = LOOM_LOW_REG_CLASS_NONE;
-  }
-  for (uint32_t i = 0; i < state->target.descriptor_set->reg_class_count; ++i) {
-    const loom_low_reg_class_t* reg_class =
-        &state->target.descriptor_set->reg_classes[i];
-    iree_string_view_t reg_class_name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        state->target.descriptor_set, reg_class->name_string_offset,
-        &reg_class_name));
-    for (iree_host_size_t string_id = 0;
-         string_id < state->module->strings.count; ++string_id) {
-      if (!iree_string_view_equal(state->module->strings.entries[string_id],
-                                  reg_class_name)) {
-        continue;
-      }
-      state->descriptor_reg_class_ids[string_id] = (uint16_t)i;
-      break;
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_allocation_resolve_budgets(
     loom_low_allocation_build_state_t* state) {
   if (state->options->budget_count == 0) {
@@ -406,12 +346,10 @@ static iree_status_t loom_low_allocation_resolve_budgets(
   for (iree_host_size_t i = 0; i < state->options->budget_count; ++i) {
     const loom_low_allocation_budget_t* budget = &state->options->budgets[i];
     uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-    const loom_low_reg_class_t* reg_class = NULL;
     bool found_reg_class = false;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_lookup_descriptor_register_class(
+    IREE_RETURN_IF_ERROR(loom_low_register_class_try_lookup_name(
         state->target.descriptor_set, budget->register_class, &reg_class_id,
-        &reg_class, &found_reg_class));
-    (void)reg_class;
+        NULL, &found_reg_class));
     if (!found_reg_class) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
@@ -590,7 +528,7 @@ static iree_status_t loom_low_allocation_resolve_reserved_ranges(
     uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
     const loom_low_reg_class_t* reg_class = NULL;
     bool found_reg_class = false;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_lookup_descriptor_register_class(
+    IREE_RETURN_IF_ERROR(loom_low_register_class_try_lookup_name(
         state->target.descriptor_set, reserved_range->register_class,
         &reg_class_id, &reg_class, &found_reg_class));
     if (!found_reg_class) {
@@ -1902,8 +1840,8 @@ iree_status_t loom_low_allocate_function(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low function target did not resolve");
   }
-  IREE_RETURN_IF_ERROR(
-      loom_low_allocation_initialize_register_class_map(&state));
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
+      module, state.target.descriptor_set, arena, &state.register_class_map));
   IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_budgets(&state));
   IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_reserved_ranges(&state));
 

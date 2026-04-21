@@ -10,8 +10,6 @@
 #define LOOM_TARGET_EMIT_WASM_TYPES_H_
 
 #include "iree/base/api.h"
-#include "loom/codegen/low/descriptors.h"
-#include "loom/ir/ir.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,13 +27,6 @@ typedef enum loom_wasm_value_type_e {
 // value-type byte used in local declarations and allocated value emission.
 iree_status_t loom_wasm_value_type_from_descriptor_register_class(
     uint16_t descriptor_reg_class_id, loom_wasm_value_type_t* out_value_type);
-
-// Resolves a Loom register type through a Wasm descriptor set to the Wasm
-// binary value-type byte used in function signatures.
-iree_status_t loom_wasm_value_type_from_register_type(
-    const loom_module_t* module,
-    const loom_low_descriptor_set_t* descriptor_set, loom_type_t type,
-    loom_wasm_value_type_t* out_value_type);
 
 #ifdef __cplusplus
 }  // extern "C"

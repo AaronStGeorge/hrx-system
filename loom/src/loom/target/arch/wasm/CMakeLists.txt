@@ -118,6 +118,20 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    register_class_map_test
+  SRCS
+    "register_class_map_test.cc"
+  DEPS
+    ::descriptors
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::register_class_map
+    loom::src::loom::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     loom_check_test
   SRCS
     "loom_check_test.cc"

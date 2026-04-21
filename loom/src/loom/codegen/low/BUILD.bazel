@@ -70,6 +70,42 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "register_class_map_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/codegen/low:register_class_map",
+)
+
+iree_assert_no_dependency(
+    name = "register_class_map_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/codegen/low:register_class_map",
+)
+
+iree_assert_no_dependency(
+    name = "register_class_map_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/codegen/low:register_class_map",
+)
+
+iree_assert_no_dependency(
+    name = "register_class_map_no_target_registry_dep",
+    dependency = "//loom/src/loom/target:low_descriptor_registry",
+    target = "//loom/src/loom/codegen/low:register_class_map",
+)
+
+iree_assert_no_dependency(
+    name = "register_class_map_no_test_low_registry_dep",
+    dependency = "//loom/src/loom/target/test:low_registry",
+    target = "//loom/src/loom/codegen/low:register_class_map",
+)
+
+iree_assert_no_dependency(
+    name = "register_class_map_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/codegen/low:register_class_map",
+)
+
+iree_assert_no_dependency(
     name = "text_asm_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/codegen/low:text_asm",
@@ -539,6 +575,18 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "register_class_map",
+    srcs = ["register_class_map.c"],
+    hdrs = ["register_class_map.h"],
+    deps = [
+        ":descriptors",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "pass_requirements",
     hdrs = ["pass_requirements.h"],
 )
@@ -631,6 +679,7 @@ loom_cc_library(
     deps = [
         ":descriptors",
         ":diagnostics",
+        ":register_class_map",
         ":requirements",
         ":target_binding",
         "//loom/src/loom/analysis:liveness",
@@ -730,6 +779,7 @@ loom_cc_library(
     deps = [
         ":descriptors",
         ":diagnostics",
+        ":register_class_map",
         ":requirements",
         ":target_binding",
         "//loom/src/loom/analysis:liveness",
@@ -872,6 +922,7 @@ loom_cc_library(
     srcs = ["verify.c"],
     hdrs = ["verify.h"],
     deps = [
+        ":register_class_map",
         ":requirements",
         ":target_binding",
         "//loom/src/loom/error:emitter",
@@ -1002,6 +1053,19 @@ loom_cc_test(
     srcs = ["requirements_test.cc"],
     deps = [
         ":requirements",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "register_class_map_test",
+    srcs = ["register_class_map_test.cc"],
+    deps = [
+        ":register_class_map",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/target/test:descriptors",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

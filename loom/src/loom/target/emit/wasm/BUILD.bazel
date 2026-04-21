@@ -155,8 +155,6 @@ loom_cc_library(
     srcs = ["types.c"],
     hdrs = ["types.h"],
     deps = [
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/ir",
         "//loom/src/loom/target/arch/wasm:descriptors_ids",
         "//runtime/src/iree/base",
     ],

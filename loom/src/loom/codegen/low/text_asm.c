@@ -101,6 +101,12 @@ static iree_status_t loom_low_descriptor_text_asm_make_packet(
     }
   }
 
+  const bool builds_as_const =
+      asm_form->operand_index_count == 0 &&
+      asm_form->result_operand_index_count == 1 &&
+      asm_form->immediate_count > 0 &&
+      !iree_all_bits_set(descriptor->flags,
+                         LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING);
   *out_packet = (loom_text_low_asm_packet_descriptor_t){
       .descriptor_set = descriptor_set,
       .form = asm_form,
@@ -110,13 +116,11 @@ static iree_status_t loom_low_descriptor_text_asm_make_packet(
       .result_count = asm_form->result_operand_index_count,
       .operand_count = asm_form->operand_index_count,
       .immediate_count = asm_form->immediate_count,
+      .immediate_attribute_field_index = builds_as_const
+                                             ? loom_low_const_attrs_ATTR_INDEX
+                                             : loom_low_op_attrs_ATTR_INDEX,
       .has_named_immediates = has_named_immediates,
-      .builds_as_const =
-          asm_form->operand_index_count == 0 &&
-          asm_form->result_operand_index_count == 1 &&
-          asm_form->immediate_count > 0 &&
-          !iree_all_bits_set(descriptor->flags,
-                             LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING),
+      .builds_as_const = builds_as_const,
   };
   return iree_ok_status();
 }

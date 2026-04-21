@@ -40,6 +40,8 @@ typedef struct loom_text_low_asm_packet_descriptor_t {
   uint16_t operand_count;
   // Number of immediate attributes parsed by this asm packet.
   uint16_t immediate_count;
+  // Operation attribute field index storing packet immediate attributes.
+  uint16_t immediate_attribute_field_index;
   // True when at least one immediate requires named-dictionary syntax.
   bool has_named_immediates;
   // True when this packet should canonicalize to a low const operation.

@@ -211,6 +211,19 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "register_class_map_test",
+    srcs = ["register_class_map_test.cc"],
+    deps = [
+        ":descriptors",
+        "//loom/src/loom/codegen/low:register_class_map",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "loom_check_test",
     srcs = ["loom_check_test.cc"],
     deps = [

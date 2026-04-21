@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/register_class_map.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -27,6 +28,7 @@ typedef struct loom_low_verify_state_t {
 typedef struct loom_low_function_verify_state_t {
   loom_low_verify_state_t* state;
   const loom_low_resolved_target_t* target;
+  loom_low_register_class_map_t register_class_map;
   iree_string_view_t function_name;
 } loom_low_function_verify_state_t;
 
@@ -874,11 +876,10 @@ static iree_status_t loom_low_verify_format_expected_register_classes(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_verify_operand_accepts_register_class(
+static bool loom_low_verify_operand_accepts_register_class(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_operand_t* descriptor_operand,
-    iree_string_view_t actual_reg_class, bool* out_accepted) {
-  *out_accepted = false;
+    uint16_t descriptor_register_class_id) {
   for (uint16_t i = 0; i < descriptor_operand->reg_class_alt_count; ++i) {
     const uint16_t alt_index = descriptor_operand->reg_class_alt_start + i;
     const loom_low_reg_class_alt_t* alt =
@@ -886,17 +887,11 @@ static iree_status_t loom_low_verify_operand_accepts_register_class(
     if (iree_all_bits_set(alt->flags, LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE)) {
       continue;
     }
-    const loom_low_reg_class_t* reg_class =
-        &descriptor_set->reg_classes[alt->reg_class_id];
-    iree_string_view_t expected_reg_class = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, reg_class->name_string_offset, &expected_reg_class));
-    if (iree_string_view_equal(actual_reg_class, expected_reg_class)) {
-      *out_accepted = true;
-      return iree_ok_status();
+    if (alt->reg_class_id == descriptor_register_class_id) {
+      return true;
     }
   }
-  return iree_ok_status();
+  return false;
 }
 
 static iree_status_t loom_low_verify_emit_register_type_mismatch(
@@ -945,27 +940,6 @@ static iree_status_t loom_low_verify_format_resource_unit_count_reason(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_verify_descriptor_find_register_class(
-    const loom_low_descriptor_set_t* descriptor_set,
-    iree_string_view_t register_class_name,
-    const loom_low_reg_class_t** out_register_class) {
-  IREE_ASSERT_ARGUMENT(out_register_class);
-  *out_register_class = NULL;
-  for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {
-    const loom_low_reg_class_t* register_class =
-        &descriptor_set->reg_classes[i];
-    iree_string_view_t descriptor_class_name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, register_class->name_string_offset,
-        &descriptor_class_name));
-    if (iree_string_view_equal(register_class_name, descriptor_class_name)) {
-      *out_register_class = register_class;
-      return iree_ok_status();
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_verify_emit_resource_register_rejected(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     loom_type_t actual_type, iree_string_view_t reason) {
@@ -999,14 +973,14 @@ static iree_status_t loom_low_verify_resource(
         IREE_SV("resource result type is not a register type"));
   }
 
-  const iree_string_view_t actual_register_class =
-      loom_low_verify_string_or_empty(module,
-                                      loom_type_register_class_id(actual_type));
   const loom_low_reg_class_t* descriptor_register_class = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_find_register_class(
-      function_state->target->descriptor_set, actual_register_class,
-      &descriptor_register_class));
-  if (!descriptor_register_class) {
+  uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
+  bool found_descriptor_register_class = false;
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
+      &function_state->register_class_map, actual_type,
+      &descriptor_register_class_id, &descriptor_register_class,
+      &found_descriptor_register_class));
+  if (!found_descriptor_register_class) {
     return loom_low_verify_emit_resource_register_rejected(
         function_state, op, actual_type,
         IREE_SV("register class is not defined by the descriptor set"));
@@ -1053,12 +1027,19 @@ static iree_status_t loom_low_verify_descriptor_register_field(
   if (loom_type_is_register(actual_type) &&
       loom_type_register_unit_count(actual_type) ==
           descriptor_operand->unit_count) {
-    iree_string_view_t actual_reg_class = loom_low_verify_string_or_empty(
-        module, loom_type_register_class_id(actual_type));
-    IREE_RETURN_IF_ERROR(loom_low_verify_operand_accepts_register_class(
-        descriptor_set, descriptor_operand, actual_reg_class, &accepted));
+    uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
+    bool found_descriptor_register_class = false;
+    IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
+        &function_state->register_class_map, actual_type,
+        &descriptor_register_class_id, NULL, &found_descriptor_register_class));
+    accepted =
+        found_descriptor_register_class &&
+        loom_low_verify_operand_accepts_register_class(
+            descriptor_set, descriptor_operand, descriptor_register_class_id);
   }
-  if (accepted) return iree_ok_status();
+  if (accepted) {
+    return iree_ok_status();
+  }
 
   iree_string_view_t expected_reg_classes = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_low_verify_format_expected_register_classes(
@@ -1291,6 +1272,9 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
       .function_name =
           loom_low_verify_function_name(state->module, low_func_op),
   };
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
+      state->module, target.descriptor_set, &state->arena,
+      &function_state.register_class_map));
   loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
   return loom_walk_region(
       state->module, loom_low_func_def_body(low_func_op), LOOM_WALK_PRE_ORDER,
