@@ -49,6 +49,7 @@ def test_generate_ireevm_core_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 9
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["descriptor_id_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["asm_forms"] >= 9
     assert any(descriptor["key"] == "iree.vm.call.import.i32" for descriptor in manifest["descriptors"])
     assert any(form["mnemonic"] == "vm.add.i32" for form in manifest["asm_forms"])
@@ -64,6 +65,7 @@ def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
     assert [descriptor["key"] for descriptor in manifest["descriptors"]] == ["iree.vm.add.i32"]
     assert manifest["table_counts"]["descriptors"] == 1
     assert manifest["table_counts"]["descriptor_refs"] == 1
+    assert manifest["table_counts"]["descriptor_id_refs"] == 1
     assert manifest["table_counts"]["asm_forms"] == 1
     assert manifest["table_counts"]["reg_classes"] == 6
     assert manifest["table_counts"]["reg_class_alts"] == 1
@@ -88,6 +90,7 @@ def test_generate_wasm_core_simd128_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 12
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["descriptor_id_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["asm_forms"] >= 12
     assert any(descriptor["key"] == "wasm.v128.load" for descriptor in manifest["descriptors"])
     assert any(form["mnemonic"] == "i32x4.add" for form in manifest["asm_forms"])
@@ -113,6 +116,7 @@ def test_generate_x86_avx512_core_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 7
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["descriptor_id_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["asm_forms"] >= 6
     assert manifest["table_counts"]["reg_classes"] == 3
     assert manifest["table_counts"]["resources"] >= 7
@@ -143,6 +147,7 @@ def test_generate_x86_packed_dot_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 53
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["descriptor_id_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["reg_classes"] == 3
     assert manifest["table_counts"]["schedule_classes"] >= 3
     assert manifest["table_counts"]["feature_mask_words"] >= 53

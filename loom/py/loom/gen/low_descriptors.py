@@ -139,6 +139,7 @@ class _CompiledDescriptorSet:
     encoding_field_values: list[EncodingFieldValue]
     descriptor_rows: list[dict[str, int]]
     descriptor_refs: list[tuple[str, int]]
+    descriptor_id_refs: list[tuple[int, int]]
     canonical_asm_form_ordinals: list[int | None]
     asm_forms: list[_CompiledAsmForm]
     asm_operand_indices: list[int]
@@ -212,6 +213,24 @@ def _u64_literal(value: int) -> str:
 
 def _hex_u64_literal(value: int) -> str:
     return f"UINT64_C(0x{value:x})"
+
+
+def _descriptor_stable_id(key: str) -> int:
+    """Returns a deterministic non-zero 63-bit descriptor identity."""
+    value = 0xCBF29CE484222325
+    for byte in key.encode("utf-8"):
+        value ^= byte
+        value = (value * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    value &= 0x7FFFFFFFFFFFFFFF
+    return value if value != 0 else 1
+
+
+def _descriptor_id_constant_name(c_enum_prefix: str, descriptor_key: str) -> str:
+    return f"{c_enum_prefix}_DESCRIPTOR_ID_{_c_identifier(descriptor_key).upper()}"
+
+
+def _descriptor_id_define(c_enum_prefix: str, descriptor_key: str) -> str:
+    return f"#define {_descriptor_id_constant_name(c_enum_prefix, descriptor_key)} {_hex_u64_literal(_descriptor_stable_id(descriptor_key))}"
 
 
 def _encoding_id_expr(value: int) -> str:
@@ -758,6 +777,16 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         )
 
     descriptor_refs = sorted((descriptor.key, i) for i, descriptor in enumerate(selected_descriptors))
+    seen_descriptor_ids: dict[int, str] = {}
+    descriptor_id_refs: list[tuple[int, int]] = []
+    for descriptor_ordinal, descriptor in enumerate(selected_descriptors):
+        stable_id = _descriptor_stable_id(descriptor.key)
+        previous_key = seen_descriptor_ids.get(stable_id)
+        if previous_key is not None:
+            raise ValueError(f"descriptor '{descriptor.key}' stable ID collides with '{previous_key}'")
+        seen_descriptor_ids[stable_id] = descriptor.key
+        descriptor_id_refs.append((stable_id, descriptor_ordinal))
+    descriptor_id_refs.sort()
 
     return _CompiledDescriptorSet(
         spec=spec,
@@ -786,6 +815,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         encoding_field_values=encoding_field_values,
         descriptor_rows=descriptor_rows,
         descriptor_refs=descriptor_refs,
+        descriptor_id_refs=descriptor_id_refs,
         canonical_asm_form_ordinals=canonical_asm_form_ordinals,
         asm_forms=asm_forms,
         asm_operand_indices=asm_operand_indices,
@@ -811,18 +841,24 @@ def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         "",
         '#include "loom/codegen/low/descriptors.h"',
         "",
-        "#ifdef __cplusplus",
-        'extern "C" {',
-        "#endif",
-        "",
-        f"const loom_low_descriptor_set_t* {spec.function_name}(void);",
-        "",
-        "#ifdef __cplusplus",
-        '}  // extern "C"',
-        "#endif",
-        "",
-        f"#endif  // {spec.header_guard}",
     ]
+    lines.extend(_descriptor_id_define(spec.c_enum_prefix, descriptor.key) for descriptor in compiled.descriptors)
+    lines.append("")
+    lines.extend(
+        [
+            "#ifdef __cplusplus",
+            'extern "C" {',
+            "#endif",
+            "",
+            f"const loom_low_descriptor_set_t* {spec.function_name}(void);",
+            "",
+            "#ifdef __cplusplus",
+            '}  // extern "C"',
+            "#endif",
+            "",
+            f"#endif  // {spec.header_guard}",
+        ]
+    )
     source = "\n".join(lines) + "\n"
     if not format_output:
         return source
@@ -1154,6 +1190,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         [
             [
                 f".key_string_offset = {pool.ref(f'descriptor_{descriptor.key}')},",
+                f".stable_id = {_descriptor_id_constant_name(spec.c_enum_prefix, descriptor.key)},",
                 f".mnemonic_string_offset = {_optional_string_expr(pool, f'mnemonic_{descriptor.key}' if descriptor.mnemonic is not None else None)},",
                 f".semantic_tag_string_offset = {_optional_string_expr(pool, f'semantic_{descriptor.key}' if descriptor.semantic_tag is not None else None)},",
                 f".feature_mask_word_start = {compiled.descriptor_rows[i]['feature_mask_word_start']},",
@@ -1189,6 +1226,19 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".descriptor_ordinal = {descriptor_ordinal},",
             ]
             for descriptor_key, descriptor_ordinal in compiled.descriptor_refs
+        ],
+    )
+    _emit_array(
+        lines,
+        "loom_low_descriptor_id_ref_t",
+        spec.c_table_prefix,
+        "DescriptorIdRefs",
+        [
+            [
+                f".stable_id = {_hex_u64_literal(stable_id)},",
+                f".descriptor_ordinal = {descriptor_ordinal},",
+            ]
+            for stable_id, descriptor_ordinal in compiled.descriptor_id_refs
         ],
     )
     if compiled.asm_operand_indices:
@@ -1246,6 +1296,8 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
             f"    .descriptor_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}Descriptors),",
             f"    .descriptor_refs = k{spec.c_table_prefix}DescriptorRefs,",
             f"    .descriptor_ref_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}DescriptorRefs),",
+            f"    .descriptor_id_refs = k{spec.c_table_prefix}DescriptorIdRefs,",
+            f"    .descriptor_id_ref_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}DescriptorIdRefs),",
         ]
     )
 
@@ -1313,6 +1365,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
         descriptors.append(
             {
                 "ordinal": i,
+                "stable_id": f"0x{_descriptor_stable_id(descriptor.key):016x}",
                 "key": descriptor.key,
                 "mnemonic": descriptor.mnemonic or "",
                 "semantic_tag": descriptor.semantic_tag or "",
@@ -1363,6 +1416,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
         "table_counts": {
             "descriptors": len(compiled.descriptors),
             "descriptor_refs": len(compiled.descriptor_refs),
+            "descriptor_id_refs": len(compiled.descriptor_id_refs),
             "operands": len(compiled.operands),
             "immediates": len(compiled.immediates),
             "enum_domains": len(compiled.enum_domains),

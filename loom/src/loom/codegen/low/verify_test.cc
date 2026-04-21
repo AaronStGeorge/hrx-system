@@ -850,9 +850,12 @@ static_assert(FEATURE_STRING_END == sizeof(kFeatureTestStrings) - 1,
 #define FEATURE_STRING_OFFSET(field) \
   static_cast<loom_bstring_table_offset_t>(FEATURE_STRING_##field)
 
+#define FEATURE_DESCRIPTOR_ID_ADD_I32 UINT64_C(1)
+
 struct FeatureTestTables {
   loom_low_descriptor_t descriptors[1];
   loom_low_descriptor_ref_t descriptor_refs[1];
+  loom_low_descriptor_id_ref_t descriptor_id_refs[1];
   loom_low_operand_t operands[4];
   loom_low_immediate_t immediates[1];
   loom_low_enum_domain_t enum_domains[1];
@@ -928,6 +931,7 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
 
   tables->descriptors[0].key_string_offset =
       FEATURE_STRING_OFFSET(descriptor_add);
+  tables->descriptors[0].stable_id = FEATURE_DESCRIPTOR_ID_ADD_I32;
   tables->descriptors[0].mnemonic_string_offset =
       FEATURE_STRING_OFFSET(mnemonic_add);
   tables->descriptors[0].semantic_tag_string_offset =
@@ -943,6 +947,8 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
   tables->descriptor_refs[0].key_string_offset =
       FEATURE_STRING_OFFSET(descriptor_add);
   tables->descriptor_refs[0].descriptor_ordinal = 0;
+  tables->descriptor_id_refs[0].stable_id = FEATURE_DESCRIPTOR_ID_ADD_I32;
+  tables->descriptor_id_refs[0].descriptor_ordinal = 0;
 
   tables->set.abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION;
   tables->set.generator_version = 1;
@@ -955,6 +961,9 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
   tables->set.descriptor_count = IREE_ARRAYSIZE(tables->descriptors);
   tables->set.descriptor_refs = tables->descriptor_refs;
   tables->set.descriptor_ref_count = IREE_ARRAYSIZE(tables->descriptor_refs);
+  tables->set.descriptor_id_refs = tables->descriptor_id_refs;
+  tables->set.descriptor_id_ref_count =
+      IREE_ARRAYSIZE(tables->descriptor_id_refs);
   tables->set.operands = tables->operands;
   tables->set.operand_count = IREE_ARRAYSIZE(tables->operands);
   tables->set.immediates = tables->immediates;
