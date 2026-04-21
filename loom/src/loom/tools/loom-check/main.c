@@ -849,11 +849,8 @@ int loom_check_provider_main(int argc, char** argv,
               .fn = loom_check_provider_initialize_low_lower_policy_registry,
               .user_data = &state,
           },
-      .low_legality_provider_list =
-          {
-              .count = state.low_legality_provider_count,
-              .values = state.low_legality_providers,
-          },
+      .low_legality_provider_list = loom_target_low_legality_provider_list_make(
+          state.low_legality_providers, state.low_legality_provider_count),
       .emit_providers =
           {
               .providers = state.emit_providers,

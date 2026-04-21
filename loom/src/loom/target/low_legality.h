@@ -52,10 +52,23 @@ typedef struct loom_target_low_legality_provider_list_t {
   const loom_target_low_legality_provider_t* const* values;
 } loom_target_low_legality_provider_list_t;
 
+// Creates a source legality provider list from borrowed storage.
+static inline loom_target_low_legality_provider_list_t
+loom_target_low_legality_provider_list_make(
+    const loom_target_low_legality_provider_t* const* values,
+    iree_host_size_t count) {
+  loom_target_low_legality_provider_list_t list = {
+      .count = count,
+      .values = values,
+  };
+  return list;
+}
+
 // Returns an empty source legality provider list.
 static inline loom_target_low_legality_provider_list_t
 loom_target_low_legality_provider_list_empty(void) {
-  return (loom_target_low_legality_provider_list_t){0, NULL};
+  loom_target_low_legality_provider_list_t list = {0};
+  return list;
 }
 
 // Returns true if |list| has no source legality providers.

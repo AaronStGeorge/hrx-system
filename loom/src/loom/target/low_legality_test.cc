@@ -93,10 +93,9 @@ TEST(TargetLowLegalityProviderListTest, VerifiesValues) {
       .try_verify_op = IgnoreProviderOp,
   };
   const loom_target_low_legality_provider_t* values[] = {&provider};
-  const loom_target_low_legality_provider_list_t list = {
-      .count = IREE_ARRAYSIZE(values),
-      .values = values,
-  };
+  const loom_target_low_legality_provider_list_t list =
+      loom_target_low_legality_provider_list_make(values,
+                                                  IREE_ARRAYSIZE(values));
   EXPECT_FALSE(loom_target_low_legality_provider_list_is_empty(list));
   IREE_EXPECT_OK(loom_target_low_legality_provider_list_verify(list));
 }
@@ -308,10 +307,9 @@ TEST_F(TargetLowLegalityTest, ProviderRecordsContractDecision) {
       .try_verify_op = RecordDot4iContract,
   };
   const loom_target_low_legality_provider_t* providers[] = {&provider};
-  const loom_target_low_legality_provider_list_t provider_list = {
-      .count = IREE_ARRAYSIZE(providers),
-      .values = providers,
-  };
+  const loom_target_low_legality_provider_list_t provider_list =
+      loom_target_low_legality_provider_list_make(providers,
+                                                  IREE_ARRAYSIZE(providers));
   EmissionCollector collector;
   const loom_target_low_legality_options_t options = {
       .bundle = bundle_,

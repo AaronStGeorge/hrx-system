@@ -101,7 +101,7 @@ static bool loom_target_low_legality_should_stop(
 
 iree_status_t loom_target_low_legality_provider_list_verify(
     loom_target_low_legality_provider_list_t list) {
-  if (list.count == 0) {
+  if (loom_target_low_legality_provider_list_is_empty(list)) {
     return iree_ok_status();
   }
   if (list.values == NULL) {
