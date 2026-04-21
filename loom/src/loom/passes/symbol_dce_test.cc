@@ -65,7 +65,8 @@ class SymbolDCETest : public ::testing::Test {
     return printed;
   }
 
-  void RunSymbolDCE(loom_module_t* module) {
+  void RunSymbolDCE(loom_module_t* module, int64_t expected_symbols_eliminated,
+                    int64_t expected_functions_eliminated) {
     iree_arena_allocator_t pass_arena;
     iree_arena_initialize(&block_pool_, &pass_arena);
     int64_t statistics[2] = {0};
@@ -76,8 +77,8 @@ class SymbolDCETest : public ::testing::Test {
         .statistics = statistics,
     };
     IREE_EXPECT_OK(loom_symbol_dce_run(&pass, module));
-    EXPECT_EQ(statistics[0], 3);
-    EXPECT_EQ(statistics[1], 3);
+    EXPECT_EQ(statistics[0], expected_symbols_eliminated);
+    EXPECT_EQ(statistics[1], expected_functions_eliminated);
     iree_arena_deinitialize(&pass_arena);
   }
 
@@ -148,7 +149,7 @@ low.func.decl target(@vm_target) @dead_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>)
   ModulePtr module(Parse(iree_make_cstring_view(source)));
   ASSERT_NE(module.get(), nullptr);
 
-  RunSymbolDCE(module.get());
+  RunSymbolDCE(module.get(), 3, 3);
   std::string pruned_text = Print(module.get());
   EXPECT_NE(pruned_text.find("@live_add"), std::string::npos);
   EXPECT_EQ(pruned_text.find("low.abi"), std::string::npos);
@@ -161,6 +162,36 @@ low.func.decl target(@vm_target) @dead_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>)
   ModulePtr read_module(ReadModule(bytes));
   ASSERT_NE(read_module.get(), nullptr);
   EXPECT_EQ(pruned_text, Print(read_module.get()));
+}
+
+TEST_F(SymbolDCETest, FunctionExportRootsPrivateEntryAndClosure) {
+  const char* source = R"(
+target.profile @wasm preset("test.profile")
+target.artifact @module target(@wasm)
+
+func.def target(@wasm) abi(wasm_function) export("entry", {artifact = @module}) @entry() {
+  func.call @helper() : ()
+  func.return
+}
+
+func.def target(@wasm) abi(wasm_function) @helper() {
+  func.return
+}
+
+func.def target(@wasm) abi(wasm_function) @dead() {
+  func.return
+}
+)";
+
+  ModulePtr module(Parse(iree_make_cstring_view(source)));
+  ASSERT_NE(module.get(), nullptr);
+
+  RunSymbolDCE(module.get(), 1, 1);
+  std::string pruned_text = Print(module.get());
+  EXPECT_NE(pruned_text.find("@entry"), std::string::npos);
+  EXPECT_NE(pruned_text.find("@helper"), std::string::npos);
+  EXPECT_EQ(pruned_text.find("@dead"), std::string::npos);
+  EXPECT_NE(pruned_text.find("target.artifact @module"), std::string::npos);
 }
 
 }  // namespace

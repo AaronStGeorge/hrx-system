@@ -66,14 +66,24 @@ typedef struct loom_symbol_dce_state_t {
 
 static bool loom_symbol_dce_symbol_is_erasable(const loom_module_t* module,
                                                const loom_symbol_t* symbol) {
-  if (!symbol || !symbol->defining_op) return false;
-  if (iree_any_bit_set(symbol->flags, LOOM_SYMBOL_FLAG_PUBLIC)) return false;
+  if (!symbol || !symbol->defining_op) {
+    return false;
+  }
+  if (iree_any_bit_set(symbol->flags, LOOM_SYMBOL_FLAG_PUBLIC)) {
+    return false;
+  }
 
   if (loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE)) {
     loom_func_like_t function =
         loom_func_like_cast(module, symbol->defining_op);
-    if (loom_func_like_isa(function) &&
-        loom_func_like_visibility(function) != 0) {
+    if (!loom_func_like_isa(function)) {
+      return true;
+    }
+    if (loom_func_like_visibility(function) != 0) {
+      return false;
+    }
+    if (loom_func_like_export_symbol(function) != LOOM_STRING_ID_INVALID ||
+        loom_func_like_export_attrs(function).count > 0) {
       return false;
     }
     return true;
