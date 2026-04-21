@@ -37,7 +37,7 @@
 //                           low-allocation-json @function
 //                           [diagnostics=...] [output=json|none]
 //                           [class=units...].
-//                           Source lowering tests use source-low @target
+//                           Source lowering tests use source-low @function
 //                           [output=module|low|none]
 //                           [diagnostics=none|memory|all]. Linked providers may
 //                           add target-specific emit forms.

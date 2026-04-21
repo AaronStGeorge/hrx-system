@@ -14,6 +14,7 @@
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/schedule.h"
 #include "loom/codegen/low/schedule_json.h"
+#include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
@@ -71,8 +72,8 @@ typedef struct loom_check_emit_request_t {
   loom_check_emit_format_t format;
   // Canonical/user-facing emit target name used in diagnostics.
   iree_string_view_t emit_target_name;
-  // Module-local target.bundle symbol name to materialize after parsing.
-  iree_string_view_t target_bundle_symbol_name;
+  // Module-local source function symbol name used by source-low lowering.
+  iree_string_view_t source_low_function_symbol_name;
   // Module-local function symbol name used by analysis dumps.
   iree_string_view_t analysis_symbol_name;
   // Low descriptor set used by descriptor-manifest dumps.
@@ -498,7 +499,7 @@ static iree_status_t loom_check_emit_parse_request(
   *out_request = (loom_check_emit_request_t){
       .format = LOOM_CHECK_EMIT_LIVENESS_JSON,
       .emit_target_name = IREE_SV("emit"),
-      .target_bundle_symbol_name = iree_string_view_empty(),
+      .source_low_function_symbol_name = iree_string_view_empty(),
       .analysis_symbol_name = iree_string_view_empty(),
       .low_descriptor_set = NULL,
       .low_descriptor_set_key = iree_string_view_empty(),
@@ -645,13 +646,14 @@ static iree_status_t loom_check_emit_parse_request(
     if (!iree_string_view_starts_with(symbol_name, IREE_SV("@"))) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "source-low requires a target bundle symbol name");
+          "source-low requires a source function symbol name");
     }
-    out_request->target_bundle_symbol_name =
+    out_request->source_low_function_symbol_name =
         iree_string_view_substr(symbol_name, 1, IREE_HOST_SIZE_MAX);
-    if (iree_string_view_is_empty(out_request->target_bundle_symbol_name)) {
+    if (iree_string_view_is_empty(
+            out_request->source_low_function_symbol_name)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "target bundle symbol name is required");
+                              "source function symbol name is required");
     }
     IREE_RETURN_IF_ERROR(
         loom_check_emit_parse_source_low_options(option_text, out_request));
@@ -970,12 +972,6 @@ static iree_status_t loom_check_emit_write_low_packet_json(
                                      &result->actual_output);
 }
 
-static bool loom_check_emit_source_low_policy_registry_has_bundle(
-    void* user_data, const loom_target_bundle_t* bundle) {
-  return loom_low_lower_policy_registry_has_bundle(
-      (const loom_low_lower_policy_registry_t*)user_data, bundle);
-}
-
 static iree_status_t loom_check_emit_write_source_low_artifacts(
     const loom_module_t* module, iree_string_builder_t* output) {
   bool has_artifact = false;
@@ -1010,7 +1006,6 @@ static iree_status_t loom_check_emit_write_source_low_text(
   IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_verify(policy_registry));
 
   const loom_target_module_compile_options_t compile_options = {
-      .target_symbol = request->target_bundle_symbol_name,
       .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
                           .user_data = diagnostic_collector},
       .source_resolver = source_resolver,
@@ -1019,39 +1014,40 @@ static iree_status_t loom_check_emit_write_source_low_text(
   IREE_RETURN_IF_ERROR(
       loom_target_module_compile_verify_module(module, &compile_options, 20));
 
-  loom_target_module_compile_target_t target = {0};
-  IREE_RETURN_IF_ERROR(loom_target_module_compile_select_target(
-      module, &compile_options,
-      loom_check_emit_source_low_policy_registry_has_bundle,
-      (void*)policy_registry, IREE_SV("source-to-low"), &target));
-
-  loom_func_like_t source_function = {0};
-  IREE_RETURN_IF_ERROR(loom_target_module_compile_find_source_function(
-      module, &target.bundle_storage.bundle, &source_function));
-
-  const loom_low_lower_policy_t* policy = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_lookup_for_bundle(
-      policy_registry, &target.bundle_storage.bundle, &policy));
-
   loom_target_module_compile_diagnostic_emitter_t pass_emitter = {0};
   loom_target_module_compile_diagnostic_emitter_initialize(
       module, &compile_options, LOOM_EMITTER_PASS, &pass_emitter);
 
-  const loom_low_lower_options_t lower_options = {
-      .target_ref = target.target_ref,
-      .bundle = &target.bundle_storage.bundle,
+  iree_arena_allocator_t selection_arena;
+  iree_arena_initialize(module->arena.block_pool, &selection_arena);
+  loom_low_source_selection_t selection = {0};
+  const loom_low_source_selection_options_t selection_options = {
+      .function_symbol_name = request->source_low_function_symbol_name,
       .descriptor_registry = &low_registry->registry,
-      .descriptor_requirements =
-          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-      .legality_provider_list = legality_provider_list,
-      .legality_diagnostic_flags = request->source_low_diagnostic_flags,
-      .policy = policy,
-      .emitter = loom_target_module_compile_emitter(&pass_emitter),
-      .max_errors = 20,
+      .policy_registry = policy_registry,
+      .lowering_kind = IREE_SV("source-to-low"),
   };
   loom_low_lower_result_t lower_result = {0};
-  IREE_RETURN_IF_ERROR(loom_low_lower_function(module, source_function,
-                                               &lower_options, &lower_result));
+  iree_status_t status = loom_low_select_source_function(
+      module, &selection_options, &selection_arena, &selection);
+  if (iree_status_is_ok(status)) {
+    const loom_low_lower_options_t lower_options = {
+        .target_ref = selection.target_ref,
+        .bundle = selection.target_bundle,
+        .descriptor_registry = &low_registry->registry,
+        .descriptor_requirements =
+            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        .legality_provider_list = legality_provider_list,
+        .legality_diagnostic_flags = request->source_low_diagnostic_flags,
+        .policy = selection.policy,
+        .emitter = loom_target_module_compile_emitter(&pass_emitter),
+        .max_errors = 20,
+    };
+    status = loom_low_lower_function(module, selection.function, &lower_options,
+                                     &lower_result);
+  }
+  iree_arena_deinitialize(&selection_arena);
+  IREE_RETURN_IF_ERROR(status);
   if (lower_result.error_count > 0 || lower_result.low_func_op == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "source-to-low lowering failed with %u error%s",

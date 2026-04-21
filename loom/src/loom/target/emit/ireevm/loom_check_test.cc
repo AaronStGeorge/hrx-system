@@ -58,7 +58,7 @@ class IreeVmLoomCheckTest : public ::testing::Test {
 };
 
 constexpr const char* kVmMixedLowFunction =
-    "target.preset @vm_target {key = \"iree-vm\", source = @vm_mix}\n"
+    "target.profile @vm_target preset(\"iree-vm\")\n"
     "\n"
     "low.func.def target(@vm_target) @vm_mix(%lhs : reg<vm.i32>, "
     "%rhs : reg<vm.i32>) -> (reg<vm.i32>) {\n"

@@ -58,8 +58,7 @@ class WasmLoomCheckTest : public ::testing::Test {
 };
 
 constexpr const char* kWasmMixedLowFunction =
-    "target.preset @wasm_target {key = \"wasm-simd128\", source = "
-    "@wasm_mix}\n"
+    "target.profile @wasm_target preset(\"wasm-simd128\")\n"
     "\n"
     "low.func.def target(@wasm_target) @wasm_mix(%addr : reg<wasm.i32>, "
     "%lhs : reg<wasm.v128>, %rhs : reg<wasm.v128>) -> (reg<wasm.v128>) {\n"

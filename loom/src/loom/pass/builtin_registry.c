@@ -70,14 +70,14 @@ static const loom_pass_requirement_def_t
 
 static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
     {
+        .name = IREE_SVL("function"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_STRING,
+    },
+    {
         .name = IREE_SVL("max-errors"),
         .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,
         .minimum_uint32 = 0,
         .maximum_uint32 = UINT32_MAX,
-    },
-    {
-        .name = IREE_SVL("target"),
-        .kind = LOOM_PASS_OPTION_SCHEMA_STRING,
     },
 };
 

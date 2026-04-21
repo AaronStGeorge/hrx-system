@@ -1,7 +1,7 @@
-// RUN: emit source-low @vm_target output=low
-target.preset @vm_target {key = "iree-vm", source = @vm_add}
+// RUN: emit source-low @vm_add output=low
+target.profile @vm_target preset("iree-vm")
 
-func.def @vm_add(%lhs: i32, %rhs: i32) -> (i32) {
+func.def target(@vm_target) @vm_add(%lhs: i32, %rhs: i32) -> (i32) {
   %sum = scalar.addi %lhs, %rhs : i32
   func.return %sum : i32
 }

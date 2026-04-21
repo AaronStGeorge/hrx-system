@@ -1,7 +1,7 @@
-// RUN: emit source-low @gfx11_global_saddr_fallback_target output=low
-target.preset @gfx11_global_saddr_fallback_target {key = "amdgpu-gfx11", source = @global_saddr_fallback}
+// RUN: emit source-low @global_saddr_fallback output=low
+target.profile @gfx11_global_saddr_fallback_target preset("amdgpu-gfx11")
 
-func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
+func.def target(@gfx11_global_saddr_fallback_target) @global_saddr_fallback(%input: buffer, %output: buffer) {
   %base = index.constant 4 : offset
   %input_view = buffer.view %input[%base] : buffer -> view<4xi32, #dense>
   %output_view = buffer.view %output[%base] : buffer -> view<4xi32, #dense>
@@ -25,10 +25,10 @@ low.func.def target(@gfx11_global_saddr_fallback_target) abi(hal_kernel) @global
 }
 
 // ====
-// RUN: emit source-low @gfx11_i32_b128_target output=low
-target.preset @gfx11_i32_b128_target {key = "amdgpu-gfx11", source = @i32_b128}
+// RUN: emit source-low @i32_b128 output=low
+target.profile @gfx11_i32_b128_target preset("amdgpu-gfx11")
 
-func.def @i32_b128(%input: buffer, %output: buffer) {
+func.def target(@gfx11_i32_b128_target) @i32_b128(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
@@ -96,10 +96,10 @@ low.func.def target(@gfx11_i32_b128_target) abi(hal_kernel) @i32_b128__low() {
 }
 
 // ====
-// RUN: emit source-low @gfx11_i32_bitwise_target output=low
-target.preset @gfx11_i32_bitwise_target {key = "amdgpu-gfx11", source = @i32_bitwise}
+// RUN: emit source-low @i32_bitwise output=low
+target.profile @gfx11_i32_bitwise_target preset("amdgpu-gfx11")
 
-func.def @i32_bitwise(%input: buffer, %output: buffer) {
+func.def target(@gfx11_i32_bitwise_target) @i32_bitwise(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
@@ -137,10 +137,10 @@ low.func.def target(@gfx11_i32_bitwise_target) abi(hal_kernel) @i32_bitwise__low
 }
 
 // ====
-// RUN: emit source-low @gfx11_i32_shift_target output=low
-target.preset @gfx11_i32_shift_target {key = "amdgpu-gfx11", source = @i32_shift}
+// RUN: emit source-low @i32_shift output=low
+target.profile @gfx11_i32_shift_target preset("amdgpu-gfx11")
 
-func.def @i32_shift(%input: buffer, %output: buffer) {
+func.def target(@gfx11_i32_shift_target) @i32_shift(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
@@ -180,10 +180,10 @@ low.func.def target(@gfx11_i32_shift_target) abi(hal_kernel) @i32_shift__low() {
 }
 
 // ====
-// RUN: emit source-low @gfx11_i32_scalarized_target output=low
-target.preset @gfx11_i32_scalarized_target {key = "amdgpu-gfx11", source = @i32_scalarized}
+// RUN: emit source-low @i32_scalarized output=low
+target.profile @gfx11_i32_scalarized_target preset("amdgpu-gfx11")
 
-func.def @i32_scalarized(%input: buffer, %output: buffer) {
+func.def target(@gfx11_i32_scalarized_target) @i32_scalarized(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
@@ -236,10 +236,10 @@ low.func.def target(@gfx11_i32_scalarized_target) abi(hal_kernel) @i32_scalarize
 }
 
 // ====
-// RUN: emit source-low @gfx11_f32_arith_target output=low
-target.preset @gfx11_f32_arith_target {key = "amdgpu-gfx11", source = @f32_arith}
+// RUN: emit source-low @f32_arith output=low
+target.profile @gfx11_f32_arith_target preset("amdgpu-gfx11")
 
-func.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+func.def target(@gfx11_f32_arith_target) @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>
@@ -278,10 +278,10 @@ low.func.def target(@gfx11_f32_arith_target) abi(hal_kernel) @f32_arith__low() {
 }
 
 // ====
-// RUN: emit source-low @gfx11_f32_fma_target output=low
-target.preset @gfx11_f32_fma_target {key = "amdgpu-gfx11", source = @f32_fma}
+// RUN: emit source-low @f32_fma output=low
+target.profile @gfx11_f32_fma_target preset("amdgpu-gfx11")
 
-func.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+func.def target(@gfx11_f32_fma_target) @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>
@@ -322,10 +322,10 @@ low.func.def target(@gfx11_f32_fma_target) abi(hal_kernel) @f32_fma__low() {
 }
 
 // ====
-// RUN: emit source-low @gfx11_f32_scalarized_target output=low
-target.preset @gfx11_f32_scalarized_target {key = "amdgpu-gfx11", source = @f32_scalarized}
+// RUN: emit source-low @f32_scalarized output=low
+target.profile @gfx11_f32_scalarized_target preset("amdgpu-gfx11")
 
-func.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+func.def target(@gfx11_f32_scalarized_target) @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64x4xf32, #dense>
@@ -388,10 +388,10 @@ low.func.def target(@gfx11_f32_scalarized_target) abi(hal_kernel) @f32_scalarize
 }
 
 // ====
-// RUN: emit source-low @gfx11_lds_b128_roundtrip_target output=low
-target.preset @gfx11_lds_b128_roundtrip_target {key = "amdgpu-gfx11", source = @lds_b128_roundtrip}
+// RUN: emit source-low @lds_b128_roundtrip output=low
+target.profile @gfx11_lds_b128_roundtrip_target preset("amdgpu-gfx11")
 
-func.def @lds_b128_roundtrip(%input: buffer, %output: buffer) {
+func.def target(@gfx11_lds_b128_roundtrip_target) @lds_b128_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset

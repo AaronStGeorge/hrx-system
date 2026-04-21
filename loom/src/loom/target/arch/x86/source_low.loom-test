@@ -1,7 +1,7 @@
-// RUN: emit source-low @x86_target output=low
-target.preset @x86_target {key = "x86-avx512", source = @x86_arith}
+// RUN: emit source-low @x86_arith output=low
+target.profile @x86_target preset("x86-avx512")
 
-func.def @x86_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
+func.def target(@x86_target) @x86_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
   %sum = vector.addi %lhs, %rhs : vector<16xi32>
   %diff = vector.subi %sum, %rhs : vector<16xi32>
   func.return %diff : vector<16xi32>
@@ -14,10 +14,10 @@ low.func.def target(@x86_target) abi(object_function) @x86_arith__low(%lhs: reg<
 }
 
 // ====
-// RUN: emit source-low @x86_f32_target output=low
-target.preset @x86_f32_target {key = "x86-avx512", source = @x86_f32_arith}
+// RUN: emit source-low @x86_f32_arith output=low
+target.profile @x86_f32_target preset("x86-avx512")
 
-func.def @x86_f32_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
+func.def target(@x86_f32_target) @x86_f32_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<16xf32>
   %difference = vector.subf %sum, %lhs : vector<16xf32>
   %product = vector.mulf %difference, %rhs : vector<16xf32>

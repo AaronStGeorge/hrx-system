@@ -478,6 +478,36 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "source_selection_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/codegen/low:source_selection",
+)
+
+iree_assert_no_dependency(
+    name = "source_selection_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/codegen/low:source_selection",
+)
+
+iree_assert_no_dependency(
+    name = "source_selection_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/codegen/low:source_selection",
+)
+
+iree_assert_no_dependency(
+    name = "source_selection_no_test_low_registry_dep",
+    dependency = "//loom/src/loom/target/test:low_registry",
+    target = "//loom/src/loom/codegen/low:source_selection",
+)
+
+iree_assert_no_dependency(
+    name = "source_selection_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/codegen/low:source_selection",
+)
+
+iree_assert_no_dependency(
     name = "allocation_materialization_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/codegen/low:allocation_materialization",
@@ -750,11 +780,11 @@ loom_cc_library(
         ":lower",
         ":pass_requirements",
         ":requirements",
+        ":source_selection",
         "//loom/src/loom/ir",
         "//loom/src/loom/pass:pipeline",
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:types",
-        "//loom/src/loom/target:module_compiler",
         "//runtime/src/iree/base",
     ],
 )
@@ -917,6 +947,23 @@ loom_cc_library(
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:types",
         "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "source_selection",
+    srcs = ["source_selection.c"],
+    hdrs = ["source_selection.h"],
+    deps = [
+        ":descriptors",
+        ":lower",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:function_symbol_facts",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:preset_registry",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],

@@ -68,8 +68,7 @@ class AmdgpuLoomCheckTest : public ::testing::Test {
 };
 
 constexpr const char* kAmdgpuGfx11MixedLowFunction =
-    "target.preset @gfx11_target {key = \"amdgpu-gfx11\", source = "
-    "@gfx11_mix}\n"
+    "target.profile @gfx11_target preset(\"amdgpu-gfx11\")\n"
     "\n"
     "low.func.def target(@gfx11_target) @gfx11_mix(%s0 : reg<amdgpu.sgpr>, "
     "%s1 : reg<amdgpu.sgpr>, %v0 : reg<amdgpu.vgpr>, "
@@ -109,9 +108,9 @@ constexpr const char* kAmdgpuGfx11MixedLowFunction =
     "}\n";
 
 struct AmdgpuTargetCase {
-  // Symbol name for the target preset under test.
+  // Symbol name for the target profile under test.
   iree_string_view_t target_symbol;
-  // Target preset key that selects the descriptor set.
+  // Target profile preset key that selects the descriptor set.
   iree_string_view_t target_key;
 };
 
@@ -124,17 +123,18 @@ const AmdgpuTargetCase kAmdgpuCurrentTargets[] = {
 
 static std::string AmdgpuB128CopySource(iree_string_view_t target_symbol,
                                         iree_string_view_t target_key) {
-  std::string source = "// RUN: emit source-low @";
+  std::string source = "// RUN: emit source-low @copy_b128 output=low\n";
+  source += "target.profile @";
   source.append(target_symbol.data, target_symbol.size);
-  source += " output=low\n";
-  source += "target.preset @";
-  source.append(target_symbol.data, target_symbol.size);
-  source += " {key = \"";
+  source += " preset(\"";
   source.append(target_key.data, target_key.size);
   source +=
-      "\", source = @copy_b128}\n"
+      "\")\n"
       "\n"
-      "func.def @copy_b128(%input: buffer, %output: buffer) {\n"
+      "func.def target(@";
+  source.append(target_symbol.data, target_symbol.size);
+  source +=
+      ") @copy_b128(%input: buffer, %output: buffer) {\n"
       "  %tid = kernel.workitem.id<x> : index\n"
       "  %zero = index.constant 0 : offset\n"
       "  %input_view = buffer.view %input[%zero] : buffer -> "
@@ -154,19 +154,19 @@ static std::string AmdgpuB128CopySource(iree_string_view_t target_symbol,
 static std::string AmdgpuSourceLowCase(iree_string_view_t target_symbol,
                                        iree_string_view_t target_key,
                                        const char* output, const char* body) {
-  std::string source = "// RUN: emit source-low @";
-  source.append(target_symbol.data, target_symbol.size);
-  source += " output=";
+  std::string source = "// RUN: emit source-low @case output=";
   source += output;
   source += "\n";
-  source += "target.preset @";
+  source += "target.profile @";
   source.append(target_symbol.data, target_symbol.size);
-  source += " {key = \"";
+  source += " preset(\"";
   source.append(target_key.data, target_key.size);
   source +=
-      "\", source = @case}\n"
+      "\")\n"
       "\n"
-      "func.def @case(%input: buffer, %output: buffer) {\n";
+      "func.def target(@";
+  source.append(target_symbol.data, target_symbol.size);
+  source += ") @case(%input: buffer, %output: buffer) {\n";
   source += body;
   source +=
       "  func.return\n"

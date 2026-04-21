@@ -67,7 +67,7 @@ class X86LoomCheckTest : public ::testing::Test {
 };
 
 constexpr const char* kX86MixedLowFunction =
-    "target.preset @x86_target {key = \"x86-avx512\", source = @x86_mix}\n"
+    "target.profile @x86_target preset(\"x86-avx512\")\n"
     "\n"
     "low.func.def target(@x86_target) @x86_mix(%base : reg<x86.gpr64>, "
     "%acc : reg<x86.zmm>, %lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>) -> "

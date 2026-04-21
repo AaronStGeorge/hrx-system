@@ -266,12 +266,12 @@ loom_cc_library(
     ::lower
     ::pass_requirements
     ::requirements
+    ::source_selection
     iree::base
     loom::src::loom::ir
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
-    loom::src::loom::target::module_compiler
   PUBLIC
 )
 
@@ -462,6 +462,26 @@ loom_cc_library(
     loom::src::loom::target::low_legality
     loom::src::loom::target::types
     loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    source_selection
+  HDRS
+    "source_selection.h"
+  SRCS
+    "source_selection.c"
+  DEPS
+    ::descriptors
+    ::lower
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::ir
+    loom::src::loom::ops::function_symbol_facts
+    loom::src::loom::ops::target
+    loom::src::loom::target::preset_registry
   PUBLIC
 )
 

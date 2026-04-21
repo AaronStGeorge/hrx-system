@@ -1,7 +1,7 @@
-// RUN: emit source-low @gfx11_lds_b32_diagnostics_target diagnostics=memory output=none
-target.preset @gfx11_lds_b32_diagnostics_target {key = "amdgpu-gfx11", source = @lds_b32_diagnostics}
+// RUN: emit source-low @lds_b32_diagnostics diagnostics=memory output=none
+target.profile @gfx11_lds_b32_diagnostics_target preset("amdgpu-gfx11")
 
-func.def @lds_b32_diagnostics(%output: buffer) {
+func.def target(@gfx11_lds_b32_diagnostics_target) @lds_b32_diagnostics(%output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -18,10 +18,10 @@ func.def @lds_b32_diagnostics(%output: buffer) {
 }
 
 // ====
-// RUN: emit source-low @gfx11_lds_padded_diagnostics_target diagnostics=memory output=none
-target.preset @gfx11_lds_padded_diagnostics_target {key = "amdgpu-gfx11", source = @lds_padded_diagnostics}
+// RUN: emit source-low @lds_padded_diagnostics diagnostics=memory output=none
+target.profile @gfx11_lds_padded_diagnostics_target preset("amdgpu-gfx11")
 
-func.def @lds_padded_diagnostics(%output: buffer) {
+func.def target(@gfx11_lds_padded_diagnostics_target) @lds_padded_diagnostics(%output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 2048 : offset
@@ -39,10 +39,10 @@ func.def @lds_padded_diagnostics(%output: buffer) {
 }
 
 // ====
-// RUN: emit source-low @gfx11_lds_read2_write2_diagnostics_target diagnostics=memory output=none
-target.preset @gfx11_lds_read2_write2_diagnostics_target {key = "amdgpu-gfx11", source = @lds_read2_write2_diagnostics}
+// RUN: emit source-low @lds_read2_write2_diagnostics diagnostics=memory output=none
+target.profile @gfx11_lds_read2_write2_diagnostics_target preset("amdgpu-gfx11")
 
-func.def @lds_read2_write2_diagnostics(%output: buffer) {
+func.def target(@gfx11_lds_read2_write2_diagnostics_target) @lds_read2_write2_diagnostics(%output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 2048 : offset
@@ -60,10 +60,10 @@ func.def @lds_read2_write2_diagnostics(%output: buffer) {
 }
 
 // ====
-// RUN: emit source-low @gfx11_lds_conflict_risk_diagnostics_target diagnostics=memory output=none
-target.preset @gfx11_lds_conflict_risk_diagnostics_target {key = "amdgpu-gfx11", source = @lds_conflict_risk_diagnostics}
+// RUN: emit source-low @lds_conflict_risk_diagnostics diagnostics=memory output=none
+target.profile @gfx11_lds_conflict_risk_diagnostics_target preset("amdgpu-gfx11")
 
-func.def @lds_conflict_risk_diagnostics(%output: buffer) {
+func.def target(@gfx11_lds_conflict_risk_diagnostics_target) @lds_conflict_risk_diagnostics(%output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset

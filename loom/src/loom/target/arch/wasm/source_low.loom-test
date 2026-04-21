@@ -1,7 +1,7 @@
-// RUN: emit source-low @wasm_target output=low
-target.preset @wasm_target {key = "wasm-simd128", source = @wasm_arith}
+// RUN: emit source-low @wasm_arith output=low
+target.profile @wasm_target preset("wasm-simd128")
 
-func.def @wasm_arith(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> (vector<4xi32>) {
+func.def target(@wasm_target) @wasm_arith(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> (vector<4xi32>) {
   %sum = vector.addi %lhs, %rhs : vector<4xi32>
   %diff = vector.subi %sum, %rhs : vector<4xi32>
   func.return %diff : vector<4xi32>
@@ -14,10 +14,10 @@ low.func.def target(@wasm_target) abi(wasm_function) @wasm_arith__low(%lhs: reg<
 }
 
 // ====
-// RUN: emit source-low @wasm_f32_target output=low
-target.preset @wasm_f32_target {key = "wasm-simd128", source = @wasm_f32_arith}
+// RUN: emit source-low @wasm_f32_arith output=low
+target.profile @wasm_f32_target preset("wasm-simd128")
 
-func.def @wasm_f32_arith(%lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4xf32>) {
+func.def target(@wasm_f32_target) @wasm_f32_arith(%lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<4xf32>
   %product = vector.mulf %sum, %rhs : vector<4xf32>
   func.return %product : vector<4xf32>
@@ -31,10 +31,10 @@ low.func.def target(@wasm_f32_target) abi(wasm_function) @wasm_f32_arith__low(%l
 }
 
 // ====
-// RUN: emit source-low @wasm_splat_target output=low
-target.preset @wasm_splat_target {key = "wasm-simd128", source = @wasm_splat}
+// RUN: emit source-low @wasm_splat output=low
+target.profile @wasm_splat_target preset("wasm-simd128")
 
-func.def @wasm_splat(%value: i32, %rhs: vector<4xi32>) -> (vector<4xi32>) {
+func.def target(@wasm_splat_target) @wasm_splat(%value: i32, %rhs: vector<4xi32>) -> (vector<4xi32>) {
   %splat = vector.splat %value : vector<4xi32>
   %sum = vector.addi %splat, %rhs : vector<4xi32>
   func.return %sum : vector<4xi32>
