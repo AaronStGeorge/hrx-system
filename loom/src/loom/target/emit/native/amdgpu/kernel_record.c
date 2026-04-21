@@ -24,6 +24,65 @@ typedef struct loom_amdgpu_kernel_record_register_usage_t {
   uint32_t next_free_vgpr;
 } loom_amdgpu_kernel_record_register_usage_t;
 
+typedef struct loom_amdgpu_kernel_record_segment_usage_t {
+  // Fixed bytes of workgroup LDS required by low.slot records.
+  uint32_t group_segment_fixed_size;
+  // Fixed bytes of invocation-private backing storage required by low.slot
+  // records.
+  uint32_t private_segment_fixed_size;
+} loom_amdgpu_kernel_record_segment_usage_t;
+
+static bool loom_amdgpu_kernel_record_symbol_ref_equal(loom_symbol_ref_t lhs,
+                                                       loom_symbol_ref_t rhs) {
+  return lhs.module_id == rhs.module_id && lhs.symbol_id == rhs.symbol_id;
+}
+
+static bool loom_amdgpu_kernel_record_u64_is_power_of_two(uint64_t value) {
+  return value != 0 && (value & (value - 1)) == 0;
+}
+
+static iree_status_t loom_amdgpu_kernel_record_checked_align_u64(
+    uint64_t value, uint64_t alignment, uint64_t* out_aligned_value) {
+  IREE_ASSERT_ARGUMENT(out_aligned_value);
+  *out_aligned_value = 0;
+  if (!loom_amdgpu_kernel_record_u64_is_power_of_two(alignment)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU kernel emission low slot alignment must be a power of two");
+  }
+  const uint64_t alignment_mask = alignment - 1;
+  if (value > UINT64_MAX - alignment_mask) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU kernel emission segment layout alignment overflows");
+  }
+  *out_aligned_value = (value + alignment_mask) & ~alignment_mask;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_kernel_record_accumulate_slot_size(
+    const loom_op_t* slot_op, uint64_t* inout_segment_size) {
+  IREE_ASSERT_ARGUMENT(inout_segment_size);
+  const int64_t slot_size = loom_low_slot_size(slot_op);
+  const int64_t slot_alignment = loom_low_slot_align(slot_op);
+  if (slot_size < 0 || slot_alignment <= 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU kernel emission low slot sizes and alignments must be "
+        "positive");
+  }
+  uint64_t aligned_segment_size = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_checked_align_u64(
+      *inout_segment_size, (uint64_t)slot_alignment, &aligned_segment_size));
+  if (aligned_segment_size > UINT64_MAX - (uint64_t)slot_size) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU kernel emission fixed segment size overflows");
+  }
+  *inout_segment_size = aligned_segment_size + (uint64_t)slot_size;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_kernel_record_concat3(
     iree_string_view_t a, iree_string_view_t b, iree_string_view_t c,
     iree_string_view_t* out_value, iree_arena_allocator_t* arena) {
@@ -303,6 +362,57 @@ static iree_status_t loom_amdgpu_kernel_record_collect_register_usage(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_kernel_record_collect_segment_usage(
+    const loom_module_t* module, const loom_op_t* function_op,
+    loom_amdgpu_kernel_record_segment_usage_t* out_usage) {
+  IREE_ASSERT_ARGUMENT(out_usage);
+  *out_usage = (loom_amdgpu_kernel_record_segment_usage_t){0};
+  const loom_symbol_ref_t function_ref = loom_low_func_def_callee(function_op);
+  uint64_t group_segment_size = 0;
+  uint64_t private_segment_size = 0;
+  const loom_block_t* module_block =
+      loom_region_const_entry_block(module->body);
+  const loom_op_t* op = NULL;
+  loom_block_for_each_op(module_block, op) {
+    if (!loom_low_slot_isa(op) ||
+        !loom_amdgpu_kernel_record_symbol_ref_equal(loom_low_slot_function(op),
+                                                    function_ref)) {
+      continue;
+    }
+    switch (loom_low_slot_space(op)) {
+      case LOOM_LOW_SLOT_SPACE_LDS: {
+        IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_accumulate_slot_size(
+            op, &group_segment_size));
+        break;
+      }
+      case LOOM_LOW_SLOT_SPACE_PRIVATE: {
+        IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_accumulate_slot_size(
+            op, &private_segment_size));
+        break;
+      }
+      case LOOM_LOW_SLOT_SPACE_STACK:
+      case LOOM_LOW_SLOT_SPACE_SCRATCH:
+        return iree_make_status(
+            IREE_STATUS_UNIMPLEMENTED,
+            "AMDGPU kernel emission does not lower stack/scratch low slots to "
+            "kernel metadata yet");
+      default:
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "AMDGPU kernel emission found a low slot with unknown storage "
+            "space");
+    }
+  }
+  if (group_segment_size > UINT32_MAX || private_segment_size > UINT32_MAX) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU kernel emission fixed segment sizes exceed metadata limits");
+  }
+  out_usage->group_segment_fixed_size = (uint32_t)group_segment_size;
+  out_usage->private_segment_fixed_size = (uint32_t)private_segment_size;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_kernel_record_validate_kernarg_live_in(
     const loom_low_allocation_sidecar_t* allocation,
     const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout) {
@@ -451,6 +561,9 @@ iree_status_t loom_amdgpu_kernel_record_build(
   loom_amdgpu_kernel_record_register_usage_t register_usage = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_register_usage(
       allocation, &register_usage));
+  loom_amdgpu_kernel_record_segment_usage_t segment_usage = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_segment_usage(
+      schedule->module, schedule->function_op, &segment_usage));
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_kernarg_live_in(
       allocation, abi_layout));
 
@@ -505,8 +618,10 @@ iree_status_t loom_amdgpu_kernel_record_build(
               .kernarg_segment_alignment =
                   abi_layout->kernarg_segment_alignment,
               .wavefront_size = processor->default_wavefront_size,
-              .group_segment_fixed_size = 0,
-              .private_segment_fixed_size = 0,
+              .group_segment_fixed_size =
+                  segment_usage.group_segment_fixed_size,
+              .private_segment_fixed_size =
+                  segment_usage.private_segment_fixed_size,
               .sgpr_count = next_free_sgpr,
               .vgpr_count = register_usage.next_free_vgpr,
               .max_flat_workgroup_size = hal_kernel->flat_workgroup_size_max,

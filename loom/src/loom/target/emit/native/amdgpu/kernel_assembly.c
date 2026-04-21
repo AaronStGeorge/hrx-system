@@ -22,10 +22,12 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder, ".amdhsa_kernel %.*s\n", (int)record->symbol.size,
       record->symbol.data));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder,
-      "  .amdhsa_group_segment_fixed_size 0\n"
-      "  .amdhsa_private_segment_fixed_size 0\n"));
+      "  .amdhsa_group_segment_fixed_size %" PRIu32
+      "\n"
+      "  .amdhsa_private_segment_fixed_size %" PRIu32 "\n",
+      kernel->group_segment_fixed_size, kernel->private_segment_fixed_size));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder, "  .amdhsa_kernarg_size %" PRIu32 "\n",
       kernel->kernarg_segment_size));

@@ -24,6 +24,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/types.h"
+#include "loom/util/fact_table.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -263,6 +264,19 @@ const loom_target_bundle_t* loom_low_lower_context_bundle(
 // Returns the selected descriptor set.
 const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
     const loom_low_lower_context_t* context);
+
+// Returns source value facts computed before preflight. The table describes
+// the source function being lowered and remains valid only during callbacks.
+const loom_value_fact_table_t* loom_low_lower_context_fact_table(
+    const loom_low_lower_context_t* context);
+
+// Creates a module-local symbol derived from the emitted low function symbol.
+// The result is suitable for target-owned function records such as low.slot
+// declarations. |suffix| is appended to the low function name; |index| is then
+// appended in decimal form when |append_index| is true.
+iree_status_t loom_low_lower_create_function_symbol(
+    loom_low_lower_context_t* context, iree_string_view_t suffix,
+    bool append_index, uint32_t index, loom_symbol_ref_t* out_symbol_ref);
 
 // Maps |source_type| through the active policy. A policy that rejects a user
 // type emits a diagnostic and returns loom_type_none() in |out_low_type|.

@@ -912,6 +912,7 @@ loom_cc_library(
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:types",
+        "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],

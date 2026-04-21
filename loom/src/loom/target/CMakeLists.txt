@@ -180,6 +180,7 @@ loom_cc_library(
     loom::src::loom::ops::target
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
+    loom::src::loom::util::fact_table
     loom::src::loom::util::walk
   PUBLIC
 )

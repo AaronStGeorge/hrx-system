@@ -22,6 +22,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/types.h"
+#include "loom/util/fact_table.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -92,6 +93,9 @@ typedef struct loom_target_low_legality_options_t {
   loom_low_descriptor_requirement_flags_t descriptor_requirements;
   // Optional target-specific source legality providers.
   loom_target_low_legality_provider_list_t provider_list;
+  // Optional caller-owned facts for |function|. When omitted, legality
+  // computes a transient table in its scratch arena.
+  const loom_value_fact_table_t* fact_table;
   // Structured diagnostic emitter for user legality failures and remarks.
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting the walk. Zero means no
@@ -135,6 +139,10 @@ const loom_target_bundle_t* loom_target_low_legality_bundle(
 
 // Returns the selected low descriptor set.
 const loom_low_descriptor_set_t* loom_target_low_legality_descriptor_set(
+    const loom_target_low_legality_context_t* context);
+
+// Returns source value facts available to target-specific legality providers.
+const loom_value_fact_table_t* loom_target_low_legality_fact_table(
     const loom_target_low_legality_context_t* context);
 
 // Emits ERR_BACKEND_001 for an unsupported legality subject.

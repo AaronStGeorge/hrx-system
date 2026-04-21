@@ -33,6 +33,8 @@ struct loom_low_lower_context_t {
   loom_low_lower_result_t* result;
   // Scratch arena for transient maps and remapped operand lists.
   iree_arena_allocator_t arena;
+  // Source value facts computed once before preflight.
+  loom_value_fact_table_t fact_table;
   // Builder used while emitting the low function.
   loom_builder_t builder;
   // Emitted low.func.def operation, or NULL before emission starts.
@@ -372,6 +374,11 @@ const loom_target_bundle_t* loom_low_lower_context_bundle(
 const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
     const loom_low_lower_context_t* context) {
   return context->descriptor_set;
+}
+
+const loom_value_fact_table_t* loom_low_lower_context_fact_table(
+    const loom_low_lower_context_t* context) {
+  return &context->fact_table;
 }
 
 iree_status_t loom_low_lower_register_class_string_id(
@@ -719,6 +726,23 @@ static iree_status_t loom_low_lower_create_low_symbol(
   }
   return loom_low_lower_create_derived_symbol(
       context, source_name, suffix, /*append_index=*/false, 0, out_symbol_ref);
+}
+
+iree_status_t loom_low_lower_create_function_symbol(
+    loom_low_lower_context_t* context, iree_string_view_t suffix,
+    bool append_index, uint32_t index, loom_symbol_ref_t* out_symbol_ref) {
+  IREE_ASSERT_ARGUMENT(out_symbol_ref);
+  *out_symbol_ref = loom_symbol_ref_null();
+  if (context->low_func_op == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "target-low function symbols can only be created after low.func.def "
+        "emission starts");
+  }
+  iree_string_view_t low_function_name = loom_low_lower_symbol_name(
+      context->module, loom_low_func_def_callee(context->low_func_op));
+  return loom_low_lower_create_derived_symbol(
+      context, low_function_name, suffix, append_index, index, out_symbol_ref);
 }
 
 static iree_status_t loom_low_lower_intern_type_id(
@@ -1255,39 +1279,53 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
                             "source function must have a body");
   }
 
-  loom_target_low_legality_options_t legality_options = {
-      .bundle = options->bundle,
-      .descriptor_registry = options->descriptor_registry,
-      .descriptor_requirements = options->descriptor_requirements,
-      .provider_list = options->legality_provider_list,
-      .emitter = options->emitter,
-      .max_errors = options->max_errors,
-  };
-  loom_target_low_legality_result_t legality_result = {};
-  IREE_RETURN_IF_ERROR(loom_target_low_verify_function_legality(
-      module, source_function, &legality_options, &legality_result));
-
-  out_result->error_count = legality_result.error_count;
-  out_result->remark_count = legality_result.remark_count;
-  out_result->descriptor_set = legality_result.descriptor_set;
-  if (out_result->error_count != 0) {
-    return iree_ok_status();
-  }
-
   loom_low_lower_context_t context = {
       .module = module,
       .source_function = source_function,
       .options = options,
       .policy = options->policy,
-      .descriptor_set = legality_result.descriptor_set,
       .result = out_result,
       .value_map_count = module->values.count,
   };
   iree_arena_initialize(module->arena.block_pool, &context.arena);
 
-  iree_status_t status = iree_arena_allocate_array(
-      &context.arena, context.value_map_count, sizeof(*context.value_map),
-      (void**)&context.value_map);
+  iree_status_t status = loom_value_fact_table_initialize(
+      &context.fact_table, &context.arena, module->values.count);
+  if (iree_status_is_ok(status)) {
+    status = loom_value_fact_table_compute(&context.fact_table, module,
+                                           source_function);
+  }
+
+  loom_target_low_legality_result_t legality_result = {};
+  if (iree_status_is_ok(status)) {
+    loom_target_low_legality_options_t legality_options = {
+        .bundle = options->bundle,
+        .descriptor_registry = options->descriptor_registry,
+        .descriptor_requirements = options->descriptor_requirements,
+        .provider_list = options->legality_provider_list,
+        .fact_table = &context.fact_table,
+        .emitter = options->emitter,
+        .max_errors = options->max_errors,
+    };
+    status = loom_target_low_verify_function_legality(
+        module, source_function, &legality_options, &legality_result);
+  }
+  if (iree_status_is_ok(status)) {
+    out_result->error_count = legality_result.error_count;
+    out_result->remark_count = legality_result.remark_count;
+    out_result->descriptor_set = legality_result.descriptor_set;
+    context.descriptor_set = legality_result.descriptor_set;
+  }
+  if (iree_status_is_ok(status) && out_result->error_count != 0) {
+    iree_arena_deinitialize(&context.arena);
+    return iree_ok_status();
+  }
+
+  if (iree_status_is_ok(status)) {
+    status = iree_arena_allocate_array(&context.arena, context.value_map_count,
+                                       sizeof(*context.value_map),
+                                       (void**)&context.value_map);
+  }
   if (iree_status_is_ok(status)) {
     for (iree_host_size_t i = 0; i < context.value_map_count; ++i) {
       context.value_map[i] = LOOM_VALUE_ID_INVALID;

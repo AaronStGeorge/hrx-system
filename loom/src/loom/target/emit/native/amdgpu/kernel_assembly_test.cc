@@ -321,6 +321,42 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsKernelEnvelopeForGfx11) {
   EXPECT_NE(output.find(".end_amdgpu_metadata\n"), std::string::npos);
 }
 
+TEST_F(AmdgpuKernelAssemblyTest, EmitsFixedSegmentSizesFromLowSlots) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  BuildSidecarsForPreset(
+      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  low.return\n"
+      "}\n"
+      "low.slot @lds0 {align = 64, function = @loom_kernel, size = 128, "
+      "space = lds}\n"
+      "low.slot @lds1 {align = 16, function = @loom_kernel, size = 16, "
+      "space = lds}\n"
+      "low.slot @private0 {align = 16, function = @loom_kernel, size = 12, "
+      "space = private}\n",
+      &sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly(&packetization.schedule,
+                                                  &packetization.allocation,
+                                                  &builder, &sidecar_arena));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+  EXPECT_NE(output.find("  .amdhsa_group_segment_fixed_size 144\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_private_segment_fixed_size 12\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("      .group_segment_fixed_size: 144\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("      .private_segment_fixed_size: 12\n"),
+            std::string::npos);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
 TEST_F(AmdgpuKernelAssemblyTest, EmitsHalBufferResourceMetadata) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);

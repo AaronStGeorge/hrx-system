@@ -23,6 +23,7 @@
 #include "loom/ops/target/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
+#include "loom/util/fact_table.h"
 #include "loom/util/walk.h"
 
 struct loom_target_low_legality_context_t {
@@ -34,8 +35,12 @@ struct loom_target_low_legality_context_t {
   const loom_target_low_legality_options_t* options;
   // Descriptor set selected by options.bundle.
   const loom_low_descriptor_set_t* descriptor_set;
+  // Source facts visible to target-specific legality providers.
+  const loom_value_fact_table_t* fact_table;
   // Result object receiving counters and selected descriptor set.
   loom_target_low_legality_result_t* result;
+  // Locally computed fact table when the caller did not provide one.
+  loom_value_fact_table_t local_fact_table;
   // Scratch arena for the IR walker.
   iree_arena_allocator_t arena;
 };
@@ -203,6 +208,11 @@ const loom_target_bundle_t* loom_target_low_legality_bundle(
 const loom_low_descriptor_set_t* loom_target_low_legality_descriptor_set(
     const loom_target_low_legality_context_t* context) {
   return context->descriptor_set;
+}
+
+const loom_value_fact_table_t* loom_target_low_legality_fact_table(
+    const loom_target_low_legality_context_t* context) {
+  return context->fact_table;
 }
 
 static bool loom_target_low_legality_codegen_format_is_low(
@@ -640,8 +650,23 @@ iree_status_t loom_target_low_verify_function_legality(
   };
   iree_arena_initialize(module->arena.block_pool, &context.arena);
 
-  iree_status_t status =
-      loom_target_low_legality_verify_function_signature(&context);
+  iree_status_t status = iree_ok_status();
+  if (options->fact_table != NULL) {
+    context.fact_table = options->fact_table;
+  } else {
+    status = loom_value_fact_table_initialize(
+        &context.local_fact_table, &context.arena, module->values.count);
+    if (iree_status_is_ok(status)) {
+      status = loom_value_fact_table_compute(&context.local_fact_table, module,
+                                             function);
+    }
+    if (iree_status_is_ok(status)) {
+      context.fact_table = &context.local_fact_table;
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_low_legality_verify_function_signature(&context);
+  }
   loom_region_t* body = loom_func_like_body(function);
   if (iree_status_is_ok(status) && body) {
     loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
