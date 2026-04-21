@@ -306,7 +306,7 @@ function(_loom_check_enable_provider _target _definition _library)
   )
 endfunction()
 
-if("amdgpu" IN_LIST IREE_LOOM_CHECK_PROVIDERS AND IREE_HAL_DRIVER_AMDGPU)
+if("amdgpu" IN_LIST IREE_LOOM_CHECK_PROVIDERS)
   _loom_check_enable_provider(
     ${_LOOM_CHECK_TARGET}
     LOOM_CHECK_HAVE_AMDGPU

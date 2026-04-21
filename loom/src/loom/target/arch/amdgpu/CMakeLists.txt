@@ -335,20 +335,37 @@ loom_cc_library(
 loom_cc_library(
   NAME
     check_provider
+  COPTS
+
   HDRS
     "check_provider.h"
   SRCS
     "check_provider.c"
   DEPS
-    ::loom_check_requirements
     ::low_registry
     ::lower
-    ::amdgpu_hal_backend
     iree::base
-    loom::src::loom::tools::loom-check::hal_run_provider
+    loom::src::loom::target::emit::native::amdgpu::loom_check
     loom::src::loom::tools::loom-check::main
   PUBLIC
 )
+
+iree_package_name(_LOOM_AMDGPU_PACKAGE_NAME)
+set(_LOOM_AMDGPU_CHECK_PROVIDER_TARGET "${_LOOM_AMDGPU_PACKAGE_NAME}_check_provider")
+
+if(IREE_HAL_DRIVER_AMDGPU)
+  target_compile_definitions(${_LOOM_AMDGPU_CHECK_PROVIDER_TARGET} PRIVATE
+    LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER=1
+  )
+  target_link_libraries(${_LOOM_AMDGPU_CHECK_PROVIDER_TARGET} PRIVATE
+    ${_LOOM_AMDGPU_PACKAGE_NAME}_loom_check_requirements
+    ${_LOOM_AMDGPU_PACKAGE_NAME}_amdgpu_hal_backend
+    loom_src_loom_tools_loom-check_hal_run_provider
+  )
+endif()
+
+unset(_LOOM_AMDGPU_CHECK_PROVIDER_TARGET)
+unset(_LOOM_AMDGPU_PACKAGE_NAME)
 
 loom_cc_library(
   NAME

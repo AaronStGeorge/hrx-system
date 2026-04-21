@@ -6,7 +6,9 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_select",
     "iree_assert_no_dependency",
+    "iree_cmake_extra_content",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -28,6 +30,13 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+config_setting(
+    name = "hal_driver_enabled",
+    flag_values = {
+        "//runtime/src/iree/hal/drivers:enabled_drivers": "amdgpu",
+    },
 )
 
 #===------------------------------------------------------------------------===#
@@ -823,15 +832,48 @@ loom_cc_library(
     name = "check_provider",
     srcs = ["check_provider.c"],
     hdrs = ["check_provider.h"],
+    copts = iree_select({
+        ":hal_driver_enabled": [
+            "-DLOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER=1",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
-        ":loom_check_requirements",
         ":low_registry",
         ":lower",
-        ":amdgpu_hal_backend",
-        "//loom/src/loom/tools/loom-check:hal_run_provider",
+        "//loom/src/loom/target/emit/native/amdgpu:loom_check",
         "//loom/src/loom/tools/loom-check:main",
         "//runtime/src/iree/base",
-    ],
+    ] + iree_select({
+        ":hal_driver_enabled": [
+            ":loom_check_requirements",
+            ":amdgpu_hal_backend",
+            "//loom/src/loom/tools/loom-check:hal_run_provider",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+iree_cmake_extra_content(
+    content = """
+iree_package_name(_LOOM_AMDGPU_PACKAGE_NAME)
+set(_LOOM_AMDGPU_CHECK_PROVIDER_TARGET "${_LOOM_AMDGPU_PACKAGE_NAME}_check_provider")
+
+if(IREE_HAL_DRIVER_AMDGPU)
+  target_compile_definitions(${_LOOM_AMDGPU_CHECK_PROVIDER_TARGET} PRIVATE
+    LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER=1
+  )
+  target_link_libraries(${_LOOM_AMDGPU_CHECK_PROVIDER_TARGET} PRIVATE
+    ${_LOOM_AMDGPU_PACKAGE_NAME}_loom_check_requirements
+    ${_LOOM_AMDGPU_PACKAGE_NAME}_amdgpu_hal_backend
+    loom_src_loom_tools_loom-check_hal_run_provider
+  )
+endif()
+
+unset(_LOOM_AMDGPU_CHECK_PROVIDER_TARGET)
+unset(_LOOM_AMDGPU_PACKAGE_NAME)
+""",
+    inline = True,
 )
 
 loom_cc_library(

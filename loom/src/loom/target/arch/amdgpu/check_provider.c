@@ -6,12 +6,23 @@
 
 #include "loom/target/arch/amdgpu/check_provider.h"
 
+#include "loom/target/emit/native/amdgpu/loom_check.h"
+
+#ifndef LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
+#define LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER 0
+#endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
+
+#if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 #include "loom/target/arch/amdgpu/loom_check_requirements.h"
+#endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
+#if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 #include "loom/target/arch/amdgpu/amdgpu_hal_backend.h"
 #include "loom/tools/loom-check/hal_run_provider.h"
+#endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 
+#if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 static const loom_run_hal_backend_t* const kLoomAmdgpuCheckHalBackends[] = {
     &iree_run_loom_amdgpu_hal_backend,
 };
@@ -34,11 +45,19 @@ static const loom_check_hal_run_provider_t kLoomAmdgpuCheckHalRunProvider = {
 static const loom_check_run_provider_t* const kLoomAmdgpuCheckRunProviders[] = {
     &kLoomAmdgpuCheckHalRunProvider.base,
 };
+#endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 
+static const loom_check_emit_provider_t* const kLoomAmdgpuCheckEmitProviders[] =
+    {
+        &loom_amdgpu_native_loom_check_emit_provider,
+};
+
+#if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 static const loom_check_requirement_provider_t* const
     kLoomAmdgpuCheckRequirementProviders[] = {
         &loom_amdgpu_loom_check_requirement_provider,
 };
+#endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 
 const loom_check_provider_t loom_amdgpu_check_provider = {
     .name = IREE_SVL("amdgpu"),
@@ -46,9 +65,13 @@ const loom_check_provider_t loom_amdgpu_check_provider = {
         loom_amdgpu_low_descriptor_registry_initialize,
     .initialize_low_lower_policy_registry =
         loom_amdgpu_low_lower_policy_registry_initialize,
+    .emit_providers = kLoomAmdgpuCheckEmitProviders,
+    .emit_provider_count = IREE_ARRAYSIZE(kLoomAmdgpuCheckEmitProviders),
+#if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
     .run_providers = kLoomAmdgpuCheckRunProviders,
     .run_provider_count = IREE_ARRAYSIZE(kLoomAmdgpuCheckRunProviders),
     .requirement_providers = kLoomAmdgpuCheckRequirementProviders,
     .requirement_provider_count =
         IREE_ARRAYSIZE(kLoomAmdgpuCheckRequirementProviders),
+#endif  // LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 };

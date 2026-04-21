@@ -41,14 +41,6 @@ string_list_flag(
     for provider in ALL_CHECK_PROVIDERS
 ]
 
-config_setting(
-    name = "amdgpu_provider_and_hal_enabled",
-    flag_values = {
-        ":enabled_providers": "amdgpu",
-        "//runtime/src/iree/hal/drivers:enabled_drivers": "amdgpu",
-    },
-)
-
 #===------------------------------------------------------------------------===#
 # Layering checks
 #===------------------------------------------------------------------------===#
@@ -78,14 +70,14 @@ iree_assert_no_dependency(
 )
 
 _AMDGPU_CHECK_COPTS = iree_select({
-    ":amdgpu_provider_and_hal_enabled": [
+    ":amdgpu_provider_enabled": [
         "-DLOOM_CHECK_HAVE_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
 _AMDGPU_CHECK_DEPS = iree_select({
-    ":amdgpu_provider_and_hal_enabled": [
+    ":amdgpu_provider_enabled": [
         "//loom/src/loom/target/arch/amdgpu:check_provider",
     ],
     "//conditions:default": [],

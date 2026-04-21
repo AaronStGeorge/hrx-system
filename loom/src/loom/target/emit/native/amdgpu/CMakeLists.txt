@@ -32,6 +32,36 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    loom_check
+  HDRS
+    "loom_check.h"
+  SRCS
+    "loom_check.c"
+  DEPS
+    ::assembly
+    iree::base
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::wait_packets
+    loom::src::loom::target::arch::amdgpu::wait_plan
+    loom::src::loom::tools::loom-check::execute
+  PUBLIC
+)
+
+iree_executable_test(
+  NAME
+    "test_assembly"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+loom_cc_library(
+  NAME
     metadata
   HDRS
     "metadata.h"

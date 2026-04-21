@@ -1019,6 +1019,29 @@ static iree_status_t loom_check_emit_write_source_low_text(
                                            LOOM_TEXT_PRINT_DEFAULT);
 }
 
+static iree_status_t loom_check_emit_verify_provider_module(
+    const loom_module_t* module,
+    const loom_target_low_descriptor_registry_t* low_registry,
+    loom_source_resolver_t source_resolver,
+    loom_check_diagnostic_collector_t* diagnostic_collector) {
+  const loom_target_module_compile_options_t compile_options = {
+      .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
+                          .user_data = diagnostic_collector},
+      .source_resolver = source_resolver,
+      .max_errors = 20,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_target_module_compile_verify_module(module, &compile_options, 20));
+
+  loom_target_module_compile_diagnostic_emitter_t verifier_emitter = {0};
+  loom_target_module_compile_diagnostic_emitter_initialize(
+      module, &compile_options, LOOM_EMITTER_VERIFIER, &verifier_emitter);
+  return loom_target_module_compile_verify_low_module(
+      module, low_registry,
+      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &verifier_emitter,
+      20);
+}
+
 iree_status_t loom_check_execute_emit(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
@@ -1178,6 +1201,42 @@ iree_status_t loom_check_execute_emit(
       status = loom_check_emit_finish_status_failure(
           status, &diagnostic_collector, test_case, case_index, report,
           filename, request.emit_target_name, allocator, result);
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+    loom_source_entry_t source_entry = {0};
+    loom_source_table_resolver_t resolver_data = {0};
+    status = loom_check_source_resolver_for_case(
+        context, filename, stripped_view, &source_entry, &resolver_data);
+    if (iree_status_is_ok(status)) {
+      status = loom_check_emit_verify_provider_module(
+          module, &low_registry,
+          (loom_source_resolver_t){.fn = loom_source_table_resolve,
+                                   .user_data = &resolver_data},
+          &diagnostic_collector);
+    }
+    if (!iree_status_is_ok(status)) {
+      loom_module_free(module);
+      iree_string_builder_deinitialize(&stripped_input);
+      if (diagnostic_collector.count > 0) {
+        iree_status_free(status);
+        status = loom_check_diagnostic_collector_finish(
+            &diagnostic_collector, test_case, case_index, report, allocator,
+            result);
+      } else {
+        status = loom_check_emit_finish_status_failure(
+            status, &diagnostic_collector, test_case, case_index, report,
+            filename, request.emit_target_name, allocator, result);
+      }
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+    if (diagnostic_collector.count > 0) {
+      status = loom_check_diagnostic_collector_finish(
+          &diagnostic_collector, test_case, case_index, report, allocator,
+          result);
+      loom_module_free(module);
+      iree_string_builder_deinitialize(&stripped_input);
       iree_arena_deinitialize(&diagnostic_arena);
       return status;
     }

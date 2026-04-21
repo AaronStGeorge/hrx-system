@@ -1001,6 +1001,7 @@ TEST_F(ExecuteTest, EmitProviderCanOwnTarget) {
   IREE_ASSERT_OK(
       ExecuteFirstWithEnvironment("// RUN: emit fake-emit\n"
                                   "func.def @f() {\n"
+                                  "  func.return\n"
                                   "}\n"
                                   "// ----\n"
                                   "fake emit\n",

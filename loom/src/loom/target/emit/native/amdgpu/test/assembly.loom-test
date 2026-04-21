@@ -1,0 +1,41 @@
+// RUN: emit amdgpu-assembly @gfx11_constants waits=none
+target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_constants}
+
+low.func.def target(@gfx11_target) @gfx11_constants(%resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>) {
+  %s_c0 = low.const<amdgpu.s_mov_b32> {imm32 = 7} : reg<amdgpu.sgpr>
+  %v_c0 = low.const<amdgpu.v_mov_b32> {imm32 = 9} : reg<amdgpu.vgpr>
+  %v_sum = low.op<amdgpu.v_add_u32>(%v_c0, %v_c0) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_dword>(%v_sum, %resource, %vaddr, %s_c0) {offset = 12} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  s_mov_b32 s4, 7
+  v_mov_b32 v1, 9
+  v_add_u32 v1, v1, v1
+  buffer_store_dword v1, v0, s[0:3], s4 offen offset:12
+  s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly-mnemonics @gfx11_memory
+target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_memory}
+
+low.func.def target(@gfx11_target) @gfx11_memory(%s0 : reg<amdgpu.sgpr>, %s1 : reg<amdgpu.sgpr>, %v0 : reg<amdgpu.vgpr>, %v1 : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) {
+  %s_sum = low.op<amdgpu.s_add_u32>(%s0, %s1) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %v_sum = low.op<amdgpu.v_add_u32>(%v0, %v1) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %loaded = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %v_mix = low.op<amdgpu.v_add_u32>(%v_sum, %loaded) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_dword>(%v_mix, %resource, %vaddr, %s_sum) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ----
+s_add_u32
+v_add_u32
+buffer_load_dword
+s_waitcnt
+v_add_u32
+buffer_store_dword
+s_waitcnt
+s_endpgm
