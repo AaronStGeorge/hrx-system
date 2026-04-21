@@ -42,7 +42,8 @@ TEST(WasmCoverageTest, FormatsRepresentativeRows) {
                          iree_string_builder_size(&builder));
   EXPECT_NE(json.find("\"target\":\"wasm-simd128\""), std::string::npos);
   EXPECT_NE(json.find("\"semantic\":\"v128.load-store\""), std::string::npos);
-  EXPECT_NE(json.find("\"missing\":[\"inspect\",\"run\"]"), std::string::npos);
+  EXPECT_NE(json.find("\"missing\":[\"run\"]"), std::string::npos);
+  EXPECT_NE(json.find("\"gap\":\"run-adapter-missing\""), std::string::npos);
   iree_string_builder_deinitialize(&builder);
 }
 
