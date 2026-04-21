@@ -287,20 +287,17 @@ def test_generate_tables_emits_call_like_interface() -> None:
     assert ".kind = LOOM_CALL_LIKE_KIND_SEMANTIC," in tables_c
 
 
-def test_generate_tables_rejects_call_like_non_trailing_operand() -> None:
+def test_generate_tables_rejects_call_like_non_variadic_operand() -> None:
     op = Op(
         "test.call",
         group=Dialect("test"),
         attrs=[AttrDef("callee", "symbol")],
-        operands=[
-            Operand("operands", ANY, variadic=True),
-            Operand("token", ANY),
-        ],
+        operands=[Operand("operand", ANY)],
         results=[Result("results", ANY, variadic=True)],
         interfaces=[
             CallLikeInterface(
                 callee="callee",
-                operands="operands",
+                operands="operand",
                 results="results",
             ),
         ],
@@ -309,8 +306,8 @@ def test_generate_tables_rejects_call_like_non_trailing_operand() -> None:
     with pytest.raises(
         ValueError,
         match=(
-            r"CallLikeInterface on 'test\.call': operand 'operands' "
-            r"must be the trailing operand field"
+            r"CallLikeInterface on 'test\.call': operand 'operand' "
+            r"must be variadic"
         ),
     ):
         generate_tables_c("test", 0, [op])
