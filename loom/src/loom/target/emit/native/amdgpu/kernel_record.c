@@ -11,7 +11,7 @@
 
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
+#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/gfx950_descriptors.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/slot_layout.h"
@@ -287,15 +287,13 @@ static iree_status_t loom_amdgpu_kernel_record_collect_register_usage(
                               " has an empty physical register range",
                               assignment->value_id);
     }
-    if (assignment->descriptor_reg_class_id ==
-        AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
+    if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_update_high_water(
           assignment->location_base, assignment->location_count,
           &out_usage->next_free_sgpr));
       continue;
     }
-    if (assignment->descriptor_reg_class_id ==
-        AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR) {
+    if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_update_high_water(
           assignment->location_base, assignment->location_count,
           &out_usage->next_free_vgpr));
