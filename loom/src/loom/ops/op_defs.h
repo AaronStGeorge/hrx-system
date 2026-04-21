@@ -700,6 +700,8 @@ typedef struct loom_symbol_definition_descriptor_t {
   // Existing bytecode payload kind, or LOOM_SYMBOL_NONE if not serializable
   // through the current SYMBOLS section.
   loom_symbol_kind_t bytecode_kind;
+  // Optional domain that computes typed facts for symbols defined by this op.
+  const loom_symbol_fact_domain_t* fact_domain;
 } loom_symbol_definition_descriptor_t;
 
 // Generated metadata for a symbol-reference attribute.

@@ -1020,6 +1020,7 @@ test_record = Op(
         name="record",
         interfaces=["record"],
         bytecode_kind="LOOM_SYMBOL_RECORD",
+        fact_domain="loom_test_record_symbol_fact_domain",
     ),
     attrs=[
         AttrDef("symbol", "symbol"),

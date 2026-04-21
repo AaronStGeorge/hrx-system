@@ -14,6 +14,7 @@ loom_cc_library(
   NAME
     test
   HDRS
+    "facts.h"
     "ops.h"
     "registry.h"
   SRCS
@@ -21,10 +22,12 @@ loom_cc_library(
     "canonicalize.c"
     "facts.c"
     "registry.c"
+    "symbol_facts.c"
     "tables.c"
     "verify.c"
   DEPS
     iree::base
+    loom::src::loom::analysis::symbol_facts
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir

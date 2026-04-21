@@ -224,6 +224,37 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    symbol_facts
+  HDRS
+    "symbol_facts.h"
+  SRCS
+    "symbol_facts.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    symbol_facts_test
+  SRCS
+    "symbol_facts_test.cc"
+  DEPS
+    ::symbol_facts
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::test
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     symbolic_expr
   HDRS
     "symbolic_expr.h"

@@ -110,6 +110,7 @@ typedef struct loom_region_t loom_region_t;
 typedef struct loom_value_t loom_value_t;
 typedef struct loom_op_vtable_t loom_op_vtable_t;
 typedef uint8_t loom_symbol_kind_t;
+typedef struct loom_symbol_fact_domain_t loom_symbol_fact_domain_t;
 typedef struct loom_symbol_definition_descriptor_t
     loom_symbol_definition_descriptor_t;
 typedef struct loom_operand_descriptor_t loom_operand_descriptor_t;

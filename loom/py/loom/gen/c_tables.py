@@ -2928,6 +2928,10 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
 
     # Symbol definition descriptors. These keep symbol-definition shape in the
     # generated op metadata instead of a central op-name map.
+    symbol_fact_domain_symbols = sorted({fact_domain for op in ops if op.symbol_def is not None if (fact_domain := _symbol_fact_domain_symbol(op)) is not None})
+    if symbol_fact_domain_symbols:
+        lines.extend(f"extern const loom_symbol_fact_domain_t {fact_domain};" for fact_domain in symbol_fact_domain_symbols)
+        lines.append("")
     for op in ops:
         if op.symbol_def is None:
             continue
@@ -2937,8 +2941,15 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         name_bstr = f"{prefix}_symbol_def_bname"
         attr_index = _resolve_attr_index(op, op.symbol_def.field, "symbol_def")
         flags = _symbol_interface_flags(op.symbol_def.interfaces)
+        fact_domain = _symbol_fact_domain_symbol(op)
         lines.append(f'static const uint8_t {name_bstr}[] = "\\x{len(name):02x}" "{name}";')
-        lines.append(f"static const loom_symbol_definition_descriptor_t {prefix}_symbol_def = {{{name_bstr}, {attr_index}, {flags}, {op.symbol_def.bytecode_kind}}};")
+        lines.append(f"static const loom_symbol_definition_descriptor_t {prefix}_symbol_def = {{")
+        lines.append(f"    .name = {name_bstr},")
+        lines.append(f"    .name_attr_index = {attr_index},")
+        lines.append(f"    .interfaces = {flags},")
+        lines.append(f"    .bytecode_kind = {op.symbol_def.bytecode_kind},")
+        lines.append(f"    .fact_domain = {'&' + fact_domain if fact_domain else 'NULL'},")
+        lines.append("};")
 
     # Structural placement descriptors.
     for op in ops:
@@ -3334,6 +3345,18 @@ def _type_fact_domain_symbol(type_def: Any) -> str | None:
         return None
     if not isinstance(fact_domain, str) or not _C_SYMBOL_RE.fullmatch(fact_domain):
         raise ValueError(f"TypeDef {type_def.name!r}: fact_domain must be a C symbol name, got {fact_domain!r}")
+    return fact_domain
+
+
+def _symbol_fact_domain_symbol(op: Any) -> str | None:
+    """Returns the validated C symbol fact-domain symbol for an Op, if any."""
+    if op.symbol_def is None:
+        return None
+    fact_domain = getattr(op.symbol_def, "fact_domain", None)
+    if fact_domain is None:
+        return None
+    if not isinstance(fact_domain, str) or not _C_SYMBOL_RE.fullmatch(fact_domain):
+        raise ValueError(f"Op {op.name!r}: symbol_def.fact_domain must be a C symbol name, got {fact_domain!r}")
     return fact_domain
 
 

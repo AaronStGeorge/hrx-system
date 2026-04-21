@@ -192,6 +192,33 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "symbol_facts",
+    srcs = ["symbol_facts.c"],
+    hdrs = ["symbol_facts.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "symbol_facts_test",
+    srcs = ["symbol_facts_test.cc"],
+    deps = [
+        ":symbol_facts",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "symbolic_expr",
     srcs = ["symbolic_expr.c"],
     hdrs = ["symbolic_expr.h"],

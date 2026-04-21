@@ -514,12 +514,14 @@ class SymbolDefinition:
         serialize through the current symbol section. New symbol families can
         leave this as LOOM_SYMBOL_NONE while still participating in IR symbol
         lookup and verification.
+    fact_domain: Optional C symbol for the dialect-owned symbol fact domain.
     """
 
     field: str
     name: str
     interfaces: tuple[str, ...]
     bytecode_kind: str = "LOOM_SYMBOL_NONE"
+    fact_domain: str | None = None
 
     def __init__(
         self,
@@ -528,6 +530,7 @@ class SymbolDefinition:
         name: str,
         interfaces: list[str] | tuple[str, ...],
         bytecode_kind: str = "LOOM_SYMBOL_NONE",
+        fact_domain: str | None = None,
     ) -> None:
         frozen_interfaces = tuple(interfaces)
         if not field:
@@ -547,6 +550,7 @@ class SymbolDefinition:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "interfaces", frozen_interfaces)
         object.__setattr__(self, "bytecode_kind", bytecode_kind)
+        object.__setattr__(self, "fact_domain", fact_domain)
 
 
 @dataclass(frozen=True, slots=True)
