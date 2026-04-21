@@ -8,10 +8,13 @@
 
 from loom.dialect.target.defs import (
     ALL_TARGET_OPS,
+    ArtifactAbiKind,
     ArtifactFormatAttr,
+    ArtifactRecordFormatAttr,
     ExportAbiKind,
     ExportLinkage,
     SnapshotCodegenFormat,
+    target_artifact,
     target_bundle,
     target_config,
     target_export,
@@ -23,10 +26,13 @@ from loom.dialect.target.defs import (
 
 __all__ = [
     "ALL_TARGET_OPS",
+    "ArtifactAbiKind",
     "ArtifactFormatAttr",
+    "ArtifactRecordFormatAttr",
     "ExportAbiKind",
     "ExportLinkage",
     "SnapshotCodegenFormat",
+    "target_artifact",
     "target_bundle",
     "target_config",
     "target_export",

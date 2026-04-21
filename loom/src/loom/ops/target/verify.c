@@ -295,6 +295,25 @@ static iree_status_t loom_target_verify_record_ref(
                                                expected_kind);
 }
 
+iree_status_t loom_target_artifact_verify(const loom_module_t* module,
+                                          const loom_op_t* op,
+                                          iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_target_verify_record_ref(
+      module, op, emitter, loom_target_artifact_target(op),
+      LOOM_OP_TARGET_PROFILE, IREE_SV("target profile")));
+  uint8_t format = loom_target_artifact_artifact_format(op);
+  if (format != 0) {
+    IREE_RETURN_IF_ERROR(loom_target_verify_known_enum(
+        emitter, op, IREE_SV("artifact_format"), format));
+  }
+  uint8_t abi = loom_target_artifact_abi(op);
+  if (abi != 0) {
+    IREE_RETURN_IF_ERROR(
+        loom_target_verify_known_enum(emitter, op, IREE_SV("abi"), abi));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_target_bundle_verify(const loom_module_t* module,
                                         const loom_op_t* op,
                                         iree_diagnostic_emitter_t emitter) {

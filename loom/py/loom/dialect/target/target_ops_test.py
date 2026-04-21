@@ -9,10 +9,13 @@
 from loom.assembly import AttrDict, Keyword, SymbolRef
 from loom.dialect.target import (
     ALL_TARGET_OPS,
+    ArtifactAbiKind,
     ArtifactFormatAttr,
+    ArtifactRecordFormatAttr,
     ExportAbiKind,
     ExportLinkage,
     SnapshotCodegenFormat,
+    target_artifact,
     target_bundle,
     target_config,
     target_export,
@@ -36,6 +39,7 @@ class TestTargetDialect:
 
     def test_inventory(self) -> None:
         assert [op.name for op in ALL_TARGET_OPS] == [
+            "target.artifact",
             "target.snapshot",
             "target.export",
             "target.config",
@@ -45,6 +49,7 @@ class TestTargetDialect:
         ]
 
     def test_public_exports_match_registry(self) -> None:
+        assert target_artifact in ALL_TARGET_OPS
         assert target_profile in ALL_TARGET_OPS
         assert target_snapshot in ALL_TARGET_OPS
         assert target_export in ALL_TARGET_OPS
@@ -69,6 +74,23 @@ class TestTargetDialect:
             ("spirv_binary", 4),
             ("vm_bytecode", 5),
             ("wasm_binary", 6),
+        ]
+        assert [(case.keyword, case.value) for case in ArtifactRecordFormatAttr.cases] == [
+            ("unknown", 0),
+            ("elf", 1),
+            ("coff", 2),
+            ("macho", 3),
+            ("spirv_binary", 4),
+            ("vm_bytecode", 5),
+            ("wasm_binary", 6),
+        ]
+        assert [(case.keyword, case.value) for case in ArtifactAbiKind.cases] == [
+            ("unknown", 0),
+            ("object_file", 1),
+            ("hal_executable", 2),
+            ("vm_module", 3),
+            ("wasm_module", 4),
+            ("spirv_module", 5),
         ]
         assert [(case.keyword, case.value) for case in ExportAbiKind.cases] == [
             ("unknown", 0),
@@ -104,6 +126,23 @@ class TestTargetDialect:
         assert op.symbol_def.fact_domain == "loom_target_profile_symbol_fact_domain"
         assert any(isinstance(element, Keyword) and element.text == "preset" for element in op.format)
         assert op.verify == "loom_target_profile_verify"
+
+    def test_artifact_shape(self) -> None:
+        op = target_artifact
+        attrs = {attr.name: attr for attr in op.attrs}
+        target_ref = attrs["target"].symbol_ref
+        assert target_ref is not None
+        assert target_ref.interfaces == ("record",)
+        assert attrs["artifact_format"].attr_type == ATTR_TYPE_ENUM
+        assert attrs["artifact_format"].enum_def is ArtifactRecordFormatAttr
+        assert attrs["artifact_format"].optional
+        assert attrs["abi"].attr_type == ATTR_TYPE_ENUM
+        assert attrs["abi"].enum_def is ArtifactAbiKind
+        assert attrs["abi"].optional
+        assert op.symbol_def is not None
+        assert op.symbol_def.fact_domain == "loom_target_artifact_symbol_fact_domain"
+        assert any(isinstance(element, Keyword) and element.text == "target" for element in op.format)
+        assert op.verify == "loom_target_artifact_verify"
 
     def test_snapshot_shape(self) -> None:
         op = target_snapshot

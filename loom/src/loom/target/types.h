@@ -39,6 +39,15 @@ typedef enum loom_target_artifact_format_e {
   LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY = 6,
 } loom_target_artifact_format_t;
 
+typedef enum loom_target_artifact_abi_kind_e {
+  LOOM_TARGET_ARTIFACT_ABI_KIND_UNKNOWN = 0,
+  LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE = 1,
+  LOOM_TARGET_ARTIFACT_ABI_KIND_HAL_EXECUTABLE = 2,
+  LOOM_TARGET_ARTIFACT_ABI_KIND_VM_MODULE = 3,
+  LOOM_TARGET_ARTIFACT_ABI_KIND_WASM_MODULE = 4,
+  LOOM_TARGET_ARTIFACT_ABI_KIND_SPIRV_MODULE = 5,
+} loom_target_artifact_abi_kind_t;
+
 typedef enum loom_target_abi_kind_e {
   LOOM_TARGET_ABI_UNKNOWN = 0,
   LOOM_TARGET_ABI_OBJECT_FUNCTION = 1,

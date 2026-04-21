@@ -18,14 +18,38 @@ extern "C" {
 #endif
 
 enum {
-  LOOM_OP_TARGET_SNAPSHOT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 0),
-  LOOM_OP_TARGET_EXPORT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 1),
-  LOOM_OP_TARGET_CONFIG = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 2),
-  LOOM_OP_TARGET_BUNDLE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 3),
-  LOOM_OP_TARGET_PRESET = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 4),
-  LOOM_OP_TARGET_PROFILE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 5),
-  LOOM_OP_TARGET_COUNT_ = 6,
+  LOOM_OP_TARGET_ARTIFACT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 0),
+  LOOM_OP_TARGET_SNAPSHOT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 1),
+  LOOM_OP_TARGET_EXPORT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 2),
+  LOOM_OP_TARGET_CONFIG = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 3),
+  LOOM_OP_TARGET_BUNDLE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 4),
+  LOOM_OP_TARGET_PRESET = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 5),
+  LOOM_OP_TARGET_PROFILE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 6),
+  LOOM_OP_TARGET_COUNT_ = 7,
 };
+
+// Linkable or loadable artifact format produced for an artifact.
+typedef enum loom_target_artifact_artifact_format_e {
+  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_UNKNOWN = 0,
+  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_ELF = 1,
+  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_COFF = 2,
+  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_MACHO = 3,
+  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_SPIRV_BINARY = 4,
+  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_VM_BYTECODE = 5,
+  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_WASM_BINARY = 6,
+  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_COUNT_ = 7,
+} loom_target_artifact_artifact_format_t;
+
+// Runtime or linker packaging ABI used by a target artifact.
+typedef enum loom_target_artifact_abi_e {
+  LOOM_TARGET_ARTIFACT_ABI_UNKNOWN = 0,
+  LOOM_TARGET_ARTIFACT_ABI_OBJECT_FILE = 1,
+  LOOM_TARGET_ARTIFACT_ABI_HAL_EXECUTABLE = 2,
+  LOOM_TARGET_ARTIFACT_ABI_VM_MODULE = 3,
+  LOOM_TARGET_ARTIFACT_ABI_WASM_MODULE = 4,
+  LOOM_TARGET_ARTIFACT_ABI_SPIRV_MODULE = 5,
+  LOOM_TARGET_ARTIFACT_ABI_COUNT_ = 6,
+} loom_target_artifact_abi_t;
 
 // Primary codegen representation emitted for a target snapshot.
 typedef enum loom_target_snapshot_codegen_format_e {
@@ -67,6 +91,31 @@ typedef enum loom_target_export_linkage_e {
   LOOM_TARGET_EXPORT_LINKAGE_DSO_LOCAL = 1,
   LOOM_TARGET_EXPORT_LINKAGE_COUNT_ = 2,
 } loom_target_export_linkage_t;
+
+// LOOM_OP_TARGET_ARTIFACT: Packaging or compile-unit record. Entry functions are derived from function export facts that reference this artifact; the artifact itself never lists functions.
+// target.artifact @gfx11_kernels target(@gfx11) {artifact_format = elf, abi = hal_executable}
+LOOM_DEFINE_ISA(loom_target_artifact_isa, LOOM_OP_TARGET_ARTIFACT)
+LOOM_DEFINE_ATTR_SYMBOL(loom_target_artifact_symbol, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_target_artifact_target, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_target_artifact_artifact_format, 2)
+LOOM_DEFINE_ATTR_ENUM(loom_target_artifact_abi, 3)
+enum loom_target_artifact_build_flag_bits_e {
+  LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ARTIFACT_FORMAT = 1u << 0,
+  LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ABI = 1u << 1,
+};
+typedef uint32_t loom_target_artifact_build_flags_t;
+iree_status_t loom_target_artifact_build(
+    loom_builder_t* builder,
+    loom_target_artifact_build_flags_t build_flags,
+    loom_symbol_ref_t symbol,
+    loom_symbol_ref_t target,
+    loom_optional uint8_t artifact_format,
+    loom_optional uint8_t abi,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_target_artifact_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_TARGET_SNAPSHOT: Frozen codegen target facts consumed by legality, lowering, and emission. The snapshot is target-neutral: target-family descriptor tables and feature catalogs remain opt-in packages.
 // target.snapshot @x86_64 {codegen_format = llvmir, target_triple = "x86_64-pc-linux-gnu", data_layout = "e-m:e-p:64:64-i64:64-n8:16:32:64-S128", artifact_format = elf, target_cpu = "x86-64-v3", target_features = "+avx2,+fma", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 4294967295, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 4294967295}

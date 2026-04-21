@@ -150,6 +150,17 @@ class TargetProfileFactsTest : public ::testing::Test {
     return profile_facts;
   }
 
+  const loom_target_artifact_symbol_facts_t* LookupArtifact(
+      const loom_module_t* module, iree_string_view_t name) {
+    const loom_symbol_facts_base_t* base_facts = nullptr;
+    IREE_CHECK_OK(loom_symbol_fact_table_lookup(
+        &fact_table_, module, FindSymbol(module, name), &base_facts));
+    const loom_target_artifact_symbol_facts_t* artifact_facts =
+        loom_target_artifact_symbol_facts_cast(base_facts);
+    IREE_ASSERT(artifact_facts != nullptr);
+    return artifact_facts;
+  }
+
   // Block pool shared by parser, module allocation, and analysis storage.
   iree_arena_block_pool_t block_pool_;
 
@@ -201,6 +212,39 @@ target.profile @wasm preset("test.profile") {index_bitwidth = 64}
   EXPECT_NE(printed.find("target.profile @wasm preset(\"test.profile\") "
                          "{index_bitwidth = 64}"),
             std::string::npos);
+}
+
+TEST_F(TargetProfileFactsTest, ArtifactFactsDefaultFromTargetProfile) {
+  ModulePtr module = ParseModule(R"(
+target.profile @wasm preset("test.profile")
+target.artifact @module target(@wasm)
+)");
+
+  const loom_target_profile_symbol_facts_t* profile =
+      LookupProfile(module.get(), IREE_SV("wasm"));
+  const loom_target_artifact_symbol_facts_t* artifact =
+      LookupArtifact(module.get(), IREE_SV("module"));
+  EXPECT_EQ(artifact->base.domain, &loom_target_artifact_symbol_fact_domain);
+  EXPECT_EQ(artifact->base.symbol_kind, LOOM_SYMBOL_RECORD);
+  EXPECT_TRUE(iree_string_view_equal(artifact->name, IREE_SV("module")));
+  EXPECT_EQ(artifact->target_profile, profile);
+  EXPECT_EQ(artifact->format, LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY);
+  EXPECT_EQ(artifact->abi_kind, LOOM_TARGET_ARTIFACT_ABI_KIND_WASM_MODULE);
+}
+
+TEST_F(TargetProfileFactsTest, ArtifactFactsOverridePackagingAbi) {
+  ModulePtr module = ParseModule(R"(
+target.profile @gfx preset("test.profile")
+target.artifact @hsaco target(@gfx) {
+  abi = hal_executable,
+  artifact_format = elf
+}
+)");
+
+  const loom_target_artifact_symbol_facts_t* artifact =
+      LookupArtifact(module.get(), IREE_SV("hsaco"));
+  EXPECT_EQ(artifact->format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
+  EXPECT_EQ(artifact->abi_kind, LOOM_TARGET_ARTIFACT_ABI_KIND_HAL_EXECUTABLE);
 }
 
 TEST_F(TargetProfileFactsTest, SparseOverridesReplacePresetFields) {
@@ -279,6 +323,37 @@ target.profile @missing preset("missing.profile")
 TEST_F(TargetProfileFactsTest, UnknownOverrideFailsLoudly) {
   ModulePtr module = ParseModule(R"(
 target.profile @bad preset("test.profile") {source = "must_not_exist"}
+)");
+
+  const loom_symbol_facts_base_t* facts = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_symbol_fact_table_lookup(
+                            &fact_table_, module.get(),
+                            FindSymbol(module.get(), IREE_SV("bad")), &facts));
+  EXPECT_EQ(facts, nullptr);
+}
+
+TEST_F(TargetProfileFactsTest, ArtifactTargetMustResolveToProfileFacts) {
+  ModulePtr module = ParseModule(R"(
+target.config @not_profile {contract_set_key = "test", contract_feature_bits = 0}
+target.artifact @bad target(@not_profile)
+)");
+
+  const loom_symbol_facts_base_t* facts = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_symbol_fact_table_lookup(
+                            &fact_table_, module.get(),
+                            FindSymbol(module.get(), IREE_SV("bad")), &facts));
+  EXPECT_EQ(facts, nullptr);
+}
+
+TEST_F(TargetProfileFactsTest, ArtifactAbiMustMatchFormat) {
+  ModulePtr module = ParseModule(R"(
+target.profile @wasm preset("test.profile")
+target.artifact @bad target(@wasm) {
+  abi = hal_executable,
+  artifact_format = wasm_binary
+}
 )");
 
   const loom_symbol_facts_base_t* facts = nullptr;

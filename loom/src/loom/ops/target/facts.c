@@ -14,13 +14,13 @@
 
 const uint8_t loom_target_profile_preset_registry_resource_key = 0;
 
-static iree_status_t loom_target_profile_string_from_id(
+static iree_status_t loom_target_symbol_string_from_id(
     const loom_module_t* module, loom_string_id_t string_id,
     iree_string_view_t field_name, iree_string_view_t* out_string) {
   *out_string = iree_string_view_empty();
   if (string_id >= module->strings.count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target.profile %.*s string id %u is invalid",
+                            "target symbol %.*s string id %u is invalid",
                             (int)field_name.size, field_name.data,
                             (uint32_t)string_id);
   }
@@ -36,7 +36,7 @@ static iree_status_t loom_target_profile_string_attr(
                             "target.profile override %.*s must be a string",
                             (int)field_name.size, field_name.data);
   }
-  return loom_target_profile_string_from_id(
+  return loom_target_symbol_string_from_id(
       module, loom_attr_as_string_id(*attr), field_name, out_string);
 }
 
@@ -307,7 +307,7 @@ static iree_status_t loom_target_profile_apply_overrides(
   for (iree_host_size_t i = 0; i < overrides.count; ++i) {
     const loom_named_attr_t* entry = &overrides.entries[i];
     iree_string_view_t name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_target_profile_string_from_id(
+    IREE_RETURN_IF_ERROR(loom_target_symbol_string_from_id(
         module, entry->name_id, IREE_SV("override name"), &name));
     IREE_RETURN_IF_ERROR(
         loom_target_profile_apply_override(module, name, &entry->value, facts));
@@ -324,6 +324,112 @@ static iree_status_t loom_target_profile_validate_preset_bundle(
         "config records",
         (int)preset_key.size, preset_key.data);
   }
+  return iree_ok_status();
+}
+
+static loom_target_artifact_abi_kind_t loom_target_artifact_default_abi(
+    loom_target_artifact_format_t format) {
+  switch (format) {
+    case LOOM_TARGET_ARTIFACT_FORMAT_ELF:
+    case LOOM_TARGET_ARTIFACT_FORMAT_COFF:
+    case LOOM_TARGET_ARTIFACT_FORMAT_MACHO:
+      return LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE;
+    case LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY:
+      return LOOM_TARGET_ARTIFACT_ABI_KIND_SPIRV_MODULE;
+    case LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE:
+      return LOOM_TARGET_ARTIFACT_ABI_KIND_VM_MODULE;
+    case LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY:
+      return LOOM_TARGET_ARTIFACT_ABI_KIND_WASM_MODULE;
+    case LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN:
+    default:
+      return LOOM_TARGET_ARTIFACT_ABI_KIND_UNKNOWN;
+  }
+}
+
+static bool loom_target_artifact_abi_matches_format(
+    loom_target_artifact_format_t format,
+    loom_target_artifact_abi_kind_t abi_kind) {
+  switch (abi_kind) {
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE:
+      return format == LOOM_TARGET_ARTIFACT_FORMAT_ELF ||
+             format == LOOM_TARGET_ARTIFACT_FORMAT_COFF ||
+             format == LOOM_TARGET_ARTIFACT_FORMAT_MACHO;
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_HAL_EXECUTABLE:
+      return format == LOOM_TARGET_ARTIFACT_FORMAT_ELF;
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_VM_MODULE:
+      return format == LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE;
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_WASM_MODULE:
+      return format == LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY;
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_SPIRV_MODULE:
+      return format == LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY;
+    case LOOM_TARGET_ARTIFACT_ABI_KIND_UNKNOWN:
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_target_artifact_symbol_fact_compute(
+    const loom_symbol_fact_domain_t* domain,
+    loom_symbol_fact_context_t* context, const loom_module_t* module,
+    loom_symbol_id_t symbol_id, const loom_symbol_t* symbol,
+    const loom_symbol_facts_base_t** out_facts) {
+  IREE_ASSERT_ARGUMENT(domain);
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(symbol);
+  IREE_ASSERT_ARGUMENT(out_facts);
+  *out_facts = NULL;
+
+  loom_target_artifact_symbol_facts_t* facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_symbol_fact_context_allocate(
+      context, sizeof(*facts), (void**)&facts));
+  memset(facts, 0, sizeof(*facts));
+
+  facts->base.domain = domain;
+  facts->base.symbol_kind = symbol->kind;
+  facts->artifact_op = symbol->defining_op;
+  facts->symbol = (loom_symbol_ref_t){
+      .module_id = 0,
+      .symbol_id = symbol_id,
+  };
+  IREE_RETURN_IF_ERROR(loom_target_symbol_string_from_id(
+      module, symbol->name_id, IREE_SV("symbol"), &facts->name));
+
+  facts->target_symbol = loom_target_artifact_target(symbol->defining_op);
+  const loom_symbol_facts_base_t* target_base_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_symbol_fact_context_lookup_ref(
+      context, facts->target_symbol, &target_base_facts));
+  facts->target_profile =
+      loom_target_profile_symbol_facts_cast(target_base_facts);
+  if (!facts->target_profile) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target.artifact target must resolve to target.profile symbol facts");
+  }
+
+  facts->format =
+      (loom_target_artifact_format_t)loom_target_artifact_artifact_format(
+          symbol->defining_op);
+  if (facts->format == LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN) {
+    facts->format = facts->target_profile->snapshot.artifact_format;
+  }
+  if (facts->format == LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target.artifact must resolve an artifact format");
+  }
+
+  facts->abi_kind = (loom_target_artifact_abi_kind_t)loom_target_artifact_abi(
+      symbol->defining_op);
+  if (facts->abi_kind == LOOM_TARGET_ARTIFACT_ABI_KIND_UNKNOWN) {
+    facts->abi_kind = loom_target_artifact_default_abi(facts->format);
+  }
+  if (!loom_target_artifact_abi_matches_format(facts->format,
+                                               facts->abi_kind)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target.artifact ABI does not match its format");
+  }
+
+  *out_facts = &facts->base;
   return iree_ok_status();
 }
 
@@ -349,9 +455,9 @@ static iree_status_t loom_target_profile_symbol_fact_compute(
       .module_id = 0,
       .symbol_id = symbol_id,
   };
-  IREE_RETURN_IF_ERROR(loom_target_profile_string_from_id(
+  IREE_RETURN_IF_ERROR(loom_target_symbol_string_from_id(
       module, symbol->name_id, IREE_SV("symbol"), &facts->name));
-  IREE_RETURN_IF_ERROR(loom_target_profile_string_from_id(
+  IREE_RETURN_IF_ERROR(loom_target_symbol_string_from_id(
       module, loom_target_profile_preset(symbol->defining_op),
       IREE_SV("preset"), &facts->preset_key));
   facts->preset_key = iree_string_view_trim(facts->preset_key);
@@ -394,6 +500,10 @@ const loom_symbol_fact_domain_t loom_target_profile_symbol_fact_domain = {
     .compute = loom_target_profile_symbol_fact_compute,
 };
 
+const loom_symbol_fact_domain_t loom_target_artifact_symbol_fact_domain = {
+    .compute = loom_target_artifact_symbol_fact_compute,
+};
+
 iree_status_t loom_target_profile_symbol_fact_context_lookup_preset_registry(
     loom_symbol_fact_context_t* context,
     const loom_target_preset_registry_t** out_registry) {
@@ -412,4 +522,12 @@ const loom_target_profile_symbol_facts_t* loom_target_profile_symbol_facts_cast(
     return NULL;
   }
   return (const loom_target_profile_symbol_facts_t*)facts;
+}
+
+const loom_target_artifact_symbol_facts_t*
+loom_target_artifact_symbol_facts_cast(const loom_symbol_facts_base_t* facts) {
+  if (!facts || facts->domain != &loom_target_artifact_symbol_fact_domain) {
+    return NULL;
+  }
+  return (const loom_target_artifact_symbol_facts_t*)facts;
 }

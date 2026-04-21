@@ -56,18 +56,39 @@ SnapshotCodegenFormat = EnumDef(
     doc="Primary codegen representation emitted for a target snapshot.",
 )
 
+_ARTIFACT_FORMAT_CASES = [
+    EnumCase("unknown", 0, doc="No artifact format selected."),
+    EnumCase("elf", 1, doc="ELF object or shared object artifact."),
+    EnumCase("coff", 2, doc="COFF object artifact."),
+    EnumCase("macho", 3, doc="Mach-O object artifact."),
+    EnumCase("spirv_binary", 4, doc="SPIR-V binary artifact."),
+    EnumCase("vm_bytecode", 5, doc="IREE VM bytecode artifact."),
+    EnumCase("wasm_binary", 6, doc="WebAssembly binary module artifact."),
+]
+
 ArtifactFormatAttr = EnumDef(
     "ArtifactFormatAttr",
-    [
-        EnumCase("unknown", 0, doc="No artifact format selected."),
-        EnumCase("elf", 1, doc="ELF object or shared object artifact."),
-        EnumCase("coff", 2, doc="COFF object artifact."),
-        EnumCase("macho", 3, doc="Mach-O object artifact."),
-        EnumCase("spirv_binary", 4, doc="SPIR-V binary artifact."),
-        EnumCase("vm_bytecode", 5, doc="IREE VM bytecode artifact."),
-        EnumCase("wasm_binary", 6, doc="WebAssembly binary module artifact."),
-    ],
+    _ARTIFACT_FORMAT_CASES,
     doc="Linkable or loadable artifact format produced for a snapshot.",
+)
+
+ArtifactRecordFormatAttr = EnumDef(
+    "ArtifactRecordFormatAttr",
+    _ARTIFACT_FORMAT_CASES,
+    doc="Linkable or loadable artifact format produced for an artifact.",
+)
+
+ArtifactAbiKind = EnumDef(
+    "ArtifactAbiKind",
+    [
+        EnumCase("unknown", 0, doc="No artifact packaging ABI selected."),
+        EnumCase("object_file", 1, doc="Native object file packaging ABI."),
+        EnumCase("hal_executable", 2, doc="IREE HAL executable packaging ABI."),
+        EnumCase("vm_module", 3, doc="IREE VM module archive packaging ABI."),
+        EnumCase("wasm_module", 4, doc="WebAssembly module packaging ABI."),
+        EnumCase("spirv_module", 5, doc="SPIR-V module packaging ABI."),
+    ],
+    doc="Runtime or linker packaging ABI used by a target artifact.",
 )
 
 ExportAbiKind = EnumDef(
@@ -132,6 +153,62 @@ target_profile = Op(
     examples=[
         'target.profile @vm preset("iree-vm")',
         'target.profile @gfx1100 preset("amdgpu.gfx1100") {target_cpu = "gfx1100"}',
+    ],
+)
+
+# ============================================================================
+# target.artifact
+# ============================================================================
+
+target_artifact = Op(
+    "target.artifact",
+    group=target_ops,
+    doc=("Packaging or compile-unit record. Entry functions are derived from function export facts that reference this artifact; the artifact itself never lists functions."),
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="target artifact",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+        fact_domain="loom_target_artifact_symbol_fact_domain",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef(
+            "target",
+            "symbol",
+            symbol_ref=SymbolReference("target profile", ["record"]),
+        ),
+        AttrDef(
+            "artifact_format",
+            ATTR_TYPE_ENUM,
+            enum_def=ArtifactRecordFormatAttr,
+            open_enum=True,
+            optional=True,
+        ),
+        AttrDef(
+            "abi",
+            ATTR_TYPE_ENUM,
+            enum_def=ArtifactAbiKind,
+            open_enum=True,
+            optional=True,
+        ),
+    ],
+    verify="loom_target_artifact_verify",
+    format=[
+        SymbolRef("symbol"),
+        kw("target"),
+        GLUE,
+        LPAREN,
+        GLUE,
+        Attr("target"),
+        GLUE,
+        RPAREN,
+        AttrDict(),
+    ],
+    examples=[
+        "target.artifact @gfx11_kernels target(@gfx11) {artifact_format = elf, abi = hal_executable}",
+        "target.artifact @wasm_module target(@wasm)",
     ],
 )
 
@@ -359,6 +436,7 @@ target_bundle = Op(
 # ============================================================================
 
 ALL_TARGET_OPS: tuple[Op, ...] = (
+    target_artifact,
     target_snapshot,
     target_export,
     target_config,

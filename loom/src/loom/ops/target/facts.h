@@ -25,6 +25,8 @@ extern "C" {
 
 typedef struct loom_target_profile_symbol_facts_t
     loom_target_profile_symbol_facts_t;
+typedef struct loom_target_artifact_symbol_facts_t
+    loom_target_artifact_symbol_facts_t;
 
 // Resolved target.profile payload.
 typedef struct loom_target_profile_symbol_facts_t {
@@ -56,8 +58,38 @@ typedef struct loom_target_profile_symbol_facts_t {
   loom_target_bundle_t bundle;
 } loom_target_profile_symbol_facts_t;
 
+// Resolved target.artifact payload.
+typedef struct loom_target_artifact_symbol_facts_t {
+  // Common symbol-fact header.
+  loom_symbol_facts_base_t base;
+
+  // Defining target.artifact op.
+  loom_op_t* artifact_op;
+
+  // Module-local symbol reference for the artifact definition.
+  loom_symbol_ref_t symbol;
+
+  // Borrowed artifact symbol name from the module string table.
+  iree_string_view_t name;
+
+  // Module-local target.profile symbol used to produce the artifact.
+  loom_symbol_ref_t target_symbol;
+
+  // Resolved target profile facts.
+  const loom_target_profile_symbol_facts_t* target_profile;
+
+  // Linkable or loadable artifact format for this compile unit.
+  loom_target_artifact_format_t format;
+
+  // Runtime or linker packaging ABI for this compile unit.
+  loom_target_artifact_abi_kind_t abi_kind;
+} loom_target_artifact_symbol_facts_t;
+
 // Symbol fact domain used by generated target.profile descriptors.
 extern const loom_symbol_fact_domain_t loom_target_profile_symbol_fact_domain;
+
+// Symbol fact domain used by generated target.artifact descriptors.
+extern const loom_symbol_fact_domain_t loom_target_artifact_symbol_fact_domain;
 
 // Resource key for provider-injected loom_target_preset_registry_t payloads.
 extern const uint8_t loom_target_profile_preset_registry_resource_key;
@@ -81,6 +113,10 @@ iree_status_t loom_target_profile_symbol_fact_context_lookup_preset_registry(
 // Casts generic symbol facts to target.profile facts when domains match.
 const loom_target_profile_symbol_facts_t* loom_target_profile_symbol_facts_cast(
     const loom_symbol_facts_base_t* facts);
+
+// Casts generic symbol facts to target.artifact facts when domains match.
+const loom_target_artifact_symbol_facts_t*
+loom_target_artifact_symbol_facts_cast(const loom_symbol_facts_base_t* facts);
 
 #ifdef __cplusplus
 }  // extern "C"
