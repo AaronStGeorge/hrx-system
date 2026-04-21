@@ -265,6 +265,7 @@ _FUNC_SIGNATURE_FORMAT: list[FormatElement] = [
 
 _FUNC_LIKE_COMMON: dict[str, Any] = dict(
     callee="callee",
+    target="target",
     visibility="visibility",
     cc="cc",
     purity="purity",
@@ -286,6 +287,7 @@ low_func_def = Op(
         name="function",
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
+        fact_domain="loom_func_like_symbol_fact_domain",
     ),
     results=[Result("results", REGISTER, variadic=True)],
     regions=[RegionDef("body", doc="Low function body.", terminator="low.return")],
@@ -324,6 +326,7 @@ low_func_decl = Op(
         name="function",
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DECL",
+        fact_domain="loom_func_like_symbol_fact_domain",
     ),
     results=[Result("results", REGISTER, variadic=True)],
     interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, args_as_operands=True)],

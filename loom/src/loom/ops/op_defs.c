@@ -534,6 +534,14 @@ loom_symbol_ref_t loom_func_like_callee(loom_func_like_t func) {
       loom_op_attrs(func.op)[func.vtable->callee_attr_index]);
 }
 
+loom_symbol_ref_t loom_func_like_target(loom_func_like_t func) {
+  if (!func.vtable || func.vtable->target_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return loom_symbol_ref_null();
+  }
+  return loom_attr_as_symbol(
+      loom_op_attrs(func.op)[func.vtable->target_attr_index]);
+}
+
 const loom_value_id_t* loom_func_like_arg_ids(loom_func_like_t func,
                                               uint16_t* out_count) {
   if (!func.vtable) {

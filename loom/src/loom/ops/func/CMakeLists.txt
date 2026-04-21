@@ -22,6 +22,7 @@ loom_cc_library(
   DEPS
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::func_like_facts
     loom::src::loom::ops::op_defs
     loom::src::loom::rewrite::rewriter
   PUBLIC

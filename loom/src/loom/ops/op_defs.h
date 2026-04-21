@@ -968,6 +968,10 @@ uint8_t loom_func_like_cc(loom_func_like_t func);
 // |func| is not valid.
 loom_symbol_ref_t loom_func_like_callee(loom_func_like_t func);
 
+// Returns the target profile symbol ref for a func-like op, or null if
+// |func| has no target contract.
+loom_symbol_ref_t loom_func_like_target(loom_func_like_t func);
+
 // Returns the function argument value IDs and their count. For ops
 // with a body region, args are the entry block's block arguments.
 // For declaration-style ops, args are stored as the op's operands.

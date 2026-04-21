@@ -2593,6 +2593,8 @@ class FuncLikeInterface(NamedTuple):
 
     # Symbol ref attr that names this function (required).
     callee: str
+    # Optional symbol ref attr naming the resolved target profile.
+    target: str | None = None
     # Visibility enum attr (e.g., public). None if not applicable.
     visibility: str | None = None
     # Calling convention enum attr. None if not applicable.

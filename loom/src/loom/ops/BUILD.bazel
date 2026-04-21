@@ -36,6 +36,38 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "func_like_facts",
+    srcs = ["func_like_facts.c"],
+    hdrs = ["func_like_facts.h"],
+    deps = [
+        ":op_defs",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "func_like_facts_test",
+    srcs = ["func_like_facts_test.cc"],
+    deps = [
+        ":func_like_facts",
+        ":op_registry",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:preset_registry",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "successor_verify",
     srcs = ["successor_verify.c"],
     hdrs = ["successor_verify.h"],

@@ -31,6 +31,42 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    func_like_facts
+  HDRS
+    "func_like_facts.h"
+  SRCS
+    "func_like_facts.c"
+  DEPS
+    ::op_defs
+    iree::base
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::ir
+    loom::src::loom::ops::target
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    func_like_facts_test
+  SRCS
+    "func_like_facts_test.cc"
+  DEPS
+    ::func_like_facts
+    ::op_registry
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::target
+    loom::src::loom::target::preset_registry
+    loom::src::loom::target::types
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     successor_verify
   HDRS
     "successor_verify.h"
