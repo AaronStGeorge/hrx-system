@@ -28,24 +28,39 @@ extern "C" {
 enum loom_amdgpu_wait_counter_e {
   // Descriptor did not name a concrete AMDGPU wait counter.
   LOOM_AMDGPU_WAIT_COUNTER_NONE = 0,
-  // VMEM/SMEM load-result dependency counter.
-  LOOM_AMDGPU_WAIT_COUNTER_LOAD = 1,
+  // VMEM/global load-result dependency counter.
+  LOOM_AMDGPU_WAIT_COUNTER_VMEM_LOAD = 1,
   // VMEM/global store completion counter.
-  LOOM_AMDGPU_WAIT_COUNTER_STORE = 2,
+  LOOM_AMDGPU_WAIT_COUNTER_VMEM_STORE = 2,
+  // LDS/DS dependency and completion counter.
+  LOOM_AMDGPU_WAIT_COUNTER_LDS = 3,
+  // Scalar-memory dependency counter.
+  LOOM_AMDGPU_WAIT_COUNTER_SMEM = 4,
   // ALU dependency counter used by depctr-style wait packets.
-  LOOM_AMDGPU_WAIT_COUNTER_ALU = 3,
+  LOOM_AMDGPU_WAIT_COUNTER_ALU = 5,
 };
 
 // Bit masks for AMDGPU wait counters. These are descriptor-overlay ids, not
 // native instruction bit encodings.
-#define LOOM_AMDGPU_WAIT_COUNTER_MASK_LOAD ((uint32_t)1u << 0)
-#define LOOM_AMDGPU_WAIT_COUNTER_MASK_STORE ((uint32_t)1u << 1)
-#define LOOM_AMDGPU_WAIT_COUNTER_MASK_ALU ((uint32_t)1u << 2)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD ((uint32_t)1u << 0)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_STORE ((uint32_t)1u << 1)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_LDS ((uint32_t)1u << 2)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_SMEM ((uint32_t)1u << 3)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_ALU ((uint32_t)1u << 4)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM   \
+  (LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD | \
+   LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_STORE)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_READ   \
+  (LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD | \
+   LOOM_AMDGPU_WAIT_COUNTER_MASK_LDS | LOOM_AMDGPU_WAIT_COUNTER_MASK_SMEM)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_WRITE \
+  (LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_STORE | LOOM_AMDGPU_WAIT_COUNTER_MASK_LDS)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_WORKGROUP \
+  LOOM_AMDGPU_WAIT_COUNTER_MASK_LDS
 #define LOOM_AMDGPU_WAIT_COUNTER_MASK_MEMORY \
-  (LOOM_AMDGPU_WAIT_COUNTER_MASK_LOAD | LOOM_AMDGPU_WAIT_COUNTER_MASK_STORE)
-#define LOOM_AMDGPU_WAIT_COUNTER_MASK_ALL                                     \
-  (LOOM_AMDGPU_WAIT_COUNTER_MASK_LOAD | LOOM_AMDGPU_WAIT_COUNTER_MASK_STORE | \
-   LOOM_AMDGPU_WAIT_COUNTER_MASK_ALU)
+  (LOOM_AMDGPU_WAIT_COUNTER_MASK_READ | LOOM_AMDGPU_WAIT_COUNTER_MASK_WRITE)
+#define LOOM_AMDGPU_WAIT_COUNTER_MASK_ALL \
+  (LOOM_AMDGPU_WAIT_COUNTER_MASK_MEMORY | LOOM_AMDGPU_WAIT_COUNTER_MASK_ALU)
 
 typedef enum loom_amdgpu_wait_plan_action_kind_e {
   // Unknown or uninitialized action kind.

@@ -307,9 +307,20 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   ASSERT_NE(wait_descriptor, nullptr);
   EXPECT_EQ(wait_descriptor->operand_count, 0u);
   EXPECT_EQ(wait_descriptor->immediate_count, 2u);
-  EXPECT_EQ(wait_descriptor->effect_count, 1u);
+  EXPECT_EQ(wait_descriptor->effect_count, 3u);
   EXPECT_EQ(wait_descriptor->encoding_id, 9u);
   EXPECT_NE(wait_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+            0u);
+
+  const loom_low_descriptor_t* vscnt_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_waitcnt_vscnt"));
+  ASSERT_NE(vscnt_descriptor, nullptr);
+  EXPECT_EQ(vscnt_descriptor->operand_count, 0u);
+  EXPECT_EQ(vscnt_descriptor->immediate_count, 1u);
+  EXPECT_EQ(vscnt_descriptor->effect_count, 1u);
+  EXPECT_EQ(vscnt_descriptor->encoding_format_id,
+            LOOM_AMDGPU_ENCODING_FORMAT_SOPK);
+  EXPECT_NE(vscnt_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
 
   const loom_low_descriptor_t* depctr_descriptor =

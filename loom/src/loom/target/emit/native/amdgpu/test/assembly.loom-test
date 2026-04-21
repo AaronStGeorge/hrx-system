@@ -53,7 +53,7 @@ buffer_load_dword
 s_waitcnt
 v_add_u32
 buffer_store_dword
-s_waitcnt
+s_waitcnt_vscnt
 s_endpgm
 
 // ====
@@ -119,6 +119,7 @@ ds_write_b128
 s_waitcnt
 s_barrier
 ds_read_b128
+s_waitcnt
 s_endpgm
 
 // ====

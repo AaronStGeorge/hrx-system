@@ -177,6 +177,7 @@ low.func.def target(@gfx11_target) @gfx11_func(%s0 : reg<amdgpu.sgpr>, %resource
   %v_mix = low.op<amdgpu.v_add_u32>(%v0, %vmem) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.op<amdgpu.buffer_store_dword>(%v_mix, %resource, %vaddr, %soffset) {offset = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.op<amdgpu.s_waitcnt>() {vmcnt = 0, lgkmcnt = 0} : ()
+  low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
   low.op<amdgpu.s_waitcnt_depctr>() {depctr = 0} : ()
   low.return %s_mix, %v_mix : reg<amdgpu.sgpr>, reg<amdgpu.vgpr>
 }
@@ -195,22 +196,31 @@ low.func.def target(@gfx11_target) @gfx11_func(%s0 : reg<amdgpu.sgpr>, %resource
   IREE_ASSERT_OK(
       BuildWaitPlan(module.get(), low_function, &arena, &schedule, &plan));
 
-  bool saw_planned_load_use = false;
+  bool saw_planned_vmem_load_use = false;
+  bool saw_planned_smem_use = false;
   bool saw_explicit_store_wait = false;
   bool saw_explicit_alu_wait = false;
   for (iree_host_size_t i = 0; i < plan.action_count; ++i) {
     const loom_amdgpu_wait_plan_action_t& action = plan.actions[i];
     if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
         action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE &&
-        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LOAD &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_VMEM_LOAD &&
         action.producer_node != LOOM_LOW_SCHEDULE_NODE_NONE &&
         action.consumer_node != LOOM_LOW_SCHEDULE_NODE_NONE &&
-        action.outstanding_before == 2) {
-      saw_planned_load_use = true;
+        action.outstanding_before == 1) {
+      saw_planned_vmem_load_use = true;
+    }
+    if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
+        action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_SMEM &&
+        action.producer_node != LOOM_LOW_SCHEDULE_NODE_NONE &&
+        action.consumer_node != LOOM_LOW_SCHEDULE_NODE_NONE &&
+        action.outstanding_before == 1) {
+      saw_planned_smem_use = true;
     }
     if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT &&
         action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_EXPLICIT_PACKET &&
-        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_STORE &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_VMEM_STORE &&
         action.outstanding_before == 1) {
       saw_explicit_store_wait = true;
     }
@@ -220,7 +230,8 @@ low.func.def target(@gfx11_target) @gfx11_func(%s0 : reg<amdgpu.sgpr>, %resource
       saw_explicit_alu_wait = true;
     }
   }
-  EXPECT_TRUE(saw_planned_load_use);
+  EXPECT_TRUE(saw_planned_vmem_load_use);
+  EXPECT_TRUE(saw_planned_smem_use);
   EXPECT_TRUE(saw_explicit_store_wait);
   EXPECT_TRUE(saw_explicit_alu_wait);
 
@@ -233,8 +244,9 @@ low.func.def target(@gfx11_target) @gfx11_func(%s0 : reg<amdgpu.sgpr>, %resource
   EXPECT_NE(json.find("\"format\":\"loom.amdgpu.wait_plan.v0\""),
             std::string::npos);
   EXPECT_NE(json.find("\"reason_name\":\"ssa_use\""), std::string::npos);
-  EXPECT_NE(json.find("\"counter_name\":\"load\""), std::string::npos);
-  EXPECT_NE(json.find("\"counter_name\":\"store\""), std::string::npos);
+  EXPECT_NE(json.find("\"counter_name\":\"vmem_load\""), std::string::npos);
+  EXPECT_NE(json.find("\"counter_name\":\"vmem_store\""), std::string::npos);
+  EXPECT_NE(json.find("\"counter_name\":\"smem\""), std::string::npos);
   EXPECT_NE(json.find("\"counter_name\":\"alu\""), std::string::npos);
   iree_arena_deinitialize(&arena);
 }
@@ -267,24 +279,32 @@ low.func.def target(@gfx950_target) @gfx950_func(%s0 : reg<amdgpu.sgpr>, %resour
   IREE_ASSERT_OK(
       BuildWaitPlan(module.get(), low_function, &arena, &schedule, &plan));
 
-  bool saw_planned_load_use = false;
+  bool saw_planned_vmem_load_use = false;
+  bool saw_planned_smem_use = false;
   bool saw_explicit_store_wait = false;
   for (iree_host_size_t i = 0; i < plan.action_count; ++i) {
     const loom_amdgpu_wait_plan_action_t& action = plan.actions[i];
     if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
         action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE &&
-        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LOAD &&
-        action.outstanding_before == 2) {
-      saw_planned_load_use = true;
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_VMEM_LOAD &&
+        action.outstanding_before == 1) {
+      saw_planned_vmem_load_use = true;
+    }
+    if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
+        action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_SMEM &&
+        action.outstanding_before == 1) {
+      saw_planned_smem_use = true;
     }
     if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT &&
         action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_EXPLICIT_PACKET &&
-        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_STORE &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_VMEM_STORE &&
         action.outstanding_before == 1) {
       saw_explicit_store_wait = true;
     }
   }
-  EXPECT_TRUE(saw_planned_load_use);
+  EXPECT_TRUE(saw_planned_vmem_load_use);
+  EXPECT_TRUE(saw_planned_smem_use);
   EXPECT_TRUE(saw_explicit_store_wait);
   iree_arena_deinitialize(&arena);
 }
@@ -331,18 +351,18 @@ low.func.def target(@target) @func(%resource : reg<amdgpu.sgpr x4>, %soffset : r
       const loom_amdgpu_wait_plan_action_t& action = plan.actions[i];
       if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
           action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE &&
-          action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LOAD &&
+          action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_VMEM_LOAD &&
           action.outstanding_before == 1) {
         saw_planned_load_use = true;
       }
       if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT &&
           action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_EXPLICIT_PACKET &&
-          action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LOAD) {
+          action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_VMEM_LOAD) {
         saw_explicit_load_wait = true;
       }
       if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT &&
           action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_EXPLICIT_PACKET &&
-          action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_STORE &&
+          action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_VMEM_STORE &&
           action.outstanding_before == 1) {
         saw_explicit_store_wait = true;
       }
@@ -388,7 +408,7 @@ low.func.def target(@gfx11_target) @gfx11_func(%value : reg<amdgpu.vgpr>, %resou
     const loom_amdgpu_wait_plan_action_t& action = plan.actions[i];
     if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
         action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_BLOCK_EXIT &&
-        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_STORE &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_VMEM_STORE &&
         action.outstanding_before == 1 &&
         action.consumer_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
       saw_block_exit_store_wait = true;
@@ -429,13 +449,13 @@ low.func.def target(@gfx11_target) @gfx11_func(%addr : reg<amdgpu.vgpr>, %value 
     const loom_amdgpu_wait_plan_action_t& action = plan.actions[i];
     if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
         action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_BARRIER &&
-        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_STORE &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LDS &&
         action.outstanding_before == 1) {
       saw_barrier_store_wait = true;
     }
     if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
         action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE &&
-        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LOAD &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LDS &&
         action.outstanding_before == 1) {
       saw_return_load_wait = true;
     }

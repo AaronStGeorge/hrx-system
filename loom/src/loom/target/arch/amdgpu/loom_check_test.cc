@@ -527,18 +527,31 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerOmitsResourceExtentForUnknownBufferUse) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsMisalignedB128StaticOffset) {
+TEST_F(AmdgpuLoomCheckTest, SourceLowerFallsBackForMisalignedB128Load) {
   const std::string source = AmdgpuGfx11SourceLowCase(
+      "low",
       "  %zero = index.constant 0 : offset\n"
       "  %view = buffer.view %input[%zero] : buffer -> view<8xi32, #dense>\n"
       "  %loaded = vector.load %view[1] : view<8xi32, #dense> -> "
       "vector<4xi32>\n"
       "  vector.store %loaded, %view[0] : vector<4xi32>, "
       "view<8xi32, #dense>\n");
-  ExpectAmdgpuSourceLowRejects(
-      &harness_, source,
-      "128-bit AMDGPU buffer memory accesses currently require 16-byte "
-      "aligned static byte offsets");
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("amdgpu_source_low.loom-test"), &result));
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("low.op<amdgpu.global_load_b128_saddr>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("low.op<amdgpu.buffer_store_b128>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("{offset = 4}"), std::string::npos)
+      << actual_output;
+  loom_check_result_deinitialize(&result);
 }
 
 TEST_F(AmdgpuLoomCheckTest, SourceLowerSplitsStaticOffsetIntoSoffset) {
@@ -579,8 +592,8 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsOutOfRangeStaticBufferOffset) {
       "view<1073742849xi32, #dense>\n");
   ExpectAmdgpuSourceLowRejects(
       &harness_, source,
-      "AMDGPU buffer memory static byte offset is outside the selected "
-      "descriptor's immediate plus scalar SOFFSET range");
+      "AMDGPU buffer memory lowering rejected this access and global pointer "
+      "fallback cannot encode the static byte offset");
 }
 
 TEST_F(AmdgpuLoomCheckTest, SourceLowerUsesDsRead2Write2ForStridedWorkgroup) {

@@ -1018,10 +1018,10 @@ TEST_F(AmdgpuAssemblyTest, EmitsPlannedWaitPackets) {
     const char* store_wait;
   };
   const Case cases[] = {
-      {"amdgpu-gfx950", "s_waitcnt vmcnt(0) lgkmcnt(0)",
-       "s_waitcnt vmcnt(0) lgkmcnt(0)"},
-      {"amdgpu-gfx11", "s_waitcnt vmcnt(0) lgkmcnt(0)",
-       "s_waitcnt vmcnt(0) lgkmcnt(0)"},
+      {"amdgpu-gfx950", "s_waitcnt vmcnt(0) lgkmcnt(63)",
+       "s_waitcnt vmcnt(0) lgkmcnt(63)"},
+      {"amdgpu-gfx11", "s_waitcnt vmcnt(0) lgkmcnt(63)",
+       "s_waitcnt_vscnt vscnt(0)"},
       {"amdgpu-gfx12", "s_wait_loadcnt loadcnt(0)",
        "s_wait_storecnt storecnt(0)"},
       {"amdgpu-gfx1250", "s_wait_loadcnt loadcnt(0)",

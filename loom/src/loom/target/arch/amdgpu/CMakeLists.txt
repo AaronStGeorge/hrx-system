@@ -726,6 +726,7 @@ loom_cc_library(
   SRCS
     "wait_packets.c"
   DEPS
+    ::descriptor_ids
     ::wait_plan
     iree::base
     iree::base::internal::arena

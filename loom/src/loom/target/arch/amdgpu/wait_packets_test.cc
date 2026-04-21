@@ -180,14 +180,9 @@ class AmdgpuWaitPacketsTest : public ::testing::Test {
   bool context_initialized_ = false;
 };
 
-TEST_F(AmdgpuWaitPacketsTest, CoalescesCombinedMemoryWaitForGfx950AndGfx11) {
-  const char* preset_keys[] = {
-      "amdgpu-gfx950",
-      "amdgpu-gfx11",
-  };
-  for (const char* preset_key : preset_keys) {
-    std::string source = TargetPreamble("target", preset_key, "func");
-    source += R"(
+TEST_F(AmdgpuWaitPacketsTest, CoalescesCombinedMemoryWaitForGfx950) {
+  std::string source = TargetPreamble("target", "amdgpu-gfx950", "func");
+  source += R"(
 low.func.def target(@target) @func(%value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %loaded = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
@@ -195,57 +190,89 @@ low.func.def target(@target) @func(%value : reg<amdgpu.vgpr>, %resource : reg<am
 }
 )";
 
-    ModulePtr module;
-    IREE_ASSERT_OK(ParseAndVerify(
-        iree_make_string_view(source.data(), source.size()), &module))
-        << preset_key;
-    const loom_op_t* low_function = FirstLowFunction(module.get());
-    ASSERT_NE(low_function, nullptr) << preset_key;
+  ModulePtr module;
+  IREE_ASSERT_OK(ParseAndVerify(
+      iree_make_string_view(source.data(), source.size()), &module));
+  const loom_op_t* low_function = FirstLowFunction(module.get());
+  ASSERT_NE(low_function, nullptr);
 
-    iree_arena_allocator_t arena;
-    iree_arena_initialize(&block_pool_, &arena);
-    loom_low_schedule_sidecar_t schedule = {};
-    loom_amdgpu_wait_plan_t wait_plan = {};
-    loom_amdgpu_wait_packet_plan_t packet_plan = {};
-    IREE_ASSERT_OK(BuildWaitPackets(module.get(), low_function, &arena,
-                                    &schedule, &wait_plan, &packet_plan))
-        << preset_key;
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_amdgpu_wait_plan_t wait_plan = {};
+  loom_amdgpu_wait_packet_plan_t packet_plan = {};
+  IREE_ASSERT_OK(BuildWaitPackets(module.get(), low_function, &arena, &schedule,
+                                  &wait_plan, &packet_plan));
 
-    EXPECT_EQ(wait_plan.action_count, 2u) << preset_key;
-    ASSERT_EQ(packet_plan.packet_count, 1u) << preset_key;
-    const loom_amdgpu_wait_packet_t& packet = packet_plan.packets[0];
-    EXPECT_EQ(ToString(packet.descriptor_key), "amdgpu.s_waitcnt")
-        << preset_key;
-    EXPECT_EQ(packet.counter_mask, LOOM_AMDGPU_WAIT_COUNTER_MASK_MEMORY)
-        << preset_key;
-    EXPECT_EQ(packet.source_action_count, 2u) << preset_key;
-    ASSERT_EQ(packet.immediate_count, 2u) << preset_key;
-    EXPECT_EQ(packet_plan.immediates[packet.immediate_start].value, 0u)
-        << preset_key;
-    EXPECT_EQ(packet_plan.immediates[packet.immediate_start + 1].value, 0u)
-        << preset_key;
+  EXPECT_EQ(wait_plan.action_count, 2u);
+  ASSERT_EQ(packet_plan.packet_count, 1u);
+  const loom_amdgpu_wait_packet_t& packet = packet_plan.packets[0];
+  EXPECT_EQ(ToString(packet.descriptor_key), "amdgpu.s_waitcnt");
+  EXPECT_EQ(packet.counter_mask, LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM);
+  EXPECT_EQ(packet.source_action_count, 2u);
+  ASSERT_EQ(packet.immediate_count, 2u);
+  EXPECT_EQ(packet_plan.immediates[packet.immediate_start].value, 0u);
+  EXPECT_EQ(packet_plan.immediates[packet.immediate_start + 1].value, 63u);
 
-    iree_string_builder_t builder;
-    iree_string_builder_initialize(iree_allocator_system(), &builder);
-    IREE_ASSERT_OK(
-        loom_amdgpu_wait_packet_plan_format_json(&packet_plan, &builder))
-        << preset_key;
-    std::string json = ToString(builder);
-    iree_string_builder_deinitialize(&builder);
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(
+      loom_amdgpu_wait_packet_plan_format_json(&packet_plan, &builder));
+  std::string json = ToString(builder);
+  iree_string_builder_deinitialize(&builder);
 
-    EXPECT_NE(json.find("\"format\":\"loom.amdgpu.wait_packet_plan.v0\""),
-              std::string::npos)
-        << preset_key;
-    EXPECT_NE(json.find("\"descriptor\":\"amdgpu.s_waitcnt\""),
-              std::string::npos)
-        << preset_key;
-    EXPECT_NE(json.find("\"source_action_count\":2"), std::string::npos)
-        << preset_key;
-    EXPECT_NE(json.find("\"name\":\"vmcnt\""), std::string::npos) << preset_key;
-    EXPECT_NE(json.find("\"name\":\"lgkmcnt\""), std::string::npos)
-        << preset_key;
-    iree_arena_deinitialize(&arena);
+  EXPECT_NE(json.find("\"format\":\"loom.amdgpu.wait_packet_plan.v0\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"descriptor\":\"amdgpu.s_waitcnt\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"source_action_count\":2"), std::string::npos);
+  EXPECT_NE(json.find("\"name\":\"vmcnt\""), std::string::npos);
+  EXPECT_NE(json.find("\"name\":\"lgkmcnt\""), std::string::npos);
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuWaitPacketsTest, SplitsVmemStoreWaitForGfx11) {
+  std::string source = TargetPreamble("target", "amdgpu-gfx11", "func");
+  source += R"(
+low.func.def target(@target) @func(%value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %loaded = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return %loaded : reg<amdgpu.vgpr>
+}
+)";
+
+  ModulePtr module;
+  IREE_ASSERT_OK(ParseAndVerify(
+      iree_make_string_view(source.data(), source.size()), &module));
+  const loom_op_t* low_function = FirstLowFunction(module.get());
+  ASSERT_NE(low_function, nullptr);
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_amdgpu_wait_plan_t wait_plan = {};
+  loom_amdgpu_wait_packet_plan_t packet_plan = {};
+  IREE_ASSERT_OK(BuildWaitPackets(module.get(), low_function, &arena, &schedule,
+                                  &wait_plan, &packet_plan));
+
+  bool saw_vmem_load_wait = false;
+  bool saw_vmem_store_wait = false;
+  EXPECT_EQ(wait_plan.action_count, 2u);
+  ASSERT_EQ(packet_plan.packet_count, 2u);
+  for (iree_host_size_t i = 0; i < packet_plan.packet_count; ++i) {
+    const loom_amdgpu_wait_packet_t& packet = packet_plan.packets[i];
+    if (ToString(packet.descriptor_key) == "amdgpu.s_waitcnt" &&
+        packet.counter_mask == LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD) {
+      saw_vmem_load_wait = true;
+    }
+    if (ToString(packet.descriptor_key) == "amdgpu.s_waitcnt_vscnt" &&
+        packet.counter_mask == LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_STORE) {
+      saw_vmem_store_wait = true;
+    }
   }
+  EXPECT_TRUE(saw_vmem_load_wait);
+  EXPECT_TRUE(saw_vmem_store_wait);
+  iree_arena_deinitialize(&arena);
 }
 
 TEST_F(AmdgpuWaitPacketsTest, MaterializesSplitMemoryWaitsForGfx12AndGfx1250) {
@@ -285,14 +312,14 @@ low.func.def target(@target) @func(%value : reg<amdgpu.vgpr>, %resource : reg<am
               "amdgpu.s_wait_loadcnt")
         << preset_key;
     EXPECT_EQ(packet_plan.packets[0].counter_mask,
-              LOOM_AMDGPU_WAIT_COUNTER_MASK_LOAD)
+              LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD)
         << preset_key;
     EXPECT_EQ(packet_plan.packets[0].source_action_count, 2u) << preset_key;
     EXPECT_EQ(ToString(packet_plan.packets[1].descriptor_key),
               "amdgpu.s_wait_storecnt")
         << preset_key;
     EXPECT_EQ(packet_plan.packets[1].counter_mask,
-              LOOM_AMDGPU_WAIT_COUNTER_MASK_STORE)
+              LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_STORE)
         << preset_key;
     EXPECT_EQ(packet_plan.packets[1].source_action_count, 2u) << preset_key;
     iree_arena_deinitialize(&arena);
@@ -341,6 +368,60 @@ TEST_F(AmdgpuWaitPacketsTest, SelectsAluWaitDescriptorPerTarget) {
         << test_case.descriptor_set_key;
     EXPECT_EQ(packet_plan.packets[0].counter_mask,
               LOOM_AMDGPU_WAIT_COUNTER_MASK_ALU)
+        << test_case.descriptor_set_key;
+    iree_arena_deinitialize(&arena);
+  }
+}
+
+TEST_F(AmdgpuWaitPacketsTest, SelectsLdsAndSmemWaitDescriptorsForGfx12) {
+  struct Case {
+    const char* descriptor_set_key;
+    uint16_t counter_id;
+    const char* expected_descriptor;
+    uint32_t expected_counter_mask;
+  };
+  const Case cases[] = {
+      {"amdgpu.gfx12.core", LOOM_AMDGPU_WAIT_COUNTER_LDS, "amdgpu.s_wait_dscnt",
+       LOOM_AMDGPU_WAIT_COUNTER_MASK_LDS},
+      {"amdgpu.gfx12.core", LOOM_AMDGPU_WAIT_COUNTER_SMEM,
+       "amdgpu.s_wait_kmcnt", LOOM_AMDGPU_WAIT_COUNTER_MASK_SMEM},
+      {"amdgpu.gfx1250.core", LOOM_AMDGPU_WAIT_COUNTER_LDS,
+       "amdgpu.s_wait_dscnt", LOOM_AMDGPU_WAIT_COUNTER_MASK_LDS},
+      {"amdgpu.gfx1250.core", LOOM_AMDGPU_WAIT_COUNTER_SMEM,
+       "amdgpu.s_wait_kmcnt", LOOM_AMDGPU_WAIT_COUNTER_MASK_SMEM},
+  };
+  for (const Case& test_case : cases) {
+    const loom_low_descriptor_set_t* descriptor_set = nullptr;
+    IREE_ASSERT_OK(LookupDescriptorSet(
+        iree_make_cstring_view(test_case.descriptor_set_key), &descriptor_set));
+    ASSERT_NE(descriptor_set, nullptr) << test_case.descriptor_set_key;
+
+    loom_low_schedule_sidecar_t schedule = {};
+    schedule.target.descriptor_set = descriptor_set;
+    loom_amdgpu_wait_plan_action_t action = {
+        .kind = LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED,
+        .reason = LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE,
+        .counter_id = test_case.counter_id,
+        .target_count = 0,
+    };
+    loom_amdgpu_wait_plan_t wait_plan = {
+        .schedule = &schedule,
+        .actions = &action,
+        .action_count = 1,
+    };
+
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool_, &arena);
+    loom_amdgpu_wait_packet_plan_t packet_plan = {};
+    IREE_ASSERT_OK(
+        loom_amdgpu_wait_packet_plan_build(&wait_plan, &arena, &packet_plan))
+        << test_case.descriptor_set_key;
+    ASSERT_EQ(packet_plan.packet_count, 1u) << test_case.descriptor_set_key;
+    EXPECT_EQ(ToString(packet_plan.packets[0].descriptor_key),
+              test_case.expected_descriptor)
+        << test_case.descriptor_set_key;
+    EXPECT_EQ(packet_plan.packets[0].counter_mask,
+              test_case.expected_counter_mask)
         << test_case.descriptor_set_key;
     iree_arena_deinitialize(&arena);
   }

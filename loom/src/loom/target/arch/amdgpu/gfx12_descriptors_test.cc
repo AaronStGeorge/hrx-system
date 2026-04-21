@@ -227,6 +227,24 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorLookupUsesStableKeys) {
       &descriptor_set->effects[load_wait_descriptor->effect_start];
   EXPECT_EQ(load_wait_effect->kind, LOOM_LOW_EFFECT_KIND_COUNTER);
   EXPECT_NE(load_wait_effect->flags & LOOM_LOW_EFFECT_FLAG_ORDERED, 0u);
+
+  const loom_low_descriptor_t* lds_wait_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_dscnt"));
+  ASSERT_NE(lds_wait_descriptor, nullptr);
+  EXPECT_EQ(lds_wait_descriptor->operand_count, 0u);
+  EXPECT_EQ(lds_wait_descriptor->immediate_count, 1u);
+  EXPECT_EQ(lds_wait_descriptor->effect_count, 1u);
+  EXPECT_EQ(lds_wait_descriptor->encoding_format_id,
+            LOOM_AMDGPU_ENCODING_FORMAT_SOPP);
+
+  const loom_low_descriptor_t* smem_wait_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_kmcnt"));
+  ASSERT_NE(smem_wait_descriptor, nullptr);
+  EXPECT_EQ(smem_wait_descriptor->operand_count, 0u);
+  EXPECT_EQ(smem_wait_descriptor->immediate_count, 1u);
+  EXPECT_EQ(smem_wait_descriptor->effect_count, 1u);
+  EXPECT_EQ(smem_wait_descriptor->encoding_format_id,
+            LOOM_AMDGPU_ENCODING_FORMAT_SOPP);
 }
 
 TEST(AmdgpuDescriptorsTest, Gfx12WmmaPacketMatchesRdnaRegisterShape) {

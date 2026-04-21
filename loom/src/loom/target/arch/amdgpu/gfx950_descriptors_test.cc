@@ -226,7 +226,7 @@ TEST(AmdgpuDescriptorsTest, Gfx950CoreDescriptorLookupUsesStableKeys) {
   ASSERT_NE(wait_descriptor, nullptr);
   EXPECT_EQ(wait_descriptor->operand_count, 0u);
   EXPECT_EQ(wait_descriptor->immediate_count, 2u);
-  EXPECT_EQ(wait_descriptor->effect_count, 1u);
+  EXPECT_EQ(wait_descriptor->effect_count, 4u);
   EXPECT_EQ(wait_descriptor->encoding_id, 12u);
   EXPECT_NE(wait_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);

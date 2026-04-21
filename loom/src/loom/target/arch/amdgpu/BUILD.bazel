@@ -1247,6 +1247,7 @@ loom_cc_library(
     srcs = ["wait_packets.c"],
     hdrs = ["wait_packets.h"],
     deps = [
+        ":descriptor_ids",
         ":wait_plan",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/ir",

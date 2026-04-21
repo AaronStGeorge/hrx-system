@@ -86,26 +86,51 @@ _SCHEDULE_WMMA = "amdgpu.wmma"
 _SCHEDULE_WMMA_SCALE = "amdgpu.wmma.scale"
 _SCHEDULE_SWMMAC = "amdgpu.swmmac"
 _SCHEDULE_WAIT_MEMORY = "amdgpu.wait.memory"
+_SCHEDULE_WAIT_VMEM_STORE = "amdgpu.wait.vmem.store"
+_SCHEDULE_WAIT_LDS = "amdgpu.wait.lds"
+_SCHEDULE_WAIT_SMEM = "amdgpu.wait.smem"
 _SCHEDULE_WAIT_LOAD = "amdgpu.wait.load"
 _SCHEDULE_WAIT_STORE = "amdgpu.wait.store"
 _SCHEDULE_WAIT_ALU = "amdgpu.wait.alu"
 _SCHEDULE_WAIT_IDLE = "amdgpu.wait.idle"
 
-_COUNTER_LOAD = 1
-_COUNTER_STORE = 2
-_COUNTER_ALU = 3
+_COUNTER_VMEM_LOAD = 1
+_COUNTER_VMEM_STORE = 2
+_COUNTER_LDS = 3
+_COUNTER_SMEM = 4
+_COUNTER_ALU = 5
 _MUBUF_SOFFSET_INLINE_ZERO = 0x80
 
-_LOAD_COUNTER_HAZARD = Hazard(HazardKind.WAIT_COUNTER, counter_id=_COUNTER_LOAD)
-_STORE_COUNTER_HAZARD = Hazard(HazardKind.WAIT_COUNTER, counter_id=_COUNTER_STORE)
+_VMEM_LOAD_COUNTER_HAZARD = Hazard(
+    HazardKind.WAIT_COUNTER, counter_id=_COUNTER_VMEM_LOAD
+)
+_VMEM_STORE_COUNTER_HAZARD = Hazard(
+    HazardKind.WAIT_COUNTER, counter_id=_COUNTER_VMEM_STORE
+)
+_LDS_COUNTER_HAZARD = Hazard(HazardKind.WAIT_COUNTER, counter_id=_COUNTER_LDS)
+_SMEM_COUNTER_HAZARD = Hazard(HazardKind.WAIT_COUNTER, counter_id=_COUNTER_SMEM)
 _ALU_COUNTER_HAZARD = Hazard(HazardKind.WAIT_COUNTER, counter_id=_COUNTER_ALU)
-_MEMORY_WAIT_HAZARDS = (_LOAD_COUNTER_HAZARD, _STORE_COUNTER_HAZARD)
-_LOAD_WAIT_HAZARDS = (_LOAD_COUNTER_HAZARD,)
-_STORE_WAIT_HAZARDS = (_STORE_COUNTER_HAZARD,)
+_GFX950_MEMORY_WAIT_HAZARDS = (
+    _VMEM_LOAD_COUNTER_HAZARD,
+    _VMEM_STORE_COUNTER_HAZARD,
+    _LDS_COUNTER_HAZARD,
+    _SMEM_COUNTER_HAZARD,
+)
+_GFX11_MEMORY_WAIT_HAZARDS = (
+    _VMEM_LOAD_COUNTER_HAZARD,
+    _LDS_COUNTER_HAZARD,
+    _SMEM_COUNTER_HAZARD,
+)
+_VMEM_LOAD_WAIT_HAZARDS = (_VMEM_LOAD_COUNTER_HAZARD,)
+_VMEM_STORE_WAIT_HAZARDS = (_VMEM_STORE_COUNTER_HAZARD,)
+_LDS_WAIT_HAZARDS = (_LDS_COUNTER_HAZARD,)
+_SMEM_WAIT_HAZARDS = (_SMEM_COUNTER_HAZARD,)
 _ALU_WAIT_HAZARDS = (_ALU_COUNTER_HAZARD,)
 _IDLE_WAIT_HAZARDS = (
-    _LOAD_COUNTER_HAZARD,
-    _STORE_COUNTER_HAZARD,
+    _VMEM_LOAD_COUNTER_HAZARD,
+    _VMEM_STORE_COUNTER_HAZARD,
+    _LDS_COUNTER_HAZARD,
+    _SMEM_COUNTER_HAZARD,
     _ALU_COUNTER_HAZARD,
 )
 
@@ -114,6 +139,13 @@ _ADDRESS_OFFSET_DWORD_ENCODING_ID = 2
 _ADDRESS_OFFSET_QWORD_ENCODING_ID = 3
 _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID = 4
 _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID = 5
+_WAIT_COUNTER_VMEM_ENCODING_ID = 16
+_WAIT_COUNTER_LGKM_ENCODING_ID = 17
+_WAIT_COUNTER_VMEM_LOAD_ENCODING_ID = 18
+_WAIT_COUNTER_VMEM_STORE_ENCODING_ID = 19
+_WAIT_COUNTER_LDS_ENCODING_ID = 20
+_WAIT_COUNTER_SMEM_ENCODING_ID = 21
+_WAIT_COUNTER_ALU_ENCODING_ID = 22
 _ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS = frozenset(
     (
         _ADDRESS_OFFSET_BYTE_ENCODING_ID,
@@ -167,7 +199,14 @@ def _common_scalar_vector_memory_resources() -> tuple[Resource, ...]:
     )
 
 
-def _common_scalar_vector_memory_schedule_classes() -> tuple[ScheduleClass, ...]:
+def _common_scalar_vector_memory_schedule_classes(
+    *,
+    smem_load_hazards: tuple[Hazard, ...],
+    vmem_load_hazards: tuple[Hazard, ...],
+    vmem_store_hazards: tuple[Hazard, ...],
+    lds_load_hazards: tuple[Hazard, ...],
+    lds_store_hazards: tuple[Hazard, ...],
+) -> tuple[ScheduleClass, ...]:
     return (
         ScheduleClass(
             _SCHEDULE_SALU,
@@ -189,7 +228,7 @@ def _common_scalar_vector_memory_schedule_classes() -> tuple[ScheduleClass, ...]
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=8,
             issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
+            hazards=smem_load_hazards,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -198,7 +237,7 @@ def _common_scalar_vector_memory_schedule_classes() -> tuple[ScheduleClass, ...]
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=16,
             issue_uses=(IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
+            hazards=vmem_load_hazards,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -207,7 +246,7 @@ def _common_scalar_vector_memory_schedule_classes() -> tuple[ScheduleClass, ...]
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=16,
             issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
-            hazards=_STORE_WAIT_HAZARDS,
+            hazards=vmem_store_hazards,
             flags=(ScheduleClassFlag.MAY_STORE,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -216,7 +255,7 @@ def _common_scalar_vector_memory_schedule_classes() -> tuple[ScheduleClass, ...]
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=8,
             issue_uses=(IssueUse(_RESOURCE_LDS_LOAD, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
+            hazards=lds_load_hazards,
             flags=(ScheduleClassFlag.MAY_LOAD,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -225,7 +264,7 @@ def _common_scalar_vector_memory_schedule_classes() -> tuple[ScheduleClass, ...]
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=8,
             issue_uses=(IssueUse(_RESOURCE_LDS_STORE, cycles=1, units=1),),
-            hazards=_STORE_WAIT_HAZARDS,
+            hazards=lds_store_hazards,
             flags=(ScheduleClassFlag.MAY_STORE,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -318,6 +357,7 @@ _VMCNT_IMMEDIATE = Immediate(
     "vmcnt",
     ImmediateKind.UNSIGNED,
     bit_width=6,
+    encoding_id=_WAIT_COUNTER_VMEM_ENCODING_ID,
     unsigned_max=(2**6) - 1,
 )
 
@@ -325,6 +365,7 @@ _LGKMCNT_IMMEDIATE = Immediate(
     "lgkmcnt",
     ImmediateKind.UNSIGNED,
     bit_width=6,
+    encoding_id=_WAIT_COUNTER_LGKM_ENCODING_ID,
     unsigned_max=(2**6) - 1,
 )
 
@@ -332,6 +373,7 @@ _LOADCNT_IMMEDIATE = Immediate(
     "loadcnt",
     ImmediateKind.UNSIGNED,
     bit_width=6,
+    encoding_id=_WAIT_COUNTER_VMEM_LOAD_ENCODING_ID,
     unsigned_max=(2**6) - 1,
 )
 
@@ -339,13 +381,39 @@ _STORECNT_IMMEDIATE = Immediate(
     "storecnt",
     ImmediateKind.UNSIGNED,
     bit_width=6,
+    encoding_id=_WAIT_COUNTER_VMEM_STORE_ENCODING_ID,
     unsigned_max=(2**6) - 1,
+)
+
+_VSCNT_IMMEDIATE = Immediate(
+    "vscnt",
+    ImmediateKind.UNSIGNED,
+    bit_width=6,
+    encoding_id=_WAIT_COUNTER_VMEM_STORE_ENCODING_ID,
+    unsigned_max=(2**6) - 1,
+)
+
+_DSCNT_IMMEDIATE = Immediate(
+    "dscnt",
+    ImmediateKind.UNSIGNED,
+    bit_width=6,
+    encoding_id=_WAIT_COUNTER_LDS_ENCODING_ID,
+    unsigned_max=(2**6) - 1,
+)
+
+_KMCNT_IMMEDIATE = Immediate(
+    "kmcnt",
+    ImmediateKind.UNSIGNED,
+    bit_width=5,
+    encoding_id=_WAIT_COUNTER_SMEM_ENCODING_ID,
+    unsigned_max=(2**5) - 1,
 )
 
 _DEPCTR_IMMEDIATE = Immediate(
     "depctr",
     ImmediateKind.UNSIGNED,
     bit_width=16,
+    encoding_id=_WAIT_COUNTER_ALU_ENCODING_ID,
     unsigned_max=(2**16) - 1,
 )
 
@@ -480,16 +548,28 @@ _WAIT_EFFECT = Effect(
     flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
 )
 
-_LOAD_WAIT_EFFECT = Effect(
+_VMEM_LOAD_WAIT_EFFECT = Effect(
     EffectKind.COUNTER,
     flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
-    counter_id=_COUNTER_LOAD,
+    counter_id=_COUNTER_VMEM_LOAD,
 )
 
-_STORE_WAIT_EFFECT = Effect(
+_VMEM_STORE_WAIT_EFFECT = Effect(
     EffectKind.COUNTER,
     flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
-    counter_id=_COUNTER_STORE,
+    counter_id=_COUNTER_VMEM_STORE,
+)
+
+_LDS_WAIT_EFFECT = Effect(
+    EffectKind.COUNTER,
+    flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
+    counter_id=_COUNTER_LDS,
+)
+
+_SMEM_WAIT_EFFECT = Effect(
+    EffectKind.COUNTER,
+    flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
+    counter_id=_COUNTER_SMEM,
 )
 
 _ALU_WAIT_EFFECT = Effect(
@@ -1911,7 +1991,10 @@ def _v_mfma_f32_16x16x16_f16_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-def _s_waitcnt_overlay() -> AmdgpuDescriptorOverlay:
+def _s_waitcnt_overlay(
+    *,
+    effects: tuple[Effect, ...],
+) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.s_waitcnt",
         instruction_name="S_WAITCNT",
@@ -1922,7 +2005,7 @@ def _s_waitcnt_overlay() -> AmdgpuDescriptorOverlay:
         operands=(),
         immediate_fields=("SIMM16",),
         immediates=(_VMCNT_IMMEDIATE, _LGKMCNT_IMMEDIATE),
-        effects=(_WAIT_EFFECT,),
+        effects=effects,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
@@ -1943,6 +2026,23 @@ def _s_waitcnt_depctr_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_waitcnt_vscnt_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_waitcnt_vscnt",
+        instruction_name="S_WAITCNT_VSCNT",
+        mnemonic="s_waitcnt_vscnt",
+        encoding_name="ENC_SOPK",
+        semantic_tag="control.waitcnt.vmem_store",
+        schedule_class=_SCHEDULE_WAIT_VMEM_STORE,
+        operands=(),
+        immediate_fields=("SIMM16",),
+        immediates=(_VSCNT_IMMEDIATE,),
+        fixed_encoding_fields=(("SDST", 124),),
+        effects=(_VMEM_STORE_WAIT_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _s_wait_loadcnt_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.s_wait_loadcnt",
@@ -1954,7 +2054,7 @@ def _s_wait_loadcnt_overlay() -> AmdgpuDescriptorOverlay:
         operands=(),
         immediate_fields=("SIMM16",),
         immediates=(_LOADCNT_IMMEDIATE,),
-        effects=(_LOAD_WAIT_EFFECT,),
+        effects=(_VMEM_LOAD_WAIT_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
@@ -1970,7 +2070,39 @@ def _s_wait_storecnt_overlay() -> AmdgpuDescriptorOverlay:
         operands=(),
         immediate_fields=("SIMM16",),
         immediates=(_STORECNT_IMMEDIATE,),
-        effects=(_STORE_WAIT_EFFECT,),
+        effects=(_VMEM_STORE_WAIT_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _s_wait_dscnt_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_wait_dscnt",
+        instruction_name="S_WAIT_DSCNT",
+        mnemonic="s_wait_dscnt",
+        encoding_name="ENC_SOPP",
+        semantic_tag="control.waitcnt.lds",
+        schedule_class=_SCHEDULE_WAIT_LDS,
+        operands=(),
+        immediate_fields=("SIMM16",),
+        immediates=(_DSCNT_IMMEDIATE,),
+        effects=(_LDS_WAIT_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _s_wait_kmcnt_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_wait_kmcnt",
+        instruction_name="S_WAIT_KMCNT",
+        mnemonic="s_wait_kmcnt",
+        encoding_name="ENC_SOPP",
+        semantic_tag="control.waitcnt.smem",
+        schedule_class=_SCHEDULE_WAIT_SMEM,
+        operands=(),
+        immediate_fields=("SIMM16",),
+        immediates=(_KMCNT_IMMEDIATE,),
+        effects=(_SMEM_WAIT_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
@@ -2109,7 +2241,14 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_ds_memory_overlays(),
         _v_mfma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
-        _s_waitcnt_overlay(),
+        _s_waitcnt_overlay(
+            effects=(
+                _VMEM_LOAD_WAIT_EFFECT,
+                _VMEM_STORE_WAIT_EFFECT,
+                _LDS_WAIT_EFFECT,
+                _SMEM_WAIT_EFFECT,
+            )
+        ),
     )
 
 
@@ -2185,7 +2324,14 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_ds_memory_overlays(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
-        _s_waitcnt_overlay(),
+        _s_waitcnt_overlay(
+            effects=(
+                _VMEM_LOAD_WAIT_EFFECT,
+                _LDS_WAIT_EFFECT,
+                _SMEM_WAIT_EFFECT,
+            )
+        ),
+        _s_waitcnt_vscnt_overlay(),
         _s_waitcnt_depctr_overlay(),
         _s_wait_idle_overlay(),
     )
@@ -2281,6 +2427,8 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_wmma_f32_16x16x16_f16_overlay(),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),
+        _s_wait_dscnt_overlay(),
+        _s_wait_kmcnt_overlay(),
         _s_wait_alu_overlay(),
         _s_wait_idle_overlay(),
     )
@@ -2375,6 +2523,8 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),
+        _s_wait_dscnt_overlay(),
+        _s_wait_kmcnt_overlay(),
         _s_wait_alu_overlay(),
         _s_wait_idle_overlay(),
     )
@@ -2434,7 +2584,13 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
-        *_common_scalar_vector_memory_schedule_classes(),
+        *_common_scalar_vector_memory_schedule_classes(
+            smem_load_hazards=_SMEM_WAIT_HAZARDS,
+            vmem_load_hazards=_VMEM_LOAD_WAIT_HAZARDS,
+            vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
+            lds_load_hazards=_LDS_WAIT_HAZARDS,
+            lds_store_hazards=_LDS_WAIT_HAZARDS,
+        ),
         ScheduleClass(
             _SCHEDULE_MFMA,
             latency_kind=LatencyKind.ESTIMATE,
@@ -2448,7 +2604,7 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
-            hazards=_MEMORY_WAIT_HAZARDS,
+            hazards=_GFX950_MEMORY_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -2510,7 +2666,13 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
-        *_common_scalar_vector_memory_schedule_classes(),
+        *_common_scalar_vector_memory_schedule_classes(
+            smem_load_hazards=_SMEM_WAIT_HAZARDS,
+            vmem_load_hazards=_VMEM_LOAD_WAIT_HAZARDS,
+            vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
+            lds_load_hazards=_LDS_WAIT_HAZARDS,
+            lds_store_hazards=_LDS_WAIT_HAZARDS,
+        ),
         ScheduleClass(
             _SCHEDULE_WMMA,
             latency_kind=LatencyKind.ESTIMATE,
@@ -2524,7 +2686,16 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
-            hazards=_MEMORY_WAIT_HAZARDS,
+            hazards=_GFX11_MEMORY_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_VMEM_STORE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_VMEM_STORE_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -2603,7 +2774,13 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
-        *_common_scalar_vector_memory_schedule_classes(),
+        *_common_scalar_vector_memory_schedule_classes(
+            smem_load_hazards=_SMEM_WAIT_HAZARDS,
+            vmem_load_hazards=_VMEM_LOAD_WAIT_HAZARDS,
+            vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
+            lds_load_hazards=_LDS_WAIT_HAZARDS,
+            lds_store_hazards=_LDS_WAIT_HAZARDS,
+        ),
         ScheduleClass(
             _SCHEDULE_WMMA,
             latency_kind=LatencyKind.ESTIMATE,
@@ -2617,7 +2794,7 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
+            hazards=_VMEM_LOAD_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -2626,7 +2803,25 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
-            hazards=_STORE_WAIT_HAZARDS,
+            hazards=_VMEM_STORE_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_LDS,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_LDS_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_SMEM,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_SMEM_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -2706,7 +2901,13 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
-        *_common_scalar_vector_memory_schedule_classes(),
+        *_common_scalar_vector_memory_schedule_classes(
+            smem_load_hazards=_SMEM_WAIT_HAZARDS,
+            vmem_load_hazards=_VMEM_LOAD_WAIT_HAZARDS,
+            vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
+            lds_load_hazards=_LDS_WAIT_HAZARDS,
+            lds_store_hazards=_LDS_WAIT_HAZARDS,
+        ),
         ScheduleClass(
             _SCHEDULE_WMMA,
             latency_kind=LatencyKind.ESTIMATE,
@@ -2736,7 +2937,7 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
+            hazards=_VMEM_LOAD_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -2745,7 +2946,25 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
-            hazards=_STORE_WAIT_HAZARDS,
+            hazards=_VMEM_STORE_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_LDS,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_LDS_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_WAIT_SMEM,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            hazards=_SMEM_WAIT_HAZARDS,
             flags=(ScheduleClassFlag.CONTROL,),
             model_quality=ModelQuality.FALLBACK,
         ),
@@ -2995,6 +3214,13 @@ def amdgpu_immediate_encoding_id_items() -> tuple[tuple[str, int], ...]:
         ("address_offset_qword", _ADDRESS_OFFSET_QWORD_ENCODING_ID),
         ("address_offset_dword_stride64", _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID),
         ("address_offset_qword_stride64", _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID),
+        ("wait_counter_vmem", _WAIT_COUNTER_VMEM_ENCODING_ID),
+        ("wait_counter_lgkm", _WAIT_COUNTER_LGKM_ENCODING_ID),
+        ("wait_counter_vmem_load", _WAIT_COUNTER_VMEM_LOAD_ENCODING_ID),
+        ("wait_counter_vmem_store", _WAIT_COUNTER_VMEM_STORE_ENCODING_ID),
+        ("wait_counter_lds", _WAIT_COUNTER_LDS_ENCODING_ID),
+        ("wait_counter_smem", _WAIT_COUNTER_SMEM_ENCODING_ID),
+        ("wait_counter_alu", _WAIT_COUNTER_ALU_ENCODING_ID),
     )
 
 
