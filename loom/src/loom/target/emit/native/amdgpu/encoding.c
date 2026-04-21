@@ -1206,21 +1206,8 @@ static iree_status_t loom_amdgpu_resolve_encoding_target(
                             "AMDGPU native encoding schedule target is "
                             "required");
   }
-  iree_string_view_t target_key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_string(
-      schedule->target.descriptor_set,
-      schedule->target.descriptor_set->target_key_string_offset, &target_key));
-  if (!iree_string_view_equal(target_key, IREE_SV("amdgpu"))) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU native encoder received target '%.*s'",
-                            (int)target_key.size, target_key.data);
-  }
-  iree_string_view_t descriptor_set_key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_string(
-      schedule->target.descriptor_set,
-      schedule->target.descriptor_set->key_string_offset, &descriptor_set_key));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set(
-      descriptor_set_key, out_target));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
+      schedule->target.descriptor_set->stable_id, out_target));
   if (schedule->block_count != 1) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
@@ -1321,7 +1308,8 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
   const loom_amdgpu_descriptor_set_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_encoding_target(schedule, &target));
   const loom_amdgpu_encoding_table_t* encoding_table =
-      loom_amdgpu_encoding_table_for_descriptor_set(target->descriptor_set_key);
+      loom_amdgpu_encoding_table_for_descriptor_set_id(
+          target->descriptor_set_stable_id);
   const loom_string_id_t* immediate_name_ids = NULL;
   iree_host_size_t immediate_name_id_count = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_immediate_name_ids(

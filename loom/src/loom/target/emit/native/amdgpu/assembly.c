@@ -14,6 +14,7 @@
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/gfx11_descriptors.h"
 #include "loom/target/arch/amdgpu/gfx950_descriptors.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/assembly.h"
 
 #define LOOM_AMDGPU_INLINE_MOVE_COUNT 16u
@@ -1090,11 +1091,13 @@ static iree_status_t loom_amdgpu_verify_assembly_target(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU assembly schedule target is required");
   }
-  iree_string_view_t target_key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
-      schedule->target.descriptor_set,
-      schedule->target.descriptor_set->target_key_string_offset, &target_key));
-  if (!iree_string_view_equal(target_key, IREE_SV("amdgpu"))) {
+  if (schedule->target.descriptor_set->target_stable_id !=
+      LOOM_AMDGPU_TARGET_STABLE_ID) {
+    iree_string_view_t target_key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+        schedule->target.descriptor_set,
+        schedule->target.descriptor_set->target_key_string_offset,
+        &target_key));
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU assembly emitter received target '%.*s'",
                             (int)target_key.size, target_key.data);

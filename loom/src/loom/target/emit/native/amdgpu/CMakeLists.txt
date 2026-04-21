@@ -28,6 +28,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::encoding
     loom::src::loom::target::arch::amdgpu::gfx11_descriptors_ids
     loom::src::loom::target::arch::amdgpu::gfx950_descriptors_ids
+    loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::emit::native::assembly
   PUBLIC

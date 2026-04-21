@@ -24,10 +24,13 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 12u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 13u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
+
+// Sentinel for absent target-family or descriptor-set stable IDs.
+#define LOOM_LOW_STABLE_ID_NONE UINT64_C(0)
 
 // Sentinel for absent 16-bit table identifiers.
 #define LOOM_LOW_ID_NONE UINT16_MAX
@@ -594,6 +597,10 @@ typedef struct loom_low_descriptor_set_t {
   uint32_t abi_version;
   // Generator or hand-authored schema version.
   uint32_t generator_version;
+  // Durable descriptor-set identity derived from the descriptor-set key.
+  uint64_t stable_id;
+  // Durable target-family identity derived from the target-family key, or NONE.
+  uint64_t target_stable_id;
   // String-table offset for the descriptor-set key.
   loom_bstring_table_offset_t key_string_offset;
   // String-table offset for the target-family key.
@@ -738,6 +745,13 @@ iree_status_t loom_low_descriptor_registry_verify(
 // emission must be deterministic.
 iree_status_t loom_low_descriptor_registry_lookup(
     const loom_low_descriptor_registry_t* registry, iree_string_view_t key,
+    const loom_low_descriptor_set_t** out_descriptor_set);
+
+// Looks up |stable_id| in |registry|. Returns OK with NULL when no set matches.
+// Duplicate matching stable IDs return ALREADY_EXISTS because target binding
+// and emission must be deterministic.
+iree_status_t loom_low_descriptor_registry_lookup_by_id(
+    const loom_low_descriptor_registry_t* registry, uint64_t stable_id,
     const loom_low_descriptor_set_t** out_descriptor_set);
 
 // Returns the B-string view at |string_offset|. A NONE offset returns an empty

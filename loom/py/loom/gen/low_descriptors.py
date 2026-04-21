@@ -842,6 +842,9 @@ def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         "",
     ]
     lines.extend(_descriptor_id_define(spec.c_enum_prefix, descriptor.key) for descriptor in compiled.descriptors)
+    lines.append(f"#define {spec.c_enum_prefix}_DESCRIPTOR_SET_ID UINT64_C(0x{descriptor_stable_id(spec.key):016x})")
+    if spec.target_key is not None:
+        lines.append(f"#define {spec.c_enum_prefix}_TARGET_ID UINT64_C(0x{descriptor_stable_id(spec.target_key):016x})")
     if compiled.reg_classes:
         lines.append("")
         lines.extend(_reg_class_id_define(spec.c_enum_prefix, reg_class.name, i) for i, reg_class in enumerate(compiled.reg_classes))
@@ -1286,6 +1289,8 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         [
             "    .abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION,",
             f"    .generator_version = {spec.generator_version},",
+            f"    .stable_id = UINT64_C(0x{descriptor_stable_id(spec.key):016x}),",
+            f"    .target_stable_id = {_hex_u64_literal(descriptor_stable_id(spec.target_key)) if spec.target_key is not None else 'LOOM_LOW_STABLE_ID_NONE'},",
             f"    .key_string_offset = {pool.ref('set_key')},",
             f"    .target_key_string_offset = {_optional_string_expr(pool, 'target_key' if spec.target_key is not None else None)},",
             f"    .feature_key_string_offset = {_optional_string_expr(pool, 'feature_key' if spec.feature_key is not None else None)},",
@@ -1415,6 +1420,8 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
         "feature_namespace": spec.feature_key or "",
         "abi_version": LOW_DESCRIPTOR_SET_ABI_VERSION,
         "generator_version": spec.generator_version,
+        "stable_id": descriptor_stable_id(spec.key),
+        "target_stable_id": descriptor_stable_id(spec.target_key) if spec.target_key is not None else 0,
         "table_counts": {
             "descriptors": len(compiled.descriptors),
             "descriptor_refs": len(compiled.descriptor_refs),

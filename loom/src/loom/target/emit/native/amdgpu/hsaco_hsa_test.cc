@@ -781,8 +781,8 @@ iree_status_t PrepareTargetProcessorForLowHsaco(
                             target.target_cpu.c_str());
   }
   const loom_amdgpu_descriptor_set_info_t* descriptor_set = nullptr;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set(
-      processor->descriptor_set_key, &descriptor_set));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
+      processor->descriptor_set_stable_id, &descriptor_set));
   if (!descriptor_set->supports_descriptor_packet_encoding) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
@@ -873,9 +873,15 @@ iree_status_t Buffer128DescriptorKeysForProcessor(
   loom_target_low_descriptor_registry_t target_registry = {};
   loom_amdgpu_low_descriptor_registry_initialize(&target_registry);
   const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_lookup(
-      &target_registry.registry, processor->descriptor_set_key,
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_lookup_by_id(
+      &target_registry.registry, processor->descriptor_set_stable_id,
       &descriptor_set));
+  if (descriptor_set == nullptr) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU descriptor registry has no set for processor '%.*s'",
+        (int)processor->target_cpu.size, processor->target_cpu.data);
+  }
   IREE_RETURN_IF_ERROR(LookupUniqueDescriptorKeyBySemanticTag(
       descriptor_set, IREE_SV("memory.load.u128"), out_load_key));
   return LookupUniqueDescriptorKeyBySemanticTag(

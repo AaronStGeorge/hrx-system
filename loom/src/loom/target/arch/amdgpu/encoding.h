@@ -102,6 +102,8 @@ typedef struct loom_amdgpu_encoding_format_layout_t {
 } loom_amdgpu_encoding_format_layout_t;
 
 typedef struct loom_amdgpu_encoding_table_t {
+  // Durable descriptor-set identity this table can encode.
+  uint64_t descriptor_set_stable_id;
   // Descriptor-set key this table can encode.
   iree_string_view_t descriptor_set_key;
   // VOP1 opcode used for target-inserted v_mov_b32 register moves.
@@ -145,11 +147,11 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format);
 // register encoding, where VGPR operands are biased by 0x100.
 bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id);
 
-// Returns the generated encoding table for |descriptor_set_key|, or NULL when
-// this binary was not linked with a matching table.
+// Returns the generated encoding table for |descriptor_set_stable_id|, or NULL
+// when this binary was not linked with a matching table.
 const loom_amdgpu_encoding_table_t*
-loom_amdgpu_encoding_table_for_descriptor_set(
-    iree_string_view_t descriptor_set_key);
+loom_amdgpu_encoding_table_for_descriptor_set_id(
+    uint64_t descriptor_set_stable_id);
 
 // Packs a native AMDGPU packet by applying |opcode| and target field values to
 // the XML-derived encoding layout. When |opcode| is

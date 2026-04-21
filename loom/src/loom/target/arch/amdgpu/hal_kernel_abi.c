@@ -115,33 +115,30 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_descriptor_reg_class_id(
   IREE_ASSERT_ARGUMENT(descriptor_set);
   IREE_ASSERT_ARGUMENT(out_descriptor_reg_class_id);
 
-  iree_string_view_t descriptor_set_key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->key_string_offset, &descriptor_set_key));
-
   uint16_t sgpr_id = LOOM_LOW_REG_CLASS_NONE;
   uint16_t vgpr_id = LOOM_LOW_REG_CLASS_NONE;
-  if (iree_string_view_equal(descriptor_set_key,
-                             IREE_SV("amdgpu.gfx11.core"))) {
-    sgpr_id = AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR;
-    vgpr_id = AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR;
-  } else if (iree_string_view_equal(descriptor_set_key,
-                                    IREE_SV("amdgpu.gfx12.core"))) {
-    sgpr_id = AMDGPU_GFX12_CORE_REG_CLASS_ID_AMDGPU_SGPR;
-    vgpr_id = AMDGPU_GFX12_CORE_REG_CLASS_ID_AMDGPU_VGPR;
-  } else if (iree_string_view_equal(descriptor_set_key,
-                                    IREE_SV("amdgpu.gfx1250.core"))) {
-    sgpr_id = AMDGPU_GFX1250_CORE_REG_CLASS_ID_AMDGPU_SGPR;
-    vgpr_id = AMDGPU_GFX1250_CORE_REG_CLASS_ID_AMDGPU_VGPR;
-  } else if (iree_string_view_equal(descriptor_set_key,
-                                    IREE_SV("amdgpu.gfx950.core"))) {
-    sgpr_id = AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_SGPR;
-    vgpr_id = AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_VGPR;
-  } else {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU HAL kernel ABI does not support descriptor set '%.*s'",
-        (int)descriptor_set_key.size, descriptor_set_key.data);
+  switch (descriptor_set->stable_id) {
+    case AMDGPU_GFX11_CORE_DESCRIPTOR_SET_ID:
+      sgpr_id = AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR;
+      vgpr_id = AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_VGPR;
+      break;
+    case AMDGPU_GFX12_CORE_DESCRIPTOR_SET_ID:
+      sgpr_id = AMDGPU_GFX12_CORE_REG_CLASS_ID_AMDGPU_SGPR;
+      vgpr_id = AMDGPU_GFX12_CORE_REG_CLASS_ID_AMDGPU_VGPR;
+      break;
+    case AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_ID:
+      sgpr_id = AMDGPU_GFX1250_CORE_REG_CLASS_ID_AMDGPU_SGPR;
+      vgpr_id = AMDGPU_GFX1250_CORE_REG_CLASS_ID_AMDGPU_VGPR;
+      break;
+    case AMDGPU_GFX950_CORE_DESCRIPTOR_SET_ID:
+      sgpr_id = AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_SGPR;
+      vgpr_id = AMDGPU_GFX950_CORE_REG_CLASS_ID_AMDGPU_VGPR;
+      break;
+    default:
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "AMDGPU HAL kernel ABI does not support "
+                              "descriptor set stable ID 0x%016" PRIx64,
+                              descriptor_set->stable_id);
   }
 
   switch (reg_class) {

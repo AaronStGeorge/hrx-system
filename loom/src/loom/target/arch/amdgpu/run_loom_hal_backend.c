@@ -40,8 +40,8 @@ static iree_status_t iree_run_loom_amdgpu_processor_is_compile_supported(
   }
 
   const loom_amdgpu_descriptor_set_info_t* descriptor_set = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set(
-      processor->descriptor_set_key, &descriptor_set));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
+      processor->descriptor_set_stable_id, &descriptor_set));
   *out_supported = descriptor_set->supports_descriptor_packet_encoding;
   return iree_ok_status();
 }

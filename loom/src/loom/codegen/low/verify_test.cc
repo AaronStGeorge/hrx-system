@@ -951,6 +951,10 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
 
   tables->set.abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION;
   tables->set.generator_version = 1;
+  tables->set.stable_id =
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.core"));
+  tables->set.target_stable_id =
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.target"));
   tables->set.key_string_offset = FEATURE_STRING_OFFSET(set_key);
   tables->set.target_key_string_offset = FEATURE_STRING_OFFSET(target_key);
   tables->set.feature_key_string_offset = FEATURE_STRING_OFFSET(feature_key);

@@ -235,6 +235,10 @@ void InitializeTestTables(TestTables* tables) {
 
   tables->set.abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION;
   tables->set.generator_version = 7;
+  tables->set.stable_id =
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.core"));
+  tables->set.target_stable_id =
+      loom_low_descriptor_stable_id_from_key(IREE_SV("test.target"));
   tables->set.key_string_offset = TEST_STRING_OFFSET(set_key);
   tables->set.target_key_string_offset = TEST_STRING_OFFSET(target_key);
   tables->set.feature_key_string_offset = TEST_STRING_OFFSET(feature_key);
@@ -615,6 +619,10 @@ TEST(LowDescriptorsTest, ProviderBackedRegistryVerifiesAndLooksUpDescriptors) {
   const loom_low_descriptor_set_t* descriptor_set = nullptr;
   IREE_ASSERT_OK(loom_low_descriptor_registry_lookup(
       &registry, IREE_SV("test.core"), &descriptor_set));
+  EXPECT_EQ(descriptor_set, &tables.set);
+  descriptor_set = nullptr;
+  IREE_ASSERT_OK(loom_low_descriptor_registry_lookup_by_id(
+      &registry, tables.set.stable_id, &descriptor_set));
   EXPECT_EQ(descriptor_set, &tables.set);
   gProvidedDescriptorSet = nullptr;
 }

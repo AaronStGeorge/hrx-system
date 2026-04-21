@@ -699,6 +699,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::util::json
     loom::src::loom::util::stream
   PUBLIC

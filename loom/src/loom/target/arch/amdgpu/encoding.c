@@ -193,8 +193,8 @@ bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id) {
 }
 
 const loom_amdgpu_encoding_table_t*
-loom_amdgpu_encoding_table_for_descriptor_set(
-    iree_string_view_t descriptor_set_key) {
+loom_amdgpu_encoding_table_for_descriptor_set_id(
+    uint64_t descriptor_set_stable_id) {
   const loom_amdgpu_encoding_table_t* tables[] = {
       loom_amdgpu_gfx950_encoding_table(),
       loom_amdgpu_gfx11_encoding_table(),
@@ -203,7 +203,7 @@ loom_amdgpu_encoding_table_for_descriptor_set(
   };
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(tables); ++i) {
     const loom_amdgpu_encoding_table_t* table = tables[i];
-    if (iree_string_view_equal(descriptor_set_key, table->descriptor_set_key)) {
+    if (descriptor_set_stable_id == table->descriptor_set_stable_id) {
       return table;
     }
   }

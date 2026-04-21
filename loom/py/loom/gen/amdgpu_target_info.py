@@ -35,11 +35,13 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+    AMDGPU_TARGET_KEY,
     AmdgpuDescriptorSetInfo,
     AmdgpuProcessorInfo,
     sorted_descriptor_set_infos,
     sorted_processor_infos,
 )
+from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
 
 
 def _c_string_literal(value: str) -> str:
@@ -52,6 +54,10 @@ def _c_string_arg(value: str) -> str:
 
 def _bool_literal(value: bool) -> str:
     return "true" if value else "false"
+
+
+def _u64_expr(value: int) -> str:
+    return f"UINT64_C(0x{value:016x})"
 
 
 def _padded_arg(value: str, width: int) -> str:
@@ -92,6 +98,9 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
         raise ValueError("AMDGPU descriptor-set target-info keys must be sorted")
     if len(keys) != len(set(keys)):
         raise ValueError("AMDGPU descriptor-set target-info keys must be unique")
+    stable_ids = [descriptor_stable_id(key) for key in keys]
+    if len(stable_ids) != len(set(stable_ids)):
+        raise ValueError("AMDGPU descriptor-set target-info stable IDs must be unique")
     for info in descriptor_sets:
         if not info.key:
             raise ValueError("AMDGPU descriptor-set key is required")
@@ -154,6 +163,9 @@ def _emit_header() -> str:
         'extern "C" {',
         "#endif",
         "",
+        "// Stable target-family identity for AMDGPU low descriptor sets.",
+        f"#define LOOM_AMDGPU_TARGET_STABLE_ID {_u64_expr(descriptor_stable_id(AMDGPU_TARGET_KEY))}",
+        "",
         "typedef enum loom_amdgpu_kernel_descriptor_profile_e {",
         "  // No kernel descriptor writer is implemented for this processor yet.",
         "  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE = 0,",
@@ -181,6 +193,8 @@ def _emit_header() -> str:
         "} loom_amdgpu_matrix_feature_profile_t;",
         "",
         "typedef struct loom_amdgpu_descriptor_set_info_t {",
+        "  // Durable descriptor-set identity derived from the descriptor-set key.",
+        "  uint64_t descriptor_set_stable_id;",
         "  // Target-low descriptor set key such as `amdgpu.gfx11.core`.",
         "  iree_string_view_t descriptor_set_key;",
         "  // Production target preset key that expands to this descriptor set.",
@@ -196,6 +210,8 @@ def _emit_header() -> str:
         "  iree_string_view_t target_cpu;",
         "  // Target-low descriptor set key selected for this processor.",
         "  iree_string_view_t descriptor_set_key;",
+        "  // Durable descriptor-set identity selected for this processor.",
+        "  uint64_t descriptor_set_stable_id;",
         "  // Production target preset key selected for this processor.",
         "  iree_string_view_t low_preset_key;",
         "  // ELF EF_AMDGPU_MACH bits for this processor, or 0 when unknown.",
@@ -245,6 +261,11 @@ def _emit_header() -> str:
         "    iree_string_view_t descriptor_set_key,",
         "    const loom_amdgpu_descriptor_set_info_t** out_descriptor_set);",
         "",
+        "// Looks up a supported AMDGPU target-low descriptor set by stable ID.",
+        "iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_id(",
+        "    uint64_t descriptor_set_stable_id,",
+        "    const loom_amdgpu_descriptor_set_info_t** out_descriptor_set);",
+        "",
         "// Parses an AMDHSA target ID such as `amdgcn-amd-amdhsa--gfx1100`.",
         "iree_status_t loom_amdgpu_target_info_parse_amdhsa_target_id(",
         "    iree_string_view_t target_id,",
@@ -264,8 +285,9 @@ def _emit_descriptor_set_rows(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
     preset_width = max(len(_c_string_arg(info.low_preset_key)) for info in descriptor_sets)
     opcode_width = len("0x000")
     lines = [
-        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(descriptor_set_key_, low_preset_key_, s_endpgm_opcode_, supports_descriptor_packet_encoding_) \\",
+        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(stable_id_, descriptor_set_key_, low_preset_key_, s_endpgm_opcode_, supports_descriptor_packet_encoding_) \\",
         "  { \\",
+        "    .descriptor_set_stable_id = stable_id_, \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
         "    .low_preset_key = IREE_SVL(low_preset_key_), \\",
         "    .s_endpgm_opcode = UINT16_C(s_endpgm_opcode_), \\",
@@ -273,11 +295,12 @@ def _emit_descriptor_set_rows(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
         "  }",
         "",
         "static const loom_amdgpu_descriptor_set_info_t kAmdgpuDescriptorSetInfos[] = {",
-        "  // descriptor_set_key     low_preset_key   s_endpgm packet_encoding",
+        "  // stable_id            descriptor_set_key     low_preset_key   s_endpgm packet_encoding",
     ]
     lines.extend(
         (
             "  LOOM_AMDGPU_DESCRIPTOR_SET_INFO("
+            f"{_padded_arg(_u64_expr(descriptor_stable_id(info.key)), len('UINT64_C(0xffffffffffffffff)'))}"
             f"{_padded_arg(_c_string_arg(info.key), key_width)}"
             f"{_padded_arg(_c_string_arg(info.low_preset_key), preset_width)}"
             f"{_padded_arg(f'0x{info.s_endpgm_opcode:03x}', opcode_width)}"
@@ -301,10 +324,11 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
     register_granule_width = 1
     bool_width = len("false")
     lines = [
-        "#define LOOM_AMDGPU_PROCESSOR_INFO(target_cpu_, descriptor_set_key_, low_preset_key_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_) \\",
+        "#define LOOM_AMDGPU_PROCESSOR_INFO(target_cpu_, descriptor_set_key_, descriptor_set_stable_id_, low_preset_key_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_) \\",
         "  { \\",
         "    .target_cpu = IREE_SVL(target_cpu_), \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
+        "    .descriptor_set_stable_id = descriptor_set_stable_id_, \\",
         "    .low_preset_key = IREE_SVL(low_preset_key_), \\",
         "    .elf_machine_flags = UINT32_C(elf_machine_flags_), \\",
         "    .elf_feature_flags = UINT32_C(elf_feature_flags_), \\",
@@ -319,13 +343,14 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "  }",
         "",
         "static const loom_amdgpu_processor_info_t kAmdgpuProcessorInfos[] = {",
-        "  // target_cpu descriptor_set_key    low_preset_key  mach  feat wave kernel_profile                             matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee",
+        "  // target_cpu descriptor_set_key    stable_id            low_preset_key  mach  feat wave kernel_profile                             matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee",
     ]
     lines.extend(
         (
             "  LOOM_AMDGPU_PROCESSOR_INFO("
             f"{_padded_arg(_c_string_arg(info.target_cpu), target_cpu_width)}"
             f"{_padded_arg(_c_string_arg(info.descriptor_set_key), descriptor_set_width)}"
+            f"{_padded_arg(_u64_expr(descriptor_stable_id(info.descriptor_set_key)) if info.descriptor_set_key else _u64_expr(0), len('UINT64_C(0xffffffffffffffff)'))}"
             f"{_padded_arg(_c_string_arg(info.low_preset_key), preset_width)}"
             f"{_padded_arg(f'0x{info.elf_machine_flags:03x}', machine_flags_width)}"
             f"{_padded_arg(f'0x{info.elf_feature_flags:x}', feature_flags_width)}"
@@ -359,6 +384,7 @@ def _emit_source(
         "",
         '#include "loom/target/arch/amdgpu/target_info.h"',
         "",
+        "#include <inttypes.h>",
         "#include <stdint.h>",
         "",
         f'static const iree_string_view_t kAmdgpuAmdhsaTargetIdPrefix = IREE_SVL("{_c_string_literal(AMDGPU_AMDHSA_TARGET_TRIPLE)}--");',
@@ -446,6 +472,37 @@ def _emit_source(
             "      IREE_STATUS_UNIMPLEMENTED,",
             "      \"AMDGPU descriptor set '%.*s' is not supported by native emission\",",
             "      (int)descriptor_set_key.size, descriptor_set_key.data);",
+            "}",
+            "",
+            "iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_id(",
+            "    uint64_t descriptor_set_stable_id,",
+            "    const loom_amdgpu_descriptor_set_info_t** out_descriptor_set) {",
+            "  IREE_ASSERT_ARGUMENT(out_descriptor_set);",
+            "  *out_descriptor_set = NULL;",
+            "  if (descriptor_set_stable_id == 0) {",
+            "    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,",
+            '                            "AMDGPU descriptor set stable ID is required");',
+            "  }",
+            "  switch (descriptor_set_stable_id) {",
+        ]
+    )
+    for index, info in enumerate(descriptor_sets):
+        lines.extend(
+            [
+                f"    case {_u64_expr(descriptor_stable_id(info.key))}:",
+                f"      *out_descriptor_set = &kAmdgpuDescriptorSetInfos[{index}];",
+                "      return iree_ok_status();",
+            ]
+        )
+    lines.extend(
+        [
+            "    default:",
+            "      return iree_make_status(",
+            "          IREE_STATUS_UNIMPLEMENTED,",
+            '          "AMDGPU descriptor set stable ID 0x%016" PRIx64',
+            '          " is not supported by native emission",',
+            "          descriptor_set_stable_id);",
+            "  }",
             "}",
             "",
             "static iree_status_t loom_amdgpu_target_info_validate_target_id_chars(",

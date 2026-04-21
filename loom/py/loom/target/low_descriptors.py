@@ -14,7 +14,7 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 12
+LOW_DESCRIPTOR_SET_ABI_VERSION = 13
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 

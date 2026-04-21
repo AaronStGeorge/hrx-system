@@ -10,6 +10,7 @@
 
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 
@@ -134,10 +135,10 @@ static iree_status_t loom_amdgpu_wait_packet_verify_target(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU wait packet materialization requires a descriptor set");
   }
-  iree_string_view_t target_key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-      descriptor_set, descriptor_set->target_key_string_offset, &target_key));
-  if (!iree_string_view_equal(target_key, IREE_SV("amdgpu"))) {
+  if (descriptor_set->target_stable_id != LOOM_AMDGPU_TARGET_STABLE_ID) {
+    iree_string_view_t target_key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+        descriptor_set, descriptor_set->target_key_string_offset, &target_key));
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU wait packet materialization received target '%.*s'",

@@ -308,8 +308,8 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralVectorConstantAndReturn) {
 
 TEST_F(AmdgpuEncodingTest, PacksGeneratedVectorRegisterMove) {
   const loom_amdgpu_encoding_table_t* table =
-      loom_amdgpu_encoding_table_for_descriptor_set(
-          IREE_SV("amdgpu.gfx11.core"));
+      loom_amdgpu_encoding_table_for_descriptor_set_id(
+          loom_low_descriptor_stable_id_from_key(IREE_SV("amdgpu.gfx11.core")));
   ASSERT_NE(table, nullptr);
 
   loom_amdgpu_encoding_packet_t packet = {};

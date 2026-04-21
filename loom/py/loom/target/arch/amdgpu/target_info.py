@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+AMDGPU_TARGET_KEY = "amdgpu"
 AMDGPU_AMDHSA_TARGET_TRIPLE = "amdgcn-amd-amdhsa"
 
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE = "none"

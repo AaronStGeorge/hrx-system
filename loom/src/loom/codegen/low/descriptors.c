@@ -137,6 +137,29 @@ uint64_t loom_low_descriptor_stable_id_from_key(iree_string_view_t key) {
   return loom_stable_id_from_string(key);
 }
 
+static iree_status_t loom_low_verify_stable_id_field(uint64_t actual_id,
+                                                     iree_string_view_t key,
+                                                     const char* field_name) {
+  if (iree_string_view_is_empty(key)) {
+    if (actual_id != LOOM_LOW_STABLE_ID_NONE) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low descriptor set %s must be NONE when its key is absent",
+          field_name);
+    }
+    return iree_ok_status();
+  }
+  const uint64_t expected_id = loom_low_descriptor_stable_id_from_key(key);
+  if (actual_id != expected_id) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low descriptor set %s 0x%016" PRIx64
+        " does not match key-derived stable id 0x%016" PRIx64,
+        field_name, actual_id, expected_id);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_tables_present(
     const loom_low_descriptor_set_t* descriptor_set) {
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
@@ -2353,10 +2376,17 @@ iree_status_t loom_low_descriptor_set_verify(
                             LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION);
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_tables_present(descriptor_set));
-  IREE_RETURN_IF_ERROR(loom_low_verify_required_string(
-      descriptor_set, descriptor_set->key_string_offset, "set.key"));
-  IREE_RETURN_IF_ERROR(loom_low_verify_optional_string(
-      descriptor_set, descriptor_set->target_key_string_offset, "set.target"));
+  iree_string_view_t set_key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
+      descriptor_set, descriptor_set->key_string_offset, "set.key", &set_key));
+  iree_string_view_t target_key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
+      descriptor_set, descriptor_set->target_key_string_offset,
+      /*allow_none=*/true, &target_key));
+  IREE_RETURN_IF_ERROR(loom_low_verify_stable_id_field(
+      descriptor_set->stable_id, set_key, "stable_id"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_stable_id_field(
+      descriptor_set->target_stable_id, target_key, "target_stable_id"));
   IREE_RETURN_IF_ERROR(loom_low_verify_optional_string(
       descriptor_set, descriptor_set->feature_key_string_offset,
       "set.feature"));
@@ -2487,6 +2517,13 @@ iree_status_t loom_low_descriptor_registry_verify(
             "low descriptor registry has duplicate descriptor set key '%.*s'",
             (int)key.size, key.data);
       }
+      if (descriptor_set->stable_id == other_descriptor_set->stable_id) {
+        return iree_make_status(
+            IREE_STATUS_ALREADY_EXISTS,
+            "low descriptor registry has duplicate descriptor set stable ID "
+            "0x%016" PRIx64,
+            descriptor_set->stable_id);
+      }
     }
   }
   return iree_ok_status();
@@ -2528,6 +2565,51 @@ iree_status_t loom_low_descriptor_registry_lookup(
           IREE_STATUS_ALREADY_EXISTS,
           "low descriptor registry has duplicate descriptor set key '%.*s'",
           (int)key.size, key.data);
+    }
+    *out_descriptor_set = descriptor_set;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_descriptor_registry_lookup_by_id(
+    const loom_low_descriptor_registry_t* registry, uint64_t stable_id,
+    const loom_low_descriptor_set_t** out_descriptor_set) {
+  IREE_ASSERT_ARGUMENT(out_descriptor_set);
+  *out_descriptor_set = NULL;
+  if (registry == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor registry is required");
+  }
+  if (stable_id == LOOM_LOW_STABLE_ID_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor set stable ID is required");
+  }
+  if (registry->descriptor_set_count != 0 &&
+      registry->descriptor_sets == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor registry entries are required");
+  }
+  if (registry->descriptor_set_provider_count != 0 &&
+      registry->descriptor_set_providers == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor registry providers are required");
+  }
+  iree_host_size_t descriptor_set_count =
+      loom_low_descriptor_registry_descriptor_set_count(registry);
+  for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
+    const loom_low_descriptor_set_t* descriptor_set =
+        loom_low_descriptor_registry_descriptor_set_at(registry, i);
+    if (descriptor_set == NULL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor registry entry is required");
+    }
+    if (descriptor_set->stable_id != stable_id) continue;
+    if (*out_descriptor_set != NULL) {
+      return iree_make_status(
+          IREE_STATUS_ALREADY_EXISTS,
+          "low descriptor registry has duplicate descriptor set stable ID "
+          "0x%016" PRIx64,
+          stable_id);
     }
     *out_descriptor_set = descriptor_set;
   }
@@ -2774,8 +2856,11 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       descriptor_set, builder, "feature_namespace",
       descriptor_set->feature_key_string_offset));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-      builder, ",\"abi_version\":%" PRIu32 ",\"generator_version\":%" PRIu32,
-      descriptor_set->abi_version, descriptor_set->generator_version));
+      builder,
+      ",\"abi_version\":%" PRIu32 ",\"generator_version\":%" PRIu32
+      ",\"stable_id\":%" PRIu64 ",\"target_stable_id\":%" PRIu64,
+      descriptor_set->abi_version, descriptor_set->generator_version,
+      descriptor_set->stable_id, descriptor_set->target_stable_id));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder,
       ",\"table_counts\":{\"descriptors\":%" PRIu32
