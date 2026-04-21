@@ -229,7 +229,8 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
       "reg<amdgpu.vgpr>\n"
       "  %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.vgpr>\n"
-      "  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
+      "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.sgpr>\n"
       "  low.op<amdgpu.buffer_store_dword>(%value, %binding, %vaddr, %zero) "
@@ -237,9 +238,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
       "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.return\n"
       "}\n",
-      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n");
+      "");
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
@@ -249,6 +248,10 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   loom_amdgpu_hal_resource_materialization_result_t result = {};
   IREE_ASSERT_OK(loom_amdgpu_hal_resource_materialize(
       module_, function_op, &bundle_storage.bundle, &result, &arena_));
+  EXPECT_EQ(result.abi_layout.function_op, function_op);
+  EXPECT_EQ(result.abi_layout.resource_count, 1u);
+  EXPECT_EQ(result.abi_layout.kernarg_segment_size, 8u);
+  EXPECT_TRUE(result.abi_layout.uses_kernarg_segment_ptr);
   EXPECT_EQ(result.materialized_resource_count, 1u);
   EXPECT_TRUE(result.inserted_kernarg_segment_ptr_live_in);
   EXPECT_FALSE(HasLowResourceOp());
@@ -350,9 +353,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  low.return\n"
       "}\n",
-      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n");
+      "");
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
@@ -362,6 +363,8 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   loom_amdgpu_hal_resource_materialization_result_t result = {};
   IREE_ASSERT_OK(loom_amdgpu_hal_resource_materialize(
       module_, function_op, &bundle_storage.bundle, &result, &arena_));
+  EXPECT_EQ(result.abi_layout.function_op, function_op);
+  EXPECT_EQ(result.abi_layout.resource_count, 0u);
   EXPECT_EQ(result.materialized_resource_count, 0u);
   EXPECT_FALSE(result.inserted_kernarg_segment_ptr_live_in);
   EXPECT_EQ(CountLiveInsWithSource(
@@ -404,12 +407,11 @@ TEST_F(AmdgpuHalResourceMaterializationTest, FixesWorkitemIdXLiveInToVgprZero) {
 TEST_F(AmdgpuHalResourceMaterializationTest, RejectsUnsupportedResourceShape) {
   BuildModule(
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
-      "  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+      "  %binding = low.resource<vm_state> {index = 0, semantic_type = "
+      "hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  low.return\n"
       "}\n",
-      "low.abi.resource @binding0 {function = @loom_kernel, kind = vm_state, "
-      "index = 0, semantic_type = hal.buffer, abi_type = "
-      "reg<amdgpu.sgpr x4>}\n");
+      "");
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);

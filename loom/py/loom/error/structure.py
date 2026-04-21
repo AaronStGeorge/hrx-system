@@ -463,6 +463,25 @@ ERR_STRUCTURE_028 = ErrorDef(
     ),
 )
 
+# ERR_STRUCTURE_029: Operation placement constraint violated.
+ERR_STRUCTURE_029 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=29,
+    severity=Severity.ERROR,
+    summary="Operation placement constraint violated.",
+    message=(
+        "'{op_name}' violates {constraint_kind} ancestor placement for "
+        "'{ancestor_name}' (observed ancestor: '{actual_ancestor}')"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("constraint_kind", ParamKind.STRING),
+        ErrorParam("ancestor_name", ParamKind.STRING),
+        ErrorParam("actual_ancestor", ParamKind.STRING),
+    ),
+    fix_hint="Move '{op_name}' to a region satisfying its placement contract",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -492,4 +511,5 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_026,
     ERR_STRUCTURE_027,
     ERR_STRUCTURE_028,
+    ERR_STRUCTURE_029,
 )

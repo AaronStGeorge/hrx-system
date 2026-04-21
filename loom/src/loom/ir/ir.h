@@ -116,6 +116,7 @@ typedef struct loom_operand_descriptor_t loom_operand_descriptor_t;
 typedef struct loom_result_descriptor_t loom_result_descriptor_t;
 typedef struct loom_attr_descriptor_t loom_attr_descriptor_t;
 typedef struct loom_region_descriptor_t loom_region_descriptor_t;
+typedef struct loom_op_placement_descriptor_t loom_op_placement_descriptor_t;
 typedef struct loom_format_element_t loom_format_element_t;
 typedef struct loom_constraint_t loom_constraint_t;
 typedef struct loom_rewriter_t loom_rewriter_t;
@@ -936,14 +937,14 @@ typedef struct loom_region_branch_t {
 //   format tables only needed by the parser/printer, and the name
 //   string only needed by diagnostics.
 //
-//   Cache line 3 (bytes 128-191): interface pointers — only touched
-//   by passes that query a specific interface (e.g., LICM reads
-//   loop_like, call graph construction reads func_like). Each
-//   pointer is NULL for ops that don't implement that interface, so
-//   passes that don't use any interfaces never fetch this line. With
-//   typical op counts (~200-500 kinds), the NULL pointers for the
-//   majority of ops occupy .rodata address space but do not cause L1
-//   cache misses because no code path reads them.
+//   Cache line 3 (bytes 128-191): interface and placement pointers — only
+//   touched by passes that query a specific interface (e.g., LICM reads
+//   loop_like, call graph construction reads func_like) and by verification.
+//   Each pointer is NULL for ops that don't implement that interface/contract,
+//   so passes that don't use any interfaces never fetch this line. With typical
+//   op counts (~200-500 kinds), the NULL pointers for the majority of ops
+//   occupy .rodata address space but do not cause L1 cache misses because no
+//   code path reads them.
 //
 // With ~500 op kinds, keeping the hot path in one cache line avoids
 // ~500 × 64B = 32KB of cold .rodata fetches per pass.
@@ -982,7 +983,7 @@ struct loom_op_vtable_t {
   uint8_t instance_flags_case_count;
   // 5 bytes padding to 128.
 
-  // --- Cache line 3: interface pointers (128-191) ---
+  // --- Cache line 3: interface and placement pointers (128-191) ---
   //
   // Each pointer is NULL for ops that don't implement that interface.
   // Passes query interfaces through cast functions like
@@ -995,8 +996,10 @@ struct loom_op_vtable_t {
   const loom_region_branch_vtable_t* region_branch;
   // Generated symbol-definition contract for SYMBOL_DEFINE ops.
   const loom_symbol_definition_descriptor_t* symbol_def;
-  // 32 bytes padding to fill cache line 3.
-  const void* _padding_iface[4];
+  // Generated structural placement contract for ancestor constraints.
+  const loom_op_placement_descriptor_t* placement;
+  // 24 bytes padding to fill cache line 3.
+  const void* _padding_iface[3];
 };
 
 // Returns the full dotted name as a string view (e.g., "test.addi").

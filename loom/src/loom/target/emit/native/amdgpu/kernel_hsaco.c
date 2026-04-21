@@ -24,8 +24,11 @@ static iree_status_t loom_amdgpu_emit_kernel_hsaco_internal(
         "AMDGPU kernel HSACO output stream and scratch arena are required");
   }
   loom_amdgpu_kernel_record_t record = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_build(schedule, allocation,
-                                                       &record, scratch_arena));
+  const loom_amdgpu_kernel_record_options_t record_options = {
+      .abi_layout = options ? options->abi_layout : NULL,
+  };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_build(
+      schedule, allocation, &record_options, &record, scratch_arena));
 
   iree_const_byte_span_t text = iree_const_byte_span_empty();
   const loom_amdgpu_wait_packet_plan_t* wait_packets =

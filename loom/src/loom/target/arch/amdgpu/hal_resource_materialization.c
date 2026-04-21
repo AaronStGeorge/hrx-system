@@ -24,11 +24,6 @@ static iree_string_view_t loom_amdgpu_hal_resource_string_or_empty(
   return module->strings.entries[string_id];
 }
 
-static bool loom_amdgpu_hal_resource_symbol_ref_equal(loom_symbol_ref_t lhs,
-                                                      loom_symbol_ref_t rhs) {
-  return lhs.module_id == rhs.module_id && lhs.symbol_id == rhs.symbol_id;
-}
-
 static iree_status_t loom_amdgpu_hal_resource_make_sgpr_type(
     loom_module_t* module, uint32_t unit_count, loom_type_t* out_type) {
   IREE_ASSERT_ARGUMENT(out_type);
@@ -159,12 +154,10 @@ static iree_status_t loom_amdgpu_hal_resource_ensure_kernarg_live_in(
 
 static const loom_amdgpu_hal_kernarg_resource_t*
 loom_amdgpu_hal_resource_lookup_layout_resource(
-    const loom_amdgpu_hal_kernel_abi_layout_t* layout,
-    loom_symbol_ref_t resource_symbol) {
+    const loom_amdgpu_hal_kernel_abi_layout_t* layout, const loom_op_t* op) {
   for (iree_host_size_t i = 0; i < layout->resource_count; ++i) {
     const loom_amdgpu_hal_kernarg_resource_t* resource = &layout->resources[i];
-    if (loom_amdgpu_hal_resource_symbol_ref_equal(resource->symbol,
-                                                  resource_symbol)) {
+    if (resource->resource_op == op) {
       return resource;
     }
   }
@@ -287,6 +280,7 @@ iree_status_t loom_amdgpu_hal_resource_materialize(
   loom_amdgpu_hal_kernel_abi_layout_t layout = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_layout_from_low(
       module, function_op, target_bundle, &layout, scratch_arena));
+  out_result->abi_layout = layout;
   if (layout.resource_count == 0) {
     return iree_ok_status();
   }
@@ -315,13 +309,12 @@ iree_status_t loom_amdgpu_hal_resource_materialize(
       loom_op_t* next_op = op->next_op;
       if (loom_low_resource_isa(op)) {
         const loom_amdgpu_hal_kernarg_resource_t* resource =
-            loom_amdgpu_hal_resource_lookup_layout_resource(
-                &layout, loom_low_resource_resource(op));
+            loom_amdgpu_hal_resource_lookup_layout_resource(&layout, op);
         if (resource == NULL) {
           status = iree_make_status(
               IREE_STATUS_NOT_FOUND,
               "AMDGPU HAL resource materialization found low.resource "
-              "without a matching ABI record");
+              "without a matching ABI layout entry");
         } else {
           if (kernarg_ptr == LOOM_VALUE_ID_INVALID) {
             status = loom_amdgpu_hal_resource_ensure_kernarg_live_in(

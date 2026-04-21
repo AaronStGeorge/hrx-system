@@ -19,4 +19,5 @@ loom_check_test_suite(
         "arithmetici.loom-test",
         "bitwisei.loom-test",
     ],
+    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

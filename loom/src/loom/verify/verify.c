@@ -76,6 +76,8 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
 
   loom_verify_op_declared_trait_consistency(state, op, vtable);
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
+  loom_verify_op_placement(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   const bool has_signature_scope = loom_verify_has_func_signature_scope(vtable);
   if (has_signature_scope) {

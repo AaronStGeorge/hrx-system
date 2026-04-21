@@ -10,11 +10,3 @@ low.func.def target(@vm_target) @vm_add__low(%lhs: reg<vm.i32>, %rhs: reg<vm.i32
   %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
   low.return %sum : reg<vm.i32>
 }
-
-low.abi.adapter @vm_add__low__abi {callee = @vm_add__low, conversion = mapped, operand_count = 2, result_count = 1}
-
-low.abi.operand @vm_add__low__abi_arg0 {abi_type = reg<vm.i32>, adapter = @vm_add__low__abi, conversion = scalar_to_register, index = 0, semantic_type = i32}
-
-low.abi.operand @vm_add__low__abi_arg1 {abi_type = reg<vm.i32>, adapter = @vm_add__low__abi, conversion = scalar_to_register, index = 1, semantic_type = i32}
-
-low.abi.result @vm_add__low__abi_result0 {abi_type = reg<vm.i32>, adapter = @vm_add__low__abi, conversion = register_to_scalar, index = 0, semantic_type = i32}

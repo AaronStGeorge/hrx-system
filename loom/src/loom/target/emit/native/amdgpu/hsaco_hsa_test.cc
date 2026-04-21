@@ -711,6 +711,7 @@ class LowKernelCompiler {
 
     StreamPtr stream = CreateStream();
     const loom_amdgpu_kernel_hsaco_options_t hsaco_options = {
+        .abi_layout = &materialization.abi_layout,
         .wait_packets = &wait_packets,
     };
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_kernel_hsaco(
@@ -804,17 +805,15 @@ iree_status_t CompileWorkitemStoreKernelForAmdgpu(const AmdgpuHsaTarget& target,
       "reg<amdgpu.vgpr>\n"
       "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %four) : "
       "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-      "  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
+      "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.sgpr>\n"
       "  low.op<amdgpu.buffer_store_dword>(%tid, %binding, %byte_offset, "
       "%zero) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
       "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.return\n"
-      "}\n"
-      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n",
+      "}\n",
       out_hsaco, arena.arena());
 }
 
@@ -895,8 +894,10 @@ iree_status_t CompileB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
       "reg<amdgpu.vgpr>\n"
       "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %scale) : "
       "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-      "  %source = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
-      "  %target = low.resource @binding1 : reg<amdgpu.sgpr x4>\n"
+      "  %source = low.resource<hal_buffer_resource> {index = 0, semantic_type "
+      "= hal.buffer} : reg<amdgpu.sgpr x4>\n"
+      "  %target = low.resource<hal_buffer_resource> {index = 1, semantic_type "
+      "= hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.sgpr>\n"
       "  %loaded = low.op<";
@@ -912,14 +913,7 @@ iree_status_t CompileB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
       "(reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, "
       "reg<amdgpu.sgpr>)\n"
       "  low.return\n"
-      "}\n"
-      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n"
-      "low.abi.resource @binding1 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 1, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n";
-
+      "}\n";
   TestArena arena;
   LowKernelCompiler compiler;
   return compiler.CompileKernel(processor->low_preset_key, source, out_hsaco,

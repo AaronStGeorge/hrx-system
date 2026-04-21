@@ -15,6 +15,8 @@ void loom_verify_op_declared_trait_consistency(loom_verify_state_t* state,
 void loom_verify_op_effective_trait_consistency(loom_verify_state_t* state,
                                                 const loom_op_t* op,
                                                 const loom_op_vtable_t* vtable);
+void loom_verify_op_placement(loom_verify_state_t* state, const loom_op_t* op,
+                              const loom_op_vtable_t* vtable);
 void loom_verify_func_purity_body_effects(loom_verify_state_t* state,
                                           const loom_op_t* op,
                                           const loom_op_vtable_t* vtable);

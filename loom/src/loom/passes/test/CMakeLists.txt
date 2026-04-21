@@ -16,7 +16,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/branch_fusion.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -27,7 +27,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/branch_sink.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -38,7 +38,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/cfg_compatibility.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -49,7 +49,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/cfg_simplify.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -60,18 +60,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/cfg_simplify_scf_pipeline.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "cfg_to_llvmir"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/cfg_to_llvmir.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -82,7 +71,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel_async_legality.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -93,7 +82,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel_resources.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -104,7 +93,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/licm.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -115,7 +104,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/loop_fusion.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -126,7 +115,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/refine_boundaries.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -137,7 +126,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/scf_index.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -148,7 +137,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/scf_to_cfg.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -159,7 +148,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/symbol_dce.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -170,7 +159,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )

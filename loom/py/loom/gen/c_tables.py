@@ -116,6 +116,7 @@ KEYWORD_MAP: dict[str, str] = {
     "target": "LOOM_KW_TARGET",
     "allocation": "LOOM_KW_ALLOCATION",
     "schedule": "LOOM_KW_SCHEDULE",
+    "source": "LOOM_KW_SOURCE",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The
@@ -1143,6 +1144,26 @@ def _region_terminator_kind(op: Op, region: RegionDef, ops_by_name: dict[str, Op
     if not any(trait.name == "Terminator" for trait in terminator_op.traits):
         raise ValueError(f"Op '{op.name}' region '{region.name}': terminator '{region.terminator}' is not marked with the Terminator trait")
     return _c_enum_name(terminator_op)
+
+
+def _trait_op_kinds(
+    op: Op,
+    ops_by_name: dict[str, Op],
+    trait_name: str,
+) -> list[str]:
+    """Returns op-kind enum names referenced by parameterized placement traits."""
+    kinds: list[str] = []
+    for trait in op.traits:
+        if trait.name != trait_name:
+            continue
+        if len(trait.args) != 1:
+            raise ValueError(f"Op '{op.name}': {trait_name} requires one op name argument")
+        ancestor_name = trait.args[0]
+        ancestor_op = ops_by_name.get(ancestor_name)
+        if ancestor_op is None:
+            raise ValueError(f"Op '{op.name}': {trait_name} '{ancestor_name}' must name an op in the '{op.namespace}' dialect")
+        kinds.append(_c_enum_name(ancestor_op))
+    return kinds
 
 
 def _trait_flags(op: Op) -> str:
@@ -2802,6 +2823,33 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         lines.append(f'static const uint8_t {name_bstr}[] = "\\x{len(name):02x}" "{name}";')
         lines.append(f"static const loom_symbol_definition_descriptor_t {prefix}_symbol_def = {{{name_bstr}, {attr_index}, {flags}, {op.symbol_def.bytecode_kind}}};")
 
+    # Structural placement descriptors.
+    for op in ops:
+        prefix = _c_prefix(op)
+        required_ancestor_kinds = _trait_op_kinds(op, ops_by_name, "HasAncestor")
+        forbidden_ancestor_kinds = _trait_op_kinds(op, ops_by_name, "NoAncestor")
+        if not required_ancestor_kinds and not forbidden_ancestor_kinds:
+            continue
+        required_ptr = "NULL"
+        forbidden_ptr = "NULL"
+        if required_ancestor_kinds:
+            required_ptr = f"{prefix}_required_ancestors"
+            lines.append(f"static const loom_op_kind_t {required_ptr}[] = {{")
+            lines.extend(f"    {kind}," for kind in required_ancestor_kinds)
+            lines.append("};")
+        if forbidden_ancestor_kinds:
+            forbidden_ptr = f"{prefix}_forbidden_ancestors"
+            lines.append(f"static const loom_op_kind_t {forbidden_ptr}[] = {{")
+            lines.extend(f"    {kind}," for kind in forbidden_ancestor_kinds)
+            lines.append("};")
+        lines.append(f"static const loom_op_placement_descriptor_t {prefix}_placement = {{")
+        lines.append(f"    .required_ancestors = {required_ptr},")
+        lines.append(f"    .forbidden_ancestors = {forbidden_ptr},")
+        lines.append(f"    .required_ancestor_count = {len(required_ancestor_kinds)},")
+        lines.append(f"    .forbidden_ancestor_count = {len(forbidden_ancestor_kinds)},")
+        lines.append("};")
+        lines.append("")
+
     # Vtables.
     for op in ops:
         prefix = _c_prefix(op)
@@ -2838,6 +2886,8 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         eff_traits = op.effective_traits or "NULL"
         interface_ptrs = {spec.vtable_field: _interface_vtable_ptr(op, spec) for spec in _INTERFACES}
         symbol_def_ptr = f"&{prefix}_symbol_def" if op.symbol_def is not None else "NULL"
+        has_placement = any(trait.name in ("HasAncestor", "NoAncestor") for trait in op.traits)
+        placement_ptr = f"&{prefix}_placement" if has_placement else "NULL"
         attr_desc_ptr = f"{prefix}_attr_desc" if non_flags else "NULL"
         operand_desc_ptr = f"{prefix}_operand_desc" if op.operands or _func_args_are_operands(op) else "NULL"
         result_desc_ptr = f"{prefix}_result_desc" if op.results else "NULL"
@@ -2886,6 +2936,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         # Cache line 3: interface pointers.
         lines.extend(f"    .{spec.vtable_field} = {interface_ptrs[spec.vtable_field]}," for spec in _INTERFACES)
         lines.append(f"    .symbol_def = {symbol_def_ptr},")
+        lines.append(f"    .placement = {placement_ptr},")
 
         lines.append("};")
         lines.append("")

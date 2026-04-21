@@ -19,7 +19,6 @@
 enum {
   LOOM_SYMBOL_DCE_STAT_SYMBOLS_ELIMINATED = 0,
   LOOM_SYMBOL_DCE_STAT_FUNCTIONS_ELIMINATED = 1,
-  LOOM_SYMBOL_DCE_STAT_LOW_ABI_RECORDS_ELIMINATED = 2,
 };
 
 static const loom_pass_statistic_def_t kSymbolDCEStatistics[] = {
@@ -27,14 +26,11 @@ static const loom_pass_statistic_def_t kSymbolDCEStatistics[] = {
      IREE_SVL("Number of unreachable symbol definitions removed.")},
     {IREE_SVL("functions-eliminated"),
      IREE_SVL("Number of unreachable private function-like symbols removed.")},
-    {IREE_SVL("low-abi-records-eliminated"),
-     IREE_SVL("Number of unreachable low ABI record symbols removed.")},
 };
 
 static const loom_pass_info_t loom_symbol_dce_pass_info_storage = {
     .name = IREE_SVL("symbol-dce"),
-    .description =
-        IREE_SVL("Remove unreachable private function and low ABI symbols."),
+    .description = IREE_SVL("Remove unreachable private function symbols."),
     .kind = LOOM_PASS_MODULE,
     .statistic_defs = kSymbolDCEStatistics,
     .statistic_count = IREE_ARRAYSIZE(kSymbolDCEStatistics),
@@ -68,31 +64,6 @@ typedef struct loom_symbol_dce_state_t {
   loom_symbol_dce_worklist_t worklist;
 } loom_symbol_dce_state_t;
 
-static bool loom_symbol_dce_ref_equal(loom_symbol_ref_t lhs,
-                                      loom_symbol_ref_t rhs) {
-  return lhs.module_id == rhs.module_id && lhs.symbol_id == rhs.symbol_id;
-}
-
-static bool loom_symbol_dce_low_abi_record_isa(const loom_op_t* op) {
-  return loom_low_abi_adapter_isa(op) || loom_low_abi_operand_isa(op) ||
-         loom_low_abi_result_isa(op) || loom_low_abi_effect_isa(op) ||
-         loom_low_abi_clobber_isa(op);
-}
-
-static bool loom_symbol_dce_low_abi_metadata_isa(const loom_op_t* op) {
-  return loom_low_abi_operand_isa(op) || loom_low_abi_result_isa(op) ||
-         loom_low_abi_effect_isa(op) || loom_low_abi_clobber_isa(op);
-}
-
-static loom_symbol_ref_t loom_symbol_dce_low_abi_metadata_adapter(
-    const loom_op_t* op) {
-  if (loom_low_abi_operand_isa(op)) return loom_low_abi_operand_adapter(op);
-  if (loom_low_abi_result_isa(op)) return loom_low_abi_result_adapter(op);
-  if (loom_low_abi_effect_isa(op)) return loom_low_abi_effect_adapter(op);
-  if (loom_low_abi_clobber_isa(op)) return loom_low_abi_clobber_adapter(op);
-  return loom_symbol_ref_null();
-}
-
 static bool loom_symbol_dce_symbol_is_erasable(const loom_module_t* module,
                                                const loom_symbol_t* symbol) {
   if (!symbol || !symbol->defining_op) return false;
@@ -108,7 +79,7 @@ static bool loom_symbol_dce_symbol_is_erasable(const loom_module_t* module,
     return true;
   }
 
-  return loom_symbol_dce_low_abi_record_isa(symbol->defining_op);
+  return false;
 }
 
 static iree_status_t loom_symbol_dce_worklist_initialize(
@@ -223,24 +194,6 @@ static iree_status_t loom_symbol_dce_mark_module_encoding_refs(
   return iree_ok_status();
 }
 
-static iree_status_t loom_symbol_dce_mark_attached_low_abi_metadata(
-    loom_symbol_dce_state_t* state, loom_symbol_ref_t adapter_ref) {
-  const loom_symbol_t* symbol = NULL;
-  loom_module_for_each_symbol(state->module, symbol) {
-    if (!symbol->defining_op ||
-        !loom_symbol_dce_low_abi_metadata_isa(symbol->defining_op)) {
-      continue;
-    }
-    loom_symbol_ref_t metadata_adapter =
-        loom_symbol_dce_low_abi_metadata_adapter(symbol->defining_op);
-    if (loom_symbol_dce_ref_equal(metadata_adapter, adapter_ref)) {
-      uint16_t symbol_id = (uint16_t)(symbol - state->module->symbols.entries);
-      IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_symbol_id(state, symbol_id));
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_symbol_dce_traverse_symbol(
     loom_symbol_dce_state_t* state, uint16_t symbol_id) {
   if (symbol_id >= state->module->symbols.count) return iree_ok_status();
@@ -254,11 +207,6 @@ static iree_status_t loom_symbol_dce_traverse_symbol(
     if (regions[i]) {
       IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_region_refs(state, regions[i]));
     }
-  }
-
-  if (loom_low_abi_adapter_isa(op)) {
-    IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_attached_low_abi_metadata(
-        state, loom_low_abi_adapter_symbol(op)));
   }
 
   return iree_ok_status();
@@ -298,8 +246,6 @@ typedef struct loom_symbol_dce_erasure_t {
   loom_op_t* op;
   // True when |op| defines a function-like symbol.
   bool is_function_like;
-  // True when |op| defines a low ABI metadata/adapter record.
-  bool is_low_abi_record;
 } loom_symbol_dce_erasure_t;
 
 static iree_status_t loom_symbol_dce_collect_erasures(
@@ -322,12 +268,9 @@ static iree_status_t loom_symbol_dce_collect_erasures(
 
     const bool is_function_like =
         loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE);
-    const bool is_low_abi_record =
-        loom_symbol_dce_low_abi_record_isa(symbol->defining_op);
     erasures[(*out_erasure_count)++] = (loom_symbol_dce_erasure_t){
         .op = symbol->defining_op,
         .is_function_like = is_function_like,
-        .is_low_abi_record = is_low_abi_record,
     };
   }
 
@@ -350,10 +293,6 @@ static iree_status_t loom_symbol_dce_erase_unreachable_symbols(
     if (erasures[i].is_function_like) {
       loom_pass_statistic_add(state->pass,
                               LOOM_SYMBOL_DCE_STAT_FUNCTIONS_ELIMINATED, 1);
-    }
-    if (erasures[i].is_low_abi_record) {
-      loom_pass_statistic_add(
-          state->pass, LOOM_SYMBOL_DCE_STAT_LOW_ABI_RECORDS_ELIMINATED, 1);
     }
   }
   return iree_ok_status();

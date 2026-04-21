@@ -76,6 +76,7 @@ from loom.dsl import (
     EnumDef,
     HasAllStaticRankOneVector,
     HasAllStaticVector,
+    HasAncestor,
     HasF16OrBf16Element,
     HasF32Element,
     HasFloatElement,
@@ -90,6 +91,7 @@ from loom.dsl import (
     HasRegister,
     ImplicitTerminator,
     LastAxisGroupedBy,
+    NoAncestor,
     OffsetCountMatchesRank,
     Op,
     Operand,
@@ -353,6 +355,14 @@ class TestTraits:
     def test_has_parent(self) -> None:
         t = HasParent("scf.for")
         assert t.args == ("scf.for",)
+
+    def test_ancestor_placement_traits(self) -> None:
+        required = HasAncestor("low.func.def")
+        forbidden = NoAncestor("low.func.def")
+        assert required.name == "HasAncestor"
+        assert required.args == ("low.func.def",)
+        assert forbidden.name == "NoAncestor"
+        assert forbidden.args == ("low.func.def",)
 
     def test_implicit_terminator(self) -> None:
         t = ImplicitTerminator("scf.yield")

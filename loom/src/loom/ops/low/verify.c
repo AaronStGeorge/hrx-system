@@ -4,8 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <string.h>
-
 #include "loom/error/emitter.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
@@ -15,9 +13,9 @@
 #include "loom/ops/target/ops.h"
 
 typedef struct loom_low_callee_signature_t {
-  // Defining low.func op for related diagnostic locations.
+  // Defining function-like op for related diagnostic locations.
   const loom_op_t* definition_op;
-  // Callee entry block argument value IDs in signature order.
+  // Callee argument value IDs in signature order.
   const loom_value_id_t* argument_ids;
   // Number of callee arguments.
   uint16_t argument_count;
@@ -27,52 +25,12 @@ typedef struct loom_low_callee_signature_t {
   uint16_t result_count;
 } loom_low_callee_signature_t;
 
-typedef enum loom_low_abi_field_kind_e {
-  // Adapter operand entry mapping a caller value to callee ABI argument.
-  LOOM_LOW_ABI_FIELD_OPERAND = 0,
-  // Adapter result entry mapping a callee ABI result to caller value.
-  LOOM_LOW_ABI_FIELD_RESULT = 1,
-} loom_low_abi_field_kind_t;
-
-typedef struct loom_low_abi_entry_t {
-  // Mapping record operation that defines this entry.
-  const loom_op_t* op;
-  // Symbol reference naming this mapping record.
-  loom_symbol_ref_t symbol;
-  // Adapter symbol reference this mapping belongs to.
-  loom_symbol_ref_t adapter;
-  // Slot index within the adapter operand or result list.
-  int64_t index;
-  // Per-slot conversion rule.
-  uint8_t conversion;
-  // Semantic boundary type carried by low.invoke.
-  loom_type_t semantic_type;
-  // Callee register ABI type carried by low.func.
-  loom_type_t abi_type;
-} loom_low_abi_entry_t;
-
-typedef enum loom_low_invoke_caller_kind_e {
-  // Invoke is not nested under a function-like body.
-  LOOM_LOW_INVOKE_CALLER_NONE = 0,
-  // Invoke is nested under an ordinary semantic function-like body.
-  LOOM_LOW_INVOKE_CALLER_SEMANTIC = 1,
-  // Invoke is nested under a target-bound low function body.
-  LOOM_LOW_INVOKE_CALLER_LOW = 2,
-} loom_low_invoke_caller_kind_t;
-
-typedef struct loom_low_invoke_caller_t {
-  // Enclosing function-like op, or NULL when there is no valid caller.
-  const loom_op_t* op;
-  // Caller classification used by low.invoke context verification.
-  loom_low_invoke_caller_kind_t kind;
-} loom_low_invoke_caller_t;
-
-typedef struct loom_low_abi_metadata_counts_t {
-  // Number of low.abi.effect records attached to the adapter.
+typedef struct loom_low_effect_counts_t {
+  // Number of explicit effect records attached to the boundary.
   uint32_t effect_count;
-  // Number of low.abi.clobber records attached to the adapter.
+  // Number of explicit clobber records attached to the boundary.
   uint32_t clobber_count;
-} loom_low_abi_metadata_counts_t;
+} loom_low_effect_counts_t;
 
 static iree_status_t loom_low_emit_related(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
@@ -178,15 +136,15 @@ static bool loom_low_function_isa(const loom_op_t* op) {
   return loom_low_func_def_isa(op) || loom_low_func_decl_isa(op);
 }
 
-static loom_symbol_ref_t loom_low_function_target(const loom_op_t* op) {
-  if (loom_low_func_def_isa(op)) return loom_low_func_def_target(op);
-  if (loom_low_func_decl_isa(op)) return loom_low_func_decl_target(op);
-  return loom_symbol_ref_null();
-}
-
 static loom_symbol_ref_t loom_low_function_symbol(const loom_op_t* op) {
   if (loom_low_func_def_isa(op)) return loom_low_func_def_callee(op);
   if (loom_low_func_decl_isa(op)) return loom_low_func_decl_callee(op);
+  return loom_symbol_ref_null();
+}
+
+static loom_symbol_ref_t loom_low_function_target(const loom_op_t* op) {
+  if (loom_low_func_def_isa(op)) return loom_low_func_def_target(op);
+  if (loom_low_func_decl_isa(op)) return loom_low_func_decl_target(op);
   return loom_symbol_ref_null();
 }
 
@@ -209,61 +167,6 @@ static loom_type_t loom_low_type_attr(const loom_module_t* module,
   return module->types.entries[type_id];
 }
 
-static iree_string_view_t loom_low_abi_conversion_name(uint8_t conversion) {
-  switch (conversion) {
-    case LOOM_LOW_ABI_ADAPTER_CONVERSION_DIRECT:
-      return IREE_SV("direct");
-    case LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED:
-      return IREE_SV("mapped");
-    default:
-      return IREE_SV("unknown");
-  }
-}
-
-static iree_string_view_t loom_low_abi_value_conversion_name(
-    uint8_t conversion) {
-  switch (conversion) {
-    case LOOM_LOW_CONVERSION_DIRECT:
-      return IREE_SV("direct");
-    case LOOM_LOW_CONVERSION_SCALAR_TO_REGISTER:
-      return IREE_SV("scalar_to_register");
-    case LOOM_LOW_CONVERSION_REGISTER_TO_SCALAR:
-      return IREE_SV("register_to_scalar");
-    case LOOM_LOW_CONVERSION_VALUE_TO_REGISTER:
-      return IREE_SV("value_to_register");
-    case LOOM_LOW_CONVERSION_REGISTER_TO_VALUE:
-      return IREE_SV("register_to_value");
-    default:
-      return IREE_SV("unknown");
-  }
-}
-
-static iree_string_view_t loom_low_abi_field_kind_name(
-    loom_low_abi_field_kind_t field_kind) {
-  switch (field_kind) {
-    case LOOM_LOW_ABI_FIELD_OPERAND:
-      return IREE_SV("operand");
-    case LOOM_LOW_ABI_FIELD_RESULT:
-      return IREE_SV("result");
-    default:
-      return IREE_SV("unknown");
-  }
-}
-
-static iree_string_view_t loom_low_invoke_caller_kind_name(
-    loom_low_invoke_caller_kind_t caller_kind) {
-  switch (caller_kind) {
-    case LOOM_LOW_INVOKE_CALLER_NONE:
-      return IREE_SV("module");
-    case LOOM_LOW_INVOKE_CALLER_SEMANTIC:
-      return IREE_SV("semantic function");
-    case LOOM_LOW_INVOKE_CALLER_LOW:
-      return IREE_SV("low function");
-    default:
-      return IREE_SV("unknown");
-  }
-}
-
 static iree_status_t loom_low_emit_function_contract_error(
     const loom_module_t* module, const loom_op_t* op, uint16_t attr_index,
     iree_string_view_t contract_name, iree_string_view_t reason,
@@ -280,219 +183,6 @@ static iree_status_t loom_low_emit_function_contract_error(
   return loom_low_emit(emitter, op,
                        loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23),
                        params, IREE_ARRAYSIZE(params));
-}
-
-static iree_status_t loom_low_verify_optional_enum_is_named(
-    const loom_module_t* module, const loom_op_t* op, uint16_t attr_index,
-    uint8_t value, iree_string_view_t contract_name, iree_string_view_t reason,
-    iree_diagnostic_emitter_t emitter) {
-  if (!loom_low_optional_attr_is_present(op, attr_index) || value != 0) {
-    return iree_ok_status();
-  }
-  return loom_low_emit_function_contract_error(module, op, attr_index,
-                                               contract_name, reason, emitter);
-}
-
-static iree_status_t loom_low_verify_function_exactness_modes(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter) {
-  if (loom_low_func_def_isa(op)) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
-        module, op, loom_low_func_def_allocation_ATTR_INDEX,
-        loom_low_func_def_allocation(op), IREE_SV("allocation"),
-        IREE_SV("explicit allocation mode must name virtual, assigned, or "
-                "fixed"),
-        emitter));
-    IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
-        module, op, loom_low_func_def_schedule_ATTR_INDEX,
-        loom_low_func_def_schedule(op), IREE_SV("schedule"),
-        IREE_SV("explicit schedule mode must name free, constrained, or "
-                "locked"),
-        emitter));
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
-      module, op, loom_low_func_decl_allocation_ATTR_INDEX,
-      loom_low_func_decl_allocation(op), IREE_SV("allocation"),
-      IREE_SV("explicit allocation mode must name virtual, assigned, or fixed"),
-      emitter));
-  IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
-      module, op, loom_low_func_decl_schedule_ATTR_INDEX,
-      loom_low_func_decl_schedule(op), IREE_SV("schedule"),
-      IREE_SV("explicit schedule mode must name free, constrained, or locked"),
-      emitter));
-  return iree_ok_status();
-}
-
-static bool loom_low_function_code_import_is_present(const loom_op_t* op,
-                                                     uint16_t* out_attr_index) {
-  uint16_t import_kind_attr_index = loom_low_func_def_import_kind_ATTR_INDEX;
-  uint16_t code_symbol_attr_index = loom_low_func_def_code_symbol_ATTR_INDEX;
-  if (loom_low_func_decl_isa(op)) {
-    import_kind_attr_index = loom_low_func_decl_import_kind_ATTR_INDEX;
-    code_symbol_attr_index = loom_low_func_decl_code_symbol_ATTR_INDEX;
-  }
-  if (loom_low_optional_attr_is_present(op, import_kind_attr_index)) {
-    *out_attr_index = import_kind_attr_index;
-    return true;
-  }
-  if (loom_low_optional_attr_is_present(op, code_symbol_attr_index)) {
-    *out_attr_index = code_symbol_attr_index;
-    return true;
-  }
-  return false;
-}
-
-static iree_status_t loom_low_verify_no_code_import_on_def(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter) {
-  uint16_t attr_index = 0;
-  if (!loom_low_function_code_import_is_present(op, &attr_index)) {
-    return iree_ok_status();
-  }
-  return loom_low_emit_function_contract_error(
-      module, op, attr_index, IREE_SV("import"),
-      IREE_SV("imported code belongs on low.func.decl; low.func.def owns an "
-              "inline body"),
-      emitter);
-}
-
-static iree_status_t loom_low_verify_decl_code_import(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter) {
-  bool import_kind_present = loom_low_optional_attr_is_present(
-      op, loom_low_func_decl_import_kind_ATTR_INDEX);
-  bool code_symbol_present = loom_low_optional_attr_is_present(
-      op, loom_low_func_decl_code_symbol_ATTR_INDEX);
-  IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
-      module, op, loom_low_func_decl_import_kind_ATTR_INDEX,
-      loom_low_func_decl_import_kind(op), IREE_SV("import"),
-      IREE_SV("import kind must name vm, native, rocasm, or object"), emitter));
-  if (import_kind_present && code_symbol_present) {
-    iree_string_view_t code_symbol =
-        loom_low_string_or_empty(module, loom_low_func_decl_code_symbol(op));
-    if (!iree_string_view_is_empty(code_symbol)) {
-      return iree_ok_status();
-    }
-    return loom_low_emit_function_contract_error(
-        module, op, loom_low_func_decl_code_symbol_ATTR_INDEX,
-        IREE_SV("import"), IREE_SV("code symbol must not be empty"), emitter);
-  }
-  if (import_kind_present) {
-    return loom_low_emit_function_contract_error(
-        module, op, loom_low_func_decl_import_kind_ATTR_INDEX,
-        IREE_SV("import"), IREE_SV("import kind requires a code symbol string"),
-        emitter);
-  }
-  if (code_symbol_present) {
-    return loom_low_emit_function_contract_error(
-        module, op, loom_low_func_decl_code_symbol_ATTR_INDEX,
-        IREE_SV("import"), IREE_SV("code symbol requires an import kind"),
-        emitter);
-  }
-  return iree_ok_status();
-}
-
-static bool loom_low_abi_field_kind_matches_op(
-    loom_low_abi_field_kind_t field_kind, const loom_op_t* op) {
-  switch (field_kind) {
-    case LOOM_LOW_ABI_FIELD_OPERAND:
-      return loom_low_abi_operand_isa(op);
-    case LOOM_LOW_ABI_FIELD_RESULT:
-      return loom_low_abi_result_isa(op);
-    default:
-      return false;
-  }
-}
-
-static loom_symbol_ref_t loom_low_abi_entry_symbol(const loom_op_t* op) {
-  if (loom_low_abi_operand_isa(op)) return loom_low_abi_operand_symbol(op);
-  if (loom_low_abi_result_isa(op)) return loom_low_abi_result_symbol(op);
-  return loom_symbol_ref_null();
-}
-
-static loom_symbol_ref_t loom_low_abi_entry_adapter(const loom_op_t* op) {
-  if (loom_low_abi_operand_isa(op)) return loom_low_abi_operand_adapter(op);
-  if (loom_low_abi_result_isa(op)) return loom_low_abi_result_adapter(op);
-  return loom_symbol_ref_null();
-}
-
-static int64_t loom_low_abi_entry_index(const loom_op_t* op) {
-  if (loom_low_abi_operand_isa(op)) return loom_low_abi_operand_index(op);
-  if (loom_low_abi_result_isa(op)) return loom_low_abi_result_index(op);
-  return -1;
-}
-
-static uint8_t loom_low_abi_entry_conversion(const loom_op_t* op) {
-  if (loom_low_abi_operand_isa(op)) return loom_low_abi_operand_conversion(op);
-  if (loom_low_abi_result_isa(op)) return loom_low_abi_result_conversion(op);
-  return UINT8_MAX;
-}
-
-static loom_type_t loom_low_abi_entry_semantic_type(const loom_module_t* module,
-                                                    const loom_op_t* op) {
-  if (loom_low_abi_operand_isa(op)) {
-    return loom_low_type_attr(module, loom_low_abi_operand_semantic_type(op));
-  }
-  if (loom_low_abi_result_isa(op)) {
-    return loom_low_type_attr(module, loom_low_abi_result_semantic_type(op));
-  }
-  return loom_type_none();
-}
-
-static loom_type_t loom_low_abi_entry_abi_type(const loom_module_t* module,
-                                               const loom_op_t* op) {
-  if (loom_low_abi_operand_isa(op)) {
-    return loom_low_type_attr(module, loom_low_abi_operand_abi_type(op));
-  }
-  if (loom_low_abi_result_isa(op)) {
-    return loom_low_type_attr(module, loom_low_abi_result_abi_type(op));
-  }
-  return loom_type_none();
-}
-
-static loom_low_abi_entry_t loom_low_abi_entry_load(const loom_module_t* module,
-                                                    const loom_op_t* op) {
-  return (loom_low_abi_entry_t){
-      .op = op,
-      .symbol = loom_low_abi_entry_symbol(op),
-      .adapter = loom_low_abi_entry_adapter(op),
-      .index = loom_low_abi_entry_index(op),
-      .conversion = loom_low_abi_entry_conversion(op),
-      .semantic_type = loom_low_abi_entry_semantic_type(module, op),
-      .abi_type = loom_low_abi_entry_abi_type(module, op),
-  };
-}
-
-static iree_status_t loom_low_emit_callee_related(
-    iree_diagnostic_emitter_t emitter, const loom_op_t* invoke_op,
-    const loom_op_t* definition_op, const loom_error_def_t* error,
-    const loom_diagnostic_param_t* params, iree_host_size_t param_count) {
-  loom_diagnostic_related_op_t related[] = {{
-      .label = IREE_SV("defined here"),
-      .op = definition_op,
-  }};
-  return loom_low_emit_related(emitter, invoke_op, error, params, param_count,
-                               related,
-                               definition_op ? IREE_ARRAYSIZE(related) : 0);
-}
-
-static iree_status_t loom_low_emit_invoke_callee_kind_mismatch(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_symbol_t* symbol, iree_diagnostic_emitter_t emitter) {
-  loom_symbol_ref_t callee = loom_low_invoke_callee(invoke_op);
-  loom_diagnostic_param_t params[] = {
-      loom_param_with_field_ref(
-          loom_param_string(loom_low_symbol_name(module, callee)),
-          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                    loom_low_invoke_callee_ATTR_INDEX)),
-      loom_param_string(loom_low_symbol_definition_name(symbol)),
-      loom_param_string(IREE_SV("low function")),
-  };
-  return loom_low_emit_callee_related(
-      emitter, invoke_op, symbol->defining_op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3), params,
-      IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_low_emit_symbol_kind_mismatch(
@@ -517,89 +207,99 @@ static iree_status_t loom_low_emit_symbol_kind_mismatch(
       symbol && symbol->defining_op ? IREE_ARRAYSIZE(related) : 0);
 }
 
-static bool loom_low_load_callee_signature(
+static iree_status_t loom_low_verify_optional_enum_is_named(
+    const loom_module_t* module, const loom_op_t* op, uint16_t attr_index,
+    uint8_t value, iree_string_view_t contract_name, iree_string_view_t reason,
+    iree_diagnostic_emitter_t emitter) {
+  if (!loom_low_optional_attr_is_present(op, attr_index) || value != 0) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_function_contract_error(module, op, attr_index,
+                                               contract_name, reason, emitter);
+}
+
+static iree_status_t loom_low_verify_function_exactness_modes(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  if (loom_low_func_def_isa(op)) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+        module, op, loom_low_func_def_allocation_ATTR_INDEX,
+        loom_low_func_def_allocation(op), IREE_SV("allocation"),
+        IREE_SV("explicit allocation mode must name virtual, assigned, or "
+                "fixed"),
+        emitter));
+    return loom_low_verify_optional_enum_is_named(
+        module, op, loom_low_func_def_schedule_ATTR_INDEX,
+        loom_low_func_def_schedule(op), IREE_SV("schedule"),
+        IREE_SV("explicit schedule mode must name free, constrained, or "
+                "locked"),
+        emitter);
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+      module, op, loom_low_func_decl_allocation_ATTR_INDEX,
+      loom_low_func_decl_allocation(op), IREE_SV("allocation"),
+      IREE_SV("explicit allocation mode must name virtual, assigned, or fixed"),
+      emitter));
+  return loom_low_verify_optional_enum_is_named(
+      module, op, loom_low_func_decl_schedule_ATTR_INDEX,
+      loom_low_func_decl_schedule(op), IREE_SV("schedule"),
+      IREE_SV("explicit schedule mode must name free, constrained, or locked"),
+      emitter);
+}
+
+static iree_status_t loom_low_verify_decl_code_import(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  bool import_kind_present = loom_low_optional_attr_is_present(
+      op, loom_low_func_decl_import_kind_ATTR_INDEX);
+  bool code_symbol_present = loom_low_optional_attr_is_present(
+      op, loom_low_func_decl_code_symbol_ATTR_INDEX);
+  IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+      module, op, loom_low_func_decl_import_kind_ATTR_INDEX,
+      loom_low_func_decl_import_kind(op), IREE_SV("import"),
+      IREE_SV("import kind must name vm, native, rocasm, or object"), emitter));
+  if (import_kind_present && code_symbol_present) {
+    iree_string_view_t code_symbol =
+        loom_low_string_or_empty(module, loom_low_func_decl_code_symbol(op));
+    if (!iree_string_view_is_empty(code_symbol)) return iree_ok_status();
+    return loom_low_emit_function_contract_error(
+        module, op, loom_low_func_decl_code_symbol_ATTR_INDEX,
+        IREE_SV("import"), IREE_SV("code symbol must not be empty"), emitter);
+  }
+  if (import_kind_present) {
+    return loom_low_emit_function_contract_error(
+        module, op, loom_low_func_decl_import_kind_ATTR_INDEX,
+        IREE_SV("import"), IREE_SV("import kind requires a code symbol string"),
+        emitter);
+  }
+  if (code_symbol_present) {
+    return loom_low_emit_function_contract_error(
+        module, op, loom_low_func_decl_code_symbol_ATTR_INDEX,
+        IREE_SV("import"), IREE_SV("code symbol requires an import kind"),
+        emitter);
+  }
+  return iree_ok_status();
+}
+
+static bool loom_low_load_func_like_signature(
     const loom_module_t* module, const loom_symbol_t* symbol,
     loom_low_callee_signature_t* out_signature) {
-  if (!loom_low_function_isa(symbol->defining_op)) return false;
-  loom_func_like_t callee = loom_func_like_cast(module, symbol->defining_op);
-  if (!loom_func_like_isa(callee)) return false;
+  loom_func_like_t func =
+      loom_func_like_cast(module, symbol ? symbol->defining_op : NULL);
+  if (!loom_func_like_isa(func)) return false;
   out_signature->definition_op = symbol->defining_op;
   out_signature->argument_ids =
-      loom_func_like_arg_ids(callee, &out_signature->argument_count);
-  out_signature->result_ids = loom_op_const_results(callee.op);
-  out_signature->result_count = callee.op->result_count;
+      loom_func_like_arg_ids(func, &out_signature->argument_count);
+  out_signature->result_ids = loom_op_const_results(func.op);
+  out_signature->result_count = func.op->result_count;
   return true;
 }
 
-static loom_low_invoke_caller_t loom_low_find_invoke_caller(
-    const loom_module_t* module, const loom_op_t* invoke_op) {
-  const loom_op_t* parent = invoke_op->parent_op;
-  while (parent) {
-    loom_func_like_t func = loom_func_like_cast(module, (loom_op_t*)parent);
-    if (loom_func_like_isa(func) && loom_func_like_body(func)) {
-      return (loom_low_invoke_caller_t){
-          .op = parent,
-          .kind = loom_low_func_def_isa(parent)
-                      ? LOOM_LOW_INVOKE_CALLER_LOW
-                      : LOOM_LOW_INVOKE_CALLER_SEMANTIC,
-      };
-    }
-    parent = parent->parent_op;
-  }
-  return (loom_low_invoke_caller_t){
-      .op = NULL,
-      .kind = LOOM_LOW_INVOKE_CALLER_NONE,
-  };
-}
-
-static const loom_op_t* loom_low_find_enclosing_low_func_def(
-    const loom_module_t* module, const loom_op_t* nested_op) {
-  const loom_op_t* parent = nested_op->parent_op;
-  while (parent) {
-    if (loom_low_func_def_isa(parent)) return parent;
-    loom_func_like_t func = loom_func_like_cast(module, (loom_op_t*)parent);
-    if (loom_func_like_isa(func) && loom_func_like_body(func)) return NULL;
-    parent = parent->parent_op;
-  }
-  return NULL;
-}
-
-static bool loom_low_func_like_is_pure(const loom_module_t* module,
-                                       const loom_op_t* op) {
-  loom_func_like_t func = loom_func_like_cast(module, (loom_op_t*)op);
-  if (!loom_func_like_isa(func)) return false;
-  if (loom_func_like_purity(func) != 0) return true;
-  loom_region_t* body = loom_func_like_body(func);
-  return body && !loom_region_has_read_effects(body) &&
-         !loom_region_has_write_effects(body);
-}
-
-static bool loom_low_abi_metadata_matches_adapter(
-    const loom_op_t* op, loom_symbol_ref_t adapter_ref) {
-  if (loom_low_abi_effect_isa(op)) {
-    return loom_low_symbol_ref_equal(loom_low_abi_effect_adapter(op),
-                                     adapter_ref);
-  }
-  if (loom_low_abi_clobber_isa(op)) {
-    return loom_low_symbol_ref_equal(loom_low_abi_clobber_adapter(op),
-                                     adapter_ref);
-  }
-  return false;
-}
-
-static loom_low_abi_metadata_counts_t loom_low_count_abi_metadata(
-    const loom_module_t* module, loom_symbol_ref_t adapter_ref) {
-  loom_low_abi_metadata_counts_t counts = {0};
-  const loom_symbol_t* symbol = NULL;
-  loom_module_for_each_symbol(module, symbol) {
-    const loom_op_t* op = symbol->defining_op;
-    if (!op || !loom_low_abi_metadata_matches_adapter(op, adapter_ref)) {
-      continue;
-    }
-    if (loom_low_abi_effect_isa(op)) ++counts.effect_count;
-    if (loom_low_abi_clobber_isa(op)) ++counts.clobber_count;
-  }
-  return counts;
+static bool loom_low_load_low_signature(
+    const loom_module_t* module, const loom_symbol_t* symbol,
+    loom_low_callee_signature_t* out_signature) {
+  if (!symbol || !loom_low_function_isa(symbol->defining_op)) return false;
+  return loom_low_load_func_like_signature(module, symbol, out_signature);
 }
 
 static iree_status_t loom_low_emit_descriptor_key_error(
@@ -627,6 +327,16 @@ static iree_status_t loom_low_verify_qualified_key_attr(
   if (loom_low_qualified_key_is_valid(key)) return iree_ok_status();
   return loom_low_emit_descriptor_key_error(emitter, op, attr_index, field_name,
                                             key, expected);
+}
+
+static iree_status_t loom_low_verify_descriptor_key(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter, loom_string_id_t opcode_id,
+    uint16_t attr_index) {
+  return loom_low_verify_qualified_key_attr(
+      module, op, emitter, opcode_id, attr_index, IREE_SV("opcode"),
+      IREE_SV("a namespace-qualified descriptor key with non-empty identifier "
+              "segments"));
 }
 
 static bool loom_low_is_power_of_two_i64(int64_t value) {
@@ -709,6 +419,18 @@ static iree_status_t loom_low_verify_slice_register_range(
         emitter);
   }
   return iree_ok_status();
+}
+
+static const loom_op_t* loom_low_find_enclosing_low_func_def(
+    const loom_module_t* module, const loom_op_t* nested_op) {
+  const loom_op_t* parent = nested_op->parent_op;
+  while (parent) {
+    if (loom_low_func_def_isa(parent)) return parent;
+    loom_func_like_t func = loom_func_like_cast(module, (loom_op_t*)parent);
+    if (loom_func_like_isa(func) && loom_func_like_body(func)) return NULL;
+    parent = parent->parent_op;
+  }
+  return NULL;
 }
 
 static iree_status_t loom_low_verify_slot_function(
@@ -801,97 +523,53 @@ static iree_status_t loom_low_verify_slot_use(
   return iree_ok_status();
 }
 
-static bool loom_low_abi_resource_kind_is_known(uint8_t kind) {
+static bool loom_low_resource_kind_is_known(uint8_t kind) {
   switch (kind) {
-    case LOOM_LOW_ABI_RESOURCE_KIND_NATIVE_POINTER:
-    case LOOM_LOW_ABI_RESOURCE_KIND_VM_STATE:
-    case LOOM_LOW_ABI_RESOURCE_KIND_VM_IMPORT:
-    case LOOM_LOW_ABI_RESOURCE_KIND_HAL_BUFFER_RESOURCE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
       return true;
     default:
       return false;
   }
 }
 
-static iree_string_view_t loom_low_abi_resource_export_abi_reason(
-    uint8_t kind) {
+static iree_string_view_t loom_low_resource_export_abi_reason(uint8_t kind) {
   switch (kind) {
-    case LOOM_LOW_ABI_RESOURCE_KIND_NATIVE_POINTER:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER:
       return IREE_SV(
           "native_pointer resources require object_function export "
           "ABI");
-    case LOOM_LOW_ABI_RESOURCE_KIND_VM_STATE:
-    case LOOM_LOW_ABI_RESOURCE_KIND_VM_IMPORT:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
       return IREE_SV("VM resources require vm_module_function export ABI");
-    case LOOM_LOW_ABI_RESOURCE_KIND_HAL_BUFFER_RESOURCE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
       return IREE_SV("HAL buffer resources require hal_kernel export ABI");
     default:
-      return IREE_SV("resource kind must name a supported target ABI resource");
+      return IREE_SV(
+          "resource import_kind must name a supported target resource");
   }
 }
 
-static bool loom_low_abi_resource_matches_export_abi(uint8_t kind,
-                                                     uint8_t abi) {
+static bool loom_low_resource_matches_export_abi(uint8_t kind, uint8_t abi) {
   switch (kind) {
-    case LOOM_LOW_ABI_RESOURCE_KIND_NATIVE_POINTER:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER:
       return abi == LOOM_TARGET_EXPORT_ABI_OBJECT_FUNCTION;
-    case LOOM_LOW_ABI_RESOURCE_KIND_VM_STATE:
-    case LOOM_LOW_ABI_RESOURCE_KIND_VM_IMPORT:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
       return abi == LOOM_TARGET_EXPORT_ABI_VM_MODULE_FUNCTION;
-    case LOOM_LOW_ABI_RESOURCE_KIND_HAL_BUFFER_RESOURCE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
       return abi == LOOM_TARGET_EXPORT_ABI_HAL_KERNEL;
     default:
       return false;
   }
 }
 
-static iree_status_t loom_low_load_resource(const loom_module_t* module,
-                                            const loom_op_t* op,
-                                            loom_symbol_ref_t resource_ref,
-                                            uint16_t resource_attr_index,
-                                            iree_diagnostic_emitter_t emitter,
-                                            const loom_op_t** out_resource_op) {
-  IREE_ASSERT_ARGUMENT(out_resource_op);
-  *out_resource_op = NULL;
-  const loom_symbol_t* resource_symbol =
-      loom_low_lookup_defined_symbol(module, resource_ref);
-  if (!resource_symbol) {
-    return iree_ok_status();
-  }
-  if (!loom_low_abi_resource_isa(resource_symbol->defining_op)) {
-    return loom_low_emit_symbol_kind_mismatch(
-        module, op, resource_ref, resource_attr_index, resource_symbol,
-        IREE_SV("low ABI resource"), emitter);
-  }
-  *out_resource_op = resource_symbol->defining_op;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_load_resource_function(
-    const loom_module_t* module, const loom_op_t* op,
-    loom_symbol_ref_t function_ref, uint16_t function_attr_index,
-    iree_diagnostic_emitter_t emitter, const loom_op_t** out_function_op) {
-  IREE_ASSERT_ARGUMENT(out_function_op);
-  *out_function_op = NULL;
-  const loom_symbol_t* function_symbol =
-      loom_low_lookup_defined_symbol(module, function_ref);
-  if (!function_symbol) {
-    return iree_ok_status();
-  }
-  if (!loom_low_func_def_isa(function_symbol->defining_op)) {
-    return loom_low_emit_symbol_kind_mismatch(
-        module, op, function_ref, function_attr_index, function_symbol,
-        IREE_SV("low function definition"), emitter);
-  }
-  *out_function_op = function_symbol->defining_op;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_load_resource_export_plan(
     const loom_module_t* module, const loom_op_t* op,
-    const loom_op_t* function_op, uint16_t function_attr_index,
-    iree_diagnostic_emitter_t emitter, const loom_op_t** out_export_op) {
-  IREE_ASSERT_ARGUMENT(out_export_op);
+    const loom_op_t* function_op, iree_diagnostic_emitter_t emitter,
+    const loom_op_t** out_export_op) {
   *out_export_op = NULL;
   loom_symbol_ref_t target_ref = loom_low_func_def_target(function_op);
   const loom_symbol_t* target_symbol =
@@ -910,8 +588,8 @@ static iree_status_t loom_low_load_resource_export_plan(
     return loom_low_emit_structural_storage_error(
         module, op,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                  function_attr_index),
-        IREE_SV("function"),
+                                  loom_low_resource_import_kind_ATTR_INDEX),
+        IREE_SV("import_kind"),
         IREE_SV("resource owner target must resolve to a target bundle"),
         related, IREE_ARRAYSIZE(related), emitter);
   }
@@ -930,41 +608,12 @@ static iree_status_t loom_low_load_resource_export_plan(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_verify_resource_export_source(
-    const loom_module_t* module, const loom_op_t* resource_op,
-    const loom_op_t* export_op, loom_symbol_ref_t function_ref,
-    iree_diagnostic_emitter_t emitter) {
-  const loom_attribute_t source_attr =
-      loom_op_attrs(export_op)[loom_target_export_source_ATTR_INDEX];
-  if (loom_attr_is_absent(source_attr)) {
-    return iree_ok_status();
-  }
-  if (loom_low_symbol_ref_equal(loom_target_export_source(export_op),
-                                function_ref)) {
-    return iree_ok_status();
-  }
-  loom_diagnostic_related_op_t related[] = {{
-      .label = IREE_SV("export plan defined here"),
-      .op = export_op,
-      .field_ref =
-          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                    loom_target_export_source_ATTR_INDEX),
-  }};
-  return loom_low_emit_structural_storage_error(
-      module, resource_op,
-      loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                loom_low_abi_resource_function_ATTR_INDEX),
-      IREE_SV("function"),
-      IREE_SV("target export source must match the resource owner function"),
-      related, IREE_ARRAYSIZE(related), emitter);
-}
-
 static iree_status_t loom_low_verify_resource_export_abi(
     const loom_module_t* module, const loom_op_t* resource_op,
     const loom_op_t* export_op, uint8_t kind,
     iree_diagnostic_emitter_t emitter) {
   uint8_t abi = loom_target_export_abi(export_op);
-  if (loom_low_abi_resource_matches_export_abi(kind, abi)) {
+  if (loom_low_resource_matches_export_abi(kind, abi)) {
     return iree_ok_status();
   }
   loom_diagnostic_related_op_t related[] = {{
@@ -976,930 +625,64 @@ static iree_status_t loom_low_verify_resource_export_abi(
   return loom_low_emit_structural_storage_error(
       module, resource_op,
       loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                loom_low_abi_resource_kind_ATTR_INDEX),
-      IREE_SV("kind"), loom_low_abi_resource_export_abi_reason(kind), related,
-      IREE_ARRAYSIZE(related), emitter);
+                                loom_low_resource_import_kind_ATTR_INDEX),
+      IREE_SV("import_kind"), loom_low_resource_export_abi_reason(kind),
+      related, IREE_ARRAYSIZE(related), emitter);
 }
 
-static iree_status_t loom_low_emit_invoke_count_mismatch(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature,
-    iree_diagnostic_emitter_t emitter, iree_string_view_t field_kind,
-    uint16_t actual_count, uint16_t expected_count) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(
-          loom_low_symbol_name(module, loom_low_invoke_callee(invoke_op))),
-      loom_param_string(field_kind),
-      loom_param_u32(actual_count),
-      loom_param_u32(expected_count),
-  };
-  return loom_low_emit_callee_related(
-      emitter, invoke_op, signature->definition_op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 13), params,
-      IREE_ARRAYSIZE(params));
-}
-
-static iree_status_t loom_low_emit_invoke_type_mismatch(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature,
-    iree_diagnostic_emitter_t emitter,
-    loom_diagnostic_field_kind_t field_ref_kind, iree_string_view_t field_kind,
-    uint16_t field_index, loom_type_t actual_type,
-    iree_string_view_t callee_field_kind, loom_type_t expected_type) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(
-          loom_low_symbol_name(module, loom_low_invoke_callee(invoke_op))),
-      loom_param_with_field_ref(
-          loom_param_string(field_kind),
-          loom_diagnostic_field_ref(field_ref_kind, field_index)),
-      loom_param_u32(field_index),
-      loom_param_type(actual_type),
-      loom_param_string(callee_field_kind),
-      loom_param_type(expected_type),
-  };
-  return loom_low_emit_callee_related(
-      emitter, invoke_op, signature->definition_op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 14), params,
-      IREE_ARRAYSIZE(params));
-}
-
-static iree_status_t loom_low_emit_adapter_callee_mismatch(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature, const loom_op_t* adapter_op,
-    iree_diagnostic_emitter_t emitter) {
-  loom_symbol_ref_t invoke_callee = loom_low_invoke_callee(invoke_op);
-  loom_symbol_ref_t adapter_ref = loom_low_invoke_adapter(invoke_op);
-  loom_symbol_ref_t adapter_callee = loom_low_abi_adapter_callee(adapter_op);
-  loom_diagnostic_param_t params[] = {
-      loom_param_with_field_ref(
-          loom_param_string(loom_low_symbol_name(module, invoke_callee)),
-          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                    loom_low_invoke_callee_ATTR_INDEX)),
-      loom_param_with_field_ref(
-          loom_param_string(loom_low_symbol_name(module, adapter_ref)),
-          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                    loom_low_invoke_adapter_ATTR_INDEX)),
-      loom_param_string(loom_low_symbol_name(module, adapter_callee)),
-  };
-  loom_diagnostic_related_op_t related[] = {
-      {
-          .label = IREE_SV("callee defined here"),
-          .op = signature->definition_op,
-      },
-      {
-          .label = IREE_SV("adapter defined here"),
-          .op = adapter_op,
-      },
-  };
-  return loom_low_emit_related(
-      emitter, invoke_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 15),
-      params, IREE_ARRAYSIZE(params), related, IREE_ARRAYSIZE(related));
-}
-
-static iree_status_t loom_low_emit_adapter_count_mismatch(
+static iree_status_t loom_low_verify_resource_op(
     const loom_module_t* module, const loom_op_t* op,
-    loom_symbol_ref_t callee_ref, const loom_op_t* callee_op,
-    loom_symbol_ref_t adapter_ref, const loom_op_t* adapter_op,
-    iree_diagnostic_emitter_t emitter, iree_string_view_t field_kind,
-    int64_t actual_count, int64_t expected_count, uint8_t conversion) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_symbol_name(module, callee_ref)),
-      loom_param_string(loom_low_symbol_name(module, adapter_ref)),
-      loom_param_string(field_kind),
-      loom_param_i64(actual_count),
-      loom_param_i64(expected_count),
-      loom_param_string(loom_low_abi_conversion_name(conversion)),
-  };
-  loom_diagnostic_related_op_t related[] = {
-      {0},
-      {0},
-  };
-  iree_host_size_t related_count = 0;
-  if (callee_op) {
-    related[related_count++] = (loom_diagnostic_related_op_t){
-        .label = IREE_SV("callee defined here"),
-        .op = callee_op,
-    };
-  }
-  if (adapter_op) {
-    related[related_count++] = (loom_diagnostic_related_op_t){
-        .label = IREE_SV("adapter defined here"),
-        .op = adapter_op,
-    };
-  }
-  return loom_low_emit_related(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 16),
-      params, IREE_ARRAYSIZE(params), related, related_count);
-}
-
-static iree_status_t loom_low_emit_adapter_type_mismatch(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature, const loom_op_t* adapter_op,
-    iree_diagnostic_emitter_t emitter,
-    loom_diagnostic_field_kind_t field_ref_kind, iree_string_view_t field_kind,
-    uint16_t field_index, loom_type_t actual_type,
-    iree_string_view_t callee_field_kind, loom_type_t expected_type,
-    uint8_t conversion) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(
-          loom_low_symbol_name(module, loom_low_invoke_callee(invoke_op))),
-      loom_param_string(
-          loom_low_symbol_name(module, loom_low_invoke_adapter(invoke_op))),
-      loom_param_string(loom_low_abi_conversion_name(conversion)),
-      loom_param_with_field_ref(
-          loom_param_string(field_kind),
-          loom_diagnostic_field_ref(field_ref_kind, field_index)),
-      loom_param_u32(field_index),
-      loom_param_type(actual_type),
-      loom_param_string(callee_field_kind),
-      loom_param_type(expected_type),
-  };
-  loom_diagnostic_related_op_t related[] = {
-      {
-          .label = IREE_SV("callee defined here"),
-          .op = signature->definition_op,
-      },
-      {
-          .label = IREE_SV("adapter defined here"),
-          .op = adapter_op,
-      },
-  };
-  return loom_low_emit_related(
-      emitter, invoke_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17),
-      params, IREE_ARRAYSIZE(params), related, IREE_ARRAYSIZE(related));
-}
-
-static iree_status_t loom_low_emit_abi_entry_error(
-    const loom_module_t* module, const loom_op_t* op,
-    loom_symbol_ref_t adapter_ref, const loom_op_t* adapter_op,
-    iree_string_view_t entry_name, const loom_op_t* entry_op,
-    loom_low_abi_field_kind_t field_kind, int64_t field_index,
-    iree_string_view_t reason, iree_diagnostic_emitter_t emitter) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_symbol_name(module, adapter_ref)),
-      loom_param_string(entry_name),
-      loom_param_string(loom_low_abi_field_kind_name(field_kind)),
-      loom_param_i64(field_index),
-      loom_param_string(reason),
-  };
-  loom_diagnostic_related_op_t related[] = {
-      {0},
-      {0},
-  };
-  iree_host_size_t related_count = 0;
-  if (adapter_op) {
-    related[related_count++] = (loom_diagnostic_related_op_t){
-        .label = IREE_SV("adapter defined here"),
-        .op = adapter_op,
-    };
-  }
-  if (entry_op) {
-    related[related_count++] = (loom_diagnostic_related_op_t){
-        .label = IREE_SV("entry defined here"),
-        .op = entry_op,
-    };
-  }
-  return loom_low_emit_related(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 18),
-      params, IREE_ARRAYSIZE(params), related, related_count);
-}
-
-static iree_status_t loom_low_emit_abi_entry_type_mismatch(
-    const loom_module_t* module, const loom_op_t* op,
-    loom_symbol_ref_t adapter_ref, const loom_op_t* adapter_op,
-    const loom_low_abi_entry_t* entry, loom_low_abi_field_kind_t field_kind,
-    uint16_t field_index, loom_type_t actual_type,
-    iree_string_view_t expected_field_kind, loom_type_t expected_type,
     iree_diagnostic_emitter_t emitter) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_symbol_name(module, adapter_ref)),
-      loom_param_string(loom_low_symbol_name(module, entry->symbol)),
-      loom_param_string(loom_low_abi_value_conversion_name(entry->conversion)),
-      loom_param_string(loom_low_abi_field_kind_name(field_kind)),
-      loom_param_u32(field_index),
-      loom_param_type(actual_type),
-      loom_param_string(expected_field_kind),
-      loom_param_type(expected_type),
-  };
-  loom_diagnostic_related_op_t related[] = {
-      {0},
-      {0},
-  };
-  iree_host_size_t related_count = 0;
-  if (adapter_op) {
-    related[related_count++] = (loom_diagnostic_related_op_t){
-        .label = IREE_SV("adapter defined here"),
-        .op = adapter_op,
-    };
+  const uint8_t import_kind = loom_low_resource_import_kind(op);
+  if (!loom_low_resource_kind_is_known(import_kind)) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_resource_import_kind_ATTR_INDEX,
+        IREE_SV("import_kind"),
+        IREE_SV("import_kind must name a supported target resource"), emitter);
   }
-  if (entry->op) {
-    related[related_count++] = (loom_diagnostic_related_op_t){
-        .label = IREE_SV("entry defined here"),
-        .op = entry->op,
-    };
-  }
-  return loom_low_emit_related(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 19),
-      params, IREE_ARRAYSIZE(params), related, related_count);
-}
 
-static iree_status_t loom_low_emit_invoke_context_error(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_invoke_caller_t* caller, const loom_op_t* callee_op,
-    const loom_op_t* adapter_op, iree_string_view_t reason,
-    iree_diagnostic_emitter_t emitter) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(
-          loom_low_symbol_name(module, loom_low_invoke_callee(invoke_op))),
-      loom_param_string(loom_low_invoke_caller_kind_name(caller->kind)),
-      loom_param_string(reason),
-  };
-  loom_diagnostic_related_op_t related[] = {
-      {0},
-      {0},
-      {0},
-  };
-  iree_host_size_t related_count = 0;
-  if (caller->op) {
-    related[related_count++] = (loom_diagnostic_related_op_t){
-        .label = IREE_SV("caller defined here"),
-        .op = caller->op,
-    };
+  if (loom_low_resource_index(op) < 0) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_resource_index_ATTR_INDEX, IREE_SV("index"),
+        IREE_SV("index must be non-negative"), emitter);
   }
-  if (callee_op) {
-    related[related_count++] = (loom_diagnostic_related_op_t){
-        .label = IREE_SV("callee defined here"),
-        .op = callee_op,
-    };
+
+  const loom_type_t semantic_type =
+      loom_low_type_attr(module, loom_low_resource_semantic_type(op));
+  if (loom_type_kind(semantic_type) == LOOM_TYPE_NONE) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_resource_semantic_type_ATTR_INDEX,
+        IREE_SV("semantic_type"),
+        IREE_SV("semantic_type must name a valid Loom type"), emitter);
   }
-  if (adapter_op) {
-    related[related_count++] = (loom_diagnostic_related_op_t){
-        .label = IREE_SV("adapter defined here"),
-        .op = adapter_op,
-    };
+
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_low_resource_result(op));
+  if (!loom_type_is_register(result_type)) {
+    return loom_low_emit_structural_storage_error(
+        module, op, loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, 0),
+        IREE_SV("result"), IREE_SV("resource result must be a register type"),
+        NULL, 0, emitter);
   }
-  return loom_low_emit_related(
-      emitter, invoke_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 20),
-      params, IREE_ARRAYSIZE(params), related, related_count);
-}
 
-static iree_status_t loom_low_emit_abi_metadata_error(
-    const loom_module_t* module, const loom_op_t* op,
-    loom_symbol_ref_t adapter_ref, const loom_op_t* adapter_op,
-    iree_string_view_t record_kind, loom_symbol_ref_t record_ref,
-    iree_string_view_t reason, iree_diagnostic_emitter_t emitter) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_symbol_name(module, adapter_ref)),
-      loom_param_string(record_kind),
-      loom_param_string(loom_low_symbol_name(module, record_ref)),
-      loom_param_string(reason),
-  };
-  loom_diagnostic_related_op_t related[] = {
-      {0},
-      {0},
-  };
-  iree_host_size_t related_count = 0;
-  if (adapter_op) {
-    related[related_count++] = (loom_diagnostic_related_op_t){
-        .label = IREE_SV("adapter defined here"),
-        .op = adapter_op,
-    };
+  const loom_op_t* enclosing_func =
+      loom_low_find_enclosing_low_func_def(module, op);
+  if (!enclosing_func) {
+    return loom_low_emit_structural_storage_error(
+        module, op, loom_diagnostic_field_ref_none(),
+        IREE_SV("enclosing function"),
+        IREE_SV("resource imports must be nested under a low function body"),
+        NULL, 0, emitter);
   }
-  related[related_count++] = (loom_diagnostic_related_op_t){
-      .label = IREE_SV("metadata defined here"),
-      .op = op,
-  };
-  return loom_low_emit_related(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 21),
-      params, IREE_ARRAYSIZE(params), related, related_count);
-}
 
-static iree_status_t loom_low_emit_invoke_purity_effect_error(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    iree_string_view_t boundary_name, iree_string_view_t reason,
-    const loom_op_t* related_op, iree_string_view_t related_label,
-    loom_low_abi_metadata_counts_t counts, iree_diagnostic_emitter_t emitter) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(
-          loom_low_symbol_name(module, loom_low_invoke_callee(invoke_op))),
-      loom_param_string(boundary_name),
-      loom_param_string(reason),
-      loom_param_u32(counts.effect_count),
-      loom_param_u32(counts.clobber_count),
-  };
-  loom_diagnostic_related_op_t related[] = {
-      {
-          .label = related_label,
-          .op = related_op,
-      },
-  };
-  return loom_low_emit_related(
-      emitter, invoke_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 22),
-      params, IREE_ARRAYSIZE(params), related,
-      related_op ? IREE_ARRAYSIZE(related) : 0);
-}
-
-static iree_status_t loom_low_verify_descriptor_key(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter, loom_string_id_t opcode_id,
-    uint16_t attr_index) {
-  return loom_low_verify_qualified_key_attr(
-      module, op, emitter, opcode_id, attr_index, IREE_SV("opcode"),
-      IREE_SV("a namespace-qualified descriptor key with non-empty identifier "
-              "segments"));
-}
-
-static iree_status_t loom_low_verify_abi_metadata_adapter(
-    const loom_module_t* module, const loom_op_t* op,
-    loom_symbol_ref_t adapter_ref, uint16_t adapter_attr_index,
-    iree_diagnostic_emitter_t emitter, const loom_op_t** out_adapter_op) {
-  *out_adapter_op = NULL;
-  const loom_symbol_t* adapter_symbol =
-      loom_low_lookup_defined_symbol(module, adapter_ref);
-  if (!adapter_symbol) return iree_ok_status();
-  const loom_op_t* adapter_op = adapter_symbol->defining_op;
-  if (!loom_low_abi_adapter_isa(adapter_op)) {
-    IREE_RETURN_IF_ERROR(loom_low_emit_symbol_kind_mismatch(
-        module, op, adapter_ref, adapter_attr_index, adapter_symbol,
-        IREE_SV("low ABI adapter"), emitter));
+  const loom_op_t* export_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_load_resource_export_plan(
+      module, op, enclosing_func, emitter, &export_op));
+  if (!export_op) {
     return iree_ok_status();
   }
-  *out_adapter_op = adapter_op;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_verify_abi_effect_resource(
-    const loom_module_t* module, const loom_op_t* op,
-    loom_symbol_ref_t adapter_ref, const loom_op_t* adapter_op,
-    iree_diagnostic_emitter_t emitter) {
-  bool resource_is_present = loom_low_optional_attr_is_present(
-      op, loom_low_abi_effect_resource_ATTR_INDEX);
-  if (resource_is_present) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_qualified_key_attr(
-        module, op, emitter, loom_low_abi_effect_resource(op),
-        loom_low_abi_effect_resource_ATTR_INDEX, IREE_SV("resource"),
-        IREE_SV("a namespace-qualified ABI resource key with non-empty "
-                "identifier segments")));
-  }
-
-  switch (loom_low_abi_effect_kind(op)) {
-    case LOOM_LOW_ABI_EFFECT_KIND_READ:
-    case LOOM_LOW_ABI_EFFECT_KIND_WRITE:
-    case LOOM_LOW_ABI_EFFECT_KIND_READWRITE:
-      if (!resource_is_present) {
-        return loom_low_emit_abi_metadata_error(
-            module, op, adapter_ref, adapter_op, IREE_SV("effect"),
-            loom_low_abi_effect_symbol(op),
-            IREE_SV("read/write/readwrite effects require a resource key"),
-            emitter);
-      }
-      return iree_ok_status();
-    case LOOM_LOW_ABI_EFFECT_KIND_CALL:
-    case LOOM_LOW_ABI_EFFECT_KIND_UNKNOWN:
-      return iree_ok_status();
-    default:
-      return loom_low_emit_abi_metadata_error(
-          module, op, adapter_ref, adapter_op, IREE_SV("effect"),
-          loom_low_abi_effect_symbol(op), IREE_SV("unknown effect kind"),
-          emitter);
-  }
-}
-
-static iree_status_t loom_low_verify_invoke_argument_count(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature,
-    iree_diagnostic_emitter_t emitter) {
-  if (invoke_op->operand_count == signature->argument_count) {
-    return iree_ok_status();
-  }
-  return loom_low_emit_invoke_count_mismatch(
-      module, invoke_op, signature, emitter, IREE_SV("operand"),
-      invoke_op->operand_count, signature->argument_count);
-}
-
-static iree_status_t loom_low_verify_invoke_result_count(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature,
-    iree_diagnostic_emitter_t emitter) {
-  if (invoke_op->result_count == signature->result_count) {
-    return iree_ok_status();
-  }
-  return loom_low_emit_invoke_count_mismatch(
-      module, invoke_op, signature, emitter, IREE_SV("result"),
-      invoke_op->result_count, signature->result_count);
-}
-
-static iree_status_t loom_low_verify_invoke_argument_types(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature,
-    iree_diagnostic_emitter_t emitter) {
-  uint16_t compare_count = invoke_op->operand_count;
-  if (compare_count > signature->argument_count) {
-    compare_count = signature->argument_count;
-  }
-  const loom_value_id_t* invoke_operands = loom_op_const_operands(invoke_op);
-  for (uint16_t i = 0; i < compare_count; ++i) {
-    loom_type_t actual_type =
-        loom_module_value_type(module, invoke_operands[i]);
-    loom_type_t expected_type =
-        loom_module_value_type(module, signature->argument_ids[i]);
-    if (loom_type_equal(actual_type, expected_type)) continue;
-    IREE_RETURN_IF_ERROR(loom_low_emit_invoke_type_mismatch(
-        module, invoke_op, signature, emitter, LOOM_DIAGNOSTIC_FIELD_OPERAND,
-        IREE_SV("operand"), i, actual_type, IREE_SV("argument"),
-        expected_type));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_verify_invoke_result_types(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature,
-    iree_diagnostic_emitter_t emitter) {
-  uint16_t compare_count = invoke_op->result_count;
-  if (compare_count > signature->result_count) {
-    compare_count = signature->result_count;
-  }
-  const loom_value_id_t* invoke_results = loom_op_const_results(invoke_op);
-  for (uint16_t i = 0; i < compare_count; ++i) {
-    loom_type_t actual_type = loom_module_value_type(module, invoke_results[i]);
-    loom_type_t expected_type =
-        loom_module_value_type(module, signature->result_ids[i]);
-    if (loom_type_equal(actual_type, expected_type)) continue;
-    IREE_RETURN_IF_ERROR(loom_low_emit_invoke_type_mismatch(
-        module, invoke_op, signature, emitter, LOOM_DIAGNOSTIC_FIELD_RESULT,
-        IREE_SV("result"), i, actual_type, IREE_SV("result"), expected_type));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_verify_adapter_signature_count(
-    const loom_module_t* module, const loom_op_t* adapter_op,
-    const loom_low_callee_signature_t* signature,
-    iree_diagnostic_emitter_t emitter, iree_string_view_t field_kind,
-    int64_t actual_count, int64_t expected_count) {
-  if (actual_count == expected_count) return iree_ok_status();
-  return loom_low_emit_adapter_count_mismatch(
-      module, adapter_op, loom_low_abi_adapter_callee(adapter_op),
-      signature->definition_op, loom_low_abi_adapter_symbol(adapter_op),
-      adapter_op, emitter, field_kind, actual_count, expected_count,
-      loom_low_abi_adapter_conversion(adapter_op));
-}
-
-static iree_status_t loom_low_verify_invoke_adapter_count(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature, const loom_op_t* adapter_op,
-    iree_diagnostic_emitter_t emitter, iree_string_view_t field_kind,
-    int64_t actual_count, int64_t expected_count) {
-  if (actual_count == expected_count) return iree_ok_status();
-  return loom_low_emit_adapter_count_mismatch(
-      module, invoke_op, loom_low_invoke_callee(invoke_op),
-      signature->definition_op, loom_low_invoke_adapter(invoke_op), adapter_op,
-      emitter, field_kind, actual_count, expected_count,
-      loom_low_abi_adapter_conversion(adapter_op));
-}
-
-static iree_status_t loom_low_verify_invoke_adapter_argument_types(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature, const loom_op_t* adapter_op,
-    iree_diagnostic_emitter_t emitter) {
-  uint8_t conversion = loom_low_abi_adapter_conversion(adapter_op);
-  if (conversion != LOOM_LOW_ABI_ADAPTER_CONVERSION_DIRECT) {
-    return iree_ok_status();
-  }
-  uint16_t compare_count = invoke_op->operand_count;
-  if (compare_count > signature->argument_count) {
-    compare_count = signature->argument_count;
-  }
-  const loom_value_id_t* invoke_operands = loom_op_const_operands(invoke_op);
-  for (uint16_t i = 0; i < compare_count; ++i) {
-    loom_type_t actual_type =
-        loom_module_value_type(module, invoke_operands[i]);
-    loom_type_t expected_type =
-        loom_module_value_type(module, signature->argument_ids[i]);
-    if (loom_type_equal(actual_type, expected_type)) continue;
-    IREE_RETURN_IF_ERROR(loom_low_emit_adapter_type_mismatch(
-        module, invoke_op, signature, adapter_op, emitter,
-        LOOM_DIAGNOSTIC_FIELD_OPERAND, IREE_SV("operand"), i, actual_type,
-        IREE_SV("argument"), expected_type, conversion));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_verify_invoke_adapter_result_types(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature, const loom_op_t* adapter_op,
-    iree_diagnostic_emitter_t emitter) {
-  uint8_t conversion = loom_low_abi_adapter_conversion(adapter_op);
-  if (conversion != LOOM_LOW_ABI_ADAPTER_CONVERSION_DIRECT) {
-    return iree_ok_status();
-  }
-  uint16_t compare_count = invoke_op->result_count;
-  if (compare_count > signature->result_count) {
-    compare_count = signature->result_count;
-  }
-  const loom_value_id_t* invoke_results = loom_op_const_results(invoke_op);
-  for (uint16_t i = 0; i < compare_count; ++i) {
-    loom_type_t actual_type = loom_module_value_type(module, invoke_results[i]);
-    loom_type_t expected_type =
-        loom_module_value_type(module, signature->result_ids[i]);
-    if (loom_type_equal(actual_type, expected_type)) continue;
-    IREE_RETURN_IF_ERROR(loom_low_emit_adapter_type_mismatch(
-        module, invoke_op, signature, adapter_op, emitter,
-        LOOM_DIAGNOSTIC_FIELD_RESULT, IREE_SV("result"), i, actual_type,
-        IREE_SV("result"), expected_type, conversion));
-  }
-  return iree_ok_status();
-}
-
-static bool loom_low_find_abi_entry(const loom_module_t* module,
-                                    loom_symbol_ref_t adapter_ref,
-                                    loom_low_abi_field_kind_t field_kind,
-                                    uint16_t field_index,
-                                    loom_low_abi_entry_t* out_entry,
-                                    loom_low_abi_entry_t* out_duplicate) {
-  bool found = false;
-  if (out_entry) memset(out_entry, 0, sizeof(*out_entry));
-  if (out_duplicate) memset(out_duplicate, 0, sizeof(*out_duplicate));
-  const loom_symbol_t* symbol = NULL;
-  loom_module_for_each_symbol(module, symbol) {
-    const loom_op_t* entry_op = symbol->defining_op;
-    if (!entry_op ||
-        !loom_low_abi_field_kind_matches_op(field_kind, entry_op)) {
-      continue;
-    }
-    loom_low_abi_entry_t entry = loom_low_abi_entry_load(module, entry_op);
-    if (!loom_low_symbol_ref_equal(entry.adapter, adapter_ref) ||
-        entry.index != field_index) {
-      continue;
-    }
-    if (found) {
-      if (out_duplicate) *out_duplicate = entry;
-      return true;
-    }
-    found = true;
-    if (out_entry) *out_entry = entry;
-  }
-  return found;
-}
-
-static iree_status_t loom_low_verify_abi_entry_conversion_shape(
-    const loom_module_t* module, const loom_op_t* op,
-    const loom_low_abi_entry_t* entry, loom_low_abi_field_kind_t field_kind,
-    const loom_op_t* adapter_op, iree_diagnostic_emitter_t emitter) {
-  switch (entry->conversion) {
-    case LOOM_LOW_CONVERSION_DIRECT:
-      if (loom_type_equal(entry->semantic_type, entry->abi_type)) {
-        return iree_ok_status();
-      }
-      return loom_low_emit_abi_entry_type_mismatch(
-          module, op, entry->adapter, adapter_op, entry, field_kind,
-          (uint16_t)entry->index, entry->semantic_type, IREE_SV("ABI"),
-          entry->abi_type, emitter);
-    case LOOM_LOW_CONVERSION_SCALAR_TO_REGISTER:
-      if (field_kind != LOOM_LOW_ABI_FIELD_OPERAND) {
-        return loom_low_emit_abi_entry_error(
-            module, op, entry->adapter, adapter_op,
-            loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
-            entry->index,
-            IREE_SV("scalar_to_register is only valid for operand entries"),
-            emitter);
-      }
-      if (loom_type_is_scalar(entry->semantic_type) &&
-          loom_type_is_register(entry->abi_type)) {
-        return iree_ok_status();
-      }
-      return loom_low_emit_abi_entry_error(
-          module, op, entry->adapter, adapter_op,
-          loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
-          entry->index,
-          IREE_SV("scalar_to_register requires a scalar semantic type and "
-                  "register ABI type"),
-          emitter);
-    case LOOM_LOW_CONVERSION_REGISTER_TO_SCALAR:
-      if (field_kind != LOOM_LOW_ABI_FIELD_RESULT) {
-        return loom_low_emit_abi_entry_error(
-            module, op, entry->adapter, adapter_op,
-            loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
-            entry->index,
-            IREE_SV("register_to_scalar is only valid for result entries"),
-            emitter);
-      }
-      if (loom_type_is_scalar(entry->semantic_type) &&
-          loom_type_is_register(entry->abi_type)) {
-        return iree_ok_status();
-      }
-      return loom_low_emit_abi_entry_error(
-          module, op, entry->adapter, adapter_op,
-          loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
-          entry->index,
-          IREE_SV("register_to_scalar requires a register ABI type and scalar "
-                  "semantic type"),
-          emitter);
-    case LOOM_LOW_CONVERSION_VALUE_TO_REGISTER:
-      if (field_kind != LOOM_LOW_ABI_FIELD_OPERAND) {
-        return loom_low_emit_abi_entry_error(
-            module, op, entry->adapter, adapter_op,
-            loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
-            entry->index,
-            IREE_SV("value_to_register is only valid for operand entries"),
-            emitter);
-      }
-      if (!loom_type_is_register(entry->semantic_type) &&
-          loom_type_is_register(entry->abi_type)) {
-        return iree_ok_status();
-      }
-      return loom_low_emit_abi_entry_error(
-          module, op, entry->adapter, adapter_op,
-          loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
-          entry->index,
-          IREE_SV("value_to_register requires a non-register semantic type and "
-                  "register ABI type"),
-          emitter);
-    case LOOM_LOW_CONVERSION_REGISTER_TO_VALUE:
-      if (field_kind != LOOM_LOW_ABI_FIELD_RESULT) {
-        return loom_low_emit_abi_entry_error(
-            module, op, entry->adapter, adapter_op,
-            loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
-            entry->index,
-            IREE_SV("register_to_value is only valid for result entries"),
-            emitter);
-      }
-      if (!loom_type_is_register(entry->semantic_type) &&
-          loom_type_is_register(entry->abi_type)) {
-        return iree_ok_status();
-      }
-      return loom_low_emit_abi_entry_error(
-          module, op, entry->adapter, adapter_op,
-          loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
-          entry->index,
-          IREE_SV("register_to_value requires a register ABI type and "
-                  "non-register semantic type"),
-          emitter);
-    default:
-      return loom_low_emit_abi_entry_error(
-          module, op, entry->adapter, adapter_op,
-          loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
-          entry->index, IREE_SV("unknown conversion rule"), emitter);
-  }
-}
-
-static iree_status_t loom_low_verify_abi_entry_record(
-    const loom_module_t* module, const loom_op_t* op,
-    loom_low_abi_field_kind_t field_kind, iree_diagnostic_emitter_t emitter) {
-  loom_low_abi_entry_t entry = loom_low_abi_entry_load(module, op);
-  const loom_symbol_t* adapter_symbol =
-      loom_low_lookup_defined_symbol(module, entry.adapter);
-  if (!adapter_symbol) {
-    return iree_ok_status();
-  }
-  const loom_op_t* adapter_op = adapter_symbol->defining_op;
-  uint16_t adapter_attr_index = field_kind == LOOM_LOW_ABI_FIELD_OPERAND
-                                    ? loom_low_abi_operand_adapter_ATTR_INDEX
-                                    : loom_low_abi_result_adapter_ATTR_INDEX;
-  if (!loom_low_abi_adapter_isa(adapter_op)) {
-    IREE_RETURN_IF_ERROR(loom_low_emit_symbol_kind_mismatch(
-        module, op, entry.adapter, adapter_attr_index, adapter_symbol,
-        IREE_SV("low ABI adapter"), emitter));
-    return iree_ok_status();
-  }
-
-  if (loom_low_abi_adapter_conversion(adapter_op) !=
-      LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED) {
-    return loom_low_emit_abi_entry_error(
-        module, op, entry.adapter, adapter_op,
-        loom_low_symbol_name(module, entry.symbol), op, field_kind, entry.index,
-        IREE_SV("only mapped adapters accept operand/result mapping entries"),
-        emitter);
-  }
-
-  int64_t expected_count = field_kind == LOOM_LOW_ABI_FIELD_OPERAND
-                               ? loom_low_abi_adapter_operand_count(adapter_op)
-                               : loom_low_abi_adapter_result_count(adapter_op);
-  if (entry.index < 0 || entry.index >= expected_count) {
-    return loom_low_emit_abi_entry_error(
-        module, op, entry.adapter, adapter_op,
-        loom_low_symbol_name(module, entry.symbol), op, field_kind, entry.index,
-        IREE_SV("index is outside the adapter arity"), emitter);
-  }
-
-  return loom_low_verify_abi_entry_conversion_shape(
-      module, op, &entry, field_kind, adapter_op, emitter);
-}
-
-static iree_status_t loom_low_verify_adapter_mapped_entry(
-    const loom_module_t* module, const loom_op_t* adapter_op,
-    loom_low_abi_field_kind_t field_kind, uint16_t field_index,
-    loom_type_t expected_abi_type, iree_diagnostic_emitter_t emitter) {
-  loom_symbol_ref_t adapter_ref = loom_low_abi_adapter_symbol(adapter_op);
-  loom_low_abi_entry_t entry = {0};
-  loom_low_abi_entry_t duplicate = {0};
-  bool found = loom_low_find_abi_entry(module, adapter_ref, field_kind,
-                                       field_index, &entry, &duplicate);
-  if (!found) {
-    return loom_low_emit_abi_entry_error(
-        module, adapter_op, adapter_ref, adapter_op, IREE_SV("<missing>"), NULL,
-        field_kind, field_index,
-        IREE_SV("mapped adapter is missing this entry"), emitter);
-  }
-  if (duplicate.op) {
-    return loom_low_emit_abi_entry_error(
-        module, adapter_op, adapter_ref, adapter_op,
-        loom_low_symbol_name(module, duplicate.symbol), duplicate.op,
-        field_kind, field_index,
-        IREE_SV("mapped adapter has more than one entry for this index"),
-        emitter);
-  }
-  IREE_RETURN_IF_ERROR(loom_low_verify_abi_entry_conversion_shape(
-      module, adapter_op, &entry, field_kind, adapter_op, emitter));
-  if (loom_type_equal(entry.abi_type, expected_abi_type)) {
-    return iree_ok_status();
-  }
-  iree_string_view_t expected_field_kind =
-      field_kind == LOOM_LOW_ABI_FIELD_OPERAND ? IREE_SV("callee argument")
-                                               : IREE_SV("callee result");
-  return loom_low_emit_abi_entry_type_mismatch(
-      module, adapter_op, adapter_ref, adapter_op, &entry, field_kind,
-      field_index, entry.abi_type, expected_field_kind, expected_abi_type,
-      emitter);
-}
-
-static iree_status_t loom_low_verify_adapter_mapped_entries(
-    const loom_module_t* module, const loom_op_t* adapter_op,
-    const loom_low_callee_signature_t* signature,
-    iree_diagnostic_emitter_t emitter) {
-  uint8_t conversion = loom_low_abi_adapter_conversion(adapter_op);
-  if (conversion != LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED) {
-    return iree_ok_status();
-  }
-  for (uint16_t i = 0; i < signature->argument_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_adapter_mapped_entry(
-        module, adapter_op, LOOM_LOW_ABI_FIELD_OPERAND, i,
-        loom_module_value_type(module, signature->argument_ids[i]), emitter));
-  }
-  for (uint16_t i = 0; i < signature->result_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_adapter_mapped_entry(
-        module, adapter_op, LOOM_LOW_ABI_FIELD_RESULT, i,
-        loom_module_value_type(module, signature->result_ids[i]), emitter));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_verify_invoke_mapped_entry(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature, const loom_op_t* adapter_op,
-    loom_low_abi_field_kind_t field_kind, uint16_t field_index,
-    loom_type_t actual_semantic_type, iree_diagnostic_emitter_t emitter) {
-  loom_symbol_ref_t adapter_ref = loom_low_invoke_adapter(invoke_op);
-  loom_low_abi_entry_t entry = {0};
-  loom_low_abi_entry_t duplicate = {0};
-  bool found = loom_low_find_abi_entry(module, adapter_ref, field_kind,
-                                       field_index, &entry, &duplicate);
-  if (!found) {
-    return loom_low_emit_abi_entry_error(
-        module, invoke_op, adapter_ref, adapter_op, IREE_SV("<missing>"), NULL,
-        field_kind, field_index,
-        IREE_SV("mapped adapter is missing this entry"), emitter);
-  }
-  if (duplicate.op) {
-    return loom_low_emit_abi_entry_error(
-        module, invoke_op, adapter_ref, adapter_op,
-        loom_low_symbol_name(module, duplicate.symbol), duplicate.op,
-        field_kind, field_index,
-        IREE_SV("mapped adapter has more than one entry for this index"),
-        emitter);
-  }
-  IREE_RETURN_IF_ERROR(loom_low_verify_abi_entry_conversion_shape(
-      module, invoke_op, &entry, field_kind, adapter_op, emitter));
-  if (!loom_type_equal(actual_semantic_type, entry.semantic_type)) {
-    return loom_low_emit_abi_entry_type_mismatch(
-        module, invoke_op, adapter_ref, adapter_op, &entry, field_kind,
-        field_index, actual_semantic_type, IREE_SV("adapter semantic"),
-        entry.semantic_type, emitter);
-  }
-
-  loom_type_t expected_abi_type =
-      field_kind == LOOM_LOW_ABI_FIELD_OPERAND
-          ? loom_module_value_type(module, signature->argument_ids[field_index])
-          : loom_module_value_type(module, signature->result_ids[field_index]);
-  if (loom_type_equal(entry.abi_type, expected_abi_type)) {
-    return iree_ok_status();
-  }
-  iree_string_view_t expected_field_kind =
-      field_kind == LOOM_LOW_ABI_FIELD_OPERAND ? IREE_SV("callee argument")
-                                               : IREE_SV("callee result");
-  return loom_low_emit_abi_entry_type_mismatch(
-      module, invoke_op, adapter_ref, adapter_op, &entry, field_kind,
-      field_index, entry.abi_type, expected_field_kind, expected_abi_type,
-      emitter);
-}
-
-static iree_status_t loom_low_verify_invoke_adapter_mapped_types(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature, const loom_op_t* adapter_op,
-    iree_diagnostic_emitter_t emitter) {
-  uint8_t conversion = loom_low_abi_adapter_conversion(adapter_op);
-  if (conversion != LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED) {
-    return iree_ok_status();
-  }
-  uint16_t compare_count = invoke_op->operand_count;
-  if (compare_count > signature->argument_count) {
-    compare_count = signature->argument_count;
-  }
-  const loom_value_id_t* invoke_operands = loom_op_const_operands(invoke_op);
-  for (uint16_t i = 0; i < compare_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_mapped_entry(
-        module, invoke_op, signature, adapter_op, LOOM_LOW_ABI_FIELD_OPERAND, i,
-        loom_module_value_type(module, invoke_operands[i]), emitter));
-  }
-  compare_count = invoke_op->result_count;
-  if (compare_count > signature->result_count) {
-    compare_count = signature->result_count;
-  }
-  const loom_value_id_t* invoke_results = loom_op_const_results(invoke_op);
-  for (uint16_t i = 0; i < compare_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_mapped_entry(
-        module, invoke_op, signature, adapter_op, LOOM_LOW_ABI_FIELD_RESULT, i,
-        loom_module_value_type(module, invoke_results[i]), emitter));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_verify_invoke_caller_context(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature, bool adapter_is_present,
-    const loom_op_t* adapter_op, iree_diagnostic_emitter_t emitter) {
-  loom_low_invoke_caller_t caller =
-      loom_low_find_invoke_caller(module, invoke_op);
-  if (caller.kind == LOOM_LOW_INVOKE_CALLER_NONE) {
-    return loom_low_emit_invoke_context_error(
-        module, invoke_op, &caller, signature->definition_op, adapter_op,
-        IREE_SV("low.invoke must be nested under a function-like body"),
-        emitter);
-  }
-
-  if (caller.kind == LOOM_LOW_INVOKE_CALLER_SEMANTIC) {
-    if (!adapter_is_present) {
-      return loom_low_emit_invoke_context_error(
-          module, invoke_op, &caller, signature->definition_op, adapter_op,
-          IREE_SV("semantic function bodies require an explicit ABI adapter"),
-          emitter);
-    }
-    return iree_ok_status();
-  }
-
-  if (caller.kind == LOOM_LOW_INVOKE_CALLER_LOW) {
-    if (adapter_op && loom_low_abi_adapter_conversion(adapter_op) ==
-                          LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED) {
-      return loom_low_emit_invoke_context_error(
-          module, invoke_op, &caller, signature->definition_op, adapter_op,
-          IREE_SV("mapped ABI adapters cross the semantic-to-low boundary and "
-                  "are not valid in low function bodies"),
-          emitter);
-    }
-    loom_symbol_ref_t caller_target = loom_low_function_target(caller.op);
-    loom_symbol_ref_t callee_target =
-        loom_low_function_target(signature->definition_op);
-    if (!loom_low_symbol_ref_equal(caller_target, callee_target)) {
-      return loom_low_emit_invoke_context_error(
-          module, invoke_op, &caller, signature->definition_op, adapter_op,
-          IREE_SV("callee target must match enclosing low function target"),
-          emitter);
-    }
-    return iree_ok_status();
-  }
-
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_verify_invoke_purity(
-    const loom_module_t* module, const loom_op_t* invoke_op,
-    const loom_low_callee_signature_t* signature, const loom_op_t* adapter_op,
-    iree_diagnostic_emitter_t emitter) {
-  if (loom_low_invoke_purity(invoke_op) == 0) return iree_ok_status();
-
-  if (adapter_op) {
-    loom_symbol_ref_t adapter_ref = loom_low_invoke_adapter(invoke_op);
-    loom_low_abi_metadata_counts_t counts =
-        loom_low_count_abi_metadata(module, adapter_ref);
-    if (counts.effect_count == 0 && counts.clobber_count == 0) {
-      return iree_ok_status();
-    }
-    return loom_low_emit_invoke_purity_effect_error(
-        module, invoke_op, loom_low_symbol_name(module, adapter_ref),
-        IREE_SV("ABI adapter declares observable effects or clobbers"),
-        adapter_op, IREE_SV("adapter defined here"), counts, emitter);
-  }
-
-  if (loom_low_func_like_is_pure(module, signature->definition_op)) {
-    return iree_ok_status();
-  }
-
-  loom_low_abi_metadata_counts_t counts = {0};
-  return loom_low_emit_invoke_purity_effect_error(
-      module, invoke_op, IREE_SV("<direct>"),
-      IREE_SV("direct callee has no pure contract"), signature->definition_op,
-      IREE_SV("callee defined here"), counts, emitter);
+  return loom_low_verify_resource_export_abi(module, op, export_op, import_kind,
+                                             emitter);
 }
 
 static iree_status_t loom_low_verify_function_preamble(
@@ -1914,13 +697,13 @@ static iree_status_t loom_low_verify_function_preamble(
   bool preamble_open = true;
   const loom_op_t* nested_op = NULL;
   loom_block_for_each_op(entry_block, nested_op) {
-    if (loom_low_live_in_isa(nested_op)) {
+    if (loom_low_live_in_isa(nested_op) || loom_low_resource_isa(nested_op)) {
       if (!preamble_open) {
         return loom_low_emit_structural_storage_error(
             module, nested_op, loom_diagnostic_field_ref_none(),
             IREE_SV("position"),
-            IREE_SV("live-ins must form an entry-block prefix before ordinary "
-                    "low packets"),
+            IREE_SV("live-ins and resources must form an entry-block prefix "
+                    "before ordinary low packets"),
             NULL, 0, emitter);
       }
       continue;
@@ -1932,17 +715,245 @@ static iree_status_t loom_low_verify_function_preamble(
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(body, block_index);
     loom_block_for_each_op(block, nested_op) {
-      if (!loom_low_live_in_isa(nested_op)) {
+      if (!loom_low_live_in_isa(nested_op) &&
+          !loom_low_resource_isa(nested_op)) {
         continue;
       }
       return loom_low_emit_structural_storage_error(
           module, nested_op, loom_diagnostic_field_ref_none(),
           IREE_SV("position"),
-          IREE_SV("live-ins must appear in the low function entry block"), NULL,
-          0, emitter);
+          IREE_SV("live-ins and resources must appear in the low function "
+                  "entry block"),
+          NULL, 0, emitter);
     }
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_low_emit_callee_related(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* call_op,
+    const loom_op_t* definition_op, const loom_error_def_t* error,
+    const loom_diagnostic_param_t* params, iree_host_size_t param_count) {
+  loom_diagnostic_related_op_t related[] = {{
+      .label = IREE_SV("defined here"),
+      .op = definition_op,
+  }};
+  return loom_low_emit_related(emitter, call_op, error, params, param_count,
+                               related,
+                               definition_op ? IREE_ARRAYSIZE(related) : 0);
+}
+
+static iree_status_t loom_low_emit_call_callee_kind_mismatch(
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_symbol_ref_t callee, uint16_t callee_attr_index,
+    const loom_symbol_t* symbol, iree_diagnostic_emitter_t emitter) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_with_field_ref(
+          loom_param_string(loom_low_symbol_name(module, callee)),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    callee_attr_index)),
+      loom_param_string(loom_low_symbol_definition_name(symbol)),
+      loom_param_string(IREE_SV("low function")),
+  };
+  return loom_low_emit_callee_related(
+      emitter, call_op, symbol->defining_op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3), params,
+      IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_low_emit_call_count_mismatch(
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t field_kind,
+    uint16_t actual_count, uint16_t expected_count) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_symbol_name(module, callee)),
+      loom_param_string(field_kind),
+      loom_param_u32(actual_count),
+      loom_param_u32(expected_count),
+  };
+  return loom_low_emit_callee_related(
+      emitter, call_op, signature->definition_op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 13), params,
+      IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_low_emit_call_type_mismatch(
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    iree_diagnostic_emitter_t emitter,
+    loom_diagnostic_field_kind_t field_ref_kind, iree_string_view_t field_kind,
+    uint16_t field_index, loom_type_t actual_type,
+    iree_string_view_t callee_field_kind, loom_type_t expected_type) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_symbol_name(module, callee)),
+      loom_param_with_field_ref(
+          loom_param_string(field_kind),
+          loom_diagnostic_field_ref(field_ref_kind, field_index)),
+      loom_param_u32(field_index),
+      loom_param_type(actual_type),
+      loom_param_string(callee_field_kind),
+      loom_param_type(expected_type),
+  };
+  return loom_low_emit_callee_related(
+      emitter, call_op, signature->definition_op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 14), params,
+      IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_low_emit_call_purity_effect_error(
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_symbol_ref_t callee, iree_string_view_t boundary_name,
+    iree_string_view_t reason, const loom_op_t* related_op,
+    iree_string_view_t related_label, loom_low_effect_counts_t counts,
+    iree_diagnostic_emitter_t emitter) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_symbol_name(module, callee)),
+      loom_param_string(boundary_name),
+      loom_param_string(reason),
+      loom_param_u32(counts.effect_count),
+      loom_param_u32(counts.clobber_count),
+  };
+  loom_diagnostic_related_op_t related[] = {{
+      .label = related_label,
+      .op = related_op,
+  }};
+  return loom_low_emit_related(
+      emitter, call_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 22),
+      params, IREE_ARRAYSIZE(params), related,
+      related_op ? IREE_ARRAYSIZE(related) : 0);
+}
+
+static bool loom_low_func_like_is_pure(const loom_module_t* module,
+                                       const loom_op_t* op) {
+  loom_func_like_t func = loom_func_like_cast(module, (loom_op_t*)op);
+  if (!loom_func_like_isa(func)) return false;
+  if (loom_func_like_purity(func) != 0) return true;
+  loom_region_t* body = loom_func_like_body(func);
+  return body && !loom_region_has_read_effects(body) &&
+         !loom_region_has_write_effects(body);
+}
+
+static iree_status_t loom_low_verify_call_argument_count(
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    iree_diagnostic_emitter_t emitter) {
+  if (call_op->operand_count == signature->argument_count) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_call_count_mismatch(
+      module, call_op, callee, signature, emitter, IREE_SV("operand"),
+      call_op->operand_count, signature->argument_count);
+}
+
+static iree_status_t loom_low_verify_call_result_count(
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    iree_diagnostic_emitter_t emitter) {
+  if (call_op->result_count == signature->result_count) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_call_count_mismatch(
+      module, call_op, callee, signature, emitter, IREE_SV("result"),
+      call_op->result_count, signature->result_count);
+}
+
+static iree_status_t loom_low_verify_call_argument_types(
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    iree_diagnostic_emitter_t emitter) {
+  uint16_t compare_count = call_op->operand_count;
+  if (compare_count > signature->argument_count) {
+    compare_count = signature->argument_count;
+  }
+  const loom_value_id_t* call_operands = loom_op_const_operands(call_op);
+  for (uint16_t i = 0; i < compare_count; ++i) {
+    loom_type_t actual_type = loom_module_value_type(module, call_operands[i]);
+    loom_type_t expected_type =
+        loom_module_value_type(module, signature->argument_ids[i]);
+    if (loom_type_equal(actual_type, expected_type)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_low_emit_call_type_mismatch(
+        module, call_op, callee, signature, emitter,
+        LOOM_DIAGNOSTIC_FIELD_OPERAND, IREE_SV("operand"), i, actual_type,
+        IREE_SV("argument"), expected_type));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_call_result_types(
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_symbol_ref_t callee, const loom_low_callee_signature_t* signature,
+    iree_diagnostic_emitter_t emitter) {
+  uint16_t compare_count = call_op->result_count;
+  if (compare_count > signature->result_count) {
+    compare_count = signature->result_count;
+  }
+  const loom_value_id_t* call_results = loom_op_const_results(call_op);
+  for (uint16_t i = 0; i < compare_count; ++i) {
+    loom_type_t actual_type = loom_module_value_type(module, call_results[i]);
+    loom_type_t expected_type =
+        loom_module_value_type(module, signature->result_ids[i]);
+    if (loom_type_equal(actual_type, expected_type)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_low_emit_call_type_mismatch(
+        module, call_op, callee, signature, emitter,
+        LOOM_DIAGNOSTIC_FIELD_RESULT, IREE_SV("result"), i, actual_type,
+        IREE_SV("result"), expected_type));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_call_purity(
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_symbol_ref_t callee, uint8_t purity,
+    const loom_low_callee_signature_t* signature,
+    iree_diagnostic_emitter_t emitter) {
+  if (purity == 0) {
+    return iree_ok_status();
+  }
+
+  const loom_op_t* purity_op = signature->definition_op;
+  if (loom_low_func_like_is_pure(module, purity_op)) {
+    return iree_ok_status();
+  }
+
+  loom_low_effect_counts_t counts = {0};
+  return loom_low_emit_call_purity_effect_error(
+      module, call_op, callee, loom_low_symbol_name(module, callee),
+      IREE_SV("callee has no pure contract"), purity_op,
+      IREE_SV("contract defined here"), counts, emitter);
+}
+
+static iree_status_t loom_low_verify_func_call_context(
+    const loom_module_t* module, const loom_op_t* call_op,
+    const loom_low_callee_signature_t* callee_signature,
+    iree_diagnostic_emitter_t emitter) {
+  const loom_op_t* caller_op =
+      loom_low_find_enclosing_low_func_def(module, call_op);
+  if (!caller_op) {
+    return iree_ok_status();
+  }
+
+  loom_symbol_ref_t caller_target = loom_low_function_target(caller_op);
+  loom_symbol_ref_t callee_target =
+      loom_low_function_target(callee_signature->definition_op);
+  if (loom_low_symbol_ref_equal(caller_target, callee_target)) {
+    return iree_ok_status();
+  }
+  loom_diagnostic_related_op_t related[] = {{
+      .label = IREE_SV("callee defined here"),
+      .op = callee_signature->definition_op,
+  }};
+  return loom_low_emit_structural_storage_error(
+      module, call_op,
+      loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                loom_low_func_call_callee_ATTR_INDEX),
+      IREE_SV("callee"),
+      IREE_SV("callee target must match enclosing low function target"),
+      related, IREE_ARRAYSIZE(related), emitter);
 }
 
 iree_status_t loom_low_op_verify(const loom_module_t* module,
@@ -2028,8 +1039,6 @@ iree_status_t loom_low_func_def_verify(const loom_module_t* module,
                                        iree_diagnostic_emitter_t emitter) {
   IREE_RETURN_IF_ERROR(
       loom_low_verify_function_exactness_modes(module, op, emitter));
-  IREE_RETURN_IF_ERROR(
-      loom_low_verify_no_code_import_on_def(module, op, emitter));
   return loom_low_verify_function_preamble(module, op, emitter);
 }
 
@@ -2096,263 +1105,72 @@ iree_status_t loom_low_frame_index_verify(const loom_module_t* module,
       loom_low_frame_index_offset_ATTR_INDEX, emitter);
 }
 
-iree_status_t loom_low_abi_resource_verify(const loom_module_t* module,
-                                           const loom_op_t* op,
-                                           iree_diagnostic_emitter_t emitter) {
-  const loom_op_t* function_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_load_resource_function(
-      module, op, loom_low_abi_resource_function(op),
-      loom_low_abi_resource_function_ATTR_INDEX, emitter, &function_op));
-
-  const uint8_t kind = loom_low_abi_resource_kind(op);
-  if (!loom_low_abi_resource_kind_is_known(kind)) {
-    return loom_low_emit_structural_storage_attr_error(
-        module, op, loom_low_abi_resource_kind_ATTR_INDEX, IREE_SV("kind"),
-        IREE_SV("kind must name a supported target ABI resource"), emitter);
-  }
-
-  if (loom_low_abi_resource_index(op) < 0) {
-    return loom_low_emit_structural_storage_attr_error(
-        module, op, loom_low_abi_resource_index_ATTR_INDEX, IREE_SV("index"),
-        IREE_SV("index must be non-negative"), emitter);
-  }
-
-  const loom_type_t semantic_type =
-      loom_low_type_attr(module, loom_low_abi_resource_semantic_type(op));
-  if (loom_type_kind(semantic_type) == LOOM_TYPE_NONE) {
-    return loom_low_emit_structural_storage_attr_error(
-        module, op, loom_low_abi_resource_semantic_type_ATTR_INDEX,
-        IREE_SV("semantic_type"),
-        IREE_SV("semantic_type must name a valid Loom type"), emitter);
-  }
-
-  const loom_type_t abi_type =
-      loom_low_type_attr(module, loom_low_abi_resource_abi_type(op));
-  if (!loom_type_is_register(abi_type)) {
-    return loom_low_emit_structural_storage_attr_error(
-        module, op, loom_low_abi_resource_abi_type_ATTR_INDEX,
-        IREE_SV("abi_type"), IREE_SV("abi_type must be a register type"),
-        emitter);
-  }
-
-  if (!function_op) {
-    return iree_ok_status();
-  }
-  const loom_op_t* export_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_load_resource_export_plan(
-      module, op, function_op, loom_low_abi_resource_function_ATTR_INDEX,
-      emitter, &export_op));
-  if (!export_op) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(loom_low_verify_resource_export_source(
-      module, op, export_op, loom_low_abi_resource_function(op), emitter));
-  return loom_low_verify_resource_export_abi(module, op, export_op, kind,
-                                             emitter);
-}
-
 iree_status_t loom_low_resource_verify(const loom_module_t* module,
                                        const loom_op_t* op,
                                        iree_diagnostic_emitter_t emitter) {
-  const loom_op_t* resource_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_load_resource(
-      module, op, loom_low_resource_resource(op),
-      loom_low_resource_resource_ATTR_INDEX, emitter, &resource_op));
-  if (!resource_op) {
-    return iree_ok_status();
-  }
-
-  const loom_op_t* enclosing_func =
-      loom_low_find_enclosing_low_func_def(module, op);
-  if (!enclosing_func) {
-    return loom_low_emit_structural_storage_error(
-        module, op, loom_diagnostic_field_ref_none(),
-        IREE_SV("enclosing function"),
-        IREE_SV("resource imports must be nested under a low function body"),
-        NULL, 0, emitter);
-  }
-
-  if (!loom_low_symbol_ref_equal(loom_low_abi_resource_function(resource_op),
-                                 loom_low_func_def_callee(enclosing_func))) {
-    loom_diagnostic_related_op_t related[] = {{
-        .label = IREE_SV("resource defined here"),
-        .op = resource_op,
-        .field_ref = loom_diagnostic_field_ref(
-            LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-            loom_low_abi_resource_function_ATTR_INDEX),
-    }};
-    return loom_low_emit_structural_storage_error(
-        module, op,
-        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                  loom_low_resource_resource_ATTR_INDEX),
-        IREE_SV("resource"),
-        IREE_SV("resource owner must match the enclosing low function"),
-        related, IREE_ARRAYSIZE(related), emitter);
-  }
-
-  const loom_type_t expected_type =
-      loom_low_type_attr(module, loom_low_abi_resource_abi_type(resource_op));
-  const loom_type_t actual_type =
-      loom_module_value_type(module, loom_low_resource_result(op));
-  if (loom_type_equal(actual_type, expected_type)) {
-    return iree_ok_status();
-  }
-
-  loom_diagnostic_related_op_t related[] = {{
-      .label = IREE_SV("resource ABI type declared here"),
-      .op = resource_op,
-      .field_ref =
-          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                    loom_low_abi_resource_abi_type_ATTR_INDEX),
-  }};
-  return loom_low_emit_structural_storage_error(
-      module, op, loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, 0),
-      IREE_SV("result"),
-      IREE_SV("result type must match the resource ABI type"), related,
-      IREE_ARRAYSIZE(related), emitter);
+  return loom_low_verify_resource_op(module, op, emitter);
 }
 
-iree_status_t loom_low_abi_adapter_verify(const loom_module_t* module,
-                                          const loom_op_t* op,
-                                          iree_diagnostic_emitter_t emitter) {
-  const loom_symbol_t* symbol =
-      loom_low_lookup_defined_symbol(module, loom_low_abi_adapter_callee(op));
+iree_status_t loom_low_func_call_verify(const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        iree_diagnostic_emitter_t emitter) {
+  loom_symbol_ref_t callee = loom_low_func_call_callee(op);
+  const loom_symbol_t* symbol = loom_low_lookup_defined_symbol(module, callee);
   if (!symbol) {
     return iree_ok_status();
   }
 
-  loom_low_callee_signature_t signature = {0};
-  if (!loom_low_load_callee_signature(module, symbol, &signature)) {
-    return loom_low_emit_symbol_kind_mismatch(
-        module, op, loom_low_abi_adapter_callee(op),
-        loom_low_abi_adapter_callee_ATTR_INDEX, symbol, IREE_SV("low function"),
+  loom_low_callee_signature_t low_signature = {0};
+  if (!loom_low_load_low_signature(module, symbol, &low_signature)) {
+    return loom_low_emit_call_callee_kind_mismatch(
+        module, op, callee, loom_low_func_call_callee_ATTR_INDEX, symbol,
         emitter);
   }
 
-  IREE_RETURN_IF_ERROR(loom_low_verify_adapter_signature_count(
-      module, op, &signature, emitter, IREE_SV("adapter operand"),
-      loom_low_abi_adapter_operand_count(op), signature.argument_count));
-  IREE_RETURN_IF_ERROR(loom_low_verify_adapter_signature_count(
-      module, op, &signature, emitter, IREE_SV("adapter result"),
-      loom_low_abi_adapter_result_count(op), signature.result_count));
   IREE_RETURN_IF_ERROR(
-      loom_low_verify_adapter_mapped_entries(module, op, &signature, emitter));
-  return iree_ok_status();
-}
-
-iree_status_t loom_low_abi_operand_verify(const loom_module_t* module,
-                                          const loom_op_t* op,
-                                          iree_diagnostic_emitter_t emitter) {
-  return loom_low_verify_abi_entry_record(module, op,
-                                          LOOM_LOW_ABI_FIELD_OPERAND, emitter);
-}
-
-iree_status_t loom_low_abi_result_verify(const loom_module_t* module,
-                                         const loom_op_t* op,
-                                         iree_diagnostic_emitter_t emitter) {
-  return loom_low_verify_abi_entry_record(module, op, LOOM_LOW_ABI_FIELD_RESULT,
-                                          emitter);
-}
-
-iree_status_t loom_low_abi_effect_verify(const loom_module_t* module,
-                                         const loom_op_t* op,
-                                         iree_diagnostic_emitter_t emitter) {
-  const loom_op_t* adapter_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_verify_abi_metadata_adapter(
-      module, op, loom_low_abi_effect_adapter(op),
-      loom_low_abi_effect_adapter_ATTR_INDEX, emitter, &adapter_op));
-  return loom_low_verify_abi_effect_resource(
-      module, op, loom_low_abi_effect_adapter(op), adapter_op, emitter);
-}
-
-iree_status_t loom_low_abi_clobber_verify(const loom_module_t* module,
-                                          const loom_op_t* op,
-                                          iree_diagnostic_emitter_t emitter) {
-  const loom_op_t* adapter_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_verify_abi_metadata_adapter(
-      module, op, loom_low_abi_clobber_adapter(op),
-      loom_low_abi_clobber_adapter_ATTR_INDEX, emitter, &adapter_op));
-  return loom_low_verify_qualified_key_attr(
-      module, op, emitter, loom_low_abi_clobber_resource(op),
-      loom_low_abi_clobber_resource_ATTR_INDEX, IREE_SV("resource"),
-      IREE_SV("a namespace-qualified ABI clobber key with non-empty "
-              "identifier segments"));
+      loom_low_verify_func_call_context(module, op, &low_signature, emitter));
+  IREE_RETURN_IF_ERROR(loom_low_verify_call_argument_count(
+      module, op, callee, &low_signature, emitter));
+  IREE_RETURN_IF_ERROR(loom_low_verify_call_result_count(
+      module, op, callee, &low_signature, emitter));
+  IREE_RETURN_IF_ERROR(loom_low_verify_call_argument_types(
+      module, op, callee, &low_signature, emitter));
+  IREE_RETURN_IF_ERROR(loom_low_verify_call_result_types(
+      module, op, callee, &low_signature, emitter));
+  return loom_low_verify_call_purity(module, op, callee,
+                                     loom_low_func_call_purity(op),
+                                     &low_signature, emitter);
 }
 
 iree_status_t loom_low_invoke_verify(const loom_module_t* module,
                                      const loom_op_t* op,
                                      iree_diagnostic_emitter_t emitter) {
-  const loom_symbol_t* symbol =
-      loom_low_lookup_defined_symbol(module, loom_low_invoke_callee(op));
+  loom_symbol_ref_t callee = loom_low_invoke_callee(op);
+  const loom_symbol_t* symbol = loom_low_lookup_defined_symbol(module, callee);
   if (!symbol) {
     return iree_ok_status();
   }
 
-  loom_low_callee_signature_t signature = {0};
-  if (!loom_low_load_callee_signature(module, symbol, &signature)) {
-    return loom_low_emit_invoke_callee_kind_mismatch(module, op, symbol,
-                                                     emitter);
+  loom_low_callee_signature_t low_signature = {0};
+  if (!loom_low_load_low_signature(module, symbol, &low_signature)) {
+    return loom_low_emit_call_callee_kind_mismatch(
+        module, op, callee, loom_low_invoke_callee_ATTR_INDEX, symbol, emitter);
   }
 
-  bool adapter_is_present =
-      loom_low_optional_attr_is_present(op, loom_low_invoke_adapter_ATTR_INDEX);
-  const loom_op_t* adapter_op = NULL;
-  if (adapter_is_present) {
-    const loom_symbol_t* adapter_symbol =
-        loom_low_lookup_defined_symbol(module, loom_low_invoke_adapter(op));
-    if (!adapter_symbol) {
-      return iree_ok_status();
-    }
-    adapter_op = adapter_symbol->defining_op;
-    if (!loom_low_abi_adapter_isa(adapter_op)) {
-      IREE_RETURN_IF_ERROR(loom_low_emit_symbol_kind_mismatch(
-          module, op, loom_low_invoke_adapter(op),
-          loom_low_invoke_adapter_ATTR_INDEX, adapter_symbol,
-          IREE_SV("low ABI adapter"), emitter));
-      return iree_ok_status();
-    }
+  return loom_low_verify_call_purity(
+      module, op, callee, loom_low_invoke_purity(op), &low_signature, emitter);
+}
+
+loom_trait_flags_t loom_low_func_call_effective_traits(const loom_op_t* op) {
+  if (loom_low_func_call_purity(op) != 0) {
+    return LOOM_TRAIT_PURE;
   }
-
-  IREE_RETURN_IF_ERROR(loom_low_verify_invoke_caller_context(
-      module, op, &signature, adapter_is_present, adapter_op, emitter));
-
-  if (adapter_op) {
-    if (!loom_low_symbol_ref_equal(loom_low_invoke_callee(op),
-                                   loom_low_abi_adapter_callee(adapter_op))) {
-      IREE_RETURN_IF_ERROR(loom_low_emit_adapter_callee_mismatch(
-          module, op, &signature, adapter_op, emitter));
-    }
-    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_adapter_count(
-        module, op, &signature, adapter_op, emitter, IREE_SV("invoke operand"),
-        op->operand_count, loom_low_abi_adapter_operand_count(adapter_op)));
-    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_adapter_count(
-        module, op, &signature, adapter_op, emitter, IREE_SV("invoke result"),
-        op->result_count, loom_low_abi_adapter_result_count(adapter_op)));
-    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_adapter_argument_types(
-        module, op, &signature, adapter_op, emitter));
-    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_adapter_result_types(
-        module, op, &signature, adapter_op, emitter));
-    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_adapter_mapped_types(
-        module, op, &signature, adapter_op, emitter));
-    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_purity(module, op, &signature,
-                                                       adapter_op, emitter));
-    return iree_ok_status();
-  }
-
-  IREE_RETURN_IF_ERROR(
-      loom_low_verify_invoke_argument_count(module, op, &signature, emitter));
-  IREE_RETURN_IF_ERROR(
-      loom_low_verify_invoke_result_count(module, op, &signature, emitter));
-  IREE_RETURN_IF_ERROR(
-      loom_low_verify_invoke_argument_types(module, op, &signature, emitter));
-  IREE_RETURN_IF_ERROR(
-      loom_low_verify_invoke_result_types(module, op, &signature, emitter));
-  IREE_RETURN_IF_ERROR(
-      loom_low_verify_invoke_purity(module, op, &signature, NULL, emitter));
-  return iree_ok_status();
+  return LOOM_TRAIT_UNKNOWN_EFFECTS;
 }
 
 loom_trait_flags_t loom_low_invoke_effective_traits(const loom_op_t* op) {
-  if (loom_low_invoke_purity(op) != 0) return LOOM_TRAIT_PURE;
+  if (loom_low_invoke_purity(op) != 0) {
+    return LOOM_TRAIT_PURE;
+  }
   return LOOM_TRAIT_UNKNOWN_EFFECTS;
 }

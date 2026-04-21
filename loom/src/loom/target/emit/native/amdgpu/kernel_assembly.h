@@ -18,11 +18,19 @@
 #include "iree/base/string_builder.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule.h"
+#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct loom_amdgpu_kernel_assembly_options_t {
+  // Optional ABI layout captured before target resource materialization.
+  const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout;
+  // Optional planned wait packets inserted into the native text stream.
+  const loom_amdgpu_wait_packet_plan_t* wait_packets;
+} loom_amdgpu_kernel_assembly_options_t;
 
 // Emits complete AMDGPU assembly for one ABI-lowered HAL kernel low.func.def.
 // The output is assembler input containing a text function body and an AMDHSA
@@ -31,6 +39,14 @@ extern "C" {
 iree_status_t loom_amdgpu_emit_kernel_assembly(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
+    iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena);
+
+// Emits complete AMDGPU assembly with optional target-owned emission sidecars.
+// |scratch_arena| receives transient ABI layout and metadata adapter storage.
+iree_status_t loom_amdgpu_emit_kernel_assembly_with_options(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_amdgpu_kernel_assembly_options_t* options,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena);
 
 // Emits complete AMDGPU assembly with planned wait packets inserted into the

@@ -1869,6 +1869,39 @@
     "fix_hint_template": "Inspect the pass-specific diagnostic or run the named pipeline on IR that satisfies pass '{pass_key}'"
   },
   {
+    "error_id": "ERR_STRUCTURE_029",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 29,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Operation placement constraint violated.",
+    "message_template": "'{op_name}' violates {constraint_kind} ancestor placement for '{ancestor_name}' (observed ancestor: '{actual_ancestor}')",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "constraint_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "ancestor_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_ancestor",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Move '{op_name}' to a region satisfying its placement contract"
+  },
+  {
     "error_id": "ERR_DOMINANCE_001",
     "domain": 5,
     "domain_name": "DOMINANCE",
@@ -3851,8 +3884,8 @@
     "code": 13,
     "severity": 0,
     "severity_name": "error",
-    "summary": "Low invoke signature count mismatch.",
-    "message_template": "low.invoke callee '@{callee_name}' {field_kind} count is {actual_count}, expected {expected_count}",
+    "summary": "Low function call signature count mismatch.",
+    "message_template": "low function call callee '@{callee_name}' {field_kind} count is {actual_count}, expected {expected_count}",
     "params": [
       {
         "name": "callee_name",
@@ -3875,7 +3908,7 @@
         "kind_name": "U32"
       }
     ],
-    "fix_hint_template": "Match the low.invoke {field_kind} list to the callee low-function signature"
+    "fix_hint_template": "Match the low function call {field_kind} list to the callee low-function signature"
   },
   {
     "error_id": "ERR_LOWERING_014",
@@ -3884,8 +3917,8 @@
     "code": 14,
     "severity": 0,
     "severity_name": "error",
-    "summary": "Low invoke signature type mismatch.",
-    "message_template": "low.invoke callee '@{callee_name}' {field_kind} {field_index} has type {actual_type}, expected callee {callee_field_kind} type {expected_type}",
+    "summary": "Low function call signature type mismatch.",
+    "message_template": "low function call callee '@{callee_name}' {field_kind} {field_index} has type {actual_type}, expected callee {callee_field_kind} type {expected_type}",
     "params": [
       {
         "name": "callee_name",
@@ -3918,283 +3951,7 @@
         "kind_name": "TYPE"
       }
     ],
-    "fix_hint_template": "Match the low.invoke {field_kind} type to the callee low-function signature"
-  },
-  {
-    "error_id": "ERR_LOWERING_015",
-    "domain": 10,
-    "domain_name": "LOWERING",
-    "code": 15,
-    "severity": 0,
-    "severity_name": "error",
-    "summary": "Low invoke ABI adapter callee mismatch.",
-    "message_template": "low.invoke callee '@{callee_name}' uses ABI adapter '@{adapter_name}' bound to callee '@{adapter_callee_name}'",
-    "params": [
-      {
-        "name": "callee_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "adapter_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "adapter_callee_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      }
-    ],
-    "fix_hint_template": "Use an ABI adapter bound to the invoked low function"
-  },
-  {
-    "error_id": "ERR_LOWERING_016",
-    "domain": 10,
-    "domain_name": "LOWERING",
-    "code": 16,
-    "severity": 0,
-    "severity_name": "error",
-    "summary": "Low invoke ABI adapter count mismatch.",
-    "message_template": "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' {field_kind} count is {actual_count}, expected {expected_count} for {conversion_rule} conversion",
-    "params": [
-      {
-        "name": "callee_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "adapter_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "field_kind",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "actual_count",
-        "kind": 1,
-        "kind_name": "I64"
-      },
-      {
-        "name": "expected_count",
-        "kind": 1,
-        "kind_name": "I64"
-      },
-      {
-        "name": "conversion_rule",
-        "kind": 0,
-        "kind_name": "STRING"
-      }
-    ],
-    "fix_hint_template": "Match the invoke, adapter record, and callee low-function signature arity"
-  },
-  {
-    "error_id": "ERR_LOWERING_017",
-    "domain": 10,
-    "domain_name": "LOWERING",
-    "code": 17,
-    "severity": 0,
-    "severity_name": "error",
-    "summary": "Low invoke ABI adapter conversion type mismatch.",
-    "message_template": "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' {conversion_rule} conversion for {field_kind} {field_index} has type {actual_type}, expected callee {callee_field_kind} type {expected_type}",
-    "params": [
-      {
-        "name": "callee_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "adapter_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "conversion_rule",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "field_kind",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "field_index",
-        "kind": 2,
-        "kind_name": "U32"
-      },
-      {
-        "name": "actual_type",
-        "kind": 4,
-        "kind_name": "TYPE"
-      },
-      {
-        "name": "callee_field_kind",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "expected_type",
-        "kind": 4,
-        "kind_name": "TYPE"
-      }
-    ],
-    "fix_hint_template": "Choose an ABI adapter conversion that accepts the semantic value type or materialize values matching the callee register ABI"
-  },
-  {
-    "error_id": "ERR_LOWERING_018",
-    "domain": 10,
-    "domain_name": "LOWERING",
-    "code": 18,
-    "severity": 0,
-    "severity_name": "error",
-    "summary": "Low ABI adapter mapping entry is invalid.",
-    "message_template": "low ABI adapter '@{adapter_name}' {field_kind} entry '@{entry_name}' at index {field_index} is invalid: {reason}",
-    "params": [
-      {
-        "name": "adapter_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "entry_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "field_kind",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "field_index",
-        "kind": 1,
-        "kind_name": "I64"
-      },
-      {
-        "name": "reason",
-        "kind": 0,
-        "kind_name": "STRING"
-      }
-    ],
-    "fix_hint_template": "Make each mapped adapter operand/result index appear exactly once, within the adapter arity, with a conversion valid for that slot kind"
-  },
-  {
-    "error_id": "ERR_LOWERING_019",
-    "domain": 10,
-    "domain_name": "LOWERING",
-    "code": 19,
-    "severity": 0,
-    "severity_name": "error",
-    "summary": "Low ABI adapter mapping type mismatch.",
-    "message_template": "low ABI adapter '@{adapter_name}' entry '@{entry_name}' {conversion_rule} conversion for {field_kind} {field_index} has type {actual_type}, expected {expected_field_kind} type {expected_type}",
-    "params": [
-      {
-        "name": "adapter_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "entry_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "conversion_rule",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "field_kind",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "field_index",
-        "kind": 2,
-        "kind_name": "U32"
-      },
-      {
-        "name": "actual_type",
-        "kind": 4,
-        "kind_name": "TYPE"
-      },
-      {
-        "name": "expected_field_kind",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "expected_type",
-        "kind": 4,
-        "kind_name": "TYPE"
-      }
-    ],
-    "fix_hint_template": "Match mapped adapter semantic types to the invoke boundary and ABI types to the callee low-function register signature"
-  },
-  {
-    "error_id": "ERR_LOWERING_020",
-    "domain": 10,
-    "domain_name": "LOWERING",
-    "code": 20,
-    "severity": 0,
-    "severity_name": "error",
-    "summary": "Low invoke caller context is invalid.",
-    "message_template": "low.invoke callee '@{callee_name}' in {caller_context} context is invalid: {reason}",
-    "params": [
-      {
-        "name": "callee_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "caller_context",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "reason",
-        "kind": 0,
-        "kind_name": "STRING"
-      }
-    ],
-    "fix_hint_template": "Invoke low functions from semantic function bodies through an explicit ABI adapter, or direct-call only same-target low functions from a low function body"
-  },
-  {
-    "error_id": "ERR_LOWERING_021",
-    "domain": 10,
-    "domain_name": "LOWERING",
-    "code": 21,
-    "severity": 0,
-    "severity_name": "error",
-    "summary": "Low ABI adapter metadata record is invalid.",
-    "message_template": "low ABI adapter '@{adapter_name}' {record_kind} metadata '@{record_name}' is invalid: {reason}",
-    "params": [
-      {
-        "name": "adapter_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "record_kind",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "record_name",
-        "kind": 0,
-        "kind_name": "STRING"
-      },
-      {
-        "name": "reason",
-        "kind": 0,
-        "kind_name": "STRING"
-      }
-    ],
-    "fix_hint_template": "Attach effect and clobber records to a low ABI adapter and use namespace-qualified resource keys such as 'vm.state' or 'amdgpu.vcc'"
+    "fix_hint_template": "Match the low function call {field_kind} type to the callee low-function signature"
   },
   {
     "error_id": "ERR_LOWERING_022",
@@ -4203,8 +3960,8 @@
     "code": 22,
     "severity": 0,
     "severity_name": "error",
-    "summary": "Low invoke purity conflicts with ABI effects.",
-    "message_template": "low.invoke pure callee '@{callee_name}' through '{boundary_name}' is invalid: {reason} ({effect_count} effect record(s), {clobber_count} clobber record(s))",
+    "summary": "Low call purity conflicts with callee effects.",
+    "message_template": "low pure call callee '@{callee_name}' through '{boundary_name}' is invalid: {reason} ({effect_count} effect record(s), {clobber_count} clobber record(s))",
     "params": [
       {
         "name": "callee_name",

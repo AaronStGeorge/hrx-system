@@ -6,10 +6,10 @@
 
 // AMDGPU HAL-kernel ABI layout over target-low resources.
 //
-// This layer derives kernarg storage from symbol-backed low.abi.resource
-// records. It intentionally stays below LLVMIR/native artifact emission so the
-// same resource ABI can feed the temporary assembly path, direct HSACO writing,
-// and future backends.
+// This layer derives kernarg storage from function-local low.resource imports.
+// It intentionally stays below LLVMIR/native artifact emission so the same
+// resource ABI can feed the temporary assembly path, direct HSACO writing, and
+// future backends.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_HAL_KERNEL_ABI_H_
 #define LOOM_TARGET_ARCH_AMDGPU_HAL_KERNEL_ABI_H_
@@ -38,11 +38,9 @@ extern "C" {
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE "amdgpu.workitem_id.x"
 
 typedef struct loom_amdgpu_hal_kernarg_resource_t {
-  // Defining low.abi.resource op for diagnostics and cross-checks.
+  // Defining low.resource op for diagnostics and cross-checks.
   const loom_op_t* resource_op;
-  // Module-local symbol defining the resource record.
-  loom_symbol_ref_t symbol;
-  // Borrowed resource symbol name without the leading '@'.
+  // Arena-owned resource name used in emitted AMDGPU metadata.
   iree_string_view_t name;
   // HAL binding ordinal used by the runtime dispatch path.
   uint32_t binding_index;
@@ -75,11 +73,11 @@ typedef struct loom_amdgpu_hal_kernel_abi_layout_t {
 
 // Derives the AMDGPU HAL-kernel ABI layout for |function_op|.
 //
-// v0 supports only low.abi.resource records with kind hal_buffer_resource,
-// dense unique binding indexes starting at zero, semantic type hal.buffer, and
-// ABI type reg<amdgpu.sgpr x4>. The kernarg segment stores one 64-bit global
+// v0 supports only low.resource imports with kind hal_buffer_resource, dense
+// unique binding indexes starting at zero, semantic type hal.buffer, and result
+// type reg<amdgpu.sgpr x4>. The kernarg segment stores one 64-bit global
 // pointer per binding in binding-index order; later lowering materializes the
-// target resource descriptor value consumed by low.resource.
+// target resource descriptor value consumed by the import.
 iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
     const loom_module_t* module, const loom_op_t* function_op,
     const loom_target_bundle_t* target_bundle,

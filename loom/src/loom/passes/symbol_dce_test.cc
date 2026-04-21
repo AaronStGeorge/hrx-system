@@ -68,7 +68,7 @@ class SymbolDCETest : public ::testing::Test {
   void RunSymbolDCE(loom_module_t* module) {
     iree_arena_allocator_t pass_arena;
     iree_arena_initialize(&block_pool_, &pass_arena);
-    int64_t statistics[3] = {0};
+    int64_t statistics[2] = {0};
     loom_pass_t pass = {
         .info = loom_symbol_dce_pass_info(),
         .instance_arena = &pass_arena,
@@ -76,9 +76,8 @@ class SymbolDCETest : public ::testing::Test {
         .statistics = statistics,
     };
     IREE_EXPECT_OK(loom_symbol_dce_run(&pass, module));
-    EXPECT_EQ(statistics[0], 6);
-    EXPECT_EQ(statistics[1], 2);
-    EXPECT_EQ(statistics[2], 4);
+    EXPECT_EQ(statistics[0], 3);
+    EXPECT_EQ(statistics[1], 3);
     iree_arena_deinitialize(&pass_arena);
   }
 
@@ -129,27 +128,21 @@ TEST_F(SymbolDCETest, PrunedLowIslandRoundTripsThroughBytecode) {
   const char* source = R"(
 test.record @vm_target
 
-low.func.decl target(@vm_target) @live_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
-low.abi.adapter @live_add_i32 {callee = @live_add, conversion = mapped, operand_count = 2, result_count = 1}
-low.abi.operand @live_add_i32_lhs {adapter = @live_add_i32, index = 0, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<vm.i32>}
-low.abi.operand @live_add_i32_rhs {adapter = @live_add_i32, index = 1, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<vm.i32>}
-low.abi.result @live_add_i32_result {adapter = @live_add_i32, index = 0, conversion = register_to_scalar, semantic_type = i32, abi_type = reg<vm.i32>}
-
-low.func.decl target(@vm_target) @dead_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
-low.abi.adapter @dead_add_i32 {callee = @dead_add, conversion = mapped, operand_count = 2, result_count = 1}
-low.abi.operand @dead_add_i32_lhs {adapter = @dead_add_i32, index = 0, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<vm.i32>}
-low.abi.operand @dead_add_i32_rhs {adapter = @dead_add_i32, index = 1, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<vm.i32>}
-low.abi.result @dead_add_i32_result {adapter = @dead_add_i32, index = 0, conversion = register_to_scalar, semantic_type = i32, abi_type = reg<vm.i32>}
+func.decl @add_i32(%lhs: i32, %rhs: i32) -> (i32)
 
 func.def public @entry(%lhs: i32, %rhs: i32) -> (i32) {
-  %sum = low.invoke @live_add(%lhs, %rhs) {adapter = @live_add_i32} : (i32, i32) -> (i32)
+  %sum = low.invoke @live_add(%lhs, %rhs) : (i32, i32) -> (i32)
   func.return %sum : i32
 }
 
 func.def @dead_wrapper(%lhs: i32, %rhs: i32) -> (i32) {
-  %sum = low.invoke @dead_add(%lhs, %rhs) {adapter = @dead_add_i32} : (i32, i32) -> (i32)
+  %sum = low.invoke @dead_add(%lhs, %rhs) : (i32, i32) -> (i32)
   func.return %sum : i32
 }
+
+low.func.decl target(@vm_target) @live_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
+
+low.func.decl target(@vm_target) @dead_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
 )";
 
   ModulePtr module(Parse(iree_make_cstring_view(source)));
@@ -158,7 +151,8 @@ func.def @dead_wrapper(%lhs: i32, %rhs: i32) -> (i32) {
   RunSymbolDCE(module.get());
   std::string pruned_text = Print(module.get());
   EXPECT_NE(pruned_text.find("@live_add"), std::string::npos);
-  EXPECT_NE(pruned_text.find("@live_add_i32"), std::string::npos);
+  EXPECT_EQ(pruned_text.find("low.abi"), std::string::npos);
+  EXPECT_EQ(pruned_text.find("add_i32"), std::string::npos);
   EXPECT_EQ(pruned_text.find("dead_add"), std::string::npos);
   EXPECT_EQ(pruned_text.find("dead_wrapper"), std::string::npos);
 

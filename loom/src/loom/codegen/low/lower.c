@@ -44,9 +44,7 @@ struct loom_low_lower_context_t {
   loom_block_t** block_map;
   // Source function argument ABI mappings.
   loom_low_lower_abi_argument_t* argument_map;
-  // Resource symbols emitted for RESOURCE argument mappings.
-  loom_symbol_ref_t* argument_resource_refs;
-  // Number of entries in |argument_map| and |argument_resource_refs|.
+  // Number of entries in |argument_map|.
   uint16_t argument_map_count;
 };
 
@@ -96,13 +94,13 @@ static bool loom_low_lower_abi_argument_kind_is_known(
   }
 }
 
-static bool loom_low_lower_abi_resource_kind_is_known(
-    loom_low_abi_resource_kind_t kind) {
+static bool loom_low_lower_resource_import_kind_is_known(
+    loom_low_resource_import_kind_t kind) {
   switch (kind) {
-    case LOOM_LOW_ABI_RESOURCE_KIND_NATIVE_POINTER:
-    case LOOM_LOW_ABI_RESOURCE_KIND_VM_STATE:
-    case LOOM_LOW_ABI_RESOURCE_KIND_VM_IMPORT:
-    case LOOM_LOW_ABI_RESOURCE_KIND_HAL_BUFFER_RESOURCE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
+    case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
       return true;
     default:
       return false;
@@ -473,10 +471,11 @@ static iree_status_t loom_low_lower_map_argument(
   if (out_argument->kind == LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT) {
     return iree_ok_status();
   }
-  if (!loom_low_lower_abi_resource_kind_is_known(out_argument->resource_kind)) {
+  if (!loom_low_lower_resource_import_kind_is_known(
+          out_argument->resource_import_kind)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low argument ABI policy produced an "
-                            "unknown resource kind");
+                            "unknown resource import kind");
   }
   if (out_argument->resource_index < 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -507,11 +506,7 @@ static iree_status_t loom_low_lower_initialize_argument_map(
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       &context->arena, argument_count, sizeof(*context->argument_map),
       (void**)&context->argument_map));
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      &context->arena, argument_count, sizeof(*context->argument_resource_refs),
-      (void**)&context->argument_resource_refs));
   for (uint16_t i = 0; i < argument_count; ++i) {
-    context->argument_resource_refs[i] = loom_symbol_ref_null();
     IREE_RETURN_IF_ERROR(loom_low_lower_map_argument(
         context, i, source_arguments[i], &context->argument_map[i]));
   }
@@ -685,206 +680,10 @@ static iree_status_t loom_low_lower_create_low_symbol(
       context, source_name, suffix, /*append_index=*/false, 0, out_symbol_ref);
 }
 
-static iree_status_t loom_low_lower_create_low_child_symbol(
-    loom_low_lower_context_t* context, iree_string_view_t suffix,
-    uint32_t index, loom_symbol_ref_t* out_symbol_ref) {
-  iree_string_view_t low_name = loom_low_lower_symbol_name(
-      context->module, context->result->low_func_ref);
-  return loom_low_lower_create_derived_symbol(
-      context, low_name, suffix, /*append_index=*/true, index, out_symbol_ref);
-}
-
-static iree_status_t loom_low_lower_create_low_named_child_symbol(
-    loom_low_lower_context_t* context, iree_string_view_t suffix,
-    loom_symbol_ref_t* out_symbol_ref) {
-  iree_string_view_t low_name = loom_low_lower_symbol_name(
-      context->module, context->result->low_func_ref);
-  return loom_low_lower_create_derived_symbol(
-      context, low_name, suffix, /*append_index=*/false, 0, out_symbol_ref);
-}
-
-static uint8_t loom_low_lower_operand_conversion(loom_type_t semantic_type,
-                                                 loom_type_t abi_type) {
-  if (loom_type_equal(semantic_type, abi_type)) {
-    return LOOM_LOW_CONVERSION_DIRECT;
-  }
-  if (loom_type_is_scalar(semantic_type) && loom_type_is_register(abi_type)) {
-    return LOOM_LOW_CONVERSION_SCALAR_TO_REGISTER;
-  }
-  return LOOM_LOW_CONVERSION_VALUE_TO_REGISTER;
-}
-
-static uint8_t loom_low_lower_result_conversion(loom_type_t semantic_type,
-                                                loom_type_t abi_type) {
-  if (loom_type_equal(semantic_type, abi_type)) {
-    return LOOM_LOW_CONVERSION_DIRECT;
-  }
-  if (loom_type_is_scalar(semantic_type) && loom_type_is_register(abi_type)) {
-    return LOOM_LOW_CONVERSION_REGISTER_TO_SCALAR;
-  }
-  return LOOM_LOW_CONVERSION_REGISTER_TO_VALUE;
-}
-
 static iree_status_t loom_low_lower_intern_type_id(
     loom_low_lower_context_t* context, loom_type_t type,
     loom_type_id_t* out_type_id) {
   return loom_module_intern_type_id(context->module, type, out_type_id);
-}
-
-static iree_status_t loom_low_lower_create_abi_operand_record(
-    loom_low_lower_context_t* context, loom_symbol_ref_t adapter_ref,
-    uint32_t index, loom_value_id_t source_value_id,
-    loom_value_id_t low_value_id) {
-  loom_symbol_ref_t operand_ref = loom_symbol_ref_null();
-  IREE_RETURN_IF_ERROR(loom_low_lower_create_low_child_symbol(
-      context, IREE_SV("__abi_arg"), index, &operand_ref));
-
-  loom_type_t semantic_type =
-      loom_module_value_type(context->module, source_value_id);
-  loom_type_t abi_type = loom_module_value_type(context->module, low_value_id);
-  loom_type_id_t semantic_type_id = LOOM_TYPE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_intern_type_id(context, semantic_type, &semantic_type_id));
-  loom_type_id_t abi_type_id = LOOM_TYPE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_intern_type_id(context, abi_type, &abi_type_id));
-
-  loom_op_t* operand_op = NULL;
-  return loom_low_abi_operand_build(
-      &context->builder, operand_ref, adapter_ref, (int64_t)index,
-      loom_low_lower_operand_conversion(semantic_type, abi_type),
-      semantic_type_id, abi_type_id, context->source_function.op->location,
-      &operand_op);
-}
-
-static iree_status_t loom_low_lower_create_abi_result_record(
-    loom_low_lower_context_t* context, loom_symbol_ref_t adapter_ref,
-    uint32_t index, loom_value_id_t source_value_id,
-    loom_value_id_t low_value_id) {
-  loom_symbol_ref_t result_ref = loom_symbol_ref_null();
-  IREE_RETURN_IF_ERROR(loom_low_lower_create_low_child_symbol(
-      context, IREE_SV("__abi_result"), index, &result_ref));
-
-  loom_type_t semantic_type =
-      loom_module_value_type(context->module, source_value_id);
-  loom_type_t abi_type = loom_module_value_type(context->module, low_value_id);
-  loom_type_id_t semantic_type_id = LOOM_TYPE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_intern_type_id(context, semantic_type, &semantic_type_id));
-  loom_type_id_t abi_type_id = LOOM_TYPE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_intern_type_id(context, abi_type, &abi_type_id));
-
-  loom_op_t* result_op = NULL;
-  return loom_low_abi_result_build(
-      &context->builder, result_ref, adapter_ref, (int64_t)index,
-      loom_low_lower_result_conversion(semantic_type, abi_type),
-      semantic_type_id, abi_type_id, context->source_function.op->location,
-      &result_op);
-}
-
-static iree_status_t loom_low_lower_create_abi_resource_record(
-    loom_low_lower_context_t* context, uint16_t source_argument_index,
-    loom_value_id_t source_argument_id) {
-  const loom_low_lower_abi_argument_t* argument =
-      &context->argument_map[source_argument_index];
-  loom_symbol_ref_t resource_ref = loom_symbol_ref_null();
-  IREE_RETURN_IF_ERROR(loom_low_lower_create_low_child_symbol(
-      context, IREE_SV("__abi_resource"), source_argument_index,
-      &resource_ref));
-
-  loom_type_t semantic_type = argument->resource_semantic_type;
-  if (loom_low_lower_type_is_none(semantic_type)) {
-    semantic_type = loom_module_value_type(context->module, source_argument_id);
-  }
-  loom_type_id_t semantic_type_id = LOOM_TYPE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_intern_type_id(context, semantic_type, &semantic_type_id));
-  loom_type_id_t abi_type_id = LOOM_TYPE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_intern_type_id(context, argument->abi_type, &abi_type_id));
-
-  loom_op_t* resource_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_abi_resource_build(
-      &context->builder, resource_ref, context->result->low_func_ref,
-      (uint8_t)argument->resource_kind, argument->resource_index,
-      semantic_type_id, abi_type_id, context->source_function.op->location,
-      &resource_op));
-  context->argument_resource_refs[source_argument_index] = resource_ref;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_lower_create_abi_resource_records(
-    loom_low_lower_context_t* context) {
-  uint16_t argument_count = 0;
-  const loom_value_id_t* source_arguments =
-      loom_func_like_arg_ids(context->source_function, &argument_count);
-  for (uint16_t i = 0; i < argument_count; ++i) {
-    if (context->argument_map[i].kind != LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(loom_low_lower_create_abi_resource_record(
-        context, i, source_arguments[i]));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_lower_create_abi_adapter_records(
-    loom_low_lower_context_t* context) {
-  IREE_RETURN_IF_ERROR(loom_low_lower_initialize_argument_map(context));
-
-  uint16_t argument_count = 0;
-  const loom_value_id_t* source_arguments =
-      loom_func_like_arg_ids(context->source_function, &argument_count);
-  const uint16_t direct_argument_count =
-      loom_low_lower_direct_argument_count(context);
-  loom_region_t* low_body = loom_low_func_def_body(context->low_func_op);
-  const loom_block_t* low_entry_block = loom_region_entry_block(low_body);
-  if (direct_argument_count != low_entry_block->arg_count) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "emitted low entry block argument count does not match direct source "
-        "ABI");
-  }
-
-  const uint16_t result_count = context->source_function.op->result_count;
-  if (result_count != context->low_func_op->result_count) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "emitted low function result count does not match source ABI");
-  }
-
-  loom_symbol_ref_t adapter_ref = loom_symbol_ref_null();
-  IREE_RETURN_IF_ERROR(loom_low_lower_create_low_named_child_symbol(
-      context, IREE_SV("__abi"), &adapter_ref));
-  loom_op_t* adapter_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_abi_adapter_build(
-      &context->builder, adapter_ref, context->result->low_func_ref,
-      LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED, direct_argument_count,
-      result_count, context->source_function.op->location, &adapter_op));
-  context->result->abi_adapter_op = adapter_op;
-  context->result->abi_adapter_ref = adapter_ref;
-
-  uint16_t direct_argument_index = 0;
-  for (uint16_t i = 0; i < argument_count; ++i) {
-    if (context->argument_map[i].kind != LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(loom_low_lower_create_abi_operand_record(
-        context, adapter_ref, direct_argument_index, source_arguments[i],
-        low_entry_block->arg_ids[direct_argument_index]));
-    ++direct_argument_index;
-  }
-
-  const loom_value_id_t* source_results =
-      loom_op_const_results(context->source_function.op);
-  const loom_value_id_t* low_results =
-      loom_op_const_results(context->low_func_op);
-  for (uint16_t i = 0; i < result_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_lower_create_abi_result_record(
-        context, adapter_ref, i, source_results[i], low_results[i]));
-  }
-  return iree_ok_status();
 }
 
 static iree_status_t loom_low_lower_check_mapped_value(
@@ -1086,7 +885,6 @@ static iree_status_t loom_low_lower_create_function_op(
   if (purity != 0) {
     build_flags |= LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_PURITY;
   }
-
   loom_builder_initialize(context->module, &context->module->arena,
                           loom_module_block(context->module),
                           &context->builder);
@@ -1204,15 +1002,22 @@ static iree_status_t loom_low_lower_emit_argument_resource_imports(
     if (context->argument_map[i].kind != LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE) {
       continue;
     }
-    if (!loom_symbol_ref_is_valid(context->argument_resource_refs[i])) {
-      status = iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "target-low resource argument has no ABI resource record");
+    loom_type_t semantic_type = context->argument_map[i].resource_semantic_type;
+    if (loom_low_lower_type_is_none(semantic_type)) {
+      semantic_type =
+          loom_module_value_type(context->module, source_arguments[i]);
+    }
+    loom_type_id_t semantic_type_id = LOOM_TYPE_ID_INVALID;
+    status = loom_low_lower_intern_type_id(context, semantic_type,
+                                           &semantic_type_id);
+    if (!iree_status_is_ok(status)) {
       break;
     }
     loom_op_t* resource_op = NULL;
     status = loom_low_resource_build(
-        &context->builder, context->argument_resource_refs[i],
+        &context->builder,
+        (uint8_t)context->argument_map[i].resource_import_kind,
+        context->argument_map[i].resource_index, semantic_type_id,
         context->argument_map[i].abi_type,
         context->source_function.op->location, &resource_op);
     if (iree_status_is_ok(status)) {
@@ -1397,7 +1202,6 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
   if (out_result) {
     *out_result = (loom_low_lower_result_t){
         .low_func_ref = loom_symbol_ref_null(),
-        .abi_adapter_ref = loom_symbol_ref_null(),
     };
   }
   IREE_RETURN_IF_ERROR(loom_low_lower_validate_options(module, source_function,
@@ -1458,9 +1262,6 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
                                                  low_func_ref);
     }
     if (iree_status_is_ok(status)) {
-      status = loom_low_lower_create_abi_resource_records(&context);
-    }
-    if (iree_status_is_ok(status)) {
       status = loom_low_lower_map_blocks(&context, source_body);
     }
     if (iree_status_is_ok(status)) {
@@ -1471,9 +1272,6 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     }
     if (iree_status_is_ok(status)) {
       status = loom_low_lower_emit_body(&context, source_body);
-    }
-    if (iree_status_is_ok(status)) {
-      status = loom_low_lower_create_abi_adapter_records(&context);
     }
   }
 

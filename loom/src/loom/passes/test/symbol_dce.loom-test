@@ -1,152 +1,117 @@
 // RUN: pass cfg-simplify,dce,symbol-dce
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @entry_export {source = @entry, export_symbol = "entry", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @entry_export, config = @vm_config}
+target.snapshot @test_snapshot {codegen_format = vm, target_triple = "test-low", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @test_export {export_symbol = "entry", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @test_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
+target.bundle @test_target {snapshot = @test_snapshot, export_plan = @test_export, config = @test_config}
 
-low.func.def target(@test_target) @vm_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
-  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  low.return %sum : reg<test.i32>
-}
-low.abi.adapter @vm_add_i32 {callee = @vm_add, conversion = mapped, operand_count = 2, result_count = 1}
-low.abi.operand @vm_add_i32_lhs {adapter = @vm_add_i32, index = 0, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<test.i32>}
-low.abi.operand @vm_add_i32_rhs {adapter = @vm_add_i32, index = 1, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<test.i32>}
-low.abi.result @vm_add_i32_result {adapter = @vm_add_i32, index = 0, conversion = register_to_scalar, semantic_type = i32, abi_type = reg<test.i32>}
-low.abi.effect @vm_add_i32_call {adapter = @vm_add_i32, kind = call, resource = "vm.import"}
-low.abi.clobber @vm_add_i32_state {adapter = @vm_add_i32, resource = "vm.state"}
-
-low.func.def target(@test_target) @fallback_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
-  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  low.return %sum : reg<test.i32>
-}
-low.abi.adapter @fallback_add_i32 {callee = @fallback_add, conversion = mapped, operand_count = 2, result_count = 1}
-low.abi.operand @fallback_add_i32_lhs {adapter = @fallback_add_i32, index = 0, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<test.i32>}
-low.abi.operand @fallback_add_i32_rhs {adapter = @fallback_add_i32, index = 1, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<test.i32>}
-low.abi.result @fallback_add_i32_result {adapter = @fallback_add_i32, index = 0, conversion = register_to_scalar, semantic_type = i32, abi_type = reg<test.i32>}
-low.abi.effect @fallback_add_i32_call {adapter = @fallback_add_i32, kind = call, resource = "vm.import"}
-low.abi.clobber @fallback_add_i32_state {adapter = @fallback_add_i32, resource = "vm.state"}
+func.decl @add_i32(%lhs: i32, %rhs: i32) -> (i32)
 
 func.def public @entry(%lhs: i32, %rhs: i32) -> (i32) {
   %is_vm = scalar.constant 1 : i1
   cfg.cond_br %is_vm, ^vm, ^fallback : i1
 ^vm:
-  %vm_sum = low.invoke @vm_add(%lhs, %rhs) {adapter = @vm_add_i32} : (i32, i32) -> (i32)
+  %vm_sum = low.invoke @vm_add(%lhs, %rhs) : (i32, i32) -> (i32)
   cfg.br ^join(%vm_sum : i32)
 ^fallback:
-  %fallback_sum = low.invoke @fallback_add(%lhs, %rhs) {adapter = @fallback_add_i32} : (i32, i32) -> (i32)
+  %fallback_sum = low.invoke @fallback_add(%lhs, %rhs) : (i32, i32) -> (i32)
   cfg.br ^join(%fallback_sum : i32)
 ^join(%sum: i32):
   func.return %sum : i32
 }
-// ----
-target.snapshot @vm_snapshot {artifact_format = vm_bytecode, codegen_format = vm, data_layout = "", default_pointer_bitwidth = 64, index_bitwidth = 64, memory_space_constant = 0, memory_space_descriptor = 0, memory_space_generic = 0, memory_space_global = 0, memory_space_host = 0, memory_space_private = 0, memory_space_workgroup = 0, offset_bitwidth = 64, target_cpu = "", target_features = "", target_triple = "iree-vm"}
-
-target.export @entry_export {abi = vm_module_function, export_symbol = "entry", hal_binding_alignment = 0, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 0, hal_flat_workgroup_size_min = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, linkage = default, source = @entry}
-
-target.config @vm_config {contract_feature_bits = 0, contract_set_key = "test.low.core"}
-
-target.bundle @test_target {config = @vm_config, export_plan = @entry_export, snapshot = @vm_snapshot}
 
 low.func.def target(@test_target) @vm_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %sum : reg<test.i32>
 }
 
-low.abi.adapter @vm_add_i32 {callee = @vm_add, conversion = mapped, operand_count = 2, result_count = 1}
+low.func.def target(@test_target) @fallback_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
+  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %sum : reg<test.i32>
+}
 
-low.abi.operand @vm_add_i32_lhs {abi_type = reg<test.i32>, adapter = @vm_add_i32, conversion = scalar_to_register, index = 0, semantic_type = i32}
+// ----
+target.snapshot @test_snapshot {artifact_format = vm_bytecode, codegen_format = vm, data_layout = "", default_pointer_bitwidth = 64, index_bitwidth = 64, memory_space_constant = 0, memory_space_descriptor = 0, memory_space_generic = 0, memory_space_global = 0, memory_space_host = 0, memory_space_private = 0, memory_space_workgroup = 0, offset_bitwidth = 64, target_cpu = "", target_features = "", target_triple = "test-low"}
 
-low.abi.operand @vm_add_i32_rhs {abi_type = reg<test.i32>, adapter = @vm_add_i32, conversion = scalar_to_register, index = 1, semantic_type = i32}
+target.export @test_export {abi = vm_module_function, export_symbol = "entry", hal_binding_alignment = 0, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 0, hal_flat_workgroup_size_min = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, linkage = default}
 
-low.abi.result @vm_add_i32_result {abi_type = reg<test.i32>, adapter = @vm_add_i32, conversion = register_to_scalar, index = 0, semantic_type = i32}
+target.config @test_config {contract_feature_bits = 0, contract_set_key = "test.low.core"}
 
-low.abi.effect @vm_add_i32_call {adapter = @vm_add_i32, kind = call, resource = "vm.import"}
-
-low.abi.clobber @vm_add_i32_state {adapter = @vm_add_i32, resource = "vm.state"}
+target.bundle @test_target {config = @test_config, export_plan = @test_export, snapshot = @test_snapshot}
 
 func.def public @entry(%lhs: i32, %rhs: i32) -> (i32) {
-  %vm_sum = low.invoke @vm_add(%lhs, %rhs) {adapter = @vm_add_i32} : (i32, i32) -> (i32)
+  %vm_sum = low.invoke @vm_add(%lhs, %rhs) : (i32, i32) -> (i32)
   func.return %vm_sum : i32
+}
+
+low.func.def target(@test_target) @vm_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
+  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %sum : reg<test.i32>
 }
 
 // ====
 // RUN: pass symbol-dce
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @entry_export {source = @entry, export_symbol = "entry", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @entry_export, config = @vm_config}
+target.snapshot @test_snapshot {codegen_format = vm, target_triple = "test-low", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @test_export {export_symbol = "entry", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @test_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
+target.bundle @test_target {snapshot = @test_snapshot, export_plan = @test_export, config = @test_config}
+
+func.decl @add_i32(%lhs: i32, %rhs: i32) -> (i32)
+
+func.def public @entry(%lhs: i32, %rhs: i32) -> (i32) {
+  %sum = low.invoke @live_add(%lhs, %rhs) : (i32, i32) -> (i32)
+  func.return %sum : i32
+}
+
+func.def @dead_wrapper(%lhs: i32, %rhs: i32) -> (i32) {
+  %sum = low.invoke @dead_add(%lhs, %rhs) : (i32, i32) -> (i32)
+  func.return %sum : i32
+}
 
 low.func.def target(@test_target) @live_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %sum : reg<test.i32>
 }
-low.abi.adapter @live_add_i32 {callee = @live_add, conversion = mapped, operand_count = 2, result_count = 1}
-low.abi.operand @live_add_i32_lhs {adapter = @live_add_i32, index = 0, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<test.i32>}
-low.abi.operand @live_add_i32_rhs {adapter = @live_add_i32, index = 1, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<test.i32>}
-low.abi.result @live_add_i32_result {adapter = @live_add_i32, index = 0, conversion = register_to_scalar, semantic_type = i32, abi_type = reg<test.i32>}
 
 low.func.def target(@test_target) @dead_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %sum : reg<test.i32>
 }
-low.abi.adapter @dead_add_i32 {callee = @dead_add, conversion = mapped, operand_count = 2, result_count = 1}
-low.abi.operand @dead_add_i32_lhs {adapter = @dead_add_i32, index = 0, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<test.i32>}
-low.abi.operand @dead_add_i32_rhs {adapter = @dead_add_i32, index = 1, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<test.i32>}
-low.abi.result @dead_add_i32_result {adapter = @dead_add_i32, index = 0, conversion = register_to_scalar, semantic_type = i32, abi_type = reg<test.i32>}
 
-func.def @entry(%lhs: i32, %rhs: i32) -> (i32) {
-  %sum = low.invoke @live_add(%lhs, %rhs) {adapter = @live_add_i32} : (i32, i32) -> (i32)
-  func.return %sum : i32
-}
-
-func.def @dead_wrapper(%lhs: i32, %rhs: i32) -> (i32) {
-  %sum = low.invoke @dead_add(%lhs, %rhs) {adapter = @dead_add_i32} : (i32, i32) -> (i32)
-  func.return %sum : i32
-}
 // ----
-target.snapshot @vm_snapshot {artifact_format = vm_bytecode, codegen_format = vm, data_layout = "", default_pointer_bitwidth = 64, index_bitwidth = 64, memory_space_constant = 0, memory_space_descriptor = 0, memory_space_generic = 0, memory_space_global = 0, memory_space_host = 0, memory_space_private = 0, memory_space_workgroup = 0, offset_bitwidth = 64, target_cpu = "", target_features = "", target_triple = "iree-vm"}
+target.snapshot @test_snapshot {artifact_format = vm_bytecode, codegen_format = vm, data_layout = "", default_pointer_bitwidth = 64, index_bitwidth = 64, memory_space_constant = 0, memory_space_descriptor = 0, memory_space_generic = 0, memory_space_global = 0, memory_space_host = 0, memory_space_private = 0, memory_space_workgroup = 0, offset_bitwidth = 64, target_cpu = "", target_features = "", target_triple = "test-low"}
 
-target.export @entry_export {abi = vm_module_function, export_symbol = "entry", hal_binding_alignment = 0, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 0, hal_flat_workgroup_size_min = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, linkage = default, source = @entry}
+target.export @test_export {abi = vm_module_function, export_symbol = "entry", hal_binding_alignment = 0, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 0, hal_flat_workgroup_size_min = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, linkage = default}
 
-target.config @vm_config {contract_feature_bits = 0, contract_set_key = "test.low.core"}
+target.config @test_config {contract_feature_bits = 0, contract_set_key = "test.low.core"}
 
-target.bundle @test_target {config = @vm_config, export_plan = @entry_export, snapshot = @vm_snapshot}
+target.bundle @test_target {config = @test_config, export_plan = @test_export, snapshot = @test_snapshot}
+
+func.def public @entry(%lhs: i32, %rhs: i32) -> (i32) {
+  %sum = low.invoke @live_add(%lhs, %rhs) : (i32, i32) -> (i32)
+  func.return %sum : i32
+}
 
 low.func.def target(@test_target) @live_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %sum : reg<test.i32>
 }
 
-low.abi.adapter @live_add_i32 {callee = @live_add, conversion = mapped, operand_count = 2, result_count = 1}
-
-low.abi.operand @live_add_i32_lhs {abi_type = reg<test.i32>, adapter = @live_add_i32, conversion = scalar_to_register, index = 0, semantic_type = i32}
-
-low.abi.operand @live_add_i32_rhs {abi_type = reg<test.i32>, adapter = @live_add_i32, conversion = scalar_to_register, index = 1, semantic_type = i32}
-
-low.abi.result @live_add_i32_result {abi_type = reg<test.i32>, adapter = @live_add_i32, conversion = register_to_scalar, index = 0, semantic_type = i32}
-
-func.def @entry(%lhs: i32, %rhs: i32) -> (i32) {
-  %sum = low.invoke @live_add(%lhs, %rhs) {adapter = @live_add_i32} : (i32, i32) -> (i32)
-  func.return %sum : i32
-}
-
 // ====
 // RUN: pass symbol-dce
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @entry_export {source = @entry, export_symbol = "entry", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @entry_export, config = @vm_config}
+target.snapshot @test_snapshot {codegen_format = vm, target_triple = "test-low", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @test_export {export_symbol = "entry", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @test_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
+target.bundle @test_target {snapshot = @test_snapshot, export_plan = @test_export, config = @test_config}
 
 low.func.def target(@test_target) @dead_add(%lhs: reg<test.i32>) -> (reg<test.i32>) {
   low.return %lhs : reg<test.i32>
 }
 
-func.def @entry(%lhs: i32) -> (i32) {
-  // ERROR@+2: SYMBOL/002 "missing_low"
-  // ERROR@+1: SYMBOL/002 "missing_adapter"
-  %sum = low.invoke @missing_low(%lhs) {adapter = @missing_adapter} : (i32) -> (i32)
+func.def public @entry(%lhs: i32) -> (i32) {
+  // ERROR@+1: SYMBOL/002 "missing_low"
+  %sum = low.invoke @missing_low(%lhs) : (i32) -> (i32)
   func.return %sum : i32
 }

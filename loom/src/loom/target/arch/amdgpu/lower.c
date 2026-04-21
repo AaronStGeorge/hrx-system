@@ -356,7 +356,8 @@ static iree_status_t loom_amdgpu_map_argument(
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE,
         .abi_type = resource_type,
-        .resource_kind = LOOM_LOW_ABI_RESOURCE_KIND_HAL_BUFFER_RESOURCE,
+        .resource_import_kind =
+            LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE,
         .resource_index = loom_amdgpu_hal_buffer_resource_index(
             context, source_argument_index),
         .resource_semantic_type = semantic_type,

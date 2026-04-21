@@ -408,6 +408,7 @@ static iree_status_t loom_amdgpu_kernel_record_build_metadata_arguments(
 iree_status_t loom_amdgpu_kernel_record_build(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
+    const loom_amdgpu_kernel_record_options_t* options,
     loom_amdgpu_kernel_record_t* out_record,
     iree_arena_allocator_t* scratch_arena) {
   IREE_ASSERT_ARGUMENT(out_record);
@@ -428,16 +429,29 @@ iree_status_t loom_amdgpu_kernel_record_build(
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_export_symbol(
       &schedule->target, schedule->module, schedule->function_op, &symbol));
 
-  loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_layout_from_low(
-      schedule->module, schedule->function_op,
-      &schedule->target.bundle_storage.bundle, &abi_layout, scratch_arena));
+  loom_amdgpu_hal_kernel_abi_layout_t derived_abi_layout = {0};
+  const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout =
+      options ? options->abi_layout : NULL;
+  if (abi_layout != NULL) {
+    if (abi_layout->function_op != schedule->function_op) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU kernel record ABI layout does not belong to the scheduled "
+          "function");
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_layout_from_low(
+        schedule->module, schedule->function_op,
+        &schedule->target.bundle_storage.bundle, &derived_abi_layout,
+        scratch_arena));
+    abi_layout = &derived_abi_layout;
+  }
 
   loom_amdgpu_kernel_record_register_usage_t register_usage = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_register_usage(
       allocation, &register_usage));
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_kernarg_live_in(
-      allocation, &abi_layout));
+      allocation, abi_layout));
 
   loom_amdgpu_kernel_descriptor_flags_t descriptor_flags = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_descriptor_flags(
@@ -448,7 +462,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
           descriptor_flags, &system_vgpr_workitem_id));
 
   const uint32_t user_sgpr_count =
-      abi_layout.uses_kernarg_segment_ptr
+      abi_layout->uses_kernarg_segment_ptr
           ? LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT
           : 0;
   const uint32_t next_free_sgpr =
@@ -475,19 +489,20 @@ iree_status_t loom_amdgpu_kernel_record_build(
 
   const loom_amdgpu_metadata_argument_t* arguments = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_build_metadata_arguments(
-      &abi_layout, &arguments, scratch_arena));
+      abi_layout, &arguments, scratch_arena));
 
   *out_record = (loom_amdgpu_kernel_record_t){
       .symbol = symbol,
       .descriptor_symbol = descriptor_symbol,
       .target_id = target_id,
-      .abi_layout = abi_layout,
+      .abi_layout = *abi_layout,
       .metadata =
           {
               .name = symbol,
               .descriptor_symbol = descriptor_symbol,
-              .kernarg_segment_size = abi_layout.kernarg_segment_size,
-              .kernarg_segment_alignment = abi_layout.kernarg_segment_alignment,
+              .kernarg_segment_size = abi_layout->kernarg_segment_size,
+              .kernarg_segment_alignment =
+                  abi_layout->kernarg_segment_alignment,
               .wavefront_size = processor->default_wavefront_size,
               .group_segment_fixed_size = 0,
               .private_segment_fixed_size = 0,
@@ -497,7 +512,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
               .required_workgroup_size = hal_kernel->required_workgroup_size,
               .has_required_workgroup_size = true,
               .arguments = arguments,
-              .argument_count = abi_layout.resource_count,
+              .argument_count = abi_layout->resource_count,
           },
       .descriptor_flags = descriptor_flags,
       .system_vgpr_workitem_id = system_vgpr_workitem_id,

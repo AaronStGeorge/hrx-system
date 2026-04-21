@@ -20,7 +20,6 @@ loom_check_test_suite(
         "cfg_compatibility.loom-test",
         "cfg_simplify.loom-test",
         "cfg_simplify_scf_pipeline.loom-test",
-        "cfg_to_llvmir.loom-test",
         "kernel_async_legality.loom-test",
         "kernel_resources.loom-test",
         "licm.loom-test",
@@ -31,4 +30,5 @@ loom_check_test_suite(
         "symbol_dce.loom-test",
         "vector_to_scalar.loom-test",
     ],
+    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

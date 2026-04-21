@@ -145,6 +145,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::schedule
+    loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::wait_packets
   PUBLIC
 )
@@ -165,6 +166,7 @@ loom_cc_library(
     iree::io::stream
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::schedule
+    loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::wait_packets
   PUBLIC
 )

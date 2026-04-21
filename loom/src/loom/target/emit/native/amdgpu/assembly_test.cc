@@ -294,7 +294,6 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     LowerSource(preset_key, body, &lower_result);
     EXPECT_EQ(lower_result.error_count, 0u);
     ASSERT_NE(lower_result.low_func_op, nullptr);
-    ASSERT_NE(lower_result.abi_adapter_op, nullptr);
 
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -379,7 +378,6 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     LowerSource(preset_key, body, &lower_result);
     EXPECT_GT(lower_result.error_count, 0u);
     EXPECT_EQ(lower_result.low_func_op, nullptr);
-    EXPECT_EQ(lower_result.abi_adapter_op, nullptr);
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -487,7 +485,6 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferStoreToVmemPacket) {
               &lower_result);
   EXPECT_EQ(lower_result.error_count, 0u);
   ASSERT_NE(lower_result.low_func_op, nullptr);
-  ASSERT_NE(lower_result.abi_adapter_op, nullptr);
 
   loom_low_verify_options_t verify_options = {
       .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -551,7 +548,6 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferLoadAddStoreToVmemPackets) {
               &lower_result);
   EXPECT_EQ(lower_result.error_count, 0u);
   ASSERT_NE(lower_result.low_func_op, nullptr);
-  ASSERT_NE(lower_result.abi_adapter_op, nullptr);
 
   loom_low_verify_options_t verify_options = {
       .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -622,7 +618,6 @@ TEST_F(AmdgpuAssemblyTest,
               &lower_result);
   EXPECT_EQ(lower_result.error_count, 0u);
   ASSERT_NE(lower_result.low_func_op, nullptr);
-  ASSERT_NE(lower_result.abi_adapter_op, nullptr);
 
   loom_low_verify_options_t verify_options = {
       .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -702,7 +697,6 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideCopyToB128Packets) {
               &lower_result);
   EXPECT_EQ(lower_result.error_count, 0u);
   ASSERT_NE(lower_result.low_func_op, nullptr);
-  ASSERT_NE(lower_result.abi_adapter_op, nullptr);
 
   loom_low_verify_options_t verify_options = {
       .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -791,7 +785,6 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideAddToLanePackets) {
               &lower_result);
   EXPECT_EQ(lower_result.error_count, 0u);
   ASSERT_NE(lower_result.low_func_op, nullptr);
-  ASSERT_NE(lower_result.abi_adapter_op, nullptr);
 
   loom_low_verify_options_t verify_options = {
       .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,

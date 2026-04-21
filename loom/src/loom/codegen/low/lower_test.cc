@@ -139,7 +139,7 @@ static iree_status_t TestMapArgument(
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE,
         .abi_type = resource_type,
-        .resource_kind = LOOM_LOW_ABI_RESOURCE_KIND_NATIVE_POINTER,
+        .resource_import_kind = LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER,
         .resource_index = source_argument_index,
         .resource_semantic_type = source_type,
     };
@@ -665,9 +665,7 @@ TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {
   EXPECT_EQ(lower_result.remark_count, 0u);
   EXPECT_NE(lower_result.descriptor_set, nullptr);
   EXPECT_NE(lower_result.low_func_op, nullptr);
-  EXPECT_NE(lower_result.abi_adapter_op, nullptr);
   EXPECT_TRUE(loom_symbol_ref_is_valid(lower_result.low_func_ref));
-  EXPECT_TRUE(loom_symbol_ref_is_valid(lower_result.abi_adapter_ref));
   EXPECT_TRUE(lower_collector.emissions.empty());
 
   EmissionCollector verify_collector;
@@ -687,19 +685,16 @@ TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {
   IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
   EXPECT_NE(text.find("low.func.def target(@test_target) @add_const__low"),
             std::string::npos);
-  EXPECT_NE(text.find("low.abi.adapter @add_const__low__abi"),
-            std::string::npos);
-  EXPECT_NE(text.find("conversion = scalar_to_register"), std::string::npos);
-  EXPECT_NE(text.find("conversion = register_to_scalar"), std::string::npos);
+  EXPECT_EQ(text.find("source(@"), std::string::npos);
   EXPECT_NE(text.find("asm<test.low.core>"), std::string::npos);
   EXPECT_NE(text.find("test.const.i32"), std::string::npos);
   EXPECT_NE(text.find("test.add.i32"), std::string::npos);
+  EXPECT_EQ(text.find("low.abi"), std::string::npos);
 
   std::string invoked_text = text;
   invoked_text.append(
       "\nfunc.def @call_lowered(%lhs: i32) -> (i32) {\n"
-      "  %result = low.invoke @add_const__low(%lhs) {adapter = "
-      "@add_const__low__abi} : (i32) -> (i32)\n"
+      "  %result = low.invoke @add_const__low(%lhs) : (i32) -> (i32)\n"
       "  func.return %result : i32\n"
       "}\n");
   ModulePtr invoked_module = ParseSource(invoked_text, &environment);
@@ -763,7 +758,6 @@ TEST_F(LowLowerTest, LowersVectorCfgFunction) {
 
   EXPECT_EQ(lower_result.error_count, 0u);
   EXPECT_NE(lower_result.low_func_op, nullptr);
-  EXPECT_NE(lower_result.abi_adapter_op, nullptr);
   EXPECT_TRUE(lower_collector.emissions.empty());
 
   EmissionCollector verify_collector;
@@ -779,13 +773,12 @@ TEST_F(LowLowerTest, LowersVectorCfgFunction) {
   std::string text;
   IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
   EXPECT_NE(text.find("@select_vector__low"), std::string::npos);
-  EXPECT_NE(text.find("@select_vector__low__abi"), std::string::npos);
+  EXPECT_EQ(text.find("source(@"), std::string::npos);
   EXPECT_NE(text.find("reg<test.v4i32>"), std::string::npos);
-  EXPECT_NE(text.find("conversion = value_to_register"), std::string::npos);
-  EXPECT_NE(text.find("conversion = register_to_value"), std::string::npos);
   EXPECT_NE(text.find("test.add.v4i32"), std::string::npos);
   EXPECT_NE(text.find("low.cond_br"), std::string::npos);
   EXPECT_NE(text.find("low.br"), std::string::npos);
+  EXPECT_EQ(text.find("low.abi"), std::string::npos);
 }
 
 TEST_F(LowLowerTest, LowersResourceArgumentsWithoutDirectAbiOperands) {
@@ -801,7 +794,6 @@ TEST_F(LowLowerTest, LowersResourceArgumentsWithoutDirectAbiOperands) {
 
   EXPECT_EQ(lower_result.error_count, 0u);
   EXPECT_NE(lower_result.low_func_op, nullptr);
-  EXPECT_NE(lower_result.abi_adapter_op, nullptr);
   EXPECT_TRUE(lower_collector.emissions.empty());
 
   EmissionCollector verify_collector;
@@ -819,15 +811,11 @@ TEST_F(LowLowerTest, LowersResourceArgumentsWithoutDirectAbiOperands) {
   EXPECT_NE(text.find("low.func.def target(@test_target) "
                       "@resource_entry__low()"),
             std::string::npos);
-  EXPECT_NE(text.find("%buffer = low.resource "
-                      "@resource_entry__low__abi_resource0"),
+  EXPECT_NE(text.find("%buffer = low.resource<native_pointer>"),
             std::string::npos);
-  EXPECT_NE(text.find("low.abi.resource "
-                      "@resource_entry__low__abi_resource0"),
-            std::string::npos);
-  EXPECT_NE(text.find("kind = native_pointer"), std::string::npos);
   EXPECT_NE(text.find("semantic_type = buffer"), std::string::npos);
-  EXPECT_NE(text.find("operand_count = 0"), std::string::npos);
+  EXPECT_EQ(text.find("source_arg"), std::string::npos);
+  EXPECT_EQ(text.find("low.abi"), std::string::npos);
   EXPECT_EQ(text.find("low.abi.operand"), std::string::npos);
 }
 
@@ -847,7 +835,6 @@ TEST_F(LowLowerTest, EmitsPreambleBeforeResourceImports) {
 
   EXPECT_EQ(lower_result.error_count, 0u);
   EXPECT_NE(lower_result.low_func_op, nullptr);
-  EXPECT_NE(lower_result.abi_adapter_op, nullptr);
   EXPECT_TRUE(lower_collector.emissions.empty());
 
   EmissionCollector verify_collector;
@@ -884,8 +871,6 @@ TEST_F(LowLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {
   EXPECT_EQ(lower_result.remark_count, 0u);
   EXPECT_EQ(lower_result.low_func_op, nullptr);
   EXPECT_FALSE(loom_symbol_ref_is_valid(lower_result.low_func_ref));
-  EXPECT_EQ(lower_result.abi_adapter_op, nullptr);
-  EXPECT_FALSE(loom_symbol_ref_is_valid(lower_result.abi_adapter_ref));
   ASSERT_EQ(lower_collector.emissions.size(), 1u);
   const CollectedEmission& emission = lower_collector.emissions[0];
   EXPECT_EQ(emission.error,

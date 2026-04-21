@@ -266,6 +266,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "test_llvmir_cfg"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/cfg.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "test_llvmir_intrinsics"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/intrinsics.loom-test"

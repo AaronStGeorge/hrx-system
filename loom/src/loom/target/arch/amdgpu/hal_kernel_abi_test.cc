@@ -124,12 +124,11 @@ class AmdgpuHalKernelAbiTest : public ::testing::Test {
 TEST_F(AmdgpuHalKernelAbiTest, LaysOutOneHalBufferResource) {
   BuildModule("loom_kernel",
               "low.func.def target(@gfx_target) @loom_kernel() {\n"
-              "  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+              "  %binding = low.resource<hal_buffer_resource> {index = 0, "
+              "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
               "  low.return\n"
               "}\n",
-              "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-              "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-              "abi_type = reg<amdgpu.sgpr x4>}\n");
+              "");
 
   loom_amdgpu_hal_kernel_abi_layout_t layout = {};
   BuildLayout(&layout);
@@ -169,14 +168,13 @@ TEST_F(AmdgpuHalKernelAbiTest, AllowsNoResources) {
 TEST_F(AmdgpuHalKernelAbiTest, RejectsDuplicateBindingIndex) {
   BuildModule("loom_kernel",
               "low.func.def target(@gfx_target) @loom_kernel() {\n"
+              "  %binding0 = low.resource<hal_buffer_resource> {index = 0, "
+              "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
+              "  %binding1 = low.resource<hal_buffer_resource> {index = 0, "
+              "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
               "  low.return\n"
               "}\n",
-              "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-              "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-              "abi_type = reg<amdgpu.sgpr x4>}\n"
-              "low.abi.resource @binding1 {function = @loom_kernel, kind = "
-              "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-              "abi_type = reg<amdgpu.sgpr x4>}\n");
+              "");
 
   const loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
@@ -193,11 +191,11 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsDuplicateBindingIndex) {
 TEST_F(AmdgpuHalKernelAbiTest, RejectsMissingDenseBindingIndex) {
   BuildModule("loom_kernel",
               "low.func.def target(@gfx_target) @loom_kernel() {\n"
+              "  %binding1 = low.resource<hal_buffer_resource> {index = 1, "
+              "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
               "  low.return\n"
               "}\n",
-              "low.abi.resource @binding1 {function = @loom_kernel, kind = "
-              "hal_buffer_resource, index = 1, semantic_type = hal.buffer, "
-              "abi_type = reg<amdgpu.sgpr x4>}\n");
+              "");
 
   const loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
@@ -214,11 +212,11 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsMissingDenseBindingIndex) {
 TEST_F(AmdgpuHalKernelAbiTest, RejectsWrongAbiType) {
   BuildModule("loom_kernel",
               "low.func.def target(@gfx_target) @loom_kernel() {\n"
+              "  %binding0 = low.resource<hal_buffer_resource> {index = 0, "
+              "semantic_type = hal.buffer} : reg<amdgpu.sgpr x3>\n"
               "  low.return\n"
               "}\n",
-              "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-              "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-              "abi_type = reg<amdgpu.sgpr x3>}\n");
+              "");
 
   const loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
@@ -232,10 +230,11 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsWrongAbiType) {
           module_, function_op, &storage.bundle, &layout, &arena_));
 }
 
-TEST_F(AmdgpuHalKernelAbiTest, RejectsMissingResourceRecord) {
+TEST_F(AmdgpuHalKernelAbiTest, RejectsWrongImportKind) {
   BuildModule("loom_kernel",
               "low.func.def target(@gfx_target) @loom_kernel() {\n"
-              "  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
+              "  %binding = low.resource<vm_state> {index = 0, "
+              "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
               "  low.return\n"
               "}\n",
               "");
@@ -247,7 +246,7 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsMissingResourceRecord) {
       module_, IREE_SV("gfx_target"), &storage));
   loom_amdgpu_hal_kernel_abi_layout_t layout = {};
   IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_NOT_FOUND,
+      IREE_STATUS_INVALID_ARGUMENT,
       loom_amdgpu_hal_kernel_abi_layout_from_low(
           module_, function_op, &storage.bundle, &layout, &arena_));
 }

@@ -6,10 +6,10 @@
 
 // AMDGPU HAL resource materialization for target-low kernels.
 //
-// low.abi.resource records describe the HAL-facing binding ABI and low.resource
-// imports the target-low resource value. This layer lowers each low.resource
-// into the AMDGPU packet-level sequence that loads the raw binding pointer from
-// kernargs and constructs the four-SGPR buffer resource consumed by MUBUF ops.
+// Function-local low.resource imports describe the HAL-facing binding ABI. This
+// layer lowers each low.resource into the AMDGPU packet-level sequence that
+// loads the raw binding pointer from kernargs and constructs the four-SGPR
+// buffer resource consumed by MUBUF ops.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_HAL_RESOURCE_MATERIALIZATION_H_
 #define LOOM_TARGET_ARCH_AMDGPU_HAL_RESOURCE_MATERIALIZATION_H_
@@ -17,6 +17,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/ir/ir.h"
+#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
@@ -24,6 +25,8 @@ extern "C" {
 #endif
 
 typedef struct loom_amdgpu_hal_resource_materialization_result_t {
+  // ABI layout captured before low.resource ops are rewritten.
+  loom_amdgpu_hal_kernel_abi_layout_t abi_layout;
   // Number of low.resource ops expanded into packet-level low IR.
   iree_host_size_t materialized_resource_count;
   // True when the pass inserted the kernarg segment pointer live-in.
@@ -34,7 +37,7 @@ typedef struct loom_amdgpu_hal_resource_materialization_result_t {
 //
 // The expansion inserts or reuses a
 // low.live_in<amdgpu.kernarg_segment_ptr> value, loads one 64-bit binding
-// pointer from the kernarg slot assigned by low.abi.resource, materializes the
+// pointer from the kernarg slot assigned by low.resource, materializes the
 // range and flags words, and replaces low.resource with a low.concat producing
 // reg<amdgpu.sgpr x4>.
 iree_status_t loom_amdgpu_hal_resource_materialize(

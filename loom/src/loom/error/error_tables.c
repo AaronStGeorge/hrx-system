@@ -1374,6 +1374,27 @@ static const loom_error_def_t loom_err_structure_028 = {
     .param_count = 4,
 };
 
+static const loom_error_param_def_t loom_err_structure_029_params[] = {
+    {"op_name", LOOM_PARAM_STRING},
+    {"constraint_kind", LOOM_PARAM_STRING},
+    {"ancestor_name", LOOM_PARAM_STRING},
+    {"actual_ancestor", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_structure_029 = {
+    .error_id = "ERR_STRUCTURE_029",
+    .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 29,
+    .summary = "Operation placement constraint violated.",
+    .message_template =
+        "'{op_name}' violates {constraint_kind} ancestor placement for "
+        "'{ancestor_name}' (observed ancestor: '{actual_ancestor}')",
+    .fix_hint_template =
+        "Move '{op_name}' to a region satisfying its placement contract",
+    .param_defs = loom_err_structure_029_params,
+    .param_count = 4,
+};
+
 static const loom_error_param_def_t loom_err_dominance_001_params[] = {
     {"value_name", LOOM_PARAM_STRING},
 };
@@ -2846,13 +2867,13 @@ static const loom_error_def_t loom_err_lowering_013 = {
     .domain = LOOM_ERROR_DOMAIN_LOWERING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
     .code = 13,
-    .summary = "Low invoke signature count mismatch.",
+    .summary = "Low function call signature count mismatch.",
     .message_template =
-        "low.invoke callee '@{callee_name}' {field_kind} count is "
+        "low function call callee '@{callee_name}' {field_kind} count is "
         "{actual_count}, expected {expected_count}",
     .fix_hint_template =
-        "Match the low.invoke {field_kind} list to the callee low-function "
-        "signature",
+        "Match the low function call {field_kind} list to the callee "
+        "low-function signature",
     .param_defs = loom_err_lowering_013_params,
     .param_count = 4,
 };
@@ -2870,177 +2891,16 @@ static const loom_error_def_t loom_err_lowering_014 = {
     .domain = LOOM_ERROR_DOMAIN_LOWERING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
     .code = 14,
-    .summary = "Low invoke signature type mismatch.",
+    .summary = "Low function call signature type mismatch.",
     .message_template =
-        "low.invoke callee '@{callee_name}' {field_kind} {field_index} has "
-        "type {actual_type}, expected callee {callee_field_kind} type "
+        "low function call callee '@{callee_name}' {field_kind} {field_index} "
+        "has type {actual_type}, expected callee {callee_field_kind} type "
         "{expected_type}",
     .fix_hint_template =
-        "Match the low.invoke {field_kind} type to the callee low-function "
-        "signature",
+        "Match the low function call {field_kind} type to the callee "
+        "low-function signature",
     .param_defs = loom_err_lowering_014_params,
     .param_count = 6,
-};
-
-static const loom_error_param_def_t loom_err_lowering_015_params[] = {
-    {"callee_name", LOOM_PARAM_STRING},
-    {"adapter_name", LOOM_PARAM_STRING},
-    {"adapter_callee_name", LOOM_PARAM_STRING},
-};
-static const loom_error_def_t loom_err_lowering_015 = {
-    .error_id = "ERR_LOWERING_015",
-    .domain = LOOM_ERROR_DOMAIN_LOWERING,
-    .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 15,
-    .summary = "Low invoke ABI adapter callee mismatch.",
-    .message_template =
-        "low.invoke callee '@{callee_name}' uses ABI adapter '@{adapter_name}' "
-        "bound to callee '@{adapter_callee_name}'",
-    .fix_hint_template = "Use an ABI adapter bound to the invoked low function",
-    .param_defs = loom_err_lowering_015_params,
-    .param_count = 3,
-};
-
-static const loom_error_param_def_t loom_err_lowering_016_params[] = {
-    {"callee_name", LOOM_PARAM_STRING}, {"adapter_name", LOOM_PARAM_STRING},
-    {"field_kind", LOOM_PARAM_STRING},  {"actual_count", LOOM_PARAM_I64},
-    {"expected_count", LOOM_PARAM_I64}, {"conversion_rule", LOOM_PARAM_STRING},
-};
-static const loom_error_def_t loom_err_lowering_016 = {
-    .error_id = "ERR_LOWERING_016",
-    .domain = LOOM_ERROR_DOMAIN_LOWERING,
-    .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 16,
-    .summary = "Low invoke ABI adapter count mismatch.",
-    .message_template =
-        "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' "
-        "{field_kind} count is {actual_count}, expected {expected_count} for "
-        "{conversion_rule} conversion",
-    .fix_hint_template =
-        "Match the invoke, adapter record, and callee low-function signature "
-        "arity",
-    .param_defs = loom_err_lowering_016_params,
-    .param_count = 6,
-};
-
-static const loom_error_param_def_t loom_err_lowering_017_params[] = {
-    {"callee_name", LOOM_PARAM_STRING},
-    {"adapter_name", LOOM_PARAM_STRING},
-    {"conversion_rule", LOOM_PARAM_STRING},
-    {"field_kind", LOOM_PARAM_STRING},
-    {"field_index", LOOM_PARAM_U32},
-    {"actual_type", LOOM_PARAM_TYPE},
-    {"callee_field_kind", LOOM_PARAM_STRING},
-    {"expected_type", LOOM_PARAM_TYPE},
-};
-static const loom_error_def_t loom_err_lowering_017 = {
-    .error_id = "ERR_LOWERING_017",
-    .domain = LOOM_ERROR_DOMAIN_LOWERING,
-    .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 17,
-    .summary = "Low invoke ABI adapter conversion type mismatch.",
-    .message_template =
-        "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' "
-        "{conversion_rule} conversion for {field_kind} {field_index} has type "
-        "{actual_type}, expected callee {callee_field_kind} type "
-        "{expected_type}",
-    .fix_hint_template =
-        "Choose an ABI adapter conversion that accepts the semantic value type "
-        "or materialize values matching the callee register ABI",
-    .param_defs = loom_err_lowering_017_params,
-    .param_count = 8,
-};
-
-static const loom_error_param_def_t loom_err_lowering_018_params[] = {
-    {"adapter_name", LOOM_PARAM_STRING}, {"entry_name", LOOM_PARAM_STRING},
-    {"field_kind", LOOM_PARAM_STRING},   {"field_index", LOOM_PARAM_I64},
-    {"reason", LOOM_PARAM_STRING},
-};
-static const loom_error_def_t loom_err_lowering_018 = {
-    .error_id = "ERR_LOWERING_018",
-    .domain = LOOM_ERROR_DOMAIN_LOWERING,
-    .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 18,
-    .summary = "Low ABI adapter mapping entry is invalid.",
-    .message_template =
-        "low ABI adapter '@{adapter_name}' {field_kind} entry '@{entry_name}' "
-        "at index {field_index} is invalid: {reason}",
-    .fix_hint_template =
-        "Make each mapped adapter operand/result index appear exactly once, "
-        "within the adapter arity, with a conversion valid for that slot kind",
-    .param_defs = loom_err_lowering_018_params,
-    .param_count = 5,
-};
-
-static const loom_error_param_def_t loom_err_lowering_019_params[] = {
-    {"adapter_name", LOOM_PARAM_STRING},
-    {"entry_name", LOOM_PARAM_STRING},
-    {"conversion_rule", LOOM_PARAM_STRING},
-    {"field_kind", LOOM_PARAM_STRING},
-    {"field_index", LOOM_PARAM_U32},
-    {"actual_type", LOOM_PARAM_TYPE},
-    {"expected_field_kind", LOOM_PARAM_STRING},
-    {"expected_type", LOOM_PARAM_TYPE},
-};
-static const loom_error_def_t loom_err_lowering_019 = {
-    .error_id = "ERR_LOWERING_019",
-    .domain = LOOM_ERROR_DOMAIN_LOWERING,
-    .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 19,
-    .summary = "Low ABI adapter mapping type mismatch.",
-    .message_template =
-        "low ABI adapter '@{adapter_name}' entry '@{entry_name}' "
-        "{conversion_rule} conversion for {field_kind} {field_index} has type "
-        "{actual_type}, expected {expected_field_kind} type {expected_type}",
-    .fix_hint_template =
-        "Match mapped adapter semantic types to the invoke boundary and ABI "
-        "types to the callee low-function register signature",
-    .param_defs = loom_err_lowering_019_params,
-    .param_count = 8,
-};
-
-static const loom_error_param_def_t loom_err_lowering_020_params[] = {
-    {"callee_name", LOOM_PARAM_STRING},
-    {"caller_context", LOOM_PARAM_STRING},
-    {"reason", LOOM_PARAM_STRING},
-};
-static const loom_error_def_t loom_err_lowering_020 = {
-    .error_id = "ERR_LOWERING_020",
-    .domain = LOOM_ERROR_DOMAIN_LOWERING,
-    .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 20,
-    .summary = "Low invoke caller context is invalid.",
-    .message_template =
-        "low.invoke callee '@{callee_name}' in {caller_context} context is "
-        "invalid: {reason}",
-    .fix_hint_template =
-        "Invoke low functions from semantic function bodies through an "
-        "explicit ABI adapter, or direct-call only same-target low functions "
-        "from a low function body",
-    .param_defs = loom_err_lowering_020_params,
-    .param_count = 3,
-};
-
-static const loom_error_param_def_t loom_err_lowering_021_params[] = {
-    {"adapter_name", LOOM_PARAM_STRING},
-    {"record_kind", LOOM_PARAM_STRING},
-    {"record_name", LOOM_PARAM_STRING},
-    {"reason", LOOM_PARAM_STRING},
-};
-static const loom_error_def_t loom_err_lowering_021 = {
-    .error_id = "ERR_LOWERING_021",
-    .domain = LOOM_ERROR_DOMAIN_LOWERING,
-    .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 21,
-    .summary = "Low ABI adapter metadata record is invalid.",
-    .message_template =
-        "low ABI adapter '@{adapter_name}' {record_kind} metadata "
-        "'@{record_name}' is invalid: {reason}",
-    .fix_hint_template =
-        "Attach effect and clobber records to a low ABI adapter and use "
-        "namespace-qualified resource keys such as 'vm.state' or 'amdgpu.vcc'",
-    .param_defs = loom_err_lowering_021_params,
-    .param_count = 4,
 };
 
 static const loom_error_param_def_t loom_err_lowering_022_params[] = {
@@ -3053,9 +2913,9 @@ static const loom_error_def_t loom_err_lowering_022 = {
     .domain = LOOM_ERROR_DOMAIN_LOWERING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
     .code = 22,
-    .summary = "Low invoke purity conflicts with ABI effects.",
+    .summary = "Low call purity conflicts with callee effects.",
     .message_template =
-        "low.invoke pure callee '@{callee_name}' through '{boundary_name}' is "
+        "low pure call callee '@{callee_name}' through '{boundary_name}' is "
         "invalid: {reason} ({effect_count} effect record(s), {clobber_count} "
         "clobber record(s))",
     .fix_hint_template =
@@ -3569,37 +3429,35 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_structure_019, &loom_err_structure_020, &loom_err_structure_021,
     &loom_err_structure_022, &loom_err_structure_023, &loom_err_structure_024,
     &loom_err_structure_025, &loom_err_structure_026, &loom_err_structure_027,
-    &loom_err_structure_028, &loom_err_dominance_001, &loom_err_dominance_002,
-    &loom_err_dominance_003, &loom_err_dominance_004, &loom_err_dominance_005,
-    &loom_err_dominance_006, &loom_err_dominance_007, &loom_err_dominance_008,
-    &loom_err_dominance_009, &loom_err_dominance_010, &loom_err_symbol_001,
-    &loom_err_symbol_002,    &loom_err_symbol_003,    &loom_err_symbol_004,
-    &loom_err_symbol_005,    &loom_err_parse_001,     &loom_err_parse_002,
-    &loom_err_parse_003,     &loom_err_parse_004,     &loom_err_parse_005,
-    &loom_err_parse_006,     &loom_err_parse_007,     &loom_err_parse_008,
-    &loom_err_parse_009,     &loom_err_parse_010,     &loom_err_parse_011,
-    &loom_err_parse_012,     &loom_err_parse_013,     &loom_err_parse_014,
-    &loom_err_parse_015,     &loom_err_parse_016,     &loom_err_parse_017,
-    &loom_err_parse_018,     &loom_err_parse_019,     &loom_err_parse_020,
-    &loom_err_parse_021,     &loom_err_parse_022,     &loom_err_parse_023,
-    &loom_err_parse_024,     &loom_err_parse_025,     &loom_err_parse_026,
-    &loom_err_parse_027,     &loom_err_parse_028,     &loom_err_parse_029,
-    &loom_err_parse_030,     &loom_err_parse_031,     &loom_err_parse_032,
-    &loom_err_parse_033,     &loom_err_parse_034,     &loom_err_bytecode_001,
-    &loom_err_bytecode_002,  &loom_err_bytecode_003,  &loom_err_bytecode_004,
-    &loom_err_bytecode_005,  &loom_err_bytecode_006,  &loom_err_bytecode_007,
-    &loom_err_bytecode_008,  &loom_err_bytecode_009,  &loom_err_bytecode_010,
-    &loom_err_bytecode_011,  &loom_err_bytecode_012,  &loom_err_bytecode_013,
-    &loom_err_bytecode_014,  &loom_err_bytecode_015,  &loom_err_bytecode_016,
-    &loom_err_bytecode_017,  &loom_err_fold_001,      &loom_err_fold_002,
-    &loom_err_fold_003,      &loom_err_fold_004,      &loom_err_fold_005,
-    &loom_err_lowering_001,  &loom_err_lowering_002,  &loom_err_lowering_003,
-    &loom_err_lowering_004,  &loom_err_lowering_005,  &loom_err_lowering_006,
-    &loom_err_lowering_007,  &loom_err_lowering_008,  &loom_err_lowering_009,
-    &loom_err_lowering_010,  &loom_err_lowering_011,  &loom_err_lowering_012,
-    &loom_err_lowering_013,  &loom_err_lowering_014,  &loom_err_lowering_015,
-    &loom_err_lowering_016,  &loom_err_lowering_017,  &loom_err_lowering_018,
-    &loom_err_lowering_019,  &loom_err_lowering_020,  &loom_err_lowering_021,
+    &loom_err_structure_028, &loom_err_structure_029, &loom_err_dominance_001,
+    &loom_err_dominance_002, &loom_err_dominance_003, &loom_err_dominance_004,
+    &loom_err_dominance_005, &loom_err_dominance_006, &loom_err_dominance_007,
+    &loom_err_dominance_008, &loom_err_dominance_009, &loom_err_dominance_010,
+    &loom_err_symbol_001,    &loom_err_symbol_002,    &loom_err_symbol_003,
+    &loom_err_symbol_004,    &loom_err_symbol_005,    &loom_err_parse_001,
+    &loom_err_parse_002,     &loom_err_parse_003,     &loom_err_parse_004,
+    &loom_err_parse_005,     &loom_err_parse_006,     &loom_err_parse_007,
+    &loom_err_parse_008,     &loom_err_parse_009,     &loom_err_parse_010,
+    &loom_err_parse_011,     &loom_err_parse_012,     &loom_err_parse_013,
+    &loom_err_parse_014,     &loom_err_parse_015,     &loom_err_parse_016,
+    &loom_err_parse_017,     &loom_err_parse_018,     &loom_err_parse_019,
+    &loom_err_parse_020,     &loom_err_parse_021,     &loom_err_parse_022,
+    &loom_err_parse_023,     &loom_err_parse_024,     &loom_err_parse_025,
+    &loom_err_parse_026,     &loom_err_parse_027,     &loom_err_parse_028,
+    &loom_err_parse_029,     &loom_err_parse_030,     &loom_err_parse_031,
+    &loom_err_parse_032,     &loom_err_parse_033,     &loom_err_parse_034,
+    &loom_err_bytecode_001,  &loom_err_bytecode_002,  &loom_err_bytecode_003,
+    &loom_err_bytecode_004,  &loom_err_bytecode_005,  &loom_err_bytecode_006,
+    &loom_err_bytecode_007,  &loom_err_bytecode_008,  &loom_err_bytecode_009,
+    &loom_err_bytecode_010,  &loom_err_bytecode_011,  &loom_err_bytecode_012,
+    &loom_err_bytecode_013,  &loom_err_bytecode_014,  &loom_err_bytecode_015,
+    &loom_err_bytecode_016,  &loom_err_bytecode_017,  &loom_err_fold_001,
+    &loom_err_fold_002,      &loom_err_fold_003,      &loom_err_fold_004,
+    &loom_err_fold_005,      &loom_err_lowering_001,  &loom_err_lowering_002,
+    &loom_err_lowering_003,  &loom_err_lowering_004,  &loom_err_lowering_005,
+    &loom_err_lowering_006,  &loom_err_lowering_007,  &loom_err_lowering_008,
+    &loom_err_lowering_009,  &loom_err_lowering_010,  &loom_err_lowering_011,
+    &loom_err_lowering_012,  &loom_err_lowering_013,  &loom_err_lowering_014,
     &loom_err_lowering_022,  &loom_err_lowering_023,  &loom_err_lowering_024,
     &loom_err_lowering_025,  &loom_err_backend_001,   &loom_err_backend_002,
     &loom_err_backend_003,   &loom_err_backend_004,   &loom_err_backend_005,

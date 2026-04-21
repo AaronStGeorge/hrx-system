@@ -431,6 +431,7 @@ loom_check_test_suite(
     name = "file_test",
     srcs = [
         "test/emit.loom-test",
+        "test/llvmir/cfg.loom-test",
         "test/llvmir/intrinsics.loom-test",
         "test/llvmir/lowering_errors.loom-test",
         "test/llvmir/memory.loom-test",

@@ -182,6 +182,7 @@ static iree_status_t loom_amdgpu_module_compile_read_stream_contents(
 
 static iree_status_t loom_amdgpu_module_compile_emit_hsaco(
     const loom_low_packetization_t* packetization,
+    const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout,
     loom_amdgpu_kernel_hsaco_summary_t* out_summary,
     iree_const_byte_span_t* out_hsaco, iree_arena_allocator_t* sidecar_arena,
     iree_allocator_t allocator) {
@@ -203,6 +204,7 @@ static iree_status_t loom_amdgpu_module_compile_emit_hsaco(
           IREE_IO_STREAM_MODE_SEEKABLE | IREE_IO_STREAM_MODE_RESIZABLE,
       32 * 1024, allocator, &stream));
   const loom_amdgpu_kernel_hsaco_options_t hsaco_options = {
+      .abi_layout = abi_layout,
       .wait_packets = &wait_packets,
       .summary = out_summary,
   };
@@ -407,7 +409,8 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
   loom_amdgpu_kernel_hsaco_summary_t hsaco_summary = {0};
   iree_const_byte_span_t hsaco = iree_const_byte_span_empty();
   iree_status_t status = loom_amdgpu_module_compile_emit_hsaco(
-      &packetization, &hsaco_summary, &hsaco, sidecar_arena, allocator);
+      &packetization, &materialization.abi_layout, &hsaco_summary, &hsaco,
+      sidecar_arena, allocator);
   if (iree_status_is_ok(status) && report != NULL) {
     loom_target_compile_report_record_emission(
         report, hsaco_summary.instruction_count, hsaco_summary.text_byte_count,
@@ -430,35 +433,31 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
         &target->bundle_storage.bundle, &descriptor_symbol_builder);
   }
   if (iree_status_is_ok(status)) {
-    loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {0};
-    status = loom_amdgpu_hal_kernel_abi_layout_from_low(
-        module, low_function_op, &target->bundle_storage.bundle, &abi_layout,
-        sidecar_arena);
-    if (iree_status_is_ok(status)) {
-      loom_amdgpu_hal_executable_binding_flags_t* binding_flags = NULL;
-      if (abi_layout.resource_count != 0) {
-        status = iree_arena_allocate_array(
-            sidecar_arena, abi_layout.resource_count, sizeof(*binding_flags),
-            (void**)&binding_flags);
-        if (iree_status_is_ok(status)) {
-          memset(binding_flags, 0,
-                 abi_layout.resource_count * sizeof(*binding_flags));
-        }
-      }
+    const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout =
+        &materialization.abi_layout;
+    loom_amdgpu_hal_executable_binding_flags_t* binding_flags = NULL;
+    if (abi_layout->resource_count != 0) {
+      status = iree_arena_allocate_array(
+          sidecar_arena, abi_layout->resource_count, sizeof(*binding_flags),
+          (void**)&binding_flags);
       if (iree_status_is_ok(status)) {
-        const loom_target_hal_kernel_abi_t* hal_kernel =
-            &target->bundle_storage.bundle.export_plan->hal_kernel;
-        const loom_amdgpu_hal_executable_export_t export_def = {
-            .symbol_name = iree_string_builder_view(&descriptor_symbol_builder),
-            .workgroup_size = hal_kernel->required_workgroup_size,
-            .constant_count = 0,
-            .binding_flags = binding_flags,
-            .binding_count = abi_layout.resource_count,
-        };
-        status = loom_amdgpu_emit_hal_executable(
-            iree_string_builder_view(&target_id_builder), hsaco, &export_def, 1,
-            allocator, out_executable);
+        memset(binding_flags, 0,
+               abi_layout->resource_count * sizeof(*binding_flags));
       }
+    }
+    if (iree_status_is_ok(status)) {
+      const loom_target_hal_kernel_abi_t* hal_kernel =
+          &target->bundle_storage.bundle.export_plan->hal_kernel;
+      const loom_amdgpu_hal_executable_export_t export_def = {
+          .symbol_name = iree_string_builder_view(&descriptor_symbol_builder),
+          .workgroup_size = hal_kernel->required_workgroup_size,
+          .constant_count = 0,
+          .binding_flags = binding_flags,
+          .binding_count = abi_layout->resource_count,
+      };
+      status = loom_amdgpu_emit_hal_executable(
+          iree_string_builder_view(&target_id_builder), hsaco, &export_def, 1,
+          allocator, out_executable);
     }
   }
 

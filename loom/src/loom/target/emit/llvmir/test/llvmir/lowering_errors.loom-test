@@ -58,7 +58,7 @@ func.def public @amdgpu_intrinsic_on_x86() -> (i32) {
 // ====
 // RUN: emit llvmir-body amdgpu-hal
 
-// Device kernel view parameters require an explicit ABI adapter.
+// Device kernel view parameters require explicit resource materialization.
 // ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
 func.def public device @bad_view_dispatch(%view: view<1xf32, #dense>) {
   func.return
@@ -69,9 +69,9 @@ func.def public device @bad_view_dispatch(%view: view<1xf32, #dense>) {
 
 // Unsupported source ops report the op name in the lowering diagnostic.
 // ERROR@+1: LOWERING/001 "UNIMPLEMENTED"
-func.def public @bad() -> (i32) {
-  %poison = scalar.poison : i32
-  func.return %poison : i32
+func.def public @bad(%input: f32) -> (f32) {
+  %root = scalar.sqrtf %input : f32
+  func.return %root : f32
 }
 
 // ====

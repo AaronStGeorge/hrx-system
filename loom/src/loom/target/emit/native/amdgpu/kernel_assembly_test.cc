@@ -157,6 +157,7 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
       const char* function_symbol, const char* body,
       iree_host_size_t expected_materialized_resource_count,
       iree_host_size_t expected_fixed_value_count,
+      loom_amdgpu_hal_kernel_abi_layout_t* out_abi_layout,
       iree_arena_allocator_t* arena,
       loom_low_packetization_t* out_packetization) {
     std::string source = "target.preset @";
@@ -191,6 +192,9 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     ASSERT_EQ(materialization.materialized_resource_count,
               expected_materialized_resource_count);
     ASSERT_TRUE(materialization.inserted_kernarg_segment_ptr_live_in);
+    if (out_abi_layout != nullptr) {
+      *out_abi_layout = materialization.abi_layout;
+    }
 
     const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
     iree_host_size_t fixed_value_count = 0;
@@ -314,21 +318,33 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsHalBufferResourceMetadata) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
-  BuildSidecarsForPreset(
+  loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
+  BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target", "loom_kernel",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
+      "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
+      "  %value = low.const<amdgpu.v_mov_b32> {imm32 = 1} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.sgpr>\n"
+      "  low.op<amdgpu.buffer_store_dword>(%value, %binding, %vaddr, %zero) "
+      "{offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.return\n"
-      "}\n"
-      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n",
-      &sidecar_arena, &packetization);
+      "}\n",
+      1, 1, &abi_layout, &sidecar_arena, &packetization);
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly(&packetization.schedule,
-                                                  &packetization.allocation,
-                                                  &builder, &sidecar_arena));
+  const loom_amdgpu_kernel_assembly_options_t assembly_options = {
+      .abi_layout = &abi_layout,
+  };
+  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_options(
+      &packetization.schedule, &packetization.allocation, &assembly_options,
+      &builder, &sidecar_arena));
   const std::string output(iree_string_builder_view(&builder).data,
                            iree_string_builder_view(&builder).size);
 
@@ -336,7 +352,8 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsHalBufferResourceMetadata) {
   EXPECT_NE(output.find("  .amdhsa_user_sgpr_count 2\n"), std::string::npos);
   EXPECT_NE(output.find("  .amdhsa_user_sgpr_kernarg_segment_ptr 1\n"),
             std::string::npos);
-  EXPECT_NE(output.find("  .amdhsa_next_free_sgpr 2\n"), std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_next_free_sgpr "), std::string::npos);
+  EXPECT_EQ(output.find("  .amdhsa_next_free_sgpr 0\n"), std::string::npos);
   EXPECT_NE(output.find("      .kernarg_segment_size: 8\n"), std::string::npos);
   EXPECT_NE(output.find("      .kernarg_segment_align: 8\n"),
             std::string::npos);
@@ -359,25 +376,24 @@ TEST_F(AmdgpuKernelAssemblyTest,
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
+  loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target", "loom_kernel",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
+      "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %value = low.const<amdgpu.v_mov_b32> {imm32 = 42} : "
       "reg<amdgpu.vgpr>\n"
       "  %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.vgpr>\n"
-      "  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
       "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.sgpr>\n"
       "  low.op<amdgpu.buffer_store_dword>(%value, %binding, %vaddr, %zero) "
       "{offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
       "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.return\n"
-      "}\n"
-      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n",
-      1, 1, &sidecar_arena, &packetization);
+      "}\n",
+      1, 1, &abi_layout, &sidecar_arena, &packetization);
 
   loom_amdgpu_wait_plan_t wait_plan = {};
   IREE_ASSERT_OK(loom_amdgpu_wait_plan_build(&packetization.schedule,
@@ -388,8 +404,12 @@ TEST_F(AmdgpuKernelAssemblyTest,
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_wait_packets(
-      &packetization.schedule, &packetization.allocation, &wait_packets,
+  const loom_amdgpu_kernel_assembly_options_t assembly_options = {
+      .abi_layout = &abi_layout,
+      .wait_packets = &wait_packets,
+  };
+  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_options(
+      &packetization.schedule, &packetization.allocation, &assembly_options,
       &builder, &sidecar_arena));
   const std::string output(iree_string_builder_view(&builder).data,
                            iree_string_builder_view(&builder).size);
@@ -424,17 +444,20 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsB128CopyKernelForGfx11) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
+  loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target", "loom_kernel",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
+      "  %source = low.resource<hal_buffer_resource> {index = 0, semantic_type "
+      "= hal.buffer} : reg<amdgpu.sgpr x4>\n"
+      "  %target = low.resource<hal_buffer_resource> {index = 1, semantic_type "
+      "= hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %scale = low.const<amdgpu.v_mov_b32> {imm32 = 16} : "
       "reg<amdgpu.vgpr>\n"
       "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %scale) : "
       "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-      "  %source = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
-      "  %target = low.resource @binding1 : reg<amdgpu.sgpr x4>\n"
       "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.sgpr>\n"
       "  %loaded = low.op<amdgpu.buffer_load_b128>(%source, %byte_offset, "
@@ -444,14 +467,8 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsB128CopyKernelForGfx11) {
       "%zero) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, "
       "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.return\n"
-      "}\n"
-      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n"
-      "low.abi.resource @binding1 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 1, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n",
-      2, 2, &sidecar_arena, &packetization);
+      "}\n",
+      2, 2, &abi_layout, &sidecar_arena, &packetization);
 
   loom_amdgpu_wait_plan_t wait_plan = {};
   IREE_ASSERT_OK(loom_amdgpu_wait_plan_build(&packetization.schedule,
@@ -463,8 +480,12 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsB128CopyKernelForGfx11) {
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_wait_packets(
-      &packetization.schedule, &packetization.allocation, &wait_packets,
+  const loom_amdgpu_kernel_assembly_options_t assembly_options = {
+      .abi_layout = &abi_layout,
+      .wait_packets = &wait_packets,
+  };
+  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_options(
+      &packetization.schedule, &packetization.allocation, &assembly_options,
       &builder, &sidecar_arena));
   const std::string output(iree_string_builder_view(&builder).data,
                            iree_string_builder_view(&builder).size);
@@ -500,20 +521,24 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsMemoryAluStressKernelForGfx11) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
+  loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target", "loom_kernel",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
+      "  %source = low.resource<hal_buffer_resource> {index = 0, semantic_type "
+      "= hal.buffer} : reg<amdgpu.sgpr x4>\n"
+      "  %wide_target = low.resource<hal_buffer_resource> {index = 1, "
+      "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
+      "  %scalar_target = low.resource<hal_buffer_resource> {index = 2, "
+      "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %zero_v = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.vgpr>\n"
       "  %four = low.const<amdgpu.v_mov_b32> {imm32 = 4} : "
       "reg<amdgpu.vgpr>\n"
       "  %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %four) : "
       "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-      "  %source = low.resource @binding0 : reg<amdgpu.sgpr x4>\n"
-      "  %wide_target = low.resource @binding1 : reg<amdgpu.sgpr x4>\n"
-      "  %scalar_target = low.resource @binding2 : reg<amdgpu.sgpr x4>\n"
       "  %zero_s = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.sgpr>\n"
       "  %wide = low.op<amdgpu.buffer_load_b128>(%source, %zero_v, "
@@ -530,17 +555,8 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsMemoryAluStressKernelForGfx11) {
       "%byte_offset, %zero_s) {offset = 0} : (reg<amdgpu.vgpr>, "
       "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
       "  low.return\n"
-      "}\n"
-      "low.abi.resource @binding0 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 0, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n"
-      "low.abi.resource @binding1 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 1, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n"
-      "low.abi.resource @binding2 {function = @loom_kernel, kind = "
-      "hal_buffer_resource, index = 2, semantic_type = hal.buffer, "
-      "abi_type = reg<amdgpu.sgpr x4>}\n",
-      3, 2, &sidecar_arena, &packetization);
+      "}\n",
+      3, 2, &abi_layout, &sidecar_arena, &packetization);
 
   loom_amdgpu_wait_plan_t wait_plan = {};
   IREE_ASSERT_OK(loom_amdgpu_wait_plan_build(&packetization.schedule,
@@ -552,8 +568,12 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsMemoryAluStressKernelForGfx11) {
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_wait_packets(
-      &packetization.schedule, &packetization.allocation, &wait_packets,
+  const loom_amdgpu_kernel_assembly_options_t assembly_options = {
+      .abi_layout = &abi_layout,
+      .wait_packets = &wait_packets,
+  };
+  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_options(
+      &packetization.schedule, &packetization.allocation, &assembly_options,
       &builder, &sidecar_arena));
   const std::string output(iree_string_builder_view(&builder).data,
                            iree_string_builder_view(&builder).size);

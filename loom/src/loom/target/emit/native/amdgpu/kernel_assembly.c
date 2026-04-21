@@ -61,7 +61,7 @@ static iree_status_t loom_amdgpu_kernel_assembly_append_metadata(
 static iree_status_t loom_amdgpu_kernel_assembly_emit(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
-    const loom_amdgpu_wait_packet_plan_t* wait_packets,
+    const loom_amdgpu_kernel_assembly_options_t* options,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
   if (builder == NULL || scratch_arena == NULL) {
     return iree_make_status(
@@ -69,8 +69,11 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
         "AMDGPU kernel assembly output builder and scratch arena are required");
   }
   loom_amdgpu_kernel_record_t record = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_build(schedule, allocation,
-                                                       &record, scratch_arena));
+  const loom_amdgpu_kernel_record_options_t record_options = {
+      .abi_layout = options ? options->abi_layout : NULL,
+  };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_build(
+      schedule, allocation, &record_options, &record, scratch_arena));
 
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ".text\n"));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -89,6 +92,8 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
       (int)record.symbol.size, record.symbol.data, (int)record.symbol.size,
       record.symbol.data, (int)record.symbol.size, record.symbol.data,
       (int)record.symbol.size, record.symbol.data));
+  const loom_amdgpu_wait_packet_plan_t* wait_packets =
+      options ? options->wait_packets : NULL;
   if (wait_packets != NULL) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_assembly_fragment_with_wait_packets(
         schedule, allocation, wait_packets, builder));
@@ -113,6 +118,19 @@ iree_status_t loom_amdgpu_emit_kernel_assembly(
                                           scratch_arena);
 }
 
+iree_status_t loom_amdgpu_emit_kernel_assembly_with_options(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_amdgpu_kernel_assembly_options_t* options,
+    iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
+  if (options == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU kernel assembly options are required");
+  }
+  return loom_amdgpu_kernel_assembly_emit(schedule, allocation, options,
+                                          builder, scratch_arena);
+}
+
 iree_status_t loom_amdgpu_emit_kernel_assembly_with_wait_packets(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
@@ -122,6 +140,9 @@ iree_status_t loom_amdgpu_emit_kernel_assembly_with_wait_packets(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU kernel assembly wait packets are required");
   }
-  return loom_amdgpu_kernel_assembly_emit(schedule, allocation, wait_packets,
+  const loom_amdgpu_kernel_assembly_options_t options = {
+      .wait_packets = wait_packets,
+  };
+  return loom_amdgpu_kernel_assembly_emit(schedule, allocation, &options,
                                           builder, scratch_arena);
 }

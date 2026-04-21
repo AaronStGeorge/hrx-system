@@ -16,7 +16,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/canonicalize.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -27,7 +27,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/cse.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -38,7 +38,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/dce.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )
@@ -49,7 +49,7 @@ iree_executable_test(
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
   SRC
-    loom::src::loom::tools::loom-check
+    loom::src::loom::tools::loom-check::loom-check-test
   LABELS
     "loom-check"
 )

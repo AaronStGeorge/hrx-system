@@ -1,24 +1,14 @@
 // Generic attr-only module record symbol used by bytecode symbol payload tests.
 test.record @target_snapshot {arch = "gfx1100", lanes = 64}
 
-// Low ABI adapter records carry typed semantic/register mapping payloads.
+// Low function declarations carry their source semantic mapping inline.
 test.record @vm_target
 
-low.func.decl target(@vm_target) @extern_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
-
-low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = mapped, operand_count = 2, result_count = 1}
-
-low.abi.operand @extern_add_i32_lhs {abi_type = reg<vm.i32>, adapter = @extern_add_i32, conversion = scalar_to_register, index = 0, semantic_type = i32}
-
-low.abi.operand @extern_add_i32_rhs {abi_type = reg<vm.i32>, adapter = @extern_add_i32, conversion = scalar_to_register, index = 1, semantic_type = i32}
-
-low.abi.result @extern_add_i32_result {abi_type = reg<vm.i32>, adapter = @extern_add_i32, conversion = register_to_scalar, index = 0, semantic_type = i32}
-
-low.abi.effect @extern_add_i32_call {adapter = @extern_add_i32, kind = call, resource = "vm.import"}
-
-low.abi.clobber @extern_add_i32_state {adapter = @extern_add_i32, resource = "vm.state"}
+func.decl @extern_add(%lhs: i32, %rhs: i32) -> (i32)
 
 func.def @caller(%lhs: i32, %rhs: i32) -> (i32) {
-  %sum = low.invoke @extern_add(%lhs, %rhs) {adapter = @extern_add_i32} : (i32, i32) -> (i32)
+  %sum = low.invoke @extern_add__low(%lhs, %rhs) : (i32, i32) -> (i32)
   func.return %sum : i32
 }
+
+low.func.decl target(@vm_target) @extern_add__low(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)

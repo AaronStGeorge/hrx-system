@@ -616,12 +616,10 @@ TEST_F(LowDescriptorVerifyTest, ValidResourceRegisterClassPasses) {
   std::string source =
       std::string(kVmTargetRecords) +
       "low.func.def target(@vm_target) @resource_user() -> (reg<vm.i32>) {\n"
-      "  %state = low.resource @vm_state : reg<vm.i32>\n"
+      "  %state = low.resource<vm_state> {index = 0, semantic_type = "
+      "vm.state} : reg<vm.i32>\n"
       "  low.return %state : reg<vm.i32>\n"
-      "}\n"
-      "low.abi.resource @vm_state {function = @resource_user, kind = "
-      "vm_state, index = 0, semantic_type = vm.state, abi_type = "
-      "reg<vm.i32>}\n";
+      "}\n";
   loom_module_t* module = ParseSource(source);
   ASSERT_NE(module, nullptr);
 
@@ -640,12 +638,10 @@ TEST_F(LowDescriptorVerifyTest, RejectsResourceRegisterClassMismatch) {
       std::string(kVmTargetRecords) +
       "low.func.def target(@vm_target) @resource_user() -> "
       "(reg<vm.missing>) {\n"
-      "  %state = low.resource @vm_state : reg<vm.missing>\n"
+      "  %state = low.resource<vm_state> {index = 0, semantic_type = "
+      "vm.state} : reg<vm.missing>\n"
       "  low.return %state : reg<vm.missing>\n"
-      "}\n"
-      "low.abi.resource @vm_state {function = @resource_user, kind = "
-      "vm_state, index = 0, semantic_type = vm.state, abi_type = "
-      "reg<vm.missing>}\n";
+      "}\n";
   loom_module_t* module = ParseSource(source);
   ASSERT_NE(module, nullptr);
 
@@ -659,7 +655,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsResourceRegisterClassMismatch) {
             loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 25));
   ASSERT_GE(collector.emissions[0].string_params.size(), 4u);
   EXPECT_EQ(collector.emissions[0].string_params[0], "resource_user");
-  EXPECT_EQ(collector.emissions[0].string_params[1], "vm_state");
+  EXPECT_EQ(collector.emissions[0].string_params[1], "low.resource");
   EXPECT_EQ(collector.emissions[0].string_params[2], "iree.vm.core");
   EXPECT_EQ(collector.emissions[0].string_params[3],
             "register class is not defined by the descriptor set");

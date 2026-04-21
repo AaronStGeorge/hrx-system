@@ -988,15 +988,13 @@ static iree_status_t loom_low_verify_descriptor_find_register_class(
 static iree_status_t loom_low_verify_emit_resource_register_rejected(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     loom_type_t actual_type, iree_string_view_t reason) {
-  const loom_module_t* module = function_state->state->module;
   const loom_low_resolved_target_t* target = function_state->target;
   loom_diagnostic_param_t params[] = {
       loom_param_string(function_state->function_name),
       loom_param_with_field_ref(
-          loom_param_string(loom_low_verify_symbol_name(
-              module, loom_low_resource_resource(op))),
+          loom_param_string(IREE_SV("low.resource")),
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                    loom_low_resource_resource_ATTR_INDEX)),
+                                    loom_low_resource_import_kind_ATTR_INDEX)),
       loom_param_with_field_ref(
           loom_param_type(actual_type),
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, 0)),

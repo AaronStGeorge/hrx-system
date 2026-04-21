@@ -371,7 +371,9 @@ static iree_status_t loom_llvmir_lowering_validate_function_abi(
         state, func.op,
         "HAL kernel profile can only export public device entry points");
   }
-  if (!is_kernel_entry) return iree_ok_status();
+  if (!is_kernel_entry) {
+    return iree_ok_status();
+  }
   if (function_kind != LOOM_LLVMIR_FUNCTION_DEFINITION) {
     return loom_llvmir_lowering_unsupported_op(
         state, func.op, "HAL kernel entry points must be function definitions");
@@ -388,8 +390,8 @@ static iree_status_t loom_llvmir_lowering_validate_function_abi(
     if (loom_type_is_view(arg_type)) {
       return loom_llvmir_lowering_unsupported_op(
           state, func.op,
-          "HAL kernel entry point view parameters need an explicit ABI "
-          "adapter");
+          "HAL kernel entry point view parameters need explicit resource "
+          "materialization");
     }
   }
   return iree_ok_status();

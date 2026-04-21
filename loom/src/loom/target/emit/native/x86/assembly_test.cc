@@ -184,7 +184,6 @@ class X86AssemblyTest : public ::testing::Test {
                                            &lower_options, &lower_result));
     EXPECT_EQ(lower_result.error_count, 0u);
     ASSERT_NE(lower_result.low_func_op, nullptr);
-    ASSERT_NE(lower_result.abi_adapter_op, nullptr);
 
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,

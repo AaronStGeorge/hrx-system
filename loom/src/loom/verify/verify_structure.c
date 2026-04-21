@@ -196,6 +196,65 @@ void loom_verify_op_effective_trait_consistency(
   loom_verify_op_trait_flags_consistency(state, op, vtable, effective_traits);
 }
 
+static iree_string_view_t loom_verify_kind_name(loom_verify_state_t* state,
+                                                loom_op_kind_t kind) {
+  const loom_op_vtable_t* vtable = loom_verify_lookup_vtable(state, kind);
+  return vtable ? loom_op_vtable_name(vtable) : IREE_SV("unknown");
+}
+
+static iree_string_view_t loom_verify_parent_context_name(
+    loom_verify_state_t* state, const loom_op_t* op) {
+  if (!op->parent_op) return IREE_SV("module");
+  return loom_verify_kind_name(state, op->parent_op->kind);
+}
+
+static const loom_op_t* loom_verify_find_ancestor(const loom_op_t* op,
+                                                  loom_op_kind_t kind) {
+  const loom_op_t* parent = op->parent_op;
+  while (parent) {
+    if (parent->kind == kind) return parent;
+    parent = parent->parent_op;
+  }
+  return NULL;
+}
+
+static void loom_verify_emit_placement_diagnostic(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, iree_string_view_t constraint_kind,
+    loom_op_kind_t ancestor_kind, iree_string_view_t actual_ancestor) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_vtable_name(vtable)),
+      loom_param_string(constraint_kind),
+      loom_param_string(loom_verify_kind_name(state, ancestor_kind)),
+      loom_param_string(actual_ancestor),
+  };
+  loom_verify_emit_structured(
+      state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 29), params,
+      IREE_ARRAYSIZE(params));
+}
+
+void loom_verify_op_placement(loom_verify_state_t* state, const loom_op_t* op,
+                              const loom_op_vtable_t* vtable) {
+  const loom_op_placement_descriptor_t* placement = vtable->placement;
+  if (!placement) return;
+
+  for (uint8_t i = 0; i < placement->required_ancestor_count; ++i) {
+    loom_op_kind_t ancestor_kind = placement->required_ancestors[i];
+    if (loom_verify_find_ancestor(op, ancestor_kind)) continue;
+    loom_verify_emit_placement_diagnostic(
+        state, op, vtable, IREE_SV("required"), ancestor_kind,
+        loom_verify_parent_context_name(state, op));
+  }
+  for (uint8_t i = 0; i < placement->forbidden_ancestor_count; ++i) {
+    loom_op_kind_t ancestor_kind = placement->forbidden_ancestors[i];
+    const loom_op_t* ancestor = loom_verify_find_ancestor(op, ancestor_kind);
+    if (!ancestor) continue;
+    loom_verify_emit_placement_diagnostic(
+        state, op, vtable, IREE_SV("forbidden"), ancestor_kind,
+        loom_verify_kind_name(state, ancestor->kind));
+  }
+}
+
 void loom_verify_func_purity_body_effects(loom_verify_state_t* state,
                                           const loom_op_t* op,
                                           const loom_op_vtable_t* vtable) {

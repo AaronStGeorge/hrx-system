@@ -261,14 +261,14 @@ ERR_LOWERING_012 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_013: Low invoke signature count mismatch.
+# ERR_LOWERING_013: Low function call signature count mismatch.
 ERR_LOWERING_013 = ErrorDef(
     domain=ErrorDomain.LOWERING,
     code=13,
     severity=Severity.ERROR,
-    summary="Low invoke signature count mismatch.",
+    summary="Low function call signature count mismatch.",
     message=(
-        "low.invoke callee '@{callee_name}' {field_kind} count is "
+        "low function call callee '@{callee_name}' {field_kind} count is "
         "{actual_count}, expected {expected_count}"
     ),
     params=(
@@ -278,19 +278,21 @@ ERR_LOWERING_013 = ErrorDef(
         ErrorParam("expected_count", ParamKind.U32),
     ),
     fix_hint=(
-        "Match the low.invoke {field_kind} list to the callee low-function signature"
+        "Match the low function call {field_kind} list to the callee "
+        "low-function signature"
     ),
 )
 
-# ERR_LOWERING_014: Low invoke signature type mismatch.
+# ERR_LOWERING_014: Low function call signature type mismatch.
 ERR_LOWERING_014 = ErrorDef(
     domain=ErrorDomain.LOWERING,
     code=14,
     severity=Severity.ERROR,
-    summary="Low invoke signature type mismatch.",
+    summary="Low function call signature type mismatch.",
     message=(
-        "low.invoke callee '@{callee_name}' {field_kind} {field_index} has "
-        "type {actual_type}, expected callee {callee_field_kind} type "
+        "low function call callee '@{callee_name}' {field_kind} "
+        "{field_index} has type {actual_type}, expected callee "
+        "{callee_field_kind} type "
         "{expected_type}"
     ),
     params=(
@@ -302,183 +304,19 @@ ERR_LOWERING_014 = ErrorDef(
         ErrorParam("expected_type", ParamKind.TYPE),
     ),
     fix_hint=(
-        "Match the low.invoke {field_kind} type to the callee low-function signature"
+        "Match the low function call {field_kind} type to the callee "
+        "low-function signature"
     ),
 )
 
-# ERR_LOWERING_015: Low invoke ABI adapter callee mismatch.
-ERR_LOWERING_015 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=15,
-    severity=Severity.ERROR,
-    summary="Low invoke ABI adapter callee mismatch.",
-    message=(
-        "low.invoke callee '@{callee_name}' uses ABI adapter "
-        "'@{adapter_name}' bound to callee '@{adapter_callee_name}'"
-    ),
-    params=(
-        ErrorParam("callee_name", ParamKind.STRING),
-        ErrorParam("adapter_name", ParamKind.STRING),
-        ErrorParam("adapter_callee_name", ParamKind.STRING),
-    ),
-    fix_hint="Use an ABI adapter bound to the invoked low function",
-)
-
-# ERR_LOWERING_016: Low invoke ABI adapter count mismatch.
-ERR_LOWERING_016 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=16,
-    severity=Severity.ERROR,
-    summary="Low invoke ABI adapter count mismatch.",
-    message=(
-        "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' "
-        "{field_kind} count is {actual_count}, expected {expected_count} "
-        "for {conversion_rule} conversion"
-    ),
-    params=(
-        ErrorParam("callee_name", ParamKind.STRING),
-        ErrorParam("adapter_name", ParamKind.STRING),
-        ErrorParam("field_kind", ParamKind.STRING),
-        ErrorParam("actual_count", ParamKind.I64),
-        ErrorParam("expected_count", ParamKind.I64),
-        ErrorParam("conversion_rule", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Match the invoke, adapter record, and callee low-function signature arity"
-    ),
-)
-
-# ERR_LOWERING_017: Low invoke ABI adapter conversion type mismatch.
-ERR_LOWERING_017 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=17,
-    severity=Severity.ERROR,
-    summary="Low invoke ABI adapter conversion type mismatch.",
-    message=(
-        "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' "
-        "{conversion_rule} conversion for {field_kind} {field_index} has "
-        "type {actual_type}, expected callee {callee_field_kind} type "
-        "{expected_type}"
-    ),
-    params=(
-        ErrorParam("callee_name", ParamKind.STRING),
-        ErrorParam("adapter_name", ParamKind.STRING),
-        ErrorParam("conversion_rule", ParamKind.STRING),
-        ErrorParam("field_kind", ParamKind.STRING),
-        ErrorParam("field_index", ParamKind.U32),
-        ErrorParam("actual_type", ParamKind.TYPE),
-        ErrorParam("callee_field_kind", ParamKind.STRING),
-        ErrorParam("expected_type", ParamKind.TYPE),
-    ),
-    fix_hint=(
-        "Choose an ABI adapter conversion that accepts the semantic value type "
-        "or materialize values matching the callee register ABI"
-    ),
-)
-
-# ERR_LOWERING_018: Low ABI adapter mapping entry is invalid.
-ERR_LOWERING_018 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=18,
-    severity=Severity.ERROR,
-    summary="Low ABI adapter mapping entry is invalid.",
-    message=(
-        "low ABI adapter '@{adapter_name}' {field_kind} entry "
-        "'@{entry_name}' at index {field_index} is invalid: {reason}"
-    ),
-    params=(
-        ErrorParam("adapter_name", ParamKind.STRING),
-        ErrorParam("entry_name", ParamKind.STRING),
-        ErrorParam("field_kind", ParamKind.STRING),
-        ErrorParam("field_index", ParamKind.I64),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Make each mapped adapter operand/result index appear exactly once, "
-        "within the adapter arity, with a conversion valid for that slot kind"
-    ),
-)
-
-# ERR_LOWERING_019: Low ABI adapter mapping type mismatch.
-ERR_LOWERING_019 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=19,
-    severity=Severity.ERROR,
-    summary="Low ABI adapter mapping type mismatch.",
-    message=(
-        "low ABI adapter '@{adapter_name}' entry '@{entry_name}' "
-        "{conversion_rule} conversion for {field_kind} {field_index} has "
-        "type {actual_type}, expected {expected_field_kind} type "
-        "{expected_type}"
-    ),
-    params=(
-        ErrorParam("adapter_name", ParamKind.STRING),
-        ErrorParam("entry_name", ParamKind.STRING),
-        ErrorParam("conversion_rule", ParamKind.STRING),
-        ErrorParam("field_kind", ParamKind.STRING),
-        ErrorParam("field_index", ParamKind.U32),
-        ErrorParam("actual_type", ParamKind.TYPE),
-        ErrorParam("expected_field_kind", ParamKind.STRING),
-        ErrorParam("expected_type", ParamKind.TYPE),
-    ),
-    fix_hint=(
-        "Match mapped adapter semantic types to the invoke boundary and ABI "
-        "types to the callee low-function register signature"
-    ),
-)
-
-# ERR_LOWERING_020: Low invoke caller context is invalid.
-ERR_LOWERING_020 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=20,
-    severity=Severity.ERROR,
-    summary="Low invoke caller context is invalid.",
-    message=(
-        "low.invoke callee '@{callee_name}' in {caller_context} context is "
-        "invalid: {reason}"
-    ),
-    params=(
-        ErrorParam("callee_name", ParamKind.STRING),
-        ErrorParam("caller_context", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Invoke low functions from semantic function bodies through an explicit "
-        "ABI adapter, or direct-call only same-target low functions from a low "
-        "function body"
-    ),
-)
-
-# ERR_LOWERING_021: Low ABI adapter metadata record is invalid.
-ERR_LOWERING_021 = ErrorDef(
-    domain=ErrorDomain.LOWERING,
-    code=21,
-    severity=Severity.ERROR,
-    summary="Low ABI adapter metadata record is invalid.",
-    message=(
-        "low ABI adapter '@{adapter_name}' {record_kind} metadata "
-        "'@{record_name}' is invalid: {reason}"
-    ),
-    params=(
-        ErrorParam("adapter_name", ParamKind.STRING),
-        ErrorParam("record_kind", ParamKind.STRING),
-        ErrorParam("record_name", ParamKind.STRING),
-        ErrorParam("reason", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Attach effect and clobber records to a low ABI adapter and use "
-        "namespace-qualified resource keys such as 'vm.state' or 'amdgpu.vcc'"
-    ),
-)
-
-# ERR_LOWERING_022: Low invoke purity conflicts with ABI effects.
+# ERR_LOWERING_022: Low call purity conflicts with callee effects.
 ERR_LOWERING_022 = ErrorDef(
     domain=ErrorDomain.LOWERING,
     code=22,
     severity=Severity.ERROR,
-    summary="Low invoke purity conflicts with ABI effects.",
+    summary="Low call purity conflicts with callee effects.",
     message=(
-        "low.invoke pure callee '@{callee_name}' through '{boundary_name}' "
+        "low pure call callee '@{callee_name}' through '{boundary_name}' "
         "is invalid: {reason} ({effect_count} effect record(s), "
         "{clobber_count} clobber record(s))"
     ),
@@ -573,13 +411,6 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_012,
     ERR_LOWERING_013,
     ERR_LOWERING_014,
-    ERR_LOWERING_015,
-    ERR_LOWERING_016,
-    ERR_LOWERING_017,
-    ERR_LOWERING_018,
-    ERR_LOWERING_019,
-    ERR_LOWERING_020,
-    ERR_LOWERING_021,
     ERR_LOWERING_022,
     ERR_LOWERING_023,
     ERR_LOWERING_024,

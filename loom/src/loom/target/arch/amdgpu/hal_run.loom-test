@@ -7,15 +7,13 @@ target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
 
 low.func.def target(@gfx_target) @loom_kernel() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %binding = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %four = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
   %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %four) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %binding = low.resource @binding0 : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.buffer_store_dword>(%tid, %binding, %byte_offset, %zero) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
 }
-
-low.abi.resource @binding0 {function = @loom_kernel, kind = hal_buffer_resource, index = 0, semantic_type = hal.buffer, abi_type = reg<amdgpu.sgpr x4>}
 // ----
 [SUCCESS] all HAL bindings matched their expected values.
 
@@ -300,12 +298,12 @@ target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
 
 low.func.def target(@gfx_target) @loom_kernel() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %wide_target = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %scalar_target = low.resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero_v = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
   %four = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
   %byte_offset = low.op<amdgpu.v_mul_lo_u32>(%tid, %four) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %source = low.resource @binding0 : reg<amdgpu.sgpr x4>
-  %wide_target = low.resource @binding1 : reg<amdgpu.sgpr x4>
-  %scalar_target = low.resource @binding2 : reg<amdgpu.sgpr x4>
   %zero_s = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %wide = low.op<amdgpu.buffer_load_b128>(%source, %zero_v, %zero_s) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>
   %seven = low.const<amdgpu.v_mov_b32> {imm32 = 7} : reg<amdgpu.vgpr>
@@ -314,10 +312,6 @@ low.func.def target(@gfx_target) @loom_kernel() {
   low.op<amdgpu.buffer_store_dword>(%sum, %scalar_target, %byte_offset, %zero_s) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
 }
-
-low.abi.resource @binding0 {function = @loom_kernel, kind = hal_buffer_resource, index = 0, semantic_type = hal.buffer, abi_type = reg<amdgpu.sgpr x4>}
-low.abi.resource @binding1 {function = @loom_kernel, kind = hal_buffer_resource, index = 1, semantic_type = hal.buffer, abi_type = reg<amdgpu.sgpr x4>}
-low.abi.resource @binding2 {function = @loom_kernel, kind = hal_buffer_resource, index = 2, semantic_type = hal.buffer, abi_type = reg<amdgpu.sgpr x4>}
 // ----
 [SUCCESS] all HAL bindings matched their expected values.
 

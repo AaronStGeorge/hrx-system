@@ -130,8 +130,10 @@ __all__ = [
     "REFINABLE_RESULT_TYPE_REFS",
     # Trait constructors.
     "AllTypesMatch",
+    "HasAncestor",
     "HasParent",
     "ImplicitTerminator",
+    "NoAncestor",
     # Memory effects.
     "EffectKind",
     "Effect",
@@ -821,9 +823,19 @@ def AllTypesMatch(*fields: str) -> Trait:
     return Trait("AllTypesMatch", *fields)
 
 
+def HasAncestor(op_name: str) -> Trait:
+    """This op must be nested under the named op at any depth."""
+    return Trait("HasAncestor", op_name)
+
+
 def HasParent(op_name: str) -> Trait:
     """This op must be directly nested inside the named op."""
     return Trait("HasParent", op_name)
+
+
+def NoAncestor(op_name: str) -> Trait:
+    """This op must not be nested under the named op at any depth."""
+    return Trait("NoAncestor", op_name)
 
 
 def ImplicitTerminator(op_name: str) -> Trait:

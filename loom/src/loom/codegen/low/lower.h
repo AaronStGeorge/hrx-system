@@ -59,7 +59,7 @@ typedef struct loom_low_lower_map_value_callback_t {
 typedef enum loom_low_lower_abi_argument_kind_e {
   // Source argument is passed as a low function block argument.
   LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT = 0,
-  // Source argument is imported through a low.abi.resource record.
+  // Source argument is imported through a function-local low.resource op.
   LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE = 1,
 } loom_low_lower_abi_argument_kind_t;
 
@@ -68,11 +68,11 @@ typedef struct loom_low_lower_abi_argument_t {
   loom_low_lower_abi_argument_kind_t kind;
   // Register type used by the low argument or imported low.resource result.
   loom_type_t abi_type;
-  // Resource kind used when |kind| is RESOURCE.
-  loom_low_abi_resource_kind_t resource_kind;
+  // Resource import kind used when |kind| is RESOURCE.
+  loom_low_resource_import_kind_t resource_import_kind;
   // Dense target ABI resource index used when |kind| is RESOURCE.
   int64_t resource_index;
-  // Semantic ABI type recorded on low.abi.resource. None defaults to the source
+  // Semantic source type recorded on low.resource. None defaults to the source
   // argument type.
   loom_type_t resource_semantic_type;
 } loom_low_lower_abi_argument_t;
@@ -220,10 +220,6 @@ typedef struct loom_low_lower_result_t {
   loom_op_t* low_func_op;
   // Module-local symbol reference for |low_func_op|.
   loom_symbol_ref_t low_func_ref;
-  // Emitted mapped low.abi.adapter op for semantic callers, or NULL on failure.
-  loom_op_t* abi_adapter_op;
-  // Module-local symbol reference for |abi_adapter_op|.
-  loom_symbol_ref_t abi_adapter_ref;
 } loom_low_lower_result_t;
 
 // Lowers one func.def-like source function into a sibling low.func.def.

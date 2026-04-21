@@ -18,6 +18,7 @@
 #include "iree/io/stream.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule.h"
+#include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
 
 #ifdef __cplusplus
@@ -38,6 +39,8 @@ typedef struct loom_amdgpu_kernel_hsaco_summary_t {
 } loom_amdgpu_kernel_hsaco_summary_t;
 
 typedef struct loom_amdgpu_kernel_hsaco_options_t {
+  // Optional ABI layout captured before target resource materialization.
+  const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout;
   // Planned wait packets inserted into the native text stream.
   const loom_amdgpu_wait_packet_plan_t* wait_packets;
   // Optional target-owned emission summary populated after successful emission.

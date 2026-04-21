@@ -774,6 +774,18 @@ typedef struct loom_region_descriptor_t {
 static_assert(sizeof(loom_region_descriptor_t) == 6,
               "loom_region_descriptor_t must be 6 bytes");
 
+// Generated structural placement metadata for an op kind.
+typedef struct loom_op_placement_descriptor_t {
+  // Op kinds that must appear somewhere in the parent-op chain.
+  const loom_op_kind_t* required_ancestors;
+  // Op kinds that must not appear anywhere in the parent-op chain.
+  const loom_op_kind_t* forbidden_ancestors;
+  // Number of entries in |required_ancestors|.
+  uint8_t required_ancestor_count;
+  // Number of entries in |forbidden_ancestors|.
+  uint8_t forbidden_ancestor_count;
+} loom_op_placement_descriptor_t;
+
 // Returns the descriptor for an actual region slot. For ops with a trailing
 // variadic region field, fixed slots use their exact descriptor and every
 // variadic slot reuses the final descriptor entry.

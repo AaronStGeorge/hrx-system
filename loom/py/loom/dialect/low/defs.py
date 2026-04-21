@@ -39,6 +39,7 @@ from loom.assembly import (
     ResultTypeList,
     Scope,
     SymbolRef,
+    TemplateParam,
     TypeOf,
     TypesOf,
     kw,
@@ -61,6 +62,8 @@ from loom.dsl import (
     EnumCase,
     EnumDef,
     FuncLikeInterface,
+    HasAncestor,
+    NoAncestor,
     Op,
     Operand,
     RegionDef,
@@ -88,69 +91,8 @@ low_ops = Dialect(
 # Shared enums
 # ============================================================================
 
-LowAbiConversion = EnumDef(
-    "LowAbiConversion",
-    [
-        EnumCase(
-            "direct",
-            0,
-            doc="Invoke operands/results are already the callee register ABI types.",
-        ),
-        EnumCase(
-            "mapped",
-            1,
-            doc="Adapter slot records describe semantic and register ABI type crossings.",
-        ),
-    ],
-    doc="Semantic-to-low ABI conversion rule used by a low ABI adapter record.",
-)
-
-LowAbiValueConversion = EnumDef(
-    "LowAbiValueConversion",
-    [
-        EnumCase(
-            "direct",
-            0,
-            doc="Semantic and ABI slot types are identical.",
-        ),
-        EnumCase(
-            "scalar_to_register",
-            1,
-            doc="A semantic scalar is materialized into a callee register ABI slot.",
-        ),
-        EnumCase(
-            "register_to_scalar",
-            2,
-            doc="A callee register ABI slot is unpacked into a semantic scalar.",
-        ),
-        EnumCase(
-            "value_to_register",
-            3,
-            doc="A non-register semantic value is materialized into a callee register ABI slot.",
-        ),
-        EnumCase(
-            "register_to_value",
-            4,
-            doc="A callee register ABI slot is unpacked into a non-register semantic value.",
-        ),
-    ],
-    doc="Per-slot conversion rule used by low ABI adapter mapping records.",
-)
-
-LowAbiEffectKind = EnumDef(
-    "LowAbiEffectKind",
-    [
-        EnumCase("read", 1, doc="Reads from the named ABI resource."),
-        EnumCase("write", 2, doc="Writes to the named ABI resource."),
-        EnumCase("readwrite", 3, doc="Reads and writes the named ABI resource."),
-        EnumCase("call", 4, doc="Performs an externally observable call."),
-        EnumCase("unknown", 5, doc="Has effects the current vocabulary cannot refine."),
-    ],
-    doc="Effect summary row attached to a low ABI adapter.",
-)
-
-LowAbiResourceKind = EnumDef(
-    "LowAbiResourceKind",
+LowResourceImportKind = EnumDef(
+    "LowResourceImportKind",
     [
         EnumCase(
             "native_pointer",
@@ -173,7 +115,7 @@ LowAbiResourceKind = EnumDef(
             doc="IREE HAL dispatch binding buffer resource descriptor materialized as a register value.",
         ),
     ],
-    doc="Target ABI resource imported into a low function body.",
+    doc="Target-provided ABI resource imported into a low function body.",
 )
 
 LowAllocationMode = EnumDef(
@@ -242,7 +184,7 @@ LowSlotSpace = EnumDef(
 # Shared fragments
 # ============================================================================
 
-_FUNC_MODIFIER_ATTRS = [
+_FUNC_COMMON_ATTRS = [
     AttrDef("callee", "symbol"),
     AttrDef(
         "target",
@@ -254,9 +196,12 @@ _FUNC_MODIFIER_ATTRS = [
     AttrDef("purity", "enum", enum_def=Purity, optional=True),
     AttrDef("allocation", "enum", enum_def=LowAllocationMode, optional=True),
     AttrDef("schedule", "enum", enum_def=LowScheduleMode, optional=True),
+    AttrDef("predicates", "predicate_list", optional=True),
+]
+
+_FUNC_DECL_IMPORT_ATTRS = [
     AttrDef("import_kind", "enum", enum_def=LowCodeImportKind, optional=True),
     AttrDef("code_symbol", "string", optional=True),
-    AttrDef("predicates", "predicate_list", optional=True),
 ]
 
 _FUNC_MODIFIER_FORMAT: list[FormatElement] = [
@@ -332,7 +277,7 @@ low_func_def = Op(
     group=low_ops,
     doc="Target-bound low function definition with register-typed signature values.",
     traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
-    attrs=list(_FUNC_MODIFIER_ATTRS),
+    attrs=list(_FUNC_COMMON_ATTRS),
     symbol_def=SymbolDefinition(
         field="callee",
         name="function",
@@ -370,7 +315,7 @@ low_func_decl = Op(
     doc="Target-bound low function declaration with register-typed signature values.",
     traits=[SYMBOL_DEFINE],
     operands=[Operand("args", REGISTER, variadic=True)],
-    attrs=list(_FUNC_MODIFIER_ATTRS),
+    attrs=[*_FUNC_COMMON_ATTRS, *_FUNC_DECL_IMPORT_ATTRS],
     symbol_def=SymbolDefinition(
         field="callee",
         name="function",
@@ -411,6 +356,49 @@ low_return = Op(
     examples=[
         "low.return",
         "low.return %value : reg<amdgpu.vgpr x1>",
+    ],
+)
+
+# ============================================================================
+# low.func.call — direct low function call
+# ============================================================================
+
+low_func_call = Op(
+    "low.func.call",
+    group=low_ops,
+    doc="Direct call from one low function body to another same-target low function.",
+    operands=[Operand("operands", REGISTER, variadic=True)],
+    attrs=[
+        AttrDef(
+            "callee",
+            "symbol",
+            symbol_ref=SymbolReference("function", ["func_like"]),
+        ),
+        AttrDef("purity", "enum", enum_def=Purity, optional=True),
+    ],
+    results=[Result("results", REGISTER, variadic=True)],
+    traits=[UNKNOWN_EFFECTS, HasAncestor("low.func.def")],
+    effective_traits="loom_low_func_call_effective_traits",
+    verify="loom_low_func_call_verify",
+    format=[
+        OptionalGroup([Attr("purity")], anchor="purity"),
+        SymbolRef("callee"),
+        GLUE,
+        LPAREN,
+        Refs("operands"),
+        RPAREN,
+        COLON,
+        LPAREN,
+        TypesOf("operands"),
+        RPAREN,
+        OptionalGroup(
+            [ARROW, ResultTypeList("results")],
+            anchor="results",
+        ),
+    ],
+    examples=[
+        "%result = low.func.call @extern_add(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)",
+        "%result = low.func.call pure @extern_add(%lhs) : (reg<vm.i32>) -> (reg<vm.i32>)",
     ],
 )
 
@@ -788,262 +776,41 @@ low_frame_index = Op(
 )
 
 # ============================================================================
-# low.abi.resource — ABI resource binding record
-# ============================================================================
-
-low_abi_resource = Op(
-    "low.abi.resource",
-    group=low_ops,
-    doc="Function-owned target ABI resource imported by low.resource.",
-    traits=[SYMBOL_DEFINE],
-    symbol_def=SymbolDefinition(
-        field="symbol",
-        name="low ABI resource",
-        interfaces=["record"],
-        bytecode_kind="LOOM_SYMBOL_RECORD",
-    ),
-    attrs=[
-        AttrDef("symbol", "symbol"),
-        AttrDef(
-            "function",
-            "symbol",
-            symbol_ref=SymbolReference("function", ["func_like"]),
-        ),
-        AttrDef("kind", ATTR_TYPE_ENUM, enum_def=LowAbiResourceKind),
-        AttrDef("index", ATTR_TYPE_I64),
-        AttrDef("semantic_type", ATTR_TYPE_TYPE),
-        AttrDef("abi_type", ATTR_TYPE_TYPE),
-    ],
-    verify="loom_low_abi_resource_verify",
-    format=[
-        SymbolRef("symbol"),
-        AttrDict(),
-    ],
-    examples=[
-        "low.abi.resource @vm_state {function = @vm_func, kind = vm_state, index = 0, semantic_type = i64, abi_type = reg<vm.i64>}",
-        "low.abi.resource @binding0 {function = @kernel, kind = hal_buffer_resource, index = 0, semantic_type = hal.buffer, abi_type = reg<amdgpu.sgpr x4>}",
-    ],
-)
-
-# ============================================================================
-# low.resource — import ABI resource into a register value
+# low.resource — import a function-local target resource into a register value
 # ============================================================================
 
 low_resource = Op(
     "low.resource",
     group=low_ops,
-    doc="Import a function-owned target ABI resource into a low register value.",
+    doc="Import a function-local target resource into a low register value.",
     attrs=[
-        AttrDef(
-            "resource",
-            "symbol",
-            symbol_ref=SymbolReference("low ABI resource", ["record"]),
-        ),
+        AttrDef("import_kind", ATTR_TYPE_ENUM, enum_def=LowResourceImportKind),
+        AttrDef("index", ATTR_TYPE_I64),
+        AttrDef("semantic_type", ATTR_TYPE_TYPE),
     ],
     results=[Result("result", REGISTER)],
     traits=[PURE],
     verify="loom_low_resource_verify",
     format=[
-        SymbolRef("resource"),
+        TemplateParam("import_kind"),
+        AttrDict(),
         COLON,
         ResultType("result"),
     ],
     examples=[
-        "%state = low.resource @vm_state : reg<vm.i64>",
-        "%binding = low.resource @binding0 : reg<amdgpu.sgpr x4>",
+        "%state = low.resource<vm_state> {index = 0, semantic_type = i64} : reg<vm.i64>",
+        "%binding = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>",
     ],
 )
 
 # ============================================================================
-# low.abi.adapter — explicit semantic-to-low ABI adapter record
-# ============================================================================
-
-low_abi_adapter = Op(
-    "low.abi.adapter",
-    group=low_ops,
-    doc=("Explicit adapter record for calls crossing from semantic Loom values into a low function register ABI."),
-    traits=[SYMBOL_DEFINE],
-    symbol_def=SymbolDefinition(
-        field="symbol",
-        name="low ABI adapter",
-        interfaces=["record"],
-        bytecode_kind="LOOM_SYMBOL_RECORD",
-    ),
-    attrs=[
-        AttrDef("symbol", "symbol"),
-        AttrDef(
-            "callee",
-            "symbol",
-            symbol_ref=SymbolReference("function", ["func_like"]),
-        ),
-        AttrDef("conversion", ATTR_TYPE_ENUM, enum_def=LowAbiConversion),
-        AttrDef("operand_count", ATTR_TYPE_I64),
-        AttrDef("result_count", ATTR_TYPE_I64),
-    ],
-    verify="loom_low_abi_adapter_verify",
-    format=[
-        SymbolRef("symbol"),
-        AttrDict(),
-    ],
-    examples=[
-        "low.abi.adapter @extern_add_direct {callee = @extern_add, conversion = direct, operand_count = 2, result_count = 1}",
-        "low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = mapped, operand_count = 2, result_count = 1}",
-    ],
-)
-
-# ============================================================================
-# low.abi.operand — semantic-to-register ABI operand mapping
-# ============================================================================
-
-low_abi_operand = Op(
-    "low.abi.operand",
-    group=low_ops,
-    doc=("Mapped low ABI adapter operand slot from semantic value type to callee register ABI type."),
-    traits=[SYMBOL_DEFINE],
-    symbol_def=SymbolDefinition(
-        field="symbol",
-        name="low ABI operand mapping",
-        interfaces=["record"],
-        bytecode_kind="LOOM_SYMBOL_RECORD",
-    ),
-    attrs=[
-        AttrDef("symbol", "symbol"),
-        AttrDef(
-            "adapter",
-            "symbol",
-            symbol_ref=SymbolReference("low ABI adapter", ["record"]),
-        ),
-        AttrDef("index", ATTR_TYPE_I64),
-        AttrDef("conversion", ATTR_TYPE_ENUM, enum_def=LowAbiValueConversion),
-        AttrDef("semantic_type", ATTR_TYPE_TYPE),
-        AttrDef("abi_type", ATTR_TYPE_TYPE),
-    ],
-    verify="loom_low_abi_operand_verify",
-    format=[
-        SymbolRef("symbol"),
-        AttrDict(),
-    ],
-    examples=[
-        "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index = 0, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<vm.i32>}",
-        "low.abi.operand @extern_add_v4_lhs {adapter = @extern_add_v4, index = 0, conversion = value_to_register, semantic_type = vector<4xi32>, abi_type = reg<avx512.zmm>}",
-    ],
-)
-
-# ============================================================================
-# low.abi.result — register-to-semantic ABI result mapping
-# ============================================================================
-
-low_abi_result = Op(
-    "low.abi.result",
-    group=low_ops,
-    doc=("Mapped low ABI adapter result slot from callee register ABI type to semantic value type."),
-    traits=[SYMBOL_DEFINE],
-    symbol_def=SymbolDefinition(
-        field="symbol",
-        name="low ABI result mapping",
-        interfaces=["record"],
-        bytecode_kind="LOOM_SYMBOL_RECORD",
-    ),
-    attrs=[
-        AttrDef("symbol", "symbol"),
-        AttrDef(
-            "adapter",
-            "symbol",
-            symbol_ref=SymbolReference("low ABI adapter", ["record"]),
-        ),
-        AttrDef("index", ATTR_TYPE_I64),
-        AttrDef("conversion", ATTR_TYPE_ENUM, enum_def=LowAbiValueConversion),
-        AttrDef("semantic_type", ATTR_TYPE_TYPE),
-        AttrDef("abi_type", ATTR_TYPE_TYPE),
-    ],
-    verify="loom_low_abi_result_verify",
-    format=[
-        SymbolRef("symbol"),
-        AttrDict(),
-    ],
-    examples=[
-        "low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, index = 0, conversion = register_to_scalar, semantic_type = i32, abi_type = reg<vm.i32>}",
-        "low.abi.result @extern_add_v4_result {adapter = @extern_add_v4, index = 0, conversion = register_to_value, semantic_type = vector<4xi32>, abi_type = reg<avx512.zmm>}",
-    ],
-)
-
-# ============================================================================
-# low.abi.effect — adapter-visible resource effect
-# ============================================================================
-
-low_abi_effect = Op(
-    "low.abi.effect",
-    group=low_ops,
-    doc=("Resource effect exposed by a low ABI adapter to semantic callers."),
-    traits=[SYMBOL_DEFINE],
-    symbol_def=SymbolDefinition(
-        field="symbol",
-        name="low ABI effect",
-        interfaces=["record"],
-        bytecode_kind="LOOM_SYMBOL_RECORD",
-    ),
-    attrs=[
-        AttrDef("symbol", "symbol"),
-        AttrDef(
-            "adapter",
-            "symbol",
-            symbol_ref=SymbolReference("low ABI adapter", ["record"]),
-        ),
-        AttrDef("kind", ATTR_TYPE_ENUM, enum_def=LowAbiEffectKind),
-        AttrDef("resource", "string", optional=True),
-    ],
-    verify="loom_low_abi_effect_verify",
-    format=[
-        SymbolRef("symbol"),
-        AttrDict(),
-    ],
-    examples=[
-        'low.abi.effect @extern_add_call {adapter = @extern_add_i32, kind = call, resource = "vm.import"}',
-    ],
-)
-
-# ============================================================================
-# low.abi.clobber — adapter-visible clobbered resource
-# ============================================================================
-
-low_abi_clobber = Op(
-    "low.abi.clobber",
-    group=low_ops,
-    doc=("Resource or register class clobbered by a low ABI adapter."),
-    traits=[SYMBOL_DEFINE],
-    symbol_def=SymbolDefinition(
-        field="symbol",
-        name="low ABI clobber",
-        interfaces=["record"],
-        bytecode_kind="LOOM_SYMBOL_RECORD",
-    ),
-    attrs=[
-        AttrDef("symbol", "symbol"),
-        AttrDef(
-            "adapter",
-            "symbol",
-            symbol_ref=SymbolReference("low ABI adapter", ["record"]),
-        ),
-        AttrDef("resource", "string"),
-    ],
-    verify="loom_low_abi_clobber_verify",
-    format=[
-        SymbolRef("symbol"),
-        AttrDict(),
-    ],
-    examples=[
-        'low.abi.clobber @extern_add_vm_state {adapter = @extern_add_i32, resource = "vm.state"}',
-    ],
-)
-
-# ============================================================================
-# low.invoke — call or interop edge to a low function symbol
+# low.invoke — semantic interop edge to an explicit low function symbol
 # ============================================================================
 
 low_invoke = Op(
     "low.invoke",
     group=low_ops,
-    doc="Call or interop edge to a low function symbol.",
+    doc="Invoke an explicitly selected translated low function from non-low IR.",
     operands=[Operand("operands", ANY, variadic=True)],
     attrs=[
         AttrDef(
@@ -1051,16 +818,10 @@ low_invoke = Op(
             "symbol",
             symbol_ref=SymbolReference("function", ["func_like"]),
         ),
-        AttrDef(
-            "adapter",
-            "symbol",
-            optional=True,
-            symbol_ref=SymbolReference("low ABI adapter", ["record"]),
-        ),
         AttrDef("purity", "enum", enum_def=Purity, optional=True),
     ],
     results=[Result("results", ANY, variadic=True)],
-    traits=[UNKNOWN_EFFECTS],
+    traits=[UNKNOWN_EFFECTS, NoAncestor("low.func.def")],
     effective_traits="loom_low_invoke_effective_traits",
     verify="loom_low_invoke_verify",
     format=[
@@ -1081,9 +842,8 @@ low_invoke = Op(
         ),
     ],
     examples=[
-        "%result = low.invoke @extern_add(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)",
-        "%result = low.invoke @extern_add(%lhs, %rhs) {adapter = @extern_add_direct} : (i32, i32) -> (i32)",
-        "%result = low.invoke pure @extern_add(%lhs, %rhs) {adapter = @extern_add_i32} : (i32, i32) -> (i32)",
+        "%result = low.invoke @extern_add(%lhs, %rhs) : (i32, i32) -> (i32)",
+        "%result = low.invoke pure @extern_add(%lhs, %rhs) : (i32, i32) -> (i32)",
     ],
 )
 
@@ -1091,17 +851,13 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_func_def,
     low_func_decl,
     low_return,
+    low_func_call,
     low_op,
     low_const,
     low_copy,
     low_slice,
     low_concat,
     low_invoke,
-    low_abi_adapter,
-    low_abi_operand,
-    low_abi_result,
-    low_abi_effect,
-    low_abi_clobber,
     low_slot,
     low_spill,
     low_reload,
@@ -1109,6 +865,5 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_br,
     low_cond_br,
     low_resource,
-    low_abi_resource,
     low_live_in,
 )

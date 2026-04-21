@@ -897,8 +897,8 @@ static iree_status_t loom_llvmir_target_legality_verify_function_abi(
     if (loom_type_is_view(arg_type)) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, func.op,
-          IREE_SV("HAL kernel entry point view parameters need an explicit ABI "
-                  "adapter"),
+          IREE_SV("HAL kernel entry point view parameters need explicit "
+                  "resource materialization"),
           iree_string_view_empty());
     }
   }

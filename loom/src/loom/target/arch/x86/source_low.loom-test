@@ -13,14 +13,6 @@ low.func.def target(@x86_target) @x86_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x
   low.return %diff : reg<x86.zmm>
 }
 
-low.abi.adapter @x86_arith__low__abi {callee = @x86_arith__low, conversion = mapped, operand_count = 2, result_count = 1}
-
-low.abi.operand @x86_arith__low__abi_arg0 {abi_type = reg<x86.zmm>, adapter = @x86_arith__low__abi, conversion = value_to_register, index = 0, semantic_type = vector<16xi32>}
-
-low.abi.operand @x86_arith__low__abi_arg1 {abi_type = reg<x86.zmm>, adapter = @x86_arith__low__abi, conversion = value_to_register, index = 1, semantic_type = vector<16xi32>}
-
-low.abi.result @x86_arith__low__abi_result0 {abi_type = reg<x86.zmm>, adapter = @x86_arith__low__abi, conversion = register_to_value, index = 0, semantic_type = vector<16xi32>}
-
 // ====
 // RUN: emit source-low @x86_f32_target output=low
 target.preset @x86_f32_target {key = "x86-avx512", source = @x86_f32_arith}
@@ -42,11 +34,3 @@ low.func.def target(@x86_f32_target) @x86_f32_arith__low(%lhs: reg<x86.zmm>, %rh
   %fma = low.op<x86.avx512.vfmadd231ps.zmm>(%13, %lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>, reg<x86.zmm>) -> %13 as reg<x86.zmm>
   low.return %fma : reg<x86.zmm>
 }
-
-low.abi.adapter @x86_f32_arith__low__abi {callee = @x86_f32_arith__low, conversion = mapped, operand_count = 2, result_count = 1}
-
-low.abi.operand @x86_f32_arith__low__abi_arg0 {abi_type = reg<x86.zmm>, adapter = @x86_f32_arith__low__abi, conversion = value_to_register, index = 0, semantic_type = vector<16xf32>}
-
-low.abi.operand @x86_f32_arith__low__abi_arg1 {abi_type = reg<x86.zmm>, adapter = @x86_f32_arith__low__abi, conversion = value_to_register, index = 1, semantic_type = vector<16xf32>}
-
-low.abi.result @x86_f32_arith__low__abi_result0 {abi_type = reg<x86.zmm>, adapter = @x86_f32_arith__low__abi, conversion = register_to_value, index = 0, semantic_type = vector<16xf32>}

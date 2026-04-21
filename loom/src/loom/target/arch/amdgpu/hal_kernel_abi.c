@@ -12,11 +12,6 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 
-static bool loom_amdgpu_hal_kernel_abi_symbol_ref_equal(loom_symbol_ref_t lhs,
-                                                        loom_symbol_ref_t rhs) {
-  return lhs.module_id == rhs.module_id && lhs.symbol_id == rhs.symbol_id;
-}
-
 static const loom_symbol_t* loom_amdgpu_hal_kernel_abi_lookup_defined_symbol(
     const loom_module_t* module, loom_symbol_ref_t symbol_ref) {
   if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
@@ -188,8 +183,10 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_validate_target(
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_symbol_name(
       module, loom_low_func_def_callee(function_op), IREE_SV("function"),
       &function_symbol_name));
-  if (!iree_string_view_equal(target_bundle->export_plan->source_symbol,
-                              function_symbol_name)) {
+
+  bool matches_function = iree_string_view_equal(
+      target_bundle->export_plan->source_symbol, function_symbol_name);
+  if (!matches_function) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU HAL kernel ABI export plan source '%.*s' does not match low "
@@ -249,60 +246,71 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_validate_abi_type(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_hal_kernel_abi_validate_resource_record(
-    const loom_module_t* module, const loom_op_t* resource_op,
-    loom_symbol_ref_t function_symbol, iree_string_view_t resource_name) {
-  if (!loom_amdgpu_hal_kernel_abi_symbol_ref_equal(
-          loom_low_abi_resource_function(resource_op), function_symbol)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU HAL resource '%.*s' is not owned by the selected low function",
-        (int)resource_name.size, resource_name.data);
+static iree_status_t loom_amdgpu_hal_kernel_abi_format_resource_name(
+    uint32_t binding_index, iree_string_view_t* out_name,
+    iree_arena_allocator_t* arena) {
+  IREE_ASSERT_ARGUMENT(out_name);
+  char scratch[32];
+  int length =
+      iree_snprintf(scratch, sizeof(scratch), "binding%" PRIu32, binding_index);
+  if (length < 0 || (iree_host_size_t)length >= sizeof(scratch)) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "failed to format AMDGPU HAL resource name");
   }
-  if (loom_low_abi_resource_kind(resource_op) !=
-      LOOM_LOW_ABI_RESOURCE_KIND_HAL_BUFFER_RESOURCE) {
+  char* storage = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(arena, (iree_host_size_t)length, (void**)&storage));
+  memcpy(storage, scratch, (iree_host_size_t)length);
+  *out_name = iree_make_string_view(storage, (iree_host_size_t)length);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hal_kernel_abi_validate_resource_import(
+    const loom_module_t* module, const loom_op_t* resource_op,
+    iree_string_view_t resource_name) {
+  if (loom_low_resource_import_kind(resource_op) !=
+      LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU HAL resource '%.*s' must use kind hal_buffer_resource",
         (int)resource_name.size, resource_name.data);
   }
-  if (loom_low_abi_resource_index(resource_op) < 0) {
+  if (loom_low_resource_index(resource_op) < 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU HAL resource '%.*s' binding index must be non-negative",
         (int)resource_name.size, resource_name.data);
   }
   loom_type_t semantic_type = loom_amdgpu_hal_kernel_abi_type_attr(
-      module, loom_low_abi_resource_semantic_type(resource_op));
+      module, loom_low_resource_semantic_type(resource_op));
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_validate_semantic_type(
       module, semantic_type, resource_name));
-  loom_type_t abi_type = loom_amdgpu_hal_kernel_abi_type_attr(
-      module, loom_low_abi_resource_abi_type(resource_op));
+  loom_type_t abi_type =
+      loom_module_value_type(module, loom_low_resource_result(resource_op));
   return loom_amdgpu_hal_kernel_abi_validate_abi_type(module, abi_type,
                                                       resource_name);
 }
 
-static iree_status_t loom_amdgpu_hal_kernel_abi_resource_from_record(
+static iree_status_t loom_amdgpu_hal_kernel_abi_resource_from_import(
     const loom_module_t* module, const loom_op_t* resource_op,
-    loom_symbol_ref_t function_symbol,
-    loom_amdgpu_hal_kernarg_resource_t* out_resource) {
+    loom_amdgpu_hal_kernarg_resource_t* out_resource,
+    iree_arena_allocator_t* arena) {
   IREE_ASSERT_ARGUMENT(out_resource);
   *out_resource = (loom_amdgpu_hal_kernarg_resource_t){0};
 
-  loom_symbol_ref_t resource_symbol = loom_low_abi_resource_symbol(resource_op);
   iree_string_view_t resource_name = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_symbol_name(
-      module, resource_symbol, IREE_SV("resource"), &resource_name));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_validate_resource_record(
-      module, resource_op, function_symbol, resource_name));
-
-  int64_t binding_index = loom_low_abi_resource_index(resource_op);
+  int64_t binding_index = loom_low_resource_index(resource_op);
   if (binding_index > UINT32_MAX) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU HAL resource '%.*s' binding index %" PRIi64 " exceeds uint32_t",
-        (int)resource_name.size, resource_name.data, binding_index);
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU HAL resource binding index %" PRIi64
+                            " exceeds uint32_t",
+                            binding_index);
   }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_format_resource_name(
+      (uint32_t)binding_index, &resource_name, arena));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_validate_resource_import(
+      module, resource_op, resource_name));
+
   uint64_t kernarg_offset =
       (uint64_t)binding_index *
       LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_SIZE;
@@ -315,7 +323,6 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_resource_from_record(
 
   *out_resource = (loom_amdgpu_hal_kernarg_resource_t){
       .resource_op = resource_op,
-      .symbol = resource_symbol,
       .name = resource_name,
       .binding_index = (uint32_t)binding_index,
       .kernarg_offset = (uint32_t)kernarg_offset,
@@ -323,81 +330,10 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_resource_from_record(
       .kernarg_alignment =
           LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT,
       .semantic_type = loom_amdgpu_hal_kernel_abi_type_attr(
-          module, loom_low_abi_resource_semantic_type(resource_op)),
-      .abi_type = loom_amdgpu_hal_kernel_abi_type_attr(
-          module, loom_low_abi_resource_abi_type(resource_op)),
+          module, loom_low_resource_semantic_type(resource_op)),
+      .abi_type =
+          loom_module_value_type(module, loom_low_resource_result(resource_op)),
   };
-  return iree_ok_status();
-}
-
-static const loom_op_t*
-loom_amdgpu_hal_kernel_abi_lookup_resource_record_by_symbol(
-    const loom_module_t* module, loom_symbol_ref_t resource_symbol) {
-  const loom_symbol_t* symbol =
-      loom_amdgpu_hal_kernel_abi_lookup_defined_symbol(module, resource_symbol);
-  if (symbol == NULL || !loom_low_abi_resource_isa(symbol->defining_op)) {
-    return NULL;
-  }
-  return symbol->defining_op;
-}
-
-static bool loom_amdgpu_hal_kernel_abi_layout_has_resource(
-    const loom_amdgpu_hal_kernel_abi_layout_t* layout,
-    loom_symbol_ref_t resource_symbol) {
-  for (iree_host_size_t i = 0; i < layout->resource_count; ++i) {
-    if (loom_amdgpu_hal_kernel_abi_symbol_ref_equal(layout->resources[i].symbol,
-                                                    resource_symbol)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static iree_status_t loom_amdgpu_hal_kernel_abi_validate_body_imports(
-    const loom_module_t* module, const loom_region_t* body,
-    const loom_amdgpu_hal_kernel_abi_layout_t* layout) {
-  for (uint16_t block_index = 0; block_index < body->block_count;
-       ++block_index) {
-    const loom_block_t* block = loom_region_const_block(body, block_index);
-    const loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      if (!loom_low_resource_isa(op)) {
-        continue;
-      }
-      loom_symbol_ref_t resource_symbol = loom_low_resource_resource(op);
-      const loom_op_t* resource_record =
-          loom_amdgpu_hal_kernel_abi_lookup_resource_record_by_symbol(
-              module, resource_symbol);
-      if (resource_record == NULL) {
-        return iree_make_status(
-            IREE_STATUS_NOT_FOUND,
-            "AMDGPU HAL low.resource references a missing resource record");
-      }
-      iree_string_view_t resource_name = iree_string_view_empty();
-      IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_symbol_name(
-          module, resource_symbol, IREE_SV("resource"), &resource_name));
-      if (!loom_amdgpu_hal_kernel_abi_layout_has_resource(layout,
-                                                          resource_symbol)) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "AMDGPU HAL low.resource '%.*s' is not owned by the selected low "
-            "function",
-            (int)resource_name.size, resource_name.data);
-      }
-
-      loom_type_t record_abi_type = loom_amdgpu_hal_kernel_abi_type_attr(
-          module, loom_low_abi_resource_abi_type(resource_record));
-      loom_type_t result_type =
-          loom_module_value_type(module, loom_low_resource_result(op));
-      if (!loom_type_equal(record_abi_type, result_type)) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "AMDGPU HAL low.resource '%.*s' result type does not match its "
-            "resource ABI type",
-            (int)resource_name.size, resource_name.data);
-      }
-    }
-  }
   return iree_ok_status();
 }
 
@@ -420,32 +356,29 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_validate_target(
       module, function_op, target_bundle));
 
-  loom_symbol_ref_t function_symbol = loom_low_func_def_callee(function_op);
+  loom_region_t* body = loom_low_func_def_body(function_op);
   uint64_t max_binding_index = 0;
   iree_host_size_t resource_count = 0;
-  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
-    const loom_op_t* resource_op = module->symbols.entries[i].defining_op;
-    if (resource_op == NULL || !loom_low_abi_resource_isa(resource_op)) {
-      continue;
-    }
-    if (!loom_amdgpu_hal_kernel_abi_symbol_ref_equal(
-            loom_low_abi_resource_function(resource_op), function_symbol)) {
-      continue;
-    }
-    ++resource_count;
-    int64_t binding_index = loom_low_abi_resource_index(resource_op);
-    if (binding_index < 0) {
-      iree_string_view_t resource_name = iree_string_view_empty();
-      IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_symbol_name(
-          module, loom_low_abi_resource_symbol(resource_op),
-          IREE_SV("resource"), &resource_name));
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "AMDGPU HAL resource '%.*s' binding index must be non-negative",
-          (int)resource_name.size, resource_name.data);
-    }
-    if ((uint64_t)binding_index > max_binding_index) {
-      max_binding_index = (uint64_t)binding_index;
+  if (body != NULL) {
+    for (uint16_t block_index = 0; block_index < body->block_count;
+         ++block_index) {
+      const loom_block_t* block = loom_region_const_block(body, block_index);
+      const loom_op_t* resource_op = NULL;
+      loom_block_for_each_op(block, resource_op) {
+        if (!loom_low_resource_isa(resource_op)) {
+          continue;
+        }
+        ++resource_count;
+        int64_t binding_index = loom_low_resource_index(resource_op);
+        if (binding_index < 0) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "AMDGPU HAL resource binding index must be non-negative");
+        }
+        if ((uint64_t)binding_index > max_binding_index) {
+          max_binding_index = (uint64_t)binding_index;
+        }
+      }
     }
   }
 
@@ -457,11 +390,6 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
             LOOM_AMDGPU_HAL_KERNEL_ABI_GLOBAL_BUFFER_KERNARG_ALIGNMENT,
         .uses_kernarg_segment_ptr = false,
     };
-    loom_region_t* body = loom_low_func_def_body(function_op);
-    if (body != NULL) {
-      IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_validate_body_imports(
-          module, body, out_layout));
-    }
     return iree_ok_status();
   }
 
@@ -478,26 +406,26 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
       arena, resource_count, sizeof(*resources), (void**)&resources));
   memset(resources, 0, resource_count * sizeof(*resources));
 
-  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
-    const loom_op_t* resource_op = module->symbols.entries[i].defining_op;
-    if (resource_op == NULL || !loom_low_abi_resource_isa(resource_op)) {
-      continue;
-    }
-    if (!loom_amdgpu_hal_kernel_abi_symbol_ref_equal(
-            loom_low_abi_resource_function(resource_op), function_symbol)) {
-      continue;
-    }
+  for (uint16_t block_index = 0; block_index < body->block_count;
+       ++block_index) {
+    const loom_block_t* block = loom_region_const_block(body, block_index);
+    const loom_op_t* resource_op = NULL;
+    loom_block_for_each_op(block, resource_op) {
+      if (!loom_low_resource_isa(resource_op)) {
+        continue;
+      }
 
-    loom_amdgpu_hal_kernarg_resource_t resource = {0};
-    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_resource_from_record(
-        module, resource_op, function_symbol, &resource));
-    if (resources[resource.binding_index].resource_op != NULL) {
-      return iree_make_status(IREE_STATUS_ALREADY_EXISTS,
-                              "AMDGPU HAL resource binding index %" PRIu32
-                              " is defined more than once",
-                              resource.binding_index);
+      loom_amdgpu_hal_kernarg_resource_t resource = {0};
+      IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_resource_from_import(
+          module, resource_op, &resource, arena));
+      if (resources[resource.binding_index].resource_op != NULL) {
+        return iree_make_status(IREE_STATUS_ALREADY_EXISTS,
+                                "AMDGPU HAL resource binding index %" PRIu32
+                                " is defined more than once",
+                                resource.binding_index);
+      }
+      resources[resource.binding_index] = resource;
     }
-    resources[resource.binding_index] = resource;
   }
 
   for (iree_host_size_t i = 0; i < resource_count; ++i) {
@@ -526,11 +454,6 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
       .resource_count = resource_count,
   };
 
-  loom_region_t* body = loom_low_func_def_body(function_op);
-  if (body != NULL) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_validate_body_imports(
-        module, body, out_layout));
-  }
   return iree_ok_status();
 }
 

@@ -31,7 +31,7 @@ typedef struct loom_amdgpu_kernel_record_t {
   iree_string_view_t descriptor_symbol;
   // Full AMDHSA target id such as `amdgcn-amd-amdhsa--gfx1100`.
   iree_string_view_t target_id;
-  // HAL kernel ABI layout derived from low.abi.resource declarations.
+  // HAL kernel ABI layout derived from function-local low.resource imports.
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout;
   // Metadata row shared by assembly notes and direct HSACO notes.
   loom_amdgpu_metadata_kernel_t metadata;
@@ -43,11 +43,17 @@ typedef struct loom_amdgpu_kernel_record_t {
   uint32_t user_sgpr_count;
 } loom_amdgpu_kernel_record_t;
 
+typedef struct loom_amdgpu_kernel_record_options_t {
+  // Optional ABI layout captured before target resource materialization.
+  const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout;
+} loom_amdgpu_kernel_record_options_t;
+
 // Builds the shared emission record for one scheduled and allocated
 // low.func.def. The returned record points into input IR and |scratch_arena|.
 iree_status_t loom_amdgpu_kernel_record_build(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
+    const loom_amdgpu_kernel_record_options_t* options,
     loom_amdgpu_kernel_record_t* out_record,
     iree_arena_allocator_t* scratch_arena);
 

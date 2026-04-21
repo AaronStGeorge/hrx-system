@@ -26,7 +26,7 @@ extern "C" {
 // SGPRs, maps 32-bit vector lane values to VGPRs, and lowers
 // scalar.constant/scalar.addi/vector.constant/vector.addi/vector.muli to
 // descriptor-backed low packets. HAL buffer arguments lower to explicit
-// low.abi.resource records and entry low.resource imports.
+// entry low.resource imports.
 // Memory operations and wider vector packing require explicit view/resource
 // layout contracts and are not guessed here.
 const loom_low_lower_policy_t* loom_amdgpu_low_lower_policy(void);

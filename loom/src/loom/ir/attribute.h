@@ -419,8 +419,13 @@ static inline uint8_t loom_attr_as_enum(loom_attribute_t attr) {
   return (uint8_t)attr.raw;
 }
 
-// Returns the symbol reference of a SYMBOL attribute.
+// Returns the symbol reference of a SYMBOL attribute. Absent optional symbol
+// attributes read as the explicit null symbol instead of the all-zero storage
+// payload, which could otherwise alias module-local symbol ordinal 0.
 static inline loom_symbol_ref_t loom_attr_as_symbol(loom_attribute_t attr) {
+  if (loom_attr_is_absent(attr)) {
+    return loom_symbol_ref_null();
+  }
   return attr.symbol;
 }
 
