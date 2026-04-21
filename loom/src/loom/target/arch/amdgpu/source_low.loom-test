@@ -21,8 +21,8 @@ low.func.def target(@gfx11_i32_b128_target) @i32_b128__low() {
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
-  %16 = low.op<amdgpu.v_mul_lo_u32>(%tid, %15) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %16 = low.op<amdgpu.v_lshlrev_b32>(%15, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %17 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %loaded = low.op<amdgpu.buffer_load_b128>(%input_view, %16, %17) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>
   %19 = low.const<amdgpu.v_mov_b32> {imm32 = 9} : reg<amdgpu.vgpr>
@@ -61,8 +61,8 @@ low.func.def target(@gfx11_i32_b128_target) @i32_b128__low() {
   %52 = low.slice %drop[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %53 = low.op<amdgpu.v_sub_u32>(%51, %52) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %result = low.concat(%44, %47, %50, %53) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %55 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
-  %56 = low.op<amdgpu.v_mul_lo_u32>(%tid, %55) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %55 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %56 = low.op<amdgpu.v_lshlrev_b32>(%55, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %57 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.buffer_store_b128>(%result, %output_view, %56, %57) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
@@ -93,8 +93,8 @@ low.func.def target(@gfx11_i32_bitwise_target) @i32_bitwise__low() {
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %17 = low.op<amdgpu.v_mul_lo_u32>(%tid, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_lshlrev_b32>(%16, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %18 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %loaded = low.op<amdgpu.buffer_load_dword>(%input_view, %17, %18) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   %mask = low.const<amdgpu.v_mov_b32> {imm32 = 15} : reg<amdgpu.vgpr>
@@ -102,8 +102,8 @@ low.func.def target(@gfx11_i32_bitwise_target) @i32_bitwise__low() {
   %tag = low.const<amdgpu.v_mov_b32> {imm32 = 240} : reg<amdgpu.vgpr>
   %with_tag = low.op<amdgpu.v_or_b32>(%masked, %tag) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %result = low.op<amdgpu.v_xor_b32>(%with_tag, %loaded) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %25 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %26 = low.op<amdgpu.v_mul_lo_u32>(%tid, %25) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %25 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %26 = low.op<amdgpu.v_lshlrev_b32>(%25, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %27 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.buffer_store_dword>(%result, %output_view, %26, %27) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
@@ -135,8 +135,8 @@ low.func.def target(@gfx11_i32_shift_target) @i32_shift__low() {
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %17 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %18 = low.op<amdgpu.v_mul_lo_u32>(%tid, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %17 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %18 = low.op<amdgpu.v_lshlrev_b32>(%17, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %loaded = low.op<amdgpu.buffer_load_dword>(%input_view, %18, %19) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   %shift = low.const<amdgpu.v_mov_b32> {imm32 = 3} : reg<amdgpu.vgpr>
@@ -145,8 +145,8 @@ low.func.def target(@gfx11_i32_shift_target) @i32_shift__low() {
   %arithmetic = low.op<amdgpu.v_ashrrev_i32>(%shift, %loaded) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %joined = low.op<amdgpu.v_or_b32>(%left, %logical) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %result = low.op<amdgpu.v_xor_b32>(%joined, %arithmetic) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %27 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %28 = low.op<amdgpu.v_mul_lo_u32>(%tid, %27) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %27 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %28 = low.op<amdgpu.v_lshlrev_b32>(%27, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %29 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.buffer_store_dword>(%result, %output_view, %28, %29) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
@@ -183,8 +183,8 @@ low.func.def target(@gfx11_i32_scalarized_target) @i32_scalarized__low() {
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %22 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
-  %23 = low.op<amdgpu.v_mul_lo_u32>(%tid, %22) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %22 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %23 = low.op<amdgpu.v_lshlrev_b32>(%22, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %24 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %loaded = low.op<amdgpu.buffer_load_b128>(%input_view, %23, %24) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>
   %lane0 = low.slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -201,8 +201,8 @@ low.func.def target(@gfx11_i32_scalarized_target) @i32_scalarized__low() {
   %lane2 = low.slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane3 = low.slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %result = low.concat(%mixed, %logical, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %40 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
-  %41 = low.op<amdgpu.v_mul_lo_u32>(%tid, %40) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %40 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %41 = low.op<amdgpu.v_lshlrev_b32>(%40, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %42 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.buffer_store_b128>(%result, %output_view, %41, %42) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
@@ -233,18 +233,18 @@ low.func.def target(@gfx11_f32_arith_target) @f32_arith__low() {
   %rhs_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %17 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %18 = low.op<amdgpu.v_mul_lo_u32>(%tid, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %17 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %18 = low.op<amdgpu.v_lshlrev_b32>(%17, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %lhs = low.op<amdgpu.buffer_load_dword>(%lhs_view, %18, %19) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
-  %21 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %22 = low.op<amdgpu.v_mul_lo_u32>(%tid, %21) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %21 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %22 = low.op<amdgpu.v_lshlrev_b32>(%21, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %23 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %rhs = low.op<amdgpu.buffer_load_dword>(%rhs_view, %22, %23) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   %sum = low.op<amdgpu.v_add_f32>(%lhs, %rhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %product = low.op<amdgpu.v_mul_f32>(%sum, %rhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %27 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %28 = low.op<amdgpu.v_mul_lo_u32>(%tid, %27) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %27 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %28 = low.op<amdgpu.v_lshlrev_b32>(%27, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %29 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.buffer_store_dword>(%product, %output_view, %28, %29) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
@@ -276,19 +276,19 @@ low.func.def target(@gfx11_f32_fma_target) @f32_fma__low() {
   %rhs_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %19 = low.op<amdgpu.v_mul_lo_u32>(%tid, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %19 = low.op<amdgpu.v_lshlrev_b32>(%18, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %20 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %lhs = low.op<amdgpu.buffer_load_dword>(%lhs_view, %19, %20) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
-  %22 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %23 = low.op<amdgpu.v_mul_lo_u32>(%tid, %22) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %22 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %23 = low.op<amdgpu.v_lshlrev_b32>(%22, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %24 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %rhs = low.op<amdgpu.buffer_load_dword>(%rhs_view, %23, %24) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   %bias = low.const<amdgpu.v_mov_b32> {imm32 = 1056964608} : reg<amdgpu.vgpr>
   %fma = low.op<amdgpu.v_fma_f32>(%lhs, %rhs, %bias) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %result = low.op<amdgpu.v_sub_f32>(%fma, %bias) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %29 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %30 = low.op<amdgpu.v_mul_lo_u32>(%tid, %29) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %29 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %30 = low.op<amdgpu.v_lshlrev_b32>(%29, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %31 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.buffer_store_dword>(%result, %output_view, %30, %31) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
@@ -331,12 +331,12 @@ low.func.def target(@gfx11_f32_scalarized_target) @f32_scalarized__low() {
   %rhs_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %29 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
-  %30 = low.op<amdgpu.v_mul_lo_u32>(%tid, %29) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %29 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %30 = low.op<amdgpu.v_lshlrev_b32>(%29, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %31 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %lhs = low.op<amdgpu.buffer_load_b128>(%lhs_view, %30, %31) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>
-  %33 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
-  %34 = low.op<amdgpu.v_mul_lo_u32>(%tid, %33) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %33 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %34 = low.op<amdgpu.v_lshlrev_b32>(%33, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %35 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %rhs = low.op<amdgpu.buffer_load_b128>(%rhs_view, %34, %35) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x4>
   %lhs0 = low.slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -353,8 +353,8 @@ low.func.def target(@gfx11_f32_scalarized_target) @f32_scalarized__low() {
   %bias = low.const<amdgpu.v_mov_b32> {imm32 = 1056964608} : reg<amdgpu.vgpr>
   %lane3 = low.op<amdgpu.v_fma_f32>(%lhs3, %rhs3, %bias) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %result = low.concat(%lane0, %lane1, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %51 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
-  %52 = low.op<amdgpu.v_mul_lo_u32>(%tid, %51) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %51 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %52 = low.op<amdgpu.v_lshlrev_b32>(%51, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %53 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.buffer_store_b128>(%result, %output_view, %52, %53) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return

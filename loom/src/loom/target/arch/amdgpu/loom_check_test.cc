@@ -342,6 +342,61 @@ TEST_F(AmdgpuLoomCheckTest,
   }
 }
 
+TEST_F(AmdgpuLoomCheckTest, SourceLowerScalesPowerOfTwoBufferStrideWithShift) {
+  loom_check_result_t result;
+  const std::string source = AmdgpuB128CopySource(
+      IREE_SV("gfx11_copy_b128_target"), IREE_SV("amdgpu-gfx11"));
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("amdgpu_source_low.loom-test"), &result));
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("low.const<amdgpu.v_mov_b32> {imm32 = 4}"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("low.op<amdgpu.v_lshlrev_b32>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_EQ(actual_output.find("low.op<amdgpu.v_mul_lo_u32>"),
+            std::string::npos)
+      << actual_output;
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(AmdgpuLoomCheckTest,
+       SourceLowerScalesNonPowerOfTwoBufferStrideWithMultiply) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "low",
+      "  %tid = kernel.workitem.id<x> : index\n"
+      "  %zero = index.constant 0 : offset\n"
+      "  %input_view = buffer.view %input[%zero] : buffer -> "
+      "view<16x3xi32, #dense>\n"
+      "  %output_view = buffer.view %output[%zero] : buffer -> "
+      "view<16x3xi32, #dense>\n"
+      "  %loaded = vector.load %input_view[%tid, 0] : "
+      "view<16x3xi32, #dense> -> vector<1xi32>\n"
+      "  vector.store %loaded, %output_view[%tid, 0] : vector<1xi32>, "
+      "view<16x3xi32, #dense>\n");
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("amdgpu_source_low.loom-test"), &result));
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("low.const<amdgpu.v_mov_b32> {imm32 = 12}"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("low.op<amdgpu.v_mul_lo_u32>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_EQ(actual_output.find("low.op<amdgpu.v_lshlrev_b32>"),
+            std::string::npos)
+      << actual_output;
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsDynamicBufferViewByteOffset) {
   const std::string source = AmdgpuGfx11SourceLowCase(
       "  %lhs = index.constant 4 : offset\n"

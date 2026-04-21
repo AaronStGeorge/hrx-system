@@ -668,6 +668,10 @@ static bool loom_amdgpu_module_value_is_workitem_id_x(
              LOOM_KERNEL_WORKITEM_ID_DIMENSION_X;
 }
 
+static bool loom_amdgpu_u32_is_power_of_two(uint32_t value) {
+  return value != 0 && (value & (value - 1)) == 0;
+}
+
 typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
 
 #define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIBE_FAILED ((uint32_t)1u << 0)
@@ -706,12 +710,18 @@ typedef struct loom_amdgpu_memory_access_diagnostic_t {
   loom_amdgpu_memory_access_rejection_flags_t rejection_bits;
 } loom_amdgpu_memory_access_diagnostic_t;
 
+#define LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE UINT32_MAX
+
 typedef struct loom_amdgpu_memory_access_t {
   // Dynamic view-axis index used to compute the VADDR register, or invalid for
   // a purely static access.
   loom_value_id_t dynamic_index;
   // Byte stride multiplied by dynamic_index to compute VADDR.
   uint32_t dynamic_index_byte_stride;
+  // Power-of-two shift used to compute VADDR, or
+  // LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE when multiplication or a
+  // static-zero VADDR is required.
+  uint32_t dynamic_index_byte_shift;
   // Total static byte offset selected from the source view access.
   int64_t static_byte_offset;
   // Static byte offset encoded in the descriptor offset immediate.
@@ -1151,6 +1161,7 @@ static bool loom_amdgpu_memory_access_select(
   IREE_ASSERT_ARGUMENT(out_diagnostic);
   *out_access = (loom_amdgpu_memory_access_t){
       .dynamic_index = LOOM_VALUE_ID_INVALID,
+      .dynamic_index_byte_shift = LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE,
       .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
   };
   *out_diagnostic = (loom_amdgpu_memory_access_diagnostic_t){0};
@@ -1275,6 +1286,15 @@ static bool loom_amdgpu_memory_access_select(
     }
     out_access->dynamic_index = dynamic_indices.values[0];
     out_access->dynamic_index_byte_stride = (uint32_t)dynamic_index_byte_stride;
+    if (loom_amdgpu_u32_is_power_of_two((uint32_t)dynamic_index_byte_stride)) {
+      uint32_t dynamic_index_byte_shift = 0;
+      uint32_t remaining_stride = (uint32_t)dynamic_index_byte_stride;
+      while (remaining_stride > 1) {
+        remaining_stride >>= 1;
+        ++dynamic_index_byte_shift;
+      }
+      out_access->dynamic_index_byte_shift = dynamic_index_byte_shift;
+    }
     out_access->static_byte_offset = static_byte_offset;
   }
 
@@ -2618,17 +2638,28 @@ static iree_status_t loom_amdgpu_emit_memory_vaddr(
   loom_value_id_t low_index = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, access->dynamic_index, &low_index));
-  loom_value_id_t low_byte_stride = LOOM_VALUE_ID_INVALID;
+  if (access->dynamic_index_byte_stride == 1) {
+    *out_low_vaddr = low_index;
+    return iree_ok_status();
+  }
+
+  const bool use_shift = access->dynamic_index_byte_shift !=
+                         LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE;
+  loom_value_id_t low_scale = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
       context, source_op, AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_V_MOV_B32,
-      access->dynamic_index_byte_stride, vgpr_type, &low_byte_stride));
+      use_shift ? access->dynamic_index_byte_shift
+                : access->dynamic_index_byte_stride,
+      vgpr_type, &low_scale));
   loom_value_id_t operands[] = {
-      low_index,
-      low_byte_stride,
+      use_shift ? low_scale : low_index,
+      use_shift ? low_index : low_scale,
   };
   loom_op_t* low_offset_op = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-      context, source_op, AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_V_MUL_LO_U32,
+      context, source_op,
+      use_shift ? AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_V_LSHLREV_B32
+                : AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_V_MUL_LO_U32,
       operands, IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0),
       &vgpr_type, 1, &low_offset_op));
   *out_low_vaddr = loom_value_slice_get(loom_low_op_results(low_offset_op), 0);

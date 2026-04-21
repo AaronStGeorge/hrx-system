@@ -632,7 +632,8 @@ TEST_F(AmdgpuAssemblyTest,
   EXPECT_EQ(verify_result.error_count, 0u);
 
   bool saw_workitem_live_in = false;
-  bool saw_byte_offset = false;
+  bool saw_byte_offset_scale = false;
+  bool saw_byte_offset_multiply = false;
   bool saw_load = false;
   bool saw_add = false;
   bool saw_store = false;
@@ -648,10 +649,13 @@ TEST_F(AmdgpuAssemblyTest,
       ++resource_count;
     } else if (loom_low_op_isa(op)) {
       if (StringIdEquals(loom_low_op_opcode(op),
-                         IREE_SV("amdgpu.v_mul_lo_u32"))) {
+                         IREE_SV("amdgpu.v_lshlrev_b32"))) {
         EXPECT_EQ(loom_low_op_operands(op).count, 2u);
         EXPECT_EQ(loom_low_op_results(op).count, 1u);
-        saw_byte_offset = true;
+        saw_byte_offset_scale = true;
+      } else if (StringIdEquals(loom_low_op_opcode(op),
+                                IREE_SV("amdgpu.v_mul_lo_u32"))) {
+        saw_byte_offset_multiply = true;
       } else if (StringIdEquals(loom_low_op_opcode(op),
                                 IREE_SV("amdgpu.buffer_load_dword"))) {
         EXPECT_EQ(loom_low_op_operands(op).count, 3u);
@@ -672,7 +676,8 @@ TEST_F(AmdgpuAssemblyTest,
   }
   EXPECT_EQ(resource_count, 2u);
   EXPECT_TRUE(saw_workitem_live_in);
-  EXPECT_TRUE(saw_byte_offset);
+  EXPECT_TRUE(saw_byte_offset_scale);
+  EXPECT_FALSE(saw_byte_offset_multiply);
   EXPECT_TRUE(saw_load);
   EXPECT_TRUE(saw_add);
   EXPECT_TRUE(saw_store);
@@ -711,7 +716,8 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideCopyToB128Packets) {
   EXPECT_EQ(verify_result.error_count, 0u);
 
   bool saw_workitem_live_in = false;
-  bool saw_byte_offset = false;
+  bool saw_byte_offset_scale = false;
+  bool saw_byte_offset_multiply = false;
   bool saw_wide_load = false;
   bool saw_wide_store = false;
   bool saw_dword_load = false;
@@ -728,10 +734,13 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideCopyToB128Packets) {
       ++resource_count;
     } else if (loom_low_op_isa(op)) {
       if (StringIdEquals(loom_low_op_opcode(op),
-                         IREE_SV("amdgpu.v_mul_lo_u32"))) {
+                         IREE_SV("amdgpu.v_lshlrev_b32"))) {
         EXPECT_EQ(loom_low_op_operands(op).count, 2u);
         EXPECT_EQ(loom_low_op_results(op).count, 1u);
-        saw_byte_offset = true;
+        saw_byte_offset_scale = true;
+      } else if (StringIdEquals(loom_low_op_opcode(op),
+                                IREE_SV("amdgpu.v_mul_lo_u32"))) {
+        saw_byte_offset_multiply = true;
       } else if (StringIdEquals(loom_low_op_opcode(op),
                                 IREE_SV("amdgpu.buffer_load_b128"))) {
         EXPECT_EQ(loom_low_op_operands(op).count, 3u);
@@ -753,7 +762,8 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideCopyToB128Packets) {
   }
   EXPECT_EQ(resource_count, 2u);
   EXPECT_TRUE(saw_workitem_live_in);
-  EXPECT_TRUE(saw_byte_offset);
+  EXPECT_TRUE(saw_byte_offset_scale);
+  EXPECT_FALSE(saw_byte_offset_multiply);
   EXPECT_TRUE(saw_wide_load);
   EXPECT_TRUE(saw_wide_store);
   EXPECT_FALSE(saw_dword_load);
