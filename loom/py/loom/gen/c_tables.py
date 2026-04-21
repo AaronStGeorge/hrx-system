@@ -22,6 +22,7 @@ Usage:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, TypeVar
@@ -3272,6 +3273,19 @@ def _type_c_ident(name: str) -> str:
     return name.replace(".", "_")
 
 
+_C_SYMBOL_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _type_fact_domain_symbol(type_def: Any) -> str | None:
+    """Returns the validated C fact-domain symbol for a TypeDef, if any."""
+    fact_domain = getattr(type_def, "fact_domain", None)
+    if fact_domain is None:
+        return None
+    if not isinstance(fact_domain, str) or not _C_SYMBOL_RE.fullmatch(fact_domain):
+        raise ValueError(f"TypeDef {type_def.name!r}: fact_domain must be a C symbol name, got {fact_domain!r}")
+    return fact_domain
+
+
 def _translate_type_format_elements(
     type_def: Any,
 ) -> list[str]:
@@ -3422,6 +3436,10 @@ def generate_type_registry(
     header.append("    const loom_fact_context_t* context, const loom_module_t* module,")
     header.append("    loom_type_t type);")
     header.append("")
+    header.append("// Installs the generated type-registry fact-domain resolver on |context|.")
+    header.append("void loom_type_registry_configure_fact_context(")
+    header.append("    loom_fact_context_t* context);")
+    header.append("")
     header.append("#ifdef __cplusplus")
     header.append("}")
     header.append("#endif")
@@ -3433,6 +3451,8 @@ def generate_type_registry(
     source = [GENERATED_HEADER]
     source.append('#include "loom/ops/type_registry.h"')
     source.append("")
+    source.append('#include "loom/util/fact_table.h"')
+    source.append("")
 
     # Emit B-string names, format arrays, and descriptors for each type.
     for td in all_types:
@@ -3441,6 +3461,11 @@ def generate_type_registry(
         source.append(f'static const uint8_t loom_type_{ident}_name[] = "\\x{name_len:02x}" "{td.name}";')
 
     source.append("")
+
+    fact_domain_symbols = sorted({fact_domain for td in all_types if (fact_domain := _type_fact_domain_symbol(td)) is not None})
+    if fact_domain_symbols:
+        source.extend(f"extern const loom_value_fact_domain_t {fact_domain};" for fact_domain in fact_domain_symbols)
+        source.append("")
 
     # Format element arrays for parameterized types.
     for td in all_types:
@@ -3459,6 +3484,7 @@ def generate_type_registry(
         ident = _type_c_ident(td.name)
         ir_kind = _IR_KIND_MAP[td.ir_kind]
         param_count = len(td.params)
+        fact_domain = _type_fact_domain_symbol(td)
         if td.format:
             elements = _translate_type_format_elements(td)
             fmt_ref = f"loom_type_{ident}_format"
@@ -3470,7 +3496,7 @@ def generate_type_registry(
         source.append(f"    .name = loom_type_{ident}_name,")
         source.append(f"    .ir_kind = {ir_kind},")
         source.append(f"    .param_count = {param_count},")
-        source.append("    .fact_domain = NULL,")
+        source.append(f"    .fact_domain = {'&' + fact_domain if fact_domain else 'NULL'},")
         source.append(f"    .format_elements = {fmt_ref},")
         source.append(f"    .format_element_count = {fmt_count},")
         source.append("};")
@@ -3554,6 +3580,13 @@ def generate_type_registry(
     source.append("  const loom_type_descriptor_t* descriptor =")
     source.append("      loom_type_registry_lookup(name);")
     source.append("  return descriptor ? descriptor->fact_domain : NULL;")
+    source.append("}")
+    source.append("")
+    source.append("void loom_type_registry_configure_fact_context(")
+    source.append("    loom_fact_context_t* context) {")
+    source.append("  if (!context) return;")
+    source.append("  context->resolve_type_domain = loom_type_registry_resolve_fact_domain;")
+    source.append("  context->resolve_type_domain_user_data = NULL;")
     source.append("}")
     source.append("")
 

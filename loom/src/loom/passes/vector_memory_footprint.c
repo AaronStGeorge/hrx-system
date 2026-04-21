@@ -15,6 +15,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
+#include "loom/ops/type_registry.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/util/fact_table.h"
@@ -1079,6 +1080,7 @@ iree_status_t loom_vector_memory_footprint_run(loom_pass_t* pass,
   };
   IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
       &state.fact_table, pass->arena, module->values.count));
+  loom_type_registry_configure_fact_context(&state.fact_table.context);
   IREE_RETURN_IF_ERROR(
       loom_value_fact_table_compute(&state.fact_table, module, function));
   loom_symbolic_expr_context_initialize(module, &state.fact_table, pass->arena,

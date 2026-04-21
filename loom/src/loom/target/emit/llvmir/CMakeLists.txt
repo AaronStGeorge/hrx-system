@@ -163,6 +163,7 @@ loom_cc_library(
     loom::src::loom::ops::llvmir
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
+    loom::src::loom::ops::type_registry
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::util::cfg_graph

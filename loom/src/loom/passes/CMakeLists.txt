@@ -109,6 +109,7 @@ loom_cc_library(
     loom::src::loom::ops::cfg
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::special_values
+    loom::src::loom::ops::type_registry
     loom::src::loom::pass::types
     loom::src::loom::rewrite::rewriter
     loom::src::loom::util::cfg_graph
@@ -291,6 +292,7 @@ loom_cc_library(
     loom::src::loom::ops::func
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::special_values
+    loom::src::loom::ops::type_registry
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
@@ -334,6 +336,7 @@ loom_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scf
+    loom::src::loom::ops::type_registry
     loom::src::loom::pass::types
     loom::src::loom::rewrite::materialize
     loom::src::loom::rewrite::remap
@@ -440,6 +443,7 @@ loom_cc_library(
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::type_registry
     loom::src::loom::ops::vector
     loom::src::loom::pass::types
     loom::src::loom::util::fact_table

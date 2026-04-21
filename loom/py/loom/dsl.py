@@ -2176,6 +2176,9 @@ class TypeDef:
     The format describes the interior of name<...>:
       - Empty format = opaque type (no angle brackets): hal.buffer
       - Non-empty format = parameterized: vm.ref<hal.buffer>, tile<4x4xf32>
+    The optional fact_domain names a C ``loom_value_fact_domain_t`` symbol
+    attached to the generated type descriptor; typed fact extensions use the
+    value's type to find this domain instead of a global schema registry.
 
     Scalar types (f32, i32, index) are NOT TypeDefs — they are
     keywords handled by a fixed name table. TypeDefs are for
@@ -2207,6 +2210,7 @@ class TypeDef:
     params: tuple[TypeParamDef, ...] = ()
     format: tuple[FormatElement, ...] = ()
     ir_kind: str = "dialect"  # "tile", "tensor", "vector", "view", etc.
+    fact_domain: str | None = None
 
     def __init__(
         self,
@@ -2216,12 +2220,14 @@ class TypeDef:
         params: list[TypeParamDef] | tuple[TypeParamDef, ...] = (),
         format: list[FormatElement] | tuple[FormatElement, ...] = (),
         ir_kind: str = "dialect",
+        fact_domain: str | None = None,
     ) -> None:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "doc", doc)
         object.__setattr__(self, "params", tuple(params))
         object.__setattr__(self, "format", tuple(format))
         object.__setattr__(self, "ir_kind", ir_kind)
+        object.__setattr__(self, "fact_domain", fact_domain)
 
     def __repr__(self) -> str:
         return f"TypeDef({self.name!r})"

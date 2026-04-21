@@ -87,6 +87,10 @@ const loom_value_fact_domain_t* loom_type_registry_resolve_fact_domain(
     const loom_fact_context_t* context, const loom_module_t* module,
     loom_type_t type);
 
+// Installs the generated type-registry fact-domain resolver on |context|.
+void loom_type_registry_configure_fact_context(
+    loom_fact_context_t* context);
+
 #ifdef __cplusplus
 }
 #endif

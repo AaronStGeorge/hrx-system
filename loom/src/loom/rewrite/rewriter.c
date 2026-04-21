@@ -11,6 +11,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
+#include "loom/ops/type_registry.h"
 
 #define LOOM_REWRITER_INITIAL_WORKLIST_CAPACITY 64
 #define LOOM_REWRITER_INITIAL_REGION_STACK_CAPACITY 8
@@ -146,6 +147,7 @@ iree_status_t loom_rewriter_enable_analysis_with_seed_facts(
   if (capacity < 256) capacity = 256;
   IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
       &rewriter->fact_table, rewriter->arena, capacity));
+  loom_type_registry_configure_fact_context(&rewriter->fact_table.context);
   if (seed_facts) {
     IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_defined_facts(
         &rewriter->fact_table, seed_facts, rewriter->module));

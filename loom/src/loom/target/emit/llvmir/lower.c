@@ -15,6 +15,7 @@
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/ops/type_registry.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/emit/llvmir/lower_internal.h"
@@ -1201,6 +1202,9 @@ static iree_status_t loom_llvmir_lowering_lower_body(
   loom_value_fact_table_t fact_table;
   iree_status_t status = loom_value_fact_table_initialize(
       &fact_table, &fact_arena, state->source_module->values.count);
+  if (iree_status_is_ok(status)) {
+    loom_type_registry_configure_fact_context(&fact_table.context);
+  }
   if (iree_status_is_ok(status)) {
     status =
         loom_value_fact_table_compute(&fact_table, state->source_module, func);

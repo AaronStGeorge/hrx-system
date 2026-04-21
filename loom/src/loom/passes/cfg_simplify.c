@@ -15,6 +15,7 @@
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/special_values.h"
+#include "loom/ops/type_registry.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/cfg_graph.h"
 #include "loom/util/dominance.h"
@@ -2532,6 +2533,7 @@ iree_status_t loom_cfg_simplify_run(loom_pass_t* pass, loom_module_t* module,
     status = loom_value_fact_table_initialize(&fact_table, &analysis_arena,
                                               module->values.count);
     if (!iree_status_is_ok(status)) break;
+    loom_type_registry_configure_fact_context(&fact_table.context);
     status = loom_value_fact_table_compute(&fact_table, module, function);
     if (!iree_status_is_ok(status)) break;
 

@@ -20,6 +20,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/special_values.h"
+#include "loom/ops/type_registry.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/passes/canonicalize.h"
@@ -1615,10 +1616,12 @@ static iree_status_t loom_refine_boundaries_function_cache_update(
 
   IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
       &cache->seed_facts, &cache->arena, initial_capacity));
+  loom_type_registry_configure_fact_context(&cache->seed_facts.context);
   IREE_RETURN_IF_ERROR(loom_refine_boundaries_replacement_table_initialize(
       &cache->seed_replacements, &cache->arena, initial_capacity));
   IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
       &cache->local_facts, &cache->arena, initial_capacity));
+  loom_type_registry_configure_fact_context(&cache->local_facts.context);
   loom_refine_boundaries_local_fact_clone_t local_clone = {
       .source_facts = function_facts,
       .target_facts = &cache->local_facts,
@@ -3085,6 +3088,9 @@ iree_status_t loom_refine_boundaries_run_with_options(
   iree_status_t status = loom_value_fact_table_initialize(
       current_boundary_facts, current_facts_arena, initial_capacity);
   if (iree_status_is_ok(status)) {
+    loom_type_registry_configure_fact_context(&current_boundary_facts->context);
+  }
+  if (iree_status_is_ok(status)) {
     status = loom_refine_boundaries_replacement_table_initialize(
         current_boundary_replacements, current_facts_arena, initial_capacity);
   }
@@ -3120,6 +3126,7 @@ iree_status_t loom_refine_boundaries_run_with_options(
     status = loom_value_fact_table_initialize(
         next_boundary_facts, next_facts_arena, initial_capacity);
     if (!iree_status_is_ok(status)) break;
+    loom_type_registry_configure_fact_context(&next_boundary_facts->context);
     memset(next_boundary_replacements, 0, sizeof(*next_boundary_replacements));
     status = loom_refine_boundaries_replacement_table_initialize(
         next_boundary_replacements, next_facts_arena, initial_capacity);

@@ -44,6 +44,7 @@ from loom.dsl import (
     Successor,
     TotalBitCountEqual,
     TypeConstraint,
+    TypeDef,
     UnpackedPayloadBitCountMatchesStorage,
 )
 from loom.gen.c_tables import (
@@ -51,11 +52,38 @@ from loom.gen.c_tables import (
     generate_builders_c,
     generate_ops_h,
     generate_tables_c,
+    generate_type_registry,
 )
 
 
 def test_type_constraint_map_covers_every_constraint() -> None:
     assert set(TYPE_CONSTRAINT_MAP) == set(TypeConstraint)
+
+
+def test_generate_type_registry_emits_fact_domain_pointer() -> None:
+    type_def = TypeDef(
+        name="test.handle",
+        fact_domain="loom_test_handle_fact_domain",
+    )
+
+    type_registry_h, type_registry_c = generate_type_registry([type_def])
+
+    assert "loom_type_registry_configure_fact_context" in type_registry_h
+    assert "extern const loom_value_fact_domain_t loom_test_handle_fact_domain;" in type_registry_c
+    assert ".fact_domain = &loom_test_handle_fact_domain," in type_registry_c
+
+
+def test_generate_type_registry_rejects_invalid_fact_domain_symbol() -> None:
+    type_def = TypeDef(
+        name="test.handle",
+        fact_domain="loom.test.handle.fact_domain",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"TypeDef 'test\.handle': fact_domain must be a C symbol name",
+    ):
+        generate_type_registry([type_def])
 
 
 def test_generate_tables_rejects_constraint_field_index_above_6_bit_max() -> None:

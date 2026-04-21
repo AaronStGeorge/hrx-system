@@ -14,6 +14,7 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/ops/type_registry.h"
 #include "loom/rewrite/materialize.h"
 #include "loom/rewrite/remap.h"
 #include "loom/rewrite/rewriter.h"
@@ -1010,6 +1011,9 @@ iree_status_t loom_scf_to_cfg_run(loom_pass_t* pass, loom_module_t* module,
   if (iree_status_is_ok(status)) {
     status = loom_value_fact_table_initialize(&state.fact_table, pass->arena,
                                               module->values.count);
+  }
+  if (iree_status_is_ok(status)) {
+    loom_type_registry_configure_fact_context(&state.fact_table.context);
   }
   if (iree_status_is_ok(status)) {
     status = loom_value_fact_table_compute(&state.fact_table, module, function);

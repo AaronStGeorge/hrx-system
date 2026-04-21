@@ -127,6 +127,7 @@ loom_cc_library(
     ::op_defs
     iree::base
     loom::src::loom::ir
+    loom::src::loom::util::fact_table
   PUBLIC
 )
 
@@ -154,8 +155,10 @@ loom_cc_test(
   DEPS
     ::op_registry
     ::type_registry
+    iree::base::internal::arena
     loom::src::loom::ops::func
     loom::src::loom::ops::index
+    loom::src::loom::util::fact_table
     iree::testing::gtest
     iree::testing::gtest_main
 )

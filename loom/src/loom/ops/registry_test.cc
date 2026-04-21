@@ -4,12 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_registry.h"
 #include "loom/ops/type_registry.h"
+#include "loom/util/fact_table.h"
 
 namespace loom {
 namespace {
@@ -445,6 +447,27 @@ TEST(TypeRegistry, LookupDialectType) {
   EXPECT_EQ(desc->param_count, 0);
   EXPECT_EQ(desc->format_elements, nullptr);
   EXPECT_EQ(desc->format_element_count, 0);
+}
+
+TEST(TypeRegistry, ConfiguresFactContextResolver) {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool, &arena);
+
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena, 8));
+  ASSERT_EQ(table.context.resolve_type_domain, nullptr);
+
+  loom_type_registry_configure_fact_context(&table.context);
+  EXPECT_EQ(table.context.resolve_type_domain,
+            loom_type_registry_resolve_fact_domain);
+  EXPECT_EQ(table.context.resolve_type_domain_user_data, nullptr);
+
+  loom_type_registry_configure_fact_context(nullptr);
+
+  iree_arena_deinitialize(&arena);
+  iree_arena_block_pool_deinitialize(&block_pool);
 }
 
 TEST(TypeRegistry, LookupUnknownReturnsNull) {
