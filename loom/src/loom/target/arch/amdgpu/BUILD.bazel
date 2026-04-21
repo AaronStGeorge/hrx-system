@@ -682,6 +682,7 @@ loom_cc_library(
     testonly = True,
     hdrs = ["descriptor_test_util.h"],
     deps = [
+        ":descriptor_ids",
         "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/testing:gtest",
     ],

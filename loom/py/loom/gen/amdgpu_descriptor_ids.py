@@ -28,6 +28,7 @@ _ensure_runtime_py_on_path()
 from loom.target.arch.amdgpu.descriptors import (  # noqa: E402
     amdgpu_common_reg_class_ids,
     amdgpu_descriptor_id_keys,
+    amdgpu_immediate_encoding_id_items,
 )
 from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
 
@@ -66,6 +67,10 @@ def _reg_class_id_constant_name(reg_class_name: str) -> str:
     return f"LOOM_AMDGPU_REG_CLASS_ID_{_c_identifier(_amdgpu_suffix(reg_class_name))}"
 
 
+def _immediate_encoding_id_constant_name(name: str) -> str:
+    return f"LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_{_c_identifier(name)}"
+
+
 def _u64_literal(value: int) -> str:
     return f"UINT64_C(0x{value:016x})"
 
@@ -89,6 +94,8 @@ def _emit_header(*, header_path: Path, format_output: bool) -> str:
     lines.extend(f"#define {_descriptor_id_constant_name(key)} {_u64_literal(descriptor_stable_id(key))}" for key in amdgpu_descriptor_id_keys())
     lines.append("")
     lines.extend(f"#define {_reg_class_id_constant_name(reg_class_name)} {reg_class_id}u" for reg_class_name, reg_class_id in amdgpu_common_reg_class_ids())
+    lines.append("")
+    lines.extend(f"#define {_immediate_encoding_id_constant_name(name)} {encoding_id}u" for name, encoding_id in amdgpu_immediate_encoding_id_items())
     lines.extend(["", "#endif  // LOOM_TARGET_ARCH_AMDGPU_DESCRIPTOR_IDS_H_"])
     source = "\n".join(lines) + "\n"
     if not format_output:

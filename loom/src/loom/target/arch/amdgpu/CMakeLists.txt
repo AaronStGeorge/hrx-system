@@ -68,6 +68,7 @@ loom_cc_library(
   HDRS
     "descriptor_test_util.h"
   DEPS
+    ::descriptor_ids
     loom::src::loom::codegen::low::descriptors
     iree::testing::gtest
   TESTONLY

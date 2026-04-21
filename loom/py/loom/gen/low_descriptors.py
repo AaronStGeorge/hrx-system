@@ -527,6 +527,10 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
                 immediate.encoding_field_id,
                 f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' encoding field id",
             )
+            _validate_u16(
+                immediate.encoding_id,
+                f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' encoding id",
+            )
             if immediate.kind is ImmediateKind.ENUM:
                 if immediate.enum_domain is None:
                     raise ValueError(f"descriptor '{descriptor.key}' enum immediate '{immediate.field_name}' has no enum domain")

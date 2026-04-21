@@ -10,6 +10,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/target/arch/amdgpu/descriptor_ids.h"
 
 namespace loom::testing {
 
@@ -64,6 +65,12 @@ inline void ExpectAmdgpuDsMemoryDescriptor(
     EXPECT_EQ(operands[1].unit_count, expected_data_units);
   }
 
+  const loom_low_immediate_t* immediate =
+      &descriptor_set->immediates[descriptor->immediate_start];
+  EXPECT_EQ(immediate->kind, LOOM_LOW_IMMEDIATE_KIND_UNSIGNED);
+  EXPECT_EQ(immediate->encoding_id,
+            LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_BYTE);
+
   const loom_low_effect_t* effect =
       &descriptor_set->effects[descriptor->effect_start];
   EXPECT_EQ(effect->kind, expected_effect_kind);
@@ -76,7 +83,8 @@ inline void ExpectAmdgpuDsMemoryDescriptor(
 inline void ExpectAmdgpuDs2AddrMemoryDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
     loom_low_effect_kind_t expected_effect_kind, uint16_t expected_value_units,
-    uint32_t expected_width_bits, uint16_t expected_encoding_format_id) {
+    uint32_t expected_width_bits, uint16_t expected_encoding_format_id,
+    uint16_t expected_immediate_encoding_id) {
   const bool is_read = expected_effect_kind == LOOM_LOW_EFFECT_KIND_READ;
   ASSERT_TRUE(is_read || expected_effect_kind == LOOM_LOW_EFFECT_KIND_WRITE);
   const loom_low_descriptor_t* descriptor =
@@ -104,9 +112,11 @@ inline void ExpectAmdgpuDs2AddrMemoryDescriptor(
   EXPECT_EQ(immediates[0].kind, LOOM_LOW_IMMEDIATE_KIND_UNSIGNED);
   EXPECT_EQ(immediates[0].bit_width, 8u);
   EXPECT_EQ(immediates[0].unsigned_max, 255u);
+  EXPECT_EQ(immediates[0].encoding_id, expected_immediate_encoding_id);
   EXPECT_EQ(immediates[1].kind, LOOM_LOW_IMMEDIATE_KIND_UNSIGNED);
   EXPECT_EQ(immediates[1].bit_width, 8u);
   EXPECT_EQ(immediates[1].unsigned_max, 255u);
+  EXPECT_EQ(immediates[1].encoding_id, expected_immediate_encoding_id);
 
   const loom_low_effect_t* effect =
       &descriptor_set->effects[descriptor->effect_start];
@@ -122,28 +132,36 @@ inline void ExpectAmdgpuDs2AddrMemoryDescriptors(
     uint16_t expected_encoding_format_id) {
   ExpectAmdgpuDs2AddrMemoryDescriptor(
       descriptor_set, IREE_SV("amdgpu.ds_read2_b32"), LOOM_LOW_EFFECT_KIND_READ,
-      1u, 64u, expected_encoding_format_id);
+      1u, 64u, expected_encoding_format_id,
+      LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD);
   ExpectAmdgpuDs2AddrMemoryDescriptor(
       descriptor_set, IREE_SV("amdgpu.ds_read2st64_b32"),
-      LOOM_LOW_EFFECT_KIND_READ, 1u, 64u, expected_encoding_format_id);
+      LOOM_LOW_EFFECT_KIND_READ, 1u, 64u, expected_encoding_format_id,
+      LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD_STRIDE64);
   ExpectAmdgpuDs2AddrMemoryDescriptor(
       descriptor_set, IREE_SV("amdgpu.ds_read2_b64"), LOOM_LOW_EFFECT_KIND_READ,
-      2u, 128u, expected_encoding_format_id);
+      2u, 128u, expected_encoding_format_id,
+      LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_QWORD);
   ExpectAmdgpuDs2AddrMemoryDescriptor(
       descriptor_set, IREE_SV("amdgpu.ds_read2st64_b64"),
-      LOOM_LOW_EFFECT_KIND_READ, 2u, 128u, expected_encoding_format_id);
+      LOOM_LOW_EFFECT_KIND_READ, 2u, 128u, expected_encoding_format_id,
+      LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_QWORD_STRIDE64);
   ExpectAmdgpuDs2AddrMemoryDescriptor(
       descriptor_set, IREE_SV("amdgpu.ds_write2_b32"),
-      LOOM_LOW_EFFECT_KIND_WRITE, 1u, 64u, expected_encoding_format_id);
+      LOOM_LOW_EFFECT_KIND_WRITE, 1u, 64u, expected_encoding_format_id,
+      LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD);
   ExpectAmdgpuDs2AddrMemoryDescriptor(
       descriptor_set, IREE_SV("amdgpu.ds_write2st64_b32"),
-      LOOM_LOW_EFFECT_KIND_WRITE, 1u, 64u, expected_encoding_format_id);
+      LOOM_LOW_EFFECT_KIND_WRITE, 1u, 64u, expected_encoding_format_id,
+      LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD_STRIDE64);
   ExpectAmdgpuDs2AddrMemoryDescriptor(
       descriptor_set, IREE_SV("amdgpu.ds_write2_b64"),
-      LOOM_LOW_EFFECT_KIND_WRITE, 2u, 128u, expected_encoding_format_id);
+      LOOM_LOW_EFFECT_KIND_WRITE, 2u, 128u, expected_encoding_format_id,
+      LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_QWORD);
   ExpectAmdgpuDs2AddrMemoryDescriptor(
       descriptor_set, IREE_SV("amdgpu.ds_write2st64_b64"),
-      LOOM_LOW_EFFECT_KIND_WRITE, 2u, 128u, expected_encoding_format_id);
+      LOOM_LOW_EFFECT_KIND_WRITE, 2u, 128u, expected_encoding_format_id,
+      LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_QWORD_STRIDE64);
 }
 
 inline void ExpectAmdgpuDsAddtidMemoryDescriptor(
@@ -192,6 +210,8 @@ inline void ExpectAmdgpuDsAddtidMemoryDescriptor(
   EXPECT_EQ(immediate->kind, LOOM_LOW_IMMEDIATE_KIND_UNSIGNED);
   EXPECT_EQ(immediate->bit_width, 8u);
   EXPECT_EQ(immediate->unsigned_max, 255u);
+  EXPECT_EQ(immediate->encoding_id,
+            LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_BYTE);
 
   const loom_low_effect_t* effect =
       &descriptor_set->effects[descriptor->effect_start];

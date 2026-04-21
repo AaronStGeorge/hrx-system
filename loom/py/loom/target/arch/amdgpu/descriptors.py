@@ -109,6 +109,22 @@ _IDLE_WAIT_HAZARDS = (
     _ALU_COUNTER_HAZARD,
 )
 
+_ADDRESS_OFFSET_BYTE_ENCODING_ID = 1
+_ADDRESS_OFFSET_DWORD_ENCODING_ID = 2
+_ADDRESS_OFFSET_QWORD_ENCODING_ID = 3
+_ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID = 4
+_ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID = 5
+_ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS = frozenset(
+    (
+        _ADDRESS_OFFSET_BYTE_ENCODING_ID,
+        _ADDRESS_OFFSET_DWORD_ENCODING_ID,
+        _ADDRESS_OFFSET_QWORD_ENCODING_ID,
+        _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
+        _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID,
+    )
+)
+_ADDRESS_OFFSET_IMMEDIATE_FIELD_NAMES = frozenset(("offset", "offset0", "offset1"))
+
 _SGPR_ALT = (RegClassAlt(_REG_SGPR),)
 _VGPR_ALT = (RegClassAlt(_REG_VGPR),)
 _VGPR_CONST_ALT = (
@@ -488,15 +504,25 @@ _DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS = (
 _PSEUDO_DEAD_REMOVABLE_FLAGS = (DescriptorFlag.DEAD_REMOVABLE, DescriptorFlag.PSEUDO)
 
 
-def _offset_immediate(bit_width: int) -> Immediate:
-    return _named_offset_immediate("offset", bit_width)
+def _offset_immediate(
+    bit_width: int,
+    *,
+    encoding_id: int = _ADDRESS_OFFSET_BYTE_ENCODING_ID,
+) -> Immediate:
+    return _named_offset_immediate("offset", bit_width, encoding_id=encoding_id)
 
 
-def _named_offset_immediate(field_name: str, bit_width: int) -> Immediate:
+def _named_offset_immediate(
+    field_name: str,
+    bit_width: int,
+    *,
+    encoding_id: int = _ADDRESS_OFFSET_BYTE_ENCODING_ID,
+) -> Immediate:
     return Immediate(
         field_name,
         ImmediateKind.UNSIGNED,
         bit_width=bit_width,
+        encoding_id=encoding_id,
         unsigned_max=(2**bit_width) - 1,
     )
 
@@ -1351,10 +1377,17 @@ def _ds_read2_overlay(
     *,
     element_width_bits: int,
     value_units: int,
+    offset_encoding_id: int | None = None,
     encoding_name: str = "ENC_DS",
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
 ) -> AmdgpuDescriptorOverlay:
     suffix = f"b{element_width_bits}"
+    if offset_encoding_id is None:
+        offset_encoding_id = (
+            _ADDRESS_OFFSET_DWORD_ENCODING_ID
+            if element_width_bits == 32
+            else _ADDRESS_OFFSET_QWORD_ENCODING_ID
+        )
     return AmdgpuDescriptorOverlay(
         descriptor_key=f"amdgpu.ds_read2_{suffix}",
         instruction_name=f"DS_READ2_{suffix.upper()}",
@@ -1371,8 +1404,8 @@ def _ds_read2_overlay(
         ),
         immediate_fields=("OFFSET0", "OFFSET1"),
         immediates=(
-            _named_offset_immediate("offset0", 8),
-            _named_offset_immediate("offset1", 8),
+            _named_offset_immediate("offset0", 8, encoding_id=offset_encoding_id),
+            _named_offset_immediate("offset1", 8, encoding_id=offset_encoding_id),
         ),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_workgroup_memory_effect(EffectKind.READ, element_width_bits * 2),),
@@ -1384,10 +1417,17 @@ def _ds_write2_overlay(
     *,
     element_width_bits: int,
     value_units: int,
+    offset_encoding_id: int | None = None,
     encoding_name: str = "ENC_DS",
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
 ) -> AmdgpuDescriptorOverlay:
     suffix = f"b{element_width_bits}"
+    if offset_encoding_id is None:
+        offset_encoding_id = (
+            _ADDRESS_OFFSET_DWORD_ENCODING_ID
+            if element_width_bits == 32
+            else _ADDRESS_OFFSET_QWORD_ENCODING_ID
+        )
     return AmdgpuDescriptorOverlay(
         descriptor_key=f"amdgpu.ds_write2_{suffix}",
         instruction_name=f"DS_WRITE2_{suffix.upper()}",
@@ -1405,8 +1445,8 @@ def _ds_write2_overlay(
         ),
         immediate_fields=("OFFSET0", "OFFSET1"),
         immediates=(
-            _named_offset_immediate("offset0", 8),
-            _named_offset_immediate("offset1", 8),
+            _named_offset_immediate("offset0", 8, encoding_id=offset_encoding_id),
+            _named_offset_immediate("offset1", 8, encoding_id=offset_encoding_id),
         ),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_workgroup_memory_effect(EffectKind.WRITE, element_width_bits * 2),),
@@ -1422,10 +1462,16 @@ def _ds_stride64_read2_overlay(
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
 ) -> AmdgpuDescriptorOverlay:
     suffix = f"b{element_width_bits}"
+    offset_encoding_id = (
+        _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID
+        if element_width_bits == 32
+        else _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID
+    )
     return replace(
         _ds_read2_overlay(
             element_width_bits=element_width_bits,
             value_units=value_units,
+            offset_encoding_id=offset_encoding_id,
             encoding_name=encoding_name,
             fixed_encoding_fields=fixed_encoding_fields,
         ),
@@ -1444,10 +1490,16 @@ def _ds_stride64_write2_overlay(
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
 ) -> AmdgpuDescriptorOverlay:
     suffix = f"b{element_width_bits}"
+    offset_encoding_id = (
+        _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID
+        if element_width_bits == 32
+        else _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID
+    )
     return replace(
         _ds_write2_overlay(
             element_width_bits=element_width_bits,
             value_units=value_units,
+            offset_encoding_id=offset_encoding_id,
             encoding_name=encoding_name,
             fixed_encoding_fields=fixed_encoding_fields,
         ),
@@ -2544,10 +2596,75 @@ def _amdgpu_descriptor_id_key_set() -> set[str]:
     return keys
 
 
+def _descriptor_has_memory_effect(descriptor: Descriptor) -> bool:
+    return any(
+        effect.kind in (EffectKind.READ, EffectKind.WRITE)
+        and effect.memory_space in (MemorySpace.GLOBAL, MemorySpace.WORKGROUP)
+        for effect in descriptor.effects
+    )
+
+
+def _descriptor_address_offset_immediates(
+    descriptor: Descriptor,
+) -> tuple[Immediate, ...]:
+    return tuple(
+        immediate
+        for immediate in descriptor.immediates
+        if immediate.field_name in _ADDRESS_OFFSET_IMMEDIATE_FIELD_NAMES
+    )
+
+
+def _validate_address_immediate_units(descriptor_set: DescriptorSet) -> None:
+    for descriptor in descriptor_set.descriptors:
+        if not _descriptor_has_memory_effect(descriptor):
+            continue
+        offset_immediates = _descriptor_address_offset_immediates(descriptor)
+        if not offset_immediates:
+            continue
+        for immediate in offset_immediates:
+            if immediate.encoding_id not in _ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS:
+                raise ValueError(
+                    f"AMDGPU memory descriptor '{descriptor.key}' immediate "
+                    f"'{immediate.field_name}' has no address-unit encoding"
+                )
+        split_offset_immediates = tuple(
+            immediate
+            for immediate in offset_immediates
+            if immediate.field_name in ("offset0", "offset1")
+        )
+        if split_offset_immediates:
+            if len(split_offset_immediates) != 2:
+                raise ValueError(
+                    f"AMDGPU memory descriptor '{descriptor.key}' has an "
+                    "incomplete split address offset"
+                )
+            first_encoding_id = split_offset_immediates[0].encoding_id
+            if any(
+                immediate.encoding_id != first_encoding_id
+                for immediate in split_offset_immediates[1:]
+            ):
+                raise ValueError(
+                    f"AMDGPU memory descriptor '{descriptor.key}' has "
+                    "inconsistent split address offset units"
+                )
+
+
 def amdgpu_descriptor_id_keys() -> tuple[str, ...]:
     """Returns descriptor keys known to the AMDGPU target family."""
 
     return tuple(sorted(_amdgpu_descriptor_id_key_set()))
+
+
+def amdgpu_immediate_encoding_id_items() -> tuple[tuple[str, int], ...]:
+    """Returns target-owned immediate encoding IDs used by AMDGPU descriptors."""
+
+    return (
+        ("address_offset_byte", _ADDRESS_OFFSET_BYTE_ENCODING_ID),
+        ("address_offset_dword", _ADDRESS_OFFSET_DWORD_ENCODING_ID),
+        ("address_offset_qword", _ADDRESS_OFFSET_QWORD_ENCODING_ID),
+        ("address_offset_dword_stride64", _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID),
+        ("address_offset_qword_stride64", _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID),
+    )
 
 
 def amdgpu_common_reg_class_ids() -> tuple[tuple[str, int], ...]:
@@ -2581,7 +2698,7 @@ def _with_overlay_descriptors(
     base: DescriptorSet,
     overlay_descriptors: tuple[Descriptor, ...],
 ) -> DescriptorSet:
-    return replace(
+    descriptor_set = replace(
         base,
         descriptors=(
             base.descriptors[0],
@@ -2589,6 +2706,8 @@ def _with_overlay_descriptors(
             *base.descriptors[1:],
         ),
     )
+    _validate_address_immediate_units(descriptor_set)
+    return descriptor_set
 
 
 def build_amdgpu_gfx950_core_descriptor_set(
