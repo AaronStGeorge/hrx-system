@@ -16,6 +16,8 @@ from loom.dialect.target.defs import (
     target_config,
     target_export,
     target_ops,
+    target_preset,
+    target_profile,
     target_snapshot,
 )
 
@@ -29,5 +31,7 @@ __all__ = [
     "target_config",
     "target_export",
     "target_ops",
+    "target_preset",
+    "target_profile",
     "target_snapshot",
 ]

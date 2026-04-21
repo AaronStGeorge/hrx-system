@@ -4,15 +4,17 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Target planning record dialect op definitions.
+"""Target planning dialect op definitions.
 
-The target dialect owns durable module records that freeze code generation
-facts before backend-specific lowering. These records are ordinary generated
-symbol definitions implementing the generic ``record`` interface; references
-between them are symbol attrs, not strings.
+The target dialect owns durable module records that select and freeze code
+generation facts before backend-specific lowering. ``target.profile`` is the
+compact authoring form: it names a provider-owned preset and sparse overrides,
+then symbol facts resolve it into dense target structs for compiler use. The
+older explicit snapshot/export/config/bundle records remain while the lowering
+pipeline migrates onto function and artifact facts.
 """
 
-from loom.assembly import AttrDict, SymbolRef
+from loom.assembly import GLUE, LPAREN, RPAREN, Attr, AttrDict, SymbolRef, kw
 from loom.dsl import (
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64,
@@ -34,7 +36,7 @@ from loom.dsl import (
 target_ops = Dialect(
     "target",
     dialect_id=0x13,
-    doc="Target planning records: snapshots, exports, configs, and bundles.",
+    doc="Target planning records: profiles, snapshots, exports, configs, and bundles.",
 )
 
 # ============================================================================
@@ -88,6 +90,49 @@ ExportLinkage = EnumDef(
         EnumCase("dso_local", 1, doc="DSO-local object linkage."),
     ],
     doc="ABI-required linkage for exported object functions or entry points.",
+)
+
+# ============================================================================
+# target.profile
+# ============================================================================
+
+target_profile = Op(
+    "target.profile",
+    group=target_ops,
+    doc=(
+        "Compact reusable target environment profile. Providers own preset "
+        "tables; the optional override dictionary is resolved once into dense "
+        "symbol facts so target queries do not walk attr dictionaries."
+    ),
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="target profile",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+        fact_domain="loom_target_profile_symbol_fact_domain",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef("preset", ATTR_TYPE_STRING),
+        AttrDef("overrides", "dict", optional=True),
+    ],
+    verify="loom_target_profile_verify",
+    format=[
+        SymbolRef("symbol"),
+        kw("preset"),
+        GLUE,
+        LPAREN,
+        GLUE,
+        Attr("preset"),
+        GLUE,
+        RPAREN,
+        AttrDict("overrides"),
+    ],
+    examples=[
+        'target.profile @vm preset("iree-vm")',
+        'target.profile @gfx1100 preset("amdgpu.gfx1100") {target_cpu = "gfx1100"}',
+    ],
 )
 
 # ============================================================================
@@ -319,4 +364,5 @@ ALL_TARGET_OPS: tuple[Op, ...] = (
     target_config,
     target_bundle,
     target_preset,
+    target_profile,
 )

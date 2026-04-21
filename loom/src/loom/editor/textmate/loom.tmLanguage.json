@@ -305,7 +305,7 @@
       "patterns": [
         {
           "name": "keyword.other.loom",
-          "match": "\\b(?:allocation|iter_args|priority|schedule|default|dgroups|device|import|layout|public|source|target|using|where|case|else|host|into|step|as|do|to|x)\\b"
+          "match": "\\b(?:allocation|iter_args|priority|schedule|default|dgroups|device|import|layout|preset|public|source|target|using|where|case|else|host|into|step|as|do|to|x)\\b"
         },
         {
           "name": "constant.language.boolean.loom",

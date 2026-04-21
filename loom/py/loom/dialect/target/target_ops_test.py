@@ -6,7 +6,7 @@
 
 """Tests for the target planning record dialect declarations."""
 
-from loom.assembly import AttrDict, SymbolRef
+from loom.assembly import AttrDict, Keyword, SymbolRef
 from loom.dialect.target import (
     ALL_TARGET_OPS,
     ArtifactFormatAttr,
@@ -17,9 +17,17 @@ from loom.dialect.target import (
     target_config,
     target_export,
     target_ops,
+    target_preset,
+    target_profile,
     target_snapshot,
 )
-from loom.dsl import ATTR_TYPE_ENUM, ATTR_TYPE_I64, ATTR_TYPE_STRING, SYMBOL_DEFINE
+from loom.dsl import (
+    ATTR_TYPE_DICT,
+    ATTR_TYPE_ENUM,
+    ATTR_TYPE_I64,
+    ATTR_TYPE_STRING,
+    SYMBOL_DEFINE,
+)
 
 
 class TestTargetDialect:
@@ -32,13 +40,17 @@ class TestTargetDialect:
             "target.export",
             "target.config",
             "target.bundle",
+            "target.preset",
+            "target.profile",
         ]
 
     def test_public_exports_match_registry(self) -> None:
+        assert target_profile in ALL_TARGET_OPS
         assert target_snapshot in ALL_TARGET_OPS
         assert target_export in ALL_TARGET_OPS
         assert target_config in ALL_TARGET_OPS
         assert target_bundle in ALL_TARGET_OPS
+        assert target_preset in ALL_TARGET_OPS
 
     def test_enums_match_runtime_values(self) -> None:
         assert [(case.keyword, case.value) for case in SnapshotCodegenFormat.cases] == [
@@ -79,7 +91,19 @@ class TestTargetDialect:
             assert op.symbol_def.interfaces == ("record",)
             assert op.symbol_def.bytecode_kind == "LOOM_SYMBOL_RECORD"
             assert isinstance(op.format[0], SymbolRef)
-            assert isinstance(op.format[1], AttrDict)
+            assert any(isinstance(element, AttrDict) for element in op.format)
+
+    def test_profile_shape(self) -> None:
+        op = target_profile
+        attrs = {attr.name: attr for attr in op.attrs}
+        assert attrs["preset"].attr_type == ATTR_TYPE_STRING
+        assert attrs["overrides"].attr_type == ATTR_TYPE_DICT
+        assert attrs["overrides"].optional
+        assert "source" not in attrs
+        assert op.symbol_def is not None
+        assert op.symbol_def.fact_domain == "loom_target_profile_symbol_fact_domain"
+        assert any(isinstance(element, Keyword) and element.text == "preset" for element in op.format)
+        assert op.verify == "loom_target_profile_verify"
 
     def test_snapshot_shape(self) -> None:
         op = target_snapshot
@@ -114,3 +138,12 @@ class TestTargetDialect:
             assert symbol_ref is not None
             assert symbol_ref.interfaces == ("record",)
         assert op.verify == "loom_target_bundle_verify"
+
+    def test_preset_is_legacy_source_bearing_record(self) -> None:
+        op = target_preset
+        attrs = {attr.name: attr for attr in op.attrs}
+        assert attrs["key"].attr_type == ATTR_TYPE_STRING
+        source_ref = attrs["source"].symbol_ref
+        assert source_ref is not None
+        assert source_ref.interfaces == ("func_like",)
+        assert op.verify == "loom_target_preset_verify"

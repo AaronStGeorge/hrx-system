@@ -39,3 +39,4 @@
   LOOM_KW_ALLOCATION = 30,  // "allocation"
   LOOM_KW_SCHEDULE = 31,  // "schedule"
   LOOM_KW_SOURCE = 32,  // "source"
+  LOOM_KW_PRESET = 33,  // "preset"

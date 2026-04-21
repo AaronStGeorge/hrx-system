@@ -79,6 +79,19 @@ static iree_status_t loom_target_verify_positive_u32(
                                           IREE_SV("an integer in [1, 2^32)"));
 }
 
+iree_status_t loom_target_profile_verify(const loom_module_t* module,
+                                         const loom_op_t* op,
+                                         iree_diagnostic_emitter_t emitter) {
+  loom_string_id_t preset_id = loom_target_profile_preset(op);
+  if (preset_id < module->strings.count &&
+      !iree_string_view_is_empty(
+          iree_string_view_trim(module->strings.entries[preset_id]))) {
+    return iree_ok_status();
+  }
+  return loom_target_emit_attr_constraint(emitter, op, IREE_SV("preset"), 0,
+                                          IREE_SV("a non-empty preset key"));
+}
+
 iree_status_t loom_target_snapshot_verify(const loom_module_t* module,
                                           const loom_op_t* op,
                                           iree_diagnostic_emitter_t emitter) {

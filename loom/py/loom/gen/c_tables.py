@@ -121,6 +121,7 @@ KEYWORD_MAP: dict[str, str] = {
     "allocation": "LOOM_KW_ALLOCATION",
     "schedule": "LOOM_KW_SCHEDULE",
     "source": "LOOM_KW_SOURCE",
+    "preset": "LOOM_KW_PRESET",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The

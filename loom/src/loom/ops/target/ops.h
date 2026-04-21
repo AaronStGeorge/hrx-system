@@ -23,7 +23,8 @@ enum {
   LOOM_OP_TARGET_CONFIG = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 2),
   LOOM_OP_TARGET_BUNDLE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 3),
   LOOM_OP_TARGET_PRESET = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 4),
-  LOOM_OP_TARGET_COUNT_ = 5,
+  LOOM_OP_TARGET_PROFILE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 5),
+  LOOM_OP_TARGET_COUNT_ = 6,
 };
 
 // Primary codegen representation emitted for a target snapshot.
@@ -202,6 +203,23 @@ iree_status_t loom_target_preset_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_target_preset_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_TARGET_PROFILE: Compact reusable target environment profile. Providers own preset tables; the optional override dictionary is resolved once into dense symbol facts so target queries do not walk attr dictionaries.
+// target.profile @vm preset("iree-vm")
+LOOM_DEFINE_ISA(loom_target_profile_isa, LOOM_OP_TARGET_PROFILE)
+LOOM_DEFINE_ATTR_SYMBOL(loom_target_profile_symbol, 0)
+LOOM_DEFINE_ATTR_STRING(loom_target_profile_preset, 1)
+LOOM_DEFINE_ATTR_DICT(loom_target_profile_overrides, 2)
+iree_status_t loom_target_profile_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t symbol,
+    loom_string_id_t preset,
+    loom_optional loom_named_attr_slice_t overrides,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_target_profile_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

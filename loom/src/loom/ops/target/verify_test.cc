@@ -117,6 +117,7 @@ static const char* kValidTargetRecords =
     "func.def @matmul() {\n"
     "  func.return\n"
     "}\n"
+    "target.profile @wasm_profile preset(\"iree-vm\")\n"
     "target.snapshot @x86_64 {codegen_format = llvmir, target_triple = "
     "\"x86_64-pc-linux-gnu\", data_layout = \"e-m:e-p:64:64\", "
     "artifact_format = elf, target_cpu = \"x86-64-v3\", target_features = "
@@ -224,6 +225,17 @@ TEST_F(TargetVerifyTest, SnapshotRejectsInvalidBitwidth) {
               loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
               LOOM_EMITTER_VERIFIER);
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "default_pointer_bitwidth");
+  ExpectI64Param(*diagnostic, 1, 0);
+}
+
+TEST_F(TargetVerifyTest, ProfileRejectsEmptyPresetKey) {
+  DiagnosticCapture capture;
+  VerifySource("target.profile @bad preset(\"\")\n", &capture);
+
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(
+      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14));
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "preset");
   ExpectI64Param(*diagnostic, 1, 0);
 }
 

@@ -14,17 +14,42 @@ loom_cc_library(
   NAME
     target
   HDRS
+    "facts.h"
     "ops.h"
   SRCS
     "builders.c"
+    "facts.c"
     "tables.c"
     "verify.c"
   DEPS
+    iree::base
+    loom::src::loom::analysis::symbol_facts
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::target::preset_registry
+    loom::src::loom::target::types
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    facts_test
+  SRCS
+    "facts_test.cc"
+  DEPS
+    ::target
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::target::preset_registry
+    loom::src::loom::target::types
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(
