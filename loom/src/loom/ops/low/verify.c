@@ -666,6 +666,16 @@ static iree_status_t loom_low_verify_resource_op(
         IREE_SV("index must be non-negative"), emitter);
   }
 
+  loom_attribute_t valid_byte_count =
+      loom_op_attrs(op)[loom_low_resource_valid_byte_count_ATTR_INDEX];
+  if (!loom_attr_is_absent(valid_byte_count) &&
+      loom_low_resource_valid_byte_count(op) < 0) {
+    return loom_low_emit_structural_storage_attr_error(
+        module, op, loom_low_resource_valid_byte_count_ATTR_INDEX,
+        IREE_SV("valid_byte_count"),
+        IREE_SV("valid_byte_count must be non-negative"), emitter);
+  }
+
   const loom_type_t semantic_type =
       loom_low_type_attr(module, loom_low_resource_semantic_type(op));
   if (loom_type_kind(semantic_type) == LOOM_TYPE_NONE) {

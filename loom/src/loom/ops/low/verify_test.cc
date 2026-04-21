@@ -798,6 +798,33 @@ TEST_F(LowVerifyTest, ResourceImportsPassForVmNativeAndHalAbiShapes) {
   EXPECT_TRUE(capture.diagnostics.empty());
 }
 
+TEST_F(LowVerifyTest, ResourceRejectsNegativeValidByteCount) {
+  DiagnosticCapture capture;
+  std::string source = kHalTargetBundle;
+  source +=
+      "low.func.def target(@hal_target) @hal_kernel() -> "
+      "(reg<amdgpu.sgpr x4>) {\n"
+      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
+      "semantic_type = hal.buffer, valid_byte_count = -1} : "
+      "reg<amdgpu.sgpr x4>\n"
+      "  low.return %binding : reg<amdgpu.sgpr x4>\n"
+      "}\n";
+  loom_verify_result_t result = VerifySource(source.c_str(), &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.resource");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_resource_valid_byte_count_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "valid_byte_count");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "valid_byte_count must be non-negative");
+}
+
 TEST_F(LowVerifyTest, ResourceRejectsWrongExportAbi) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(

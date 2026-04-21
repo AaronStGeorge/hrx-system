@@ -1056,9 +1056,10 @@ static iree_status_t loom_low_lower_emit_argument_resource_imports(
     }
     loom_op_t* resource_op = NULL;
     status = loom_low_resource_build(
-        &context->builder,
+        &context->builder, context->argument_map[i].resource_build_flags,
         (uint8_t)context->argument_map[i].resource_import_kind,
         context->argument_map[i].resource_index, semantic_type_id,
+        context->argument_map[i].resource_valid_byte_count,
         context->argument_map[i].abi_type,
         context->source_function.op->location, &resource_op);
     if (iree_status_is_ok(status)) {

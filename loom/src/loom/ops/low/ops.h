@@ -468,11 +468,18 @@ LOOM_DEFINE_RESULT(loom_low_resource_result, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_low_resource_import_kind, 0)
 LOOM_DEFINE_ATTR_I64(loom_low_resource_index, 1)
 LOOM_DEFINE_ATTR_TYPE(loom_low_resource_semantic_type, 2)
+LOOM_DEFINE_ATTR_I64(loom_low_resource_valid_byte_count, 3)
+enum loom_low_resource_build_flag_bits_e {
+  LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_VALID_BYTE_COUNT = 1u << 0,
+};
+typedef uint32_t loom_low_resource_build_flags_t;
 iree_status_t loom_low_resource_build(
     loom_builder_t* builder,
+    loom_low_resource_build_flags_t build_flags,
     uint8_t import_kind,
     int64_t index,
     uint32_t semantic_type,
+    loom_optional int64_t valid_byte_count,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

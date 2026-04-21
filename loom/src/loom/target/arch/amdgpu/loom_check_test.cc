@@ -384,10 +384,60 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerFoldsStaticBufferViewByteOffset) {
   EXPECT_TRUE(result.has_actual_output);
   EXPECT_EQ(result.diagnostic_count, 0u);
   const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find(
+                "low.resource<hal_buffer_resource> {index = 0, semantic_type "
+                "= hal.buffer, valid_byte_count = 48}"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find(
+                "low.resource<hal_buffer_resource> {index = 1, semantic_type "
+                "= hal.buffer, valid_byte_count = 32}"),
+            std::string::npos)
+      << actual_output;
   EXPECT_NE(actual_output.find("low.op<amdgpu.buffer_load_dword>"),
             std::string::npos)
       << actual_output;
   EXPECT_NE(actual_output.find("{offset = 20}"), std::string::npos)
+      << actual_output;
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(AmdgpuLoomCheckTest, SourceLowerOmitsResourceExtentForUnknownBufferUse) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "low",
+      "  %base = index.constant 16 : offset\n"
+      "  %zero = index.constant 0 : offset\n"
+      "  %unused = buffer.assume.memory_space %input {memory_space = global} : "
+      "buffer\n"
+      "  %input_view = buffer.view %input[%base] : buffer -> "
+      "view<8xi32, #dense>\n"
+      "  %output_view = buffer.view %output[%zero] : buffer -> "
+      "view<8xi32, #dense>\n"
+      "  %loaded = vector.load %input_view[1] : view<8xi32, #dense> -> "
+      "vector<1xi32>\n"
+      "  vector.store %loaded, %output_view[0] : vector<1xi32>, "
+      "view<8xi32, #dense>\n");
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("amdgpu_source_low.loom-test"), &result));
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find(
+                "low.resource<hal_buffer_resource> {index = 0, semantic_type "
+                "= hal.buffer}"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_EQ(actual_output.find(
+                "low.resource<hal_buffer_resource> {index = 0, semantic_type "
+                "= hal.buffer, valid_byte_count"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find(
+                "low.resource<hal_buffer_resource> {index = 1, semantic_type "
+                "= hal.buffer, valid_byte_count = 32}"),
+            std::string::npos)
       << actual_output;
   loom_check_result_deinitialize(&result);
 }

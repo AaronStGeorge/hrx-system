@@ -44,7 +44,8 @@ typedef struct loom_amdgpu_hal_resource_materialization_result_t {
 // low.live_in<amdgpu.kernarg_segment_ptr> value, loads one 64-bit binding
 // pointer from the kernarg slot assigned by low.resource, materializes the
 // range and flags words, and replaces low.resource with a low.concat producing
-// reg<amdgpu.sgpr x4>.
+// reg<amdgpu.sgpr x4>. The descriptor range word uses low.resource
+// valid_byte_count when present, otherwise it defaults to UINT32_MAX.
 iree_status_t loom_amdgpu_hal_resource_materialize(
     loom_module_t* module, loom_op_t* function_op,
     const loom_target_bundle_t* target_bundle,

@@ -801,6 +801,12 @@ low_resource = Op(
         AttrDef("import_kind", ATTR_TYPE_ENUM, enum_def=LowResourceImportKind),
         AttrDef("index", ATTR_TYPE_I64),
         AttrDef("semantic_type", ATTR_TYPE_TYPE),
+        AttrDef(
+            "valid_byte_count",
+            ATTR_TYPE_I64,
+            optional=True,
+            doc="Optional byte-addressable extent guaranteed valid for the imported resource.",
+        ),
     ],
     results=[Result("result", REGISTER)],
     traits=[PURE],

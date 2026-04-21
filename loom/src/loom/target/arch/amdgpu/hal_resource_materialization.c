@@ -15,8 +15,6 @@
 #include "loom/target/arch/amdgpu/gfx11_descriptors.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 
-#define LOOM_AMDGPU_HAL_RESOURCE_DESCRIPTOR_RANGE_WORD UINT32_MAX
-
 static iree_string_view_t loom_amdgpu_hal_resource_string_or_empty(
     const loom_module_t* module, loom_string_id_t string_id) {
   if (module == NULL || string_id == LOOM_STRING_ID_INVALID ||
@@ -74,6 +72,29 @@ static iree_status_t loom_amdgpu_hal_resource_verify_sgpr_range_value(
         "AMDGPU HAL resource %.*s must have type reg<amdgpu.sgpr x%" PRIu32 ">",
         (int)label.size, label.data, unit_count);
   }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hal_resource_descriptor_range_word(
+    const loom_op_t* resource_op, uint32_t* out_range_word) {
+  IREE_ASSERT_ARGUMENT(out_range_word);
+  *out_range_word = UINT32_MAX;
+  loom_attribute_t attr =
+      loom_op_attrs(resource_op)[loom_low_resource_valid_byte_count_ATTR_INDEX];
+  if (loom_attr_is_absent(attr)) {
+    return iree_ok_status();
+  }
+  const int64_t valid_byte_count =
+      loom_low_resource_valid_byte_count(resource_op);
+  if (valid_byte_count < 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL resource valid_byte_count must be non-negative");
+  }
+  if (valid_byte_count > UINT32_MAX) {
+    return iree_ok_status();
+  }
+  *out_range_word = (uint32_t)valid_byte_count;
   return iree_ok_status();
 }
 
@@ -250,10 +271,12 @@ static iree_status_t loom_amdgpu_hal_resource_materialize_one(
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_pointer_load(
       rewriter, descriptor_set, kernarg_ptr, soffset, resource->kernarg_offset,
       sgpr_x2_type, op->location, &pointer));
+  uint32_t range_word = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_hal_resource_descriptor_range_word(op, &range_word));
   loom_value_id_t range = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_mov_b32(
-      rewriter, descriptor_set, LOOM_AMDGPU_HAL_RESOURCE_DESCRIPTOR_RANGE_WORD,
-      sgpr_type, op->location, &range));
+      rewriter, descriptor_set, range_word, sgpr_type, op->location, &range));
   loom_value_id_t flags = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_mov_b32(
       rewriter, descriptor_set,

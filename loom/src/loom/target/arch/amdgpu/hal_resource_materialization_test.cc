@@ -150,6 +150,35 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
     return count;
   }
 
+  bool HasLowConstWithI64Attr(const char* opcode, const char* attr_name,
+                              int64_t value) {
+    loom_op_t* function_op = FindFirstLowFunction();
+    if (function_op == nullptr) {
+      return false;
+    }
+    loom_region_t* body = loom_low_func_def_body(function_op);
+    for (uint16_t block_index = 0; block_index < body->block_count;
+         ++block_index) {
+      const loom_block_t* block = loom_region_const_block(body, block_index);
+      const loom_op_t* op = nullptr;
+      loom_block_for_each_op(block, op) {
+        if (!loom_low_const_isa(op) ||
+            ModuleString(loom_low_const_opcode(op)) != opcode) {
+          continue;
+        }
+        loom_named_attr_slice_t attrs = loom_low_const_attrs(op);
+        for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+          if (ModuleString(attrs.entries[i].name_id) == attr_name &&
+              attrs.entries[i].value.kind == LOOM_ATTR_I64 &&
+              attrs.entries[i].value.i64 == value) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   int CountLiveInsWithSource(const char* source) {
     loom_op_t* function_op = FindFirstLowFunction();
     if (function_op == nullptr) {
@@ -312,6 +341,33 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   EXPECT_EQ(text.data[text.data_length - 3], 0x00u);
   EXPECT_EQ(text.data[text.data_length - 2], 0xB0u);
   EXPECT_EQ(text.data[text.data_length - 1], 0xBFu);
+}
+
+TEST_F(AmdgpuHalResourceMaterializationTest,
+       MaterializesHalBufferResourceRangeFromValidByteCount) {
+  BuildModule(
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
+      "semantic_type = hal.buffer, valid_byte_count = 64} : "
+      "reg<amdgpu.sgpr x4>\n"
+      "  low.return\n"
+      "}\n",
+      "");
+
+  loom_op_t* function_op = FindFirstLowFunction();
+  ASSERT_NE(function_op, nullptr);
+  loom_target_ir_bundle_storage_t bundle_storage = {};
+  BuildBundle(&bundle_storage);
+  const loom_low_descriptor_set_t* descriptor_set =
+      SelectDescriptorSet(&bundle_storage.bundle);
+
+  loom_amdgpu_hal_resource_materialization_result_t result = {};
+  IREE_ASSERT_OK(loom_amdgpu_hal_resource_materialize(
+      module_, function_op, &bundle_storage.bundle, descriptor_set, &result,
+      &arena_));
+  EXPECT_FALSE(HasLowResourceOp());
+  EXPECT_TRUE(HasLowConstWithI64Attr("amdgpu.s_mov_b32", "imm32", 64));
+  VerifyModule();
 }
 
 TEST_F(AmdgpuHalResourceMaterializationTest,
