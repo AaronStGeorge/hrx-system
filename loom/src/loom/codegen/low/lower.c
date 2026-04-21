@@ -300,6 +300,14 @@ static iree_string_view_t loom_low_lower_config_key(
   return loom_low_lower_nonempty(bundle->config->name, IREE_SV("<empty>"));
 }
 
+static bool loom_low_lower_function_attr_present(loom_func_like_t function,
+                                                 uint8_t attr_index) {
+  if (attr_index == LOOM_ATTR_INDEX_NONE) {
+    return false;
+  }
+  return !loom_attr_is_absent(loom_op_attrs(function.op)[attr_index]);
+}
+
 static bool loom_low_lower_should_stop(
     const loom_low_lower_context_t* context) {
   return context->options->max_errors != 0 &&
@@ -646,14 +654,15 @@ static iree_status_t loom_low_lower_validate_options(
       options->target_ref.module_id != 0 ||
       options->target_ref.symbol_id >= module->symbols.count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "module-local target bundle symbol is required");
+                            "module-local target profile symbol is required");
   }
   const loom_symbol_t* target_symbol =
       &module->symbols.entries[options->target_ref.symbol_id];
   if (!target_symbol->defining_op ||
-      target_symbol->defining_op->kind != LOOM_OP_TARGET_BUNDLE) {
+      (target_symbol->defining_op->kind != LOOM_OP_TARGET_PROFILE &&
+       target_symbol->defining_op->kind != LOOM_OP_TARGET_BUNDLE)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target symbol must define a target.bundle op");
+                            "target symbol must define a target.profile op");
   }
   if (!options->bundle || !options->bundle->snapshot ||
       !options->bundle->export_plan || !options->bundle->config) {
@@ -959,6 +968,18 @@ static iree_status_t loom_low_lower_create_function_op(
   uint8_t visibility = loom_func_like_visibility(context->source_function);
   uint8_t cc = loom_func_like_cc(context->source_function);
   uint8_t purity = loom_func_like_purity(context->source_function);
+  const bool has_explicit_abi = loom_low_lower_function_attr_present(
+      context->source_function,
+      context->source_function.vtable->abi_attr_index);
+  uint8_t abi = has_explicit_abi
+                    ? loom_func_like_abi(context->source_function)
+                    : context->options->bundle->export_plan->abi_kind;
+  loom_named_attr_slice_t abi_attrs =
+      loom_func_like_abi_attrs(context->source_function);
+  loom_string_id_t export_symbol =
+      loom_func_like_export_symbol(context->source_function);
+  loom_named_attr_slice_t export_attrs =
+      loom_func_like_export_attrs(context->source_function);
   if (visibility != 0) {
     build_flags |= LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY;
   }
@@ -968,18 +989,22 @@ static iree_status_t loom_low_lower_create_function_op(
   if (purity != 0) {
     build_flags |= LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_PURITY;
   }
+  if (abi != 0) {
+    build_flags |= LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_ABI;
+  }
+  if (export_symbol != LOOM_STRING_ID_INVALID) {
+    build_flags |= LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL;
+  }
   loom_builder_initialize(context->module, &context->module->arena,
                           loom_module_block(context->module),
                           &context->builder);
   IREE_RETURN_IF_ERROR(loom_low_func_def_build(
       &context->builder, build_flags, visibility, cc, purity,
-      /*allocation=*/0, /*schedule=*/0, context->options->target_ref,
-      /*abi=*/0, loom_named_attr_slice_empty(),
-      /*export_symbol=*/LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(),
-      low_func_ref, arg_types, arg_count, result_types, result_count,
-      /*tied_results=*/NULL, /*tied_result_count=*/0, /*predicates=*/NULL,
-      /*predicates_count=*/0, context->source_function.op->location,
-      &context->low_func_op));
+      /*allocation=*/0, /*schedule=*/0, context->options->target_ref, abi,
+      abi_attrs, export_symbol, export_attrs, low_func_ref, arg_types,
+      arg_count, result_types, result_count, /*tied_results=*/NULL,
+      /*tied_result_count=*/0, /*predicates=*/NULL, /*predicates_count=*/0,
+      context->source_function.op->location, &context->low_func_op));
 
   loom_region_t* low_body = loom_low_func_def_body(context->low_func_op);
   low_body->flags = source_body->flags;

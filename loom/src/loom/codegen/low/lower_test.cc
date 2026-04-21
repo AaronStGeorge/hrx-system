@@ -556,6 +556,31 @@ class LowLowerTest : public ::testing::Test {
     return module;
   }
 
+  ModulePtr ParseAndLowerProfileTarget(const char* source,
+                                       EmissionCollector* collector,
+                                       loom_low_lower_result_t* out_result) {
+    ModulePtr module = ParseSource(source);
+    IREE_ASSERT(registry_.target_bundle_count > 0);
+    const loom_target_bundle_t* bundle = registry_.target_bundles[0];
+
+    const loom_low_lower_policy_t* policy = nullptr;
+    IREE_CHECK_OK(loom_low_lower_policy_registry_lookup_for_bundle(
+        &policy_registry_, bundle, &policy));
+    const loom_low_lower_options_t options = {
+        .target_ref = SymbolRef(module.get(), IREE_SV("test_target")),
+        .bundle = bundle,
+        .descriptor_registry = &registry_.registry,
+        .descriptor_requirements =
+            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        .policy = policy,
+        .emitter = collector->emitter(),
+        .max_errors = 20,
+    };
+    IREE_CHECK_OK(loom_low_lower_function(
+        module.get(), FirstFunction(module.get()), &options, out_result));
+    return module;
+  }
+
   iree_status_t VerifyLowModule(loom_module_t* module,
                                 EmissionCollector* collector,
                                 loom_low_verify_result_t* out_result) {
@@ -672,8 +697,10 @@ TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {
   };
   std::string text;
   IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
-  EXPECT_NE(text.find("low.func.def target(@test_target) @add_const__low"),
+  EXPECT_NE(text.find("low.func.def target(@test_target) "
+                      "abi(object_function)"),
             std::string::npos);
+  EXPECT_NE(text.find("@add_const__low"), std::string::npos);
   EXPECT_EQ(text.find("source(@"), std::string::npos);
   EXPECT_NE(text.find("asm<test.low.core>"), std::string::npos);
   EXPECT_NE(text.find("test.const.i32"), std::string::npos);
@@ -723,6 +750,47 @@ TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {
   EXPECT_NE(disassembled_text.find("@add_const__low"), std::string::npos);
   EXPECT_NE(disassembled_text.find("asm<test.low.core>"), std::string::npos);
   EXPECT_NE(disassembled_text.find("test.add.i32"), std::string::npos);
+}
+
+TEST_F(LowLowerTest, LowersScalarFunctionTargetingProfile) {
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseAndLowerProfileTarget(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) abi(vm_module_function) "
+      "export(\"add_const_export\") @add_const(%lhs: i32) -> (i32) {\n"
+      "  %c7 = scalar.constant 7 : i32\n"
+      "  %sum = scalar.addi %lhs, %c7 : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+
+  EmissionCollector verify_collector;
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      VerifyLowModule(module.get(), &verify_collector, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+  EXPECT_TRUE(verify_collector.emissions.empty());
+
+  const loom_text_print_options_t print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+  };
+  std::string text;
+  IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
+  EXPECT_NE(text.find("target.profile @test_target preset(\"test-low\")"),
+            std::string::npos);
+  EXPECT_NE(text.find("low.func.def target(@test_target) "
+                      "abi(vm_module_function) export(\"add_const_export\")"),
+            std::string::npos);
+  EXPECT_NE(text.find("@add_const__low"), std::string::npos);
+  EXPECT_NE(text.find("test.const.i32"), std::string::npos);
+  EXPECT_NE(text.find("test.add.i32"), std::string::npos);
+  EXPECT_EQ(text.find("target.bundle"), std::string::npos);
 }
 
 TEST_F(LowLowerTest, LowersVectorCfgFunction) {
@@ -798,8 +866,9 @@ TEST_F(LowLowerTest, LowersResourceArgumentsWithoutDirectAbiOperands) {
   std::string text;
   IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
   EXPECT_NE(text.find("low.func.def target(@test_target) "
-                      "@resource_entry__low()"),
+                      "abi(object_function)"),
             std::string::npos);
+  EXPECT_NE(text.find("@resource_entry__low()"), std::string::npos);
   EXPECT_NE(text.find("%buffer = low.resource<native_pointer>"),
             std::string::npos);
   EXPECT_NE(text.find("semantic_type = buffer"), std::string::npos);

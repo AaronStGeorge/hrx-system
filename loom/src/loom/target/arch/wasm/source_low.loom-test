@@ -7,7 +7,7 @@ func.def @wasm_arith(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> (vector<4xi32>
   func.return %diff : vector<4xi32>
 }
 // ----
-low.func.def target(@wasm_target) @wasm_arith__low(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
+low.func.def target(@wasm_target) abi(wasm_function) @wasm_arith__low(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
   %sum = low.op<wasm.i32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
   %diff = low.op<wasm.i32x4.sub>(%sum, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
   low.return %diff : reg<wasm.v128>
@@ -24,7 +24,7 @@ func.def @wasm_f32_arith(%lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4x
 }
 
 // ----
-low.func.def target(@wasm_f32_target) @wasm_f32_arith__low(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
+low.func.def target(@wasm_f32_target) abi(wasm_function) @wasm_f32_arith__low(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
   %sum = low.op<wasm.f32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
   %product = low.op<wasm.f32x4.mul>(%sum, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
   low.return %product : reg<wasm.v128>
@@ -41,7 +41,7 @@ func.def @wasm_splat(%value: i32, %rhs: vector<4xi32>) -> (vector<4xi32>) {
 }
 
 // ----
-low.func.def target(@wasm_splat_target) @wasm_splat__low(%value: reg<wasm.i32>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
+low.func.def target(@wasm_splat_target) abi(wasm_function) @wasm_splat__low(%value: reg<wasm.i32>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
   %splat = low.op<wasm.i32x4.splat>(%value) : (reg<wasm.i32>) -> reg<wasm.v128>
   %sum = low.op<wasm.i32x4.add>(%splat, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
   low.return %sum : reg<wasm.v128>

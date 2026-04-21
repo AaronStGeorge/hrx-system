@@ -6,7 +6,7 @@
 
 // Low function target binding.
 //
-// This layer connects ordinary Loom target records to dense low descriptor
+// This layer connects low function target profiles to dense low descriptor
 // tables. The descriptor table ABI itself remains IR-agnostic; this file owns
 // the codegen contract that says a low.func target record selects one
 // descriptor set key and feature bitset before low.op packet verification,
@@ -27,15 +27,15 @@ extern "C" {
 
 // Resolved low target context for one low function.
 typedef struct loom_low_resolved_target_t {
-  // Symbol defining the low function target record.
+  // Symbol defining the low function target profile or legacy bundle record.
   const loom_symbol_t* target_symbol;
-  // Defining op for |target_symbol|; currently expected to be target.bundle.
+  // Defining op for |target_symbol|.
   const loom_op_t* target_op;
-  // target.snapshot op selected by the target bundle.
+  // target.snapshot op selected by a legacy target bundle, or NULL.
   const loom_op_t* snapshot_op;
-  // target.export op selected by the target bundle.
+  // target.export op selected by a legacy target bundle, or NULL.
   const loom_op_t* export_plan_op;
-  // target.config op selected by the target bundle.
+  // target.config op selected by a legacy target bundle, or NULL.
   const loom_op_t* config_op;
   // Materialized target records selected by this low function.
   loom_target_ir_bundle_storage_t bundle_storage;
@@ -80,7 +80,7 @@ typedef struct loom_low_resolved_descriptor_packet_t {
   const loom_low_descriptor_t* descriptor;
 } loom_low_resolved_descriptor_packet_t;
 
-// Resolves the target bundle/config and descriptor set for |low_func_op|.
+// Resolves the target profile records and descriptor set for |low_func_op|.
 // User IR failures are emitted through |emitter| and leave
 // out_target->descriptor_set NULL. Infrastructure failures are returned as
 // status. |low_func_op| must be low.func.def or low.func.decl.

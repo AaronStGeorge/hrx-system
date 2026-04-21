@@ -546,6 +546,7 @@ loom_cc_library(
     srcs = ["descriptors.c"],
     hdrs = ["descriptors.h"],
     deps = [
+        "//loom/src/loom/target:types",
         "//loom/src/loom/util:bstring",
         "//loom/src/loom/util:stable_id",
         "//runtime/src/iree/base",
@@ -649,6 +650,7 @@ loom_cc_library(
     hdrs = ["target_binding.h"],
     deps = [
         ":descriptors",
+        "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
@@ -656,6 +658,7 @@ loom_cc_library(
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target:ir_records",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

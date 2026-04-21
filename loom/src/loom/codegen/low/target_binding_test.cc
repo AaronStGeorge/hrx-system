@@ -6,6 +6,8 @@
 
 #include "loom/codegen/low/target_binding.h"
 
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -132,6 +134,56 @@ class LowTargetBindingTest : public ::testing::Test {
     };
   }
 
+  static loom_low_descriptor_registry_t IreeVmRegistryWithPreset() {
+    static const loom_target_snapshot_t kVmSnapshot = {
+        .name = IREE_SVL("test.iree-vm"),
+        .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_VM,
+        .target_triple = IREE_SVL("iree-vm"),
+        .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE,
+        .target_cpu = IREE_SVL("iree-vm"),
+        .default_pointer_bitwidth = 64,
+        .index_bitwidth = 64,
+        .offset_bitwidth = 64,
+        .memory_spaces =
+            {
+                .generic = 0,
+                .global = 0,
+                .workgroup = UINT32_MAX,
+                .constant = 0,
+                .private_memory = 0,
+                .host = 0,
+                .descriptor = UINT32_MAX,
+            },
+    };
+    static const loom_target_export_plan_t kVmExportPlan = {
+        .name = IREE_SVL("test.iree-vm"),
+        .abi_kind = LOOM_TARGET_ABI_VM_MODULE_FUNCTION,
+        .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
+    };
+    static const loom_target_config_t kVmConfig = {
+        .name = IREE_SVL("test.iree-vm"),
+        .contract_set_key = IREE_SVL("iree.vm.core"),
+    };
+    static const loom_target_bundle_t kVmBundle = {
+        .name = IREE_SVL("test.iree-vm"),
+        .snapshot = &kVmSnapshot,
+        .export_plan = &kVmExportPlan,
+        .config = &kVmConfig,
+    };
+    static const loom_low_descriptor_set_t* descriptor_sets[] = {
+        loom_ireevm_core_descriptor_set(),
+    };
+    static const loom_target_bundle_t* target_bundles[] = {
+        &kVmBundle,
+    };
+    return loom_low_descriptor_registry_t{
+        .descriptor_sets = descriptor_sets,
+        .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+        .target_bundles = target_bundles,
+        .target_bundle_count = IREE_ARRAYSIZE(target_bundles),
+    };
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
 };
@@ -253,6 +305,51 @@ TEST_F(LowTargetBindingTest, ResolvesBundleConfigAndDescriptorSet) {
   loom_module_free(module);
 }
 
+TEST_F(LowTargetBindingTest, ResolvesProfilePresetAndDescriptorSet) {
+  const char source[] =
+      "target.profile @vm_target preset(\"test.iree-vm\")\n"
+      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "reg<vm.i32>) -> (reg<vm.i32>) {\n"
+      "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, "
+      "reg<vm.i32>) -> reg<vm.i32>\n"
+      "  low.return %sum : reg<vm.i32>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+  const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
+  ASSERT_NE(low_func, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistryWithPreset();
+  EmissionCollector collector;
+  loom_low_resolved_target_t target = {};
+  IREE_ASSERT_OK(loom_low_resolve_function_target(
+      module, low_func, &registry, collector.emitter(), &target));
+
+  EXPECT_TRUE(collector.emissions.empty());
+  EXPECT_EQ(target.target_op->kind, LOOM_OP_TARGET_PROFILE);
+  EXPECT_EQ(target.snapshot_op, nullptr);
+  EXPECT_EQ(target.export_plan_op, nullptr);
+  EXPECT_EQ(target.config_op, nullptr);
+  EXPECT_EQ(target.descriptor_set, loom_ireevm_core_descriptor_set());
+  EXPECT_EQ(target.bundle_storage.bundle.snapshot,
+            &target.bundle_storage.snapshot);
+  EXPECT_EQ(target.bundle_storage.bundle.export_plan,
+            &target.bundle_storage.export_plan);
+  EXPECT_EQ(target.bundle_storage.bundle.config, &target.bundle_storage.config);
+  EXPECT_EQ(target.bundle_storage.snapshot.codegen_format,
+            LOOM_TARGET_CODEGEN_FORMAT_VM);
+  EXPECT_EQ(target.bundle_storage.export_plan.abi_kind,
+            LOOM_TARGET_ABI_VM_MODULE_FUNCTION);
+  EXPECT_EQ(ToString(target.bundle_storage.config.contract_set_key),
+            "iree.vm.core");
+  EXPECT_TRUE(iree_string_view_equal(target.target_name, IREE_SV("vm_target")));
+  EXPECT_TRUE(iree_string_view_equal(target.descriptor_set_key,
+                                     IREE_SV("iree.vm.core")));
+  EXPECT_EQ(target.feature_bits, 0u);
+
+  loom_module_free(module);
+}
+
 TEST_F(LowTargetBindingTest, ResolvesDescriptorPacketToDenseOrdinal) {
   loom_module_t* module = ParseSource(ValidVmLowFunction());
   ASSERT_NE(module, nullptr);
@@ -328,7 +425,7 @@ TEST_F(LowTargetBindingTest, ResolvesMissingDescriptorPacketAsUnresolved) {
   loom_module_free(module);
 }
 
-TEST_F(LowTargetBindingTest, RejectsTargetRecordThatIsNotBundle) {
+TEST_F(LowTargetBindingTest, RejectsTargetRecordThatIsNotProfileOrBundle) {
   const char source[] =
       "target.config @vm_config {contract_set_key = \"iree.vm.core\", "
       "contract_feature_bits = 0}\n"
@@ -351,7 +448,7 @@ TEST_F(LowTargetBindingTest, RejectsTargetRecordThatIsNotBundle) {
             loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3));
   ASSERT_GE(collector.emissions[0].string_params.size(), 3u);
   EXPECT_EQ(collector.emissions[0].string_params[0], "vm_config");
-  EXPECT_EQ(collector.emissions[0].string_params[2], "target bundle");
+  EXPECT_EQ(collector.emissions[0].string_params[2], "target profile");
   EXPECT_EQ(target.descriptor_set, nullptr);
 
   loom_module_free(module);

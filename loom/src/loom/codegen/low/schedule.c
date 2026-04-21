@@ -30,7 +30,7 @@ typedef struct loom_low_schedule_build_state_t {
   const loom_op_t* function_op;
   // Body region of function_op.
   loom_region_t* body;
-  // Resolved target bundle and descriptor set for the low function.
+  // Resolved target records and descriptor set for the low function.
   loom_low_resolved_target_t target;
   // Descriptor register-class lookup map for module register types.
   loom_low_register_class_map_t register_class_map;

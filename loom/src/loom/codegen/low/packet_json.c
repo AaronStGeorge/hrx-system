@@ -666,6 +666,10 @@ static iree_status_t loom_low_packet_json_write_packet(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
   }
   IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"descriptor_ordinal\":"));
+  IREE_RETURN_IF_ERROR(loom_low_packet_json_write_nullable_u32(
+      node->descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE, stream));
+  IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"mnemonic\":"));
   if (descriptor) {
     IREE_RETURN_IF_ERROR(loom_low_packet_json_write_descriptor_string_or_null(

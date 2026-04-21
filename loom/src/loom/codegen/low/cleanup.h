@@ -26,7 +26,7 @@ extern "C" {
 // Removes dead-removable target-low ops from one low.func.def.
 //
 // |descriptor_registry| selects the descriptor set named by the low function's
-// target bundle. Descriptor-backed low.op/low.const packets are removable only
+// target profile. Descriptor-backed low.op/low.const packets are removable only
 // when their descriptor carries LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE and all
 // SSA results are unused. The pass arena is transient and comes from the
 // module's arena block pool.

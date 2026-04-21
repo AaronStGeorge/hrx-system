@@ -19,6 +19,7 @@ loom_cc_library(
     "descriptors.c"
   DEPS
     iree::base
+    loom::src::loom::target::types
     loom::src::loom::util::bstring
     loom::src::loom::util::stable_id
   PUBLIC
@@ -148,6 +149,8 @@ loom_cc_library(
   DEPS
     ::descriptors
     iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir

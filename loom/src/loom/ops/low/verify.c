@@ -68,23 +68,31 @@ static bool loom_low_qualified_key_segment_continue(char c) {
 }
 
 static bool loom_low_qualified_key_is_valid(iree_string_view_t key) {
-  if (iree_string_view_is_empty(key)) return false;
+  if (iree_string_view_is_empty(key)) {
+    return false;
+  }
   bool saw_separator = false;
   bool expect_segment_start = true;
   for (iree_host_size_t i = 0; i < key.size; ++i) {
     char c = key.data[i];
     if (c == '.') {
-      if (expect_segment_start) return false;
+      if (expect_segment_start) {
+        return false;
+      }
       saw_separator = true;
       expect_segment_start = true;
       continue;
     }
     if (expect_segment_start) {
-      if (!loom_low_qualified_key_segment_start(c)) return false;
+      if (!loom_low_qualified_key_segment_start(c)) {
+        return false;
+      }
       expect_segment_start = false;
       continue;
     }
-    if (!loom_low_qualified_key_segment_continue(c)) return false;
+    if (!loom_low_qualified_key_segment_continue(c)) {
+      return false;
+    }
   }
   return saw_separator && !expect_segment_start;
 }
@@ -100,9 +108,13 @@ static iree_string_view_t loom_low_string_or_empty(const loom_module_t* module,
 
 static iree_string_view_t loom_low_op_name(const loom_module_t* module,
                                            const loom_op_t* op) {
-  if (!op) return IREE_SV("<null>");
+  if (!op) {
+    return IREE_SV("<null>");
+  }
   const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
-  if (!vtable) return IREE_SV("<unknown>");
+  if (!vtable) {
+    return IREE_SV("<unknown>");
+  }
   return loom_op_vtable_name(vtable);
 }
 
@@ -119,7 +131,9 @@ static iree_string_view_t loom_low_symbol_name(const loom_module_t* module,
 
 static iree_string_view_t loom_low_symbol_definition_name(
     const loom_symbol_t* symbol) {
-  if (!symbol || !symbol->definition) return IREE_SV("unresolved");
+  if (!symbol || !symbol->definition) {
+    return IREE_SV("unresolved");
+  }
   return loom_symbol_definition_descriptor_name(symbol->definition);
 }
 
@@ -130,7 +144,9 @@ static const loom_symbol_t* loom_low_lookup_defined_symbol(
     return NULL;
   }
   const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
-  if (!symbol->definition || !symbol->defining_op) return NULL;
+  if (!symbol->definition || !symbol->defining_op) {
+    return NULL;
+  }
   return symbol;
 }
 
@@ -139,14 +155,22 @@ static bool loom_low_function_isa(const loom_op_t* op) {
 }
 
 static loom_symbol_ref_t loom_low_function_symbol(const loom_op_t* op) {
-  if (loom_low_func_def_isa(op)) return loom_low_func_def_callee(op);
-  if (loom_low_func_decl_isa(op)) return loom_low_func_decl_callee(op);
+  if (loom_low_func_def_isa(op)) {
+    return loom_low_func_def_callee(op);
+  }
+  if (loom_low_func_decl_isa(op)) {
+    return loom_low_func_decl_callee(op);
+  }
   return loom_symbol_ref_null();
 }
 
 static loom_symbol_ref_t loom_low_function_target(const loom_op_t* op) {
-  if (loom_low_func_def_isa(op)) return loom_low_func_def_target(op);
-  if (loom_low_func_decl_isa(op)) return loom_low_func_decl_target(op);
+  if (loom_low_func_def_isa(op)) {
+    return loom_low_func_def_target(op);
+  }
+  if (loom_low_func_decl_isa(op)) {
+    return loom_low_func_decl_target(op);
+  }
   return loom_symbol_ref_null();
 }
 
@@ -159,6 +183,25 @@ static bool loom_low_optional_attr_is_present(const loom_op_t* op,
                                               uint16_t attr_index) {
   return attr_index < op->attribute_count &&
          !loom_attr_is_absent(loom_op_attrs(op)[attr_index]);
+}
+
+static bool loom_low_function_explicit_abi(const loom_op_t* op,
+                                           uint8_t* out_abi,
+                                           uint16_t* out_abi_attr_index) {
+  if (loom_low_func_def_isa(op) &&
+      loom_low_optional_attr_is_present(op, loom_low_func_def_abi_ATTR_INDEX)) {
+    *out_abi = loom_low_func_def_abi(op);
+    *out_abi_attr_index = loom_low_func_def_abi_ATTR_INDEX;
+    return true;
+  }
+  if (loom_low_func_decl_isa(op) &&
+      loom_low_optional_attr_is_present(op,
+                                        loom_low_func_decl_abi_ATTR_INDEX)) {
+    *out_abi = loom_low_func_decl_abi(op);
+    *out_abi_attr_index = loom_low_func_decl_abi_ATTR_INDEX;
+    return true;
+  }
+  return false;
 }
 
 static loom_type_t loom_low_type_attr(const loom_module_t* module,
@@ -263,7 +306,9 @@ static iree_status_t loom_low_verify_decl_code_import(
   if (import_kind_present && code_symbol_present) {
     iree_string_view_t code_symbol =
         loom_low_string_or_empty(module, loom_low_func_decl_code_symbol(op));
-    if (!iree_string_view_is_empty(code_symbol)) return iree_ok_status();
+    if (!iree_string_view_is_empty(code_symbol)) {
+      return iree_ok_status();
+    }
     return loom_low_emit_function_contract_error(
         module, op, loom_low_func_decl_code_symbol_ATTR_INDEX,
         IREE_SV("import"), IREE_SV("code symbol must not be empty"), emitter);
@@ -288,7 +333,9 @@ static bool loom_low_load_func_like_signature(
     loom_low_callee_signature_t* out_signature) {
   loom_func_like_t func =
       loom_func_like_cast(module, symbol ? symbol->defining_op : NULL);
-  if (!loom_func_like_isa(func)) return false;
+  if (!loom_func_like_isa(func)) {
+    return false;
+  }
   out_signature->definition_op = symbol->defining_op;
   out_signature->argument_ids =
       loom_func_like_arg_ids(func, &out_signature->argument_count);
@@ -300,7 +347,9 @@ static bool loom_low_load_func_like_signature(
 static bool loom_low_load_low_signature(
     const loom_module_t* module, const loom_symbol_t* symbol,
     loom_low_callee_signature_t* out_signature) {
-  if (!symbol || !loom_low_function_isa(symbol->defining_op)) return false;
+  if (!symbol || !loom_low_function_isa(symbol->defining_op)) {
+    return false;
+  }
   return loom_low_load_func_like_signature(module, symbol, out_signature);
 }
 
@@ -326,7 +375,9 @@ static iree_status_t loom_low_verify_qualified_key_attr(
     uint16_t attr_index, iree_string_view_t field_name,
     iree_string_view_t expected) {
   iree_string_view_t key = loom_low_string_or_empty(module, string_id);
-  if (loom_low_qualified_key_is_valid(key)) return iree_ok_status();
+  if (loom_low_qualified_key_is_valid(key)) {
+    return iree_ok_status();
+  }
   return loom_low_emit_descriptor_key_error(emitter, op, attr_index, field_name,
                                             key, expected);
 }
@@ -445,9 +496,13 @@ static const loom_op_t* loom_low_find_enclosing_low_func_def(
     const loom_module_t* module, const loom_op_t* nested_op) {
   const loom_op_t* parent = nested_op->parent_op;
   while (parent) {
-    if (loom_low_func_def_isa(parent)) return parent;
+    if (loom_low_func_def_isa(parent)) {
+      return parent;
+    }
     loom_func_like_t func = loom_func_like_cast(module, (loom_op_t*)parent);
-    if (loom_func_like_isa(func) && loom_func_like_body(func)) return NULL;
+    if (loom_func_like_isa(func) && loom_func_like_body(func)) {
+      return NULL;
+    }
     parent = parent->parent_op;
   }
   return NULL;
@@ -459,8 +514,12 @@ static iree_status_t loom_low_verify_slot_function(
     iree_diagnostic_emitter_t emitter) {
   const loom_symbol_t* symbol =
       loom_low_lookup_defined_symbol(module, function_ref);
-  if (!symbol) return iree_ok_status();
-  if (loom_low_func_def_isa(symbol->defining_op)) return iree_ok_status();
+  if (!symbol) {
+    return iree_ok_status();
+  }
+  if (loom_low_func_def_isa(symbol->defining_op)) {
+    return iree_ok_status();
+  }
   return loom_low_emit_symbol_kind_mismatch(
       module, op, function_ref, attr_index, symbol,
       IREE_SV("low function definition"), emitter);
@@ -475,7 +534,9 @@ static iree_status_t loom_low_load_slot(const loom_module_t* module,
   *out_slot_op = NULL;
   const loom_symbol_t* slot_symbol =
       loom_low_lookup_defined_symbol(module, slot_ref);
-  if (!slot_symbol) return iree_ok_status();
+  if (!slot_symbol) {
+    return iree_ok_status();
+  }
   if (!loom_low_slot_isa(slot_symbol->defining_op)) {
     return loom_low_emit_symbol_kind_mismatch(module, op, slot_ref,
                                               slot_attr_index, slot_symbol,
@@ -492,7 +553,9 @@ static iree_status_t loom_low_verify_slot_use(
   const loom_op_t* slot_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_load_slot(module, op, slot_ref, slot_attr_index,
                                           emitter, &slot_op));
-  if (!slot_op) return iree_ok_status();
+  if (!slot_op) {
+    return iree_ok_status();
+  }
 
   const loom_op_t* enclosing_func =
       loom_low_find_enclosing_low_func_def(module, op);
@@ -650,6 +713,27 @@ static iree_status_t loom_low_verify_resource_export_abi(
       related, IREE_ARRAYSIZE(related), emitter);
 }
 
+static iree_status_t loom_low_verify_resource_function_abi(
+    const loom_module_t* module, const loom_op_t* resource_op,
+    const loom_op_t* function_op, uint16_t function_abi_attr_index, uint8_t abi,
+    uint8_t kind, iree_diagnostic_emitter_t emitter) {
+  if (loom_low_resource_matches_export_abi(kind, abi)) {
+    return iree_ok_status();
+  }
+  loom_diagnostic_related_op_t related[] = {{
+      .label = IREE_SV("function ABI defined here"),
+      .op = function_op,
+      .field_ref = loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                             function_abi_attr_index),
+  }};
+  return loom_low_emit_structural_storage_error(
+      module, resource_op,
+      loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                loom_low_resource_import_kind_ATTR_INDEX),
+      IREE_SV("import_kind"), loom_low_resource_export_abi_reason(kind),
+      related, IREE_ARRAYSIZE(related), emitter);
+}
+
 static iree_status_t loom_low_verify_resource_op(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter) {
@@ -703,6 +787,15 @@ static iree_status_t loom_low_verify_resource_op(
         IREE_SV("enclosing function"),
         IREE_SV("resource imports must be nested under a low function body"),
         NULL, 0, emitter);
+  }
+
+  uint8_t function_abi = 0;
+  uint16_t function_abi_attr_index = 0;
+  if (loom_low_function_explicit_abi(enclosing_func, &function_abi,
+                                     &function_abi_attr_index)) {
+    return loom_low_verify_resource_function_abi(
+        module, op, enclosing_func, function_abi_attr_index, function_abi,
+        import_kind, emitter);
   }
 
   const loom_op_t* export_op = NULL;
@@ -857,8 +950,12 @@ static iree_status_t loom_low_emit_call_purity_effect_error(
 static bool loom_low_func_like_is_pure(const loom_module_t* module,
                                        const loom_op_t* op) {
   loom_func_like_t func = loom_func_like_cast(module, (loom_op_t*)op);
-  if (!loom_func_like_isa(func)) return false;
-  if (loom_func_like_purity(func) != 0) return true;
+  if (!loom_func_like_isa(func)) {
+    return false;
+  }
+  if (loom_func_like_purity(func) != 0) {
+    return true;
+  }
   loom_region_t* body = loom_func_like_body(func);
   return body && !loom_region_has_read_effects(body) &&
          !loom_region_has_write_effects(body);

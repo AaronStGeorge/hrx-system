@@ -8,9 +8,12 @@
 
 #include <inttypes.h>
 
+#include "iree/base/internal/arena.h"
+#include "loom/analysis/symbol_facts.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/target/facts.h"
 #include "loom/ops/target/ops.h"
 
 static iree_status_t loom_low_emit(iree_diagnostic_emitter_t emitter,
@@ -38,7 +41,9 @@ static const loom_symbol_t* loom_low_lookup_defined_symbol(
     return NULL;
   }
   const loom_symbol_t* symbol = &module->symbols.entries[ref.symbol_id];
-  if (symbol->definition == NULL || symbol->defining_op == NULL) return NULL;
+  if (symbol->definition == NULL || symbol->defining_op == NULL) {
+    return NULL;
+  }
   return symbol;
 }
 
@@ -77,7 +82,9 @@ static iree_string_view_t loom_low_string_or_empty(const loom_module_t* module,
 
 static iree_string_view_t loom_low_symbol_definition_name(
     const loom_symbol_t* symbol) {
-  if (!symbol || !symbol->definition) return IREE_SV("unresolved");
+  if (!symbol || !symbol->definition) {
+    return IREE_SV("unresolved");
+  }
   return loom_symbol_definition_descriptor_name(symbol->definition);
 }
 
@@ -119,7 +126,8 @@ static iree_status_t loom_low_emit_unresolved_symbol(
 
 static iree_status_t loom_low_emit_missing_descriptor_set(
     iree_diagnostic_emitter_t emitter, const loom_module_t* module,
-    const loom_op_t* low_func_op, const loom_op_t* config_op,
+    const loom_op_t* low_func_op, const loom_op_t* target_context_op,
+    loom_diagnostic_field_ref_t target_context_field_ref,
     uint16_t target_attr_index, iree_string_view_t descriptor_set_key,
     iree_string_view_t target_name) {
   loom_diagnostic_param_t params[] = {
@@ -132,15 +140,13 @@ static iree_status_t loom_low_emit_missing_descriptor_set(
   };
   loom_diagnostic_related_op_t related[] = {{
       .label = IREE_SV("descriptor set selected here"),
-      .op = config_op,
-      .field_ref = loom_diagnostic_field_ref(
-          LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-          loom_target_config_contract_set_key_ATTR_INDEX),
+      .op = target_context_op,
+      .field_ref = target_context_field_ref,
   }};
   return loom_low_emit(emitter, low_func_op,
                        loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 3),
                        params, IREE_ARRAYSIZE(params), related,
-                       IREE_ARRAYSIZE(related));
+                       target_context_op ? IREE_ARRAYSIZE(related) : 0);
 }
 
 static iree_status_t loom_low_emit_target_config_feature_constraint(
@@ -198,42 +204,87 @@ static iree_status_t loom_low_resolve_bundle_record(
   return iree_ok_status();
 }
 
-iree_status_t loom_low_resolve_function_target(
+static iree_status_t loom_low_resolve_profile_target(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_descriptor_registry_t* registry,
-    iree_diagnostic_emitter_t emitter, loom_low_resolved_target_t* out_target) {
-  if (!module || !low_func_op || !out_target) {
+    iree_diagnostic_emitter_t emitter, loom_symbol_ref_t target_ref,
+    uint16_t target_attr_index, loom_low_resolved_target_t* out_target) {
+  if (registry == NULL || registry->target_bundle_count == 0 ||
+      registry->target_bundles == NULL) {
     return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "module, low function op, and output target are required");
-  }
-  *out_target = (loom_low_resolved_target_t){0};
-  loom_symbol_ref_t target_ref = loom_symbol_ref_null();
-  uint16_t target_attr_index = 0;
-  if (!loom_low_get_function_target_ref(low_func_op, &target_ref,
-                                        &target_attr_index)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected low.func.def or low.func.decl");
+        IREE_STATUS_FAILED_PRECONDITION,
+        "target.profile low function targets require a descriptor registry "
+        "with target-bundle presets");
   }
 
-  const loom_symbol_t* target_symbol =
-      loom_low_lookup_defined_symbol(module, target_ref);
-  if (!target_symbol) {
-    return loom_low_emit_unresolved_symbol(emitter, module, low_func_op,
-                                           target_ref, target_attr_index);
+  loom_target_preset_registry_t preset_registry = {
+      .target_bundles = registry->target_bundles,
+      .target_bundle_count = registry->target_bundle_count,
+  };
+  loom_symbol_fact_resource_t resource =
+      loom_target_profile_preset_registry_resource(&preset_registry);
+  const loom_symbol_fact_table_options_t fact_options = {
+      .resources = loom_make_symbol_fact_resource_list(&resource, 1),
+  };
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(module->arena.block_pool, &arena);
+  loom_symbol_fact_table_t fact_table = {0};
+  loom_symbol_fact_table_initialize_with_options(&fact_table, &fact_options,
+                                                 &arena);
+
+  const loom_symbol_facts_base_t* base_facts = NULL;
+  iree_status_t status = loom_symbol_fact_table_lookup_ref(
+      &fact_table, module, target_ref, &base_facts);
+  const loom_target_profile_symbol_facts_t* profile_facts =
+      iree_status_is_ok(status)
+          ? loom_target_profile_symbol_facts_cast(base_facts)
+          : NULL;
+  if (iree_status_is_ok(status) && profile_facts == NULL) {
+    status = loom_low_emit_symbol_kind_mismatch(
+        emitter, module, low_func_op, target_ref, out_target->target_symbol,
+        target_attr_index, IREE_SV("target profile"));
+  }
+  if (iree_status_is_ok(status)) {
+    out_target->bundle_storage.snapshot = profile_facts->snapshot;
+    out_target->bundle_storage.export_plan = profile_facts->export_plan;
+    out_target->bundle_storage.config = profile_facts->config;
+    out_target->bundle_storage.bundle = (loom_target_bundle_t){
+        .name = profile_facts->bundle.name,
+        .snapshot = &out_target->bundle_storage.snapshot,
+        .export_plan = &out_target->bundle_storage.export_plan,
+        .config = &out_target->bundle_storage.config,
+    };
+    out_target->descriptor_set_key =
+        out_target->bundle_storage.config.contract_set_key;
+    out_target->feature_bits =
+        out_target->bundle_storage.config.contract_feature_bits;
   }
 
-  out_target->target_symbol = target_symbol;
-  out_target->target_op = target_symbol->defining_op;
-  out_target->target_name = loom_low_symbol_name(module, target_ref);
-
-  if (!loom_target_bundle_isa(target_symbol->defining_op)) {
-    return loom_low_emit_symbol_kind_mismatch(
-        emitter, module, low_func_op, target_ref, target_symbol,
-        target_attr_index, IREE_SV("target bundle"));
+  iree_arena_deinitialize(&arena);
+  if (!iree_status_is_ok(status)) {
+    return status;
   }
 
-  const loom_op_t* bundle_op = target_symbol->defining_op;
+  const loom_low_descriptor_set_t* descriptor_set = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_lookup(
+      registry, out_target->descriptor_set_key, &descriptor_set));
+  if (!descriptor_set) {
+    return loom_low_emit_missing_descriptor_set(
+        emitter, module, low_func_op, out_target->target_op,
+        loom_diagnostic_field_ref_none(), target_attr_index,
+        out_target->descriptor_set_key, out_target->target_name);
+  }
+  out_target->descriptor_set = descriptor_set;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_resolve_bundle_target(
+    const loom_module_t* module, const loom_op_t* low_func_op,
+    const loom_low_descriptor_registry_t* registry,
+    iree_diagnostic_emitter_t emitter, uint16_t target_attr_index,
+    loom_low_resolved_target_t* out_target) {
+  const loom_op_t* bundle_op = out_target->target_symbol->defining_op;
   const loom_symbol_t* snapshot_symbol = NULL;
   IREE_RETURN_IF_ERROR(loom_low_resolve_bundle_record(
       module, bundle_op, loom_target_bundle_snapshot(bundle_op),
@@ -277,11 +328,58 @@ iree_status_t loom_low_resolve_function_target(
       registry, out_target->descriptor_set_key, &descriptor_set));
   if (!descriptor_set) {
     return loom_low_emit_missing_descriptor_set(
-        emitter, module, low_func_op, config_op, target_attr_index,
-        out_target->descriptor_set_key, out_target->target_name);
+        emitter, module, low_func_op, config_op,
+        loom_diagnostic_field_ref(
+            LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+            loom_target_config_contract_set_key_ATTR_INDEX),
+        target_attr_index, out_target->descriptor_set_key,
+        out_target->target_name);
   }
   out_target->descriptor_set = descriptor_set;
   return iree_ok_status();
+}
+
+iree_status_t loom_low_resolve_function_target(
+    const loom_module_t* module, const loom_op_t* low_func_op,
+    const loom_low_descriptor_registry_t* registry,
+    iree_diagnostic_emitter_t emitter, loom_low_resolved_target_t* out_target) {
+  if (!module || !low_func_op || !out_target) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "module, low function op, and output target are required");
+  }
+  *out_target = (loom_low_resolved_target_t){0};
+  loom_symbol_ref_t target_ref = loom_symbol_ref_null();
+  uint16_t target_attr_index = 0;
+  if (!loom_low_get_function_target_ref(low_func_op, &target_ref,
+                                        &target_attr_index)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected low.func.def or low.func.decl");
+  }
+
+  const loom_symbol_t* target_symbol =
+      loom_low_lookup_defined_symbol(module, target_ref);
+  if (!target_symbol) {
+    return loom_low_emit_unresolved_symbol(emitter, module, low_func_op,
+                                           target_ref, target_attr_index);
+  }
+
+  out_target->target_symbol = target_symbol;
+  out_target->target_op = target_symbol->defining_op;
+  out_target->target_name = loom_low_symbol_name(module, target_ref);
+
+  if (loom_target_profile_isa(target_symbol->defining_op)) {
+    return loom_low_resolve_profile_target(module, low_func_op, registry,
+                                           emitter, target_ref,
+                                           target_attr_index, out_target);
+  }
+  if (loom_target_bundle_isa(target_symbol->defining_op)) {
+    return loom_low_resolve_bundle_target(
+        module, low_func_op, registry, emitter, target_attr_index, out_target);
+  }
+  return loom_low_emit_symbol_kind_mismatch(
+      emitter, module, low_func_op, target_ref, target_symbol,
+      target_attr_index, IREE_SV("target profile"));
 }
 
 iree_status_t loom_low_resolve_descriptor_packet(

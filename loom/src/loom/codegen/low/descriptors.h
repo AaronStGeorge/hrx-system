@@ -17,6 +17,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/string_builder.h"
+#include "loom/target/types.h"
 #include "loom/util/bstring.h"
 
 #ifdef __cplusplus
@@ -715,6 +716,10 @@ typedef struct loom_low_descriptor_registry_t {
   const loom_low_descriptor_set_provider_t* descriptor_set_providers;
   // Number of provider functions in |descriptor_set_providers|.
   iree_host_size_t descriptor_set_provider_count;
+  // Borrowed target-bundle presets linked with these descriptor sets.
+  const loom_target_bundle_t* const* target_bundles;
+  // Number of valid target-bundle presets in |target_bundles|.
+  iree_host_size_t target_bundle_count;
 } loom_low_descriptor_registry_t;
 
 // Returns the total number of descriptor-set slots in |registry|, including

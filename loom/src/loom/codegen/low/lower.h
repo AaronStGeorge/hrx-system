@@ -195,7 +195,8 @@ bool loom_low_lower_policy_registry_has_bundle(
     const loom_target_bundle_t* bundle);
 
 typedef struct loom_low_lower_options_t {
-  // Module-local target.bundle symbol used by the emitted low.func.def.
+  // Module-local target.profile or legacy target.bundle symbol used by the
+  // emitted low.func.def.
   loom_symbol_ref_t target_ref;
   // Target bundle selected for this lowering attempt.
   const loom_target_bundle_t* bundle;

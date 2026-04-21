@@ -7,7 +7,7 @@ func.def @x86_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi3
   func.return %diff : vector<16xi32>
 }
 // ----
-low.func.def target(@x86_target) @x86_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) {
+low.func.def target(@x86_target) abi(object_function) @x86_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) {
   %sum = low.op<x86.avx512.vpaddd.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
   %diff = low.op<x86.avx512.vpsubd.zmm>(%sum, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
   low.return %diff : reg<x86.zmm>
@@ -26,7 +26,7 @@ func.def @x86_f32_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<1
 }
 
 // ----
-low.func.def target(@x86_f32_target) @x86_f32_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) {
+low.func.def target(@x86_f32_target) abi(object_function) @x86_f32_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) {
   %sum = low.op<x86.avx512.vaddps.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
   %difference = low.op<x86.avx512.vsubps.zmm>(%sum, %lhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
   %product = low.op<x86.avx512.vmulps.zmm>(%difference, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>

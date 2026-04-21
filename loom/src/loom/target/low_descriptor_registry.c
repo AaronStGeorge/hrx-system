@@ -28,6 +28,8 @@ void loom_target_low_descriptor_registry_initialize_from_tables(
           {
               .descriptor_set_providers = descriptor_set_providers,
               .descriptor_set_provider_count = descriptor_set_provider_count,
+              .target_bundles = target_bundles,
+              .target_bundle_count = target_bundle_count,
           },
   };
 }

@@ -11,7 +11,7 @@ func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@gfx11_global_saddr_fallback_target) @global_saddr_fallback__low() {
+low.func.def target(@gfx11_global_saddr_fallback_target) abi(hal_kernel) @global_saddr_fallback__low() {
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 20} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 20} : reg<amdgpu.sgpr x4>
   %base = low.const<amdgpu.s_mov_b32> {imm32 = 4} : reg<amdgpu.sgpr>
@@ -43,7 +43,7 @@ func.def @i32_b128(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@gfx11_i32_b128_target) @i32_b128__low() {
+low.func.def target(@gfx11_i32_b128_target) abi(hal_kernel) @i32_b128__low() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
@@ -115,7 +115,7 @@ func.def @i32_bitwise(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@gfx11_i32_bitwise_target) @i32_bitwise__low() {
+low.func.def target(@gfx11_i32_bitwise_target) abi(hal_kernel) @i32_bitwise__low() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -157,7 +157,7 @@ func.def @i32_shift(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@gfx11_i32_shift_target) @i32_shift__low() {
+low.func.def target(@gfx11_i32_shift_target) abi(hal_kernel) @i32_shift__low() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -205,7 +205,7 @@ func.def @i32_scalarized(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@gfx11_i32_scalarized_target) @i32_scalarized__low() {
+low.func.def target(@gfx11_i32_scalarized_target) abi(hal_kernel) @i32_scalarized__low() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
@@ -254,7 +254,7 @@ func.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@gfx11_f32_arith_target) @f32_arith__low() {
+low.func.def target(@gfx11_f32_arith_target) abi(hal_kernel) @f32_arith__low() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %rhs_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -297,7 +297,7 @@ func.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@gfx11_f32_fma_target) @f32_fma__low() {
+low.func.def target(@gfx11_f32_fma_target) abi(hal_kernel) @f32_fma__low() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %rhs_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -352,7 +352,7 @@ func.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buff
 }
 
 // ----
-low.func.def target(@gfx11_f32_scalarized_target) @f32_scalarized__low() {
+low.func.def target(@gfx11_f32_scalarized_target) abi(hal_kernel) @f32_scalarized__low() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %rhs_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
@@ -407,7 +407,7 @@ func.def @lds_b128_roundtrip(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@gfx11_lds_b128_roundtrip_target) @lds_b128_roundtrip__low() {
+low.func.def target(@gfx11_lds_b128_roundtrip_target) abi(hal_kernel) @lds_b128_roundtrip__low() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
