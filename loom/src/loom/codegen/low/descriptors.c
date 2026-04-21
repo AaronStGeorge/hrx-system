@@ -8,6 +8,8 @@
 
 #include <inttypes.h>
 
+#include "loom/util/stable_id.h"
+
 static iree_status_t loom_low_verify_pointer_for_count(const void* pointer,
                                                        uint32_t count,
                                                        const char* table_name) {
@@ -132,13 +134,7 @@ static iree_status_t loom_low_verify_non_empty_required_string(
 }
 
 uint64_t loom_low_descriptor_stable_id_from_key(iree_string_view_t key) {
-  uint64_t value = UINT64_C(0xCBF29CE484222325);
-  for (iree_host_size_t i = 0; i < key.size; ++i) {
-    value ^= (uint8_t)key.data[i];
-    value *= UINT64_C(0x100000001B3);
-  }
-  value &= UINT64_C(0x7FFFFFFFFFFFFFFF);
-  return value == LOOM_LOW_DESCRIPTOR_ID_NONE ? UINT64_C(1) : value;
+  return loom_stable_id_from_string(key);
 }
 
 static iree_status_t loom_low_verify_tables_present(

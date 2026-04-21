@@ -246,7 +246,8 @@ LOOM_DEFINE_ISA(loom_low_op_isa, LOOM_OP_LOW_OP)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_op_operands, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_op_results, 0)
 LOOM_DEFINE_ATTR_STRING(loom_low_op_opcode, 0)
-LOOM_DEFINE_ATTR_DICT(loom_low_op_attrs, 1)
+LOOM_DEFINE_ATTR_I64(loom_low_op_descriptor_id, 1)
+LOOM_DEFINE_ATTR_DICT(loom_low_op_attrs, 2)
 iree_status_t loom_low_op_build(
     loom_builder_t* builder,
     loom_string_id_t opcode,
@@ -268,7 +269,8 @@ iree_status_t loom_low_op_verify(
 LOOM_DEFINE_ISA(loom_low_const_isa, LOOM_OP_LOW_CONST)
 LOOM_DEFINE_RESULT(loom_low_const_result, 0)
 LOOM_DEFINE_ATTR_STRING(loom_low_const_opcode, 0)
-LOOM_DEFINE_ATTR_DICT(loom_low_const_attrs, 1)
+LOOM_DEFINE_ATTR_I64(loom_low_const_descriptor_id, 1)
+LOOM_DEFINE_ATTR_DICT(loom_low_const_attrs, 2)
 iree_status_t loom_low_const_build(
     loom_builder_t* builder,
     loom_string_id_t opcode,

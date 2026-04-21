@@ -29,6 +29,7 @@ from loom.assembly import (
     AttrTable,
     BindingList,
     BlockArgs,
+    DescriptorRef,
     Flags,
     FormatElement,
     FuncArgs,
@@ -118,6 +119,7 @@ from loom.ir import (
 from loom.ir import (
     TiedResult as IRTiedResult,
 )
+from loom.stable_id import stable_id_from_string
 
 __all__ = [
     "ParseError",
@@ -571,7 +573,7 @@ def _is_type_start(token: Token, type_registry: dict[str, TypeDef]) -> bool:
         return False
     if token.kind == TokenKind.OP_NAME:
         # Dotted type names like hal.buffer, vm.ref.
-        return token.text in type_registry
+        return True
     if token.kind == TokenKind.LPAREN:
         return True  # Function type.
     return False
@@ -652,6 +654,9 @@ def parse_type_from_tokens(
                 token.location,
                 tokenizer._filename,
             )
+        if token.kind == TokenKind.OP_NAME:
+            tokenizer.next()
+            return DialectType(token.text), {}
 
     # Function type: (types) -> (types)
     if token.kind == TokenKind.LPAREN:
@@ -1929,6 +1934,16 @@ class Parser:
                             op_name_tok = tok.expect(TokenKind.OP_NAME)
                         tok.expect(TokenKind.RANGLE)
                         parsed.attributes[name] = op_name_tok.text
+
+                case DescriptorRef(key=key, stable_id=stable_id):
+                    tok.expect(TokenKind.LANGLE)
+                    if tok.at(TokenKind.OP_NAME) or tok.at(TokenKind.BARE_IDENT):
+                        key_tok = tok.next()
+                    else:
+                        key_tok = tok.expect(TokenKind.OP_NAME)
+                    tok.expect(TokenKind.RANGLE)
+                    parsed.attributes[key] = key_tok.text
+                    parsed.attributes[stable_id] = stable_id_from_string(key_tok.text)
 
                 case TemplateParam(field=name):
                     tok.expect(TokenKind.LANGLE)

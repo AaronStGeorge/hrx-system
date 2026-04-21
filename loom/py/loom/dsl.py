@@ -2270,6 +2270,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
         BindingList,
         BlockArgs,
         BlockRef,
+        DescriptorRef,
         EncodingOf,
         Flags,
         FuncArgs,
@@ -2307,6 +2308,9 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
                 | TemplateParam(field=f)
             ):
                 fields.add(f)
+            case DescriptorRef(key=key, stable_id=stable_id):
+                fields.add(key)
+                fields.add(stable_id)
             case TypeOf(field=f) | TypesOf(field=f):
                 fields.add(f)
             case ResultType(field=f) | ResultTypeList(field=f):

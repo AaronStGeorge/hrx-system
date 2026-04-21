@@ -300,21 +300,26 @@ iree_status_t loom_low_resolve_descriptor_packet(
   };
 
   loom_string_id_t key_id = LOOM_STRING_ID_INVALID;
+  int64_t stable_id = (int64_t)LOOM_LOW_DESCRIPTOR_ID_NONE;
   if (loom_low_op_isa(op)) {
     out_packet->kind = LOOM_LOW_DESCRIPTOR_PACKET_OP;
     out_packet->key_attr_index = loom_low_op_opcode_ATTR_INDEX;
     key_id = loom_low_op_opcode(op);
+    stable_id = loom_low_op_descriptor_id(op);
   } else if (loom_low_const_isa(op)) {
     out_packet->kind = LOOM_LOW_DESCRIPTOR_PACKET_CONST;
     out_packet->key_attr_index = loom_low_const_opcode_ATTR_INDEX;
     key_id = loom_low_const_opcode(op);
+    stable_id = loom_low_const_descriptor_id(op);
   } else {
     return iree_ok_status();
   }
 
   out_packet->key = loom_low_string_or_empty(module, key_id);
-  out_packet->stable_id =
-      loom_low_descriptor_stable_id_from_key(out_packet->key);
+  if (stable_id <= 0) {
+    return iree_ok_status();
+  }
+  out_packet->stable_id = (uint64_t)stable_id;
   const uint32_t descriptor_ordinal =
       loom_low_descriptor_set_lookup_descriptor_by_id(target->descriptor_set,
                                                       out_packet->stable_id);

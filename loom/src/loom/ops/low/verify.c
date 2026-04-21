@@ -11,6 +11,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/successor_verify.h"
 #include "loom/ops/target/ops.h"
+#include "loom/util/stable_id.h"
 
 typedef struct loom_low_callee_signature_t {
   // Defining function-like op for related diagnostic locations.
@@ -366,6 +367,24 @@ static iree_status_t loom_low_emit_structural_storage_attr_error(
       module, op,
       loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, attr_index),
       field_name, reason, NULL, 0, emitter);
+}
+
+static iree_status_t loom_low_verify_descriptor_id(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter, loom_string_id_t opcode_id,
+    int64_t descriptor_id, uint16_t descriptor_id_attr_index) {
+  iree_string_view_t key = loom_low_string_or_empty(module, opcode_id);
+  uint64_t expected_id = loom_stable_id_from_string(key);
+  if (descriptor_id == (int64_t)expected_id) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_structural_storage_error(
+      module, op,
+      loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                descriptor_id_attr_index),
+      IREE_SV("descriptor_id"),
+      IREE_SV("descriptor ID must match the stable ID derived from opcode"),
+      NULL, 0, emitter);
 }
 
 static iree_status_t loom_low_verify_same_register_unit_count(
@@ -959,17 +978,24 @@ static iree_status_t loom_low_verify_func_call_context(
 iree_status_t loom_low_op_verify(const loom_module_t* module,
                                  const loom_op_t* op,
                                  iree_diagnostic_emitter_t emitter) {
-  return loom_low_verify_descriptor_key(module, op, emitter,
-                                        loom_low_op_opcode(op),
-                                        loom_low_op_opcode_ATTR_INDEX);
+  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_key(
+      module, op, emitter, loom_low_op_opcode(op),
+      loom_low_op_opcode_ATTR_INDEX));
+  return loom_low_verify_descriptor_id(
+      module, op, emitter, loom_low_op_opcode(op),
+      loom_low_op_descriptor_id(op), loom_low_op_descriptor_id_ATTR_INDEX);
 }
 
 iree_status_t loom_low_const_verify(const loom_module_t* module,
                                     const loom_op_t* op,
                                     iree_diagnostic_emitter_t emitter) {
-  return loom_low_verify_descriptor_key(module, op, emitter,
-                                        loom_low_const_opcode(op),
-                                        loom_low_const_opcode_ATTR_INDEX);
+  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_key(
+      module, op, emitter, loom_low_const_opcode(op),
+      loom_low_const_opcode_ATTR_INDEX));
+  return loom_low_verify_descriptor_id(module, op, emitter,
+                                       loom_low_const_opcode(op),
+                                       loom_low_const_descriptor_id(op),
+                                       loom_low_const_descriptor_id_ATTR_INDEX);
 }
 
 iree_status_t loom_low_copy_verify(const loom_module_t* module,

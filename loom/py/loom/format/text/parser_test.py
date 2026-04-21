@@ -532,9 +532,15 @@ class TestParseDialectTypes:
         assert inner.name == "vm.list"
         assert inner.params[0] == I32
 
-    def test_unknown_type_fails(self) -> None:
+    def test_unknown_dotted_type_is_opaque_dialect_type(self) -> None:
+        result = _parse_type("hal.unknown", type_registry=self._registry())
+        assert isinstance(result, DialectType)
+        assert result.name == "hal.unknown"
+        assert result.params == ()
+
+    def test_unknown_bare_type_fails(self) -> None:
         with pytest.raises(ParseError, match="expected type"):
-            _parse_type("hal.unknown", type_registry=self._registry())
+            _parse_type("unknown", type_registry=self._registry())
 
 
 # ============================================================================

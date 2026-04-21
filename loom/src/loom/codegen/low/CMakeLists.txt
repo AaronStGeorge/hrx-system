@@ -20,6 +20,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::util::bstring
+    loom::src::loom::util::stable_id
   PUBLIC
 )
 

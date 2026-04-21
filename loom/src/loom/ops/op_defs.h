@@ -222,6 +222,11 @@ enum loom_format_kind_e {
   // CFG successor block reference: ^label.
   // field_index = successor index whose target block is printed or parsed.
   LOOM_FORMAT_KIND_SUCCESSOR_REF = 26,
+
+  // Descriptor key reference in angle brackets: <amdgpu.v_add_u32>. The
+  // field_index references the diagnostic string attribute and data references
+  // the derived i64 stable-ID attribute.
+  LOOM_FORMAT_KIND_DESCRIPTOR_REF = 27,
 };
 typedef uint8_t loom_format_kind_t;
 

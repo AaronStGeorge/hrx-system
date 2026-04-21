@@ -72,6 +72,25 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "stable_id",
+    srcs = ["stable_id.c"],
+    hdrs = ["stable_id.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "stable_id_test",
+    srcs = ["stable_id_test.cc"],
+    deps = [
+        ":stable_id",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "fact_table",
     srcs = ["fact_table.c"],
     hdrs = ["fact_table.h"],

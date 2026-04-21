@@ -1049,6 +1049,8 @@ static bool loom_print_format_element_covers_attr(
     case LOOM_FORMAT_KIND_TEMPLATE_PARAM:
     case LOOM_FORMAT_KIND_PREDICATE_LIST:
       return element->field_index == attr_index;
+    case LOOM_FORMAT_KIND_DESCRIPTOR_REF:
+      return element->field_index == attr_index || element->data == attr_index;
     case LOOM_FORMAT_KIND_INDEX_LIST:
       return element->data == attr_index;
     case LOOM_FORMAT_KIND_OPERAND_DICT:
@@ -3211,6 +3213,44 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
               ctx,
               loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->field_index),
               op_ref_start, ctx->stream->offset);
+        }
+        break;
+      }
+      case LOOM_FORMAT_KIND_DESCRIPTOR_REF: {
+        // Descriptor key reference in angle brackets, glued to the op name:
+        // low.op<amdgpu.v_add_u32>. The field_index references the diagnostic
+        // key spelling and data references the derived stable ID.
+        if (element->field_index >= op->attribute_count) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "format DESCRIPTOR_REF field_index %u out of range (op has %u "
+              "attributes)",
+              element->field_index, op->attribute_count);
+        }
+        if (element->data >= op->attribute_count) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "format DESCRIPTOR_REF stable-id field_index %u out of range "
+              "(op has %u attributes)",
+              element->data, op->attribute_count);
+        }
+        loom_attribute_t attr = loom_op_attrs(op)[element->field_index];
+        if (attr.kind == LOOM_ATTR_STRING &&
+            attr.string_id != LOOM_STRING_ID_INVALID &&
+            attr.string_id < ctx->module->strings.count) {
+          iree_string_view_t key = ctx->module->strings.entries[attr.string_id];
+          iree_host_size_t ref_start = ctx->stream->offset;
+          IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "<", true));
+          IREE_RETURN_IF_ERROR(loom_print_emit(ctx, key, true));
+          IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ">", true));
+          loom_print_did_write(ctx);
+          loom_print_report_field(
+              ctx,
+              loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->field_index),
+              ref_start, ctx->stream->offset);
+          loom_print_report_field(
+              ctx, loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->data),
+              ref_start, ctx->stream->offset);
         }
         break;
       }

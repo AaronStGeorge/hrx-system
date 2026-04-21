@@ -511,6 +511,7 @@ loom_cc_library(
     hdrs = ["descriptors.h"],
     deps = [
         "//loom/src/loom/util:bstring",
+        "//loom/src/loom/util:stable_id",
         "//runtime/src/iree/base",
     ],
 )

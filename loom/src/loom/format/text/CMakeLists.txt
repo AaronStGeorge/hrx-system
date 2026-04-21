@@ -45,6 +45,7 @@ loom_cc_library(
     loom::src::loom::ir::symbol_map
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::type_registry
+    loom::src::loom::util::stable_id
   PUBLIC
 )
 

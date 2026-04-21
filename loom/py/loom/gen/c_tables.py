@@ -34,6 +34,7 @@ from loom.assembly import (
     BindingList,
     BlockArgs,
     BlockRef,
+    DescriptorRef,
     Flags,
     FormatElement,
     FuncArgs,
@@ -1164,6 +1165,27 @@ def _translate_format_elements(
                     kind, index = _resolve_field(name)
                     elements.append(("LOOM_FORMAT_KIND_OP_REF", index, "0"))
 
+                case DescriptorRef(key=key_name, stable_id=stable_id_name):
+                    key_kind, key_index = _resolve_field(key_name)
+                    stable_id_kind, stable_id_index = _resolve_field(stable_id_name)
+                    key_attr = op.attr(key_name)
+                    stable_id_attr = op.attr(stable_id_name)
+                    if key_kind != FieldKind.ATTR:
+                        raise ValueError(f"Op '{op.name}': DescriptorRef key field '{key_name}' is not an attr field")
+                    if key_attr is None or key_attr.attr_type != "string":
+                        raise ValueError(f"Op '{op.name}': DescriptorRef key field '{key_name}' must be a string attr")
+                    if stable_id_kind != FieldKind.ATTR:
+                        raise ValueError(f"Op '{op.name}': DescriptorRef stable ID field '{stable_id_name}' is not an attr field")
+                    if stable_id_attr is None or stable_id_attr.attr_type != "i64":
+                        raise ValueError(f"Op '{op.name}': DescriptorRef stable ID field '{stable_id_name}' must be an i64 attr")
+                    elements.append(
+                        (
+                            "LOOM_FORMAT_KIND_DESCRIPTOR_REF",
+                            key_index,
+                            str(stable_id_index),
+                        )
+                    )
+
                 case TemplateParam(field=name):
                     kind, index = _resolve_field(name)
                     elements.append(("LOOM_FORMAT_KIND_TEMPLATE_PARAM", index, "0"))
@@ -1747,6 +1769,23 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                 case OpRef(field=name):
                     append_attr_param(name)
 
+                case DescriptorRef(key=name, stable_id=stable_id):
+                    attr_def = op.attr(name)
+                    if attr_def is None:
+                        continue
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "descriptor_ref",
+                            "c_type": _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t"),
+                            "attr_type": attr_def.attr_type,
+                            "attr_index": _resolve_attr_index(op, name, "builder"),
+                            "stable_id_attr_index": _resolve_attr_index(op, stable_id, "builder"),
+                        }
+                    )
+                    covered_attrs.add(name)
+                    covered_attrs.add(stable_id)
+
                 case Keyword() | TypeOf() | TypesOf() | Glue():
                     pass
 
@@ -1838,6 +1877,8 @@ def _build_c_param_list(params: list[dict[str, object]], layout: FieldLayout, pr
                 c_params.append(f"{opt}{param['c_type']} {param['name']}")
                 if param["attr_type"] == "i64_array":
                     c_params.append(f"iree_host_size_t {param['name']}_count")
+            case "descriptor_ref":
+                c_params.append(f"{param['c_type']} {param['name']}")
             case "symbol":
                 c_params.append(f"loom_symbol_ref_t {param['name']}")
             case "index_list":
@@ -2259,6 +2300,14 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
                 lines.append("  }")
             else:
                 lines.append(f"  loom_op_attrs(*out_op)[{idx}] = {constructor};")
+        elif param["kind"] == "descriptor_ref":
+            idx = param["attr_index"]
+            stable_id_idx = param["stable_id_attr_index"]
+            name = param["name"]
+            lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_string({name});")
+            lines.append(f"  loom_op_attrs(*out_op)[{stable_id_idx}] = loom_attr_i64((int64_t)")
+            lines.append("      loom_stable_id_from_string(")
+            lines.append(f"          builder->module->strings.entries[{name}]));")
 
     # Define result values in the module's value table.
     for param in params:
@@ -3045,6 +3094,8 @@ def generate_builders_c(dialect_name: str, ops: Sequence[Op]) -> str:
     lines.append("")
     lines.append('#include "loom/ir/module.h"')
     lines.append('#include "loom/ops/builder_macros.h"')
+    if any(isinstance(element, DescriptorRef) for op in ops for element in _flatten_format(op.format)):
+        lines.append('#include "loom/util/stable_id.h"')
     lines.append("")
 
     for op in ops:

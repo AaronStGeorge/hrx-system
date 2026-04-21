@@ -12,18 +12,15 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from loom.stable_id import stable_id_from_string
+
 LOW_DESCRIPTOR_SET_ABI_VERSION = 12
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 
 def descriptor_stable_id(key: str) -> int:
     """Returns the deterministic non-zero 63-bit identity for a descriptor key."""
-    value = 0xCBF29CE484222325
-    for byte in key.encode("utf-8"):
-        value ^= byte
-        value = (value * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
-    value &= 0x7FFFFFFFFFFFFFFF
-    return value if value != 0 else 1
+    return stable_id_from_string(key)
 
 
 class CEnum(Enum):

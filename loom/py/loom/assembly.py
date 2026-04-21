@@ -78,6 +78,7 @@ __all__ = [
     # Angle-bracket elements.
     "Flags",
     "OpRef",
+    "DescriptorRef",
     "TemplateParam",
     # Type-interior format elements.
     "ShapeOf",
@@ -636,6 +637,23 @@ class OpRef:
 
 
 @dataclass(frozen=True, slots=True)
+class DescriptorRef:
+    """Descriptor key reference in angle brackets after the op name.
+
+    Prints/parses: <target.descriptor> (glued to the op name), while storing
+    both the diagnostic key spelling and a durable stable descriptor ID.
+
+    The ``key`` field names a string attribute used for text and diagnostics.
+    The ``stable_id`` field names an i64 attribute derived from ``key``. The ID
+    is the compiled/durable identity; descriptor-set ordinals remain transient
+    row addresses selected by the active low target.
+    """
+
+    key: str
+    stable_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class TemplateParam:
     """Required compile-time op parameter in angle brackets after the op name.
 
@@ -740,6 +758,7 @@ type FormatElement = (
     | Glue
     | Flags
     | OpRef
+    | DescriptorRef
     | TemplateParam
     | ShapeOf
     | ScalarOf

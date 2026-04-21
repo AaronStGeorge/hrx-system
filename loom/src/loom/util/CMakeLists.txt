@@ -81,6 +81,29 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    stable_id
+  HDRS
+    "stable_id.h"
+  SRCS
+    "stable_id.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    stable_id_test
+  SRCS
+    "stable_id_test.cc"
+  DEPS
+    ::stable_id
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     fact_table
   HDRS
     "fact_table.h"

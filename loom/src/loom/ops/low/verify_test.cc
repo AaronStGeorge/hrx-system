@@ -127,6 +127,22 @@ class LowVerifyTest : public ::testing::Test {
     return nullptr;
   }
 
+  loom_op_t* FindFirstLowOpInBody(loom_op_t* func_op) {
+    loom_region_t* body = loom_low_func_def_body(func_op);
+    if (!body || body->block_count == 0) {
+      ADD_FAILURE() << "expected low.func.def to have a body";
+      return nullptr;
+    }
+    loom_op_t* op = nullptr;
+    loom_block_for_each_op(loom_region_entry_block(body), op) {
+      if (loom_low_op_isa(op)) {
+        return op;
+      }
+    }
+    ADD_FAILURE() << "expected low.func.def body to contain low.op";
+    return nullptr;
+  }
+
   loom_source_id_t FindContextSourceId(const char* filename) const {
     iree_string_view_t source_name = iree_make_cstring_view(filename);
     for (iree_host_size_t i = 0; i < context_.sources.count; ++i) {
@@ -236,6 +252,43 @@ TEST_F(LowVerifyTest, DescriptorKeysPassWithQualifiedSegments) {
       &capture);
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_TRUE(capture.diagnostics.empty());
+}
+
+TEST_F(LowVerifyTest, DescriptorIdMustMatchDescriptorKey) {
+  static const char* kSource =
+      "test.record @gfx1100 {}\n"
+      "low.func.def target(@gfx1100) @add(%lhs : reg<amdgpu.vgpr x1>, "
+      "%rhs : reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
+      "  %sum = low.op<amdgpu.v_add_u32>(%lhs, %rhs) : "
+      "(reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> "
+      "reg<amdgpu.vgpr x1>\n"
+      "  low.return %sum : reg<amdgpu.vgpr x1>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(kSource);
+  ASSERT_NE(module, nullptr);
+  loom_op_t* func_op = FindFirstLowFuncDef(module);
+  ASSERT_NE(func_op, nullptr);
+  loom_op_t* packet_op = FindFirstLowOpInBody(func_op);
+  ASSERT_NE(packet_op, nullptr);
+  loom_op_attrs(packet_op)[loom_low_op_descriptor_id_ATTR_INDEX] =
+      loom_attr_i64(0);
+
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifyParsedModule(kSource, module, &capture);
+  loom_module_free(module);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.op");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "descriptor_id");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_op_descriptor_id_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "descriptor ID must match the stable ID derived from opcode");
 }
 
 TEST_F(LowVerifyTest, LiveInAndResourceAcceptEntryPreamble) {
