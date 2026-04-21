@@ -309,6 +309,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::encoding
     loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::presets
     loom::src::loom::testing::context

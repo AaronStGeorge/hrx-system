@@ -331,7 +331,7 @@ static iree_status_t loom_x86_select_packed_dot_descriptor(
   }
 
   uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
-      descriptor_set, loom_low_descriptor_stable_id_from_key(descriptor->name));
+      descriptor_set, descriptor->stable_id);
   if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
     return iree_make_status(IREE_STATUS_NOT_FOUND,
                             "x86 packed-dot descriptor '%.*s' is missing",

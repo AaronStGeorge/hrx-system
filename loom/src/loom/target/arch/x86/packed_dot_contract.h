@@ -92,6 +92,8 @@ typedef struct loom_x86_packed_dot_shape_t {
 typedef struct loom_x86_packed_dot_descriptor_t {
   // Stable Loom descriptor name used by tests, diagnostics, and target logs.
   iree_string_view_t name;
+  // Durable low descriptor identity for target-set membership checks.
+  uint64_t stable_id;
   // LLVM intrinsic name when Loom lowers through an intrinsic call.
   iree_string_view_t llvm_intrinsic_name;
   // Source operand ABI required by the LLVM intrinsic declaration and call.

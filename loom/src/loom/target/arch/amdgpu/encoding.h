@@ -104,6 +104,8 @@ typedef struct loom_amdgpu_encoding_format_layout_t {
 typedef struct loom_amdgpu_encoding_table_t {
   // Descriptor-set key this table can encode.
   iree_string_view_t descriptor_set_key;
+  // VOP1 opcode used for target-inserted v_mov_b32 register moves.
+  uint16_t v_mov_b32_opcode;
   // Sorted format-layout rows.
   const loom_amdgpu_encoding_format_layout_t* formats;
   // Number of format-layout rows.
@@ -163,8 +165,8 @@ iree_status_t loom_amdgpu_encoding_pack(
 // Packs a 32-bit VGPR-to-VGPR v_mov_b32 packet using the target table's VOP1
 // layout.
 iree_status_t loom_amdgpu_encoding_pack_v_mov_b32_vgpr(
-    const loom_amdgpu_encoding_table_t* table, uint16_t opcode, uint16_t vdst,
-    uint16_t vsrc0, loom_amdgpu_encoding_packet_t* out_packet);
+    const loom_amdgpu_encoding_table_t* table, uint16_t vdst, uint16_t vsrc0,
+    loom_amdgpu_encoding_packet_t* out_packet);
 
 #ifdef __cplusplus
 }  // extern "C"

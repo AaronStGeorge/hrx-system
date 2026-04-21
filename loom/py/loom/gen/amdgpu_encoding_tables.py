@@ -35,6 +35,7 @@ from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
     AmdgpuIsaBitRange,
     AmdgpuIsaEncoding,
     AmdgpuIsaEncodingField,
+    AmdgpuIsaInstruction,
     parse_amdgpu_isa_xml_path,
 )
 
@@ -194,6 +195,23 @@ def _compile_formats(
     return compiled_formats, compiled_fields, compiled_ranges
 
 
+def _instruction_opcode(
+    instructions: tuple[AmdgpuIsaInstruction, ...],
+    *,
+    instruction_name: str,
+    encoding_name: str,
+    condition_name: str,
+) -> int:
+    for instruction in instructions:
+        if instruction.name != instruction_name:
+            continue
+        for encoding in instruction.encodings:
+            if encoding.encoding_name == encoding_name and encoding.condition_name == condition_name:
+                return encoding.opcode
+        raise ValueError(f"AMDGPU instruction '{instruction_name}' has no {encoding_name}/{condition_name} encoding")
+    raise ValueError(f"AMDGPU instruction '{instruction_name}' is missing")
+
+
 def _emit_word_array(words: tuple[int, ...]) -> str:
     padded_words = words + (0,) * (4 - len(words))
     return "{" + ", ".join(f"UINT32_C(0x{word:08x})" for word in padded_words) + "}"
@@ -206,10 +224,17 @@ def _emit_source(
     table_prefix: str,
     table_function: str,
     encodings: tuple[AmdgpuIsaEncoding, ...],
+    instructions: tuple[AmdgpuIsaInstruction, ...],
     source_path: Path,
     format_output: bool,
 ) -> str:
     compiled_formats, compiled_fields, compiled_ranges = _compile_formats(encodings)
+    v_mov_b32_opcode = _instruction_opcode(
+        instructions,
+        instruction_name="V_MOV_B32",
+        encoding_name="ENC_VOP1",
+        condition_name="default",
+    )
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -285,6 +310,7 @@ def _emit_source(
             "",
             f"static const loom_amdgpu_encoding_table_t k{table_prefix}Table = {{",
             f'    .descriptor_set_key = IREE_SVL("{descriptor_set_key}"),',
+            f"    .v_mov_b32_opcode = {v_mov_b32_opcode},",
             f"    .formats = k{table_prefix}Formats,",
             f"    .format_count = IREE_ARRAYSIZE(k{table_prefix}Formats),",
             f"    .fields = k{table_prefix}Fields,",
@@ -340,6 +366,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             table_prefix=table_prefix,
             table_function=table_function,
             encodings=spec.encodings,
+            instructions=spec.instructions,
             source_path=args.source,
             format_output=args.format,
         ),

@@ -501,29 +501,6 @@ static iree_status_t loom_amdgpu_encode_s_mov_b32_register(
   return loom_amdgpu_append_u32(state, word);
 }
 
-static iree_status_t loom_amdgpu_v_mov_b32_opcode(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t* out_opcode) {
-  IREE_ASSERT_ARGUMENT(out_opcode);
-  *out_opcode = 0;
-  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
-      descriptor_set,
-      loom_low_descriptor_stable_id_from_key(IREE_SV("amdgpu.v_mov_b32")));
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "AMDGPU native encoding descriptor "
-                            "'amdgpu.v_mov_b32' is missing");
-  }
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
-  if (descriptor == NULL) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "AMDGPU native encoding descriptor "
-                            "'amdgpu.v_mov_b32' is missing");
-  }
-  *out_opcode = descriptor->encoding_id;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_encode_v_mov_b32_register(
     loom_amdgpu_encode_state_t* state, uint16_t vdst, uint16_t src0) {
   if (vdst == src0) {
@@ -541,12 +518,9 @@ static iree_status_t loom_amdgpu_encode_v_mov_b32_register(
         state->target->descriptor_set_key.data);
   }
 
-  uint16_t opcode = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_v_mov_b32_opcode(
-      state->schedule->target.descriptor_set, &opcode));
   loom_amdgpu_encoding_packet_t encoded_packet;
   IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_pack_v_mov_b32_vgpr(
-      encoding_table, opcode, vdst, src0, &encoded_packet));
+      encoding_table, vdst, src0, &encoded_packet));
   return loom_amdgpu_append_encoding_packet(state, &encoded_packet);
 }
 

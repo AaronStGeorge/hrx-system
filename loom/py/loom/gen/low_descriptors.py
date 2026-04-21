@@ -48,6 +48,7 @@ from loom.target.low_descriptors import (
     RegClassAltFlag,
     Resource,
     ScheduleClass,
+    descriptor_stable_id,
 )
 
 
@@ -215,22 +216,12 @@ def _hex_u64_literal(value: int) -> str:
     return f"UINT64_C(0x{value:x})"
 
 
-def _descriptor_stable_id(key: str) -> int:
-    """Returns a deterministic non-zero 63-bit descriptor identity."""
-    value = 0xCBF29CE484222325
-    for byte in key.encode("utf-8"):
-        value ^= byte
-        value = (value * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
-    value &= 0x7FFFFFFFFFFFFFFF
-    return value if value != 0 else 1
-
-
 def _descriptor_id_constant_name(c_enum_prefix: str, descriptor_key: str) -> str:
     return f"{c_enum_prefix}_DESCRIPTOR_ID_{_c_identifier(descriptor_key).upper()}"
 
 
 def _descriptor_id_define(c_enum_prefix: str, descriptor_key: str) -> str:
-    return f"#define {_descriptor_id_constant_name(c_enum_prefix, descriptor_key)} {_hex_u64_literal(_descriptor_stable_id(descriptor_key))}"
+    return f"#define {_descriptor_id_constant_name(c_enum_prefix, descriptor_key)} {_hex_u64_literal(descriptor_stable_id(descriptor_key))}"
 
 
 def _encoding_id_expr(value: int) -> str:
@@ -780,7 +771,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     seen_descriptor_ids: dict[int, str] = {}
     descriptor_id_refs: list[tuple[int, int]] = []
     for descriptor_ordinal, descriptor in enumerate(selected_descriptors):
-        stable_id = _descriptor_stable_id(descriptor.key)
+        stable_id = descriptor_stable_id(descriptor.key)
         previous_key = seen_descriptor_ids.get(stable_id)
         if previous_key is not None:
             raise ValueError(f"descriptor '{descriptor.key}' stable ID collides with '{previous_key}'")
@@ -1365,7 +1356,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
         descriptors.append(
             {
                 "ordinal": i,
-                "stable_id": f"0x{_descriptor_stable_id(descriptor.key):016x}",
+                "stable_id": f"0x{descriptor_stable_id(descriptor.key):016x}",
                 "key": descriptor.key,
                 "mnemonic": descriptor.mnemonic or "",
                 "semantic_tag": descriptor.semantic_tag or "",

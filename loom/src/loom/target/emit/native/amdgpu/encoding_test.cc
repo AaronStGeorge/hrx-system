@@ -17,6 +17,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/presets.h"
 #include "loom/testing/context.h"
@@ -303,6 +304,22 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralVectorConstantAndReturn) {
   EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(42));
   EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuEncodingTest, PacksGeneratedVectorRegisterMove) {
+  const loom_amdgpu_encoding_table_t* table =
+      loom_amdgpu_encoding_table_for_descriptor_set(
+          IREE_SV("amdgpu.gfx11.core"));
+  ASSERT_NE(table, nullptr);
+
+  loom_amdgpu_encoding_packet_t packet = {};
+  IREE_ASSERT_OK(
+      loom_amdgpu_encoding_pack_v_mov_b32_vgpr(table, 7, 3, &packet));
+  ASSERT_EQ(packet.word_count, 1u);
+  const uint32_t word = packet.words[0];
+  EXPECT_EQ(word & UINT32_C(0x1FF), UINT32_C(0x103));
+  EXPECT_EQ((word >> 9) & UINT32_C(0xFF), table->v_mov_b32_opcode);
+  EXPECT_EQ((word >> 17) & UINT32_C(0xFF), UINT32_C(7));
 }
 
 TEST_F(AmdgpuEncodingTest, EncodesLiveInAsNonEmittingPacket) {

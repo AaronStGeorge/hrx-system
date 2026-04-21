@@ -13,6 +13,7 @@ from pathlib import Path
 
 from loom.gen import bootstrap as _bootstrap
 from loom.target.arch.x86.packed_dot_data import X86_PACKED_DOT_DESCRIPTORS
+from loom.target.low_descriptors import descriptor_stable_id
 
 
 def _clang_format_source(source: str, assume_filename: Path) -> str:
@@ -28,6 +29,10 @@ def _clang_format_source(source: str, assume_filename: Path) -> str:
 
 def _c_string_literal(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+
+
+def _hex_u64_literal(value: int) -> str:
+    return f"UINT64_C(0x{value:x})"
 
 
 def _emit_header() -> str:
@@ -84,6 +89,7 @@ def _emit_source() -> str:
             [
                 "        {",
                 f'            .name = IREE_SVL("{_c_string_literal(descriptor.key)}"),',
+                f"            .stable_id = {_hex_u64_literal(descriptor_stable_id(descriptor.key))},",
                 (f'            .llvm_intrinsic_name = IREE_SVL("{_c_string_literal(descriptor.llvm_intrinsic_name)}"),'),
                 f"            .llvm_source_abi = {descriptor.llvm_source_abi},",
                 (f'            .instruction_mnemonic = IREE_SVL("{_c_string_literal(descriptor.mnemonic)}"),'),

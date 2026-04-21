@@ -61,6 +61,10 @@ TEST(X86PackedDotDescriptorsTest, LowDescriptorsMirrorContractKeys) {
     const loom_low_descriptor_t* low_descriptor =
         LookupDescriptor(descriptor_set, contract_descriptor->name);
     ASSERT_NE(low_descriptor, nullptr);
+    EXPECT_EQ(low_descriptor->stable_id, contract_descriptor->stable_id);
+    EXPECT_NE(loom_low_descriptor_set_lookup_descriptor_by_id(
+                  descriptor_set, contract_descriptor->stable_id),
+              LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
     EXPECT_EQ(DescriptorString(descriptor_set,
                                low_descriptor->mnemonic_string_offset),
               std::string(contract_descriptor->instruction_mnemonic.data,
