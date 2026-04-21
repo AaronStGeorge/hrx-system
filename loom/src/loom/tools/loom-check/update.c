@@ -19,6 +19,8 @@ const char* loom_check_update_edit_kind_name(
       return "insert_diagnostic_annotations";
     case LOOM_CHECK_UPDATE_EDIT_DELETE_DIAGNOSTIC_ANNOTATION:
       return "delete_diagnostic_annotation";
+    case LOOM_CHECK_UPDATE_EDIT_DELETE_EXPECTED_SECTION:
+      return "delete_expected_section";
   }
   return "unknown";
 }
@@ -28,6 +30,19 @@ const char* loom_check_update_edit_kind_name(
 static bool loom_check_ends_with_blank_line(iree_string_view_t text) {
   return text.size >= 2 && text.data[text.size - 1] == '\n' &&
          text.data[text.size - 2] == '\n';
+}
+
+// Returns true when the produced output has no semantic expected text.
+static bool loom_check_actual_output_is_empty(iree_string_view_t text) {
+  return iree_string_view_is_empty(iree_string_view_trim(text));
+}
+
+static bool loom_check_update_deletes_expected_section(
+    const loom_check_case_t* test_case,
+    const loom_check_case_update_t* update) {
+  return test_case->has_expected_section &&
+         update->empty_output_omits_expected_section &&
+         loom_check_actual_output_is_empty(update->actual_output);
 }
 
 // Appends a blank line (\n) to |builder| if the content written so far
@@ -60,28 +75,55 @@ static bool loom_check_source_range_is_in_bounds(
   return range.start_byte <= range.end_byte && range.end_byte <= source_size;
 }
 
-iree_status_t loom_check_build_update_edit(iree_string_view_t original_source,
-                                           const loom_check_case_t* test_case,
-                                           iree_string_view_t actual_output,
-                                           iree_string_builder_t* new_text,
-                                           loom_check_update_edit_t* out_edit) {
+static loom_check_source_range_t loom_check_expected_section_range(
+    const loom_check_case_t* test_case) {
+  return (loom_check_source_range_t){
+      .start_byte = test_case->expected_separator_range.start_byte,
+      .end_byte = test_case->expected_range.end_byte,
+  };
+}
+
+iree_status_t loom_check_build_update_edit(
+    iree_string_view_t original_source, const loom_check_case_t* test_case,
+    iree_string_view_t actual_output, bool empty_output_omits_expected_section,
+    iree_string_builder_t* new_text, loom_check_update_edit_t* out_edit) {
   IREE_ASSERT_ARGUMENT(test_case);
   IREE_ASSERT_ARGUMENT(new_text);
   IREE_ASSERT_ARGUMENT(out_edit);
   memset(out_edit, 0, sizeof(*out_edit));
 
   iree_host_size_t cursor_offset = 0;
+  bool handled_following_source_padding = false;
   if (test_case->has_expected_section) {
-    if (!loom_check_source_range_is_in_bounds(test_case->expected_range,
+    bool delete_expected_section =
+        empty_output_omits_expected_section &&
+        loom_check_actual_output_is_empty(actual_output);
+    loom_check_source_range_t update_range =
+        delete_expected_section ? loom_check_expected_section_range(test_case)
+                                : test_case->expected_range;
+    if (!loom_check_source_range_is_in_bounds(update_range,
                                               original_source.size)) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "expected section range out of bounds");
     }
-    out_edit->kind = LOOM_CHECK_UPDATE_EDIT_REPLACE_EXPECTED_OUTPUT;
-    out_edit->range = test_case->expected_range;
-    cursor_offset = test_case->expected_range.end_byte;
-    IREE_RETURN_IF_ERROR(
-        loom_check_append_with_trailing_newline(new_text, actual_output));
+    out_edit->kind = delete_expected_section
+                         ? LOOM_CHECK_UPDATE_EDIT_DELETE_EXPECTED_SECTION
+                         : LOOM_CHECK_UPDATE_EDIT_REPLACE_EXPECTED_OUTPUT;
+    out_edit->range = update_range;
+    cursor_offset = update_range.end_byte;
+    if (delete_expected_section) {
+      iree_string_view_t prefix =
+          iree_make_string_view(original_source.data, update_range.start_byte);
+      if (cursor_offset < original_source.size && prefix.size > 0 &&
+          !loom_check_ends_with_blank_line(prefix)) {
+        IREE_RETURN_IF_ERROR(
+            iree_string_builder_append_cstring(new_text, "\n"));
+      }
+      handled_following_source_padding = true;
+    } else {
+      IREE_RETURN_IF_ERROR(
+          loom_check_append_with_trailing_newline(new_text, actual_output));
+    }
   } else {
     if (!loom_check_source_range_is_in_bounds(test_case->input_range,
                                               original_source.size)) {
@@ -95,18 +137,23 @@ iree_status_t loom_check_build_update_edit(iree_string_view_t original_source,
     };
     cursor_offset = test_case->input_range.end_byte;
 
-    iree_string_view_t prefix =
-        iree_make_string_view(original_source.data, cursor_offset);
-    if (prefix.size > 0 && !loom_check_ends_with_blank_line(prefix)) {
-      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(new_text, "\n"));
+    if (!empty_output_omits_expected_section ||
+        !loom_check_actual_output_is_empty(actual_output)) {
+      iree_string_view_t prefix =
+          iree_make_string_view(original_source.data, cursor_offset);
+      if (prefix.size > 0 && !loom_check_ends_with_blank_line(prefix)) {
+        IREE_RETURN_IF_ERROR(
+            iree_string_builder_append_cstring(new_text, "\n"));
+      }
+      IREE_RETURN_IF_ERROR(
+          iree_string_builder_append_cstring(new_text, "// ----\n"));
+      IREE_RETURN_IF_ERROR(
+          loom_check_append_with_trailing_newline(new_text, actual_output));
     }
-    IREE_RETURN_IF_ERROR(
-        iree_string_builder_append_cstring(new_text, "// ----\n"));
-    IREE_RETURN_IF_ERROR(
-        loom_check_append_with_trailing_newline(new_text, actual_output));
   }
 
-  if (cursor_offset < original_source.size) {
+  if (cursor_offset < original_source.size &&
+      !handled_following_source_padding) {
     IREE_RETURN_IF_ERROR(loom_check_ensure_blank_line(new_text));
   }
   return iree_ok_status();
@@ -121,34 +168,53 @@ iree_status_t loom_check_apply_updates(iree_string_view_t original_source,
   iree_host_size_t update_count = 0;
 
   for (iree_host_size_t i = 0; i < file->case_count; ++i) {
-    if (!updates[i].needs_update) continue;
+    if (!updates[i].needs_update) {
+      continue;
+    }
+    const loom_check_case_t* test_case = &file->cases[i];
+    bool delete_expected_section =
+        loom_check_update_deletes_expected_section(test_case, &updates[i]);
+    if (!test_case->has_expected_section &&
+        updates[i].empty_output_omits_expected_section &&
+        loom_check_actual_output_is_empty(updates[i].actual_output)) {
+      continue;
+    }
     ++update_count;
 
-    const loom_check_case_t* test_case = &file->cases[i];
-
     if (test_case->has_expected_section) {
-      // Emit everything from cursor to the start of the expected section.
+      const char* replacement_start = updates[i].expected_start;
+      const char* replacement_end = updates[i].expected_end;
+      if (delete_expected_section) {
+        loom_check_source_range_t expected_section_range =
+            loom_check_expected_section_range(test_case);
+        replacement_start =
+            original_source.data + expected_section_range.start_byte;
+        replacement_end =
+            original_source.data + expected_section_range.end_byte;
+      }
       iree_host_size_t prefix_length =
-          (iree_host_size_t)(updates[i].expected_start - cursor);
+          (iree_host_size_t)(replacement_start - cursor);
       IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
           new_source, iree_make_string_view(cursor, prefix_length)));
-      // Emit the actual output as the new expected section.
-      IREE_RETURN_IF_ERROR(loom_check_append_with_trailing_newline(
-          new_source, updates[i].actual_output));
-      cursor = updates[i].expected_end;
+      if (!delete_expected_section) {
+        IREE_RETURN_IF_ERROR(loom_check_append_with_trailing_newline(
+            new_source, updates[i].actual_output));
+      }
+      cursor = replacement_end;
     } else {
-      // No expected section — insert separator + actual output after input.
       iree_host_size_t prefix_length =
           (iree_host_size_t)(updates[i].input_end - cursor);
       IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
           new_source, iree_make_string_view(cursor, prefix_length)));
-      // Blank line before the separator for visual separation from input.
-      IREE_RETURN_IF_ERROR(loom_check_ensure_blank_line(new_source));
-      IREE_RETURN_IF_ERROR(
-          iree_string_builder_append_cstring(new_source, "// ----\n"));
-      // Emit the actual output as the new expected section.
-      IREE_RETURN_IF_ERROR(loom_check_append_with_trailing_newline(
-          new_source, updates[i].actual_output));
+      if (!updates[i].empty_output_omits_expected_section ||
+          !loom_check_actual_output_is_empty(updates[i].actual_output)) {
+        // No expected section exists, so insert one after the input.
+        IREE_RETURN_IF_ERROR(loom_check_ensure_blank_line(new_source));
+        IREE_RETURN_IF_ERROR(
+            iree_string_builder_append_cstring(new_source, "// ----\n"));
+        IREE_RETURN_IF_ERROR(loom_check_append_with_trailing_newline(
+            new_source, updates[i].actual_output));
+      }
       cursor = updates[i].input_end;
     }
 

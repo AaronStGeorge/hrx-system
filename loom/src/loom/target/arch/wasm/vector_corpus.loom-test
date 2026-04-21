@@ -7,7 +7,6 @@ func.def @wasm_i32_mix4(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> (vector<4xi
   %result = vector.subi %product, %lhs : vector<4xi32>
   func.return %result : vector<4xi32>
 }
-// ----
 
 // ====
 // RUN: emit source-low @wasm_f32_mix_target output=none
@@ -18,7 +17,6 @@ func.def @wasm_f32_mix4(%lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4xf
   %result = vector.addf %product, %rhs : vector<4xf32>
   func.return %result : vector<4xf32>
 }
-// ----
 
 // ====
 // RUN: emit source-low @wasm_memory_gap_target output=none
@@ -33,7 +31,6 @@ func.def @wasm_memory_gap(%input: buffer, %output: buffer) {
   vector.store %loaded, %output_view[0] : vector<4xi32>, view<4xi32, #dense>
   func.return
 }
-// ----
 
 // ====
 // RUN: emit source-low @wasm_dot_gap_target output=none
@@ -44,4 +41,3 @@ func.def @wasm_dot_gap(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi3
   %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   func.return %dot : vector<1xi32>
 }
-// ----

@@ -10,8 +10,6 @@ low.func.def target(@test_target) @sched(%lhs : reg<test.i32>, %rhs : reg<test.i
   low.return %sum : reg<test.i32>
 }
 
-// ----
-
 // ====
 
 // RUN: emit low-schedule-json @resource_mix
@@ -71,8 +69,6 @@ low.func.def target(@test_target) @pressure(%lhs : reg<test.phys>, %rhs : reg<te
   low.return %sum : reg<test.phys>
 }
 
-// ----
-
 // ====
 
 // RUN: emit low-schedule-json @resource_diag diagnostics=resources output=none
@@ -86,8 +82,6 @@ low.func.def target(@test_target) @resource_diag(%a : reg<test.i32>, %b : reg<te
   %out = low.op<test.add.i32>(%abc, %a) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %out : reg<test.i32>
 }
-
-// ----
 
 // ====
 
@@ -108,8 +102,6 @@ low.func.def target(@test_target) @model_diag(%ptr : reg<test.ptr>, %arg : reg<t
   low.return %sum : reg<test.v4i32>
 }
 
-// ----
-
 // ====
 
 // RUN: emit low-schedule-json @hazard_diag diagnostics=hazards output=none
@@ -123,8 +115,6 @@ low.func.def target(@test_target) @hazard_diag(%ptr : reg<test.ptr>) -> (reg<tes
   %out = low.op<test.add.v4i32>(%a, %b) : (reg<test.v4i32>, reg<test.v4i32>) -> reg<test.v4i32>
   low.return %out : reg<test.v4i32>
 }
-
-// ----
 
 // ====
 

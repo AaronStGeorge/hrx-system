@@ -61,8 +61,6 @@ low.func.def target(@test_target) @phys_predicted_spill(%lhs : reg<test.phys>, %
   low.return %sum : reg<test.phys>
 }
 
-// ----
-
 // ====
 
 // RUN: emit low-allocation-json @copy
@@ -96,8 +94,6 @@ low.func.def target(@test_target) @copy_diagnostics(%lhs : reg<test.i32>, %rhs :
   %sum = low.op<test.add.i32>(%copy, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %sum : reg<test.i32>
 }
-
-// ----
 
 // ====
 

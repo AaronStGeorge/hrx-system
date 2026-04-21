@@ -15,7 +15,6 @@ func.def @amdgpu_i32_row_mix(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: 
   vector.store %result, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
   func.return
 }
-// ----
 
 // ====
 // RUN: emit source-low @gfx11_i32_b64_target output=none
@@ -33,7 +32,6 @@ func.def @amdgpu_i32_b64(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buff
   vector.store %sum, %output_view[%tid, 0] : vector<2xi32>, view<64x2xi32, #dense>
   func.return
 }
-// ----
 
 // ====
 // RUN: emit source-low @gfx11_lds_b96_target output=none
@@ -55,7 +53,6 @@ func.def @amdgpu_lds_b96() {
   vector.store %result, %scratch_view[%tid, 0] : vector<3xi32>, view<64x3xi32, #dense>
   func.return
 }
-// ----
 
 // ====
 // RUN: emit source-low @gfx11_f32_micro_tile_target output=none
@@ -76,7 +73,6 @@ func.def @amdgpu_f32_micro_tile(%lhs_buffer: buffer, %rhs_buffer: buffer, %outpu
   vector.store %biased, %output_view[%tid, 0] : vector<4xf32>, view<64x4xf32, #dense>
   func.return
 }
-// ----
 
 // ====
 // RUN: emit source-low @gfx11_q4_decode_shape_target output=none
@@ -98,7 +94,6 @@ func.def @amdgpu_q4_decode_shape(%input: buffer, %output: buffer) {
   vector.store %swapped, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
   func.return
 }
-// ----
 
 // ====
 // RUN: emit source-low @gfx11_dot_gap_target output=none
@@ -109,4 +104,3 @@ func.def @amdgpu_dot_gap(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1x
   %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   func.return %dot : vector<1xi32>
 }
-// ----

@@ -16,7 +16,6 @@ func.def @lds_b32_diagnostics(%output: buffer) {
   vector.store %loaded, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
   func.return
 }
-// ----
 
 // ====
 // RUN: emit source-low @gfx11_lds_padded_diagnostics_target diagnostics=memory output=none
@@ -38,7 +37,6 @@ func.def @lds_padded_diagnostics(%output: buffer) {
   vector.store %loaded, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
   func.return
 }
-// ----
 
 // ====
 // RUN: emit source-low @gfx11_lds_read2_write2_diagnostics_target diagnostics=memory output=none
@@ -60,7 +58,6 @@ func.def @lds_read2_write2_diagnostics(%output: buffer) {
   vector.store %loaded, %output_view[%tid, 0] : vector<2xi32>, view<64x2xi32, #dense>
   func.return
 }
-// ----
 
 // ====
 // RUN: emit source-low @gfx11_lds_conflict_risk_diagnostics_target diagnostics=memory output=none
@@ -81,4 +78,3 @@ func.def @lds_conflict_risk_diagnostics(%output: buffer) {
   vector.store %loaded, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
   func.return
 }
-// ----

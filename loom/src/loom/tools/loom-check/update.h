@@ -29,22 +29,26 @@
 extern "C" {
 #endif
 
-// Per-case update tracking. The caller populates one of these per case
-// after execution, indicating whether the expected section should be
-// rewritten and providing the actual output text.
+// Per-case update tracking. The caller populates one of these per case after
+// execution, indicating whether the expected section should be rewritten or
+// deleted and providing the actual output text.
 typedef struct loom_check_case_update_t {
-  // Whether this case's expected section should be rewritten.
+  // Whether this case's expected section should be rewritten or deleted.
   bool needs_update;
   // The actual output to write. Must remain valid until apply_updates
   // returns (typically a view into a result's actual_output builder).
   iree_string_view_t actual_output;
-  // Pointer to the end of the input section in the original source.
-  // Used to locate where to insert a // ---- separator when the case
-  // has no existing expected section.
+  // Whether an empty actual output should leave a missing expected section
+  // absent, or delete an existing one, instead of producing empty // ---- text.
+  bool empty_output_omits_expected_section;
+  // Pointer to the end of the input section in the original source. Used to
+  // locate where to insert a // ---- separator when none exists.
   const char* input_end;
-  // Pointers to the start and end of the existing expected section in
-  // the original source. Only valid when the case has_expected_section.
+  // Pointer to the start of the existing expected payload in the original
+  // source. Only valid when the case has_expected_section.
   const char* expected_start;
+  // Pointer to the end of the existing expected payload in the original source.
+  // Only valid when the case has_expected_section.
   const char* expected_end;
 } loom_check_case_update_t;
 
@@ -54,6 +58,7 @@ typedef enum loom_check_update_edit_kind_e {
   LOOM_CHECK_UPDATE_EDIT_INSERT_EXPECTED_OUTPUT = 1,
   LOOM_CHECK_UPDATE_EDIT_INSERT_DIAGNOSTIC_ANNOTATIONS = 2,
   LOOM_CHECK_UPDATE_EDIT_DELETE_DIAGNOSTIC_ANNOTATION = 3,
+  LOOM_CHECK_UPDATE_EDIT_DELETE_EXPECTED_SECTION = 4,
 } loom_check_update_edit_kind_t;
 
 // Machine-readable update edit metadata. |range| is a byte range in the
@@ -76,9 +81,9 @@ const char* loom_check_update_edit_kind_name(
 // updated via |out_update_count|.
 //
 // The reconstruction walks the original source, copying unchanged
-// regions verbatim and replacing or inserting expected sections for
-// cases where needs_update is true. Trailing newlines are ensured
-// after each inserted/replaced section.
+// regions verbatim and replacing, inserting, or deleting expected sections for
+// cases where needs_update is true. Trailing newlines are ensured after each
+// inserted/replaced section.
 iree_status_t loom_check_apply_updates(iree_string_view_t original_source,
                                        const loom_check_file_t* file,
                                        const loom_check_case_update_t* updates,
@@ -88,11 +93,10 @@ iree_status_t loom_check_apply_updates(iree_string_view_t original_source,
 // Builds the exact replacement text and range that loom_check_apply_updates()
 // would use for one case. The caller owns |new_text| and |out_edit|. The source
 // and parsed case must come from the same buffer.
-iree_status_t loom_check_build_update_edit(iree_string_view_t original_source,
-                                           const loom_check_case_t* test_case,
-                                           iree_string_view_t actual_output,
-                                           iree_string_builder_t* new_text,
-                                           loom_check_update_edit_t* out_edit);
+iree_status_t loom_check_build_update_edit(
+    iree_string_view_t original_source, const loom_check_case_t* test_case,
+    iree_string_view_t actual_output, bool empty_output_omits_expected_section,
+    iree_string_builder_t* new_text, loom_check_update_edit_t* out_edit);
 
 #ifdef __cplusplus
 }

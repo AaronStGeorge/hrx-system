@@ -781,8 +781,13 @@ static iree_status_t loom_check_emit_compare_output(
   iree_string_builder_t stripped_expected;
   iree_string_builder_initialize(allocator, &stripped_expected);
 
+  iree_string_view_t comparable_expected = test_case->expected;
+  if (result->expected_output_defaults_to_empty &&
+      !test_case->has_expected_section) {
+    comparable_expected = iree_string_view_empty();
+  }
   iree_status_t status =
-      loom_check_strip_comments(test_case->expected, &stripped_expected);
+      loom_check_strip_comments(comparable_expected, &stripped_expected);
   if (iree_status_is_ok(status)) {
     iree_string_view_t actual_trimmed =
         iree_string_view_trim(iree_string_builder_view(&result->actual_output));
@@ -900,6 +905,7 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
   IREE_RETURN_IF_ERROR(loom_low_schedule_function(
       module, low_function, &options, analysis_arena, &sidecar));
   if (suppress_output) {
+    result->expected_output_defaults_to_empty = true;
     return iree_ok_status();
   }
   return loom_low_schedule_format_json(&sidecar, &result->actual_output);
@@ -928,6 +934,7 @@ static iree_status_t loom_check_emit_write_low_allocation_json(
   IREE_RETURN_IF_ERROR(loom_low_allocate_function(
       module, low_function, &options, analysis_arena, &sidecar));
   if (suppress_output) {
+    result->expected_output_defaults_to_empty = true;
     return iree_ok_status();
   }
   return loom_low_allocation_format_json(&sidecar, &result->actual_output);
@@ -955,6 +962,7 @@ static iree_status_t loom_check_emit_write_low_packet_json(
       loom_low_packetize_function(module, low_function, &packetization_options,
                                   analysis_arena, &packetization));
   if (suppress_output) {
+    result->expected_output_defaults_to_empty = true;
     return iree_ok_status();
   }
   return loom_low_packet_format_json(&packetization.schedule,
@@ -1060,6 +1068,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
       20));
 
   if (request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_NONE) {
+    result->expected_output_defaults_to_empty = true;
     return iree_ok_status();
   }
   if (request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {

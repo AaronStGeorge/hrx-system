@@ -51,9 +51,11 @@ class UpdateTest : public ::testing::Test {
   // Builds one machine-readable update edit and returns its replacement text.
   std::string BuildUpdateEdit(const loom_check_case_t& test_case,
                               iree_string_view_t actual_output,
+                              bool empty_output_omits_expected_section,
                               loom_check_update_edit_t* out_edit) {
     IREE_EXPECT_OK(loom_check_build_update_edit(
-        source_, &test_case, actual_output, &new_source_, out_edit));
+        source_, &test_case, actual_output, empty_output_omits_expected_section,
+        &new_source_, out_edit));
     return std::string(iree_string_builder_buffer(&new_source_),
                        iree_string_builder_size(&new_source_));
   }
@@ -103,8 +105,9 @@ TEST_F(UpdateTest, BuildEditReplacesExpectedSection) {
   ASSERT_EQ(file.case_count, 1u);
 
   loom_check_update_edit_t edit = {};
-  std::string text = BuildUpdateEdit(
-      file.cases[0], iree_make_cstring_view("new expected\n"), &edit);
+  std::string text =
+      BuildUpdateEdit(file.cases[0], iree_make_cstring_view("new expected\n"),
+                      /*empty_output_omits_expected_section=*/false, &edit);
 
   EXPECT_EQ(edit.kind, LOOM_CHECK_UPDATE_EDIT_REPLACE_EXPECTED_OUTPUT);
   EXPECT_EQ(edit.range.start_byte, file.cases[0].expected_range.start_byte);
@@ -148,7 +151,8 @@ TEST_F(UpdateTest, BuildEditInsertsExpectedSeparator) {
 
   loom_check_update_edit_t edit = {};
   std::string text = BuildUpdateEdit(
-      file.cases[0], iree_make_cstring_view("formatted output\n"), &edit);
+      file.cases[0], iree_make_cstring_view("formatted output\n"),
+      /*empty_output_omits_expected_section=*/false, &edit);
 
   EXPECT_EQ(edit.kind, LOOM_CHECK_UPDATE_EDIT_INSERT_EXPECTED_OUTPUT);
   EXPECT_EQ(edit.range.start_byte, file.cases[0].input_range.end_byte);
@@ -156,6 +160,168 @@ TEST_F(UpdateTest, BuildEditInsertsExpectedSeparator) {
   EXPECT_EQ(text, "\n// ----\nformatted output\n");
   EXPECT_STREQ(loom_check_update_edit_kind_name(edit.kind),
                "insert_expected_output");
+}
+
+TEST_F(UpdateTest, BuildEditInsertsExpectedSeparatorForEmptyInsertedOutput) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @f() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+
+  loom_check_update_edit_t edit = {};
+  std::string text =
+      BuildUpdateEdit(file.cases[0], iree_string_view_empty(),
+                      /*empty_output_omits_expected_section=*/false, &edit);
+
+  EXPECT_EQ(edit.kind, LOOM_CHECK_UPDATE_EDIT_INSERT_EXPECTED_OUTPUT);
+  EXPECT_EQ(edit.range.start_byte, file.cases[0].input_range.end_byte);
+  EXPECT_EQ(edit.range.end_byte, file.cases[0].input_range.end_byte);
+  EXPECT_EQ(text, "\n// ----\n");
+}
+
+TEST_F(UpdateTest, InsertsExpectedSeparatorForEmptyInsertedOutput) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @f() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+
+  loom_check_case_update_t updates[1] = {};
+  updates[0].needs_update = true;
+  updates[0].actual_output = iree_string_view_empty();
+  updates[0].input_end = file.cases[0].input.data + file.cases[0].input.size;
+
+  iree_host_size_t update_count = 0;
+  std::string result = Apply(file, updates, &update_count);
+
+  EXPECT_EQ(update_count, 1u);
+  EXPECT_NE(result.find("}\n\n// ----\n"), std::string::npos);
+}
+
+TEST_F(UpdateTest, OmitsExpectedSeparatorForEmptyInsertedOutput) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @f() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+
+  loom_check_case_update_t updates[1] = {};
+  updates[0].needs_update = true;
+  updates[0].actual_output = iree_string_view_empty();
+  updates[0].empty_output_omits_expected_section = true;
+  updates[0].input_end = file.cases[0].input.data + file.cases[0].input.size;
+
+  iree_host_size_t update_count = 0;
+  std::string result = Apply(file, updates, &update_count);
+
+  EXPECT_EQ(update_count, 0u);
+  EXPECT_EQ(result, std::string(source_.data, source_.size));
+  EXPECT_EQ(result.find("// ----\n"), std::string::npos);
+}
+
+TEST_F(UpdateTest, BuildEditOmitsExpectedSeparatorForEmptyInsertedOutput) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @f() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+
+  loom_check_update_edit_t edit = {};
+  std::string text =
+      BuildUpdateEdit(file.cases[0], iree_string_view_empty(),
+                      /*empty_output_omits_expected_section=*/true, &edit);
+
+  EXPECT_EQ(edit.kind, LOOM_CHECK_UPDATE_EDIT_INSERT_EXPECTED_OUTPUT);
+  EXPECT_EQ(edit.range.start_byte, file.cases[0].input_range.end_byte);
+  EXPECT_EQ(edit.range.end_byte, file.cases[0].input_range.end_byte);
+  EXPECT_EQ(text, "");
+}
+
+TEST_F(UpdateTest, DeletesEmptyExpectedSectionForEmptyOutputMode) {
+  auto file = Parse(
+      "// RUN: emit source-low @target output=none\n"
+      "func.def @f() {\n"
+      "}\n"
+      "\n"
+      "// ----\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+
+  loom_check_case_update_t updates[1] = {};
+  updates[0].needs_update = true;
+  updates[0].actual_output = iree_string_view_empty();
+  updates[0].empty_output_omits_expected_section = true;
+  updates[0].expected_start = file.cases[0].expected.data;
+  updates[0].expected_end =
+      file.cases[0].expected.data + file.cases[0].expected.size;
+
+  iree_host_size_t update_count = 0;
+  std::string result = Apply(file, updates, &update_count);
+
+  EXPECT_EQ(update_count, 1u);
+  EXPECT_EQ(result.find("// ----\n"), std::string::npos);
+  EXPECT_NE(result.find("func.def @f()"), std::string::npos);
+}
+
+TEST_F(UpdateTest, BuildEditDeletesEmptyExpectedSectionForEmptyOutputMode) {
+  auto file = Parse(
+      "// RUN: emit source-low @target output=none\n"
+      "func.def @f() {\n"
+      "}\n"
+      "\n"
+      "// ----\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+
+  loom_check_update_edit_t edit = {};
+  std::string text =
+      BuildUpdateEdit(file.cases[0], iree_string_view_empty(),
+                      /*empty_output_omits_expected_section=*/true, &edit);
+
+  EXPECT_EQ(edit.kind, LOOM_CHECK_UPDATE_EDIT_DELETE_EXPECTED_SECTION);
+  EXPECT_EQ(edit.range.start_byte,
+            file.cases[0].expected_separator_range.start_byte);
+  EXPECT_EQ(edit.range.end_byte, file.cases[0].expected_range.end_byte);
+  EXPECT_EQ(text, "");
+  EXPECT_STREQ(loom_check_update_edit_kind_name(edit.kind),
+               "delete_expected_section");
+}
+
+TEST_F(UpdateTest, DeletesEmptyExpectedSectionBeforeFollowingCase) {
+  auto file = Parse(
+      "// RUN: emit source-low @target output=none\n"
+      "func.def @a() {\n"
+      "}\n"
+      "\n"
+      "// ----\n"
+      "\n"
+      "// ====\n"
+      "\n"
+      "func.def @b() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 2u);
+
+  loom_check_case_update_t updates[2] = {};
+  updates[0].needs_update = true;
+  updates[0].actual_output = iree_string_view_empty();
+  updates[0].empty_output_omits_expected_section = true;
+  updates[0].expected_start = file.cases[0].expected.data;
+  updates[0].expected_end =
+      file.cases[0].expected.data + file.cases[0].expected.size;
+
+  iree_host_size_t update_count = 0;
+  std::string result = Apply(file, updates, &update_count);
+
+  EXPECT_EQ(update_count, 1u);
+  EXPECT_EQ(result.find("// ----\n"), std::string::npos);
+  EXPECT_NE(result.find("}\n\n// ====\n"), std::string::npos);
+  EXPECT_NE(result.find("func.def @b()"), std::string::npos);
 }
 
 TEST_F(UpdateTest, InsertsExpectedWithFollowingCase) {
@@ -187,6 +353,34 @@ TEST_F(UpdateTest, InsertsExpectedWithFollowingCase) {
   // The // ==== and second case should be preserved.
   EXPECT_NE(result.find("// ====\n"), std::string::npos);
   EXPECT_NE(result.find("func.def @b()"), std::string::npos);
+}
+
+TEST_F(UpdateTest, OmitsEmptyExpectedSeparatorWithFollowingCase) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @a() {\n"
+      "}\n"
+      "\n"
+      "// ====\n"
+      "\n"
+      "func.def @b() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 2u);
+
+  loom_check_case_update_t updates[2] = {};
+  updates[0].needs_update = true;
+  updates[0].actual_output = iree_string_view_empty();
+  updates[0].empty_output_omits_expected_section = true;
+  updates[0].input_end = file.cases[0].input.data + file.cases[0].input.size;
+
+  iree_host_size_t update_count = 0;
+  std::string result = Apply(file, updates, &update_count);
+
+  EXPECT_EQ(update_count, 0u);
+  EXPECT_EQ(result, std::string(source_.data, source_.size));
+  EXPECT_EQ(result.find("// ----\n"), std::string::npos);
+  EXPECT_NE(result.find("}\n\n// ====\n"), std::string::npos);
 }
 
 TEST_F(UpdateTest, PreservesUnchangedCase) {

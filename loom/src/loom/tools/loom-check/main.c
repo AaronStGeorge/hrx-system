@@ -24,7 +24,8 @@
 
 IREE_FLAG(bool, update, false,
           "Rewrite test files with actual output in the expected\n"
-          "section (after // ----). Inserts the separator if absent.\n"
+          "section (after // ----). Inserts the separator for non-empty\n"
+          "output when absent.\n"
           "Cannot be used with stdin or verify mode.");
 IREE_FLAG(bool, verbose, false,
           "Print PASS/FAIL/SKIP for every case, not just failures.");
@@ -286,16 +287,27 @@ static iree_status_t loom_check_process_file(
          (FLAG_json.output_mode == LOOM_CHECK_JSON_OUTPUT_FAILURES &&
           results[i].final_outcome == LOOM_CHECK_FAIL));
     if ((wants_json_case || updates) && results[i].has_actual_output) {
+      iree_string_view_t comparable_expected = test_case->expected;
+      if (results[i].expected_output_defaults_to_empty &&
+          !test_case->has_expected_section) {
+        comparable_expected = iree_string_view_empty();
+      }
       iree_string_view_t stripped_expected_trimmed =
-          iree_string_view_trim(test_case->expected);
+          iree_string_view_trim(comparable_expected);
       iree_string_view_t actual_output =
           iree_string_builder_view(&results[i].actual_output);
       iree_string_view_t actual_trimmed = iree_string_view_trim(actual_output);
-      if (!iree_string_view_equal(stripped_expected_trimmed, actual_trimmed)) {
+      bool delete_expected_section =
+          results[i].expected_output_defaults_to_empty &&
+          test_case->has_expected_section &&
+          iree_string_view_is_empty(actual_trimmed);
+      if (delete_expected_section ||
+          !iree_string_view_equal(stripped_expected_trimmed, actual_trimmed)) {
         if (wants_json_case) {
           status = loom_check_build_update_edit(
-              source, test_case, actual_output, &results[i].update_edit.text,
-              &results[i].update_edit.value);
+              source, test_case, actual_output,
+              results[i].expected_output_defaults_to_empty,
+              &results[i].update_edit.text, &results[i].update_edit.value);
           if (iree_status_is_ok(status)) {
             results[i].update_edit.present = true;
           }
@@ -303,6 +315,8 @@ static iree_status_t loom_check_process_file(
         if (iree_status_is_ok(status) && updates) {
           updates[i].needs_update = true;
           updates[i].actual_output = actual_output;
+          updates[i].empty_output_omits_expected_section =
+              results[i].expected_output_defaults_to_empty;
           updates[i].input_end = test_case->input.data + test_case->input.size;
           if (test_case->has_expected_section) {
             updates[i].expected_start = test_case->expected.data;
