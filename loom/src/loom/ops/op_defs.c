@@ -411,6 +411,84 @@ iree_status_t loom_op_walk_subtree_type_refs(
 }
 
 //===----------------------------------------------------------------------===//
+// CallLike interface
+//===----------------------------------------------------------------------===//
+
+loom_call_like_t loom_call_like_cast(const loom_module_t* module,
+                                     loom_op_t* op) {
+  if (!op) {
+    return (loom_call_like_t){.op = NULL, .vtable = NULL};
+  }
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable || !vtable->call_like) {
+    return (loom_call_like_t){.op = NULL, .vtable = NULL};
+  }
+  return (loom_call_like_t){.op = op, .vtable = vtable->call_like};
+}
+
+loom_symbol_ref_t loom_call_like_callee(loom_call_like_t call) {
+  if (!call.vtable) {
+    return loom_symbol_ref_null();
+  }
+  return loom_attr_as_symbol(
+      loom_op_attrs(call.op)[call.vtable->callee_attr_index]);
+}
+
+loom_value_slice_t loom_call_like_operands(loom_call_like_t call) {
+  if (!call.vtable || call.vtable->operand_offset > call.op->operand_count) {
+    return (loom_value_slice_t){0};
+  }
+  uint16_t offset = call.vtable->operand_offset;
+  return (loom_value_slice_t){
+      .values = loom_op_operands(call.op) + offset,
+      .count = (uint16_t)(call.op->operand_count - offset),
+  };
+}
+
+loom_value_slice_t loom_call_like_results(loom_call_like_t call) {
+  if (!call.vtable || call.vtable->result_offset > call.op->result_count) {
+    return (loom_value_slice_t){0};
+  }
+  uint16_t offset = call.vtable->result_offset;
+  return (loom_value_slice_t){
+      .values = loom_op_results(call.op) + offset,
+      .count = (uint16_t)(call.op->result_count - offset),
+  };
+}
+
+uint16_t loom_call_like_operand_offset(loom_call_like_t call) {
+  if (!call.vtable) {
+    return 0;
+  }
+  return call.vtable->operand_offset;
+}
+
+uint16_t loom_call_like_result_offset(loom_call_like_t call) {
+  if (!call.vtable) {
+    return 0;
+  }
+  return call.vtable->result_offset;
+}
+
+uint8_t loom_call_like_purity(loom_call_like_t call) {
+  if (!call.vtable) {
+    return 0;
+  }
+  if (call.vtable->purity_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return 0;
+  }
+  return loom_attr_as_enum(
+      loom_op_attrs(call.op)[call.vtable->purity_attr_index]);
+}
+
+loom_call_like_kind_t loom_call_like_kind(loom_call_like_t call) {
+  if (!call.vtable) {
+    return LOOM_CALL_LIKE_KIND_NONE;
+  }
+  return call.vtable->kind;
+}
+
+//===----------------------------------------------------------------------===//
 // FuncLike interface
 //===----------------------------------------------------------------------===//
 

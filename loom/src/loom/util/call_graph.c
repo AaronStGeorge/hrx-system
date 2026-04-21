@@ -10,7 +10,6 @@
 
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/util/walk.h"
 
@@ -31,7 +30,9 @@ static iree_status_t loom_edge_list_add(loom_edge_list_t* list,
                                         loom_symbol_id_t callee) {
   // Dedup: check if already present.
   for (uint16_t i = 0; i < list->count; ++i) {
-    if (list->callees[i] == callee) return iree_ok_status();
+    if (list->callees[i] == callee) {
+      return iree_ok_status();
+    }
   }
   if (list->count >= list->capacity) {
     iree_host_size_t new_capacity =
@@ -60,9 +61,24 @@ static iree_status_t loom_call_collector_visit(
     loom_walk_result_t* out_result) {
   *out_result = LOOM_WALK_CONTINUE;
   loom_call_collector_t* collector = (loom_call_collector_t*)user_data;
-  if (!loom_func_call_isa(op)) return iree_ok_status();
-  loom_symbol_ref_t callee_ref = loom_func_call_callee(op);
-  if (!loom_symbol_ref_is_valid(callee_ref)) return iree_ok_status();
+  loom_call_like_t call = loom_call_like_cast(collector->module, op);
+  if (!loom_call_like_isa(call)) {
+    return iree_ok_status();
+  }
+  loom_call_like_kind_t kind = loom_call_like_kind(call);
+  if (kind != LOOM_CALL_LIKE_KIND_SEMANTIC &&
+      kind != LOOM_CALL_LIKE_KIND_LOW_INTERNAL &&
+      kind != LOOM_CALL_LIKE_KIND_LOW_INVOKE) {
+    return iree_ok_status();
+  }
+  loom_symbol_ref_t callee_ref = loom_call_like_callee(call);
+  if (!loom_symbol_ref_is_valid(callee_ref) || callee_ref.module_id != 0 ||
+      callee_ref.symbol_id >= collector->module->symbols.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "call-like op target symbol ref {module=%u, symbol=%u} is invalid",
+        (unsigned)callee_ref.module_id, (unsigned)callee_ref.symbol_id);
+  }
   return loom_edge_list_add(collector->edges, collector->arena,
                             callee_ref.symbol_id);
 }

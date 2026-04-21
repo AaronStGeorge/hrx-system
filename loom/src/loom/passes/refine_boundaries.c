@@ -411,23 +411,41 @@ typedef struct loom_refine_boundaries_graph_t {
   iree_host_size_t symbol_to_node_count;
 } loom_refine_boundaries_graph_t;
 
-static bool loom_refine_boundaries_read_call(const loom_op_t* op,
+static bool loom_refine_boundaries_call_kind_participates(
+    loom_call_like_kind_t kind) {
+  switch (kind) {
+    case LOOM_CALL_LIKE_KIND_SEMANTIC:
+    case LOOM_CALL_LIKE_KIND_TEMPLATE:
+      return true;
+    case LOOM_CALL_LIKE_KIND_LOW_INTERNAL:
+    case LOOM_CALL_LIKE_KIND_LOW_INVOKE:
+    case LOOM_CALL_LIKE_KIND_NONE:
+    default:
+      return false;
+  }
+}
+
+static bool loom_refine_boundaries_read_call(const loom_module_t* module,
+                                             loom_op_t* op,
+                                             loom_call_like_t* out_call,
                                              loom_symbol_ref_t* out_callee,
                                              loom_value_slice_t* out_operands,
                                              loom_value_slice_t* out_results) {
-  if (loom_func_call_isa(op)) {
-    *out_callee = loom_func_call_callee(op);
-    *out_operands = loom_func_call_operands(op);
-    *out_results = loom_func_call_results(op);
-    return true;
+  loom_call_like_t call = loom_call_like_cast(module, op);
+  if (!loom_call_like_isa(call) ||
+      !loom_refine_boundaries_call_kind_participates(
+          loom_call_like_kind(call))) {
+    if (out_call) *out_call = (loom_call_like_t){0};
+    *out_callee = loom_symbol_ref_null();
+    *out_operands = (loom_value_slice_t){0};
+    *out_results = (loom_value_slice_t){0};
+    return false;
   }
-  if (loom_func_apply_isa(op)) {
-    *out_callee = loom_func_apply_callee(op);
-    *out_operands = loom_func_apply_operands(op);
-    *out_results = loom_func_apply_results(op);
-    return true;
-  }
-  return false;
+  if (out_call) *out_call = call;
+  *out_callee = loom_call_like_callee(call);
+  *out_operands = loom_call_like_operands(call);
+  *out_results = loom_call_like_results(call);
+  return true;
 }
 
 static bool loom_refine_boundaries_callee_node(
@@ -464,7 +482,8 @@ static iree_status_t loom_refine_boundaries_visit_successor_call(
   loom_symbol_ref_t callee = loom_symbol_ref_null();
   loom_value_slice_t operands = {0};
   loom_value_slice_t results = {0};
-  if (!loom_refine_boundaries_read_call(op, &callee, &operands, &results)) {
+  if (!loom_refine_boundaries_read_call(walk->graph->module, op, NULL, &callee,
+                                        &operands, &results)) {
     return iree_ok_status();
   }
 
@@ -1108,11 +1127,12 @@ static iree_status_t loom_refine_boundaries_collect_return_forwarding(
 }
 
 static iree_status_t loom_refine_boundaries_collect_call(
-    loom_refine_boundaries_collect_t* collect, const loom_op_t* op) {
+    loom_refine_boundaries_collect_t* collect, loom_op_t* op) {
   loom_symbol_ref_t callee = loom_symbol_ref_null();
   loom_value_slice_t operands = {0};
   loom_value_slice_t results = {0};
-  if (!loom_refine_boundaries_read_call(op, &callee, &operands, &results)) {
+  if (!loom_refine_boundaries_read_call(collect->graph->module, op, NULL,
+                                        &callee, &operands, &results)) {
     return iree_ok_status();
   }
 
@@ -1813,7 +1833,8 @@ static iree_status_t loom_refine_boundaries_refine_call_result_types(
   loom_symbol_ref_t callee = loom_symbol_ref_null();
   loom_value_slice_t operands = {0};
   loom_value_slice_t results = {0};
-  if (!loom_refine_boundaries_read_call(op, &callee, &operands, &results)) {
+  if (!loom_refine_boundaries_read_call(walk->module, op, NULL, &callee,
+                                        &operands, &results)) {
     return iree_ok_status();
   }
 
@@ -2023,7 +2044,8 @@ static iree_status_t loom_refine_boundaries_collect_specialization_call(
   loom_symbol_ref_t callee = loom_symbol_ref_null();
   loom_value_slice_t operands = {0};
   loom_value_slice_t results = {0};
-  if (!loom_refine_boundaries_read_call(op, &callee, &operands, &results)) {
+  if (!loom_refine_boundaries_read_call(walk->module, op, NULL, &callee,
+                                        &operands, &results)) {
     return iree_ok_status();
   }
   (void)operands;
@@ -2455,9 +2477,11 @@ static iree_status_t loom_refine_boundaries_preflight_pruned_call(
   loom_refine_boundaries_prune_call_walk_t* walk =
       (loom_refine_boundaries_prune_call_walk_t*)user_data;
   loom_symbol_ref_t callee = loom_symbol_ref_null();
+  loom_call_like_t call = {0};
   loom_value_slice_t operands = {0};
   loom_value_slice_t results = {0};
-  if (!loom_refine_boundaries_read_call(op, &callee, &operands, &results)) {
+  if (!loom_refine_boundaries_read_call(walk->graph->module, op, &call, &callee,
+                                        &operands, &results)) {
     return iree_ok_status();
   }
 
@@ -2486,35 +2510,41 @@ static iree_status_t loom_refine_boundaries_preflight_pruned_call(
   }
 
   const loom_tied_result_t* tied_results = loom_op_tied_results(op);
+  uint16_t operand_offset = loom_call_like_operand_offset(call);
+  uint16_t result_offset = loom_call_like_result_offset(call);
   for (uint16_t i = 0; i < op->tied_result_count; ++i) {
     uint16_t operand_index = tied_results[i].operand_index;
-    if (plan->has_prunable_arguments && operand_index >= plan->argument_count) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "tied result operand index %u is out of range for %u argument(s)",
-          (unsigned)operand_index, (unsigned)plan->argument_count);
-    }
-    if (plan->has_prunable_arguments) {
-      plan->prune_arguments[operand_index] = false;
+    if (plan->has_prunable_arguments && operand_index >= operand_offset) {
+      uint16_t argument_index = (uint16_t)(operand_index - operand_offset);
+      if (argument_index >= plan->argument_count) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "tied result operand index %u is out of range for %u argument(s)",
+            (unsigned)argument_index, (unsigned)plan->argument_count);
+      }
+      plan->prune_arguments[argument_index] = false;
     }
 
     uint16_t result_index = tied_results[i].result_index;
-    if (plan->has_prunable_results && result_index >= plan->result_count) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "tied result index %u is out of range for %u result(s)",
-          (unsigned)result_index, (unsigned)plan->result_count);
-    }
-    if (plan->has_prunable_results) {
-      plan->prune_results[result_index] = false;
+    if (plan->has_prunable_results && result_index >= result_offset) {
+      uint16_t call_result_index = (uint16_t)(result_index - result_offset);
+      if (call_result_index >= plan->result_count) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "tied result index %u is out of range for %u result(s)",
+            (unsigned)call_result_index, (unsigned)plan->result_count);
+      }
+      plan->prune_results[call_result_index] = false;
     }
   }
 
   if (plan->has_prunable_results) {
     for (uint16_t i = 0; i < plan->result_count; ++i) {
-      if (!plan->prune_results[i]) continue;
+      if (!plan->prune_results[i]) {
+        continue;
+      }
       if (!loom_refine_boundaries_result_is_prunable(walk->graph->module, op,
-                                                     i)) {
+                                                     result_offset + i)) {
         plan->prune_results[i] = false;
       }
     }
@@ -2564,45 +2594,90 @@ static iree_status_t loom_refine_boundaries_build_pruned_call(
   *out_old_to_new_result_indices = NULL;
   *out_new_op = NULL;
   loom_symbol_ref_t callee = loom_symbol_ref_null();
+  loom_call_like_t call = {0};
   loom_value_slice_t operands = {0};
   loom_value_slice_t results = {0};
-  if (!loom_refine_boundaries_read_call(op, &callee, &operands, &results)) {
-    return iree_ok_status();
+  if (!loom_refine_boundaries_read_call(module, op, &call, &callee, &operands,
+                                        &results)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected direct call-like op");
+  }
+  (void)callee;
+
+  if (op->successor_count != 0 || op->region_count != 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "boundary pruning requires call-like ops without successors or "
+        "regions");
+  }
+  uint16_t operand_offset = loom_call_like_operand_offset(call);
+  uint16_t result_offset = loom_call_like_result_offset(call);
+  if (operand_offset > op->operand_count || result_offset > op->result_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "call-like operand or result offset is out of range");
   }
 
-  loom_value_id_t* kept_operands = NULL;
   uint16_t* old_to_new_operand_indices = NULL;
-  if (operands.count > 0) {
+  loom_value_id_t* new_operands = NULL;
+  if (op->operand_count > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        arena, operands.count, sizeof(*kept_operands), (void**)&kept_operands));
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        arena, operands.count, sizeof(*old_to_new_operand_indices),
+        arena, op->operand_count, sizeof(*old_to_new_operand_indices),
         (void**)&old_to_new_operand_indices));
-    for (iree_host_size_t i = 0; i < operands.count; ++i) {
+    for (uint16_t i = 0; i < op->operand_count; ++i) {
       old_to_new_operand_indices[i] = UINT16_MAX;
     }
   }
-  iree_host_size_t kept_operand_count = 0;
-  for (iree_host_size_t i = 0; i < operands.count; ++i) {
-    if (i < plan->argument_count && plan->prune_arguments[i]) continue;
-    old_to_new_operand_indices[i] = (uint16_t)kept_operand_count;
-    kept_operands[kept_operand_count++] = operands.values[i];
+  uint16_t kept_call_operand_count = 0;
+  for (uint16_t i = 0; i < operands.count; ++i) {
+    if (i < plan->argument_count && plan->prune_arguments[i]) {
+      continue;
+    }
+    old_to_new_operand_indices[operand_offset + i] =
+        (uint16_t)(operand_offset + kept_call_operand_count);
+    ++kept_call_operand_count;
+  }
+  uint16_t new_operand_count =
+      (uint16_t)(operand_offset + kept_call_operand_count);
+  if (new_operand_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, new_operand_count,
+                                                   sizeof(*new_operands),
+                                                   (void**)&new_operands));
+    const loom_value_id_t* old_operands = loom_op_const_operands(op);
+    for (uint16_t i = 0; i < operand_offset; ++i) {
+      old_to_new_operand_indices[i] = i;
+      new_operands[i] = old_operands[i];
+    }
+    uint16_t kept_index = operand_offset;
+    for (uint16_t i = 0; i < operands.count; ++i) {
+      uint16_t old_index = (uint16_t)(operand_offset + i);
+      if (old_to_new_operand_indices[old_index] == UINT16_MAX) {
+        continue;
+      }
+      new_operands[kept_index++] = operands.values[i];
+    }
   }
 
   uint16_t* old_to_new_result_indices = NULL;
-  if (results.count > 0) {
+  if (op->result_count > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        arena, results.count, sizeof(*old_to_new_result_indices),
+        arena, op->result_count, sizeof(*old_to_new_result_indices),
         (void**)&old_to_new_result_indices));
-    for (iree_host_size_t i = 0; i < results.count; ++i) {
+    for (uint16_t i = 0; i < op->result_count; ++i) {
       old_to_new_result_indices[i] = UINT16_MAX;
     }
   }
-  iree_host_size_t kept_result_count = 0;
-  for (iree_host_size_t i = 0; i < results.count; ++i) {
-    if (i < plan->result_count && plan->prune_results[i]) continue;
-    old_to_new_result_indices[i] = (uint16_t)kept_result_count++;
+  uint16_t kept_call_result_count = 0;
+  for (uint16_t i = 0; i < results.count; ++i) {
+    if (i < plan->result_count && plan->prune_results[i]) {
+      continue;
+    }
+    old_to_new_result_indices[result_offset + i] =
+        (uint16_t)(result_offset + kept_call_result_count);
+    ++kept_call_result_count;
   }
+  uint16_t new_result_count =
+      (uint16_t)(result_offset + kept_call_result_count);
 
   loom_tied_result_t* tied_results = NULL;
   if (op->tied_result_count > 0) {
@@ -2613,11 +2688,11 @@ static iree_status_t loom_refine_boundaries_build_pruned_call(
     for (uint16_t i = 0; i < op->tied_result_count; ++i) {
       tied_results[i] = old_tied_results[i];
       uint16_t old_operand_index = old_tied_results[i].operand_index;
-      if (old_operand_index >= operands.count) {
+      if (old_operand_index >= op->operand_count) {
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
             "tied result operand index %u is out of range for %u operand(s)",
-            (unsigned)old_operand_index, (unsigned)operands.count);
+            (unsigned)old_operand_index, (unsigned)op->operand_count);
       }
       uint16_t new_operand_index =
           old_to_new_operand_indices[old_operand_index];
@@ -2629,11 +2704,11 @@ static iree_status_t loom_refine_boundaries_build_pruned_call(
       }
       tied_results[i].operand_index = new_operand_index;
       uint16_t old_result_index = old_tied_results[i].result_index;
-      if (old_result_index >= results.count) {
+      if (old_result_index >= op->result_count) {
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
             "tied result index %u is out of range for %u result(s)",
-            (unsigned)old_result_index, (unsigned)results.count);
+            (unsigned)old_result_index, (unsigned)op->result_count);
       }
       uint16_t new_result_index = old_to_new_result_indices[old_result_index];
       if (new_result_index == UINT16_MAX) {
@@ -2646,13 +2721,20 @@ static iree_status_t loom_refine_boundaries_build_pruned_call(
   }
 
   loom_type_t* result_types = NULL;
-  if (kept_result_count > 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, kept_result_count,
-                                                   sizeof(*result_types),
-                                                   (void**)&result_types));
-    for (iree_host_size_t i = 0; i < results.count; ++i) {
-      uint16_t new_index = old_to_new_result_indices[i];
-      if (new_index == UINT16_MAX) continue;
+  if (new_result_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, new_result_count, sizeof(*result_types), (void**)&result_types));
+    const loom_value_id_t* old_results = loom_op_const_results(op);
+    for (uint16_t i = 0; i < result_offset; ++i) {
+      old_to_new_result_indices[i] = i;
+      result_types[i] = loom_module_value_type(module, old_results[i]);
+    }
+    for (uint16_t i = 0; i < results.count; ++i) {
+      uint16_t old_index = (uint16_t)(result_offset + i);
+      uint16_t new_index = old_to_new_result_indices[old_index];
+      if (new_index == UINT16_MAX) {
+        continue;
+      }
       result_types[new_index] =
           loom_module_value_type(module, results.values[i]);
     }
@@ -2662,26 +2744,27 @@ static iree_status_t loom_refine_boundaries_build_pruned_call(
   loom_builder_t builder;
   loom_builder_initialize(module, &module->arena, op->parent_block, &builder);
   loom_builder_set_before(&builder, op);
-  if (loom_func_call_isa(op)) {
-    uint8_t purity = loom_func_call_purity(op);
-    loom_func_call_build_flags_t build_flags =
-        purity ? LOOM_FUNC_CALL_BUILD_FLAG_HAS_PURITY : 0;
-    return loom_func_call_build(
-        &builder, build_flags, purity, callee, kept_operands,
-        kept_operand_count, result_types, kept_result_count, tied_results,
-        op->tied_result_count, op->location, out_new_op);
+  IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
+      &builder, op->kind, new_operand_count, new_result_count,
+      /*region_count=*/0, op->tied_result_count, op->attribute_count,
+      op->location, out_new_op));
+  if (new_operand_count > 0) {
+    memcpy(loom_op_operands(*out_new_op), new_operands,
+           (iree_host_size_t)new_operand_count * sizeof(*new_operands));
   }
-  if (loom_func_apply_isa(op)) {
-    uint8_t purity = loom_func_apply_purity(op);
-    loom_func_apply_build_flags_t build_flags =
-        purity ? LOOM_FUNC_APPLY_BUILD_FLAG_HAS_PURITY : 0;
-    return loom_func_apply_build(
-        &builder, build_flags, purity, callee, kept_operands,
-        kept_operand_count, result_types, kept_result_count, tied_results,
-        op->tied_result_count, op->location, out_new_op);
+  for (uint16_t i = 0; i < new_result_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_builder_define_value(
+        &builder, result_types[i], &loom_op_results(*out_new_op)[i]));
   }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "expected func.call or func.apply");
+  if (op->tied_result_count > 0) {
+    memcpy(loom_op_tied_results(*out_new_op), tied_results,
+           (iree_host_size_t)op->tied_result_count * sizeof(*tied_results));
+  }
+  if (op->attribute_count > 0) {
+    memcpy(loom_op_attrs(*out_new_op), loom_op_const_attrs(op),
+           (iree_host_size_t)op->attribute_count * sizeof(loom_attribute_t));
+  }
+  return loom_builder_finalize_op(&builder, *out_new_op);
 }
 
 typedef struct loom_refine_boundaries_rewrite_call_walk_t {
@@ -2709,7 +2792,8 @@ static iree_status_t loom_refine_boundaries_rewrite_pruned_call(
   loom_symbol_ref_t callee = loom_symbol_ref_null();
   loom_value_slice_t operands = {0};
   loom_value_slice_t results = {0};
-  if (!loom_refine_boundaries_read_call(op, &callee, &operands, &results)) {
+  if (!loom_refine_boundaries_read_call(walk->module, op, NULL, &callee,
+                                        &operands, &results)) {
     return iree_ok_status();
   }
 
@@ -2735,7 +2819,9 @@ static iree_status_t loom_refine_boundaries_rewrite_pruned_call(
   const loom_value_id_t* new_results = loom_op_const_results(new_op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
     uint16_t new_index = old_to_new_result_indices[i];
-    if (new_index == UINT16_MAX) continue;
+    if (new_index == UINT16_MAX) {
+      continue;
+    }
     IREE_RETURN_IF_ERROR(loom_value_replace_all_uses_with(
         walk->module, old_results[i], new_results[new_index]));
   }

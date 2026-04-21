@@ -74,6 +74,8 @@ from loom.dsl import (
     BlockArgCount,
     BlockArgsMatchElementTypes,
     BlockArgsMatchTypes,
+    CallLikeInterface,
+    CallLikeKind,
     Dialect,
     DimIndexInBounds,
     EnumCase,
@@ -675,6 +677,14 @@ test_invoke = Op(
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
+    interfaces=[
+        CallLikeInterface(
+            callee="callee",
+            operands="operands",
+            results="results",
+            kind=CallLikeKind.SEMANTIC,
+        ),
+    ],
     verify="loom_test_invoke_verify",
     format=[
         SymbolRef("callee"),

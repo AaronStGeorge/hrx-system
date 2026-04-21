@@ -28,6 +28,7 @@ from loom.dsl import (
     AttrDef,
     AttrMatchesElementType,
     BitRangeWithinElementWidth,
+    CallLikeInterface,
     Dialect,
     ElementWidthAtLeastAttr,
     ElementWidthGreaterThan,
@@ -258,6 +259,87 @@ def test_generate_tables_preserves_operand_and_result_descriptor_names() -> None
     assert "{loom_test_reduce_input_operand_bname, LOOM_TYPE_CONSTRAINT_INTEGER, 0}" in tables_c
     assert ("{loom_test_reduce_partials_operand_bname, LOOM_TYPE_CONSTRAINT_INTEGER, LOOM_OPERAND_VARIADIC}") in tables_c
     assert ("{loom_test_reduce_results_result_bname, LOOM_TYPE_CONSTRAINT_INTEGER, LOOM_RESULT_VARIADIC}") in tables_c
+
+
+def test_generate_tables_emits_call_like_interface() -> None:
+    op = Op(
+        "test.call",
+        group=Dialect("test"),
+        attrs=[AttrDef("callee", "symbol")],
+        operands=[Operand("operands", ANY, variadic=True)],
+        results=[Result("results", ANY, variadic=True)],
+        interfaces=[
+            CallLikeInterface(
+                callee="callee",
+                operands="operands",
+                results="results",
+            ),
+        ],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "static const loom_call_like_vtable_t loom_test_call_call_like" in tables_c
+    assert ".callee_attr_index = 0," in tables_c
+    assert ".purity_attr_index = 255," in tables_c
+    assert ".operand_offset = 0," in tables_c
+    assert ".result_offset = 0," in tables_c
+    assert ".kind = LOOM_CALL_LIKE_KIND_SEMANTIC," in tables_c
+
+
+def test_generate_tables_rejects_call_like_non_trailing_operand() -> None:
+    op = Op(
+        "test.call",
+        group=Dialect("test"),
+        attrs=[AttrDef("callee", "symbol")],
+        operands=[
+            Operand("operands", ANY, variadic=True),
+            Operand("token", ANY),
+        ],
+        results=[Result("results", ANY, variadic=True)],
+        interfaces=[
+            CallLikeInterface(
+                callee="callee",
+                operands="operands",
+                results="results",
+            ),
+        ],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"CallLikeInterface on 'test\.call': operand 'operands' "
+            r"must be the trailing operand field"
+        ),
+    ):
+        generate_tables_c("test", 0, [op])
+
+
+def test_generate_tables_rejects_call_like_non_variadic_result() -> None:
+    op = Op(
+        "test.call",
+        group=Dialect("test"),
+        attrs=[AttrDef("callee", "symbol")],
+        operands=[Operand("operands", ANY, variadic=True)],
+        results=[Result("result", ANY)],
+        interfaces=[
+            CallLikeInterface(
+                callee="callee",
+                operands="operands",
+                results="result",
+            ),
+        ],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"CallLikeInterface on 'test\.call': result 'result' "
+            r"must be variadic"
+        ),
+    ):
+        generate_tables_c("test", 0, [op])
 
 
 def test_types_of_result_field_generates_result_type_list_format() -> None:

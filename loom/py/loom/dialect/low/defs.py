@@ -58,6 +58,8 @@ from loom.dsl import (
     UNKNOWN_EFFECTS,
     AttrDef,
     BlockArgsSatisfy,
+    CallLikeInterface,
+    CallLikeKind,
     Dialect,
     EnumCase,
     EnumDef,
@@ -378,6 +380,15 @@ low_func_call = Op(
     ],
     results=[Result("results", REGISTER, variadic=True)],
     traits=[UNKNOWN_EFFECTS, HasAncestor("low.func.def")],
+    interfaces=[
+        CallLikeInterface(
+            callee="callee",
+            operands="operands",
+            results="results",
+            purity="purity",
+            kind=CallLikeKind.LOW_INTERNAL,
+        ),
+    ],
     effective_traits="loom_low_func_call_effective_traits",
     verify="loom_low_func_call_verify",
     format=[
@@ -822,6 +833,15 @@ low_invoke = Op(
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS, NoAncestor("low.func.def")],
+    interfaces=[
+        CallLikeInterface(
+            callee="callee",
+            operands="operands",
+            results="results",
+            purity="purity",
+            kind=CallLikeKind.LOW_INVOKE,
+        ),
+    ],
     effective_traits="loom_low_invoke_effective_traits",
     verify="loom_low_invoke_verify",
     format=[

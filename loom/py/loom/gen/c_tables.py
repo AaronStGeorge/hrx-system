@@ -60,6 +60,8 @@ from loom.assembly import (
 from loom.dsl import (
     ATTR_TYPE_FLAGS,
     AttrDef,
+    CallLikeInterface,
+    CallLikeKind,
     EffectKind,
     EnumDef,
     FuncLikeInterface,
@@ -164,6 +166,13 @@ TYPE_CONSTRAINT_MAP: dict[TypeConstraint, str] = {
     TypeConstraint.POOL: "LOOM_TYPE_CONSTRAINT_POOL",
     TypeConstraint.REGISTER: "LOOM_TYPE_CONSTRAINT_REGISTER",
     TypeConstraint.I1: "LOOM_TYPE_CONSTRAINT_I1",
+}
+
+CALL_LIKE_KIND_MAP: dict[CallLikeKind, str] = {
+    CallLikeKind.SEMANTIC: "LOOM_CALL_LIKE_KIND_SEMANTIC",
+    CallLikeKind.TEMPLATE: "LOOM_CALL_LIKE_KIND_TEMPLATE",
+    CallLikeKind.LOW_INTERNAL: "LOOM_CALL_LIKE_KIND_LOW_INTERNAL",
+    CallLikeKind.LOW_INVOKE: "LOOM_CALL_LIKE_KIND_LOW_INVOKE",
 }
 
 _ERROR_REF_CODE_BITS = 10
@@ -560,6 +569,24 @@ def _resolve_operand_index(op: Op, operand_name: str | None, interface_name: str
     raise ValueError(f"{interface_name} on {op.name!r}: operand {operand_name!r} not found. Available: {[o.name for o in op.operands]}")
 
 
+def _resolve_result_index(op: Op, result_name: str | None, interface_name: str = "interface") -> int:
+    """Resolves a result name to its index in the op's result list.
+
+    Returns 0xFF (LOOM_RESULT_INDEX_NONE) if result_name is None.
+    Raises ValueError if the result name is not found on the op.
+    |interface_name| is used in error messages.
+
+    The returned index is the position in op.results. This includes
+    fixed results and the variadic result tail.
+    """
+    if result_name is None:
+        return 0xFF
+    for i, result in enumerate(op.results):
+        if result.name == result_name:
+            return i
+    raise ValueError(f"{interface_name} on {op.name!r}: result {result_name!r} not found. Available: {[r.name for r in op.results]}")
+
+
 def _resolve_block_arg_index(
     op: Op,
     region_name: str,
@@ -624,9 +651,11 @@ class InterfaceFieldSpec:
           "attr"       — resolve to an op attribute index
           "region"     — resolve to an op region index
           "operand"    — resolve to an op operand index
+          "result"     — resolve to an op result index
           "block_arg"  — resolve to a block argument index within a
                          region (requires region_field)
           "bool"       — render as a C boolean literal (true/false)
+          "call_kind"  — render a loom_call_like_kind_t constant
     region_field: For kind="block_arg", the name of the interface field
         that names the region the block arg belongs to. Unused for
         other kinds.
@@ -668,6 +697,19 @@ class InterfaceSpec:
 # Registry of all interfaces known to the generator. Adding a new
 # interface is a single entry here (plus the C-side struct/cast code).
 _INTERFACES: tuple[InterfaceSpec, ...] = (
+    InterfaceSpec(
+        python_class=CallLikeInterface,
+        name="CallLikeInterface",
+        c_struct="loom_call_like_vtable_t",
+        vtable_field="call_like",
+        fields=(
+            InterfaceFieldSpec("callee", "callee_attr_index", "attr"),
+            InterfaceFieldSpec("purity", "purity_attr_index", "attr"),
+            InterfaceFieldSpec("operands", "operand_offset", "operand"),
+            InterfaceFieldSpec("results", "result_offset", "result"),
+            InterfaceFieldSpec("kind", "kind", "call_kind"),
+        ),
+    ),
     InterfaceSpec(
         python_class=FuncLikeInterface,
         name="FuncLikeInterface",
@@ -729,6 +771,8 @@ def _resolve_interface_field(
         return str(_resolve_region_index(op, py_value, interface_name))
     if field_spec.kind == "operand":
         return str(_resolve_operand_index(op, py_value, interface_name))
+    if field_spec.kind == "result":
+        return str(_resolve_result_index(op, py_value, interface_name))
     if field_spec.kind == "block_arg":
         if not field_spec.region_field:
             raise ValueError(f"{interface_name} field {field_spec.py_field!r}: kind='block_arg' requires region_field to name the region this block arg belongs to")
@@ -736,7 +780,28 @@ def _resolve_interface_field(
         return str(_resolve_block_arg_index(op, region_value, py_value, interface_name))
     if field_spec.kind == "bool":
         return "true" if py_value else "false"
+    if field_spec.kind == "call_kind":
+        if not isinstance(py_value, CallLikeKind):
+            raise ValueError(f"{interface_name} field {field_spec.py_field!r}: expected CallLikeKind, got {py_value!r}")
+        return CALL_LIKE_KIND_MAP[py_value]
     raise ValueError(f"{interface_name} field {field_spec.py_field!r}: unknown kind {field_spec.kind!r}")
+
+
+def _validate_call_like_interface(op: Op, iface: CallLikeInterface, interface_name: str) -> None:
+    """Validates CallLikeInterface's trailing variadic slice contract."""
+    operand_index = _resolve_operand_index(op, iface.operands, interface_name)
+    operand = op.operands[operand_index]
+    if not operand.variadic:
+        raise ValueError(f"{interface_name} on {op.name!r}: operand {iface.operands!r} must be variadic")
+    if operand_index + 1 != len(op.operands):
+        raise ValueError(f"{interface_name} on {op.name!r}: operand {iface.operands!r} must be the trailing operand field")
+
+    result_index = _resolve_result_index(op, iface.results, interface_name)
+    result = op.results[result_index]
+    if not result.variadic:
+        raise ValueError(f"{interface_name} on {op.name!r}: result {iface.results!r} must be variadic")
+    if result_index + 1 != len(op.results):
+        raise ValueError(f"{interface_name} on {op.name!r}: result {iface.results!r} must be the trailing result field")
 
 
 def _emit_interface_vtable(op: Op, spec: InterfaceSpec, lines: list[str]) -> None:
@@ -749,6 +814,8 @@ def _emit_interface_vtable(op: Op, spec: InterfaceSpec, lines: list[str]) -> Non
     iface = _find_interface(op, spec.python_class)
     if iface is None:
         return
+    if isinstance(iface, CallLikeInterface):
+        _validate_call_like_interface(op, iface, spec.name)
     prefix = _c_prefix(op)
     lines.append(f"static const {spec.c_struct} {prefix}_{spec.vtable_field} = {{")
     for field_spec in spec.fields:

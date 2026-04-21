@@ -51,6 +51,8 @@ from loom.dsl import (
     TERMINATOR,
     UNKNOWN_EFFECTS,
     AttrDef,
+    CallLikeInterface,
+    CallLikeKind,
     Dialect,
     EnumCase,
     EnumDef,
@@ -358,6 +360,15 @@ func_call = Op(
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
+    interfaces=[
+        CallLikeInterface(
+            callee="callee",
+            operands="operands",
+            results="results",
+            purity="purity",
+            kind=CallLikeKind.SEMANTIC,
+        ),
+    ],
     canonicalize="loom_func_call_canonicalize",
     effective_traits="loom_func_call_effective_traits",
     format=[
@@ -404,6 +415,15 @@ func_apply = Op(
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
+    interfaces=[
+        CallLikeInterface(
+            callee="callee",
+            operands="operands",
+            results="results",
+            purity="purity",
+            kind=CallLikeKind.TEMPLATE,
+        ),
+    ],
     canonicalize="loom_func_apply_canonicalize",
     effective_traits="loom_func_apply_effective_traits",
     format=[

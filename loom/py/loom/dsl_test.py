@@ -67,6 +67,8 @@ from loom.dsl import (
     BlockArgsMatchElementTypes,
     BlockArgsMatchTypes,
     BlockArgsSatisfy,
+    CallLikeInterface,
+    CallLikeKind,
     Dialect,
     DimIndexInBounds,
     ElementWidthAtLeastAttr,
@@ -383,6 +385,31 @@ class TestTraits:
         ]
         names = [t.name for t in standard]
         assert len(set(names)) == len(names), "Duplicate trait names"
+
+
+# ============================================================================
+# Interfaces
+# ============================================================================
+
+
+class TestInterfaces:
+    def test_call_like_interface_defaults_to_semantic(self) -> None:
+        interface = CallLikeInterface(
+            callee="callee",
+            operands="operands",
+            results="results",
+        )
+        assert interface.callee == "callee"
+        assert interface.operands == "operands"
+        assert interface.results == "results"
+        assert interface.purity is None
+        assert interface.kind == CallLikeKind.SEMANTIC
+
+    def test_call_like_kind_values(self) -> None:
+        assert CallLikeKind.SEMANTIC.value == "semantic"
+        assert CallLikeKind.TEMPLATE.value == "template"
+        assert CallLikeKind.LOW_INTERNAL.value == "low_internal"
+        assert CallLikeKind.LOW_INVOKE.value == "low_invoke"
 
 
 # ============================================================================

@@ -132,7 +132,6 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
-    loom::src::loom::ops::func
     loom::src::loom::ops::op_defs
   PUBLIC
 )
@@ -147,6 +146,7 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::func
+    loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
     iree::testing::gtest

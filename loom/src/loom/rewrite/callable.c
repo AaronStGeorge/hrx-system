@@ -10,18 +10,36 @@
 #include "loom/ops/func/ops.h"
 #include "loom/rewrite/materialize.h"
 
-static bool loom_callable_get_call_symbol_ref(const loom_op_t* call_op,
+static bool loom_callable_get_call_symbol_ref(const loom_module_t* module,
+                                              const loom_op_t* call_op,
                                               loom_symbol_ref_t* out_ref) {
-  if (loom_func_call_isa(call_op)) {
-    *out_ref = loom_func_call_callee(call_op);
-    return true;
-  }
-  if (loom_func_apply_isa(call_op)) {
-    *out_ref = loom_func_apply_callee(call_op);
+  loom_call_like_t call = loom_call_like_cast(module, (loom_op_t*)call_op);
+  if (loom_call_like_isa(call)) {
+    *out_ref = loom_call_like_callee(call);
     return true;
   }
   *out_ref = loom_symbol_ref_null();
   return false;
+}
+
+static iree_status_t loom_callable_get_whole_call(const loom_module_t* module,
+                                                  const loom_op_t* call_op,
+                                                  loom_call_like_t* out_call) {
+  loom_call_like_t call = loom_call_like_cast(module, (loom_op_t*)call_op);
+  if (!loom_call_like_isa(call)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "op is not a direct callable op");
+  }
+  if (loom_call_like_operand_offset(call) != 0 ||
+      loom_call_like_result_offset(call) != 0 || call_op->region_count != 0 ||
+      call_op->successor_count != 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "callable rewrite requires a call-like op whose operands and results "
+        "are exactly the call payload");
+  }
+  *out_call = call;
+  return iree_ok_status();
 }
 
 iree_status_t loom_callable_resolve_direct_callee(
@@ -33,7 +51,7 @@ iree_status_t loom_callable_resolve_direct_callee(
   }
   *out_callee = (loom_func_like_t){0};
   loom_symbol_ref_t ref = loom_symbol_ref_null();
-  if (!loom_callable_get_call_symbol_ref(call_op, &ref)) {
+  if (!loom_callable_get_call_symbol_ref(module, call_op, &ref)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "op is not a direct callable op");
   }
@@ -82,9 +100,10 @@ static iree_status_t loom_callable_validate_same_module_callee(
 }
 
 static iree_status_t loom_callable_validate_call_targets_callee(
-    const loom_op_t* call_op, loom_func_like_t callee) {
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_func_like_t callee) {
   loom_symbol_ref_t call_ref = loom_symbol_ref_null();
-  if (!loom_callable_get_call_symbol_ref(call_op, &call_ref)) {
+  if (!loom_callable_get_call_symbol_ref(module, call_op, &call_ref)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "op is not a direct callable op");
   }
@@ -141,44 +160,44 @@ static iree_status_t loom_callable_validate_inline_body(
 
 static iree_status_t loom_callable_bind_entry_args(loom_ir_remap_t* remap,
                                                    loom_func_like_t callee,
-                                                   const loom_op_t* call_op) {
+                                                   loom_call_like_t call) {
   uint16_t arg_count = 0;
   const loom_value_id_t* arg_ids = loom_func_like_arg_ids(callee, &arg_count);
-  if (arg_count != call_op->operand_count) {
+  loom_value_slice_t operands = loom_call_like_operands(call);
+  if (arg_count != operands.count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "call operand count %u does not match callee argument count %u",
-        (unsigned)call_op->operand_count, (unsigned)arg_count);
+        (unsigned)operands.count, (unsigned)arg_count);
   }
-  const loom_value_id_t* operands = loom_op_const_operands(call_op);
   for (uint16_t i = 0; i < arg_count; ++i) {
     IREE_RETURN_IF_ERROR(
-        loom_ir_remap_map_value(remap, arg_ids[i], operands[i]));
+        loom_ir_remap_map_value(remap, arg_ids[i], operands.values[i]));
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_callable_resolve_return_replacements(
-    loom_rewriter_t* rewriter, loom_op_t* call_op, loom_op_t* return_op,
+    loom_rewriter_t* rewriter, loom_call_like_t call, loom_op_t* return_op,
     loom_ir_remap_t* remap, loom_value_id_t* replacements) {
   loom_value_slice_t return_operands = loom_func_return_operands(return_op);
-  if (return_operands.count != call_op->result_count) {
+  loom_value_slice_t call_results_slice = loom_call_like_results(call);
+  if (return_operands.count != call_results_slice.count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "func.return operand count %u does not match call result count %u",
-        (unsigned)return_operands.count, (unsigned)call_op->result_count);
+        (unsigned)return_operands.count, (unsigned)call_results_slice.count);
   }
-  const loom_value_id_t* call_results = loom_op_const_results(call_op);
-  for (uint16_t i = 0; i < call_op->result_count; ++i) {
+  for (uint16_t i = 0; i < call_results_slice.count; ++i) {
     IREE_RETURN_IF_ERROR(loom_ir_remap_resolve_value(
         remap, return_operands.values[i], &replacements[i]));
-    if (call_results[i] == LOOM_VALUE_ID_INVALID ||
+    if (call_results_slice.values[i] == LOOM_VALUE_ID_INVALID ||
         replacements[i] == LOOM_VALUE_ID_INVALID) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "call result and replacement must be valid");
     }
     loom_type_t result_type =
-        loom_module_value_type(rewriter->module, call_results[i]);
+        loom_module_value_type(rewriter->module, call_results_slice.values[i]);
     loom_type_t replacement_type =
         loom_module_value_type(rewriter->module, replacements[i]);
     if (!loom_type_equal(result_type, replacement_type)) {
@@ -191,12 +210,12 @@ static iree_status_t loom_callable_resolve_return_replacements(
 }
 
 static iree_status_t loom_callable_preserve_call_result_names(
-    loom_rewriter_t* rewriter, const loom_op_t* call_op,
+    loom_rewriter_t* rewriter, loom_call_like_t call,
     const loom_value_id_t* replacements, uint16_t count,
     loom_value_id_t value_checkpoint) {
-  const loom_value_id_t* call_results = loom_op_const_results(call_op);
+  loom_value_slice_t call_results = loom_call_like_results(call);
   for (uint16_t i = 0; i < count; ++i) {
-    loom_value_id_t old_result = call_results[i];
+    loom_value_id_t old_result = call_results.values[i];
     loom_value_id_t replacement = replacements[i];
     if (old_result == LOOM_VALUE_ID_INVALID ||
         replacement == LOOM_VALUE_ID_INVALID) {
@@ -385,28 +404,32 @@ static iree_status_t loom_callable_validate_consumable_callee(
   return iree_ok_status();
 }
 
-static bool loom_callable_value_is_call_operand(const loom_op_t* call_op,
+static bool loom_callable_value_is_call_operand(loom_call_like_t call,
                                                 loom_value_id_t value_id) {
-  const loom_value_id_t* operands = loom_op_const_operands(call_op);
-  for (uint16_t i = 0; i < call_op->operand_count; ++i) {
-    if (operands[i] == value_id) return true;
+  loom_value_slice_t operands = loom_call_like_operands(call);
+  for (uint16_t i = 0; i < operands.count; ++i) {
+    if (operands.values[i] == value_id) {
+      return true;
+    }
   }
   return false;
 }
 
 static iree_status_t loom_callable_preserve_consuming_call_result_names(
-    loom_rewriter_t* rewriter, const loom_op_t* call_op,
+    loom_rewriter_t* rewriter, loom_call_like_t call,
     const loom_value_id_t* replacements, uint16_t count) {
-  const loom_value_id_t* call_results = loom_op_const_results(call_op);
+  loom_value_slice_t call_results = loom_call_like_results(call);
   for (uint16_t i = 0; i < count; ++i) {
-    loom_value_id_t old_result = call_results[i];
+    loom_value_id_t old_result = call_results.values[i];
     loom_value_id_t replacement = replacements[i];
     if (old_result == LOOM_VALUE_ID_INVALID ||
         replacement == LOOM_VALUE_ID_INVALID) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "call result and replacement must be valid");
     }
-    if (loom_callable_value_is_call_operand(call_op, replacement)) continue;
+    if (loom_callable_value_is_call_operand(call, replacement)) {
+      continue;
+    }
     if ((iree_host_size_t)replacement >= rewriter->module->values.count) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "inline replacement value %%%u is out of range",
@@ -434,8 +457,11 @@ iree_status_t loom_callable_inline_call(loom_rewriter_t* rewriter,
   }
   IREE_RETURN_IF_ERROR(
       loom_callable_validate_same_module_callee(rewriter->module, callee));
+  IREE_RETURN_IF_ERROR(loom_callable_validate_call_targets_callee(
+      rewriter->module, call_op, callee));
+  loom_call_like_t call = {0};
   IREE_RETURN_IF_ERROR(
-      loom_callable_validate_call_targets_callee(call_op, callee));
+      loom_callable_get_whole_call(rewriter->module, call_op, &call));
 
   loom_block_t* entry_block = NULL;
   loom_op_t* return_op = NULL;
@@ -445,12 +471,13 @@ iree_status_t loom_callable_inline_call(loom_rewriter_t* rewriter,
   loom_ir_remap_t remap = {0};
   IREE_RETURN_IF_ERROR(loom_ir_remap_initialize(
       rewriter->module, rewriter->module, rewriter->arena, NULL, &remap));
-  IREE_RETURN_IF_ERROR(loom_callable_bind_entry_args(&remap, callee, call_op));
+  IREE_RETURN_IF_ERROR(loom_callable_bind_entry_args(&remap, callee, call));
 
+  loom_value_slice_t call_results = loom_call_like_results(call);
   loom_value_id_t* replacements = NULL;
-  if (call_op->result_count > 0) {
+  if (call_results.count > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        rewriter->arena, call_op->result_count, sizeof(loom_value_id_t),
+        rewriter->arena, call_results.count, sizeof(loom_value_id_t),
         (void**)&replacements));
   }
 
@@ -464,16 +491,15 @@ iree_status_t loom_callable_inline_call(loom_rewriter_t* rewriter,
       &rewriter->builder, entry_block, &remap, &clone_options);
   if (iree_status_is_ok(status)) {
     status = loom_callable_resolve_return_replacements(
-        rewriter, call_op, return_op, &remap, replacements);
+        rewriter, call, return_op, &remap, replacements);
   }
   loom_builder_restore(&rewriter->builder, saved_ip);
   IREE_RETURN_IF_ERROR(status);
 
   IREE_RETURN_IF_ERROR(loom_callable_preserve_call_result_names(
-      rewriter, call_op, replacements, call_op->result_count,
-      value_checkpoint));
+      rewriter, call, replacements, call_results.count, value_checkpoint));
   return loom_rewriter_replace_all_uses_and_erase(
-      rewriter, call_op, replacements, call_op->result_count);
+      rewriter, call_op, replacements, call_results.count);
 }
 
 iree_status_t loom_callable_inline_consuming_call(loom_rewriter_t* rewriter,
@@ -490,8 +516,11 @@ iree_status_t loom_callable_inline_consuming_call(loom_rewriter_t* rewriter,
   }
   IREE_RETURN_IF_ERROR(
       loom_callable_validate_same_module_callee(rewriter->module, callee));
+  IREE_RETURN_IF_ERROR(loom_callable_validate_call_targets_callee(
+      rewriter->module, call_op, callee));
+  loom_call_like_t call = {0};
   IREE_RETURN_IF_ERROR(
-      loom_callable_validate_call_targets_callee(call_op, callee));
+      loom_callable_get_whole_call(rewriter->module, call_op, &call));
   IREE_RETURN_IF_ERROR(loom_callable_validate_consumable_callee(
       rewriter->module, call_op, callee));
 
@@ -507,16 +536,17 @@ iree_status_t loom_callable_inline_consuming_call(loom_rewriter_t* rewriter,
   IREE_RETURN_IF_ERROR(
       loom_ir_remap_initialize(rewriter->module, rewriter->module,
                                rewriter->arena, &remap_options, &remap));
-  IREE_RETURN_IF_ERROR(loom_callable_bind_entry_args(&remap, callee, call_op));
+  IREE_RETURN_IF_ERROR(loom_callable_bind_entry_args(&remap, callee, call));
 
+  loom_value_slice_t call_results = loom_call_like_results(call);
   loom_value_id_t* replacements = NULL;
-  if (call_op->result_count > 0) {
+  if (call_results.count > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        rewriter->arena, call_op->result_count, sizeof(loom_value_id_t),
+        rewriter->arena, call_results.count, sizeof(loom_value_id_t),
         (void**)&replacements));
   }
   IREE_RETURN_IF_ERROR(loom_callable_resolve_return_replacements(
-      rewriter, call_op, return_op, &remap, replacements));
+      rewriter, call, return_op, &remap, replacements));
 
   loom_ir_move_block_options_t move_options = {
       .omit_terminators = true,
@@ -524,9 +554,9 @@ iree_status_t loom_callable_inline_consuming_call(loom_rewriter_t* rewriter,
   IREE_RETURN_IF_ERROR(loom_ir_move_block_ops_before(
       rewriter, entry_block, call_op, &remap, &move_options));
   IREE_RETURN_IF_ERROR(loom_callable_preserve_consuming_call_result_names(
-      rewriter, call_op, replacements, call_op->result_count));
+      rewriter, call, replacements, call_results.count));
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
-      rewriter, call_op, replacements, call_op->result_count));
+      rewriter, call_op, replacements, call_results.count));
   return loom_rewriter_erase(rewriter, callee.op);
 }
 

@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-// Resolves the direct symbol target of func.call or func.apply.
+// Resolves the direct symbol target of a direct call-like op.
 iree_status_t loom_callable_resolve_direct_callee(const loom_module_t* module,
                                                   const loom_op_t* call_op,
                                                   loom_func_like_t* out_callee);

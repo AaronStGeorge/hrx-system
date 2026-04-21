@@ -6,16 +6,16 @@
 
 // Call graph construction and SCC analysis.
 //
-// Builds a call graph from func.call ops in a module, then computes
-// strongly connected components (SCCs) using Tarjan's algorithm. SCCs
-// are returned in reverse topological order (callees before callers),
-// which is the right iteration order for bottom-up analyses like
-// purity inference, cost modeling, and inlining decisions.
+// Builds a call graph from direct call-like ops in a module, then computes
+// strongly connected components (SCCs) using Tarjan's algorithm. SCCs are
+// returned in reverse topological order (callees before callers), which is the
+// right iteration order for bottom-up analyses like purity inference, cost
+// modeling, and inlining decisions.
 //
-// Construction: walks each function body looking for func.call ops,
-// records (caller, callee) edges. Uses parent_op chains to find the
-// containing function from each call op. Total cost: O(N) where N is
-// the total number of ops across all function bodies.
+// Construction: walks each function body looking for direct semantic,
+// target-low-internal, and explicit low-invoke call-like ops, then records
+// (caller, callee) edges. Total cost: O(N) where N is the total number of ops
+// across all function bodies.
 //
 // SCC: Tarjan's iterative algorithm, O(V+E) where V = functions and
 // E = call edges. Typically trivial (< 100 nodes for ML models).
@@ -85,9 +85,9 @@ typedef struct loom_call_graph_t {
 //===----------------------------------------------------------------------===//
 
 // Builds the call graph for all function-like symbols in |module|.
-// Walks each function body looking for func.call ops, records edges,
-// deduplicates callee lists, and computes SCCs. All memory is
-// allocated from |arena|.
+// Walks each function body looking for direct call-like ops, records edges,
+// deduplicates callee lists, and computes SCCs. All memory is allocated from
+// |arena|.
 iree_status_t loom_call_graph_build(const loom_module_t* module,
                                     iree_arena_allocator_t* arena,
                                     loom_call_graph_t* out_graph);

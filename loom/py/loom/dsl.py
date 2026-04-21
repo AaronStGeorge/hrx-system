@@ -188,6 +188,8 @@ __all__ = [
     # Op group.
     "Dialect",
     # Interfaces.
+    "CallLikeInterface",
+    "CallLikeKind",
     "FuncLikeInterface",
     "LoopLikeInterface",
     "RegionBranchInterface",
@@ -2532,6 +2534,39 @@ def _validate_no_effect_conflicts(
 # ============================================================================
 # Interfaces
 # ============================================================================
+
+
+class CallLikeKind(Enum):
+    """Semantic class of a direct call-like op."""
+
+    # Ordinary runtime/semantic dispatch.
+    SEMANTIC = "semantic"
+    # Compile-time template expansion.
+    TEMPLATE = "template"
+    # Direct target-low function body to target-low function body call.
+    LOW_INTERNAL = "low_internal"
+    # Explicit semantic-to-target-low invocation of an already selected low function.
+    LOW_INVOKE = "low_invoke"
+
+
+class CallLikeInterface(NamedTuple):
+    """Interface for direct symbol call-like ops.
+
+    The named operand/result fields are trailing slices containing call
+    arguments and call results. The generator resolves their starting offsets
+    and emits a loom_call_like_vtable_t in .rodata.
+    """
+
+    # Symbol ref attr naming the direct callee.
+    callee: str
+    # Variadic operand field holding call arguments.
+    operands: str
+    # Variadic result field holding call results.
+    results: str
+    # Optional purity enum attr. None if not applicable.
+    purity: str | None = None
+    # Semantic class used by analyses to opt into only the call shapes they own.
+    kind: CallLikeKind = CallLikeKind.SEMANTIC
 
 
 class FuncLikeInterface(NamedTuple):

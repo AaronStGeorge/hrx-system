@@ -120,6 +120,7 @@ typedef struct loom_op_placement_descriptor_t loom_op_placement_descriptor_t;
 typedef struct loom_format_element_t loom_format_element_t;
 typedef struct loom_constraint_t loom_constraint_t;
 typedef struct loom_rewriter_t loom_rewriter_t;
+typedef struct loom_call_like_vtable_t loom_call_like_vtable_t;
 typedef struct loom_func_like_vtable_t loom_func_like_vtable_t;
 typedef struct loom_loop_like_vtable_t loom_loop_like_vtable_t;
 typedef struct loom_region_branch_vtable_t loom_region_branch_vtable_t;
@@ -781,7 +782,56 @@ typedef iree_status_t (*loom_type_transfer_fn_t)(
 #define LOOM_ATTR_INDEX_NONE ((uint8_t)0xFF)
 #define LOOM_REGION_INDEX_NONE ((uint8_t)0xFF)
 #define LOOM_OPERAND_INDEX_NONE ((uint8_t)0xFF)
+#define LOOM_RESULT_INDEX_NONE ((uint8_t)0xFF)
 #define LOOM_BLOCK_ARG_INDEX_NONE ((uint8_t)0xFF)
+
+//===----------------------------------------------------------------------===//
+// CallLike interface vtable
+//===----------------------------------------------------------------------===//
+
+typedef uint8_t loom_call_like_kind_t;
+
+enum loom_call_like_kind_e {
+  // Invalid or non-call-like op.
+  LOOM_CALL_LIKE_KIND_NONE = 0,
+  // Ordinary runtime/semantic dispatch.
+  LOOM_CALL_LIKE_KIND_SEMANTIC = 1,
+  // Compile-time template expansion.
+  LOOM_CALL_LIKE_KIND_TEMPLATE = 2,
+  // Direct target-low function body to target-low function body call.
+  LOOM_CALL_LIKE_KIND_LOW_INTERNAL = 3,
+  // Explicit semantic-to-target-low invocation of a selected low function.
+  LOOM_CALL_LIKE_KIND_LOW_INVOKE = 4,
+};
+
+// Interface descriptor for direct symbol call-like ops. The operand and result
+// offsets identify trailing call argument/result slices, so generic analyses
+// can read call edges without knowing dialect-specific op names.
+typedef struct loom_call_like_vtable_t {
+  // Index of the symbol ref attr that names the direct callee.
+  uint8_t callee_attr_index;
+
+  // Index of the optional purity enum attr. LOOM_ATTR_INDEX_NONE if absent.
+  uint8_t purity_attr_index;
+
+  // Operand offset where call arguments begin.
+  uint8_t operand_offset;
+
+  // Result offset where call results begin.
+  uint8_t result_offset;
+
+  // Semantic class used by analyses to opt into the call shapes they own.
+  loom_call_like_kind_t kind;
+} loom_call_like_vtable_t;
+
+// Fat reference to a direct call-like op. 16 bytes, passed by value.
+typedef struct loom_call_like_t {
+  // Operation implementing the CallLike interface.
+  loom_op_t* op;
+
+  // Interface vtable for |op|.
+  const loom_call_like_vtable_t* vtable;
+} loom_call_like_t;
 
 // Interface descriptor for function-like ops. Pure .rodata — a struct
 // of attr/region indices that let generic code read the right fields
@@ -939,7 +989,7 @@ typedef struct loom_region_branch_t {
 //
 //   Cache line 3 (bytes 128-191): interface and placement pointers — only
 //   touched by passes that query a specific interface (e.g., LICM reads
-//   loop_like, call graph construction reads func_like) and by verification.
+//   loop_like, call graph construction reads call_like) and by verification.
 //   Each pointer is NULL for ops that don't implement that interface/contract,
 //   so passes that don't use any interfaces never fetch this line. With typical
 //   op counts (~200-500 kinds), the NULL pointers for the majority of ops
@@ -991,6 +1041,7 @@ struct loom_op_vtable_t {
   // not implement the interface; callers check the result with the
   // corresponding isa() helper.
 
+  const loom_call_like_vtable_t* call_like;
   const loom_func_like_vtable_t* func_like;
   const loom_loop_like_vtable_t* loop_like;
   const loom_region_branch_vtable_t* region_branch;
@@ -998,8 +1049,8 @@ struct loom_op_vtable_t {
   const loom_symbol_definition_descriptor_t* symbol_def;
   // Generated structural placement contract for ancestor constraints.
   const loom_op_placement_descriptor_t* placement;
-  // 24 bytes padding to fill cache line 3.
-  const void* _padding_iface[3];
+  // 16 bytes padding to fill cache line 3.
+  const void* _padding_iface[2];
 };
 
 // Returns the full dotted name as a string view (e.g., "test.addi").

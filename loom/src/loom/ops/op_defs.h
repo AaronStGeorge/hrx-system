@@ -887,6 +887,45 @@ iree_status_t loom_op_walk_subtree_type_refs(
     loom_type_value_ref_callback_t callback, void* user_data);
 
 //===----------------------------------------------------------------------===//
+// CallLike interface helpers
+//===----------------------------------------------------------------------===//
+
+// Returns true if |call| refers to a valid direct call-like op. A cast via
+// loom_call_like_cast() returns {NULL, NULL} on failure. All accessors below
+// tolerate a NULL vtable and return safe defaults.
+static inline bool loom_call_like_isa(loom_call_like_t call) {
+  return call.op != NULL;
+}
+
+// Casts |op| to loom_call_like_t if it implements the CallLike interface.
+// Returns {NULL, NULL} if |op| is NULL or does not implement it.
+loom_call_like_t loom_call_like_cast(const loom_module_t* module,
+                                     loom_op_t* op);
+
+// Returns the direct callee symbol ref, or {0, 0} if |call| is not valid.
+loom_symbol_ref_t loom_call_like_callee(loom_call_like_t call);
+
+// Returns the trailing call argument slice, or an empty slice if |call| is not
+// valid or the recorded offset is malformed for the op instance.
+loom_value_slice_t loom_call_like_operands(loom_call_like_t call);
+
+// Returns the trailing call result slice, or an empty slice if |call| is not
+// valid or the recorded offset is malformed for the op instance.
+loom_value_slice_t loom_call_like_results(loom_call_like_t call);
+
+// Returns the operand offset where call arguments begin.
+uint16_t loom_call_like_operand_offset(loom_call_like_t call);
+
+// Returns the result offset where call results begin.
+uint16_t loom_call_like_result_offset(loom_call_like_t call);
+
+// Returns the purity attr value (0 = unspecified, nonzero = pure).
+uint8_t loom_call_like_purity(loom_call_like_t call);
+
+// Returns the semantic class of the call-like op.
+loom_call_like_kind_t loom_call_like_kind(loom_call_like_t call);
+
+//===----------------------------------------------------------------------===//
 // FuncLike interface helpers
 //===----------------------------------------------------------------------===//
 

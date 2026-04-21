@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Unit tests for the FuncLike, LoopLike, and RegionBranch interface
+// Unit tests for the CallLike, FuncLike, LoopLike, and RegionBranch interface
 // cast functions and inline accessors. These tests verify the
 // .rodata interface vtables on cache line 3 of the op vtable are
 // wired correctly: cast() returns a non-null fat reference for ops
@@ -66,9 +66,9 @@ class InterfaceTest : public ::testing::Test {
                                               IREE_SV("host_fn"), &name_id));
     uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
     IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
-    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
-    IREE_ASSERT_OK(loom_test_func_build(&module_builder, 0, 0, 0, callee, NULL,
-                                        0, NULL, 0, NULL, 0, NULL, 0,
+    func_ref_ = {.module_id = 0, .symbol_id = symbol_id};
+    IREE_ASSERT_OK(loom_test_func_build(&module_builder, 0, 0, 0, func_ref_,
+                                        NULL, 0, NULL, 0, NULL, 0, NULL, 0,
                                         LOOM_LOCATION_UNKNOWN, &func_op_));
     func_like_ = loom_func_like_cast(module_, func_op_);
     body_ = loom_func_like_body(func_like_);
@@ -129,10 +129,57 @@ class InterfaceTest : public ::testing::Test {
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
   loom_op_t* func_op_ = nullptr;
+  loom_symbol_ref_t func_ref_ = {};
   loom_func_like_t func_like_;
   loom_region_t* body_ = nullptr;
   loom_builder_t builder_;
 };
+
+//===----------------------------------------------------------------------===//
+// CallLike interface
+//===----------------------------------------------------------------------===//
+
+TEST_F(InterfaceTest, CallLikeCastReturnsValidForInvoke) {
+  loom_op_t* input = build_i32(42);
+  loom_value_id_t input_id = loom_op_results(input)[0];
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* invoke_op = nullptr;
+  IREE_ASSERT_OK(loom_test_invoke_build(&builder_, func_ref_, &input_id, 1,
+                                        &i32, 1, nullptr, 0,
+                                        LOOM_LOCATION_UNKNOWN, &invoke_op));
+
+  loom_call_like_t call = loom_call_like_cast(module_, invoke_op);
+  EXPECT_TRUE(loom_call_like_isa(call));
+  EXPECT_EQ(call.op, invoke_op);
+  EXPECT_NE(call.vtable, nullptr);
+  EXPECT_EQ(loom_call_like_kind(call), LOOM_CALL_LIKE_KIND_SEMANTIC);
+  EXPECT_EQ(loom_call_like_purity(call), 0);
+  EXPECT_EQ(loom_call_like_operand_offset(call), 0);
+  EXPECT_EQ(loom_call_like_result_offset(call), 0);
+  EXPECT_EQ(loom_call_like_callee(call).symbol_id, func_ref_.symbol_id);
+
+  loom_value_slice_t operands = loom_call_like_operands(call);
+  ASSERT_EQ(operands.count, 1);
+  EXPECT_EQ(operands.values[0], input_id);
+  loom_value_slice_t results = loom_call_like_results(call);
+  ASSERT_EQ(results.count, 1);
+  EXPECT_EQ(results.values[0], loom_op_results(invoke_op)[0]);
+}
+
+TEST_F(InterfaceTest, CallLikeCastReturnsNullForNonCall) {
+  loom_op_t* constant_op = build_i32(42);
+  loom_call_like_t call = loom_call_like_cast(module_, constant_op);
+  EXPECT_FALSE(loom_call_like_isa(call));
+  EXPECT_EQ(call.op, nullptr);
+  EXPECT_EQ(call.vtable, nullptr);
+}
+
+TEST_F(InterfaceTest, CallLikeCastReturnsNullForNullOp) {
+  loom_call_like_t call = loom_call_like_cast(module_, nullptr);
+  EXPECT_FALSE(loom_call_like_isa(call));
+  EXPECT_EQ(call.op, nullptr);
+  EXPECT_EQ(call.vtable, nullptr);
+}
 
 //===----------------------------------------------------------------------===//
 // FuncLike interface
