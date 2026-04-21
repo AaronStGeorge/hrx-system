@@ -108,6 +108,20 @@ constexpr const char* kAmdgpuGfx11MixedLowFunction =
     "reg<amdgpu.vgpr>, reg<amdgpu.vgpr x8>\n"
     "}\n";
 
+struct AmdgpuTargetCase {
+  // Symbol name for the target preset under test.
+  iree_string_view_t target_symbol;
+  // Target preset key that selects the descriptor set.
+  iree_string_view_t target_key;
+};
+
+const AmdgpuTargetCase kAmdgpuCurrentTargets[] = {
+    {IREE_SV("gfx950_target"), IREE_SV("amdgpu-gfx950")},
+    {IREE_SV("gfx11_target"), IREE_SV("amdgpu-gfx11")},
+    {IREE_SV("gfx12_target"), IREE_SV("amdgpu-gfx12")},
+    {IREE_SV("gfx1250_target"), IREE_SV("amdgpu-gfx1250")},
+};
+
 static std::string AmdgpuB128CopySource(iree_string_view_t target_symbol,
                                         iree_string_view_t target_key) {
   std::string source = "// RUN: emit source-low @";
@@ -137,13 +151,20 @@ static std::string AmdgpuB128CopySource(iree_string_view_t target_symbol,
   return source;
 }
 
-static std::string AmdgpuGfx11SourceLowCase(const char* output,
-                                            const char* body) {
-  std::string source = "// RUN: emit source-low @gfx11_target output=";
+static std::string AmdgpuSourceLowCase(iree_string_view_t target_symbol,
+                                       iree_string_view_t target_key,
+                                       const char* output, const char* body) {
+  std::string source = "// RUN: emit source-low @";
+  source.append(target_symbol.data, target_symbol.size);
+  source += " output=";
   source += output;
+  source += "\n";
+  source += "target.preset @";
+  source.append(target_symbol.data, target_symbol.size);
+  source += " {key = \"";
+  source.append(target_key.data, target_key.size);
   source +=
-      "\n"
-      "target.preset @gfx11_target {key = \"amdgpu-gfx11\", source = @case}\n"
+      "\", source = @case}\n"
       "\n"
       "func.def @case(%input: buffer, %output: buffer) {\n";
   source += body;
@@ -152,6 +173,12 @@ static std::string AmdgpuGfx11SourceLowCase(const char* output,
       "}\n"
       "// ----\n";
   return source;
+}
+
+static std::string AmdgpuGfx11SourceLowCase(const char* output,
+                                            const char* body) {
+  return AmdgpuSourceLowCase(IREE_SV("gfx11_target"), IREE_SV("amdgpu-gfx11"),
+                             output, body);
 }
 
 static std::string AmdgpuGfx11SourceLowCase(const char* body) {
@@ -554,71 +581,90 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsOutOfRangeStaticBufferOffset) {
 }
 
 TEST_F(AmdgpuLoomCheckTest, SourceLowerUsesDsRead2Write2ForStridedWorkgroup) {
-  const std::string source = AmdgpuGfx11SourceLowCase(
-      "low",
-      "  %bytes = index.constant 64 : offset\n"
-      "  %zero = index.constant 0 : offset\n"
-      "  %scratch = buffer.alloca %bytes {base_alignment = 16, "
-      "memory_space = workgroup} : buffer\n"
-      "  %scratch_view = buffer.view %scratch[%zero] : buffer -> "
-      "view<8xi32, #strided<stride=2>>\n"
-      "  %loaded = vector.load %scratch_view[0] : "
-      "view<8xi32, #strided<stride=2>> -> vector<2xi32>\n"
-      "  vector.store %loaded, %scratch_view[0] : vector<2xi32>, "
-      "view<8xi32, #strided<stride=2>>\n");
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
-                            IREE_SV("amdgpu_source_low.loom-test"), &result));
-  EXPECT_TRUE(result.has_actual_output);
-  EXPECT_EQ(result.diagnostic_count, 0u);
-  const std::string actual_output = harness_.ActualOutputString(result);
-  EXPECT_NE(actual_output.find("low.op<amdgpu.ds_read2_b32>"),
-            std::string::npos)
-      << actual_output;
-  EXPECT_NE(actual_output.find("low.op<amdgpu.ds_write2_b32>"),
-            std::string::npos)
-      << actual_output;
-  EXPECT_NE(actual_output.find("{offset0 = 0, offset1 = 2}"), std::string::npos)
-      << actual_output;
-  EXPECT_EQ(actual_output.find("low.op<amdgpu.ds_read_b64>"), std::string::npos)
-      << actual_output;
-  loom_check_result_deinitialize(&result);
+  for (const AmdgpuTargetCase& test_case : kAmdgpuCurrentTargets) {
+    const std::string source = AmdgpuSourceLowCase(
+        test_case.target_symbol, test_case.target_key, "low",
+        "  %bytes = index.constant 64 : offset\n"
+        "  %zero = index.constant 0 : offset\n"
+        "  %scratch = buffer.alloca %bytes {base_alignment = 16, "
+        "memory_space = workgroup} : buffer\n"
+        "  %scratch_view = buffer.view %scratch[%zero] : buffer -> "
+        "view<8xi32, #strided<stride=2>>\n"
+        "  %loaded = vector.load %scratch_view[0] : "
+        "view<8xi32, #strided<stride=2>> -> vector<2xi32>\n"
+        "  vector.store %loaded, %scratch_view[0] : vector<2xi32>, "
+        "view<8xi32, #strided<stride=2>>\n");
+    loom_check_result_t result;
+    IREE_ASSERT_OK(harness_.ExecuteFirst(
+        iree_make_string_view(source.data(), source.size()),
+        IREE_SV("amdgpu_source_low.loom-test"), &result));
+    EXPECT_TRUE(result.has_actual_output);
+    EXPECT_EQ(result.diagnostic_count, 0u);
+    const std::string actual_output = harness_.ActualOutputString(result);
+    const std::string target_key(test_case.target_key.data,
+                                 test_case.target_key.size);
+    EXPECT_NE(actual_output.find("low.op<amdgpu.ds_read2_b32>"),
+              std::string::npos)
+        << target_key << "\n"
+        << actual_output;
+    EXPECT_NE(actual_output.find("low.op<amdgpu.ds_write2_b32>"),
+              std::string::npos)
+        << target_key << "\n"
+        << actual_output;
+    EXPECT_NE(actual_output.find("{offset0 = 0, offset1 = 2}"),
+              std::string::npos)
+        << target_key << "\n"
+        << actual_output;
+    EXPECT_EQ(actual_output.find("low.op<amdgpu.ds_read_b64>"),
+              std::string::npos)
+        << target_key << "\n"
+        << actual_output;
+    loom_check_result_deinitialize(&result);
+  }
 }
 
 TEST_F(AmdgpuLoomCheckTest,
        SourceLowerUsesDsRead2Write2Stride64ForLargeWorkgroupStride) {
-  const std::string source = AmdgpuGfx11SourceLowCase(
-      "low",
-      "  %bytes = index.constant 4096 : offset\n"
-      "  %zero = index.constant 0 : offset\n"
-      "  %scratch = buffer.alloca %bytes {base_alignment = 16, "
-      "memory_space = workgroup} : buffer\n"
-      "  %scratch_view = buffer.view %scratch[%zero] : buffer -> "
-      "view<1024xi32, #strided<stride=512>>\n"
-      "  %loaded = vector.load %scratch_view[0] : "
-      "view<1024xi32, #strided<stride=512>> -> vector<2xi32>\n"
-      "  vector.store %loaded, %scratch_view[0] : vector<2xi32>, "
-      "view<1024xi32, #strided<stride=512>>\n");
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
-                            IREE_SV("amdgpu_source_low.loom-test"), &result));
-  EXPECT_TRUE(result.has_actual_output);
-  EXPECT_EQ(result.diagnostic_count, 0u);
-  const std::string actual_output = harness_.ActualOutputString(result);
-  EXPECT_NE(actual_output.find("low.op<amdgpu.ds_read2st64_b32>"),
-            std::string::npos)
-      << actual_output;
-  EXPECT_NE(actual_output.find("low.op<amdgpu.ds_write2st64_b32>"),
-            std::string::npos)
-      << actual_output;
-  EXPECT_NE(actual_output.find("{offset0 = 0, offset1 = 8}"), std::string::npos)
-      << actual_output;
-  EXPECT_EQ(actual_output.find("low.op<amdgpu.ds_read2_b32>"),
-            std::string::npos)
-      << actual_output;
-  loom_check_result_deinitialize(&result);
+  for (const AmdgpuTargetCase& test_case : kAmdgpuCurrentTargets) {
+    const std::string source = AmdgpuSourceLowCase(
+        test_case.target_symbol, test_case.target_key, "low",
+        "  %bytes = index.constant 4096 : offset\n"
+        "  %zero = index.constant 0 : offset\n"
+        "  %scratch = buffer.alloca %bytes {base_alignment = 16, "
+        "memory_space = workgroup} : buffer\n"
+        "  %scratch_view = buffer.view %scratch[%zero] : buffer -> "
+        "view<1024xi32, #strided<stride=512>>\n"
+        "  %loaded = vector.load %scratch_view[0] : "
+        "view<1024xi32, #strided<stride=512>> -> vector<2xi32>\n"
+        "  vector.store %loaded, %scratch_view[0] : vector<2xi32>, "
+        "view<1024xi32, #strided<stride=512>>\n");
+    loom_check_result_t result;
+    IREE_ASSERT_OK(harness_.ExecuteFirst(
+        iree_make_string_view(source.data(), source.size()),
+        IREE_SV("amdgpu_source_low.loom-test"), &result));
+    EXPECT_TRUE(result.has_actual_output);
+    EXPECT_EQ(result.diagnostic_count, 0u);
+    const std::string actual_output = harness_.ActualOutputString(result);
+    const std::string target_key(test_case.target_key.data,
+                                 test_case.target_key.size);
+    EXPECT_NE(actual_output.find("low.op<amdgpu.ds_read2st64_b32>"),
+              std::string::npos)
+        << target_key << "\n"
+        << actual_output;
+    EXPECT_NE(actual_output.find("low.op<amdgpu.ds_write2st64_b32>"),
+              std::string::npos)
+        << target_key << "\n"
+        << actual_output;
+    EXPECT_NE(actual_output.find("{offset0 = 0, offset1 = 8}"),
+              std::string::npos)
+        << target_key << "\n"
+        << actual_output;
+    EXPECT_EQ(actual_output.find("low.op<amdgpu.ds_read2_b32>"),
+              std::string::npos)
+        << target_key << "\n"
+        << actual_output;
+    loom_check_result_deinitialize(&result);
+  }
 }
 
 TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsNonWorkitemDynamicIndex) {
