@@ -45,3 +45,28 @@ low.abi.operand @wasm_f32_arith__low__abi_arg0 {abi_type = reg<wasm.v128>, adapt
 low.abi.operand @wasm_f32_arith__low__abi_arg1 {abi_type = reg<wasm.v128>, adapter = @wasm_f32_arith__low__abi, conversion = value_to_register, index = 1, semantic_type = vector<4xf32>}
 
 low.abi.result @wasm_f32_arith__low__abi_result0 {abi_type = reg<wasm.v128>, adapter = @wasm_f32_arith__low__abi, conversion = register_to_value, index = 0, semantic_type = vector<4xf32>}
+
+// ====
+// RUN: emit source-low @wasm_splat_target output=low
+target.preset @wasm_splat_target {key = "wasm-simd128", source = @wasm_splat}
+
+func.def @wasm_splat(%value: i32, %rhs: vector<4xi32>) -> (vector<4xi32>) {
+  %splat = vector.splat %value : vector<4xi32>
+  %sum = vector.addi %splat, %rhs : vector<4xi32>
+  func.return %sum : vector<4xi32>
+}
+
+// ----
+low.func.def target(@wasm_splat_target) @wasm_splat__low(%value: reg<wasm.i32>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %splat = low.op<wasm.i32x4.splat>(%value) : (reg<wasm.i32>) -> reg<wasm.v128>
+  %sum = low.op<wasm.i32x4.add>(%splat, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  low.return %sum : reg<wasm.v128>
+}
+
+low.abi.adapter @wasm_splat__low__abi {callee = @wasm_splat__low, conversion = mapped, operand_count = 2, result_count = 1}
+
+low.abi.operand @wasm_splat__low__abi_arg0 {abi_type = reg<wasm.i32>, adapter = @wasm_splat__low__abi, conversion = scalar_to_register, index = 0, semantic_type = i32}
+
+low.abi.operand @wasm_splat__low__abi_arg1 {abi_type = reg<wasm.v128>, adapter = @wasm_splat__low__abi, conversion = value_to_register, index = 1, semantic_type = vector<4xi32>}
+
+low.abi.result @wasm_splat__low__abi_result0 {abi_type = reg<wasm.v128>, adapter = @wasm_splat__low__abi, conversion = register_to_value, index = 0, semantic_type = vector<4xi32>}

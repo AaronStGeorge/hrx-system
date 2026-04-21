@@ -12,3 +12,46 @@ low.func.def target(@wasm_target) @wasm_memory(%addr: reg<wasm.i32>, %lhs: reg<w
 
 // ----
 wasm module validated: wasm_memory
+
+// ====
+// RUN: emit wasm-module-validate @wasm_i32_arithmetic export=wasm_i32_arithmetic
+// REQUIRES: wasm-validate
+target.preset @wasm_i32_target {key = "wasm-simd128", source = @wasm_i32_arithmetic}
+
+low.func.def target(@wasm_i32_target) @wasm_i32_arithmetic(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %sum = low.op<wasm.i32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  %product = low.op<wasm.i32x4.mul>(%sum, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  %diff = low.op<wasm.i32x4.sub>(%product, %lhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  low.return %diff : reg<wasm.v128>
+}
+
+// ----
+wasm module validated: wasm_i32_arithmetic
+
+// ====
+// RUN: emit wasm-module-validate @wasm_f32_arithmetic export=wasm_f32_arithmetic
+// REQUIRES: wasm-validate
+target.preset @wasm_f32_target {key = "wasm-simd128", source = @wasm_f32_arithmetic}
+
+low.func.def target(@wasm_f32_target) @wasm_f32_arithmetic(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %sum = low.op<wasm.f32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  %product = low.op<wasm.f32x4.mul>(%sum, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  low.return %product : reg<wasm.v128>
+}
+
+// ----
+wasm module validated: wasm_f32_arithmetic
+
+// ====
+// RUN: emit wasm-module-validate @wasm_splat export=wasm_splat
+// REQUIRES: wasm-validate
+target.preset @wasm_splat_target {key = "wasm-simd128", source = @wasm_splat}
+
+low.func.def target(@wasm_splat_target) @wasm_splat(%value: reg<wasm.i32>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %splat = low.op<wasm.i32x4.splat>(%value) : (reg<wasm.i32>) -> reg<wasm.v128>
+  %sum = low.op<wasm.i32x4.add>(%splat, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  low.return %sum : reg<wasm.v128>
+}
+
+// ----
+wasm module validated: wasm_splat

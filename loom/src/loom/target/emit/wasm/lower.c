@@ -127,6 +127,13 @@ static bool loom_wasm_can_lower_vector_4xf32_binary(
          loom_wasm_value_is_vector_4xf32(context, result);
 }
 
+static bool loom_wasm_can_lower_i32x4_splat(loom_low_lower_context_t* context,
+                                            loom_value_id_t scalar,
+                                            loom_value_id_t result) {
+  return loom_wasm_value_is_i32(context, scalar) &&
+         loom_wasm_value_is_vector_4xi32(context, result);
+}
+
 static iree_status_t loom_wasm_can_lower_op(void* user_data,
                                             loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
@@ -170,6 +177,11 @@ static iree_status_t loom_wasm_can_lower_op(void* user_data,
       *out_handled = loom_wasm_can_lower_vector_4xf32_binary(
           context, loom_vector_mulf_lhs(source_op),
           loom_vector_mulf_rhs(source_op), loom_vector_mulf_result(source_op));
+      return iree_ok_status();
+    case LOOM_OP_VECTOR_SPLAT:
+      *out_handled = loom_wasm_can_lower_i32x4_splat(
+          context, loom_vector_splat_scalar(source_op),
+          loom_vector_splat_result(source_op));
       return iree_ok_status();
     default:
       *out_handled = false;
@@ -224,6 +236,32 @@ static iree_status_t loom_wasm_lower_constant(loom_low_lower_context_t* context,
   return loom_low_lower_bind_value(context,
                                    loom_scalar_constant_result(source_op),
                                    loom_low_const_result(low_const));
+}
+
+static iree_status_t loom_wasm_lower_unary(loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op,
+                                           iree_string_view_t descriptor_key,
+                                           loom_value_id_t source_operand,
+                                           loom_value_id_t source_result) {
+  loom_value_id_t low_operand = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, source_operand, &low_operand));
+
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_wasm_low_result_type(context, source_op,
+                                                 source_result, &result_type));
+
+  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_wasm_intern(context, descriptor_key, &opcode_id));
+  loom_op_t* low_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_op_build(
+      loom_low_lower_context_builder(context), opcode_id, &low_operand, 1,
+      loom_make_named_attr_slice(NULL, 0), &result_type, 1,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+      &low_op));
+  return loom_low_lower_bind_value(
+      context, source_result,
+      loom_value_slice_get(loom_low_op_results(low_op), 0));
 }
 
 static iree_status_t loom_wasm_lower_binary(loom_low_lower_context_t* context,
@@ -305,6 +343,11 @@ static iree_status_t loom_wasm_try_lower_op(void* user_data,
           context, source_op, IREE_SV("wasm.f32x4.mul"),
           loom_vector_mulf_lhs(source_op), loom_vector_mulf_rhs(source_op),
           loom_vector_mulf_result(source_op));
+    case LOOM_OP_VECTOR_SPLAT:
+      return loom_wasm_lower_unary(context, source_op,
+                                   IREE_SV("wasm.i32x4.splat"),
+                                   loom_vector_splat_scalar(source_op),
+                                   loom_vector_splat_result(source_op));
     default:
       return iree_ok_status();
   }
