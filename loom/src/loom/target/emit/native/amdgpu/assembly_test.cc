@@ -501,7 +501,8 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferStoreToVmemPacket) {
   bool saw_resource = false;
   bool saw_vaddr_zero = false;
   bool saw_soffset_zero = false;
-  bool saw_store = false;
+  bool saw_default_store = false;
+  bool saw_off_zero_store = false;
   loom_region_t* low_body = loom_low_func_def_body(lower_result.low_func_op);
   loom_block_t* entry_block = loom_region_entry_block(low_body);
   loom_op_t* op = nullptr;
@@ -518,14 +519,22 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferStoreToVmemPacket) {
                          IREE_SV("amdgpu.buffer_store_dword"))) {
         EXPECT_EQ(loom_low_op_operands(op).count, 4u);
         EXPECT_EQ(loom_low_op_results(op).count, 0u);
-        saw_store = true;
+        saw_default_store = true;
+      } else if (StringIdEquals(
+                     loom_low_op_opcode(op),
+                     IREE_SV("amdgpu.buffer_store_dword_off_zero"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 2u);
+        EXPECT_EQ(loom_low_op_results(op).count, 0u);
+        saw_off_zero_store = true;
       }
     }
   }
   EXPECT_TRUE(saw_resource);
-  EXPECT_TRUE(saw_vaddr_zero);
-  EXPECT_TRUE(saw_soffset_zero);
-  EXPECT_TRUE(saw_store);
+  if (saw_default_store) {
+    EXPECT_TRUE(saw_vaddr_zero);
+    EXPECT_TRUE(saw_soffset_zero);
+  }
+  EXPECT_TRUE(saw_default_store || saw_off_zero_store);
 }
 
 TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferLoadAddStoreToVmemPackets) {
@@ -578,6 +587,11 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferLoadAddStoreToVmemPackets) {
         EXPECT_EQ(loom_low_op_results(op).count, 1u);
         saw_load = true;
       } else if (StringIdEquals(loom_low_op_opcode(op),
+                                IREE_SV("amdgpu.buffer_load_dword_off_zero"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 1u);
+        EXPECT_EQ(loom_low_op_results(op).count, 1u);
+        saw_load = true;
+      } else if (StringIdEquals(loom_low_op_opcode(op),
                                 IREE_SV("amdgpu.v_add_u32"))) {
         EXPECT_EQ(loom_low_op_operands(op).count, 2u);
         EXPECT_EQ(loom_low_op_results(op).count, 1u);
@@ -585,6 +599,12 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferLoadAddStoreToVmemPackets) {
       } else if (StringIdEquals(loom_low_op_opcode(op),
                                 IREE_SV("amdgpu.buffer_store_dword"))) {
         EXPECT_EQ(loom_low_op_operands(op).count, 4u);
+        EXPECT_EQ(loom_low_op_results(op).count, 0u);
+        saw_store = true;
+      } else if (StringIdEquals(
+                     loom_low_op_opcode(op),
+                     IREE_SV("amdgpu.buffer_store_dword_off_zero"))) {
+        EXPECT_EQ(loom_low_op_operands(op).count, 2u);
         EXPECT_EQ(loom_low_op_results(op).count, 0u);
         saw_store = true;
       }
@@ -681,6 +701,40 @@ TEST_F(AmdgpuAssemblyTest,
   EXPECT_TRUE(saw_load);
   EXPECT_TRUE(saw_add);
   EXPECT_TRUE(saw_store);
+}
+
+TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemYZToAbiLiveIns) {
+  loom_low_lower_result_t lower_result = {};
+  LowerSource("amdgpu-gfx11",
+              "func.def @gfx_source() {\n"
+              "  %tid_y0 = kernel.workitem.id<y> : index\n"
+              "  %tid_z = kernel.workitem.id<z> : index\n"
+              "  %tid_y1 = kernel.workitem.id<y> : index\n"
+              "  func.return\n"
+              "}\n",
+              &lower_result);
+  EXPECT_EQ(lower_result.error_count, 0u);
+  ASSERT_NE(lower_result.low_func_op, nullptr);
+
+  bool saw_workitem_y_live_in = false;
+  bool saw_workitem_z_live_in = false;
+  uint32_t live_in_count = 0;
+  loom_region_t* low_body = loom_low_func_def_body(lower_result.low_func_op);
+  loom_block_t* entry_block = loom_region_entry_block(low_body);
+  loom_op_t* op = nullptr;
+  loom_block_for_each_op(entry_block, op) {
+    if (!loom_low_live_in_isa(op)) {
+      continue;
+    }
+    ++live_in_count;
+    saw_workitem_y_live_in |= StringIdEquals(loom_low_live_in_source(op),
+                                             IREE_SV("amdgpu.workitem_id.y"));
+    saw_workitem_z_live_in |= StringIdEquals(loom_low_live_in_source(op),
+                                             IREE_SV("amdgpu.workitem_id.z"));
+  }
+  EXPECT_EQ(live_in_count, 2u);
+  EXPECT_TRUE(saw_workitem_y_live_in);
+  EXPECT_TRUE(saw_workitem_z_live_in);
 }
 
 TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideCopyToB128Packets) {

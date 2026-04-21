@@ -37,6 +37,12 @@ extern "C" {
 // Stable low.live_in source spelling for workitem_id.x in v0.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE "amdgpu.workitem_id.x"
 
+// Stable low.live_in source spelling for workitem_id.y in v1.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Y_SOURCE "amdgpu.workitem_id.y"
+
+// Stable low.live_in source spelling for workitem_id.z in v2.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE "amdgpu.workitem_id.z"
+
 typedef struct loom_amdgpu_hal_kernarg_resource_t {
   // Defining low.resource op for diagnostics and cross-checks.
   const loom_op_t* resource_op;
@@ -93,11 +99,20 @@ bool loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
 bool loom_amdgpu_hal_kernel_abi_is_workitem_id_x_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
 
+// Returns true if |value_id| is defined by the workitem_id.y live-in.
+bool loom_amdgpu_hal_kernel_abi_is_workitem_id_y_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
+// Returns true if |value_id| is defined by the workitem_id.z live-in.
+bool loom_amdgpu_hal_kernel_abi_is_workitem_id_z_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
 // Finds AMDGPU ABI live-ins that require fixed physical locations during
 // allocation.
 //
 // The returned array is arena-owned. The current ABI fixes the kernarg segment
-// pointer live-in to s[0:1] and the workitem_id.x live-in to v0 when present.
+// pointer live-in to s[0:1] and workitem_id.x/y/z live-ins to v0/v1/v2 when
+// present.
 iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
     const loom_module_t* module, const loom_op_t* function_op,
     const loom_low_descriptor_set_t* descriptor_set,

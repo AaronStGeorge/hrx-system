@@ -414,6 +414,49 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsHalBufferResourceMetadata) {
   iree_arena_deinitialize(&sidecar_arena);
 }
 
+TEST_F(AmdgpuKernelAssemblyTest, EmitsWorkitemZDescriptorMode) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
+  BuildMaterializedHalResourceSidecarsForPreset(
+      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %tid_z = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE
+      "> : reg<amdgpu.vgpr>\n"
+      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
+      "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
+      "  %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.vgpr>\n"
+      "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
+      "reg<amdgpu.sgpr>\n"
+      "  low.op<amdgpu.buffer_store_dword>(%tid_z, %binding, %vaddr, %zero) "
+      "{offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+      "  low.return\n"
+      "}\n",
+      1, 2, &abi_layout, &sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  const loom_amdgpu_kernel_assembly_options_t assembly_options = {
+      .abi_layout = &abi_layout,
+  };
+  IREE_ASSERT_OK(loom_amdgpu_emit_kernel_assembly_with_options(
+      &packetization.schedule, &packetization.allocation, &assembly_options,
+      &builder, &sidecar_arena));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+
+  EXPECT_NE(output.find("  .amdhsa_system_vgpr_workitem_id 2\n"),
+            std::string::npos);
+  EXPECT_NE(output.find("  .amdhsa_next_free_vgpr "), std::string::npos);
+  EXPECT_EQ(output.find("  .amdhsa_next_free_vgpr 0\n"), std::string::npos);
+
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
 TEST_F(AmdgpuKernelAssemblyTest,
        EmitsMaterializedHalBufferStoreKernelForGfx11) {
   iree_arena_allocator_t sidecar_arena;

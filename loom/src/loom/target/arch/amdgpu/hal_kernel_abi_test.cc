@@ -150,6 +150,32 @@ TEST_F(AmdgpuHalKernelAbiTest, LaysOutOneHalBufferResource) {
   EXPECT_EQ(loom_type_register_unit_count(resource.abi_type), 4u);
 }
 
+TEST_F(AmdgpuHalKernelAbiTest, LaysOutTwoHalBufferResources) {
+  BuildModule("loom_kernel",
+              "low.func.def target(@gfx_target) @loom_kernel() {\n"
+              "  %input = low.resource<hal_buffer_resource> {index = 0, "
+              "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
+              "  %output = low.resource<hal_buffer_resource> {index = 1, "
+              "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
+              "  low.return\n"
+              "}\n",
+              "");
+
+  loom_amdgpu_hal_kernel_abi_layout_t layout = {};
+  BuildLayout(&layout);
+
+  EXPECT_EQ(layout.kernarg_segment_size, 16u);
+  EXPECT_EQ(layout.kernarg_segment_alignment, 8u);
+  EXPECT_TRUE(layout.uses_kernarg_segment_ptr);
+  ASSERT_EQ(layout.resource_count, 2u);
+  EXPECT_EQ(ToString(layout.resources[0].name), "binding0");
+  EXPECT_EQ(layout.resources[0].binding_index, 0u);
+  EXPECT_EQ(layout.resources[0].kernarg_offset, 0u);
+  EXPECT_EQ(layout.resources[1].binding_index, 1u);
+  EXPECT_EQ(ToString(layout.resources[1].name), "binding1");
+  EXPECT_EQ(layout.resources[1].kernarg_offset, 8u);
+}
+
 TEST_F(AmdgpuHalKernelAbiTest, AllowsNoResources) {
   BuildModule("loom_kernel",
               "low.func.def target(@gfx_target) @loom_kernel() {\n"

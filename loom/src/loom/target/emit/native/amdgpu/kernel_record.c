@@ -25,6 +25,17 @@ typedef struct loom_amdgpu_kernel_record_register_usage_t {
   uint32_t next_free_vgpr;
 } loom_amdgpu_kernel_record_register_usage_t;
 
+typedef struct loom_amdgpu_kernel_record_workitem_id_t {
+  // Predicate identifying the ABI live-in value.
+  bool (*is_live_in)(const loom_module_t* module, loom_value_id_t value_id);
+  // Physical VGPR base required by the AMDGPU kernel ABI.
+  uint32_t expected_location_base;
+  // Kernel descriptor flag that requests this initialized system VGPR.
+  loom_amdgpu_kernel_descriptor_flags_t descriptor_flag;
+  // Diagnostic label for this workitem-id dimension.
+  iree_string_view_t label;
+} loom_amdgpu_kernel_record_workitem_id_t;
+
 static bool loom_amdgpu_kernel_record_symbol_ref_equal(loom_symbol_ref_t lhs,
                                                        loom_symbol_ref_t rhs) {
   return lhs.module_id == rhs.module_id && lhs.symbol_id == rhs.symbol_id;
@@ -369,7 +380,30 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
     loom_amdgpu_kernel_descriptor_flags_t* out_flags) {
   IREE_ASSERT_ARGUMENT(out_flags);
   *out_flags = 0;
-  bool found_workitem_id_x = false;
+  static const loom_amdgpu_kernel_record_workitem_id_t workitem_ids[] = {
+      {
+          .is_live_in = loom_amdgpu_hal_kernel_abi_is_workitem_id_x_live_in,
+          .expected_location_base = 0,
+          .descriptor_flag =
+              LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X,
+          .label = IREE_SVL("workitem_id.x"),
+      },
+      {
+          .is_live_in = loom_amdgpu_hal_kernel_abi_is_workitem_id_y_live_in,
+          .expected_location_base = 1,
+          .descriptor_flag =
+              LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y,
+          .label = IREE_SVL("workitem_id.y"),
+      },
+      {
+          .is_live_in = loom_amdgpu_hal_kernel_abi_is_workitem_id_z_live_in,
+          .expected_location_base = 2,
+          .descriptor_flag =
+              LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z,
+          .label = IREE_SVL("workitem_id.z"),
+      },
+  };
+  bool found_workitem_ids[IREE_ARRAYSIZE(workitem_ids)] = {0};
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
@@ -378,22 +412,38 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
       continue;
     }
-    if (!loom_amdgpu_hal_kernel_abi_is_workitem_id_x_live_in(
-            allocation->module, assignment->value_id)) {
-      continue;
+    for (iree_host_size_t j = 0; j < IREE_ARRAYSIZE(workitem_ids); ++j) {
+      if (!workitem_ids[j].is_live_in(allocation->module,
+                                      assignment->value_id)) {
+        continue;
+      }
+      if (found_workitem_ids[j]) {
+        return iree_make_status(
+            IREE_STATUS_ALREADY_EXISTS,
+            "AMDGPU kernel emission found duplicate %.*s live-ins",
+            (int)workitem_ids[j].label.size, workitem_ids[j].label.data);
+      }
+      found_workitem_ids[j] = true;
+      if (assignment->location_base != workitem_ids[j].expected_location_base ||
+          assignment->location_count != 1) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "AMDGPU kernel emission requires the %.*s live-in to be fixed to "
+            "v%" PRIu32,
+            (int)workitem_ids[j].label.size, workitem_ids[j].label.data,
+            workitem_ids[j].expected_location_base);
+      }
+      *out_flags |= workitem_ids[j].descriptor_flag;
     }
-    if (found_workitem_id_x) {
-      return iree_make_status(
-          IREE_STATUS_ALREADY_EXISTS,
-          "AMDGPU kernel emission found duplicate workitem_id.x live-ins");
-    }
-    found_workitem_id_x = true;
-    if (assignment->location_base != 0 || assignment->location_count != 1) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU kernel emission requires the workitem_id.x live-in to be "
-          "fixed to v0");
-    }
+  }
+  if (iree_any_bit_set(
+          *out_flags,
+          LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z)) {
+    *out_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X |
+                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y;
+  } else if (iree_any_bit_set(
+                 *out_flags,
+                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y)) {
     *out_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X;
   }
   return iree_ok_status();

@@ -1923,8 +1923,9 @@ static bool loom_amdgpu_can_lower_vector_from_elements(
 
 static bool loom_amdgpu_can_lower_workitem_id(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op) {
-  return loom_kernel_workitem_id_dimension(source_op) ==
-             LOOM_KERNEL_WORKITEM_ID_DIMENSION_X &&
+  const loom_kernel_workitem_id_dimension_t dimension =
+      loom_kernel_workitem_id_dimension(source_op);
+  return dimension < LOOM_KERNEL_WORKITEM_ID_DIMENSION_COUNT_ &&
          loom_amdgpu_value_is_address_scalar(
              context, loom_kernel_workitem_id_result(source_op));
 }
@@ -3002,17 +3003,40 @@ static iree_status_t loom_amdgpu_lower_buffer_assume_memory_space(
       context, loom_buffer_assume_memory_space_result(source_op), low_buffer);
 }
 
-static iree_status_t loom_amdgpu_emit_workitem_id_x_live_in(
+static iree_status_t loom_amdgpu_workitem_id_source(
+    loom_kernel_workitem_id_dimension_t dimension,
+    iree_string_view_t* out_source) {
+  IREE_ASSERT_ARGUMENT(out_source);
+  *out_source = iree_string_view_empty();
+  switch (dimension) {
+    case LOOM_KERNEL_WORKITEM_ID_DIMENSION_X:
+      *out_source = IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE);
+      return iree_ok_status();
+    case LOOM_KERNEL_WORKITEM_ID_DIMENSION_Y:
+      *out_source = IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Y_SOURCE);
+      return iree_ok_status();
+    case LOOM_KERNEL_WORKITEM_ID_DIMENSION_Z:
+      *out_source = IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE);
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown AMDGPU workitem-id dimension %u",
+                              (unsigned)dimension);
+  }
+}
+
+static iree_status_t loom_amdgpu_emit_workitem_id_live_in(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_kernel_workitem_id_dimension_t dimension,
     loom_value_id_t* out_low_value_id) {
   IREE_ASSERT_ARGUMENT(out_low_value_id);
   *out_low_value_id = LOOM_VALUE_ID_INVALID;
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
+  iree_string_view_t source = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_workitem_id_source(dimension, &source));
   loom_string_id_t source_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_intern(
-      context, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE),
-      &source_id));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_intern(context, source, &source_id));
   loom_op_t* live_in_op = NULL;
   IREE_RETURN_IF_ERROR(
       loom_low_live_in_build(loom_low_lower_context_builder(context), source_id,
@@ -3031,44 +3055,59 @@ static iree_status_t loom_amdgpu_emit_preamble(
   if (source_body == NULL) {
     return iree_ok_status();
   }
-  const loom_op_t* first_workitem_id_x_op = NULL;
+  const loom_op_t*
+      first_workitem_id_ops[LOOM_KERNEL_WORKITEM_ID_DIMENSION_COUNT_] = {0};
   for (uint16_t block_index = 0; block_index < source_body->block_count;
        ++block_index) {
     const loom_block_t* source_block =
         loom_region_const_block(source_body, block_index);
     const loom_op_t* source_op = NULL;
     loom_block_for_each_op(source_block, source_op) {
-      if (loom_kernel_workitem_id_isa(source_op) &&
-          loom_kernel_workitem_id_dimension(source_op) ==
-              LOOM_KERNEL_WORKITEM_ID_DIMENSION_X) {
-        first_workitem_id_x_op = source_op;
-        break;
+      if (!loom_kernel_workitem_id_isa(source_op)) {
+        continue;
       }
+      const loom_kernel_workitem_id_dimension_t dimension =
+          loom_kernel_workitem_id_dimension(source_op);
+      if (dimension >= LOOM_KERNEL_WORKITEM_ID_DIMENSION_COUNT_ ||
+          first_workitem_id_ops[dimension] != NULL) {
+        continue;
+      }
+      first_workitem_id_ops[dimension] = source_op;
     }
-    if (first_workitem_id_x_op != NULL) {
-      break;
-    }
-  }
-  if (first_workitem_id_x_op == NULL) {
-    return iree_ok_status();
   }
 
-  loom_value_id_t low_workitem_id = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workitem_id_x_live_in(
-      context, first_workitem_id_x_op, &low_workitem_id));
+  loom_value_id_t low_workitem_ids[LOOM_KERNEL_WORKITEM_ID_DIMENSION_COUNT_] = {
+      LOOM_VALUE_ID_INVALID,
+      LOOM_VALUE_ID_INVALID,
+      LOOM_VALUE_ID_INVALID,
+  };
+  for (uint32_t i = 0; i < LOOM_KERNEL_WORKITEM_ID_DIMENSION_COUNT_; ++i) {
+    if (first_workitem_id_ops[i] == NULL) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workitem_id_live_in(
+        context, first_workitem_id_ops[i],
+        (loom_kernel_workitem_id_dimension_t)i, &low_workitem_ids[i]));
+  }
+
   for (uint16_t block_index = 0; block_index < source_body->block_count;
        ++block_index) {
     const loom_block_t* source_block =
         loom_region_const_block(source_body, block_index);
     const loom_op_t* source_op = NULL;
     loom_block_for_each_op(source_block, source_op) {
-      if (!loom_kernel_workitem_id_isa(source_op) ||
-          loom_kernel_workitem_id_dimension(source_op) !=
-              LOOM_KERNEL_WORKITEM_ID_DIMENSION_X) {
+      if (!loom_kernel_workitem_id_isa(source_op)) {
+        continue;
+      }
+      const loom_kernel_workitem_id_dimension_t dimension =
+          loom_kernel_workitem_id_dimension(source_op);
+      if (dimension >= LOOM_KERNEL_WORKITEM_ID_DIMENSION_COUNT_ ||
+          low_workitem_ids[dimension] == LOOM_VALUE_ID_INVALID) {
         continue;
       }
       IREE_RETURN_IF_ERROR(loom_low_lower_bind_value(
-          context, loom_kernel_workitem_id_result(source_op), low_workitem_id));
+          context, loom_kernel_workitem_id_result(source_op),
+          low_workitem_ids[dimension]));
     }
   }
   return iree_ok_status();
