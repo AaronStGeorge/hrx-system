@@ -290,12 +290,20 @@ def _validate_operand_overlay(
                 f"'{instruction.name}' encoding '{encoding.encoding_name}'"
             )
     for field_name, _value in overlay.fixed_encoding_fields:
-        if field_name not in encoding_fields:
+        xml_operand = xml_operands.get(field_name)
+        if field_name not in encoding_fields and xml_operand is None:
             raise AmdgpuDescriptorOverlayError(
                 f"descriptor overlay '{overlay.descriptor_key}' references "
                 f"missing fixed encoding field '{field_name}' on instruction "
                 f"'{instruction.name}' encoding '{encoding.encoding_name}'"
             )
+        if xml_operand is not None:
+            if not xml_operand.is_input or xml_operand.is_output:
+                raise AmdgpuDescriptorOverlayError(
+                    f"descriptor overlay '{overlay.descriptor_key}' fixed field "
+                    f"'{field_name}' does not describe an input operand"
+                )
+            covered_fields.add(field_name)
 
     missing_fields = sorted(set(xml_operands) - covered_fields)
     if missing_fields:

@@ -65,6 +65,23 @@ TEST(AmdgpuDescriptorIdsTest, CommonLoweringIdsResolveAcrossDescriptorSets) {
   ExpectMissingDescriptor(gfx1250,
                           LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_LOAD_DWORDX4);
   ExpectHasDescriptor(gfx950, LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_LOAD_DWORDX4);
+
+  ExpectHasDescriptor(gfx11,
+                      LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_LOAD_DWORD_OFF_ZERO);
+  ExpectHasDescriptor(gfx11,
+                      LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_STORE_DWORD_OFF_ZERO);
+  ExpectHasDescriptor(gfx950,
+                      LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_LOAD_DWORD_OFF_ZERO);
+  ExpectHasDescriptor(gfx950,
+                      LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_STORE_DWORD_OFF_ZERO);
+  ExpectMissingDescriptor(gfx12,
+                          LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_LOAD_DWORD_OFF_ZERO);
+  ExpectMissingDescriptor(
+      gfx12, LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_STORE_DWORD_OFF_ZERO);
+  ExpectMissingDescriptor(gfx1250,
+                          LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_LOAD_DWORD_OFF_ZERO);
+  ExpectMissingDescriptor(
+      gfx1250, LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_STORE_DWORD_OFF_ZERO);
 }
 
 TEST(AmdgpuDescriptorIdsTest, CommonRegClassIdsMatchDescriptorSetContract) {

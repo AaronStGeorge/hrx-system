@@ -476,7 +476,10 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerFoldsStaticBufferViewByteOffset) {
                 "= hal.buffer, valid_byte_count = 32}"),
             std::string::npos)
       << actual_output;
-  EXPECT_NE(actual_output.find("low.op<amdgpu.buffer_load_dword>"),
+  EXPECT_NE(actual_output.find("low.op<amdgpu.buffer_load_dword_off_zero>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("low.op<amdgpu.buffer_store_dword_off_zero>"),
             std::string::npos)
       << actual_output;
   EXPECT_NE(actual_output.find("{offset = 20}"), std::string::npos)

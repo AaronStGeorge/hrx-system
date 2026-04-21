@@ -18,6 +18,22 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource : reg<amdgpu.sgpr 
   s_endpgm
 
 // ====
+// RUN: emit amdgpu-assembly @gfx11_buffer_off_zero waits=none
+target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_buffer_off_zero}
+
+low.func.def target(@gfx11_target) @gfx11_buffer_off_zero(%resource : reg<amdgpu.sgpr x4>) {
+  %loaded = low.op<amdgpu.buffer_load_dword_off_zero>(%resource) {offset = 12} : (reg<amdgpu.sgpr x4>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_dword_off_zero>(%loaded, %resource) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  buffer_load_dword v0, off, s[0:3], 0 offset:12
+  buffer_store_dword v0, off, s[0:3], 0 offset:16
+  s_endpgm
+
+// ====
 // RUN: emit amdgpu-assembly-mnemonics @gfx11_memory
 target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_memory}
 

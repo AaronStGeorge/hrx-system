@@ -223,6 +223,36 @@ def test_materialize_uses_explicit_asm_forms() -> None:
     assert descriptor.asm_forms[0].immediates[0].name is None
 
 
+def test_fixed_encoding_fields_cover_input_xml_operands() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    descriptor = materialize_amdgpu_descriptor_overlay(
+        spec,
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.buffer_load_dword.off_zero",
+            instruction_name="BUFFER_LOAD_DWORD",
+            mnemonic="buffer_load_dword",
+            encoding_name="ENC_VBUFFER",
+            semantic_tag="memory.load.u32",
+            schedule_class="amdgpu.vmem.load",
+            operands=(
+                AmdgpuOperandOverlay("VDATA", _result("dst", _VGPR_ALT)),
+                AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+            ),
+            fixed_encoding_fields=(("VADDR", 0), ("SOFFSET", 0)),
+            implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+        ),
+    )
+
+    assert [operand.field_name for operand in descriptor.operands] == [
+        "dst",
+        "resource",
+    ]
+    assert [field.value for field in descriptor.encoding_field_values] == [0, 0]
+    assert all(
+        field.encoding_field_id != 0 for field in descriptor.encoding_field_values
+    )
+
+
 def test_materialize_rejects_missing_instruction() -> None:
     spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
     overlay = AmdgpuDescriptorOverlay(

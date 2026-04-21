@@ -11,6 +11,7 @@
 #include "loom/codegen/low/move_sequence.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/gfx11_descriptors.h"
 #include "loom/target/arch/amdgpu/gfx950_descriptors.h"
@@ -515,11 +516,23 @@ static iree_status_t loom_amdgpu_append_offset_suffix(
 
 static iree_status_t loom_amdgpu_append_mubuf_load_packet(
     const loom_native_assembly_packet_context_t* context) {
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(context, 0));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  if (descriptor->stable_id ==
+      LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_LOAD_DWORD_OFF_ZERO) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "off"));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "0"));
+    return loom_amdgpu_append_offset_suffix(context);
+  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
@@ -532,11 +545,23 @@ static iree_status_t loom_amdgpu_append_mubuf_load_packet(
 
 static iree_status_t loom_amdgpu_append_mubuf_store_packet(
     const loom_native_assembly_packet_context_t* context) {
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  if (descriptor->stable_id ==
+      LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_STORE_DWORD_OFF_ZERO) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "off"));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "0"));
+    return loom_amdgpu_append_offset_suffix(context);
+  }
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 2));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));

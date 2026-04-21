@@ -94,6 +94,7 @@ _SCHEDULE_WAIT_IDLE = "amdgpu.wait.idle"
 _COUNTER_LOAD = 1
 _COUNTER_STORE = 2
 _COUNTER_ALU = 3
+_MUBUF_SOFFSET_INLINE_ZERO = 0x80
 
 _LOAD_COUNTER_HAZARD = Hazard(HazardKind.WAIT_COUNTER, counter_id=_COUNTER_LOAD)
 _STORE_COUNTER_HAZARD = Hazard(HazardKind.WAIT_COUNTER, counter_id=_COUNTER_STORE)
@@ -1051,6 +1052,40 @@ def _buffer_load_dword_overlay(
     )
 
 
+def _buffer_load_dword_off_zero_overlay(
+    *,
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 12,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.buffer_load_dword_off_zero",
+        instruction_name="BUFFER_LOAD_DWORD",
+        mnemonic="buffer_load_dword",
+        encoding_name=encoding_name,
+        semantic_tag="memory.load.u32",
+        schedule_class=_SCHEDULE_VMEM_LOAD,
+        operands=(
+            AmdgpuOperandOverlay("VDATA", _vgpr_result()),
+            AmdgpuOperandOverlay(
+                resource_field_name, _sgpr_resource("resource", units=4)
+            ),
+        ),
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+        immediate_fields=(offset_field_name,),
+        immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=(
+            ("VADDR", 0),
+            ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
+            ("OFFEN", 0),
+        ),
+        effects=(_GLOBAL_LOAD_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=(),
+    )
+
+
 def _buffer_load_64_overlay(
     *,
     descriptor_key: str = "amdgpu.buffer_load_b64",
@@ -1147,6 +1182,40 @@ def _buffer_store_dword_overlay(
         fixed_encoding_fields=(("OFFEN", 1),),
         effects=(_GLOBAL_STORE_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _buffer_store_dword_off_zero_overlay(
+    *,
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 12,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.buffer_store_dword_off_zero",
+        instruction_name="BUFFER_STORE_DWORD",
+        mnemonic="buffer_store_dword",
+        encoding_name=encoding_name,
+        semantic_tag="memory.store.u32",
+        schedule_class=_SCHEDULE_VMEM_STORE,
+        operands=(
+            AmdgpuOperandOverlay("VDATA", _vgpr_operand("value")),
+            AmdgpuOperandOverlay(
+                resource_field_name, _sgpr_resource("resource", units=4)
+            ),
+        ),
+        implicit_operands=(_IGNORE_GLOBAL_WRITE_MEMORY,),
+        immediate_fields=(offset_field_name,),
+        immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=(
+            ("VADDR", 0),
+            ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
+            ("OFFEN", 0),
+        ),
+        effects=(_GLOBAL_STORE_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=(),
     )
 
 
@@ -1692,6 +1761,9 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _buffer_load_dword_overlay(
             encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
         ),
+        _buffer_load_dword_off_zero_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
         _buffer_load_64_overlay(
             descriptor_key="amdgpu.buffer_load_dwordx2",
             instruction_name="BUFFER_LOAD_DWORDX2",
@@ -1707,6 +1779,9 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             resource_field_name="SRSRC",
         ),
         _buffer_store_dword_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
+        _buffer_store_dword_off_zero_overlay(
             encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
         ),
         _buffer_store_64_overlay(
@@ -1755,11 +1830,17 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _buffer_load_dword_overlay(
             encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
         ),
+        _buffer_load_dword_off_zero_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
         _buffer_load_64_overlay(encoding_name="ENC_MUBUF", resource_field_name="SRSRC"),
         _buffer_load_128_overlay(
             encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
         ),
         _buffer_store_dword_overlay(
+            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+        ),
+        _buffer_store_dword_off_zero_overlay(
             encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
         ),
         _buffer_store_64_overlay(
