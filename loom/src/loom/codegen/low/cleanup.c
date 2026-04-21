@@ -14,34 +14,9 @@
 #include "loom/passes/dce.h"
 
 typedef struct loom_low_cleanup_deadness_context_t {
-  // Descriptor set selected by the low function target bundle.
-  const loom_low_descriptor_set_t* descriptor_set;
+  // Resolved target selected by the low function target bundle.
+  const loom_low_resolved_target_t* target;
 } loom_low_cleanup_deadness_context_t;
-
-static iree_string_view_t loom_low_cleanup_module_string(
-    const loom_module_t* module, loom_string_id_t string_id) {
-  if (string_id == LOOM_STRING_ID_INVALID ||
-      string_id >= module->strings.count) {
-    return iree_string_view_empty();
-  }
-  return module->strings.entries[string_id];
-}
-
-static bool loom_low_cleanup_get_descriptor_opcode(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_string_view_t* out_opcode) {
-  if (loom_low_op_isa(op)) {
-    *out_opcode =
-        loom_low_cleanup_module_string(module, loom_low_op_opcode(op));
-    return true;
-  }
-  if (loom_low_const_isa(op)) {
-    *out_opcode =
-        loom_low_cleanup_module_string(module, loom_low_const_opcode(op));
-    return true;
-  }
-  return false;
-}
 
 static iree_status_t loom_low_cleanup_deadness_query(
     void* user_data, const loom_module_t* module, const loom_op_t* op,
@@ -50,8 +25,10 @@ static iree_status_t loom_low_cleanup_deadness_query(
       (loom_low_cleanup_deadness_context_t*)user_data;
   *out_is_dead = false;
 
-  iree_string_view_t opcode = iree_string_view_empty();
-  if (!loom_low_cleanup_get_descriptor_opcode(module, op, &opcode)) {
+  loom_low_resolved_descriptor_packet_t packet = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_resolve_descriptor_packet(module, context->target, op, &packet));
+  if (packet.kind == LOOM_LOW_DESCRIPTOR_PACKET_NONE) {
     *out_is_dead = loom_op_is_trivially_dead(module, op);
     return iree_ok_status();
   }
@@ -60,20 +37,13 @@ static iree_status_t loom_low_cleanup_deadness_query(
     return iree_ok_status();
   }
 
-  const uint64_t descriptor_id = loom_low_descriptor_stable_id_from_key(opcode);
-  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
-      context->descriptor_set, descriptor_id);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+  if (packet.descriptor == NULL) {
     return iree_make_status(IREE_STATUS_NOT_FOUND,
                             "failed to look up low descriptor '%.*s'",
-                            (int)opcode.size, opcode.data);
+                            (int)packet.key.size, packet.key.data);
   }
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(context->descriptor_set,
-                                            descriptor_ordinal);
-  *out_is_dead =
-      descriptor && iree_any_bit_set(descriptor->flags,
-                                     LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE);
+  *out_is_dead = iree_any_bit_set(packet.descriptor->flags,
+                                  LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE);
   return iree_ok_status();
 }
 
@@ -112,7 +82,7 @@ iree_status_t loom_low_cleanup_function(
       .arena = &pass_arena,
   };
   loom_low_cleanup_deadness_context_t deadness_context = {
-      .descriptor_set = target.descriptor_set,
+      .target = &target,
   };
   const loom_dce_deadness_query_callback_t deadness_query = {
       .fn = loom_low_cleanup_deadness_query,

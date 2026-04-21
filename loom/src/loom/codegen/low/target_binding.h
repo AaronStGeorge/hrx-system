@@ -49,6 +49,37 @@ typedef struct loom_low_resolved_target_t {
   const loom_low_descriptor_set_t* descriptor_set;
 } loom_low_resolved_target_t;
 
+typedef enum loom_low_descriptor_packet_kind_e {
+  // Not a descriptor-backed low packet.
+  LOOM_LOW_DESCRIPTOR_PACKET_NONE = 0,
+  // low.op descriptor packet.
+  LOOM_LOW_DESCRIPTOR_PACKET_OP = 1,
+  // low.const descriptor packet.
+  LOOM_LOW_DESCRIPTOR_PACKET_CONST = 2,
+} loom_low_descriptor_packet_kind_t;
+
+// Target-bound descriptor identity for one descriptor-backed low packet.
+//
+// Text IR names descriptor packets with stable spellings. Compiled in-memory
+// consumers resolve that source spelling through this boundary and carry
+// descriptor ordinals or pointers in their own dense sidecars.
+typedef struct loom_low_resolved_descriptor_packet_t {
+  // Operation represented by this packet record.
+  const loom_op_t* op;
+  // Descriptor packet kind, or NONE for non-packet ops.
+  loom_low_descriptor_packet_kind_t kind;
+  // Borrowed textual descriptor key used for diagnostics.
+  iree_string_view_t key;
+  // Attribute index containing |key| in text-form IR.
+  uint16_t key_attr_index;
+  // Durable descriptor identity derived from |key|.
+  uint64_t stable_id;
+  // Dense descriptor ordinal in |target->descriptor_set|, or NONE.
+  uint32_t descriptor_ordinal;
+  // Descriptor row in |target->descriptor_set|, or NULL when unresolved.
+  const loom_low_descriptor_t* descriptor;
+} loom_low_resolved_descriptor_packet_t;
+
 // Resolves the target bundle/config and descriptor set for |low_func_op|.
 // User IR failures are emitted through |emitter| and leave
 // out_target->descriptor_set NULL. Infrastructure failures are returned as
@@ -57,6 +88,15 @@ iree_status_t loom_low_resolve_function_target(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_descriptor_registry_t* registry,
     iree_diagnostic_emitter_t emitter, loom_low_resolved_target_t* out_target);
+
+// Resolves |op| as a descriptor-backed low packet in |target|.
+//
+// Non-packet ops return OK with kind NONE. Missing user descriptors return OK
+// with a non-NONE kind and NULL descriptor so callers can emit diagnostics
+// using their own error domains and continue when appropriate.
+iree_status_t loom_low_resolve_descriptor_packet(
+    const loom_module_t* module, const loom_low_resolved_target_t* target,
+    const loom_op_t* op, loom_low_resolved_descriptor_packet_t* out_packet);
 
 #ifdef __cplusplus
 }  // extern "C"

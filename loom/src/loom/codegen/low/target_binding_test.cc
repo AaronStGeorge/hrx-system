@@ -108,6 +108,20 @@ class LowTargetBindingTest : public ::testing::Test {
     return nullptr;
   }
 
+  const loom_op_t* FindFirstBodyOp(const loom_op_t* low_func,
+                                   loom_op_kind_t kind) {
+    loom_region_t* body = loom_low_func_def_body(low_func);
+    if (!body || body->block_count == 0) {
+      return nullptr;
+    }
+    loom_block_t* block = loom_region_entry_block(body);
+    const loom_op_t* op = nullptr;
+    loom_block_for_each_op(block, op) {
+      if (op->kind == kind) return op;
+    }
+    return nullptr;
+  }
+
   static loom_low_descriptor_registry_t IreeVmRegistry() {
     static const loom_low_descriptor_set_t* descriptor_sets[] = {
         loom_ireevm_core_descriptor_set(),
@@ -235,6 +249,81 @@ TEST_F(LowTargetBindingTest, ResolvesBundleConfigAndDescriptorSet) {
   EXPECT_TRUE(iree_string_view_equal(target.descriptor_set_key,
                                      IREE_SV("iree.vm.core")));
   EXPECT_EQ(target.feature_bits, 0u);
+
+  loom_module_free(module);
+}
+
+TEST_F(LowTargetBindingTest, ResolvesDescriptorPacketToDenseOrdinal) {
+  loom_module_t* module = ParseSource(ValidVmLowFunction());
+  ASSERT_NE(module, nullptr);
+  const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
+  ASSERT_NE(low_func, nullptr);
+  const loom_op_t* low_op = FindFirstBodyOp(low_func, LOOM_OP_LOW_OP);
+  ASSERT_NE(low_op, nullptr);
+  const loom_op_t* low_return = FindFirstBodyOp(low_func, LOOM_OP_LOW_RETURN);
+  ASSERT_NE(low_return, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  EmissionCollector collector;
+  loom_low_resolved_target_t target = {};
+  IREE_ASSERT_OK(loom_low_resolve_function_target(
+      module, low_func, &registry, collector.emitter(), &target));
+  ASSERT_NE(target.descriptor_set, nullptr);
+
+  loom_low_resolved_descriptor_packet_t packet = {};
+  IREE_ASSERT_OK(
+      loom_low_resolve_descriptor_packet(module, &target, low_op, &packet));
+  EXPECT_EQ(packet.op, low_op);
+  EXPECT_EQ(packet.kind, LOOM_LOW_DESCRIPTOR_PACKET_OP);
+  EXPECT_EQ(ToString(packet.key), "iree.vm.add.i32");
+  EXPECT_EQ(packet.key_attr_index, loom_low_op_opcode_ATTR_INDEX);
+  ASSERT_NE(packet.descriptor, nullptr);
+  EXPECT_EQ(packet.stable_id, packet.descriptor->stable_id);
+  EXPECT_EQ(packet.descriptor,
+            loom_low_descriptor_set_descriptor_at(target.descriptor_set,
+                                                  packet.descriptor_ordinal));
+
+  IREE_ASSERT_OK(
+      loom_low_resolve_descriptor_packet(module, &target, low_return, &packet));
+  EXPECT_EQ(packet.op, low_return);
+  EXPECT_EQ(packet.kind, LOOM_LOW_DESCRIPTOR_PACKET_NONE);
+  EXPECT_EQ(packet.descriptor, nullptr);
+  EXPECT_EQ(packet.descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
+
+  loom_module_free(module);
+}
+
+TEST_F(LowTargetBindingTest, ResolvesMissingDescriptorPacketAsUnresolved) {
+  std::string source = WithValidVmTargetRecords(
+      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
+      "@vm_export, config = @vm_config}\n"
+      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "reg<vm.i32>) -> (reg<vm.i32>) {\n"
+      "  %sum = low.op<iree.vm.missing.i32>(%lhs, %rhs) : (reg<vm.i32>, "
+      "reg<vm.i32>) -> reg<vm.i32>\n"
+      "  low.return %sum : reg<vm.i32>\n"
+      "}\n");
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+  const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
+  ASSERT_NE(low_func, nullptr);
+  const loom_op_t* low_op = FindFirstBodyOp(low_func, LOOM_OP_LOW_OP);
+  ASSERT_NE(low_op, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  EmissionCollector collector;
+  loom_low_resolved_target_t target = {};
+  IREE_ASSERT_OK(loom_low_resolve_function_target(
+      module, low_func, &registry, collector.emitter(), &target));
+  ASSERT_NE(target.descriptor_set, nullptr);
+
+  loom_low_resolved_descriptor_packet_t packet = {};
+  IREE_ASSERT_OK(
+      loom_low_resolve_descriptor_packet(module, &target, low_op, &packet));
+  EXPECT_EQ(packet.kind, LOOM_LOW_DESCRIPTOR_PACKET_OP);
+  EXPECT_EQ(ToString(packet.key), "iree.vm.missing.i32");
+  EXPECT_EQ(packet.descriptor, nullptr);
+  EXPECT_EQ(packet.descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
 
   loom_module_free(module);
 }

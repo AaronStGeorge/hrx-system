@@ -152,15 +152,6 @@ static iree_status_t loom_low_schedule_emit(
   return iree_diagnostic_emit(state->options->emitter, &emission);
 }
 
-static iree_string_view_t loom_low_schedule_module_string(
-    const loom_module_t* module, loom_string_id_t string_id) {
-  if (string_id == LOOM_STRING_ID_INVALID ||
-      string_id >= module->strings.count) {
-    return iree_string_view_empty();
-  }
-  return module->strings.entries[string_id];
-}
-
 static bool loom_low_schedule_op_is_descriptor_packet(const loom_op_t* op) {
   return loom_low_op_isa(op) || loom_low_const_isa(op);
 }
@@ -606,50 +597,35 @@ static iree_status_t loom_low_schedule_resolve_descriptor(
   *out_descriptor = NULL;
   if (!loom_low_schedule_op_is_descriptor_packet(op)) return iree_ok_status();
 
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  if (loom_low_op_isa(op)) {
-    opcode_id = loom_low_op_opcode(op);
-  } else {
-    opcode_id = loom_low_const_opcode(op);
-  }
-  iree_string_view_t opcode =
-      loom_low_schedule_module_string(state->module, opcode_id);
-  node->descriptor_id = loom_low_descriptor_stable_id_from_key(opcode);
-
-  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
-      state->target.descriptor_set, node->descriptor_id);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+  loom_low_resolved_descriptor_packet_t packet = {0};
+  IREE_RETURN_IF_ERROR(loom_low_resolve_descriptor_packet(
+      state->module, &state->target, op, &packet));
+  node->descriptor_id = packet.stable_id;
+  if (packet.descriptor == NULL) {
     IREE_RETURN_IF_ERROR(
-        loom_low_schedule_emit_missing_descriptor(state, op, opcode));
+        loom_low_schedule_emit_missing_descriptor(state, op, packet.key));
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low schedule descriptor '%.*s' is not available",
-                            (int)opcode.size, opcode.data);
+                            (int)packet.key.size, packet.key.data);
   }
 
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(state->target.descriptor_set,
-                                            descriptor_ordinal);
-  if (!descriptor) {
-    return iree_make_status(IREE_STATUS_INTERNAL,
-                            "resolved descriptor ordinal is out of bounds");
-  }
-  node->descriptor_ordinal = descriptor_ordinal;
-  node->effect_count = descriptor->effect_count;
-  node->schedule_class_id = descriptor->schedule_class_id;
-  if (descriptor->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE ||
-      descriptor->schedule_class_id >=
+  node->descriptor_ordinal = packet.descriptor_ordinal;
+  node->effect_count = packet.descriptor->effect_count;
+  node->schedule_class_id = packet.descriptor->schedule_class_id;
+  if (packet.descriptor->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE ||
+      packet.descriptor->schedule_class_id >=
           state->target.descriptor_set->schedule_class_count) {
     IREE_RETURN_IF_ERROR(
-        loom_low_schedule_emit_missing_schedule_class(state, op, opcode));
+        loom_low_schedule_emit_missing_schedule_class(state, op, packet.key));
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "low schedule descriptor '%.*s' has no usable schedule class",
-        (int)opcode.size, opcode.data);
+        (int)packet.key.size, packet.key.data);
   }
 
   const loom_low_schedule_class_t* schedule_class =
       &state->target.descriptor_set
-           ->schedule_classes[descriptor->schedule_class_id];
+           ->schedule_classes[packet.descriptor->schedule_class_id];
   node->latency_cycles = schedule_class->latency_cycles;
   node->latency_kind = schedule_class->latency_kind;
   node->model_quality = schedule_class->model_quality;
@@ -658,7 +634,7 @@ static iree_status_t loom_low_schedule_resolve_descriptor(
   IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
       state->target.descriptor_set, schedule_class->name_string_offset,
       &node->schedule_class_name));
-  *out_descriptor = descriptor;
+  *out_descriptor = packet.descriptor;
   return iree_ok_status();
 }
 

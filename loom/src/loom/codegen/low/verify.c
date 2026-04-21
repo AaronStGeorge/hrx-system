@@ -108,25 +108,6 @@ static iree_string_view_t loom_low_verify_string_or_empty(
   return module->strings.entries[string_id];
 }
 
-static bool loom_low_verify_get_packet_opcode(const loom_module_t* module,
-                                              const loom_op_t* op,
-                                              iree_string_view_t* out_opcode,
-                                              uint16_t* out_opcode_attr_index) {
-  if (loom_low_op_isa(op)) {
-    *out_opcode =
-        loom_low_verify_string_or_empty(module, loom_low_op_opcode(op));
-    *out_opcode_attr_index = loom_low_op_opcode_ATTR_INDEX;
-    return true;
-  }
-  if (loom_low_const_isa(op)) {
-    *out_opcode =
-        loom_low_verify_string_or_empty(module, loom_low_const_opcode(op));
-    *out_opcode_attr_index = loom_low_const_opcode_ATTR_INDEX;
-    return true;
-  }
-  return false;
-}
-
 static bool loom_low_verify_get_packet_attrs(const loom_op_t* op,
                                              loom_named_attr_slice_t* out_attrs,
                                              uint16_t* out_attrs_attr_index) {
@@ -1200,26 +1181,18 @@ static iree_status_t loom_low_verify_descriptor_features(
 }
 
 static iree_status_t loom_low_verify_packet(
-    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
-    iree_string_view_t opcode, uint16_t opcode_attr_index) {
+    loom_low_function_verify_state_t* function_state,
+    const loom_low_resolved_descriptor_packet_t* packet) {
+  const loom_op_t* op = packet->op;
+  const iree_string_view_t opcode = packet->key;
+  const uint16_t opcode_attr_index = packet->key_attr_index;
+  if (packet->descriptor == NULL) {
+    return loom_low_verify_emit_missing_descriptor(
+        function_state, op, packet->key, packet->key_attr_index);
+  }
   const loom_low_descriptor_set_t* descriptor_set =
       function_state->target->descriptor_set;
-  const uint64_t descriptor_id = loom_low_descriptor_stable_id_from_key(opcode);
-  uint32_t descriptor_ordinal = loom_low_descriptor_set_lookup_descriptor_by_id(
-      descriptor_set, descriptor_id);
-  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return loom_low_verify_emit_missing_descriptor(function_state, op, opcode,
-                                                   opcode_attr_index);
-  }
-
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
-  if (!descriptor) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "low descriptor ordinal %" PRIu32
-                            " is out of range",
-                            descriptor_ordinal);
-  }
+  const loom_low_descriptor_t* descriptor = packet->descriptor;
   if (descriptor->result_count > descriptor->operand_count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor '%.*s' has %" PRIu16
@@ -1282,17 +1255,16 @@ static iree_status_t loom_low_verify_walk_op(void* user_data, loom_op_t* op,
     return iree_ok_status();
   }
 
-  iree_string_view_t opcode = iree_string_view_empty();
-  uint16_t opcode_attr_index = 0;
-  if (!loom_low_verify_get_packet_opcode(function_state->state->module, op,
-                                         &opcode, &opcode_attr_index)) {
+  loom_low_resolved_descriptor_packet_t packet = {0};
+  IREE_RETURN_IF_ERROR(loom_low_resolve_descriptor_packet(
+      function_state->state->module, function_state->target, op, &packet));
+  if (packet.kind == LOOM_LOW_DESCRIPTOR_PACKET_NONE) {
     if (loom_low_resource_isa(op)) {
       return loom_low_verify_resource(function_state, op);
     }
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(
-      loom_low_verify_packet(function_state, op, opcode, opcode_attr_index));
+  IREE_RETURN_IF_ERROR(loom_low_verify_packet(function_state, &packet));
   if (loom_low_verify_should_stop(function_state->state)) {
     *out_result = LOOM_WALK_ABORT;
   }
