@@ -584,6 +584,40 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11DsMemoryBarrierAndReturn) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest, EncodesGfx11Ds2AddrMemoryAndReturn) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel(%addr : "
+      "reg<amdgpu.vgpr>, %value32a : reg<amdgpu.vgpr>, %value32b : "
+      "reg<amdgpu.vgpr>, %value64a : reg<amdgpu.vgpr x2>, "
+      "%value64b : reg<amdgpu.vgpr x2>) {\n"
+      "  %loaded32 = low.op<amdgpu.ds_read2_b32>(%addr) {offset0 = 1, "
+      "offset1 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>\n"
+      "  low.op<amdgpu.ds_write2_b32>(%addr, %value32a, %value32b) "
+      "{offset0 = 3, offset1 = 4} : (reg<amdgpu.vgpr>, "
+      "reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)\n"
+      "  %loaded64st64 = low.op<amdgpu.ds_read2st64_b64>(%addr) "
+      "{offset0 = 5, offset1 = 6} : (reg<amdgpu.vgpr>) -> "
+      "reg<amdgpu.vgpr x4>\n"
+      "  low.op<amdgpu.ds_write2st64_b64>(%addr, %value64a, %value64b) "
+      "{offset0 = 7, offset1 = 8} : (reg<amdgpu.vgpr>, "
+      "reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>)\n"
+      "  low.return\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_GT(text.data_length, 4u);
+  EXPECT_EQ(text.data_length % 4, 0u);
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(AmdgpuEncodingTest, EncodesReturnForCurrentAmdgpuFamilies) {
   struct Case {
     // Target preset used to select the low descriptor set.
