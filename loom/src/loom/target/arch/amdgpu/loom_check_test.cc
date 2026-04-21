@@ -553,6 +553,74 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsOutOfRangeStaticBufferOffset) {
       "descriptor's immediate plus scalar SOFFSET range");
 }
 
+TEST_F(AmdgpuLoomCheckTest, SourceLowerUsesDsRead2Write2ForStridedWorkgroup) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "low",
+      "  %bytes = index.constant 64 : offset\n"
+      "  %zero = index.constant 0 : offset\n"
+      "  %scratch = buffer.alloca %bytes {base_alignment = 16, "
+      "memory_space = workgroup} : buffer\n"
+      "  %scratch_view = buffer.view %scratch[%zero] : buffer -> "
+      "view<8xi32, #strided<stride=2>>\n"
+      "  %loaded = vector.load %scratch_view[0] : "
+      "view<8xi32, #strided<stride=2>> -> vector<2xi32>\n"
+      "  vector.store %loaded, %scratch_view[0] : vector<2xi32>, "
+      "view<8xi32, #strided<stride=2>>\n");
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("amdgpu_source_low.loom-test"), &result));
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("low.op<amdgpu.ds_read2_b32>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("low.op<amdgpu.ds_write2_b32>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("{offset0 = 0, offset1 = 2}"), std::string::npos)
+      << actual_output;
+  EXPECT_EQ(actual_output.find("low.op<amdgpu.ds_read_b64>"), std::string::npos)
+      << actual_output;
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(AmdgpuLoomCheckTest,
+       SourceLowerUsesDsRead2Write2Stride64ForLargeWorkgroupStride) {
+  const std::string source = AmdgpuGfx11SourceLowCase(
+      "low",
+      "  %bytes = index.constant 4096 : offset\n"
+      "  %zero = index.constant 0 : offset\n"
+      "  %scratch = buffer.alloca %bytes {base_alignment = 16, "
+      "memory_space = workgroup} : buffer\n"
+      "  %scratch_view = buffer.view %scratch[%zero] : buffer -> "
+      "view<1024xi32, #strided<stride=512>>\n"
+      "  %loaded = vector.load %scratch_view[0] : "
+      "view<1024xi32, #strided<stride=512>> -> vector<2xi32>\n"
+      "  vector.store %loaded, %scratch_view[0] : vector<2xi32>, "
+      "view<1024xi32, #strided<stride=512>>\n");
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      harness_.ExecuteFirst(iree_make_string_view(source.data(), source.size()),
+                            IREE_SV("amdgpu_source_low.loom-test"), &result));
+  EXPECT_TRUE(result.has_actual_output);
+  EXPECT_EQ(result.diagnostic_count, 0u);
+  const std::string actual_output = harness_.ActualOutputString(result);
+  EXPECT_NE(actual_output.find("low.op<amdgpu.ds_read2st64_b32>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("low.op<amdgpu.ds_write2st64_b32>"),
+            std::string::npos)
+      << actual_output;
+  EXPECT_NE(actual_output.find("{offset0 = 0, offset1 = 8}"), std::string::npos)
+      << actual_output;
+  EXPECT_EQ(actual_output.find("low.op<amdgpu.ds_read2_b32>"),
+            std::string::npos)
+      << actual_output;
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsNonWorkitemDynamicIndex) {
   const std::string source = AmdgpuGfx11SourceLowCase(
       "  %zero = index.constant 0 : offset\n"
