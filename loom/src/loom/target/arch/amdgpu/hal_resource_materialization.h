@@ -16,6 +16,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/descriptors.h"
 #include "loom/ir/ir.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/types.h"
@@ -35,6 +36,10 @@ typedef struct loom_amdgpu_hal_resource_materialization_result_t {
 
 // Expands AMDGPU HAL low.resource imports in |function_op|.
 //
+// |descriptor_set| must be the target-low descriptor set selected for
+// |target_bundle|. Materialized packets are selected by stable descriptor ID
+// and verified against that concrete set.
+//
 // The expansion inserts or reuses a
 // low.live_in<amdgpu.kernarg_segment_ptr> value, loads one 64-bit binding
 // pointer from the kernarg slot assigned by low.resource, materializes the
@@ -43,6 +48,7 @@ typedef struct loom_amdgpu_hal_resource_materialization_result_t {
 iree_status_t loom_amdgpu_hal_resource_materialize(
     loom_module_t* module, loom_op_t* function_op,
     const loom_target_bundle_t* target_bundle,
+    const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_hal_resource_materialization_result_t* out_result,
     iree_arena_allocator_t* scratch_arena);
 

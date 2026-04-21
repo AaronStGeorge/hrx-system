@@ -374,10 +374,14 @@ static iree_status_t loom_amdgpu_module_compile_low_function(
     report->lowered_symbol = target->bundle_storage.export_plan.source_symbol;
   }
 
+  const loom_low_descriptor_set_t* descriptor_set = NULL;
+  IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
+      &low_registry->registry, &target->bundle_storage.bundle,
+      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set));
   loom_amdgpu_hal_resource_materialization_result_t materialization = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_materialize(
-      module, low_function_op, &target->bundle_storage.bundle, &materialization,
-      sidecar_arena));
+      module, low_function_op, &target->bundle_storage.bundle, descriptor_set,
+      &materialization, sidecar_arena));
 
   const loom_low_allocation_fixed_value_t* fixed_values = NULL;
   iree_host_size_t fixed_value_count = 0;

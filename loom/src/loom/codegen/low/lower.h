@@ -285,6 +285,27 @@ iree_status_t loom_low_lower_bind_value(loom_low_lower_context_t* context,
                                         loom_value_id_t source_value_id,
                                         loom_value_id_t low_value_id);
 
+// Emits a descriptor-backed low.op selected by stable descriptor ID.
+//
+// The selected descriptor set on |context| is the authority for converting the
+// durable ID into the packet's textual descriptor spelling. Source lowerings
+// should pass generated descriptor ID constants or target selector results here
+// instead of interning descriptor key strings and relying on builders to hash
+// them back into IDs.
+iree_status_t loom_low_lower_emit_descriptor_op(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    const loom_value_id_t* operands, iree_host_size_t operand_count,
+    loom_named_attr_slice_t attrs, const loom_type_t* result_types,
+    iree_host_size_t result_count, const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count, loom_location_id_t location,
+    loom_op_t** out_op);
+
+// Emits a descriptor-backed low.const selected by stable descriptor ID.
+iree_status_t loom_low_lower_emit_descriptor_const(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    loom_named_attr_slice_t attrs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
 // Emits ERR_BACKEND_001 for an unsupported source-to-low lowering subject.
 iree_status_t loom_low_lower_emit_reject(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,

@@ -26,6 +26,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    builder
+  HDRS
+    "builder.h"
+  SRCS
+    "builder.c"
+  DEPS
+    ::descriptors
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     requirements
   HDRS
     "requirements.h"
@@ -410,6 +425,7 @@ loom_cc_library(
   SRCS
     "lower.c"
   DEPS
+    ::builder
     ::descriptors
     ::requirements
     iree::base
@@ -489,6 +505,7 @@ loom_cc_test(
     loom::src::loom::ops::vector
     loom::src::loom::target::ir_records
     loom::src::loom::target::presets
+    loom::src::loom::target::test::descriptors_ids
     loom::src::loom::target::test::low_registry
     loom::src::loom::testing::context
     iree::testing::gtest

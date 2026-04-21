@@ -11,6 +11,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/target/emit/ireevm/descriptors.h"
 
 static bool loom_ireevm_type_is_i1_or_i32(loom_type_t type) {
   if (!loom_type_is_scalar(type)) {
@@ -150,9 +151,6 @@ static iree_status_t loom_ireevm_low_result_type(
 
 static iree_status_t loom_ireevm_lower_constant(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_ireevm_intern(context, IREE_SV("iree.vm.const.i32"), &opcode_id));
   loom_string_id_t value_name_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_ireevm_intern(context, IREE_SV("i32_value"), &value_name_id));
@@ -169,8 +167,8 @@ static iree_status_t loom_ireevm_lower_constant(
       },
   };
   loom_op_t* low_const = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_const_build(
-      loom_low_lower_context_builder(context), opcode_id,
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_const(
+      context, IREE_VM_CORE_DESCRIPTOR_ID_IREE_VM_CONST_I32,
       loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)), result_type,
       source_op->location, &low_const));
   return loom_low_lower_bind_value(context,
@@ -180,7 +178,7 @@ static iree_status_t loom_ireevm_lower_constant(
 
 static iree_status_t loom_ireevm_lower_binary(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op,
-                                              iree_string_view_t descriptor_key,
+                                              uint64_t descriptor_id,
                                               loom_value_id_t source_lhs,
                                               loom_value_id_t source_rhs,
                                               loom_value_id_t source_result) {
@@ -195,14 +193,12 @@ static iree_status_t loom_ireevm_lower_binary(loom_low_lower_context_t* context,
   IREE_RETURN_IF_ERROR(loom_ireevm_low_result_type(
       context, source_op, source_result, &result_type));
 
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_ireevm_intern(context, descriptor_key, &opcode_id));
   loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_op_build(
-      loom_low_lower_context_builder(context), opcode_id, low_operands,
-      IREE_ARRAYSIZE(low_operands), loom_make_named_attr_slice(NULL, 0),
-      &result_type, 1, /*tied_results=*/NULL, /*tied_result_count=*/0,
-      source_op->location, &low_op));
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
+      context, descriptor_id, low_operands, IREE_ARRAYSIZE(low_operands),
+      loom_make_named_attr_slice(NULL, 0), &result_type, 1,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+      &low_op));
   return loom_low_lower_bind_value(
       context, source_result,
       loom_value_slice_get(loom_low_op_results(low_op), 0));
@@ -224,17 +220,17 @@ static iree_status_t loom_ireevm_try_lower_op(void* user_data,
       return loom_ireevm_lower_constant(context, source_op);
     case LOOM_OP_SCALAR_ADDI:
       return loom_ireevm_lower_binary(
-          context, source_op, IREE_SV("iree.vm.add.i32"),
+          context, source_op, IREE_VM_CORE_DESCRIPTOR_ID_IREE_VM_ADD_I32,
           loom_scalar_addi_lhs(source_op), loom_scalar_addi_rhs(source_op),
           loom_scalar_addi_result(source_op));
     case LOOM_OP_SCALAR_SUBI:
       return loom_ireevm_lower_binary(
-          context, source_op, IREE_SV("iree.vm.sub.i32"),
+          context, source_op, IREE_VM_CORE_DESCRIPTOR_ID_IREE_VM_SUB_I32,
           loom_scalar_subi_lhs(source_op), loom_scalar_subi_rhs(source_op),
           loom_scalar_subi_result(source_op));
     case LOOM_OP_SCALAR_CMPI:
       return loom_ireevm_lower_binary(
-          context, source_op, IREE_SV("iree.vm.cmp.eq.i32"),
+          context, source_op, IREE_VM_CORE_DESCRIPTOR_ID_IREE_VM_CMP_EQ_I32,
           loom_scalar_cmpi_lhs(source_op), loom_scalar_cmpi_rhs(source_op),
           loom_scalar_cmpi_result(source_op));
     default:

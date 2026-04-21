@@ -302,6 +302,7 @@ loom_cc_library(
   SRCS
     "lower.c"
   DEPS
+    ::gfx11_descriptors_ids
     ::hal_kernel_abi
     iree::base
     loom::src::loom::codegen::low::lower
@@ -437,10 +438,13 @@ loom_cc_library(
   SRCS
     "hal_resource_materialization.c"
   DEPS
+    ::gfx11_descriptors_ids
     ::hal_kernel_abi
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::builder
+    loom::src::loom::codegen::low::descriptors
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::rewrite::rewriter
@@ -486,6 +490,7 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::target::emit::native::amdgpu::encoding
     loom::src::loom::target::ir_records
+    loom::src::loom::target::low_descriptor_registry
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main

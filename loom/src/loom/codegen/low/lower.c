@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/builder.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -371,6 +372,30 @@ const loom_target_bundle_t* loom_low_lower_context_bundle(
 const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
     const loom_low_lower_context_t* context) {
   return context->descriptor_set;
+}
+
+iree_status_t loom_low_lower_emit_descriptor_op(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    const loom_value_id_t* operands, iree_host_size_t operand_count,
+    loom_named_attr_slice_t attrs, const loom_type_t* result_types,
+    iree_host_size_t result_count, const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count, loom_location_id_t location,
+    loom_op_t** out_op) {
+  IREE_ASSERT_ARGUMENT(context);
+  return loom_low_build_descriptor_op(
+      &context->builder, context->descriptor_set, descriptor_id, operands,
+      operand_count, attrs, result_types, result_count, tied_results,
+      tied_result_count, location, out_op);
+}
+
+iree_status_t loom_low_lower_emit_descriptor_const(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    loom_named_attr_slice_t attrs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op) {
+  IREE_ASSERT_ARGUMENT(context);
+  return loom_low_build_descriptor_const(&context->builder,
+                                         context->descriptor_set, descriptor_id,
+                                         attrs, result_type, location, out_op);
 }
 
 iree_status_t loom_low_lower_map_type(loom_low_lower_context_t* context,

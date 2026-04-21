@@ -305,6 +305,7 @@ loom_cc_library(
     srcs = ["lower.c"],
     hdrs = ["lower.h"],
     deps = [
+        ":avx512_descriptors_ids",
         ":packed_dot_contract",
         ":packed_dot_vector",
         "//loom/src/loom/codegen/low:descriptors",

@@ -93,6 +93,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
+    loom::src::loom::target::arch::wasm::descriptors_ids
   PUBLIC
 )
 

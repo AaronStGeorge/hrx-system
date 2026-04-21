@@ -22,6 +22,7 @@
 #include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/emit/native/amdgpu/encoding.h"
 #include "loom/target/ir_records.h"
+#include "loom/target/low_descriptor_registry.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -200,6 +201,16 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
         module_, IREE_SV("gfx_target"), out_storage));
   }
 
+  const loom_low_descriptor_set_t* SelectDescriptorSet(
+      const loom_target_bundle_t* bundle) {
+    const loom_low_descriptor_set_t* descriptor_set = nullptr;
+    IREE_CHECK_OK(loom_target_low_descriptor_set_select_for_bundle(
+        &target_registry_.registry, bundle,
+        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        &descriptor_set));
+    return descriptor_set;
+  }
+
   void VerifyModule() {
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -244,10 +255,13 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   ASSERT_NE(function_op, nullptr);
   loom_target_ir_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
+  const loom_low_descriptor_set_t* descriptor_set =
+      SelectDescriptorSet(&bundle_storage.bundle);
 
   loom_amdgpu_hal_resource_materialization_result_t result = {};
   IREE_ASSERT_OK(loom_amdgpu_hal_resource_materialize(
-      module_, function_op, &bundle_storage.bundle, &result, &arena_));
+      module_, function_op, &bundle_storage.bundle, descriptor_set, &result,
+      &arena_));
   EXPECT_EQ(result.abi_layout.function_op, function_op);
   EXPECT_EQ(result.abi_layout.resource_count, 1u);
   EXPECT_EQ(result.abi_layout.kernarg_segment_size, 8u);
@@ -359,10 +373,13 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   ASSERT_NE(function_op, nullptr);
   loom_target_ir_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
+  const loom_low_descriptor_set_t* descriptor_set =
+      SelectDescriptorSet(&bundle_storage.bundle);
 
   loom_amdgpu_hal_resource_materialization_result_t result = {};
   IREE_ASSERT_OK(loom_amdgpu_hal_resource_materialize(
-      module_, function_op, &bundle_storage.bundle, &result, &arena_));
+      module_, function_op, &bundle_storage.bundle, descriptor_set, &result,
+      &arena_));
   EXPECT_EQ(result.abi_layout.function_op, function_op);
   EXPECT_EQ(result.abi_layout.resource_count, 0u);
   EXPECT_EQ(result.materialized_resource_count, 0u);
@@ -417,11 +434,13 @@ TEST_F(AmdgpuHalResourceMaterializationTest, RejectsUnsupportedResourceShape) {
   ASSERT_NE(function_op, nullptr);
   loom_target_ir_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
+  const loom_low_descriptor_set_t* descriptor_set =
+      SelectDescriptorSet(&bundle_storage.bundle);
   loom_amdgpu_hal_resource_materialization_result_t result = {};
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_amdgpu_hal_resource_materialize(
-          module_, function_op, &bundle_storage.bundle, &result, &arena_));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_amdgpu_hal_resource_materialize(
+                            module_, function_op, &bundle_storage.bundle,
+                            descriptor_set, &result, &arena_));
 }
 
 }  // namespace

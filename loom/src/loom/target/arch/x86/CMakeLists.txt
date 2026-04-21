@@ -128,6 +128,7 @@ loom_cc_library(
   SRCS
     "lower.c"
   DEPS
+    ::avx512_descriptors_ids
     ::packed_dot_contract
     ::packed_dot_vector
     iree::base

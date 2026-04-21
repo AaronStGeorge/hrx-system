@@ -338,6 +338,7 @@ loom_cc_test(
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::arch::amdgpu::wait_plan
     loom::src::loom::target::ir_records
+    loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::presets
     loom::src::loom::target::tool::llvm
     loom::src::loom::testing::context
@@ -422,6 +423,7 @@ loom_cc_test(
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::arch::amdgpu::wait_plan
     loom::src::loom::target::ir_records
+    loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::presets
     loom::src::loom::testing::context
     iree::testing::gtest

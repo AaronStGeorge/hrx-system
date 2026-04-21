@@ -517,6 +517,18 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "builder",
+    srcs = ["builder.c"],
+    hdrs = ["builder.h"],
+    deps = [
+        ":descriptors",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "requirements",
     srcs = ["requirements.c"],
     hdrs = ["requirements.h"],
@@ -837,6 +849,7 @@ loom_cc_library(
     srcs = ["lower.c"],
     hdrs = ["lower.h"],
     deps = [
+        ":builder",
         ":descriptors",
         ":requirements",
         "//loom/src/loom/error:emitter",
@@ -908,6 +921,7 @@ loom_cc_test(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target:ir_records",
         "//loom/src/loom/target:presets",
+        "//loom/src/loom/target/test:descriptors_ids",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base/internal:arena",

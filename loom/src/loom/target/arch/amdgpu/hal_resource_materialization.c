@@ -8,9 +8,11 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/builder.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/target/arch/amdgpu/gfx11_descriptors.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 
 #define LOOM_AMDGPU_HAL_RESOURCE_DESCRIPTOR_RANGE_WORD UINT32_MAX
@@ -178,43 +180,42 @@ static iree_status_t loom_amdgpu_hal_resource_i64_attr(
 }
 
 static iree_status_t loom_amdgpu_hal_resource_build_s_mov_b32(
-    loom_rewriter_t* rewriter, int64_t value, loom_type_t sgpr_type,
-    loom_location_id_t location, loom_value_id_t* out_value) {
+    loom_rewriter_t* rewriter, const loom_low_descriptor_set_t* descriptor_set,
+    int64_t value, loom_type_t sgpr_type, loom_location_id_t location,
+    loom_value_id_t* out_value) {
   IREE_ASSERT_ARGUMENT(out_value);
   *out_value = LOOM_VALUE_ID_INVALID;
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      rewriter->module, IREE_SV("amdgpu.s_mov_b32"), &opcode_id));
   loom_named_attr_t attr = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_i64_attr(
       rewriter->module, IREE_SV("imm32"), value, &attr));
   loom_op_t* const_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_const_build(
-      &rewriter->builder, opcode_id, loom_make_named_attr_slice(&attr, 1),
-      sgpr_type, location, &const_op));
+  IREE_RETURN_IF_ERROR(loom_low_build_descriptor_const(
+      &rewriter->builder, descriptor_set,
+      AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_S_MOV_B32,
+      loom_make_named_attr_slice(&attr, 1), sgpr_type, location, &const_op));
   *out_value = loom_low_const_result(const_op);
   return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_hal_resource_build_pointer_load(
-    loom_rewriter_t* rewriter, loom_value_id_t kernarg_ptr,
-    loom_value_id_t soffset, uint32_t kernarg_offset, loom_type_t sgpr_x2_type,
+    loom_rewriter_t* rewriter, const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t kernarg_ptr, loom_value_id_t soffset,
+    uint32_t kernarg_offset, loom_type_t sgpr_x2_type,
     loom_location_id_t location, loom_value_id_t* out_value) {
   IREE_ASSERT_ARGUMENT(out_value);
   *out_value = LOOM_VALUE_ID_INVALID;
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      rewriter->module, IREE_SV("amdgpu.s_load_dwordx2"), &opcode_id));
   loom_named_attr_t attr = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_i64_attr(
       rewriter->module, IREE_SV("offset"), kernarg_offset, &attr));
   const loom_value_id_t operands[] = {kernarg_ptr, soffset};
   const loom_type_t result_types[] = {sgpr_x2_type};
   loom_op_t* load_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_op_build(
-      &rewriter->builder, opcode_id, operands, IREE_ARRAYSIZE(operands),
-      loom_make_named_attr_slice(&attr, 1), result_types,
-      IREE_ARRAYSIZE(result_types), NULL, 0, location, &load_op));
+  IREE_RETURN_IF_ERROR(loom_low_build_descriptor_op(
+      &rewriter->builder, descriptor_set,
+      AMDGPU_GFX11_CORE_DESCRIPTOR_ID_AMDGPU_S_LOAD_DWORDX2, operands,
+      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(&attr, 1),
+      result_types, IREE_ARRAYSIZE(result_types), /*tied_results=*/NULL,
+      /*tied_result_count=*/0, location, &load_op));
   *out_value = loom_low_op_results(load_op).values[0];
   return iree_ok_status();
 }
@@ -223,26 +224,28 @@ static iree_status_t loom_amdgpu_hal_resource_materialize_one(
     loom_rewriter_t* rewriter, loom_op_t* op,
     const loom_amdgpu_hal_kernarg_resource_t* resource,
     const loom_target_bundle_t* target_bundle, loom_value_id_t kernarg_ptr,
-    loom_type_t sgpr_type, loom_type_t sgpr_x2_type) {
+    const loom_low_descriptor_set_t* descriptor_set, loom_type_t sgpr_type,
+    loom_type_t sgpr_x2_type) {
   const loom_value_id_t value_checkpoint =
       loom_rewriter_value_checkpoint(rewriter);
   loom_builder_set_before(&rewriter->builder, op);
 
   loom_value_id_t soffset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_mov_b32(
-      rewriter, 0, sgpr_type, op->location, &soffset));
+      rewriter, descriptor_set, 0, sgpr_type, op->location, &soffset));
   loom_value_id_t pointer = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_pointer_load(
-      rewriter, kernarg_ptr, soffset, resource->kernarg_offset, sgpr_x2_type,
-      op->location, &pointer));
+      rewriter, descriptor_set, kernarg_ptr, soffset, resource->kernarg_offset,
+      sgpr_x2_type, op->location, &pointer));
   loom_value_id_t range = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_mov_b32(
-      rewriter, LOOM_AMDGPU_HAL_RESOURCE_DESCRIPTOR_RANGE_WORD, sgpr_type,
-      op->location, &range));
+      rewriter, descriptor_set, LOOM_AMDGPU_HAL_RESOURCE_DESCRIPTOR_RANGE_WORD,
+      sgpr_type, op->location, &range));
   loom_value_id_t flags = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_mov_b32(
-      rewriter, target_bundle->export_plan->hal_kernel.buffer_resource_flags,
-      sgpr_type, op->location, &flags));
+      rewriter, descriptor_set,
+      target_bundle->export_plan->hal_kernel.buffer_resource_flags, sgpr_type,
+      op->location, &flags));
 
   const loom_value_id_t sources[] = {pointer, range, flags};
   loom_op_t* concat_op = NULL;
@@ -261,15 +264,17 @@ static iree_status_t loom_amdgpu_hal_resource_materialize_one(
 iree_status_t loom_amdgpu_hal_resource_materialize(
     loom_module_t* module, loom_op_t* function_op,
     const loom_target_bundle_t* target_bundle,
+    const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_hal_resource_materialization_result_t* out_result,
     iree_arena_allocator_t* scratch_arena) {
   IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_amdgpu_hal_resource_materialization_result_t){0};
-  if (module == NULL || function_op == NULL || scratch_arena == NULL) {
+  if (module == NULL || function_op == NULL || target_bundle == NULL ||
+      descriptor_set == NULL || scratch_arena == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU HAL resource materialization requires a module, function, and "
-        "scratch arena");
+        "AMDGPU HAL resource materialization requires a module, function, "
+        "target bundle, descriptor set, and scratch arena");
   }
   if (!loom_low_func_def_isa(function_op)) {
     return iree_make_status(
@@ -323,8 +328,8 @@ iree_status_t loom_amdgpu_hal_resource_materialize(
           }
           if (iree_status_is_ok(status)) {
             status = loom_amdgpu_hal_resource_materialize_one(
-                &rewriter, op, resource, target_bundle, kernarg_ptr, sgpr_type,
-                sgpr_x2_type);
+                &rewriter, op, resource, target_bundle, kernarg_ptr,
+                descriptor_set, sgpr_type, sgpr_x2_type);
           }
           if (iree_status_is_ok(status)) {
             ++out_result->materialized_resource_count;

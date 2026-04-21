@@ -29,6 +29,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/target/ir_records.h"
 #include "loom/target/presets.h"
+#include "loom/target/test/descriptors.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/testing/context.h"
 
@@ -206,18 +207,8 @@ static iree_status_t TestCanLowerOp(void* user_data,
   }
 }
 
-static iree_status_t InternOpcode(loom_low_lower_context_t* context,
-                                  iree_string_view_t opcode,
-                                  loom_string_id_t* out_opcode_id) {
-  return loom_module_intern_string(loom_low_lower_context_module(context),
-                                   opcode, out_opcode_id);
-}
-
 static iree_status_t TestLowerScalarConstant(loom_low_lower_context_t* context,
                                              const loom_op_t* source_op) {
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      InternOpcode(context, IREE_SV("test.const.i32"), &opcode_id));
   loom_string_id_t value_name_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(loom_low_lower_context_module(context),
@@ -240,8 +231,8 @@ static iree_status_t TestLowerScalarConstant(loom_low_lower_context_t* context,
       },
   };
   loom_op_t* low_const_op = nullptr;
-  IREE_RETURN_IF_ERROR(loom_low_const_build(
-      loom_low_lower_context_builder(context), opcode_id,
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_const(
+      context, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_CONST_I32,
       loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)), result_type,
       source_op->location, &low_const_op));
   return loom_low_lower_bind_value(context,
@@ -251,7 +242,7 @@ static iree_status_t TestLowerScalarConstant(loom_low_lower_context_t* context,
 
 static iree_status_t TestLowerBinaryOp(loom_low_lower_context_t* context,
                                        const loom_op_t* source_op,
-                                       iree_string_view_t opcode,
+                                       uint64_t descriptor_id,
                                        loom_value_id_t source_lhs,
                                        loom_value_id_t source_rhs,
                                        loom_value_id_t source_result) {
@@ -271,14 +262,12 @@ static iree_status_t TestLowerBinaryOp(loom_low_lower_context_t* context,
         "test policy did not map binary op result to a register");
   }
 
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(InternOpcode(context, opcode, &opcode_id));
   loom_op_t* low_op = nullptr;
-  IREE_RETURN_IF_ERROR(loom_low_op_build(
-      loom_low_lower_context_builder(context), opcode_id, low_operands,
-      IREE_ARRAYSIZE(low_operands), loom_make_named_attr_slice(NULL, 0),
-      &result_type, 1, /*tied_results=*/NULL, /*tied_result_count=*/0,
-      source_op->location, &low_op));
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
+      context, descriptor_id, low_operands, IREE_ARRAYSIZE(low_operands),
+      loom_make_named_attr_slice(NULL, 0), &result_type, 1,
+      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+      &low_op));
   return loom_low_lower_bind_value(
       context, source_result,
       loom_value_slice_get(loom_low_op_results(low_op), 0));
@@ -295,16 +284,16 @@ static iree_status_t TestTryLowerOp(void* user_data,
       return TestLowerScalarConstant(context, source_op);
     case LOOM_OP_SCALAR_ADDI:
       *out_handled = true;
-      return TestLowerBinaryOp(context, source_op, IREE_SV("test.add.i32"),
-                               loom_scalar_addi_lhs(source_op),
-                               loom_scalar_addi_rhs(source_op),
-                               loom_scalar_addi_result(source_op));
+      return TestLowerBinaryOp(
+          context, source_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
+          loom_scalar_addi_lhs(source_op), loom_scalar_addi_rhs(source_op),
+          loom_scalar_addi_result(source_op));
     case LOOM_OP_VECTOR_ADDI:
       *out_handled = true;
-      return TestLowerBinaryOp(context, source_op, IREE_SV("test.add.v4i32"),
-                               loom_vector_addi_lhs(source_op),
-                               loom_vector_addi_rhs(source_op),
-                               loom_vector_addi_result(source_op));
+      return TestLowerBinaryOp(
+          context, source_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_V4I32,
+          loom_vector_addi_lhs(source_op), loom_vector_addi_rhs(source_op),
+          loom_vector_addi_result(source_op));
     default:
       *out_handled = false;
       return iree_ok_status();

@@ -153,6 +153,16 @@ def loom_low_descriptor_cc_library(
         **kwargs
     )
 
+    package_name = native.package_name()
+    generated_header = "//%s:%s" % (package_name, header)
+    loom_cc_library(
+        name = name + "_ids",
+        hdrs = [generated_header],
+        deps = deps,
+        testonly = testonly,
+        visibility = visibility,
+    )
+
 def loom_low_descriptor_exclude_from_cmake_all(
         cc_libraries = [],
         targets = []):

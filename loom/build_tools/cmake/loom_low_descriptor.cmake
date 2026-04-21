@@ -123,7 +123,38 @@ function(loom_target_table_cc_library)
 endfunction()
 
 function(loom_low_descriptor_cc_library)
+  cmake_parse_arguments(
+    _RULE
+    ""
+    "NAME;HEADER"
+    "DEPS"
+    ${ARGN}
+  )
+
   loom_target_table_cc_library(${ARGN})
+
+  if(NOT _RULE_NAME)
+    message(FATAL_ERROR "loom_low_descriptor_cc_library requires NAME")
+  endif()
+  if(NOT _RULE_HEADER)
+    message(FATAL_ERROR "loom_low_descriptor_cc_library requires HEADER")
+  endif()
+
+  set(_HEADER "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_HEADER}")
+  iree_package_name(_PACKAGE_NAME)
+  loom_cc_library(
+    NAME
+      "${_RULE_NAME}_ids"
+    HDRS
+      "${_HEADER}"
+    DEPS
+      ${_RULE_DEPS}
+    PUBLIC
+  )
+  add_dependencies(
+    "${_PACKAGE_NAME}_${_RULE_NAME}_ids"
+    "${_PACKAGE_NAME}_${_RULE_NAME}_gen"
+  )
 endfunction()
 
 function(loom_low_descriptor_exclude_from_all)

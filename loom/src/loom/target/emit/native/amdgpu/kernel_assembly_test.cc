@@ -23,6 +23,7 @@
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/ir_records.h"
+#include "loom/target/low_descriptor_registry.h"
 #include "loom/target/presets.h"
 #include "loom/target/tool/llvm.h"
 #include "loom/testing/context.h"
@@ -184,11 +185,16 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     loom_target_ir_bundle_storage_t bundle_storage = {};
     IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
         module_, iree_make_cstring_view(target_symbol), &bundle_storage));
+    const loom_low_descriptor_set_t* descriptor_set = nullptr;
+    IREE_ASSERT_OK(loom_target_low_descriptor_set_select_for_bundle(
+        &target_registry_.registry, &bundle_storage.bundle,
+        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        &descriptor_set));
 
     loom_amdgpu_hal_resource_materialization_result_t materialization = {};
     IREE_ASSERT_OK(loom_amdgpu_hal_resource_materialize(
-        module_, low_function, &bundle_storage.bundle, &materialization,
-        arena));
+        module_, low_function, &bundle_storage.bundle, descriptor_set,
+        &materialization, arena));
     ASSERT_EQ(materialization.materialized_resource_count,
               expected_materialized_resource_count);
     ASSERT_TRUE(materialization.inserted_kernarg_segment_ptr_live_in);
