@@ -121,8 +121,8 @@ typedef struct loom_target_compile_report_t {
   loom_target_compile_report_detail_flags_t detail_flags;
   // VM module name requested for archive emission.
   iree_string_view_t module_name;
-  // Target bundle symbol requested by the caller, if any.
-  iree_string_view_t target_symbol;
+  // Function entry symbol requested by the caller, if any.
+  iree_string_view_t entry_symbol;
   // Execution or codegen backend name that produced the candidate, if any.
   iree_string_view_t backend_name;
   // Target family name selected by the backend, if any.

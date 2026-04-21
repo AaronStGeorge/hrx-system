@@ -16,8 +16,8 @@
 typedef struct loom_check_hal_run_options_t {
   // HAL backend name selected by --loom_backend.
   iree_string_view_t backend_name;
-  // Module-local target symbol selected by --loom_target.
-  iree_string_view_t target_symbol;
+  // Module-local entry function selected by --loom_entry.
+  iree_string_view_t entry_symbol;
   // HAL executable entry point ordinal selected by --entry_point.
   uint32_t entry_point;
   // Dispatch workgroup count selected by --workgroup_count.
@@ -166,12 +166,12 @@ static iree_status_t loom_check_hal_run_options_initialize(
       continue;
     }
     status = loom_check_run_arguments_take_option_value(
-        arguments, &i, IREE_SV("loom_target"), &value, &matched);
+        arguments, &i, IREE_SV("loom_entry"), &value, &matched);
     if (!iree_status_is_ok(status)) {
       break;
     }
     if (matched) {
-      out_options->target_symbol = value;
+      out_options->entry_symbol = value;
       continue;
     }
     status = loom_check_run_arguments_take_option_value(
@@ -351,7 +351,7 @@ iree_status_t loom_check_hal_run_provider_execute(
   if (iree_status_is_ok(status)) {
     loom_run_candidate_compile_options_t compile_options = {0};
     loom_run_candidate_compile_options_initialize(&compile_options);
-    compile_options.target_symbol = run_options.target_symbol;
+    compile_options.entry_symbol = run_options.entry_symbol;
     compile_options.source_resolver = loom_run_module_source_resolver(&module);
     loom_run_compile_report_capture_configure_compile_options(
         &compile_report_capture, &compile_options);

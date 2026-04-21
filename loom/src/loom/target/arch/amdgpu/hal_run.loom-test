@@ -3,9 +3,9 @@
 // ====
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&64xi32=0 --expected_binding=64xi32=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-low.func.def target(@gfx_target) @loom_kernel() {
+low.func.def target(@gfx_target) abi(hal_kernel) @loom_kernel() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %binding = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %four = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
@@ -20,9 +20,9 @@ low.func.def target(@gfx_target) @loom_kernel() {
 // ====
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&64xi32=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63 --binding=&64xi32=0 --expected_binding=64xi32=0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63 --expected_binding=64xi32=7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%input: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
@@ -39,9 +39,9 @@ func.def @loom_kernel(%input: buffer, %output: buffer) {
 // ====
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=4,1,1 --binding=&4xi32=0 --expected_binding=4xi32=42,42,42,42
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%output: buffer) {
   %bid = kernel.workgroup.id<x> : index
   %zero = index.constant 0 : offset
   %view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>
@@ -56,9 +56,9 @@ func.def @loom_kernel(%output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=5,6,7,8 --binding=&4xi32=0 --expected_binding=4xi32=5,6,7,8 --expected_binding=4xi32=5,6,7,8
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%input: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>
@@ -73,9 +73,9 @@ func.def @loom_kernel(%input: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&8xi32=10,11,12,13,14,15,16,17 --binding=&4xi32=0 --expected_binding=8xi32=10,11,12,13,14,15,16,17 --expected_binding=4xi32=14,15,16,17
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%input: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%input: buffer, %output: buffer) {
   %input_base = index.constant 16 : offset
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%input_base] : buffer -> view<4xi32, #dense>
@@ -91,9 +91,9 @@ func.def @loom_kernel(%input: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=1,2,3,4 --binding=&4xi32=5,6,7,8 --binding=&4xi32=0 --expected_binding=4xi32=1,2,3,4 --expected_binding=4xi32=5,6,7,8 --expected_binding=4xi32=6,8,10,12
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs[%zero] : buffer -> view<4xi32, #dense>
   %rhs_view = buffer.view %rhs[%zero] : buffer -> view<4xi32, #dense>
@@ -111,9 +111,9 @@ func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=1,2,3,4 --binding=&4xi32=0 --expected_binding=4xi32=1,2,3,4 --expected_binding=4xi32=8,1,6,4
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%input: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>
@@ -139,9 +139,9 @@ func.def @loom_kernel(%input: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xf32=1,2,3,4 --binding=&4xf32=5,6,7,8 --binding=&4xf32=0 --expected_binding=4xf32=1,2,3,4 --expected_binding=4xf32=5,6,7,8 --expected_binding=4xf32=35,60,91,128
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs[%zero] : buffer -> view<4xf32, #dense>
   %rhs_view = buffer.view %rhs[%zero] : buffer -> view<4xf32, #dense>
@@ -164,9 +164,9 @@ func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xf32=1,2,3,4 --binding=&4xf32=5,6,7,8 --binding=&4xf32=0 --expected_binding=4xf32=1,2,3,4 --expected_binding=4xf32=5,6,7,8 --expected_binding=4xf32=6,12,-4,32.5
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs[%zero] : buffer -> view<4xf32, #dense>
   %rhs_view = buffer.view %rhs[%zero] : buffer -> view<4xf32, #dense>
@@ -197,9 +197,9 @@ func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=20,21,22,23 --binding=&4xi32=3,4,5,6 --binding=&4xi32=0 --expected_binding=4xi32=20,21,22,23 --expected_binding=4xi32=3,4,5,6 --expected_binding=4xi32=17,17,17,17
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs[%zero] : buffer -> view<4xi32, #dense>
   %rhs_view = buffer.view %rhs[%zero] : buffer -> view<4xi32, #dense>
@@ -217,9 +217,9 @@ func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=4660,22136,255,1 --binding=&4xi32=0 --expected_binding=4xi32=4660,22136,255,1 --expected_binding=4xi32=64,128,240,16
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%input: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<1x4xi32, #dense>
@@ -245,9 +245,9 @@ func.def @loom_kernel(%input: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&8xi32=1,2,3,4,5,6,7,8 --binding=&8xi32=10,10,10,10,10,10,10,10 --binding=&8xi32=0 --expected_binding=8xi32=1,2,3,4,5,6,7,8 --expected_binding=8xi32=10,10,10,10,10,10,10,10 --expected_binding=8xi32=0,0,0,0,15,16,17,18
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs[%zero] : buffer -> view<1x8xi32, #dense>
@@ -266,9 +266,9 @@ func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&256xi32=1 --binding=&256xi32=5 --binding=&256xi32=0 --expected_binding=256xi32=1 --expected_binding=256xi32=5 --expected_binding=256xi32=6
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs[%zero] : buffer -> view<64x4xi32, #dense>
@@ -287,9 +287,9 @@ func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&256xi32=1 --binding=&256xi32=0 --expected_binding=256xi32=1 --expected_binding=256xi32=6
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%input: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
@@ -307,9 +307,9 @@ func.def @loom_kernel(%input: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=100,100,100,100 --binding=&4xi32=0 --expected_binding=4xi32=100,100,100,100 --expected_binding=4xi32=100,101,102,103
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%input: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%input: buffer, %output: buffer) {
   %zero_offset = index.constant 0 : offset
   %input_view = buffer.view %input[%zero_offset] : buffer -> view<4xi32, #dense>
   %output_view = buffer.view %output[%zero_offset] : buffer -> view<4xi32, #dense>
@@ -328,9 +328,9 @@ func.def @loom_kernel(%input: buffer, %output: buffer) {
 // REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=5,6,7,8 --binding=&4xi32=0 --binding=&64xi32=0 --expected_binding=4xi32=5,6,7,8 --expected_binding=4xi32=5,6,7,8 --expected_binding=64xi32=7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-low.func.def target(@gfx_target) @loom_kernel() {
+low.func.def target(@gfx_target) abi(hal_kernel) @loom_kernel() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %wide_target = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
@@ -352,9 +352,9 @@ low.func.def target(@gfx_target) @loom_kernel() {
 // ====
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&1xi32=0 --expected_binding=1xi32=42
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%output: buffer) {
   %zero = index.constant 0 : offset
   %view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
   %value = vector.constant 42 : vector<1xi32>
@@ -367,9 +367,9 @@ func.def @loom_kernel(%output: buffer) {
 // ====
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&1xi32=35 --binding=&1xi32=0 --expected_binding=1xi32=35 --expected_binding=1xi32=42
 
-target.preset @gfx_target {key = "amdgpu-current", source = @loom_kernel}
+target.profile @gfx_target preset("amdgpu-current")
 
-func.def @loom_kernel(%input: buffer, %output: buffer) {
+func.def target(@gfx_target) @loom_kernel(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<1xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>

@@ -20,9 +20,9 @@ extern "C" {
 typedef struct loom_run_candidate_compile_options_t {
   // VM module name stored in VM bytecode archives. Empty uses "loom".
   iree_string_view_t module_name;
-  // Optional target.bundle symbol to compile. Empty requires one compatible
-  // target for the selected backend.
-  iree_string_view_t target_symbol;
+  // Optional function symbol to compile. Empty requires one compatible function
+  // entry for the selected backend.
+  iree_string_view_t entry_symbol;
   // Diagnostic sink used for verification, lowering, scheduling, and
   // allocation diagnostics.
   loom_diagnostic_sink_t diagnostic_sink;

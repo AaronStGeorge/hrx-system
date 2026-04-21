@@ -37,7 +37,7 @@ iree_status_t loom_run_hal_candidate_compile(
                                              &options->report_row_storage);
   out_candidate->compile_report.artifact_kind =
       LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
-  out_candidate->compile_report.target_symbol = options->target_symbol;
+  out_candidate->compile_report.entry_symbol = options->entry_symbol;
   out_candidate->compile_report.backend_name = backend->name;
   out_candidate->compile_report.target_family_name =
       backend->target_family_name;
@@ -61,13 +61,13 @@ iree_status_t loom_run_hal_candidate_compile(
   if (iree_status_is_ok(status)) {
     status = backend->compile(
         backend, run_module->module, &out_candidate->target,
-        options->target_symbol, options->diagnostic_sink,
+        options->entry_symbol, options->diagnostic_sink,
         options->source_resolver, options->max_errors,
         &out_candidate->compile_report, allocator, &out_candidate->executable);
   }
   out_candidate->compile_report.artifact_kind =
       LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
-  out_candidate->compile_report.target_symbol = options->target_symbol;
+  out_candidate->compile_report.entry_symbol = options->entry_symbol;
   out_candidate->compile_report.backend_name = backend->name;
   out_candidate->compile_report.target_family_name =
       backend->target_family_name;

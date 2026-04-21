@@ -29,10 +29,10 @@ extern "C" {
 typedef struct loom_ireevm_module_compile_options_t {
   // VM module name stored in the emitted archive. Empty uses "loom".
   iree_string_view_t module_name;
-  // Optional target.bundle symbol to compile. Empty requires exactly one
-  // IREE-VM-compatible target bundle after preset expansion. A leading '@' is
+  // Optional function symbol to compile. Empty requires exactly one
+  // IREE-VM-compatible function with a target profile. A leading '@' is
   // accepted for command-line ergonomics.
-  iree_string_view_t target_symbol;
+  iree_string_view_t entry_symbol;
   // Diagnostic sink used for verification, lowering, scheduling, and
   // allocation diagnostics. A NULL callback still counts diagnostics.
   loom_diagnostic_sink_t diagnostic_sink;
@@ -49,10 +49,11 @@ typedef struct loom_ireevm_module_compile_options_t {
 
 // Compiles |module| into an allocator-owned IREE VM bytecode module archive.
 //
-// |module| is mutated in place: compact target.preset records are expanded to
-// explicit target records and the selected source function gains sibling low
-// IR produced by source-to-low lowering. The caller owns |out_archive| and must
-// release it with loom_ireevm_module_archive_deinitialize.
+// |module| is mutated in place: the selected function gains sibling low IR
+// produced by source-to-low lowering. Target profiles are resolved through the
+// linked descriptor registry without materializing companion target records in
+// the IR. The caller owns |out_archive| and must release it with
+// loom_ireevm_module_archive_deinitialize.
 iree_status_t loom_ireevm_compile_module_archive(
     loom_module_t* module, const loom_ireevm_module_compile_options_t* options,
     iree_allocator_t allocator, loom_ireevm_module_archive_t* out_archive);

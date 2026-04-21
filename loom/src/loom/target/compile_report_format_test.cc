@@ -44,7 +44,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   loom_target_compile_report_t report = {};
   loom_target_compile_report_initialize(&report);
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
-  report.target_symbol = IREE_SVL("vm_target");
+  report.entry_symbol = IREE_SVL("branchy");
   report.target_bundle_name = IREE_SVL("vm_target");
   report.lowered_symbol = IREE_SVL("branchy");
   loom_target_compile_report_record_artifact_size(&report, 128);
@@ -71,6 +71,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
 
   iree_string_view_t output = iree_string_builder_view(&builder);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("artifact=vm-archive"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("entry=branchy"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("pressure_classes=1"), 0),
             IREE_STRING_VIEW_NPOS);

@@ -36,11 +36,11 @@ iree_status_t loom_ireevm_run_candidate_compile(
   out_candidate->compile_report.artifact_kind =
       LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
   out_candidate->compile_report.module_name = options->module_name;
-  out_candidate->compile_report.target_symbol = options->target_symbol;
+  out_candidate->compile_report.entry_symbol = options->entry_symbol;
 
   const loom_ireevm_module_compile_options_t compile_options = {
       .module_name = options->module_name,
-      .target_symbol = options->target_symbol,
+      .entry_symbol = options->entry_symbol,
       .diagnostic_sink = options->diagnostic_sink,
       .source_resolver = options->source_resolver,
       .max_errors = options->max_errors,
@@ -52,7 +52,7 @@ iree_status_t loom_ireevm_run_candidate_compile(
   out_candidate->compile_report.artifact_kind =
       LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
   out_candidate->compile_report.module_name = options->module_name;
-  out_candidate->compile_report.target_symbol = options->target_symbol;
+  out_candidate->compile_report.entry_symbol = options->entry_symbol;
   if (iree_status_is_ok(status)) {
     loom_target_compile_report_record_artifact_size(
         &out_candidate->compile_report, out_candidate->archive.data_length);

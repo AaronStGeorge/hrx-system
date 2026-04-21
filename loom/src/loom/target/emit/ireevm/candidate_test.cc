@@ -27,9 +27,9 @@ iree_status_t InitializeLowDescriptorRegistry(
 }
 
 constexpr char kVmSource[] =
-    "target.preset @vm_target {key = \"iree-vm\", source = @branchy}\n"
+    "target.profile @vm_target preset(\"iree-vm\")\n"
     "\n"
-    "func.def @branchy(%lhs: i32, %rhs: i32) -> (i32) {\n"
+    "func.def target(@vm_target) @branchy(%lhs: i32, %rhs: i32) -> (i32) {\n"
     "  %c0 = scalar.constant 0 : i32\n"
     "  %is_zero = scalar.cmpi eq, %lhs, %c0 : i32\n"
     "  cfg.cond_br %is_zero, ^then, ^else : i1\n"

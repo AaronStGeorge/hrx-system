@@ -21,10 +21,10 @@
 #include "loom/tooling/execution/one_shot.h"
 #include "loom/tooling/execution/session.h"
 
-IREE_FLAG(string, loom_target, "",
-          "Optional target.bundle symbol to compile, such as '@vm_target'. "
-          "When omitted the module must contain exactly one target compatible "
-          "with the selected backend.");
+IREE_FLAG(string, loom_entry, "",
+          "Optional function symbol to compile, such as '@main'. When omitted "
+          "the module must contain exactly one function entry compatible with "
+          "the selected backend.");
 IREE_FLAG(string, loom_backend, "vm",
           "Compilation backend to run, such as 'vm' or a linked native "
           "backend.");
@@ -419,7 +419,7 @@ int iree_run_loom_main(int argc, char** argv,
   loom_run_candidate_compile_options_t compile_options = {0};
   loom_run_candidate_compile_options_initialize(&compile_options);
   compile_options.module_name = iree_make_cstring_view(FLAG_loom_module_name);
-  compile_options.target_symbol = iree_make_cstring_view(FLAG_loom_target);
+  compile_options.entry_symbol = iree_make_cstring_view(FLAG_loom_entry);
   loom_run_compile_report_capture_options_t compile_report_options = {0};
   if (iree_status_is_ok(status)) {
     status = iree_run_loom_compile_report_options_initialize(

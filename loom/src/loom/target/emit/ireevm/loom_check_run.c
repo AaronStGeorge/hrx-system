@@ -14,8 +14,8 @@
 #include "loom/tooling/execution/vm_invocation.h"
 
 typedef struct loom_ireevm_loom_check_run_options_t {
-  // Module-local target symbol selected by --loom_target.
-  iree_string_view_t target_symbol;
+  // Module-local entry function selected by --loom_entry.
+  iree_string_view_t entry_symbol;
   // Module name embedded in the emitted VM bytecode archive.
   iree_string_view_t module_name;
   // Exported VM function selected by --function.
@@ -174,12 +174,12 @@ static iree_status_t loom_ireevm_loom_check_run_options_initialize(
       continue;
     }
     status = loom_check_run_arguments_take_option_value(
-        arguments, &i, IREE_SV("loom_target"), &value, &matched);
+        arguments, &i, IREE_SV("loom_entry"), &value, &matched);
     if (!iree_status_is_ok(status)) {
       break;
     }
     if (matched) {
-      out_options->target_symbol = value;
+      out_options->entry_symbol = value;
       continue;
     }
     status = loom_check_run_arguments_take_option_value(
@@ -352,7 +352,7 @@ static iree_status_t loom_ireevm_loom_check_run_execute(
     loom_run_candidate_compile_options_t compile_options = {0};
     loom_run_candidate_compile_options_initialize(&compile_options);
     compile_options.module_name = run_options.module_name;
-    compile_options.target_symbol = run_options.target_symbol;
+    compile_options.entry_symbol = run_options.entry_symbol;
     compile_options.source_resolver = loom_run_module_source_resolver(&module);
     loom_run_compile_report_capture_configure_compile_options(
         &compile_report_capture, &compile_options);

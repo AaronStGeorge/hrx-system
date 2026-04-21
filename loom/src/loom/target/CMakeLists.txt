@@ -214,14 +214,15 @@ loom_cc_library(
   DEPS
     ::ir_records
     ::low_descriptor_registry
-    ::presets
     ::types
     iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
     loom::src::loom::codegen::low::verify
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
+    loom::src::loom::ops::function_symbol_facts
+    loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
     loom::src::loom::verify
   PUBLIC

@@ -25,10 +25,10 @@ extern "C" {
 #endif
 
 typedef struct loom_amdgpu_module_compile_options_t {
-  // Optional target.bundle symbol to compile. Empty requires exactly one
-  // AMDGPU HAL-native-compatible target bundle after preset expansion. A
-  // leading '@' is accepted for command-line ergonomics.
-  iree_string_view_t target_symbol;
+  // Optional function symbol to compile. Empty requires exactly one AMDGPU
+  // HAL-native-compatible function with a target profile. A leading '@' is
+  // accepted for command-line ergonomics.
+  iree_string_view_t entry_symbol;
   // Optional AMDHSA processor name such as `gfx1100` overriding the selected
   // preset snapshot CPU. This preserves the preset's descriptor-set family
   // while letting JIT runners specialize to the concrete HAL device ISA.
@@ -49,10 +49,11 @@ typedef struct loom_amdgpu_module_compile_options_t {
 
 // Compiles |module| into an allocator-owned IREE HAL AMDGPU executable.
 //
-// |module| is mutated in place: compact target.preset records are expanded to
-// explicit target records and HAL low.resource imports in the selected
-// low.func.def are materialized before scheduling. The caller owns
-// |out_executable| and must release it with
+// |module| is mutated in place: source functions may gain sibling low IR and
+// HAL low.resource imports in the selected low.func.def are materialized before
+// scheduling. Target profiles are resolved through the linked descriptor
+// registry without materializing companion target records in the IR. The caller
+// owns |out_executable| and must release it with
 // loom_amdgpu_hal_executable_deinitialize.
 iree_status_t loom_amdgpu_compile_hal_executable(
     loom_module_t* module, const loom_amdgpu_module_compile_options_t* options,

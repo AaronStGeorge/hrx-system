@@ -8,12 +8,12 @@
 
 #include <inttypes.h>
 
+#include "loom/analysis/symbol_facts.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
-#include "loom/ops/low/ops.h"
-#include "loom/ops/target/ops.h"
-#include "loom/target/presets.h"
+#include "loom/ops/function_symbol_facts.h"
+#include "loom/ops/op_defs.h"
+#include "loom/ops/target/facts.h"
 
 uint32_t loom_target_module_compile_max_errors(
     const loom_target_module_compile_options_t* options,
@@ -24,17 +24,17 @@ uint32_t loom_target_module_compile_max_errors(
   return default_max_errors;
 }
 
-iree_string_view_t loom_target_module_compile_target_symbol_name(
+iree_string_view_t loom_target_module_compile_entry_symbol_name(
     const loom_target_module_compile_options_t* options) {
   if (!options) {
     return iree_string_view_empty();
   }
-  iree_string_view_t target_symbol =
-      iree_string_view_trim(options->target_symbol);
-  if (iree_string_view_starts_with_char(target_symbol, '@')) {
-    target_symbol = iree_string_view_remove_prefix(target_symbol, 1);
+  iree_string_view_t entry_symbol =
+      iree_string_view_trim(options->entry_symbol);
+  if (iree_string_view_starts_with_char(entry_symbol, '@')) {
+    entry_symbol = iree_string_view_remove_prefix(entry_symbol, 1);
   }
-  return target_symbol;
+  return entry_symbol;
 }
 
 void loom_target_module_compile_diagnostic_emitter_initialize(
@@ -144,15 +144,6 @@ iree_diagnostic_emitter_t loom_target_module_compile_emitter(
   };
 }
 
-iree_status_t loom_target_module_compile_expand_presets(
-    loom_module_t* module,
-    const loom_target_low_descriptor_registry_t* low_registry) {
-  const loom_target_preset_registry_t preset_registry =
-      loom_target_low_descriptor_registry_presets(low_registry);
-  iree_host_size_t expanded_count = 0;
-  return loom_target_expand_presets(module, &preset_registry, &expanded_count);
-}
-
 iree_status_t loom_target_module_compile_verify_module(
     const loom_module_t* module,
     const loom_target_module_compile_options_t* options,
@@ -220,130 +211,202 @@ iree_status_t loom_target_module_compile_find_symbol_by_name(
   return iree_ok_status();
 }
 
-static iree_status_t loom_target_module_compile_select_named_target(
-    const loom_module_t* module, iree_string_view_t target_symbol,
-    loom_target_module_compile_bundle_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t target_kind,
-    loom_target_module_compile_target_t* out_target) {
-  uint16_t target_symbol_id = LOOM_SYMBOL_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_target_module_compile_find_symbol_by_name(
-      module, target_symbol, &target_symbol_id));
-  IREE_RETURN_IF_ERROR(loom_target_ir_bundle_from_symbol_name(
-      module, target_symbol, &out_target->bundle_storage));
-  if (!predicate(predicate_user_data, &out_target->bundle_storage.bundle)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target bundle @%.*s is not compatible with %.*s",
-                            (int)target_symbol.size, target_symbol.data,
-                            (int)target_kind.size, target_kind.data);
+static iree_status_t loom_target_module_compile_initialize_fact_table(
+    const loom_target_low_descriptor_registry_t* low_registry,
+    iree_arena_allocator_t* arena, loom_symbol_fact_table_t* out_fact_table) {
+  if (low_registry == NULL || low_registry->target_bundle_count == 0 ||
+      low_registry->target_bundles == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "module compilation requires target profile presets");
   }
-  out_target->target_ref =
-      (loom_symbol_ref_t){.module_id = 0, .symbol_id = target_symbol_id};
+  loom_target_preset_registry_t* preset_registry = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(arena, sizeof(*preset_registry),
+                                           (void**)&preset_registry));
+  *preset_registry = loom_target_low_descriptor_registry_presets(low_registry);
+
+  loom_symbol_fact_resource_t* resource = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(arena, sizeof(*resource), (void**)&resource));
+  *resource = loom_target_profile_preset_registry_resource(preset_registry);
+  const loom_symbol_fact_table_options_t fact_options = {
+      .resources = loom_make_symbol_fact_resource_list(resource, 1),
+  };
+  loom_symbol_fact_table_initialize_with_options(out_fact_table, &fact_options,
+                                                 arena);
   return iree_ok_status();
 }
 
-static iree_status_t loom_target_module_compile_select_single_target(
-    const loom_module_t* module,
-    loom_target_module_compile_bundle_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t target_kind,
-    loom_target_module_compile_target_t* out_target) {
-  iree_host_size_t candidate_count = 0;
+static iree_status_t loom_target_module_compile_lookup_function_facts(
+    const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
+    loom_symbol_id_t symbol_id,
+    const loom_function_symbol_facts_t** out_function_facts) {
+  const loom_symbol_facts_base_t* base_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_symbol_fact_table_lookup(fact_table, module,
+                                                     symbol_id, &base_facts));
+  *out_function_facts = loom_function_symbol_facts_cast(base_facts);
+  return iree_ok_status();
+}
 
+static void loom_target_module_compile_entry_from_facts(
+    const loom_module_t* module, loom_symbol_id_t symbol_id,
+    const loom_function_symbol_facts_t* function_facts,
+    loom_target_module_compile_entry_t* out_entry) {
+  out_entry->function =
+      loom_func_like_cast(module, function_facts->function_op);
+  out_entry->function_name = function_facts->name;
+  out_entry->function_ref = (loom_symbol_ref_t){
+      .module_id = 0,
+      .symbol_id = symbol_id,
+  };
+  out_entry->target_ref = function_facts->target_symbol;
+  out_entry->bundle_storage.snapshot = *function_facts->target_bundle->snapshot;
+  out_entry->bundle_storage.export_plan = function_facts->export_plan;
+  out_entry->bundle_storage.config = *function_facts->target_bundle->config;
+  out_entry->bundle_storage.bundle = (loom_target_bundle_t){
+      .name = function_facts->target_bundle->name,
+      .snapshot = &out_entry->bundle_storage.snapshot,
+      .export_plan = &out_entry->bundle_storage.export_plan,
+      .config = &out_entry->bundle_storage.config,
+  };
+}
+
+static void loom_target_module_compile_assign_entry(
+    const loom_target_module_compile_entry_t* source,
+    loom_target_module_compile_entry_t* out_entry) {
+  *out_entry = *source;
+  loom_target_ir_bundle_storage_rebind(&out_entry->bundle_storage);
+}
+
+static iree_status_t loom_target_module_compile_try_entry(
+    const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
+    loom_symbol_id_t symbol_id,
+    loom_target_module_compile_entry_predicate_fn_t predicate,
+    void* predicate_user_data, iree_string_view_t entry_kind,
+    bool require_compatible, bool* out_compatible,
+    loom_target_module_compile_entry_t* out_entry) {
+  *out_compatible = false;
+  const loom_function_symbol_facts_t* function_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_lookup_function_facts(
+      module, fact_table, symbol_id, &function_facts));
+  if (!function_facts || !function_facts->has_body) {
+    if (!require_compatible) {
+      return iree_ok_status();
+    }
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "entry symbol is not a function with a body");
+  }
+  if (function_facts->target_bundle == NULL) {
+    if (!require_compatible) {
+      return iree_ok_status();
+    }
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "entry function @%.*s must declare a target profile",
+        (int)function_facts->name.size, function_facts->name.data);
+  }
+
+  loom_target_module_compile_entry_t entry = {0};
+  loom_target_module_compile_entry_from_facts(module, symbol_id, function_facts,
+                                              &entry);
+  if (!predicate(predicate_user_data, &entry)) {
+    if (!require_compatible) {
+      return iree_ok_status();
+    }
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "entry function @%.*s is not compatible with %.*s",
+                            (int)function_facts->name.size,
+                            function_facts->name.data, (int)entry_kind.size,
+                            entry_kind.data);
+  }
+
+  loom_target_module_compile_assign_entry(&entry, out_entry);
+  *out_compatible = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_target_module_compile_select_named_entry(
+    const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
+    iree_string_view_t entry_symbol,
+    loom_target_module_compile_entry_predicate_fn_t predicate,
+    void* predicate_user_data, iree_string_view_t entry_kind,
+    loom_target_module_compile_entry_t* out_entry) {
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_find_symbol_by_name(
+      module, entry_symbol, &symbol_id));
+  bool compatible = false;
+  return loom_target_module_compile_try_entry(
+      module, fact_table, symbol_id, predicate, predicate_user_data, entry_kind,
+      /*require_compatible=*/true, &compatible, out_entry);
+}
+
+static iree_status_t loom_target_module_compile_select_single_entry(
+    const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
+    loom_target_module_compile_entry_predicate_fn_t predicate,
+    void* predicate_user_data, iree_string_view_t entry_kind,
+    loom_target_module_compile_entry_t* out_entry) {
+  iree_host_size_t candidate_count = 0;
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
     if (i > UINT16_MAX) {
       return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "symbol index exceeds target ref range");
+                              "symbol index exceeds entry ref range");
     }
-    const loom_symbol_t* symbol = &module->symbols.entries[i];
-    if (!symbol->defining_op || !loom_target_bundle_isa(symbol->defining_op)) {
+    bool compatible = false;
+    loom_target_module_compile_entry_t candidate = {0};
+    IREE_RETURN_IF_ERROR(loom_target_module_compile_try_entry(
+        module, fact_table, (loom_symbol_id_t)i, predicate, predicate_user_data,
+        entry_kind, /*require_compatible=*/false, &compatible, &candidate));
+    if (!compatible) {
       continue;
     }
-    if (symbol->name_id >= module->strings.count) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "target bundle has invalid symbol name id");
-    }
-    iree_string_view_t symbol_name = module->strings.entries[symbol->name_id];
-    loom_target_ir_bundle_storage_t storage = {0};
-    IREE_RETURN_IF_ERROR(
-        loom_target_ir_bundle_from_symbol_name(module, symbol_name, &storage));
-    if (!predicate(predicate_user_data, &storage.bundle)) {
-      continue;
-    }
-
     ++candidate_count;
     if (candidate_count == 1) {
-      out_target->bundle_storage = storage;
-      loom_target_ir_bundle_storage_rebind(&out_target->bundle_storage);
-      out_target->target_ref =
-          (loom_symbol_ref_t){.module_id = 0, .symbol_id = (uint16_t)i};
+      loom_target_module_compile_assign_entry(&candidate, out_entry);
     }
   }
 
   if (candidate_count == 0) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "module contains no %.*s target bundle",
-                            (int)target_kind.size, target_kind.data);
+    return iree_make_status(
+        IREE_STATUS_NOT_FOUND,
+        "module contains no %.*s-compatible function with a target profile",
+        (int)entry_kind.size, entry_kind.data);
   }
   if (candidate_count > 1) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "module contains %" PRIhsz
-                            " %.*s target bundles; pass --loom-target=@name",
-                            candidate_count, (int)target_kind.size,
-                            target_kind.data);
+                            " %.*s-compatible functions; select one by symbol",
+                            candidate_count, (int)entry_kind.size,
+                            entry_kind.data);
   }
   return iree_ok_status();
 }
 
-iree_status_t loom_target_module_compile_select_target(
+iree_status_t loom_target_module_compile_select_entry(
     const loom_module_t* module,
     const loom_target_module_compile_options_t* options,
-    loom_target_module_compile_bundle_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t target_kind,
-    loom_target_module_compile_target_t* out_target) {
+    const loom_target_low_descriptor_registry_t* low_registry,
+    loom_target_module_compile_entry_predicate_fn_t predicate,
+    void* predicate_user_data, iree_string_view_t entry_kind,
+    iree_arena_allocator_t* arena,
+    loom_target_module_compile_entry_t* out_entry) {
+  IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(predicate);
-  IREE_ASSERT_ARGUMENT(out_target);
-  *out_target = (loom_target_module_compile_target_t){0};
-  iree_string_view_t target_symbol =
-      loom_target_module_compile_target_symbol_name(options);
-  if (!iree_string_view_is_empty(target_symbol)) {
-    return loom_target_module_compile_select_named_target(
-        module, target_symbol, predicate, predicate_user_data, target_kind,
-        out_target);
-  }
-  return loom_target_module_compile_select_single_target(
-      module, predicate, predicate_user_data, target_kind, out_target);
-}
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_entry);
+  *out_entry = (loom_target_module_compile_entry_t){0};
 
-iree_status_t loom_target_module_compile_find_source_function(
-    const loom_module_t* module, const loom_target_bundle_t* bundle,
-    loom_func_like_t* out_function) {
-  IREE_ASSERT_ARGUMENT(out_function);
-  *out_function = (loom_func_like_t){0};
-  if (!bundle || !bundle->export_plan ||
-      iree_string_view_is_empty(bundle->export_plan->source_symbol)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "selected target bundle does not name an export source function");
+  loom_symbol_fact_table_t fact_table = {0};
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_initialize_fact_table(
+      low_registry, arena, &fact_table));
+
+  iree_string_view_t entry_symbol =
+      loom_target_module_compile_entry_symbol_name(options);
+  if (!iree_string_view_is_empty(entry_symbol)) {
+    return loom_target_module_compile_select_named_entry(
+        module, &fact_table, entry_symbol, predicate, predicate_user_data,
+        entry_kind, out_entry);
   }
-  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_target_module_compile_find_symbol_by_name(
-      module, bundle->export_plan->source_symbol, &symbol_id));
-  const loom_symbol_t* symbol = &module->symbols.entries[symbol_id];
-  if (!symbol->defining_op) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "source function @%.*s has no definition",
-                            (int)bundle->export_plan->source_symbol.size,
-                            bundle->export_plan->source_symbol.data);
-  }
-  loom_func_like_t function = loom_func_like_cast(module, symbol->defining_op);
-  if (!loom_func_like_isa(function) || !loom_func_like_body(function) ||
-      (function.op->kind != LOOM_OP_FUNC_DEF &&
-       function.op->kind != LOOM_OP_LOW_FUNC_DEF)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "source symbol @%.*s is not a func.def or low.func.def with a body",
-        (int)bundle->export_plan->source_symbol.size,
-        bundle->export_plan->source_symbol.data);
-  }
-  *out_function = function;
-  return iree_ok_status();
+  return loom_target_module_compile_select_single_entry(
+      module, &fact_table, predicate, predicate_user_data, entry_kind,
+      out_entry);
 }

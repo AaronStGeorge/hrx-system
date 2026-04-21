@@ -126,7 +126,7 @@ static iree_status_t loom_target_compile_report_format_summary(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
       builder, IREE_SV("backend"), report->backend_name));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
-      builder, IREE_SV("target"), report->target_symbol));
+      builder, IREE_SV("entry"), report->entry_symbol));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(
       builder, IREE_SV("bundle"), report->target_bundle_name));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_append_string_field(

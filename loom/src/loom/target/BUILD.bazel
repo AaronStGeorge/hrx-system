@@ -184,16 +184,17 @@ loom_cc_library(
     deps = [
         ":ir_records",
         ":low_descriptor_registry",
-        ":presets",
         ":types",
+        "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops:function_symbol_facts",
+        "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

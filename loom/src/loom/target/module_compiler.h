@@ -7,13 +7,14 @@
 // Shared module-to-target compilation helpers.
 //
 // These utilities own target-neutral mechanics that every concrete backend
-// needs: target.preset expansion, generic and low verification, target bundle
-// selection, source symbol lookup, and diagnostic emission with source ranges.
+// needs: generic and low verification, function-entry selection, function-owned
+// target profile resolution, and diagnostic emission with source ranges.
 
 #ifndef LOOM_TARGET_MODULE_COMPILER_H_
 #define LOOM_TARGET_MODULE_COMPILER_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/ir.h"
 #include "loom/target/ir_records.h"
@@ -25,10 +26,10 @@ extern "C" {
 #endif
 
 typedef struct loom_target_module_compile_options_t {
-  // Optional target.bundle symbol to compile. Empty requires exactly one
-  // compatible target bundle after preset expansion. A leading '@' is accepted
-  // for command-line ergonomics.
-  iree_string_view_t target_symbol;
+  // Optional function symbol to compile. Empty requires exactly one compatible
+  // function with a target profile. A leading '@' is accepted for command-line
+  // ergonomics.
+  iree_string_view_t entry_symbol;
   // Diagnostic sink used for verification, lowering, scheduling, and
   // allocation diagnostics. A NULL callback still counts diagnostics.
   loom_diagnostic_sink_t diagnostic_sink;
@@ -39,12 +40,19 @@ typedef struct loom_target_module_compile_options_t {
   uint32_t max_errors;
 } loom_target_module_compile_options_t;
 
-typedef struct loom_target_module_compile_target_t {
-  // Materialized target.bundle records selected for this compilation.
-  loom_target_ir_bundle_storage_t bundle_storage;
-  // Module-local symbol reference for the selected target.bundle op.
+typedef struct loom_target_module_compile_entry_t {
+  // Source or low entry function selected for this compilation.
+  loom_func_like_t function;
+  // Borrowed selected function symbol name.
+  iree_string_view_t function_name;
+  // Module-local symbol reference for |function|.
+  loom_symbol_ref_t function_ref;
+  // Module-local target.profile symbol referenced by |function|.
   loom_symbol_ref_t target_ref;
-} loom_target_module_compile_target_t;
+  // Materialized target bundle selected by |function|. The export plan is the
+  // function-owned effective export plan, not a profile-global backreference.
+  loom_target_ir_bundle_storage_t bundle_storage;
+} loom_target_module_compile_entry_t;
 
 typedef struct loom_target_module_compile_diagnostic_emitter_t {
   // Module containing op locations referenced by emitted diagnostics.
@@ -57,16 +65,16 @@ typedef struct loom_target_module_compile_diagnostic_emitter_t {
   loom_emitter_t emitter;
 } loom_target_module_compile_diagnostic_emitter_t;
 
-typedef bool(IREE_API_PTR* loom_target_module_compile_bundle_predicate_fn_t)(
-    void* user_data, const loom_target_bundle_t* bundle);
+typedef bool(IREE_API_PTR* loom_target_module_compile_entry_predicate_fn_t)(
+    void* user_data, const loom_target_module_compile_entry_t* entry);
 
 // Returns |options->max_errors| when present, otherwise |default_max_errors|.
 uint32_t loom_target_module_compile_max_errors(
     const loom_target_module_compile_options_t* options,
     uint32_t default_max_errors);
 
-// Returns the normalized target symbol name without a leading '@'.
-iree_string_view_t loom_target_module_compile_target_symbol_name(
+// Returns the normalized entry symbol name without a leading '@'.
+iree_string_view_t loom_target_module_compile_entry_symbol_name(
     const loom_target_module_compile_options_t* options);
 
 // Initializes a diagnostic emitter for compilation subsystems.
@@ -78,11 +86,6 @@ void loom_target_module_compile_diagnostic_emitter_initialize(
 // Returns a callback wrapper for |emitter|.
 iree_diagnostic_emitter_t loom_target_module_compile_emitter(
     loom_target_module_compile_diagnostic_emitter_t* emitter);
-
-// Expands all target.preset records known to |low_registry|.
-iree_status_t loom_target_module_compile_expand_presets(
-    loom_module_t* module,
-    const loom_target_low_descriptor_registry_t* low_registry);
 
 // Runs generic module verification and fails if any diagnostics were emitted.
 iree_status_t loom_target_module_compile_verify_module(
@@ -104,19 +107,16 @@ iree_status_t loom_target_module_compile_find_symbol_by_name(
     const loom_module_t* module, iree_string_view_t symbol_name,
     uint16_t* out_symbol_id);
 
-// Selects either the named target bundle or the only compatible target bundle
+// Selects either the named function entry or the only compatible function entry
 // according to |predicate|.
-iree_status_t loom_target_module_compile_select_target(
+iree_status_t loom_target_module_compile_select_entry(
     const loom_module_t* module,
     const loom_target_module_compile_options_t* options,
-    loom_target_module_compile_bundle_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t target_kind,
-    loom_target_module_compile_target_t* out_target);
-
-// Resolves |bundle|'s export source symbol as a func-like definition.
-iree_status_t loom_target_module_compile_find_source_function(
-    const loom_module_t* module, const loom_target_bundle_t* bundle,
-    loom_func_like_t* out_function);
+    const loom_target_low_descriptor_registry_t* low_registry,
+    loom_target_module_compile_entry_predicate_fn_t predicate,
+    void* predicate_user_data, iree_string_view_t entry_kind,
+    iree_arena_allocator_t* arena,
+    loom_target_module_compile_entry_t* out_entry);
 
 #ifdef __cplusplus
 }  // extern "C"

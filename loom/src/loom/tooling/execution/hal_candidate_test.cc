@@ -64,13 +64,13 @@ iree_status_t FakeHalFormatTarget(const loom_run_hal_backend_t* backend,
 iree_status_t FakeHalCompile(
     const loom_run_hal_backend_t* backend, loom_module_t* module,
     const loom_run_hal_selected_target_t* target,
-    iree_string_view_t target_symbol, loom_diagnostic_sink_t diagnostic_sink,
+    iree_string_view_t entry_symbol, loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
     loom_run_hal_executable_t* out_executable) {
   (void)backend;
   (void)module;
-  (void)target_symbol;
+  (void)entry_symbol;
   (void)diagnostic_sink;
   (void)source_resolver;
   (void)max_errors;

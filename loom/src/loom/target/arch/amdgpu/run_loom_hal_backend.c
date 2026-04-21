@@ -122,7 +122,7 @@ static iree_status_t iree_run_loom_amdgpu_format_target(
   return iree_run_loom_amdgpu_format_target_id(processor, output);
 }
 
-static iree_status_t iree_run_loom_amdgpu_rewrite_current_presets(
+static iree_status_t iree_run_loom_amdgpu_rewrite_current_profiles(
     loom_module_t* module, const loom_amdgpu_processor_info_t* processor) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(processor);
@@ -138,17 +138,17 @@ static iree_status_t iree_run_loom_amdgpu_rewrite_current_presets(
   loom_block_t* block = loom_module_block(module);
   loom_op_t* op = NULL;
   loom_block_for_each_op(block, op) {
-    if (!loom_target_preset_isa(op)) {
+    if (!loom_target_profile_isa(op)) {
       continue;
     }
-    const loom_string_id_t key_id = loom_target_preset_key(op);
+    const loom_string_id_t key_id = loom_target_profile_preset(op);
     if (key_id == LOOM_STRING_ID_INVALID || key_id >= module->strings.count) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "target preset has invalid key string id");
+                              "target profile has invalid preset string id");
     }
     iree_string_view_t key = module->strings.entries[key_id];
     if (iree_string_view_equal(key, kIreeRunLoomAmdgpuCurrentPreset)) {
-      loom_op_attrs(op)[loom_target_preset_key_ATTR_INDEX] =
+      loom_op_attrs(op)[loom_target_profile_preset_ATTR_INDEX] =
           loom_attr_string(selected_key_id);
     }
   }
@@ -158,7 +158,7 @@ static iree_status_t iree_run_loom_amdgpu_rewrite_current_presets(
 static iree_status_t iree_run_loom_amdgpu_compile(
     const loom_run_hal_backend_t* backend, loom_module_t* module,
     const loom_run_hal_selected_target_t* target,
-    iree_string_view_t target_symbol, loom_diagnostic_sink_t diagnostic_sink,
+    iree_string_view_t entry_symbol, loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
     loom_run_hal_executable_t* out_executable) {
@@ -171,7 +171,7 @@ static iree_status_t iree_run_loom_amdgpu_compile(
   const loom_amdgpu_processor_info_t* processor =
       (const loom_amdgpu_processor_info_t*)target->data;
   IREE_RETURN_IF_ERROR(
-      iree_run_loom_amdgpu_rewrite_current_presets(module, processor));
+      iree_run_loom_amdgpu_rewrite_current_profiles(module, processor));
 
   loom_amdgpu_hal_executable_t* executable = NULL;
   IREE_RETURN_IF_ERROR(iree_allocator_malloc(allocator, sizeof(*executable),
@@ -179,7 +179,7 @@ static iree_status_t iree_run_loom_amdgpu_compile(
   *executable = (loom_amdgpu_hal_executable_t){0};
 
   const loom_amdgpu_module_compile_options_t compile_options = {
-      .target_symbol = target_symbol,
+      .entry_symbol = entry_symbol,
       .target_cpu = processor->target_cpu,
       .diagnostic_sink = diagnostic_sink,
       .source_resolver = source_resolver,

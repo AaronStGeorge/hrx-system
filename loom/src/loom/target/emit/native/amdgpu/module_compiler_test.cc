@@ -28,9 +28,8 @@ iree_status_t ParseLowNoopModule(loom_context_t* context,
                                  iree_arena_block_pool_t* block_pool,
                                  loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "low.func.def target(@gfx_target) abi(hal_kernel) @loom_kernel() {\n"
       "  low.return\n"
       "}\n";
   loom_text_parse_options_t parse_options = {
@@ -45,9 +44,8 @@ iree_status_t ParseLowMemoryAluStressModule(loom_context_t* context,
                                             iree_arena_block_pool_t* block_pool,
                                             loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "low.func.def target(@gfx_target) abi(hal_kernel) @loom_kernel() {\n"
       "  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>\n"
       "  %source = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
@@ -90,9 +88,8 @@ iree_status_t ParseLowWorkitemYZModule(loom_context_t* context,
                                        iree_arena_block_pool_t* block_pool,
                                        loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "low.func.def target(@gfx_target) abi(hal_kernel) @loom_kernel() {\n"
       "  %tid_y = low.live_in<amdgpu.workitem_id.y> : reg<amdgpu.vgpr>\n"
       "  %tid_z = low.live_in<amdgpu.workitem_id.z> : reg<amdgpu.vgpr>\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
@@ -120,9 +117,8 @@ iree_status_t ParseSemanticVectorModule(loom_context_t* context,
                                         iree_arena_block_pool_t* block_pool,
                                         loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "func.def @loom_kernel() {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "func.def target(@gfx_target) @loom_kernel() {\n"
       "  %lhs = vector.constant 3 : vector<1xi32>\n"
       "  %rhs = vector.constant 7 : vector<1xi32>\n"
       "  %sum = vector.addi %lhs, %rhs : vector<1xi32>\n"
@@ -141,9 +137,8 @@ iree_status_t ParseSemanticBufferModule(loom_context_t* context,
                                         iree_arena_block_pool_t* block_pool,
                                         loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "func.def @loom_kernel(%output: buffer) {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "func.def target(@gfx_target) @loom_kernel(%output: buffer) {\n"
       "  func.return\n"
       "}\n";
   loom_text_parse_options_t parse_options = {
@@ -158,9 +153,8 @@ iree_status_t ParseSemanticBufferStoreModule(
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
     loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "func.def @loom_kernel(%output: buffer) {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "func.def target(@gfx_target) @loom_kernel(%output: buffer) {\n"
       "  %zero = index.constant 0 : offset\n"
       "  %view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>\n"
       "  %value = vector.constant 42 : vector<1xi32>\n"
@@ -179,9 +173,9 @@ iree_status_t ParseSemanticBufferLoadAddStoreModule(
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
     loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "func.def @loom_kernel(%input: buffer, %output: buffer) {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "func.def target(@gfx_target) @loom_kernel(%input: buffer, "
+      "%output: buffer) {\n"
       "  %zero = index.constant 0 : offset\n"
       "  %input_view = buffer.view %input[%zero] : buffer -> "
       "view<1xi32, #dense>\n"
@@ -207,9 +201,9 @@ iree_status_t ParseSemanticWorkitemIndexedLoadAddStoreModule(
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
     loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "func.def @loom_kernel(%input: buffer, %output: buffer) {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "func.def target(@gfx_target) @loom_kernel(%input: buffer, "
+      "%output: buffer) {\n"
       "  %tid = kernel.workitem.id<x> : index\n"
       "  %zero = index.constant 0 : offset\n"
       "  %input_view = buffer.view %input[%zero] : buffer -> "
@@ -236,9 +230,9 @@ iree_status_t ParseSemanticWorkitemIndexedB128CopyModule(
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
     loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "func.def @loom_kernel(%input: buffer, %output: buffer) {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "func.def target(@gfx_target) @loom_kernel(%input: buffer, "
+      "%output: buffer) {\n"
       "  %tid = kernel.workitem.id<x> : index\n"
       "  %zero = index.constant 0 : offset\n"
       "  %input_view = buffer.view %input[%zero] : buffer -> "
@@ -263,9 +257,9 @@ iree_status_t ParseSemanticWorkitemIndexedB128AddModule(
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
     loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "func.def @loom_kernel(%lhs: buffer, %rhs: buffer, %output: buffer) {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "func.def target(@gfx_target) @loom_kernel(%lhs: buffer, %rhs: buffer, "
+      "%output: buffer) {\n"
       "  %tid = kernel.workitem.id<x> : index\n"
       "  %zero = index.constant 0 : offset\n"
       "  %lhs_view = buffer.view %lhs[%zero] : buffer -> "
@@ -295,9 +289,9 @@ iree_status_t ParseSemanticWorkgroupB128RoundtripModule(
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
     loom_module_t** out_module) {
   static const char kSource[] =
-      "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-      "@loom_kernel}\n"
-      "func.def @loom_kernel(%input: buffer, %output: buffer) {\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
+      "func.def target(@gfx_target) @loom_kernel(%input: buffer, "
+      "%output: buffer) {\n"
       "  %tid = kernel.workitem.id<x> : index\n"
       "  %zero = index.constant 0 : offset\n"
       "  %bytes = index.constant 1024 : offset\n"
