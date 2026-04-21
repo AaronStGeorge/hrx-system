@@ -127,57 +127,6 @@ static iree_status_t loom_amdgpu_wait_packet_target_count(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_wait_packet_lookup_descriptor(
-    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
-    loom_amdgpu_wait_packet_descriptor_t* out_descriptor) {
-  IREE_ASSERT_ARGUMENT(out_descriptor);
-  *out_descriptor = (loom_amdgpu_wait_packet_descriptor_t){
-      .descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE,
-  };
-  if (descriptor_set == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU wait packet materialization requires a descriptor set");
-  }
-  if (descriptor_set->descriptor_ref_count != 0 &&
-      descriptor_set->descriptor_refs == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU descriptor reference map is required");
-  }
-  for (uint32_t i = 0; i < descriptor_set->descriptor_ref_count; ++i) {
-    const loom_low_descriptor_ref_t* descriptor_ref =
-        &descriptor_set->descriptor_refs[i];
-    iree_string_view_t descriptor_key = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, descriptor_ref->key_string_offset, &descriptor_key));
-    if (!iree_string_view_equal(descriptor_key, key)) {
-      continue;
-    }
-    if (descriptor_ref->descriptor_ordinal >=
-        descriptor_set->descriptor_count) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "AMDGPU descriptor reference '%.*s' points at descriptor ordinal "
-          "%" PRIu32 " but only %" PRIu32 " descriptors exist",
-          (int)descriptor_key.size, descriptor_key.data,
-          descriptor_ref->descriptor_ordinal, descriptor_set->descriptor_count);
-    }
-    const loom_low_descriptor_t* descriptor =
-        &descriptor_set->descriptors[descriptor_ref->descriptor_ordinal];
-    iree_string_view_t canonical_key = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, descriptor->key_string_offset, &canonical_key));
-    *out_descriptor = (loom_amdgpu_wait_packet_descriptor_t){
-        .available = true,
-        .descriptor_ordinal = descriptor_ref->descriptor_ordinal,
-        .descriptor = descriptor,
-        .key = canonical_key,
-    };
-    return iree_ok_status();
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_wait_packet_verify_target(
     const loom_low_descriptor_set_t* descriptor_set) {
   if (descriptor_set == NULL) {
@@ -197,26 +146,116 @@ static iree_status_t loom_amdgpu_wait_packet_verify_target(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_wait_packet_descriptor_counter_effect(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, bool* out_has_counter_effect,
+    uint16_t* out_counter_id) {
+  *out_has_counter_effect = false;
+  *out_counter_id = LOOM_AMDGPU_WAIT_COUNTER_NONE;
+  if (descriptor->effect_count == 0) {
+    return iree_ok_status();
+  }
+  if (descriptor->effect_start > descriptor_set->effect_count ||
+      descriptor->effect_count >
+          descriptor_set->effect_count - descriptor->effect_start) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU wait descriptor effect range is out of range");
+  }
+  for (uint16_t i = 0; i < descriptor->effect_count; ++i) {
+    const loom_low_effect_t* effect =
+        &descriptor_set->effects[descriptor->effect_start + i];
+    if (effect->kind != LOOM_LOW_EFFECT_KIND_COUNTER) {
+      continue;
+    }
+    if (*out_has_counter_effect) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU wait descriptor carries multiple counter effects");
+    }
+    *out_has_counter_effect = true;
+    *out_counter_id = effect->counter_id;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_wait_packet_assign_descriptor(
+    loom_amdgpu_wait_packet_builder_t* builder, const char* packet_kind,
+    uint32_t descriptor_ordinal, const loom_low_descriptor_t* descriptor,
+    loom_amdgpu_wait_packet_descriptor_t* target_descriptor) {
+  iree_string_view_t key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+      builder->descriptor_set, descriptor->key_string_offset, &key));
+  if (target_descriptor->available) {
+    return iree_make_status(
+        IREE_STATUS_ALREADY_EXISTS,
+        "AMDGPU descriptor set has multiple %s wait packets: '%.*s' and "
+        "'%.*s'",
+        packet_kind, (int)target_descriptor->key.size,
+        target_descriptor->key.data, (int)key.size, key.data);
+  }
+  *target_descriptor = (loom_amdgpu_wait_packet_descriptor_t){
+      .available = true,
+      .descriptor_ordinal = descriptor_ordinal,
+      .descriptor = descriptor,
+      .key = key,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_wait_packet_classify_descriptor(
+    loom_amdgpu_wait_packet_builder_t* builder, uint32_t descriptor_ordinal,
+    const loom_low_descriptor_t* descriptor) {
+  bool has_counter_effect = false;
+  uint16_t counter_id = LOOM_AMDGPU_WAIT_COUNTER_NONE;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_descriptor_counter_effect(
+      builder->descriptor_set, descriptor, &has_counter_effect, &counter_id));
+  if (!has_counter_effect) {
+    return iree_ok_status();
+  }
+  if (descriptor->immediate_count == 2 &&
+      counter_id == LOOM_AMDGPU_WAIT_COUNTER_NONE) {
+    return loom_amdgpu_wait_packet_assign_descriptor(
+        builder, "combined memory", descriptor_ordinal, descriptor,
+        &builder->target.combined_memory_wait);
+  }
+  if (descriptor->immediate_count != 1) {
+    return iree_ok_status();
+  }
+  switch (counter_id) {
+    case LOOM_AMDGPU_WAIT_COUNTER_LOAD:
+      return loom_amdgpu_wait_packet_assign_descriptor(
+          builder, "load", descriptor_ordinal, descriptor,
+          &builder->target.load_wait);
+    case LOOM_AMDGPU_WAIT_COUNTER_STORE:
+      return loom_amdgpu_wait_packet_assign_descriptor(
+          builder, "store", descriptor_ordinal, descriptor,
+          &builder->target.store_wait);
+    case LOOM_AMDGPU_WAIT_COUNTER_ALU:
+      return loom_amdgpu_wait_packet_assign_descriptor(
+          builder, "ALU", descriptor_ordinal, descriptor,
+          &builder->target.alu_wait);
+    default:
+      return iree_ok_status();
+  }
+}
+
 static iree_status_t loom_amdgpu_wait_packet_analyze_target(
     loom_amdgpu_wait_packet_builder_t* builder) {
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_wait_packet_verify_target(builder->descriptor_set));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_lookup_descriptor(
-      builder->descriptor_set, IREE_SV("amdgpu.s_waitcnt"),
-      &builder->target.combined_memory_wait));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_lookup_descriptor(
-      builder->descriptor_set, IREE_SV("amdgpu.s_wait_loadcnt"),
-      &builder->target.load_wait));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_lookup_descriptor(
-      builder->descriptor_set, IREE_SV("amdgpu.s_wait_storecnt"),
-      &builder->target.store_wait));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_lookup_descriptor(
-      builder->descriptor_set, IREE_SV("amdgpu.s_wait_alu"),
-      &builder->target.alu_wait));
-  if (!builder->target.alu_wait.available) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_lookup_descriptor(
-        builder->descriptor_set, IREE_SV("amdgpu.s_waitcnt_depctr"),
-        &builder->target.alu_wait));
+  const loom_amdgpu_wait_packet_descriptor_t unavailable = {
+      .descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE,
+  };
+  builder->target = (loom_amdgpu_wait_packet_target_t){
+      .combined_memory_wait = unavailable,
+      .load_wait = unavailable,
+      .store_wait = unavailable,
+      .alu_wait = unavailable,
+  };
+  for (uint32_t i = 0; i < builder->descriptor_set->descriptor_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_classify_descriptor(
+        builder, i, &builder->descriptor_set->descriptors[i]));
   }
   return iree_ok_status();
 }
