@@ -19,6 +19,13 @@
   (LOOM_AMDGPU_NATIVE_LOW_PHASES | LOOM_TARGET_COVERAGE_PHASE_INSPECT | \
    LOOM_TARGET_COVERAGE_PHASE_RUN)
 
+#define LOOM_AMDGPU_AUTHORED_LOW_PHASES                                        \
+  (LOOM_TARGET_COVERAGE_PHASE_DESCRIPTOR |                                     \
+   LOOM_TARGET_COVERAGE_PHASE_LOW_PARSE |                                      \
+   LOOM_TARGET_COVERAGE_PHASE_SCHEDULE | LOOM_TARGET_COVERAGE_PHASE_ALLOCATE | \
+   LOOM_TARGET_COVERAGE_PHASE_TEXT_EMIT |                                      \
+   LOOM_TARGET_COVERAGE_PHASE_BINARY_ENCODE)
+
 #define LOOM_AMDGPU_MATRIX_DESCRIPTOR_PHASES                                   \
   (LOOM_TARGET_COVERAGE_PHASE_DESCRIPTOR |                                     \
    LOOM_TARGET_COVERAGE_PHASE_LOW_PARSE |                                      \
@@ -34,6 +41,24 @@ static const loom_target_coverage_row_t kLoomAmdgpuTargetCoverageRows[] = {
         .expected_phases = LOOM_AMDGPU_EXECUTABLE_LOW_PHASES,
         .supported_phases = LOOM_AMDGPU_NATIVE_LOW_PHASES,
         .gap_key = IREE_SVL("validation-run-provider-optional"),
+    },
+    {
+        .target_key = IREE_SVL("amdgpu-gfx11"),
+        .descriptor_set_key = IREE_SVL("amdgpu.gfx11.core"),
+        .category = IREE_SVL("memory.workgroup"),
+        .semantic_tag = IREE_SVL("ds-b32-b128-load-store"),
+        .expected_phases = LOOM_AMDGPU_NATIVE_LOW_PHASES,
+        .supported_phases = LOOM_AMDGPU_AUTHORED_LOW_PHASES,
+        .gap_key = IREE_SVL("source-lower-workgroup-memory-missing"),
+    },
+    {
+        .target_key = IREE_SVL("amdgpu-gfx11"),
+        .descriptor_set_key = IREE_SVL("amdgpu.gfx11.core"),
+        .category = IREE_SVL("synchronization"),
+        .semantic_tag = IREE_SVL("waitcnt-and-workgroup-barrier"),
+        .expected_phases = LOOM_AMDGPU_NATIVE_LOW_PHASES,
+        .supported_phases = LOOM_AMDGPU_AUTHORED_LOW_PHASES,
+        .gap_key = IREE_SVL("source-lower-barrier-missing"),
     },
     {
         .target_key = IREE_SVL("amdgpu-gfx11"),

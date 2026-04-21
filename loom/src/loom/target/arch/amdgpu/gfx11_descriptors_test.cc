@@ -189,6 +189,61 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
       store_128_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
       0u);
 
+  const loom_low_descriptor_t* ds_read_128_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.ds_read_b128"));
+  ASSERT_NE(ds_read_128_descriptor, nullptr);
+  EXPECT_EQ(ds_read_128_descriptor->operand_count, 2u);
+  EXPECT_EQ(ds_read_128_descriptor->result_count, 1u);
+  EXPECT_EQ(ds_read_128_descriptor->immediate_count, 1u);
+  EXPECT_EQ(ds_read_128_descriptor->effect_count, 1u);
+  EXPECT_EQ(ds_read_128_descriptor->encoding_format_id,
+            LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  const loom_low_operand_t* ds_read_128_operands =
+      &descriptor_set->operands[ds_read_128_descriptor->operand_start];
+  EXPECT_EQ(ds_read_128_operands[0].unit_count, 4u);
+  EXPECT_EQ(ds_read_128_operands[1].unit_count, 1u);
+  const loom_low_effect_t* ds_read_128_effect =
+      &descriptor_set->effects[ds_read_128_descriptor->effect_start];
+  EXPECT_EQ(ds_read_128_effect->kind, LOOM_LOW_EFFECT_KIND_READ);
+  EXPECT_EQ(ds_read_128_effect->memory_space, LOOM_LOW_MEMORY_SPACE_WORKGROUP);
+  EXPECT_EQ(ds_read_128_effect->width_bits, 128u);
+  EXPECT_NE(ds_read_128_effect->flags & LOOM_LOW_EFFECT_FLAG_DEPENDENCY, 0u);
+  EXPECT_NE(
+      ds_read_128_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+      0u);
+
+  const loom_low_descriptor_t* ds_write_128_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.ds_write_b128"));
+  ASSERT_NE(ds_write_128_descriptor, nullptr);
+  EXPECT_EQ(ds_write_128_descriptor->operand_count, 2u);
+  EXPECT_EQ(ds_write_128_descriptor->result_count, 0u);
+  EXPECT_EQ(ds_write_128_descriptor->immediate_count, 1u);
+  EXPECT_EQ(ds_write_128_descriptor->effect_count, 1u);
+  const loom_low_operand_t* ds_write_128_operands =
+      &descriptor_set->operands[ds_write_128_descriptor->operand_start];
+  EXPECT_EQ(ds_write_128_operands[0].unit_count, 1u);
+  EXPECT_EQ(ds_write_128_operands[1].unit_count, 4u);
+  const loom_low_effect_t* ds_write_128_effect =
+      &descriptor_set->effects[ds_write_128_descriptor->effect_start];
+  EXPECT_EQ(ds_write_128_effect->kind, LOOM_LOW_EFFECT_KIND_WRITE);
+  EXPECT_EQ(ds_write_128_effect->memory_space, LOOM_LOW_MEMORY_SPACE_WORKGROUP);
+  EXPECT_EQ(ds_write_128_effect->width_bits, 128u);
+  EXPECT_NE(ds_write_128_effect->flags & LOOM_LOW_EFFECT_FLAG_DEPENDENCY, 0u);
+  EXPECT_NE(
+      ds_write_128_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+      0u);
+
+  const loom_low_descriptor_t* barrier_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_barrier"));
+  ASSERT_NE(barrier_descriptor, nullptr);
+  EXPECT_EQ(barrier_descriptor->operand_count, 0u);
+  EXPECT_EQ(barrier_descriptor->immediate_count, 0u);
+  EXPECT_EQ(barrier_descriptor->effect_count, 2u);
+  EXPECT_EQ(barrier_descriptor->encoding_format_id,
+            LOOM_AMDGPU_ENCODING_FORMAT_SOPP);
+  EXPECT_NE(barrier_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
+            0u);
+
   const loom_low_descriptor_t* scalar_load_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_load_dwordx2"));
   ASSERT_NE(scalar_load_descriptor, nullptr);

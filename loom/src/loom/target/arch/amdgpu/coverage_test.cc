@@ -43,6 +43,9 @@ TEST(AmdgpuCoverageTest, FormatsRepresentativeRows) {
   EXPECT_NE(json.find("\"target\":\"amdgpu-gfx11\""), std::string::npos);
   EXPECT_NE(json.find("\"semantic\":\"buffer-b128-load-store\""),
             std::string::npos);
+  EXPECT_NE(json.find("\"semantic\":\"ds-b32-b128-load-store\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"category\":\"synchronization\""), std::string::npos);
   EXPECT_NE(json.find("\"gap\":\"source-lower-matrix-encoding-missing\""),
             std::string::npos);
   iree_string_builder_deinitialize(&builder);

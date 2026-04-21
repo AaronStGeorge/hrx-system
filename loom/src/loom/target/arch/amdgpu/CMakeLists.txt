@@ -175,6 +175,7 @@ loom_cc_test(
   SRCS
     "gfx12_descriptors_test.cc"
   DEPS
+    ::encoding_defs
     ::gfx12_descriptors
     loom::src::loom::codegen::low::descriptors
     iree::testing::gtest
@@ -213,6 +214,7 @@ loom_cc_test(
   SRCS
     "gfx1250_descriptors_test.cc"
   DEPS
+    ::encoding_defs
     ::gfx1250_descriptors
     loom::src::loom::codegen::low::descriptors
     iree::testing::gtest
@@ -251,6 +253,7 @@ loom_cc_test(
   SRCS
     "gfx950_descriptors_test.cc"
   DEPS
+    ::encoding_defs
     ::gfx950_descriptors
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::text_asm_roundtrip_test_util

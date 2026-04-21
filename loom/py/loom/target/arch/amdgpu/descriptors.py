@@ -64,6 +64,8 @@ _RESOURCE_VALU = "amdgpu.valu"
 _RESOURCE_SMEM = "amdgpu.smem"
 _RESOURCE_VMEM_LOAD = "amdgpu.vmem.load"
 _RESOURCE_VMEM_STORE = "amdgpu.vmem.store"
+_RESOURCE_LDS_LOAD = "amdgpu.lds.load"
+_RESOURCE_LDS_STORE = "amdgpu.lds.store"
 _RESOURCE_MFMA = "amdgpu.mfma"
 _RESOURCE_WMMA = "amdgpu.wmma"
 _RESOURCE_SWMMAC = "amdgpu.swmmac"
@@ -74,6 +76,9 @@ _SCHEDULE_VALU = "amdgpu.valu"
 _SCHEDULE_SMEM_LOAD = "amdgpu.smem.load"
 _SCHEDULE_VMEM_LOAD = "amdgpu.vmem.load"
 _SCHEDULE_VMEM_STORE = "amdgpu.vmem.store"
+_SCHEDULE_LDS_LOAD = "amdgpu.lds.load"
+_SCHEDULE_LDS_STORE = "amdgpu.lds.store"
+_SCHEDULE_BARRIER = "amdgpu.barrier"
 _SCHEDULE_MFMA = "amdgpu.mfma"
 _SCHEDULE_WMMA = "amdgpu.wmma"
 _SCHEDULE_WMMA_SCALE = "amdgpu.wmma.scale"
@@ -124,6 +129,91 @@ def _matrix_hazards(resource: str) -> tuple[Hazard, ...]:
             producer_stage=0,
             consumer_stage=0,
             distance=2,
+        ),
+    )
+
+
+def _common_scalar_vector_memory_resources() -> tuple[Resource, ...]:
+    return (
+        Resource(_RESOURCE_SALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
+        Resource(_RESOURCE_VALU, capacity_per_cycle=1, kind=ResourceKind.VECTOR_ALU),
+        Resource(_RESOURCE_SMEM, capacity_per_cycle=1, kind=ResourceKind.LOAD),
+        Resource(_RESOURCE_VMEM_LOAD, capacity_per_cycle=1, kind=ResourceKind.LOAD),
+        Resource(_RESOURCE_VMEM_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
+        Resource(_RESOURCE_LDS_LOAD, capacity_per_cycle=1, kind=ResourceKind.LOAD),
+        Resource(_RESOURCE_LDS_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
+    )
+
+
+def _common_scalar_vector_memory_schedule_classes() -> tuple[ScheduleClass, ...]:
+    return (
+        ScheduleClass(
+            _SCHEDULE_SALU,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_SALU, cycles=1, units=1),),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
+            _SCHEDULE_VALU,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
+            hazards=_ALU_WAIT_HAZARDS,
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
+            _SCHEDULE_SMEM_LOAD,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=8,
+            issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.MAY_LOAD,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_VMEM_LOAD,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=16,
+            issue_uses=(IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.MAY_LOAD,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_VMEM_STORE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=16,
+            issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
+            hazards=_STORE_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.MAY_STORE,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_LDS_LOAD,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=8,
+            issue_uses=(IssueUse(_RESOURCE_LDS_LOAD, cycles=1, units=1),),
+            hazards=_LOAD_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.MAY_LOAD,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_LDS_STORE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=8,
+            issue_uses=(IssueUse(_RESOURCE_LDS_STORE, cycles=1, units=1),),
+            hazards=_STORE_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.MAY_STORE,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_BARRIER,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
         ),
     )
 
@@ -325,6 +415,45 @@ _GLOBAL_STORE_B128_EFFECT = Effect(
     width_bits=128,
 )
 
+_WORKGROUP_LOAD_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.WORKGROUP,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=32,
+)
+
+_WORKGROUP_LOAD_B128_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.WORKGROUP,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=128,
+)
+
+_WORKGROUP_STORE_EFFECT = Effect(
+    EffectKind.WRITE,
+    memory_space=MemorySpace.WORKGROUP,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=32,
+)
+
+_WORKGROUP_STORE_B128_EFFECT = Effect(
+    EffectKind.WRITE,
+    memory_space=MemorySpace.WORKGROUP,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=128,
+)
+
+_WORKGROUP_BARRIER_EFFECT = Effect(
+    EffectKind.BARRIER,
+    memory_space=MemorySpace.WORKGROUP,
+    flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
+)
+
+_CONVERGENT_EFFECT = Effect(
+    EffectKind.CONVERGENT,
+    flags=(EffectFlag.ORDERED,),
+)
+
 _WAIT_EFFECT = Effect(
     EffectKind.COUNTER,
     flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
@@ -417,6 +546,42 @@ _IGNORE_GLOBAL_WRITE_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
     is_input=False,
     is_output=True,
     ignore_reason="modeled-by-global-write-effect",
+)
+
+_IGNORE_WORKGROUP_READ_MEMORY = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_DSMEM",
+    data_format_name="FMT_NUM_B32",
+    size_bits=32,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-workgroup-read-effect",
+)
+
+_IGNORE_WORKGROUP_READ_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_DSMEM",
+    data_format_name="FMT_NUM_B128",
+    size_bits=128,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-workgroup-read-effect",
+)
+
+_IGNORE_WORKGROUP_WRITE_MEMORY = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_DSMEM",
+    data_format_name="FMT_NUM_B32",
+    size_bits=32,
+    is_input=False,
+    is_output=True,
+    ignore_reason="modeled-by-workgroup-write-effect",
+)
+
+_IGNORE_WORKGROUP_WRITE_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_DSMEM",
+    data_format_name="FMT_NUM_B128",
+    size_bits=128,
+    is_input=False,
+    is_output=True,
+    ignore_reason="modeled-by-workgroup-write-effect",
 )
 
 
@@ -950,6 +1115,131 @@ def _buffer_store_128_overlay(
     )
 
 
+def _ds_read_b32_overlay(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ds_read_b32",
+        instruction_name="DS_READ_B32",
+        mnemonic="ds_read_b32",
+        encoding_name=encoding_name,
+        semantic_tag="memory.workgroup.load.u32",
+        schedule_class=_SCHEDULE_LDS_LOAD,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+        ),
+        implicit_operands=(_IGNORE_WORKGROUP_READ_MEMORY,),
+        immediate_fields=("OFFSET0",),
+        immediates=(_offset_immediate(8),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_WORKGROUP_LOAD_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _ds_read_b128_overlay(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ds_read_b128",
+        instruction_name="DS_READ_B128",
+        mnemonic="ds_read_b128",
+        encoding_name=encoding_name,
+        semantic_tag="memory.workgroup.load.u128",
+        schedule_class=_SCHEDULE_LDS_LOAD,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=4)),
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+        ),
+        implicit_operands=(_IGNORE_WORKGROUP_READ_MEMORY_B128,),
+        immediate_fields=("OFFSET0",),
+        immediates=(_offset_immediate(8),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_WORKGROUP_LOAD_B128_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _ds_write_b32_overlay(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ds_write_b32",
+        instruction_name="DS_WRITE_B32",
+        mnemonic="ds_write_b32",
+        encoding_name=encoding_name,
+        semantic_tag="memory.workgroup.store.u32",
+        schedule_class=_SCHEDULE_LDS_STORE,
+        operands=(
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+            AmdgpuOperandOverlay("DATA0", _vgpr_operand("value")),
+        ),
+        implicit_operands=(_IGNORE_WORKGROUP_WRITE_MEMORY,),
+        immediate_fields=("OFFSET0",),
+        immediates=(_offset_immediate(8),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_WORKGROUP_STORE_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _ds_write_b128_overlay(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ds_write_b128",
+        instruction_name="DS_WRITE_B128",
+        mnemonic="ds_write_b128",
+        encoding_name=encoding_name,
+        semantic_tag="memory.workgroup.store.u128",
+        schedule_class=_SCHEDULE_LDS_STORE,
+        operands=(
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+            AmdgpuOperandOverlay("DATA0", _vgpr_operand("value", units=4)),
+        ),
+        implicit_operands=(_IGNORE_WORKGROUP_WRITE_MEMORY_B128,),
+        immediate_fields=("OFFSET0",),
+        immediates=(_offset_immediate(8),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_WORKGROUP_STORE_B128_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _ds_memory_overlays(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _ds_read_b32_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+        _ds_read_b128_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+        _ds_write_b32_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+        _ds_write_b128_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+    )
+
+
 def _v_wmma_f32_16x16x16_f16_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_wmma_f32_16x16x16_f16",
@@ -1080,6 +1370,20 @@ def _s_wait_idle_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_barrier_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_barrier",
+        instruction_name="S_BARRIER",
+        mnemonic="s_barrier",
+        encoding_name="ENC_SOPP",
+        semantic_tag="control.barrier.workgroup",
+        schedule_class=_SCHEDULE_BARRIER,
+        operands=(),
+        effects=(_WORKGROUP_BARRIER_EFFECT, _CONVERGENT_EFFECT),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _gfx950_core_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
@@ -1119,7 +1423,9 @@ def _gfx950_core_overlay_descriptors(
                 encoding_name="ENC_MUBUF",
                 resource_field_name="SRSRC",
             ),
+            *_ds_memory_overlays(),
             _v_mfma_f32_16x16x16_f16_overlay(),
+            _s_barrier_overlay(),
             _s_waitcnt_overlay(),
         ),
     )
@@ -1156,7 +1462,9 @@ def _gfx11_core_overlay_descriptors(
             _buffer_store_128_overlay(
                 encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
             ),
+            *_ds_memory_overlays(),
             _v_wmma_f32_16x16x16_f16_overlay(),
+            _s_barrier_overlay(),
             _s_waitcnt_overlay(),
             _s_waitcnt_depctr_overlay(),
             _s_wait_idle_overlay(),
@@ -1206,6 +1514,10 @@ def _gfx12_core_overlay_descriptors(
                 resource_field_name="RSRC",
                 offset_field_name="IOFFSET",
                 offset_bit_width=24,
+            ),
+            *_ds_memory_overlays(
+                encoding_name="ENC_VDS",
+                fixed_encoding_fields=(("OFFSET1", 0),),
             ),
             _v_wmma_f32_16x16x16_f16_overlay(),
             _s_wait_loadcnt_overlay(),
@@ -1259,6 +1571,10 @@ def _gfx1250_core_overlay_descriptors(
                 offset_field_name="IOFFSET",
                 offset_bit_width=24,
             ),
+            *_ds_memory_overlays(
+                encoding_name="ENC_VDS",
+                fixed_encoding_fields=(("OFFSET1", 0),),
+            ),
             _s_wait_loadcnt_overlay(),
             _s_wait_storecnt_overlay(),
             _s_wait_alu_overlay(),
@@ -1303,57 +1619,12 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
     resources=(
-        Resource(_RESOURCE_SALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
-        Resource(_RESOURCE_VALU, capacity_per_cycle=1, kind=ResourceKind.VECTOR_ALU),
-        Resource(_RESOURCE_SMEM, capacity_per_cycle=1, kind=ResourceKind.LOAD),
-        Resource(_RESOURCE_VMEM_LOAD, capacity_per_cycle=1, kind=ResourceKind.LOAD),
-        Resource(_RESOURCE_VMEM_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
+        *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_MFMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
-        ScheduleClass(
-            _SCHEDULE_SALU,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=1,
-            issue_uses=(IssueUse(_RESOURCE_SALU, cycles=1, units=1),),
-            model_quality=ModelQuality.ESTIMATED,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VALU,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=1,
-            issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
-            hazards=_ALU_WAIT_HAZARDS,
-            model_quality=ModelQuality.ESTIMATED,
-        ),
-        ScheduleClass(
-            _SCHEDULE_SMEM_LOAD,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=8,
-            issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_LOAD,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VMEM_LOAD,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=16,
-            issue_uses=(IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_LOAD,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VMEM_STORE,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=16,
-            issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
-            hazards=_STORE_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_STORE,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
+        *_common_scalar_vector_memory_schedule_classes(),
         ScheduleClass(
             _SCHEDULE_MFMA,
             latency_kind=LatencyKind.ESTIMATE,
@@ -1417,57 +1688,12 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
     resources=(
-        Resource(_RESOURCE_SALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
-        Resource(_RESOURCE_VALU, capacity_per_cycle=1, kind=ResourceKind.VECTOR_ALU),
-        Resource(_RESOURCE_SMEM, capacity_per_cycle=1, kind=ResourceKind.LOAD),
-        Resource(_RESOURCE_VMEM_LOAD, capacity_per_cycle=1, kind=ResourceKind.LOAD),
-        Resource(_RESOURCE_VMEM_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
+        *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
-        ScheduleClass(
-            _SCHEDULE_SALU,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=1,
-            issue_uses=(IssueUse(_RESOURCE_SALU, cycles=1, units=1),),
-            model_quality=ModelQuality.ESTIMATED,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VALU,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=1,
-            issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
-            hazards=_ALU_WAIT_HAZARDS,
-            model_quality=ModelQuality.ESTIMATED,
-        ),
-        ScheduleClass(
-            _SCHEDULE_SMEM_LOAD,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=8,
-            issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_LOAD,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VMEM_LOAD,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=16,
-            issue_uses=(IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_LOAD,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VMEM_STORE,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=16,
-            issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
-            hazards=_STORE_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_STORE,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
+        *_common_scalar_vector_memory_schedule_classes(),
         ScheduleClass(
             _SCHEDULE_WMMA,
             latency_kind=LatencyKind.ESTIMATE,
@@ -1548,57 +1774,12 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
     resources=(
-        Resource(_RESOURCE_SALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
-        Resource(_RESOURCE_VALU, capacity_per_cycle=1, kind=ResourceKind.VECTOR_ALU),
-        Resource(_RESOURCE_SMEM, capacity_per_cycle=1, kind=ResourceKind.LOAD),
-        Resource(_RESOURCE_VMEM_LOAD, capacity_per_cycle=1, kind=ResourceKind.LOAD),
-        Resource(_RESOURCE_VMEM_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
+        *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
-        ScheduleClass(
-            _SCHEDULE_SALU,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=1,
-            issue_uses=(IssueUse(_RESOURCE_SALU, cycles=1, units=1),),
-            model_quality=ModelQuality.ESTIMATED,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VALU,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=1,
-            issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
-            hazards=_ALU_WAIT_HAZARDS,
-            model_quality=ModelQuality.ESTIMATED,
-        ),
-        ScheduleClass(
-            _SCHEDULE_SMEM_LOAD,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=8,
-            issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_LOAD,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VMEM_LOAD,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=16,
-            issue_uses=(IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_LOAD,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VMEM_STORE,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=16,
-            issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
-            hazards=_STORE_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_STORE,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
+        *_common_scalar_vector_memory_schedule_classes(),
         ScheduleClass(
             _SCHEDULE_WMMA,
             latency_kind=LatencyKind.ESTIMATE,
@@ -1688,58 +1869,13 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
     resources=(
-        Resource(_RESOURCE_SALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
-        Resource(_RESOURCE_VALU, capacity_per_cycle=1, kind=ResourceKind.VECTOR_ALU),
-        Resource(_RESOURCE_SMEM, capacity_per_cycle=1, kind=ResourceKind.LOAD),
-        Resource(_RESOURCE_VMEM_LOAD, capacity_per_cycle=1, kind=ResourceKind.LOAD),
-        Resource(_RESOURCE_VMEM_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
+        *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
         Resource(_RESOURCE_SWMMAC, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
-        ScheduleClass(
-            _SCHEDULE_SALU,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=1,
-            issue_uses=(IssueUse(_RESOURCE_SALU, cycles=1, units=1),),
-            model_quality=ModelQuality.ESTIMATED,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VALU,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=1,
-            issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
-            hazards=_ALU_WAIT_HAZARDS,
-            model_quality=ModelQuality.ESTIMATED,
-        ),
-        ScheduleClass(
-            _SCHEDULE_SMEM_LOAD,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=8,
-            issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_LOAD,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VMEM_LOAD,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=16,
-            issue_uses=(IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),),
-            hazards=_LOAD_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_LOAD,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
-        ScheduleClass(
-            _SCHEDULE_VMEM_STORE,
-            latency_kind=LatencyKind.VARIABLE,
-            latency_cycles=16,
-            issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
-            hazards=_STORE_WAIT_HAZARDS,
-            flags=(ScheduleClassFlag.MAY_STORE,),
-            model_quality=ModelQuality.FALLBACK,
-        ),
+        *_common_scalar_vector_memory_schedule_classes(),
         ScheduleClass(
             _SCHEDULE_WMMA,
             latency_kind=LatencyKind.ESTIMATE,

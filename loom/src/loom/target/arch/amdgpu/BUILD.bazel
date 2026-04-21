@@ -710,6 +710,7 @@ loom_cc_test(
     name = "gfx12_descriptors_test",
     srcs = ["gfx12_descriptors_test.cc"],
     deps = [
+        ":encoding_defs",
         ":gfx12_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/testing:gtest",
@@ -737,6 +738,7 @@ loom_cc_test(
     name = "gfx1250_descriptors_test",
     srcs = ["gfx1250_descriptors_test.cc"],
     deps = [
+        ":encoding_defs",
         ":gfx1250_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/testing:gtest",
@@ -764,6 +766,7 @@ loom_cc_test(
     name = "gfx950_descriptors_test",
     srcs = ["gfx950_descriptors_test.cc"],
     deps = [
+        ":encoding_defs",
         ":gfx950_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:text_asm_roundtrip_test_util",

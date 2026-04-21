@@ -21,6 +21,7 @@
 #define LOOM_AMDGPU_SOPP_S_WAITCNT_OPCODE UINT16_C(0x09)
 #define LOOM_AMDGPU_SOPP_S_WAITCNT_DEPCTR_OPCODE UINT16_C(0x08)
 #define LOOM_AMDGPU_SOPP_S_WAIT_IDLE_OPCODE UINT16_C(0x0A)
+#define LOOM_AMDGPU_SOPP_GFX11_S_BARRIER_OPCODE UINT16_C(0x3D)
 #define LOOM_AMDGPU_SISRC_LITERAL UINT16_C(255)
 #define LOOM_AMDGPU_VGPR_SRC_BASE UINT16_C(0x100)
 #define LOOM_AMDGPU_MAX_PACKET_FIELD_VALUES 32u
@@ -785,6 +786,9 @@ static iree_status_t loom_amdgpu_encode_sopp_packet(
   if (opcode == LOOM_AMDGPU_SOPP_S_WAIT_IDLE_OPCODE) {
     return loom_amdgpu_encode_sopp_word(state, opcode, 0);
   }
+  if (opcode == LOOM_AMDGPU_SOPP_GFX11_S_BARRIER_OPCODE) {
+    return loom_amdgpu_encode_sopp_word(state, opcode, 0);
+  }
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                           "AMDGPU SOPP opcode %" PRIu16
                           " is not supported by native encoding",
@@ -879,6 +883,7 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3:
     case LOOM_AMDGPU_ENCODING_FORMAT_SMEM:
     case LOOM_AMDGPU_ENCODING_FORMAT_MUBUF:
+    case LOOM_AMDGPU_ENCODING_FORMAT_DS:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL:
       return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
     default: {
