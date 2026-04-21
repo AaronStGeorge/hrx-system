@@ -56,7 +56,7 @@ buffer_store_b64
 s_endpgm
 
 // ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_barrier waits=none
+// RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_barrier
 target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_lds_barrier}
 
 low.func.def target(@gfx11_target) @gfx11_lds_barrier(%addr : reg<amdgpu.vgpr>, %value : reg<amdgpu.vgpr x4>) {
@@ -68,6 +68,7 @@ low.func.def target(@gfx11_target) @gfx11_lds_barrier(%addr : reg<amdgpu.vgpr>, 
 
 // ----
 ds_write_b128
+s_waitcnt
 s_barrier
 ds_read_b128
 s_endpgm

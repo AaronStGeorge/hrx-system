@@ -398,6 +398,60 @@ low.func.def target(@gfx11_target) @gfx11_func(%value : reg<amdgpu.vgpr>, %resou
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuWaitPlanTest, PlansWorkgroupBarrierDrain) {
+  std::string source =
+      TargetPreamble("gfx11_target", "amdgpu-gfx11", "gfx11_func");
+  source += R"(
+low.func.def target(@gfx11_target) @gfx11_func(%addr : reg<amdgpu.vgpr>, %value : reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x4>) {
+  low.op<amdgpu.ds_write_b128>(%addr, %value) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>)
+  low.op<amdgpu.s_barrier>() : ()
+  %loaded = low.op<amdgpu.ds_read_b128>(%addr) {offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  low.return %loaded : reg<amdgpu.vgpr x4>
+}
+)";
+
+  ModulePtr module;
+  IREE_ASSERT_OK(ParseAndVerify(
+      iree_make_string_view(source.data(), source.size()), &module));
+  const loom_op_t* low_function = FirstLowFunction(module.get());
+  ASSERT_NE(low_function, nullptr);
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_amdgpu_wait_plan_t plan = {};
+  IREE_ASSERT_OK(
+      BuildWaitPlan(module.get(), low_function, &arena, &schedule, &plan));
+
+  bool saw_barrier_store_wait = false;
+  bool saw_return_load_wait = false;
+  for (iree_host_size_t i = 0; i < plan.action_count; ++i) {
+    const loom_amdgpu_wait_plan_action_t& action = plan.actions[i];
+    if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
+        action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_BARRIER &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_STORE &&
+        action.outstanding_before == 1) {
+      saw_barrier_store_wait = true;
+    }
+    if (action.kind == LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED &&
+        action.reason == LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE &&
+        action.counter_id == LOOM_AMDGPU_WAIT_COUNTER_LOAD &&
+        action.outstanding_before == 1) {
+      saw_return_load_wait = true;
+    }
+  }
+  EXPECT_TRUE(saw_barrier_store_wait);
+  EXPECT_TRUE(saw_return_load_wait);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_amdgpu_wait_plan_format_json(&plan, &builder));
+  std::string json = ToString(builder);
+  iree_string_builder_deinitialize(&builder);
+  EXPECT_NE(json.find("\"reason_name\":\"barrier\""), std::string::npos);
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(AmdgpuWaitPlanTest, RejectsUnknownWaitCounterId) {
   loom_low_schedule_node_t node = {};
   loom_low_schedule_hazard_use_t hazard = {
