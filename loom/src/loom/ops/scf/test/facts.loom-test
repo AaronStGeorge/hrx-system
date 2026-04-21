@@ -154,6 +154,129 @@ func.def @for_iv_unknown_step_is_unknown(%step: index) -> (i64, i64, i64) {
 
 // ====
 
+// Loop-carried entry facts seed iter_arg block arguments, so facts queried
+// inside a dynamic counted loop body can fold without inlining the loop.
+func.def @for_iter_arg_facts_reach_body(%n: index) -> (i64) {
+  %lo = index.constant 0 : index
+  %n2 = index.assume %n [range(%n, 1, 4)] : index
+  %step = index.constant 1 : index
+  %seven = scalar.constant 7 : i64
+  %zero = scalar.constant 0 : i64
+  %forwarded, %observed = scf.for %iv = [%lo to %n2 step %step](%acc = %seven : i64, %prev = %zero : i64) -> (i64, i64) {
+    %body_lo = test.fact_range_lo %acc : i64 -> i64
+    scf.yield %acc, %body_lo : i64, i64
+  }
+  func.return %observed : i64
+}
+
+// ----
+func.def @for_iter_arg_facts_reach_body(%n: index) -> (i64) {
+  %lo = index.constant 0 : index
+  %n2 = index.assume %n [range(%n, 1, 4)] : index
+  %step = index.constant 1 : index
+  %zero = scalar.constant 0 : i64
+  %observed = scf.for %iv = [%lo to %n2 step %step](%prev = %zero : i64) -> (i64) {
+    %body_lo = scalar.constant 7 : i64
+    scf.yield %body_lo : i64
+  }
+  func.return %observed : i64
+}
+
+// ====
+
+// A may-zero loop can still expose exact result facts when the zero-trip init
+// and every yielded value meet to the same type-domain fact.
+func.def @for_may_zero_result_uses_loop_summary(%n: index) -> (i64) {
+  %lo = index.constant 0 : index
+  %n2 = index.assume %n [range(%n, 0, 4)] : index
+  %step = index.constant 1 : index
+  %seven = scalar.constant 7 : i64
+  %observed = scf.for %iv = [%lo to %n2 step %step](%acc = %seven : i64) -> (i64) {
+    %body_lo = test.fact_range_lo %acc : i64 -> i64
+    scf.yield %body_lo : i64
+  }
+  %result_lo = test.fact_range_lo %observed : i64 -> i64
+  func.return %result_lo : i64
+}
+
+// ----
+func.def @for_may_zero_result_uses_loop_summary(%n: index) -> (i64) {
+  %result_lo = scalar.constant 7 : i64
+  func.return %result_lo : i64
+}
+
+// ====
+
+// A statically zero-trip loop result keeps the init operand facts even if the
+// body would yield a different exact value.
+func.def @for_zero_trip_result_is_init() -> (i64) {
+  %lo = index.constant 8 : index
+  %hi = index.constant 4 : index
+  %step = index.constant 1 : index
+  %seven = scalar.constant 7 : i64
+  %forty_two = scalar.constant 42 : i64
+  %observed = scf.for %iv = [%lo to %hi step %step](%acc = %seven : i64) -> (i64) {
+    scf.yield %forty_two : i64
+  }
+  %result_lo = test.fact_range_lo %observed : i64 -> i64
+  func.return %result_lo : i64
+}
+
+// ----
+func.def @for_zero_trip_result_is_init() -> (i64) {
+  %result_lo = scalar.constant 7 : i64
+  func.return %result_lo : i64
+}
+
+// ====
+
+// Arithmetic-carried values widen instead of leaving a stale exact summary when
+// the bounded solver cannot represent the recurrence compactly.
+func.def @for_arithmetic_carried_widens_to_unknown(%n: index) -> (i64, i64) {
+  %lo = index.constant 0 : index
+  %n2 = index.assume %n [range(%n, 0, 4)] : index
+  %step = index.constant 1 : index
+  %zero = scalar.constant 0 : i64
+  %one = scalar.constant 1 : i64
+  %observed = scf.for %iv = [%lo to %n2 step %step](%acc = %zero : i64) -> (i64) {
+    %next = scalar.addi %acc, %one : i64
+    scf.yield %next : i64
+  }
+  %result_lo = test.fact_range_lo %observed : i64 -> i64
+  %result_hi = test.fact_range_hi %observed : i64 -> i64
+  func.return %result_lo, %result_hi : i64, i64
+}
+
+// ----
+func.def @for_arithmetic_carried_widens_to_unknown(%n: index) -> (i64, i64) {
+  %result_lo = scalar.constant -9223372036854775808 : i64
+  %result_hi = scalar.constant 9223372036854775807 : i64
+  func.return %result_lo, %result_hi : i64, i64
+}
+
+// ====
+
+// The same loop-like summary path handles condition-region loops. The carried
+// value is forwarded unchanged through both the false exit and true body paths.
+func.def @while_unchanged_carried_result(%keep_going: i1) -> (i64) {
+  %nine = scalar.constant 9 : i64
+  %result = scf.while(%before = %nine : i64) -> (i64) {
+    scf.condition %keep_going, %before : i1, i64
+  } do(%body: i64) {
+    scf.yield %body : i64
+  }
+  %result_lo = test.fact_range_lo %result : i64 -> i64
+  func.return %result_lo : i64
+}
+
+// ----
+func.def @while_unchanged_carried_result(%keep_going: i1) -> (i64) {
+  %result_lo = scalar.constant 9 : i64
+  func.return %result_lo : i64
+}
+
+// ====
+
 // Lookup facts meet only rows that selector range facts allow. Since the
 // explicit keys cover the full [0, 1] selector domain, the default row is not
 // included in the result range.

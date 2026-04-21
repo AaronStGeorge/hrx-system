@@ -16,6 +16,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_value_fact_domain_t loom_value_fact_domain_t;
+
 // Format element kinds for type interiors (inside <...>).
 // These are separate from op format elements because type
 // interiors have different semantics (shape dims, element
@@ -52,6 +54,10 @@ typedef struct loom_type_descriptor_t {
   // Number of declared parameters.
   uint8_t param_count;
 
+  // Optional type-owned value fact domain. NULL means the type only has generic
+  // scalar facts or uses the domain-free extension behavior.
+  const loom_value_fact_domain_t* fact_domain;
+
   // Format element array for the type interior (inside <...>).
   // NULL for opaque types (no angle brackets).
   const loom_type_format_element_t* format_elements;
@@ -74,6 +80,12 @@ const loom_type_registry_entry_t* loom_type_registry_entries(void);
 // Returns the descriptor on success, NULL if not found.
 const loom_type_descriptor_t* loom_type_registry_lookup(
     iree_string_view_t name);
+
+// Resolves the type-owned value fact domain for |type|, or NULL if the
+// registered type has no extension fact domain.
+const loom_value_fact_domain_t* loom_type_registry_resolve_fact_domain(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t type);
 
 #ifdef __cplusplus
 }

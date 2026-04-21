@@ -7,6 +7,7 @@
 #include "loom/util/fact_table.h"
 
 #include <cstdint>
+#include <cstring>
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
@@ -30,6 +31,106 @@ class FactTableTest : public ::testing::Test {
 
   iree_arena_block_pool_t block_pool_;
   iree_arena_allocator_t arena_;
+};
+
+static constexpr uint8_t kTestRawPayloadTag = 42;
+
+static const loom_value_fact_domain_t* FactTableTestResolveDomain(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t type) {
+  (void)module;
+  (void)type;
+  return static_cast<const loom_value_fact_domain_t*>(
+      context->resolve_type_domain_user_data);
+}
+
+static bool FactTableTestRawExtensionsEqual(
+    const loom_value_fact_domain_t* domain, const loom_module_t* module,
+    loom_type_t type, const loom_value_fact_table_t* lhs_table,
+    loom_value_facts_t lhs, const loom_value_fact_table_t* rhs_table,
+    loom_value_facts_t rhs) {
+  (void)domain;
+  (void)module;
+  (void)type;
+  const void* lhs_payload = nullptr;
+  const void* rhs_payload = nullptr;
+  iree_host_size_t lhs_length = 0;
+  iree_host_size_t rhs_length = 0;
+  bool lhs_has = loom_value_facts_query_extension_payload(
+      lhs_table ? &lhs_table->context : nullptr, lhs, kTestRawPayloadTag,
+      &lhs_payload, &lhs_length);
+  bool rhs_has = loom_value_facts_query_extension_payload(
+      rhs_table ? &rhs_table->context : nullptr, rhs, kTestRawPayloadTag,
+      &rhs_payload, &rhs_length);
+  if (!lhs_has || !rhs_has) {
+    return lhs.extension_id == LOOM_VALUE_FACT_EXTENSION_ID_NONE &&
+           rhs.extension_id == LOOM_VALUE_FACT_EXTENSION_ID_NONE;
+  }
+  return lhs_length == rhs_length &&
+         std::memcmp(lhs_payload, rhs_payload, lhs_length) == 0;
+}
+
+static iree_status_t FactTableTestRawCloneExtension(
+    const loom_value_fact_domain_t* domain, const loom_module_t* module,
+    loom_type_t type, loom_value_fact_table_t* target,
+    const loom_value_fact_table_t* source, loom_value_facts_t facts,
+    loom_value_facts_t* inout_facts) {
+  (void)domain;
+  (void)module;
+  (void)type;
+  const void* payload = nullptr;
+  iree_host_size_t payload_length = 0;
+  if (!loom_value_facts_query_extension_payload(&source->context, facts,
+                                                kTestRawPayloadTag, &payload,
+                                                &payload_length)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "source fact has no test raw payload");
+  }
+  loom_value_facts_t cloned_extension = loom_value_facts_unknown();
+  IREE_RETURN_IF_ERROR(loom_value_facts_make_extension_payload(
+      &target->context, kTestRawPayloadTag, payload, payload_length,
+      &cloned_extension));
+  inout_facts->extension_id = cloned_extension.extension_id;
+  return iree_ok_status();
+}
+
+static iree_status_t FactTableTestRawMeetExtension(
+    const loom_value_fact_domain_t* domain, const loom_module_t* module,
+    loom_type_t type, loom_value_fact_table_t* target,
+    const loom_value_fact_table_t* lhs_table, loom_value_facts_t lhs,
+    const loom_value_fact_table_t* rhs_table, loom_value_facts_t rhs,
+    loom_value_facts_t* inout_facts) {
+  if (!FactTableTestRawExtensionsEqual(domain, module, type, lhs_table, lhs,
+                                       rhs_table, rhs)) {
+    return iree_ok_status();
+  }
+  if (lhs.extension_id == LOOM_VALUE_FACT_EXTENSION_ID_NONE) {
+    return iree_ok_status();
+  }
+  loom_value_facts_t cloned_extension = loom_value_facts_unknown();
+  IREE_RETURN_IF_ERROR(FactTableTestRawCloneExtension(
+      domain, module, type, target, lhs_table, lhs, &cloned_extension));
+  inout_facts->extension_id = cloned_extension.extension_id;
+  return iree_ok_status();
+}
+
+static iree_status_t FactTableTestRawWidenExtension(
+    const loom_value_fact_domain_t* domain, const loom_module_t* module,
+    loom_type_t type, loom_value_fact_table_t* target,
+    const loom_value_fact_table_t* previous_table, loom_value_facts_t previous,
+    const loom_value_fact_table_t* next_table, loom_value_facts_t next,
+    uint32_t iteration, loom_value_facts_t* inout_facts) {
+  (void)iteration;
+  return FactTableTestRawMeetExtension(domain, module, type, target,
+                                       previous_table, previous, next_table,
+                                       next, inout_facts);
+}
+
+static const loom_value_fact_domain_t kTestRawFactDomain = {
+    .extensions_equal = FactTableTestRawExtensionsEqual,
+    .clone_extension = FactTableTestRawCloneExtension,
+    .meet_extension = FactTableTestRawMeetExtension,
+    .widen_extension = FactTableTestRawWidenExtension,
 };
 
 //===----------------------------------------------------------------------===//
@@ -402,7 +503,8 @@ TEST_F(FactTableTest, CloneDefinedFactsReinternsExtensions) {
   iree_arena_initialize(&block_pool_, &target_arena);
   loom_value_fact_table_t target = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&target, &target_arena, 0));
-  IREE_ASSERT_OK(loom_value_fact_table_clone_defined_facts(&target, &source));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_clone_defined_facts(&target, &source, nullptr));
 
   loom_value_facts_t cloned_facts = loom_value_fact_table_lookup(&target, 7);
   EXPECT_NE(cloned_facts.extension_id, LOOM_VALUE_FACT_EXTENSION_ID_NONE);
@@ -484,6 +586,153 @@ TEST_F(FactTableTest, CrossTableFactsDifferentExtensionsDoNotCompareEqual) {
       loom_value_fact_table_extensions_equal(&lhs, lhs_facts, &rhs, rhs_facts));
 
   iree_arena_deinitialize(&rhs_arena);
+}
+
+TEST_F(FactTableTest, TypeOwnedRawPayloadClonesAndMeetsThroughDomain) {
+  loom_value_fact_table_t source = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&source, &arena_, 0));
+  source.context.resolve_type_domain = FactTableTestResolveDomain;
+  source.context.resolve_type_domain_user_data =
+      const_cast<loom_value_fact_domain_t*>(&kTestRawFactDomain);
+
+  const uint8_t payload[] = {1, 3, 5, 7};
+  loom_value_facts_t extension = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_extension_payload(
+      &source.context, kTestRawPayloadTag, payload, sizeof(payload),
+      &extension));
+  loom_value_facts_t same_extension = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_extension_payload(
+      &source.context, kTestRawPayloadTag, payload, sizeof(payload),
+      &same_extension));
+  EXPECT_EQ(extension.extension_id, same_extension.extension_id);
+  loom_value_facts_t source_facts = loom_value_facts_exact_i64(11);
+  source_facts.extension_id = extension.extension_id;
+
+  iree_arena_allocator_t target_arena;
+  iree_arena_initialize(&block_pool_, &target_arena);
+  loom_value_fact_table_t target = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&target, &target_arena, 0));
+  target.context.resolve_type_domain = FactTableTestResolveDomain;
+  target.context.resolve_type_domain_user_data =
+      const_cast<loom_value_fact_domain_t*>(&kTestRawFactDomain);
+
+  loom_type_t type = loom_type_none();
+  loom_value_facts_t cloned = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_fact_table_clone_fact_for_type(
+      &target, &source, nullptr, type, source_facts, &cloned));
+
+  EXPECT_EQ(cloned.range_lo, 11);
+  EXPECT_TRUE(loom_value_fact_table_facts_equal_for_type(
+      nullptr, type, &source, source_facts, &target, cloned));
+
+  const void* cloned_payload = nullptr;
+  iree_host_size_t cloned_payload_length = 0;
+  ASSERT_TRUE(loom_value_facts_query_extension_payload(
+      &target.context, cloned, kTestRawPayloadTag, &cloned_payload,
+      &cloned_payload_length));
+  EXPECT_EQ(cloned_payload_length, sizeof(payload));
+  EXPECT_NE(cloned_payload, payload);
+  EXPECT_EQ(std::memcmp(cloned_payload, payload, sizeof(payload)), 0);
+
+  loom_value_facts_t joined = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_fact_table_meet_for_type(
+      &target, nullptr, type, &source, source_facts, &target, cloned, &joined));
+  EXPECT_EQ(joined.range_lo, 11);
+  ASSERT_TRUE(loom_value_facts_query_extension_payload(
+      &target.context, joined, kTestRawPayloadTag, &cloned_payload,
+      &cloned_payload_length));
+  EXPECT_EQ(cloned_payload_length, sizeof(payload));
+  EXPECT_EQ(std::memcmp(cloned_payload, payload, sizeof(payload)), 0);
+
+  iree_arena_deinitialize(&target_arena);
+}
+
+TEST_F(FactTableTest, TypeOwnedRawPayloadRejectsTagMismatch) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+  table.context.resolve_type_domain = FactTableTestResolveDomain;
+  table.context.resolve_type_domain_user_data =
+      const_cast<loom_value_fact_domain_t*>(&kTestRawFactDomain);
+
+  const uint8_t payload[] = {2, 4, 6, 8};
+  loom_value_facts_t expected = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_extension_payload(
+      &table.context, kTestRawPayloadTag, payload, sizeof(payload), &expected));
+  loom_value_facts_t other = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_extension_payload(
+      &table.context, kTestRawPayloadTag + 1, payload, sizeof(payload),
+      &other));
+
+  EXPECT_FALSE(loom_value_fact_table_facts_equal_for_type(
+      nullptr, loom_type_none(), &table, expected, &table, other));
+  EXPECT_FALSE(loom_value_facts_query_extension_payload(
+      &table.context, other, kTestRawPayloadTag, nullptr, nullptr));
+}
+
+TEST_F(FactTableTest, TypeOwnedRawPayloadDegradesWhenTooLarge) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  uint8_t payload[LOOM_VALUE_FACT_RAW_PAYLOAD_LENGTH_LIMIT + 1] = {};
+  loom_value_facts_t facts = loom_value_facts_exact_i64(5);
+  IREE_ASSERT_OK(loom_value_facts_make_extension_payload(
+      &table.context, kTestRawPayloadTag, payload, sizeof(payload), &facts));
+
+  EXPECT_TRUE(loom_value_facts_is_unknown(facts));
+  EXPECT_EQ(facts.extension_id, LOOM_VALUE_FACT_EXTENSION_ID_NONE);
+}
+
+TEST_F(FactTableTest, TypedMeetPreservesStableExtension) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_facts_t extension = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &table.context, loom_value_facts_exact_i64(7), &extension));
+  loom_value_facts_t lhs = loom_value_facts_exact_i64(4);
+  lhs.extension_id = extension.extension_id;
+  loom_value_facts_t rhs = loom_value_facts_exact_i64(12);
+  rhs.extension_id = extension.extension_id;
+
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I64, loom_dim_pack_static(4), 0);
+  loom_value_facts_t joined = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_fact_table_meet_for_type(
+      &table, nullptr, vector_type, &table, lhs, &table, rhs, &joined));
+
+  EXPECT_EQ(joined.range_lo, 4);
+  EXPECT_EQ(joined.range_hi, 12);
+  loom_value_fact_uniform_element_t uniform = {};
+  EXPECT_TRUE(
+      loom_value_facts_query_uniform_element(&table.context, joined, &uniform));
+  EXPECT_EQ(uniform.element.range_lo, 7);
+}
+
+TEST_F(FactTableTest, TypedWidenDropsChangingScalarButKeepsStableExtension) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_facts_t extension = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &table.context, loom_value_facts_exact_i64(3), &extension));
+  loom_value_facts_t previous = loom_value_facts_exact_i64(4);
+  previous.extension_id = extension.extension_id;
+  loom_value_facts_t next = loom_value_facts_exact_i64(8);
+  next.extension_id = extension.extension_id;
+
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I64, loom_dim_pack_static(4), 0);
+  loom_value_facts_t widened = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_fact_table_widen_for_type(
+      &table, nullptr, vector_type, &table, previous, &table, next,
+      /*iteration=*/2, &widened));
+
+  EXPECT_EQ(widened.range_lo, INT64_MIN);
+  EXPECT_EQ(widened.range_hi, INT64_MAX);
+  loom_value_fact_uniform_element_t uniform = {};
+  EXPECT_TRUE(loom_value_facts_query_uniform_element(&table.context, widened,
+                                                     &uniform));
+  EXPECT_EQ(uniform.element.range_lo, 3);
 }
 
 }  // namespace

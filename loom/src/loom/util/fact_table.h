@@ -47,11 +47,16 @@ extern "C" {
 typedef struct loom_value_fact_table_t loom_value_fact_table_t;
 typedef struct loom_value_fact_extension_entry_t
     loom_value_fact_extension_entry_t;
+typedef struct loom_value_fact_domain_t loom_value_fact_domain_t;
 
 // Maximum lane facts stored in a small static vector extension. Larger static
 // vectors degrade to unknown facts instead of allocating per-lane analysis
 // payloads.
 #define LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT 16
+
+// Maximum raw payload bytes a type-owned fact domain may intern. Larger domain
+// payloads degrade to no extension, which is the domain top/unknown value.
+#define LOOM_VALUE_FACT_RAW_PAYLOAD_LENGTH_LIMIT 256
 
 // All lanes of a vector value share the same element facts.
 typedef struct loom_value_fact_uniform_element_t {
@@ -313,6 +318,72 @@ struct loom_fact_context_t {
   // Table that owns the dense facts and any extension payloads allocated by
   // inference helpers.
   loom_value_fact_table_t* table;
+
+  // Optional type-domain resolver installed by layers that own registered type
+  // descriptors. The fact table itself intentionally does not depend on the
+  // generated type registry; callers that can map |type| to a descriptor can
+  // return descriptor->fact_domain here.
+  const loom_value_fact_domain_t* (*resolve_type_domain)(
+      const loom_fact_context_t* context, const loom_module_t* module,
+      loom_type_t type);
+
+  // Caller-owned data for resolve_type_domain.
+  void* resolve_type_domain_user_data;
+};
+
+// Type-owned operations for the optional extension slot in
+// loom_value_facts_t.
+//
+// Scalar facts stay in the dense value record and use the generic transfer
+// functions in loom/ir/facts.h. A fact domain only owns interpretation of the
+// cold extension payload for values whose type declares the domain. Domains are
+// immutable .rodata objects referenced from type descriptors; there is no
+// process-global schema registry or schema ID stored in extension entries.
+//
+// Returning no extension is the domain top/unknown value. Domain callbacks must
+// keep payloads bounded and degrade to no extension instead of allocating
+// unbounded analysis state.
+struct loom_value_fact_domain_t {
+  // Returns true when |lhs| and |rhs| carry semantically equal extension facts
+  // for |type|. Scalar range/divisor fields are compared by the generic caller.
+  bool (*extensions_equal)(const loom_value_fact_domain_t* domain,
+                           const loom_module_t* module, loom_type_t type,
+                           const loom_value_fact_table_t* lhs_table,
+                           loom_value_facts_t lhs,
+                           const loom_value_fact_table_t* rhs_table,
+                           loom_value_facts_t rhs);
+
+  // Clones the extension payload carried by |facts| from |source| into
+  // |target|. The generic caller copies scalar fields before invoking this.
+  iree_status_t (*clone_extension)(const loom_value_fact_domain_t* domain,
+                                   const loom_module_t* module,
+                                   loom_type_t type,
+                                   loom_value_fact_table_t* target,
+                                   const loom_value_fact_table_t* source,
+                                   loom_value_facts_t facts,
+                                   loom_value_facts_t* inout_facts);
+
+  // Computes the extension component of a join for two facts of |type|. The
+  // generic caller has already joined scalar fields in |inout_facts|.
+  iree_status_t (*meet_extension)(const loom_value_fact_domain_t* domain,
+                                  const loom_module_t* module, loom_type_t type,
+                                  loom_value_fact_table_t* target,
+                                  const loom_value_fact_table_t* lhs_table,
+                                  loom_value_facts_t lhs,
+                                  const loom_value_fact_table_t* rhs_table,
+                                  loom_value_facts_t rhs,
+                                  loom_value_facts_t* inout_facts);
+
+  // Widens a loop-carried extension fact. The default domain-free behavior is
+  // conservative: stable extensions are preserved, changing extensions degrade
+  // to no extension. |iteration| is zero-based for the loop summary solver.
+  iree_status_t (*widen_extension)(
+      const loom_value_fact_domain_t* domain, const loom_module_t* module,
+      loom_type_t type, loom_value_fact_table_t* target,
+      const loom_value_fact_table_t* previous_table,
+      loom_value_facts_t previous, const loom_value_fact_table_t* next_table,
+      loom_value_facts_t next, uint32_t iteration,
+      loom_value_facts_t* inout_facts);
 };
 
 struct loom_value_fact_table_t {
@@ -395,6 +466,13 @@ iree_status_t loom_value_fact_table_clone_fact(
     loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
     loom_value_facts_t facts, loom_value_facts_t* out_facts);
 
+// Clones |facts| using the fact domain implied by |type|. Prefer this typed
+// form when the value/type is available; extension payloads are type-owned.
+iree_status_t loom_value_fact_table_clone_fact_for_type(
+    loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
+    const loom_module_t* module, loom_type_t type, loom_value_facts_t facts,
+    loom_value_facts_t* out_facts);
+
 // Returns true when two fact values are semantically equal, including any
 // extension payloads, even when the extension IDs were interned in different
 // fact tables.
@@ -403,6 +481,12 @@ bool loom_value_fact_table_facts_equal(const loom_value_fact_table_t* lhs_table,
                                        const loom_value_fact_table_t* rhs_table,
                                        loom_value_facts_t rhs);
 
+// Typed semantic equality for facts whose values have |type|.
+bool loom_value_fact_table_facts_equal_for_type(
+    const loom_module_t* module, loom_type_t type,
+    const loom_value_fact_table_t* lhs_table, loom_value_facts_t lhs,
+    const loom_value_fact_table_t* rhs_table, loom_value_facts_t rhs);
+
 // Returns true when both facts carry semantically equal extension payloads.
 // Facts without extensions compare equal only when neither side has an
 // extension.
@@ -410,10 +494,36 @@ bool loom_value_fact_table_extensions_equal(
     const loom_value_fact_table_t* lhs_table, loom_value_facts_t lhs,
     const loom_value_fact_table_t* rhs_table, loom_value_facts_t rhs);
 
-// Clones all defined source entries into |target|. Undefined entries remain
-// unset in |target| so normal block-argument and op fact seeding can fill them.
+// Typed semantic equality for extension payloads whose values have |type|.
+bool loom_value_fact_table_extensions_equal_for_type(
+    const loom_module_t* module, loom_type_t type,
+    const loom_value_fact_table_t* lhs_table, loom_value_facts_t lhs,
+    const loom_value_fact_table_t* rhs_table, loom_value_facts_t rhs);
+
+// Computes a conservative join for two facts of |type| and stores the result in
+// |target|. Extension payloads are preserved only when the type's fact domain
+// proves they remain valid across the join.
+iree_status_t loom_value_fact_table_meet_for_type(
+    loom_value_fact_table_t* target, const loom_module_t* module,
+    loom_type_t type, const loom_value_fact_table_t* lhs_table,
+    loom_value_facts_t lhs, const loom_value_fact_table_t* rhs_table,
+    loom_value_facts_t rhs, loom_value_facts_t* out_facts);
+
+// Widens a loop-carried fact of |type| from |previous| to |next|. This is a
+// convergence accelerator for summary solvers, not a scalar transfer function.
+iree_status_t loom_value_fact_table_widen_for_type(
+    loom_value_fact_table_t* target, const loom_module_t* module,
+    loom_type_t type, const loom_value_fact_table_t* previous_table,
+    loom_value_facts_t previous, const loom_value_fact_table_t* next_table,
+    loom_value_facts_t next, uint32_t iteration, loom_value_facts_t* out_facts);
+
+// Clones all defined source entries into |target|. When |module| is provided,
+// extension payloads use the type-owned domain implied by each value ID.
+// Undefined entries remain unset in |target| so normal block-argument and op
+// fact seeding can fill them.
 iree_status_t loom_value_fact_table_clone_defined_facts(
-    loom_value_fact_table_t* target, const loom_value_fact_table_t* source);
+    loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
+    const loom_module_t* module);
 
 // Computes facts for a single op by calling its vtable fact inference function.
 // Gathers operand facts from the table, calls the callback, and defines result
@@ -527,6 +637,22 @@ iree_status_t loom_value_facts_make_view_reference(
 bool loom_value_facts_query_view_reference(
     const loom_fact_context_t* context, loom_value_facts_t facts,
     loom_value_fact_view_reference_t* out);
+
+// Creates a bounded raw extension payload for type-owned fact domains. The
+// |payload_tag| namespace belongs to the value type domain; it is not a global
+// schema ID. Payloads larger than LOOM_VALUE_FACT_RAW_PAYLOAD_LENGTH_LIMIT
+// degrade to unknown facts.
+iree_status_t loom_value_facts_make_extension_payload(
+    loom_fact_context_t* context, uint8_t payload_tag, const void* payload,
+    iree_host_size_t payload_length, loom_value_facts_t* out);
+
+// Returns true and populates |out_payload|/|out_payload_length| when |facts|
+// carries a raw payload with |payload_tag|. Returned bytes are borrowed from
+// the fact table that owns |context| and remain valid for the table lifetime.
+bool loom_value_facts_query_extension_payload(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    uint8_t payload_tag, const void** out_payload,
+    iree_host_size_t* out_payload_length);
 
 #ifdef __cplusplus
 }
