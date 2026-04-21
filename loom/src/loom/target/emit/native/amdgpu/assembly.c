@@ -584,6 +584,20 @@ static bool loom_amdgpu_descriptor_uses_global_pointer_format(
   }
 }
 
+static bool loom_amdgpu_descriptor_uses_global_scalar_base_format(
+    const loom_native_assembly_packet_context_t* context) {
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  const uint16_t address_operand_index = descriptor->result_count;
+  if (address_operand_index >= descriptor->operand_count) {
+    return false;
+  }
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[descriptor->operand_start];
+  return operands[address_operand_index].unit_count == 1;
+}
+
 static iree_status_t loom_amdgpu_append_global_load_packet(
     const loom_native_assembly_packet_context_t* context) {
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
@@ -593,8 +607,12 @@ static iree_status_t loom_amdgpu_append_global_load_packet(
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(context->builder, "off"));
+  if (loom_amdgpu_descriptor_uses_global_scalar_base_format(context)) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "off"));
+  }
   return loom_amdgpu_append_offset_suffix(context);
 }
 
@@ -607,8 +625,12 @@ static iree_status_t loom_amdgpu_append_global_store_packet(
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(context->builder, "off"));
+  if (loom_amdgpu_descriptor_uses_global_scalar_base_format(context)) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 2));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "off"));
+  }
   return loom_amdgpu_append_offset_suffix(context);
 }
 

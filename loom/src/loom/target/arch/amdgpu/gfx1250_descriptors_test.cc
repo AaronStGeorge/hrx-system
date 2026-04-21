@@ -20,6 +20,7 @@ using ::loom::testing::ExpectAmdgpuDs2AddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsAddtidMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
 using ::loom::testing::ExpectAmdgpuGlobalMemoryDescriptors;
+using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
@@ -187,6 +188,9 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
   ExpectAmdgpuGlobalMemoryDescriptors(descriptor_set,
                                       LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 24u,
                                       /*expected_implicit_m0=*/false);
+  ExpectAmdgpuGlobalSaddrMemoryDescriptors(
+      descriptor_set, LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 24u,
+      /*expected_implicit_m0=*/false);
   ExpectAmdgpuDsMemoryDescriptor(descriptor_set, IREE_SV("amdgpu.ds_read_b64"),
                                  LOOM_LOW_EFFECT_KIND_READ, 2u, 64u,
                                  LOOM_AMDGPU_ENCODING_FORMAT_VDS);

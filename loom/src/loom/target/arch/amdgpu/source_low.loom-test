@@ -1,3 +1,30 @@
+// RUN: emit source-low @gfx11_global_saddr_fallback_target output=low
+target.preset @gfx11_global_saddr_fallback_target {key = "amdgpu-gfx11", source = @global_saddr_fallback}
+
+func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
+  %base = index.constant 4 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<4xi32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[0] : vector<4xi32>, view<4xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@gfx11_global_saddr_fallback_target) @global_saddr_fallback__low() {
+  %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 20} : reg<amdgpu.sgpr x4>
+  %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 20} : reg<amdgpu.sgpr x4>
+  %base = low.const<amdgpu.s_mov_b32> {imm32 = 4} : reg<amdgpu.sgpr>
+  %9 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %10 = low.slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = low.op<amdgpu.global_load_b128_saddr>(%9, %10) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr x4>
+  %12 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %13 = low.slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_store_b128_saddr>(%12, %loaded, %13) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x2>)
+  low.return
+}
+
+// ====
 // RUN: emit source-low @gfx11_i32_b128_target output=low
 target.preset @gfx11_i32_b128_target {key = "amdgpu-gfx11", source = @i32_b128}
 

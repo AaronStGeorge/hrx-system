@@ -71,6 +71,14 @@ TEST(AmdgpuDescriptorIdsTest, CommonLoweringIdsResolveAcrossDescriptorSets) {
     ExpectHasDescriptor(descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_READ_B128);
     ExpectHasDescriptor(descriptor_set,
                         LOOM_AMDGPU_DESCRIPTOR_ID_DS_WRITE_B128);
+    ExpectHasDescriptor(descriptor_set,
+                        LOOM_AMDGPU_DESCRIPTOR_ID_GLOBAL_LOAD_B128);
+    ExpectHasDescriptor(descriptor_set,
+                        LOOM_AMDGPU_DESCRIPTOR_ID_GLOBAL_STORE_B128);
+    ExpectHasDescriptor(descriptor_set,
+                        LOOM_AMDGPU_DESCRIPTOR_ID_GLOBAL_LOAD_B128_SADDR);
+    ExpectHasDescriptor(descriptor_set,
+                        LOOM_AMDGPU_DESCRIPTOR_ID_GLOBAL_STORE_B128_SADDR);
   }
 
   ExpectHasDescriptor(gfx11, LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_LOAD_B128);

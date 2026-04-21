@@ -88,6 +88,22 @@ low.func.def target(@gfx11_target) @gfx11_global_pointer(%addr : reg<amdgpu.vgpr
   s_endpgm
 
 // ====
+// RUN: emit amdgpu-assembly @gfx11_global_saddr waits=none
+target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_global_saddr}
+
+low.func.def target(@gfx11_target) @gfx11_global_saddr(%addr : reg<amdgpu.vgpr>, %saddr : reg<amdgpu.sgpr x2>) {
+  %loaded = low.op<amdgpu.global_load_b128_saddr>(%addr, %saddr) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr x4>
+  low.op<amdgpu.global_store_b128_saddr>(%addr, %loaded, %saddr) {offset = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x2>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  global_load_b128 v[4:7], v0, s[0:1] offset:4
+  global_store_b128 v0, v[4:7], s[0:1] offset:8
+  s_endpgm
+
+// ====
 // RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_barrier
 target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_lds_barrier}
 
