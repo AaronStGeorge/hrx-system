@@ -68,6 +68,7 @@ _RESOURCE_VMEM_LOAD = "amdgpu.vmem.load"
 _RESOURCE_VMEM_STORE = "amdgpu.vmem.store"
 _RESOURCE_LDS_LOAD = "amdgpu.lds.load"
 _RESOURCE_LDS_STORE = "amdgpu.lds.store"
+_RESOURCE_LDS_CROSSLANE = "amdgpu.lds.crosslane"
 _RESOURCE_MFMA = "amdgpu.mfma"
 _RESOURCE_WMMA = "amdgpu.wmma"
 _RESOURCE_SWMMAC = "amdgpu.swmmac"
@@ -80,6 +81,7 @@ _SCHEDULE_VMEM_LOAD = "amdgpu.vmem.load"
 _SCHEDULE_VMEM_STORE = "amdgpu.vmem.store"
 _SCHEDULE_LDS_LOAD = "amdgpu.lds.load"
 _SCHEDULE_LDS_STORE = "amdgpu.lds.store"
+_SCHEDULE_LDS_CROSSLANE = "amdgpu.lds.crosslane"
 _SCHEDULE_BARRIER = "amdgpu.barrier"
 _SCHEDULE_MFMA = "amdgpu.mfma"
 _SCHEDULE_WMMA = "amdgpu.wmma"
@@ -139,6 +141,7 @@ _ADDRESS_OFFSET_DWORD_ENCODING_ID = 2
 _ADDRESS_OFFSET_QWORD_ENCODING_ID = 3
 _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID = 4
 _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID = 5
+_ADDRESS_OFFSET_DS16_ENCODING_ID = 6
 _WAIT_COUNTER_VMEM_ENCODING_ID = 16
 _WAIT_COUNTER_LGKM_ENCODING_ID = 17
 _WAIT_COUNTER_VMEM_LOAD_ENCODING_ID = 18
@@ -153,6 +156,7 @@ _ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS = frozenset(
         _ADDRESS_OFFSET_QWORD_ENCODING_ID,
         _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
         _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID,
+        _ADDRESS_OFFSET_DS16_ENCODING_ID,
     )
 )
 _ADDRESS_OFFSET_IMMEDIATE_FIELD_NAMES = frozenset(("offset", "offset0", "offset1"))
@@ -196,6 +200,7 @@ def _common_scalar_vector_memory_resources() -> tuple[Resource, ...]:
         Resource(_RESOURCE_VMEM_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
         Resource(_RESOURCE_LDS_LOAD, capacity_per_cycle=1, kind=ResourceKind.LOAD),
         Resource(_RESOURCE_LDS_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
+        Resource(_RESOURCE_LDS_CROSSLANE, capacity_per_cycle=1, kind=ResourceKind.LOAD),
     )
 
 
@@ -206,6 +211,7 @@ def _common_scalar_vector_memory_schedule_classes(
     vmem_store_hazards: tuple[Hazard, ...],
     lds_load_hazards: tuple[Hazard, ...],
     lds_store_hazards: tuple[Hazard, ...],
+    lds_crosslane_hazards: tuple[Hazard, ...],
 ) -> tuple[ScheduleClass, ...]:
     return (
         ScheduleClass(
@@ -266,6 +272,14 @@ def _common_scalar_vector_memory_schedule_classes(
             issue_uses=(IssueUse(_RESOURCE_LDS_STORE, cycles=1, units=1),),
             hazards=lds_store_hazards,
             flags=(ScheduleClassFlag.MAY_STORE,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_LDS_CROSSLANE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=8,
+            issue_uses=(IssueUse(_RESOURCE_LDS_CROSSLANE, cycles=1, units=1),),
+            hazards=lds_crosslane_hazards,
             model_quality=ModelQuality.FALLBACK,
         ),
         ScheduleClass(
@@ -1869,6 +1883,195 @@ def _ds_write_addtid_b32_overlay(
     )
 
 
+def _ds_crosslane_offset_immediate() -> Immediate:
+    return _offset_immediate(16, encoding_id=_ADDRESS_OFFSET_DS16_ENCODING_ID)
+
+
+def _ds_swizzle_b32_overlay(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ds_swizzle_b32",
+        instruction_name="DS_SWIZZLE_B32",
+        mnemonic="ds_swizzle_b32",
+        encoding_name=encoding_name,
+        semantic_tag="memory.crosslane.swizzle.u32",
+        schedule_class=_SCHEDULE_LDS_CROSSLANE,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+        ),
+        immediates=(_ds_crosslane_offset_immediate(),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_CONVERGENT_EFFECT,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _ds_permute_b32_overlay(
+    *,
+    descriptor_key: str = "amdgpu.ds_permute_b32",
+    instruction_name: str = "DS_PERMUTE_B32",
+    mnemonic: str = "ds_permute_b32",
+    semantic_tag: str = "memory.crosslane.permute.u32",
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_LDS_CROSSLANE,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+            AmdgpuOperandOverlay("DATA0", _vgpr_operand("value")),
+        ),
+        immediates=(_ds_crosslane_offset_immediate(),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_CONVERGENT_EFFECT,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _ds_bpermute_b32_overlay(
+    *,
+    descriptor_key: str = "amdgpu.ds_bpermute_b32",
+    instruction_name: str = "DS_BPERMUTE_B32",
+    mnemonic: str = "ds_bpermute_b32",
+    semantic_tag: str = "memory.crosslane.bpermute.u32",
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+) -> AmdgpuDescriptorOverlay:
+    return _ds_permute_b32_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        encoding_name=encoding_name,
+        fixed_encoding_fields=fixed_encoding_fields,
+    )
+
+
+def _ds_bpermute_fi_b32_overlay(
+    *,
+    encoding_name: str = "ENC_VDS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return _ds_bpermute_b32_overlay(
+        descriptor_key="amdgpu.ds_bpermute_fi_b32",
+        instruction_name="DS_BPERMUTE_FI_B32",
+        mnemonic="ds_bpermute_fi_b32",
+        semantic_tag="memory.crosslane.bpermute.fi.u32",
+        encoding_name=encoding_name,
+        fixed_encoding_fields=fixed_encoding_fields,
+    )
+
+
+def _ds_crosslane_overlays(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+    include_fetch_invalid: bool = False,
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    overlays = (
+        _ds_swizzle_b32_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+        _ds_permute_b32_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+        _ds_bpermute_b32_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+    )
+    if not include_fetch_invalid:
+        return overlays
+    return (
+        *overlays,
+        _ds_bpermute_fi_b32_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        ),
+    )
+
+
+def _ds_transpose_read_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    width_bits: int,
+    units: int,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_LDS_LOAD,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=units)),
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+        ),
+        implicit_operands=(
+            _ignore_workgroup_memory(width_bits=width_bits, is_input=True),
+        ),
+        immediates=(_ds_crosslane_offset_immediate(),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_workgroup_memory_effect(EffectKind.READ, width_bits),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _gfx950_ds_transpose_read_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _ds_transpose_read_overlay(
+            descriptor_key="amdgpu.ds_read_b64_tr_b4",
+            instruction_name="DS_READ_B64_TR_B4",
+            mnemonic="ds_read_b64_tr_b4",
+            semantic_tag="memory.workgroup.transpose.load.b4.u64",
+            width_bits=64,
+            units=2,
+        ),
+        _ds_transpose_read_overlay(
+            descriptor_key="amdgpu.ds_read_b96_tr_b6",
+            instruction_name="DS_READ_B96_TR_B6",
+            mnemonic="ds_read_b96_tr_b6",
+            semantic_tag="memory.workgroup.transpose.load.b6.u96",
+            width_bits=96,
+            units=3,
+        ),
+        _ds_transpose_read_overlay(
+            descriptor_key="amdgpu.ds_read_b64_tr_b8",
+            instruction_name="DS_READ_B64_TR_B8",
+            mnemonic="ds_read_b64_tr_b8",
+            semantic_tag="memory.workgroup.transpose.load.b8.u64",
+            width_bits=64,
+            units=2,
+        ),
+        _ds_transpose_read_overlay(
+            descriptor_key="amdgpu.ds_read_b64_tr_b16",
+            instruction_name="DS_READ_B64_TR_B16",
+            mnemonic="ds_read_b64_tr_b16",
+            semantic_tag="memory.workgroup.transpose.load.b16.u64",
+            width_bits=64,
+            units=2,
+        ),
+    )
+
+
 def _ds_fixed_fields_without_offset1(
     fixed_encoding_fields: tuple[tuple[str, int], ...],
 ) -> tuple[tuple[str, int], ...]:
@@ -2239,6 +2442,8 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             implicit_m0=True,
         ),
         *_ds_memory_overlays(),
+        *_ds_crosslane_overlays(),
+        *_gfx950_ds_transpose_read_overlays(),
         _v_mfma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
         _s_waitcnt_overlay(
@@ -2322,6 +2527,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             descriptor_key_suffix="_saddr",
         ),
         *_ds_memory_overlays(),
+        *_ds_crosslane_overlays(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
         _s_waitcnt_overlay(
@@ -2424,6 +2630,11 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             encoding_name="ENC_VDS",
             fixed_encoding_fields=(("OFFSET1", 0),),
         ),
+        *_ds_crosslane_overlays(
+            encoding_name="ENC_VDS",
+            fixed_encoding_fields=(),
+            include_fetch_invalid=True,
+        ),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),
@@ -2521,6 +2732,11 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             encoding_name="ENC_VDS",
             fixed_encoding_fields=(("OFFSET1", 0),),
         ),
+        *_ds_crosslane_overlays(
+            encoding_name="ENC_VDS",
+            fixed_encoding_fields=(),
+            include_fetch_invalid=True,
+        ),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),
         _s_wait_dscnt_overlay(),
@@ -2590,6 +2806,7 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
             lds_load_hazards=_LDS_WAIT_HAZARDS,
             lds_store_hazards=_LDS_WAIT_HAZARDS,
+            lds_crosslane_hazards=_LDS_WAIT_HAZARDS,
         ),
         ScheduleClass(
             _SCHEDULE_MFMA,
@@ -2672,6 +2889,7 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
             lds_load_hazards=_LDS_WAIT_HAZARDS,
             lds_store_hazards=_LDS_WAIT_HAZARDS,
+            lds_crosslane_hazards=_LDS_WAIT_HAZARDS,
         ),
         ScheduleClass(
             _SCHEDULE_WMMA,
@@ -2780,6 +2998,7 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
             lds_load_hazards=_LDS_WAIT_HAZARDS,
             lds_store_hazards=_LDS_WAIT_HAZARDS,
+            lds_crosslane_hazards=_LDS_WAIT_HAZARDS,
         ),
         ScheduleClass(
             _SCHEDULE_WMMA,
@@ -2907,6 +3126,7 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
             lds_load_hazards=_LDS_WAIT_HAZARDS,
             lds_store_hazards=_LDS_WAIT_HAZARDS,
+            lds_crosslane_hazards=_LDS_WAIT_HAZARDS,
         ),
         ScheduleClass(
             _SCHEDULE_WMMA,
@@ -3214,6 +3434,7 @@ def amdgpu_immediate_encoding_id_items() -> tuple[tuple[str, int], ...]:
         ("address_offset_qword", _ADDRESS_OFFSET_QWORD_ENCODING_ID),
         ("address_offset_dword_stride64", _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID),
         ("address_offset_qword_stride64", _ADDRESS_OFFSET_QWORD_STRIDE64_ENCODING_ID),
+        ("address_offset_ds16", _ADDRESS_OFFSET_DS16_ENCODING_ID),
         ("wait_counter_vmem", _WAIT_COUNTER_VMEM_ENCODING_ID),
         ("wait_counter_lgkm", _WAIT_COUNTER_LGKM_ENCODING_ID),
         ("wait_counter_vmem_load", _WAIT_COUNTER_VMEM_LOAD_ENCODING_ID),

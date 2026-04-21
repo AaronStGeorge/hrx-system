@@ -182,3 +182,64 @@ low.func.def target(@gfx11_target) @gfx11_lds_addtid(%m0 : reg<amdgpu.m0>, %valu
 ds_read_addtid_b32
 ds_write_addtid_b32
 s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_crosslane waits=none
+target.preset @gfx11_target {key = "amdgpu-gfx11", source = @gfx11_lds_crosslane}
+
+low.func.def target(@gfx11_target) @gfx11_lds_crosslane(%addr : reg<amdgpu.vgpr>) {
+  %swizzled = low.op<amdgpu.ds_swizzle_b32>(%addr) {offset = 32} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %permuted = low.op<amdgpu.ds_permute_b32>(%addr, %swizzled) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %bpermuted = low.op<amdgpu.ds_bpermute_b32>(%addr, %permuted) {offset = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_write_b32>(%addr, %bpermuted) {offset = 12} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
+  low.return
+}
+
+// ----
+ds_swizzle_b32
+ds_permute_b32
+ds_bpermute_b32
+ds_write_b32
+s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly-mnemonics @gfx12_lds_crosslane_fi waits=none
+target.preset @gfx12_target {key = "amdgpu-gfx12", source = @gfx12_lds_crosslane_fi}
+
+low.func.def target(@gfx12_target) @gfx12_lds_crosslane_fi(%addr : reg<amdgpu.vgpr>, %value : reg<amdgpu.vgpr>) {
+  %bpermuted = low.op<amdgpu.ds_bpermute_fi_b32>(%addr, %value) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_write_b32>(%addr, %bpermuted) {offset = 20} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
+  low.return
+}
+
+// ----
+ds_bpermute_fi_b32
+ds_write_b32
+s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly-mnemonics @gfx950_lds_transpose waits=none
+target.preset @gfx950_target {key = "amdgpu-gfx950", source = @gfx950_lds_transpose}
+
+low.func.def target(@gfx950_target) @gfx950_lds_transpose(%addr : reg<amdgpu.vgpr>) {
+  %loaded_b4 = low.op<amdgpu.ds_read_b64_tr_b4>(%addr) {offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %loaded_b6 = low.op<amdgpu.ds_read_b96_tr_b6>(%addr) {offset = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
+  %loaded_b8 = low.op<amdgpu.ds_read_b64_tr_b8>(%addr) {offset = 32} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %loaded_b16 = low.op<amdgpu.ds_read_b64_tr_b16>(%addr) {offset = 48} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.op<amdgpu.ds_write_b64>(%addr, %loaded_b4) {offset = 64} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>)
+  low.op<amdgpu.ds_write_b96>(%addr, %loaded_b6) {offset = 80} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x3>)
+  low.op<amdgpu.ds_write_b64>(%addr, %loaded_b8) {offset = 96} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>)
+  low.op<amdgpu.ds_write_b64>(%addr, %loaded_b16) {offset = 112} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>)
+  low.return
+}
+
+// ----
+ds_read_b64_tr_b4
+ds_read_b96_tr_b6
+ds_read_b64_tr_b8
+ds_read_b64_tr_b16
+ds_write_b64
+ds_write_b96
+ds_write_b64
+ds_write_b64
+s_endpgm

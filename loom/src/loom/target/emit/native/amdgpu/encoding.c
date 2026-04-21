@@ -13,6 +13,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/gfx11_descriptors.h"
 #include "loom/target/arch/amdgpu/target_info.h"
@@ -967,6 +968,16 @@ static iree_status_t loom_amdgpu_encode_generic_descriptor_packet(
   for (uint16_t i = 0; i < packet->descriptor->immediate_count; ++i) {
     const loom_low_immediate_t* immediate =
         &descriptor_set->immediates[packet->descriptor->immediate_start + i];
+    if (immediate->encoding_id ==
+        LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16) {
+      uint64_t value = 0;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_read_immediate_encoding_field_value(
+          state, packet, i, &value));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_push_ds16_offset_field_values(
+          field_values, IREE_ARRAYSIZE(field_values), &field_value_count,
+          value));
+      continue;
+    }
     if (immediate->encoding_field_id == 0) {
       continue;
     }

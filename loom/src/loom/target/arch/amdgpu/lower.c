@@ -1477,6 +1477,9 @@ static bool loom_amdgpu_immediate_encoding_address_unit_byte_count(
     case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_QWORD_STRIDE64:
       *out_unit_byte_count = 8 * 64;
       return true;
+    case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16:
+      *out_unit_byte_count = 1;
+      return true;
     default:
       return false;
   }

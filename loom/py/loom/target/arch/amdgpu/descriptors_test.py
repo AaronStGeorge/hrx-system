@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from loom.target.arch.amdgpu.descriptors import (
+    _ADDRESS_OFFSET_DS16_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
     _validate_address_immediate_units,
@@ -96,3 +97,19 @@ def test_address_immediate_validation_rejects_inconsistent_split_units() -> None
 
     with pytest.raises(ValueError, match="inconsistent split address offset units"):
         _validate_address_immediate_units(_descriptor_set(descriptor))
+
+
+def test_address_immediate_validation_accepts_split_ds16_offset() -> None:
+    descriptor = _memory_descriptor(
+        immediates=(
+            Immediate(
+                "offset",
+                ImmediateKind.UNSIGNED,
+                bit_width=16,
+                encoding_id=_ADDRESS_OFFSET_DS16_ENCODING_ID,
+                unsigned_max=65535,
+            ),
+        )
+    )
+
+    _validate_address_immediate_units(_descriptor_set(descriptor))

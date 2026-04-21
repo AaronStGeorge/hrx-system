@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
+#include "loom/target/arch/amdgpu/encoding.h"
 
 namespace loom::testing {
 
@@ -378,6 +379,120 @@ inline void ExpectAmdgpuDsAddtidMemoryDescriptors(
   ExpectAmdgpuDsAddtidMemoryDescriptor(
       descriptor_set, IREE_SV("amdgpu.ds_write_addtid_b32"),
       LOOM_LOW_EFFECT_KIND_WRITE, expected_encoding_format_id);
+}
+
+inline void ExpectAmdgpuDsCrosslaneDescriptor(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
+    uint16_t expected_operand_count, uint16_t expected_encoding_format_id) {
+  const loom_low_descriptor_t* descriptor =
+      LookupAmdgpuDescriptorForTest(descriptor_set, key);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->operand_count, expected_operand_count);
+  EXPECT_EQ(descriptor->result_count, 1u);
+  EXPECT_EQ(descriptor->immediate_count, 1u);
+  EXPECT_EQ(descriptor->effect_count, 1u);
+  EXPECT_EQ(descriptor->encoding_format_id, expected_encoding_format_id);
+  EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE, 0u);
+  EXPECT_EQ(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
+
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[descriptor->operand_start];
+  EXPECT_EQ(operands[0].unit_count, 1u);
+  EXPECT_EQ(operands[0].role, LOOM_LOW_OPERAND_ROLE_RESULT);
+  EXPECT_EQ(operands[1].unit_count, 1u);
+  EXPECT_EQ(operands[1].role, LOOM_LOW_OPERAND_ROLE_OPERAND);
+  if (expected_operand_count == 3u) {
+    EXPECT_EQ(operands[2].unit_count, 1u);
+    EXPECT_EQ(operands[2].role, LOOM_LOW_OPERAND_ROLE_OPERAND);
+  }
+
+  const loom_low_immediate_t* immediate =
+      &descriptor_set->immediates[descriptor->immediate_start];
+  EXPECT_EQ(immediate->kind, LOOM_LOW_IMMEDIATE_KIND_UNSIGNED);
+  EXPECT_EQ(immediate->bit_width, 16u);
+  EXPECT_EQ(immediate->unsigned_max, 65535u);
+  EXPECT_EQ(immediate->encoding_field_id, 0u);
+  EXPECT_EQ(immediate->encoding_id,
+            LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
+
+  const loom_low_effect_t* effect =
+      &descriptor_set->effects[descriptor->effect_start];
+  EXPECT_EQ(effect->kind, LOOM_LOW_EFFECT_KIND_CONVERGENT);
+  EXPECT_EQ(effect->memory_space, LOOM_LOW_MEMORY_SPACE_NONE);
+  EXPECT_NE(effect->flags & LOOM_LOW_EFFECT_FLAG_ORDERED, 0u);
+}
+
+inline void ExpectAmdgpuDsCrosslaneDescriptors(
+    const loom_low_descriptor_set_t* descriptor_set,
+    uint16_t expected_encoding_format_id, bool expect_fetch_invalid) {
+  ExpectAmdgpuDsCrosslaneDescriptor(descriptor_set,
+                                    IREE_SV("amdgpu.ds_swizzle_b32"), 2u,
+                                    expected_encoding_format_id);
+  ExpectAmdgpuDsCrosslaneDescriptor(descriptor_set,
+                                    IREE_SV("amdgpu.ds_permute_b32"), 3u,
+                                    expected_encoding_format_id);
+  ExpectAmdgpuDsCrosslaneDescriptor(descriptor_set,
+                                    IREE_SV("amdgpu.ds_bpermute_b32"), 3u,
+                                    expected_encoding_format_id);
+  if (expect_fetch_invalid) {
+    ExpectAmdgpuDsCrosslaneDescriptor(descriptor_set,
+                                      IREE_SV("amdgpu.ds_bpermute_fi_b32"), 3u,
+                                      expected_encoding_format_id);
+  }
+}
+
+inline void ExpectAmdgpuDsTransposeReadDescriptor(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
+    uint16_t expected_value_units, uint32_t expected_width_bits,
+    uint16_t expected_encoding_format_id) {
+  const loom_low_descriptor_t* descriptor =
+      LookupAmdgpuDescriptorForTest(descriptor_set, key);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->operand_count, 2u);
+  EXPECT_EQ(descriptor->result_count, 1u);
+  EXPECT_EQ(descriptor->immediate_count, 1u);
+  EXPECT_EQ(descriptor->effect_count, 1u);
+  EXPECT_EQ(descriptor->encoding_format_id, expected_encoding_format_id);
+
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[descriptor->operand_start];
+  EXPECT_EQ(operands[0].unit_count, expected_value_units);
+  EXPECT_EQ(operands[0].role, LOOM_LOW_OPERAND_ROLE_RESULT);
+  EXPECT_EQ(operands[1].unit_count, 1u);
+  EXPECT_EQ(operands[1].role, LOOM_LOW_OPERAND_ROLE_OPERAND);
+
+  const loom_low_immediate_t* immediate =
+      &descriptor_set->immediates[descriptor->immediate_start];
+  EXPECT_EQ(immediate->kind, LOOM_LOW_IMMEDIATE_KIND_UNSIGNED);
+  EXPECT_EQ(immediate->bit_width, 16u);
+  EXPECT_EQ(immediate->unsigned_max, 65535u);
+  EXPECT_EQ(immediate->encoding_field_id, 0u);
+  EXPECT_EQ(immediate->encoding_id,
+            LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
+
+  const loom_low_effect_t* effect =
+      &descriptor_set->effects[descriptor->effect_start];
+  EXPECT_EQ(effect->kind, LOOM_LOW_EFFECT_KIND_READ);
+  EXPECT_EQ(effect->memory_space, LOOM_LOW_MEMORY_SPACE_WORKGROUP);
+  EXPECT_EQ(effect->width_bits, expected_width_bits);
+  EXPECT_NE(effect->flags & LOOM_LOW_EFFECT_FLAG_DEPENDENCY, 0u);
+  EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
+}
+
+inline void ExpectAmdgpuGfx950DsTransposeReadDescriptors(
+    const loom_low_descriptor_set_t* descriptor_set) {
+  ExpectAmdgpuDsTransposeReadDescriptor(descriptor_set,
+                                        IREE_SV("amdgpu.ds_read_b64_tr_b4"), 2u,
+                                        64u, LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  ExpectAmdgpuDsTransposeReadDescriptor(descriptor_set,
+                                        IREE_SV("amdgpu.ds_read_b96_tr_b6"), 3u,
+                                        96u, LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  ExpectAmdgpuDsTransposeReadDescriptor(descriptor_set,
+                                        IREE_SV("amdgpu.ds_read_b64_tr_b8"), 2u,
+                                        64u, LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  ExpectAmdgpuDsTransposeReadDescriptor(
+      descriptor_set, IREE_SV("amdgpu.ds_read_b64_tr_b16"), 2u, 64u,
+      LOOM_AMDGPU_ENCODING_FORMAT_DS);
 }
 
 }  // namespace loom::testing

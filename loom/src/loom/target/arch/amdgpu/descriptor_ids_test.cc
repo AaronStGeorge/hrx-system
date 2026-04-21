@@ -131,7 +131,27 @@ TEST(AmdgpuDescriptorIdsTest, AddressImmediateEncodingIdsMatchDescriptorSets) {
     ExpectImmediateEncoding(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_READ2ST64_B32,
         LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD_STRIDE64);
+    ExpectImmediateEncoding(
+        descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_SWIZZLE_B32,
+        LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
+    ExpectImmediateEncoding(
+        descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_PERMUTE_B32,
+        LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
+    ExpectImmediateEncoding(
+        descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32,
+        LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
   }
+  for (const loom_low_descriptor_set_t* descriptor_set :
+       {loom_amdgpu_gfx12_core_descriptor_set(),
+        loom_amdgpu_gfx1250_core_descriptor_set()}) {
+    ExpectImmediateEncoding(
+        descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_FI_B32,
+        LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
+  }
+  ExpectImmediateEncoding(
+      loom_amdgpu_gfx950_core_descriptor_set(),
+      LOOM_AMDGPU_DESCRIPTOR_ID_DS_READ_B64_TR_B4,
+      LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
 }
 
 TEST(AmdgpuDescriptorIdsTest, CommonRegClassIdsMatchDescriptorSetContract) {

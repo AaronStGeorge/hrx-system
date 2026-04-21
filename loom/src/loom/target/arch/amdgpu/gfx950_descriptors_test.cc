@@ -20,7 +20,9 @@ namespace {
 
 using ::loom::testing::ExpectAmdgpuDs2AddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsAddtidMemoryDescriptors;
+using ::loom::testing::ExpectAmdgpuDsCrosslaneDescriptors;
 using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
+using ::loom::testing::ExpectAmdgpuGfx950DsTransposeReadDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
 using ::loom::testing::LowTextAsmRoundTripHarness;
@@ -211,6 +213,10 @@ TEST(AmdgpuDescriptorsTest, Gfx950CoreDescriptorLookupUsesStableKeys) {
                                        LOOM_AMDGPU_ENCODING_FORMAT_DS);
   ExpectAmdgpuDsAddtidMemoryDescriptors(descriptor_set,
                                         LOOM_AMDGPU_ENCODING_FORMAT_DS);
+  ExpectAmdgpuDsCrosslaneDescriptors(descriptor_set,
+                                     LOOM_AMDGPU_ENCODING_FORMAT_DS,
+                                     /*expect_fetch_invalid=*/false);
+  ExpectAmdgpuGfx950DsTransposeReadDescriptors(descriptor_set);
 
   const loom_low_descriptor_t* barrier_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_barrier"));

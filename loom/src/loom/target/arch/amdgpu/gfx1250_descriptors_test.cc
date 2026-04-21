@@ -18,6 +18,7 @@ namespace {
 
 using ::loom::testing::ExpectAmdgpuDs2AddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsAddtidMemoryDescriptors;
+using ::loom::testing::ExpectAmdgpuDsCrosslaneDescriptors;
 using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
 using ::loom::testing::ExpectAmdgpuGlobalMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
@@ -213,6 +214,9 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
                                        LOOM_AMDGPU_ENCODING_FORMAT_VDS);
   ExpectAmdgpuDsAddtidMemoryDescriptors(descriptor_set,
                                         LOOM_AMDGPU_ENCODING_FORMAT_VDS);
+  ExpectAmdgpuDsCrosslaneDescriptors(descriptor_set,
+                                     LOOM_AMDGPU_ENCODING_FORMAT_VDS,
+                                     /*expect_fetch_invalid=*/true);
 
   const loom_low_descriptor_t* load_wait_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_loadcnt"));

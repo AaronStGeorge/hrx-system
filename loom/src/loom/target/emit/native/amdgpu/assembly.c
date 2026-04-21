@@ -584,6 +584,17 @@ static bool loom_amdgpu_descriptor_uses_global_pointer_format(
   }
 }
 
+static bool loom_amdgpu_descriptor_uses_data_share_format(
+    const loom_low_descriptor_t* descriptor) {
+  switch (descriptor->encoding_format_id) {
+    case LOOM_AMDGPU_ENCODING_FORMAT_DS:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VDS:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static bool loom_amdgpu_descriptor_uses_global_scalar_base_format(
     const loom_native_assembly_packet_context_t* context) {
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
@@ -1143,6 +1154,11 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
       return has_read_effect ? loom_amdgpu_append_global_load_packet(context)
                              : loom_amdgpu_append_global_store_packet(context);
     }
+    const loom_op_t* op = context->packet->node->op;
+    return loom_amdgpu_append_memory_packet(context, descriptor->result_count,
+                                            op->operand_count);
+  }
+  if (loom_amdgpu_descriptor_uses_data_share_format(descriptor)) {
     const loom_op_t* op = context->packet->node->op;
     return loom_amdgpu_append_memory_packet(context, descriptor->result_count,
                                             op->operand_count);
