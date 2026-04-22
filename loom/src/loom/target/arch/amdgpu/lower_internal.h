@@ -57,6 +57,10 @@ uint32_t loom_amdgpu_vector_i32_lane_count(loom_type_t type);
 // zero when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_f32_lane_count(loom_type_t type);
 
+// Returns the i8 lane count for a supported AMDGPU packed byte payload, or zero
+// when the source type is not representable as that payload.
+uint32_t loom_amdgpu_vector_i8_lane_count(loom_type_t type);
+
 // Returns true when the source type is a 32-bit-element view that can map to an
 // AMDGPU HAL/global buffer resource or LDS root.
 bool loom_amdgpu_type_is_32bit_view(loom_type_t type);
@@ -198,6 +202,21 @@ iree_status_t loom_amdgpu_emit_const_u32(loom_low_lower_context_t* context,
                                          loom_type_t result_type,
                                          loom_value_id_t* out_value_id);
 
+// Emits one binary VGPR descriptor op.
+iree_status_t loom_amdgpu_emit_vgpr_binary(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id, loom_value_id_t lhs, loom_value_id_t rhs,
+    loom_type_t lane_type, loom_value_id_t* out_value);
+
+// Emits one VGPR shift descriptor op with a materialized immediate shift
+// amount. If |shift| is zero, returns |value| unchanged.
+iree_status_t loom_amdgpu_emit_vgpr_shift(loom_low_lower_context_t* context,
+                                          const loom_op_t* source_op,
+                                          uint64_t descriptor_id,
+                                          uint32_t shift, loom_value_id_t value,
+                                          loom_type_t lane_type,
+                                          loom_value_id_t* out_value);
+
 // Emits a low.slice from a register range.
 iree_status_t loom_amdgpu_emit_low_slice(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
@@ -258,6 +277,15 @@ bool loom_amdgpu_can_lower_vector_bitfield_insert(
 // Lowers a source vector.bitfield.insert op to AMDGPU descriptor-backed low
 // packets.
 iree_status_t loom_amdgpu_lower_vector_bitfield_insert(
+    loom_low_lower_context_t* context, const loom_op_t* source_op);
+
+// Returns true when a source vector.bitpack op can lower through the current
+// AMDGPU packed byte descriptor family.
+bool loom_amdgpu_can_lower_vector_bitpack(loom_low_lower_context_t* context,
+                                          const loom_op_t* source_op);
+
+// Lowers a source vector.bitpack op to AMDGPU descriptor-backed low packets.
+iree_status_t loom_amdgpu_lower_vector_bitpack(
     loom_low_lower_context_t* context, const loom_op_t* source_op);
 
 // Verifies source vector-dot legality for AMDGPU target-low selection.

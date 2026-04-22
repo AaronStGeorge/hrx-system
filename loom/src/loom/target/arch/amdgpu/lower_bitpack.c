@@ -1,0 +1,95 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include <stdint.h>
+
+#include "loom/ir/context.h"
+#include "loom/ops/vector/ops.h"
+#include "loom/target/arch/amdgpu/descriptor_ids.h"
+#include "loom/target/arch/amdgpu/lower_internal.h"
+
+typedef struct loom_amdgpu_bitpack_t {
+  // Source vector value containing unpacked i32 lanes.
+  loom_value_id_t source;
+  // Result vector value containing one packed i8 dword.
+  loom_value_id_t result;
+} loom_amdgpu_bitpack_t;
+
+static bool loom_amdgpu_bitpack_select(loom_low_lower_context_t* context,
+                                       const loom_op_t* source_op,
+                                       loom_amdgpu_bitpack_t* out_select) {
+  IREE_ASSERT_ARGUMENT(out_select);
+  *out_select = (loom_amdgpu_bitpack_t){0};
+  if (!loom_vector_bitpack_isa(source_op) ||
+      loom_vector_bitpack_width(source_op) != 8) {
+    return false;
+  }
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_id_t source = loom_vector_bitpack_source(source_op);
+  const loom_value_id_t result = loom_vector_bitpack_result(source_op);
+  const loom_type_t source_type = loom_module_value_type(module, source);
+  const loom_type_t result_type = loom_module_value_type(module, result);
+  if (loom_amdgpu_vector_i32_lane_count(source_type) != 4 ||
+      loom_amdgpu_vector_i8_lane_count(result_type) != 4) {
+    return false;
+  }
+
+  out_select->source = source;
+  out_select->result = result;
+  return true;
+}
+
+bool loom_amdgpu_can_lower_vector_bitpack(loom_low_lower_context_t* context,
+                                          const loom_op_t* source_op) {
+  loom_amdgpu_bitpack_t select = {0};
+  return loom_amdgpu_bitpack_select(context, source_op, &select);
+}
+
+iree_status_t loom_amdgpu_lower_vector_bitpack(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  loom_amdgpu_bitpack_t select = {0};
+  if (!loom_amdgpu_bitpack_select(context, source_op, &select)) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "preflight accepted unsupported AMDGPU "
+                            "vector.bitpack");
+  }
+
+  loom_value_id_t low_source = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, select.source, &low_source));
+
+  loom_type_t lane_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
+  loom_value_id_t mask_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, UINT32_C(255),
+      lane_type, &mask_value));
+
+  loom_value_id_t packed = LOOM_VALUE_ID_INVALID;
+  for (uint32_t i = 0; i < 4; ++i) {
+    loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
+        context, source_op, low_source, i, lane_type, &source_lane));
+    loom_value_id_t low_bits = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32, source_lane,
+        mask_value, lane_type, &low_bits));
+    loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHLREV_B32, i * 8u,
+        low_bits, lane_type, &shifted));
+    if (packed == LOOM_VALUE_ID_INVALID) {
+      packed = shifted;
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_OR_B32, packed, shifted,
+        lane_type, &packed));
+  }
+
+  return loom_low_lower_bind_value(context, select.result, packed);
+}

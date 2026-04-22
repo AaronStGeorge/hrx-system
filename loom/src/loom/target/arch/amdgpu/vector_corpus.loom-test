@@ -115,6 +115,22 @@ func.def target(@gfx11_q6_merge_shape_target) @amdgpu_q6_merge_shape(%low_buffer
 }
 
 // ====
+// RUN: emit source-low @amdgpu_q6_pack_dot_shape output=none
+target.profile @gfx11_q6_pack_dot_shape_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_q6_pack_dot_shape_target) @amdgpu_q6_pack_dot_shape(%low_packed: vector<4xi32>, %high_packed: vector<4xi32>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  %low4 = vector.bitfield.extractu %low_packed {offset = 0, width = 4} : vector<4xi32> -> vector<4xi32>
+  %high2 = vector.bitfield.extractu %high_packed {offset = 0, width = 2} : vector<4xi32> -> vector<4xi32>
+  %q6 = vector.bitfield.insert %high2 into %low4 {offset = 4, width = 2} : vector<4xi32>, vector<4xi32>
+  %bias = vector.constant 32 : vector<4xi32>
+  %signed_q6 = vector.subi %q6, %bias : vector<4xi32>
+  %lhs = vector.bitpack<8> %signed_q6 : vector<4xi32> -> vector<4xi8>
+  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  func.return %dot : vector<1xi32>
+}
+
+// ====
 // RUN: emit source-low @amdgpu_dot4i_s8s8 output=none
 target.profile @gfx11_dot4i_s8s8_target preset("amdgpu-gfx11")
 

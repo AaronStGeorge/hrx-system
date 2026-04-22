@@ -23,11 +23,6 @@ typedef struct loom_amdgpu_dot_diagnostic_t {
   loom_amdgpu_dot_rejection_flags_t rejection_bits;
 } loom_amdgpu_dot_diagnostic_t;
 
-static uint32_t loom_amdgpu_vector_i8_lane_count(loom_type_t type) {
-  return loom_amdgpu_static_vector_lane_count(
-      type, LOOM_SCALAR_TYPE_I8, LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES * 4);
-}
-
 static bool loom_amdgpu_descriptor_set_has_descriptor(
     const loom_low_descriptor_set_t* descriptor_set, uint64_t descriptor_id) {
   return descriptor_set != NULL &&
