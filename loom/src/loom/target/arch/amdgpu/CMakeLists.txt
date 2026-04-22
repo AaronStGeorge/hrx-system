@@ -459,6 +459,7 @@ loom_cc_library(
     "lower_dot.c"
     "lower_mask.c"
     "lower_memory.c"
+    "lower_preamble.c"
     "lower_reduce.c"
     "lower_structural.c"
     "lower_support.c"

@@ -219,6 +219,19 @@ iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
                                          loom_low_lower_plan_t plan);
 
+// Selects a plan for kernel preamble source ops.
+iree_status_t loom_amdgpu_select_preamble_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_low_lower_plan_t* out_plan);
+
+// Emits preamble live-ins for the current low function.
+iree_status_t loom_amdgpu_emit_preamble(void* user_data,
+                                        loom_low_lower_context_t* context);
+
+// Lowers a kernel preamble source op using its pre-bound live-in value.
+iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
+                                            const loom_op_t* source_op);
+
 // Looks up a lowered i32 value and materializes exact source constants into
 // VGPRs when a vector-style packet cannot consume the existing lowering.
 iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
