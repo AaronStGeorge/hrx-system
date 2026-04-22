@@ -434,3 +434,19 @@ low.func.def target(@gfx11_lds_b128_roundtrip_target) abi(hal_kernel) @lds_b128_
 }
 
 low.slot @lds_b128_roundtrip__low__lds5 {align = 16, function = @lds_b128_roundtrip__low, size = 1024, space = lds}
+
+// ====
+// RUN: emit source-low @dot4i_s8s8 output=low
+target.profile @gfx11_dot4i_s8s8_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_dot4i_s8s8_target) @dot4i_s8s8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  func.return %dot : vector<1xi32>
+}
+
+// ----
+low.func.def target(@gfx11_dot4i_s8s8_target) abi(hal_kernel) @dot4i_s8s8__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %dot = low.op<amdgpu.v_dot4_i32_i8>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %dot : reg<amdgpu.vgpr>
+}

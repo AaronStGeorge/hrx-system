@@ -2194,6 +2194,24 @@ def _v_mfma_f32_16x16x16_f16_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_dot4_i32_i8_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_dot4_i32_i8",
+        instruction_name="V_DOT4_I32_I8",
+        mnemonic="v_dot4_i32_i8",
+        encoding_name="ENC_VOP3P",
+        semantic_tag="dot.s8s8.i32x1",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
+            AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _s_waitcnt_overlay(
     *,
     effects: tuple[Effect, ...],
@@ -2443,6 +2461,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),
+        _v_dot4_i32_i8_overlay(),
         *_gfx950_ds_transpose_read_overlays(),
         _v_mfma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
@@ -2528,6 +2547,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),
+        _v_dot4_i32_i8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
         _s_waitcnt_overlay(
@@ -2635,6 +2655,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             fixed_encoding_fields=(),
             include_fetch_invalid=True,
         ),
+        _v_dot4_i32_i8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),
@@ -2737,6 +2758,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             fixed_encoding_fields=(),
             include_fetch_invalid=True,
         ),
+        _v_dot4_i32_i8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),

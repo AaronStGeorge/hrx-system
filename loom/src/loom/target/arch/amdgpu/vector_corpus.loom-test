@@ -96,11 +96,11 @@ func.def target(@gfx11_q4_decode_shape_target) @amdgpu_q4_decode_shape(%input: b
 }
 
 // ====
-// RUN: emit source-low @amdgpu_dot_gap output=none
-// XFAIL: AMDGPU source-to-low does not yet select MFMA/WMMA-style dot contracts.
-target.profile @gfx11_dot_gap_target preset("amdgpu-gfx11")
+// RUN: emit source-low @amdgpu_dot4i_s8s8 output=none
+target.profile @gfx11_dot4i_s8s8_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_dot_gap_target) @amdgpu_dot_gap(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+func.def target(@gfx11_dot4i_s8s8_target) @amdgpu_dot4i_s8s8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
   %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   func.return %dot : vector<1xi32>
 }
