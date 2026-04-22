@@ -466,6 +466,11 @@ static iree_status_t TestEmitPreamble(void* user_data,
       loom_low_lower_context_low_function(context)->location, &live_in_op);
 }
 
+struct TestCallbackPlan {
+  // Descriptor emitted by the callback-selected low op.
+  uint64_t descriptor_id;
+};
+
 static iree_status_t TestSelectCallbackOp(void* user_data,
                                           loom_low_lower_context_t* context,
                                           const loom_op_t* source_op,
@@ -482,10 +487,11 @@ static iree_status_t TestSelectCallbackOp(void* user_data,
           loom_module_value_type(module, loom_scalar_muli_result(source_op)))) {
     return iree_ok_status();
   }
-  *out_plan = (loom_low_lower_plan_t){
-      .id = source_op->kind,
-      .payload = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
-  };
+  TestCallbackPlan* plan_data = nullptr;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+      context, sizeof(*plan_data), (void**)&plan_data));
+  plan_data->descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32;
+  *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
   return iree_ok_status();
 }
 
@@ -495,6 +501,9 @@ static iree_status_t TestEmitCallbackOp(void* user_data,
                                         loom_low_lower_plan_t plan) {
   (void)user_data;
   IREE_ASSERT_EQ(plan.id, LOOM_OP_SCALAR_MULI);
+  const auto* plan_data =
+      static_cast<const TestCallbackPlan*>(plan.target_data);
+  IREE_ASSERT_NE(plan_data, nullptr);
   loom_value_id_t operands[2] = {
       LOOM_VALUE_ID_INVALID,
       LOOM_VALUE_ID_INVALID,
@@ -508,7 +517,7 @@ static iree_status_t TestEmitCallbackOp(void* user_data,
       context, source_op, loom_scalar_muli_result(source_op), &result_type));
   loom_op_t* low_op = nullptr;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, plan.payload, operands, IREE_ARRAYSIZE(operands),
+      context, plan_data->descriptor_id, operands, IREE_ARRAYSIZE(operands),
       loom_make_named_attr_slice(NULL, 0), &result_type, 1, nullptr, 0,
       source_op->location, &low_op));
   return loom_low_lower_bind_value(

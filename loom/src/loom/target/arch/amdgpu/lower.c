@@ -17,15 +17,15 @@ static iree_status_t loom_amdgpu_select_plan_id(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan) {
   *out_plan = loom_low_lower_plan_empty();
-#define LOOM_AMDGPU_SELECT_DATA(plan_type, select_fn)                      \
-  do {                                                                     \
-    plan_type* plan_data = NULL;                                           \
-    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(                \
-        context, sizeof(*plan_data), (void**)&plan_data));                 \
-    if (select_fn(context, source_op, plan_data)) {                        \
-      *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data); \
-    }                                                                      \
-    return iree_ok_status();                                               \
+#define LOOM_AMDGPU_SELECT_DATA(plan_type, select_fn)                   \
+  do {                                                                  \
+    plan_type* plan_data = NULL;                                        \
+    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(             \
+        context, sizeof(*plan_data), (void**)&plan_data));              \
+    if (select_fn(context, source_op, plan_data)) {                     \
+      *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data); \
+    }                                                                   \
+    return iree_ok_status();                                            \
   } while (false)
   switch (source_op->kind) {
     case LOOM_OP_INDEX_CONSTANT:

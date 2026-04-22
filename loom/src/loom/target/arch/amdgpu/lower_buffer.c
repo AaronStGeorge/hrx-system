@@ -64,7 +64,7 @@ iree_status_t loom_amdgpu_select_buffer_plan(loom_low_lower_context_t* context,
           context, sizeof(*plan_data), (void**)&plan_data));
       if (loom_amdgpu_select_buffer_alloca_plan(context, source_op,
                                                 plan_data)) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
+        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
       }
       return iree_ok_status();
     }
@@ -78,7 +78,7 @@ iree_status_t loom_amdgpu_select_buffer_plan(loom_low_lower_context_t* context,
       return iree_ok_status();
   }
   if (selected) {
-    *out_plan = loom_low_lower_plan_make(source_op->kind, 0, NULL);
+    *out_plan = loom_low_lower_plan_make(source_op->kind, NULL);
   }
   return iree_ok_status();
 }

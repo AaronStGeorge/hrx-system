@@ -119,27 +119,24 @@ typedef uint64_t loom_low_lower_plan_id_t;
 typedef struct loom_low_lower_plan_t {
   // Target-owned dense plan id selected during planning.
   loom_low_lower_plan_id_t id;
-  // Target-owned auxiliary value, usually a selected descriptor stable id.
-  uint64_t payload;
   // Arena-owned target plan data selected during planning and consumed by
   // emission during the same lowering run. Core lowering never interprets it.
   const void* target_data;
 } loom_low_lower_plan_t;
 
 // Returns a selected lowering plan. |target_data| points at immutable
-// target-owned payload storage allocated from the current lowering arena, or
-// NULL when |id| and |payload| fully describe the plan.
+// target-owned storage allocated from the current lowering arena, or NULL when
+// |id| fully describes the plan.
 static inline loom_low_lower_plan_t loom_low_lower_plan_make(
-    loom_low_lower_plan_id_t id, uint64_t payload, const void* target_data) {
+    loom_low_lower_plan_id_t id, const void* target_data) {
   return (loom_low_lower_plan_t){
       .id = id,
-      .payload = payload,
       .target_data = target_data,
   };
 }
 
 static inline loom_low_lower_plan_t loom_low_lower_plan_empty(void) {
-  return loom_low_lower_plan_make(LOOM_LOW_LOWER_PLAN_ID_NONE, 0, NULL);
+  return loom_low_lower_plan_make(LOOM_LOW_LOWER_PLAN_ID_NONE, NULL);
 }
 
 static inline bool loom_low_lower_plan_is_empty(loom_low_lower_plan_t plan) {

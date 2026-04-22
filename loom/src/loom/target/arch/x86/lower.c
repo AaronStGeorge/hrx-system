@@ -671,7 +671,7 @@ static iree_status_t loom_x86_select_packed_dot_op(
             context, sizeof(*plan_data), (void**)&plan_data));
         if (loom_x86_init_packed_dot_plan(source_op, descriptor->stable_id,
                                           plan_data)) {
-          *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
+          *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
         }
       }
       return iree_ok_status();

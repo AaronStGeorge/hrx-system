@@ -296,7 +296,7 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                                            plan_data);
       }
       if (selected) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
+        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
       }
       return iree_ok_status();
     }
@@ -305,7 +305,7 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
       IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
           context, sizeof(*plan_data), (void**)&plan_data));
       if (loom_amdgpu_select_vector_iota_plan(context, source_op, plan_data)) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
+        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
       }
       return iree_ok_status();
     }
@@ -315,7 +315,7 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
           context, sizeof(*plan_data), (void**)&plan_data));
       if (loom_amdgpu_select_vector_extract_plan(context, source_op,
                                                  plan_data)) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
+        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
       }
       return iree_ok_status();
     }
@@ -325,7 +325,7 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
           context, sizeof(*plan_data), (void**)&plan_data));
       if (loom_amdgpu_select_vector_from_elements_plan(context, source_op,
                                                        plan_data)) {
-        *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
+        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
       }
       return iree_ok_status();
     }

@@ -277,7 +277,7 @@ iree_status_t loom_amdgpu_select_integer_plan(loom_low_lower_context_t* context,
       loom_amdgpu_integer_rule_for_op(source_op->kind);
   if (rule != NULL &&
       loom_amdgpu_can_lower_integer_rule(context, source_op, rule)) {
-    *out_plan = loom_low_lower_plan_make(source_op->kind, 0, NULL);
+    *out_plan = loom_low_lower_plan_make(source_op->kind, NULL);
   }
   return iree_ok_status();
 }
