@@ -6,6 +6,7 @@
 
 #include "loom/codegen/low/lower_rules.h"
 
+#include <inttypes.h>
 #include <stdint.h>
 
 #include "loom/ir/context.h"
@@ -90,18 +91,16 @@ static loom_value_id_t loom_low_lower_rule_source_value(
 }
 
 static bool loom_low_lower_rule_can_materialize_value(
-    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     uint16_t value_ref_index) {
   IREE_ASSERT_LT(value_ref_index, rule_set->value_ref_count);
-  const loom_low_lower_value_ref_t* value_ref =
-      &rule_set->value_refs[value_ref_index];
-  IREE_ASSERT_GT(value_ref->materializer_index, 0);
-  const loom_low_lower_value_materializer_t* materializer =
-      loom_low_lower_rule_value_materializer(rule_set, value_ref);
-  IREE_ASSERT(materializer->can_materialize != NULL);
-  return materializer->can_materialize(
-      context, source_op,
+  if (match_context->can_materialize.fn == NULL) {
+    return false;
+  }
+  return match_context->can_materialize.fn(
+      match_context->can_materialize.user_data, match_context, rule_set,
+      source_op, value_ref_index,
       loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index));
 }
 
@@ -210,21 +209,65 @@ static bool loom_low_lower_rule_type_matches(
   return true;
 }
 
-static iree_status_t loom_low_lower_rule_mapped_low_type(
-    loom_low_lower_context_t* context,
+static iree_status_t loom_low_lower_rule_mapped_value(
+    const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
-    uint16_t value_ref_index, loom_type_t* out_type) {
-  IREE_ASSERT_ARGUMENT(out_type);
-  *out_type = loom_type_none();
+    uint16_t value_ref_index,
+    loom_low_lower_rule_mapped_value_t* out_mapped_value) {
+  IREE_ASSERT_ARGUMENT(out_mapped_value);
+  *out_mapped_value = loom_low_lower_rule_mapped_value_none();
+  if (match_context->map_value.fn == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target-low lowering rule match context needs a value mapper");
+  }
   loom_value_id_t source_value_id =
       loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_map_value(context, source_op, source_value_id, out_type));
+  return match_context->map_value.fn(match_context->map_value.user_data,
+                                     match_context, source_op, source_value_id,
+                                     out_mapped_value);
+}
+
+static iree_status_t loom_low_lower_rule_mapped_value_register_class_matches(
+    const loom_low_lower_rule_match_context_t* match_context,
+    loom_low_lower_rule_mapped_value_t mapped_value,
+    uint16_t descriptor_register_class_id, bool* out_matches) {
+  IREE_ASSERT_ARGUMENT(out_matches);
+  *out_matches = false;
+  if (!mapped_value.is_register) {
+    return iree_ok_status();
+  }
+  if (descriptor_register_class_id >=
+      match_context->descriptor_set->reg_class_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target-low lowering rule references register class %" PRIu16
+        " outside the selected descriptor set",
+        descriptor_register_class_id);
+  }
+  if (mapped_value.descriptor_register_class_id != LOOM_LOW_REG_CLASS_NONE) {
+    *out_matches = mapped_value.descriptor_register_class_id ==
+                   descriptor_register_class_id;
+    return iree_ok_status();
+  }
+  if (mapped_value.register_class_id == LOOM_STRING_ID_INVALID) {
+    return iree_ok_status();
+  }
+  if (match_context->register_class.fn == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low lowering rule match context needs a "
+                            "register-class mapper");
+  }
+  loom_string_id_t expected_class_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(match_context->register_class.fn(
+      match_context->register_class.user_data, match_context,
+      descriptor_register_class_id, &expected_class_id));
+  *out_matches = mapped_value.register_class_id == expected_class_id;
   return iree_ok_status();
 }
 
 static iree_status_t loom_low_lower_rule_guard_matches(
-    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     const loom_low_lower_guard_t* guard, bool* out_matches) {
   IREE_ASSERT_ARGUMENT(out_matches);
@@ -234,8 +277,8 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       IREE_ASSERT_LT(guard->type_pattern_index, rule_set->type_pattern_count);
       loom_value_id_t value_id = loom_low_lower_rule_source_value(
           rule_set, source_op, guard->value_ref_index);
-      loom_type_t type = loom_module_value_type(
-          loom_low_lower_context_module(context), value_id);
+      loom_type_t type =
+          loom_module_value_type(match_context->module, value_id);
       *out_matches = loom_low_lower_rule_type_matches(
           &rule_set->type_patterns[guard->type_pattern_index], type);
       return iree_ok_status();
@@ -268,34 +311,29 @@ static iree_status_t loom_low_lower_rule_guard_matches(
                          guard->maximum_i64;
       return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE:
-      *out_matches =
-          loom_low_descriptor_set_lookup_descriptor_by_id(
-              loom_low_lower_context_descriptor_set(context),
-              guard->descriptor_id) != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+      *out_matches = loom_low_descriptor_set_lookup_descriptor_by_id(
+                         match_context->descriptor_set, guard->descriptor_id) !=
+                     LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
       return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_VALUE_MATERIALIZABLE:
       *out_matches = loom_low_lower_rule_can_materialize_value(
-          context, rule_set, source_op, guard->value_ref_index);
+          match_context, rule_set, source_op, guard->value_ref_index);
       return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_CLASS: {
-      loom_type_t low_type = loom_type_none();
-      IREE_RETURN_IF_ERROR(loom_low_lower_rule_mapped_low_type(
-          context, rule_set, source_op, guard->value_ref_index, &low_type));
-      if (!loom_type_is_register(low_type)) {
-        return iree_ok_status();
-      }
-      loom_string_id_t expected_class_id = LOOM_STRING_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_low_lower_register_class_string_id(
-          context, guard->register_class_id, &expected_class_id));
-      *out_matches = loom_type_register_class_id(low_type) == expected_class_id;
-      return iree_ok_status();
+      loom_low_lower_rule_mapped_value_t mapped_value =
+          loom_low_lower_rule_mapped_value_none();
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_mapped_value(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          &mapped_value));
+      return loom_low_lower_rule_mapped_value_register_class_matches(
+          match_context, mapped_value, guard->register_class_id, out_matches);
     }
     case LOOM_LOW_LOWER_GUARD_VALUE_STATIC_DIM0_MULTIPLE: {
       IREE_ASSERT_GT(guard->u64, 0);
       loom_value_id_t value_id = loom_low_lower_rule_source_value(
           rule_set, source_op, guard->value_ref_index);
-      loom_type_t type = loom_module_value_type(
-          loom_low_lower_context_module(context), value_id);
+      loom_type_t type =
+          loom_module_value_type(match_context->module, value_id);
       if (loom_type_rank(type) == 0 || loom_type_dim_is_dynamic_at(type, 0)) {
         return iree_ok_status();
       }
@@ -305,21 +343,24 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       return iree_ok_status();
     }
     case LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT_EQ: {
-      loom_type_t lhs_type = loom_type_none();
-      IREE_RETURN_IF_ERROR(loom_low_lower_rule_mapped_low_type(
-          context, rule_set, source_op, guard->value_ref_index, &lhs_type));
-      if (!loom_type_is_register(lhs_type)) {
+      loom_low_lower_rule_mapped_value_t lhs_value =
+          loom_low_lower_rule_mapped_value_none();
+      IREE_RETURN_IF_ERROR(
+          loom_low_lower_rule_mapped_value(match_context, rule_set, source_op,
+                                           guard->value_ref_index, &lhs_value));
+      if (!lhs_value.is_register) {
         return iree_ok_status();
       }
-      loom_type_t rhs_type = loom_type_none();
-      IREE_RETURN_IF_ERROR(loom_low_lower_rule_mapped_low_type(
-          context, rule_set, source_op, guard->other_value_ref_index,
-          &rhs_type));
-      if (!loom_type_is_register(rhs_type)) {
+      loom_low_lower_rule_mapped_value_t rhs_value =
+          loom_low_lower_rule_mapped_value_none();
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_mapped_value(
+          match_context, rule_set, source_op, guard->other_value_ref_index,
+          &rhs_value));
+      if (!rhs_value.is_register) {
         return iree_ok_status();
       }
-      *out_matches = loom_type_register_unit_count(lhs_type) ==
-                     loom_type_register_unit_count(rhs_type);
+      *out_matches =
+          lhs_value.register_unit_count == rhs_value.register_unit_count;
       return iree_ok_status();
     }
     default:
@@ -329,7 +370,7 @@ static iree_status_t loom_low_lower_rule_guard_matches(
 }
 
 static iree_status_t loom_low_lower_rule_matches(
-    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     const loom_low_lower_rule_t* rule, bool* out_matches,
     uint16_t* out_diagnostic_index, uint16_t* out_matched_guard_count) {
@@ -345,7 +386,7 @@ static iree_status_t loom_low_lower_rule_matches(
     const loom_low_lower_guard_t* guard = &rule_set->guards[guard_index];
     bool guard_matches = false;
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_guard_matches(
-        context, rule_set, source_op, guard, &guard_matches));
+        match_context, rule_set, source_op, guard, &guard_matches));
     if (!guard_matches) {
       *out_diagnostic_index = guard->diagnostic_index;
       *out_matched_guard_count = i;
@@ -357,11 +398,13 @@ static iree_status_t loom_low_lower_rule_matches(
   return iree_ok_status();
 }
 
-iree_status_t loom_low_lower_rule_set_select(
-    loom_low_lower_context_t* context,
+iree_status_t loom_low_lower_rule_set_select_with_match_context(
+    const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     loom_low_lower_rule_selection_t* out_selection) {
-  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(match_context);
+  IREE_ASSERT_ARGUMENT(match_context->module);
+  IREE_ASSERT_ARGUMENT(match_context->descriptor_set);
   IREE_ASSERT_ARGUMENT(rule_set);
   IREE_ASSERT_ARGUMENT(source_op);
   IREE_ASSERT_ARGUMENT(out_selection);
@@ -389,8 +432,8 @@ iree_status_t loom_low_lower_rule_set_select(
     uint16_t diagnostic_index = LOOM_LOW_LOWER_DIAGNOSTIC_NONE;
     uint16_t matched_guard_count = 0;
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_matches(
-        context, rule_set, source_op, rule, &rule_matches, &diagnostic_index,
-        &matched_guard_count));
+        match_context, rule_set, source_op, rule, &rule_matches,
+        &diagnostic_index, &matched_guard_count));
     if (rule_matches) {
       out_selection->rule = rule;
       return iree_ok_status();
@@ -405,6 +448,110 @@ iree_status_t loom_low_lower_rule_set_select(
   out_selection->diagnostic_index = best_diagnostic_index;
   out_selection->matched_guard_count = best_matched_guard_count;
   return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_rule_match_map_value_from_lowering(
+    void* user_data, const loom_low_lower_rule_match_context_t* match_context,
+    const loom_op_t* source_op, loom_value_id_t source_value_id,
+    loom_low_lower_rule_mapped_value_t* out_mapped_value) {
+  (void)match_context;
+  IREE_ASSERT_ARGUMENT(out_mapped_value);
+  *out_mapped_value = loom_low_lower_rule_mapped_value_none();
+  loom_low_lower_context_t* context = (loom_low_lower_context_t*)user_data;
+  loom_type_t low_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_map_value(context, source_op, source_value_id, &low_type));
+  if (!loom_type_is_register(low_type)) {
+    return iree_ok_status();
+  }
+  *out_mapped_value = (loom_low_lower_rule_mapped_value_t){
+      .is_register = true,
+      .descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE,
+      .register_class_id = loom_type_register_class_id(low_type),
+      .register_unit_count = loom_type_register_unit_count(low_type),
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_rule_match_register_class_from_lowering(
+    void* user_data, const loom_low_lower_rule_match_context_t* match_context,
+    uint16_t descriptor_register_class_id, loom_string_id_t* out_string_id) {
+  (void)match_context;
+  loom_low_lower_context_t* context = (loom_low_lower_context_t*)user_data;
+  return loom_low_lower_register_class_string_id(
+      context, descriptor_register_class_id, out_string_id);
+}
+
+static bool loom_low_lower_rule_match_can_materialize_from_lowering(
+    void* user_data, const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, loom_value_id_t source_value_id) {
+  (void)match_context;
+  loom_low_lower_context_t* context = (loom_low_lower_context_t*)user_data;
+  IREE_ASSERT_LT(value_ref_index, rule_set->value_ref_count);
+  const loom_low_lower_value_ref_t* value_ref =
+      &rule_set->value_refs[value_ref_index];
+  IREE_ASSERT_GT(value_ref->materializer_index, 0);
+  const loom_low_lower_value_materializer_t* materializer =
+      loom_low_lower_rule_value_materializer(rule_set, value_ref);
+  IREE_ASSERT(materializer->can_materialize != NULL);
+  return materializer->can_materialize(context, source_op, source_value_id);
+}
+
+iree_status_t loom_low_lower_rule_set_select(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t* out_selection) {
+  IREE_ASSERT_ARGUMENT(context);
+  const loom_low_lower_rule_match_context_t match_context = {
+      .module = loom_low_lower_context_module(context),
+      .descriptor_set = loom_low_lower_context_descriptor_set(context),
+      .map_value =
+          {
+              .fn = loom_low_lower_rule_match_map_value_from_lowering,
+              .user_data = context,
+          },
+      .register_class =
+          {
+              .fn = loom_low_lower_rule_match_register_class_from_lowering,
+              .user_data = context,
+          },
+      .can_materialize =
+          {
+              .fn = loom_low_lower_rule_match_can_materialize_from_lowering,
+              .user_data = context,
+          },
+  };
+  return loom_low_lower_rule_set_select_with_match_context(
+      &match_context, rule_set, source_op, out_selection);
+}
+
+const loom_low_lower_diagnostic_t* loom_low_lower_rule_set_selection_diagnostic(
+    const loom_low_lower_rule_set_t* rule_set,
+    loom_low_lower_rule_selection_t selection) {
+  IREE_ASSERT_ARGUMENT(rule_set);
+  if (selection.rule != NULL ||
+      selection.diagnostic_index == LOOM_LOW_LOWER_DIAGNOSTIC_NONE ||
+      selection.diagnostic_index >= rule_set->diagnostic_count) {
+    return NULL;
+  }
+  return &rule_set->diagnostics[selection.diagnostic_index];
+}
+
+uint64_t loom_low_lower_rule_first_descriptor_id(
+    const loom_low_lower_rule_set_t* rule_set,
+    const loom_low_lower_rule_t* rule) {
+  IREE_ASSERT_ARGUMENT(rule_set);
+  IREE_ASSERT_ARGUMENT(rule);
+  for (uint16_t i = 0; i < rule->emit_count; ++i) {
+    const uint16_t emit_index = (uint16_t)(rule->emit_start + i);
+    IREE_ASSERT_LT(emit_index, rule_set->emit_count);
+    const uint64_t descriptor_id = rule_set->emits[emit_index].descriptor_id;
+    if (descriptor_id != LOOM_LOW_DESCRIPTOR_ID_NONE) {
+      return descriptor_id;
+    }
+  }
+  return LOOM_LOW_DESCRIPTOR_ID_NONE;
 }
 
 iree_status_t loom_low_lower_rule_set_emit_selection_failure(

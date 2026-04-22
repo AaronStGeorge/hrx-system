@@ -163,6 +163,40 @@ static iree_status_t TestMapArgument(
                      &out_argument->abi_type);
 }
 
+static iree_status_t TestRuleMatchMapValue(
+    void* user_data, const loom_low_lower_rule_match_context_t* context,
+    const loom_op_t* source_op, loom_value_id_t source_value_id,
+    loom_low_lower_rule_mapped_value_t* out_mapped_value) {
+  (void)user_data;
+  (void)source_op;
+  IREE_ASSERT_ARGUMENT(out_mapped_value);
+  IREE_ASSERT_LT(source_value_id, context->module->values.count);
+  *out_mapped_value = loom_low_lower_rule_mapped_value_none();
+  loom_type_t source_type =
+      loom_module_value_type(context->module, source_value_id);
+  if (IsI32(source_type) || IsI1(source_type) || IsIndex(source_type)) {
+    *out_mapped_value = loom_low_lower_rule_mapped_value_register(
+        TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 1);
+  } else if (IsVector4xi32(source_type)) {
+    *out_mapped_value = loom_low_lower_rule_mapped_value_register(
+        TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 4);
+  }
+  return iree_ok_status();
+}
+
+static bool TestRuleMatchCanMaterialize(
+    void* user_data, const loom_low_lower_rule_match_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, loom_value_id_t source_value_id) {
+  (void)user_data;
+  (void)context;
+  (void)rule_set;
+  (void)source_op;
+  (void)value_ref_index;
+  (void)source_value_id;
+  return true;
+}
+
 static bool TestCanMaterializeCopy(loom_low_lower_context_t* context,
                                    const loom_op_t* source_op,
                                    loom_value_id_t source_value_id) {
@@ -991,6 +1025,25 @@ class LowLowerTest : public ::testing::Test {
     return (loom_func_like_t){0};
   }
 
+  const loom_op_t* FirstBodyOpOfKind(loom_module_t* module,
+                                     loom_op_kind_t kind) {
+    loom_func_like_t function = FirstFunction(module);
+    loom_region_t* body = loom_func_like_body(function);
+    if (body == nullptr) {
+      ADD_FAILURE() << "expected function to have a body";
+      return nullptr;
+    }
+    const loom_block_t* entry_block = loom_region_const_entry_block(body);
+    loom_op_t* op = nullptr;
+    loom_block_for_each_op(entry_block, op) {
+      if (op->kind == kind) {
+        return op;
+      }
+    }
+    ADD_FAILURE() << "expected function body to contain op kind " << kind;
+    return nullptr;
+  }
+
   loom_symbol_ref_t SymbolRef(loom_module_t* module,
                               iree_string_view_t symbol_name) {
     loom_string_id_t symbol_name_id = LOOM_STRING_ID_INVALID;
@@ -1117,6 +1170,84 @@ class LowLowerTest : public ::testing::Test {
   loom_target_low_descriptor_registry_t registry_ = {};
   loom_low_lower_policy_registry_t policy_registry_ = {};
 };
+
+TEST_F(LowLowerTest, RuleSelectionWithMatchContextSelectsVectorRule) {
+  ModulePtr module = ParseSource(
+      "func.def @add_vectors(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> "
+      "(vector<4xi32>) {\n"
+      "  %sum = vector.addi %lhs, %rhs : vector<4xi32>\n"
+      "  func.return %sum : vector<4xi32>\n"
+      "}\n");
+  const loom_op_t* source_op =
+      FirstBodyOpOfKind(module.get(), LOOM_OP_VECTOR_ADDI);
+  ASSERT_NE(source_op, nullptr);
+
+  const loom_low_lower_rule_match_context_t match_context = {
+      .module = module.get(),
+      .descriptor_set = loom_test_low_core_descriptor_set(),
+      .map_value =
+          {
+              .fn = TestRuleMatchMapValue,
+              .user_data = nullptr,
+          },
+  };
+  loom_low_lower_rule_selection_t selection = {};
+  IREE_ASSERT_OK(loom_low_lower_rule_set_select_with_match_context(
+      &match_context, &kTestLowerRuleSet, source_op, &selection));
+
+  EXPECT_TRUE(selection.has_source_op_span);
+  EXPECT_EQ(selection.rule, &kTestLowerRules[3]);
+  EXPECT_EQ(selection.diagnostic_index, LOOM_LOW_LOWER_DIAGNOSTIC_NONE);
+  EXPECT_EQ(loom_low_lower_rule_set_selection_diagnostic(&kTestLowerRuleSet,
+                                                         selection),
+            nullptr);
+  EXPECT_EQ(loom_low_lower_rule_first_descriptor_id(&kTestLowerRuleSet,
+                                                    selection.rule),
+            TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32);
+}
+
+TEST_F(LowLowerTest, RuleSelectionWithMatchContextUsesMaterializerCallback) {
+  ModulePtr module = ParseSource(
+      "func.def @madd(%lhs: index, %rhs: index, %acc: index) -> (index) {\n"
+      "  %result = index.madd %lhs, %rhs, %acc : index\n"
+      "  func.return %result : index\n"
+      "}\n");
+  const loom_op_t* source_op =
+      FirstBodyOpOfKind(module.get(), LOOM_OP_INDEX_MADD);
+  ASSERT_NE(source_op, nullptr);
+
+  loom_low_lower_rule_match_context_t match_context = {
+      .module = module.get(),
+      .descriptor_set = loom_test_low_core_descriptor_set(),
+      .map_value =
+          {
+              .fn = TestRuleMatchMapValue,
+              .user_data = nullptr,
+          },
+  };
+  loom_low_lower_rule_selection_t selection = {};
+  IREE_ASSERT_OK(loom_low_lower_rule_set_select_with_match_context(
+      &match_context, &kTestLowerRuleSet, source_op, &selection));
+  EXPECT_EQ(selection.rule, nullptr);
+  const loom_low_lower_diagnostic_t* diagnostic =
+      loom_low_lower_rule_set_selection_diagnostic(&kTestLowerRuleSet,
+                                                   selection);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_EQ(diagnostic,
+            &kTestLowerDiagnostics[kTestLowerDiagnosticMaterialized]);
+
+  match_context.can_materialize.fn = TestRuleMatchCanMaterialize;
+  match_context.can_materialize.user_data = nullptr;
+  IREE_ASSERT_OK(loom_low_lower_rule_set_select_with_match_context(
+      &match_context, &kTestLowerRuleSet, source_op, &selection));
+
+  EXPECT_TRUE(selection.has_source_op_span);
+  EXPECT_EQ(selection.rule, &kTestLowerRules[5]);
+  EXPECT_EQ(selection.diagnostic_index, LOOM_LOW_LOWER_DIAGNOSTIC_NONE);
+  EXPECT_EQ(loom_low_lower_rule_first_descriptor_id(&kTestLowerRuleSet,
+                                                    selection.rule),
+            TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32);
+}
 
 TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {
   EmissionCollector lower_collector;

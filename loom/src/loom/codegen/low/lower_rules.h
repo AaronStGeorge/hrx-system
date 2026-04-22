@@ -23,6 +23,9 @@
 extern "C" {
 #endif
 
+typedef struct loom_low_lower_rule_match_context_t
+    loom_low_lower_rule_match_context_t;
+
 // Returns a scalar element-type bit for type-pattern masks.
 #define LOOM_LOW_LOWER_SCALAR_TYPE_BIT(type) (UINT64_C(1) << (uint32_t)(type))
 
@@ -89,6 +92,91 @@ typedef struct loom_low_lower_value_materializer_t {
   // Emission-time callback that returns the low value used by descriptor ops.
   loom_low_lower_materialize_value_fn_t materialize;
 } loom_low_lower_value_materializer_t;
+
+typedef struct loom_low_lower_rule_mapped_value_t {
+  // True when the source value maps to a target-low register.
+  bool is_register;
+  // Descriptor-set register-class ID, or LOOM_LOW_REG_CLASS_NONE if the mapped
+  // value only has a module string ID for its class.
+  uint16_t descriptor_register_class_id;
+  // Module string ID for the register class, or LOOM_STRING_ID_INVALID if the
+  // mapped value carries a descriptor-set register-class ID directly.
+  loom_string_id_t register_class_id;
+  // Number of target-low allocation units occupied by the mapped register.
+  uint32_t register_unit_count;
+} loom_low_lower_rule_mapped_value_t;
+
+// Creates a non-register mapped value.
+static inline loom_low_lower_rule_mapped_value_t
+loom_low_lower_rule_mapped_value_none(void) {
+  return (loom_low_lower_rule_mapped_value_t){
+      .is_register = false,
+      .descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE,
+      .register_class_id = LOOM_STRING_ID_INVALID,
+      .register_unit_count = 0,
+  };
+}
+
+// Creates a mapped register value addressed by descriptor-set register class.
+static inline loom_low_lower_rule_mapped_value_t
+loom_low_lower_rule_mapped_value_register(uint16_t descriptor_register_class_id,
+                                          uint32_t register_unit_count) {
+  return (loom_low_lower_rule_mapped_value_t){
+      .is_register = true,
+      .descriptor_register_class_id = descriptor_register_class_id,
+      .register_class_id = LOOM_STRING_ID_INVALID,
+      .register_unit_count = register_unit_count,
+  };
+}
+
+typedef iree_status_t (*loom_low_lower_rule_match_map_value_fn_t)(
+    void* user_data, const loom_low_lower_rule_match_context_t* context,
+    const loom_op_t* source_op, loom_value_id_t source_value_id,
+    loom_low_lower_rule_mapped_value_t* out_mapped_value);
+
+typedef struct loom_low_lower_rule_match_map_value_callback_t {
+  // Callback invoked to map one source value into target-low register metadata.
+  loom_low_lower_rule_match_map_value_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_rule_match_map_value_callback_t;
+
+typedef iree_status_t (*loom_low_lower_rule_match_register_class_fn_t)(
+    void* user_data, const loom_low_lower_rule_match_context_t* context,
+    uint16_t descriptor_register_class_id, loom_string_id_t* out_string_id);
+
+typedef struct loom_low_lower_rule_match_register_class_callback_t {
+  // Callback invoked when a mapped value reports a module string ID and a guard
+  // needs the equivalent descriptor-set register-class spelling.
+  loom_low_lower_rule_match_register_class_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_rule_match_register_class_callback_t;
+
+typedef bool (*loom_low_lower_rule_match_can_materialize_value_fn_t)(
+    void* user_data, const loom_low_lower_rule_match_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, loom_value_id_t source_value_id);
+
+typedef struct loom_low_lower_rule_match_can_materialize_value_callback_t {
+  // Callback invoked for VALUE_MATERIALIZABLE guards.
+  loom_low_lower_rule_match_can_materialize_value_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_rule_match_can_materialize_value_callback_t;
+
+struct loom_low_lower_rule_match_context_t {
+  // Source module being matched.
+  const loom_module_t* module;
+  // Descriptor set selected for the target-low contract.
+  const loom_low_descriptor_set_t* descriptor_set;
+  // Source-value to target-low register metadata mapper.
+  loom_low_lower_rule_match_map_value_callback_t map_value;
+  // Optional descriptor-register-class to module string mapper.
+  loom_low_lower_rule_match_register_class_callback_t register_class;
+  // Optional source value materializer predicate bridge.
+  loom_low_lower_rule_match_can_materialize_value_callback_t can_materialize;
+};
 
 typedef struct loom_low_lower_value_ref_t {
   // Source value namespace being referenced.
@@ -317,6 +405,27 @@ iree_status_t loom_low_lower_rule_set_select(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     loom_low_lower_rule_selection_t* out_selection);
+
+// Selects the exact lowering rule for |source_op| using a read-only match
+// context. This is the legality/checking sibling of
+// loom_low_lower_rule_set_select and performs no IR mutation or emission.
+iree_status_t loom_low_lower_rule_set_select_with_match_context(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t* out_selection);
+
+// Returns the diagnostic row for |selection|, or NULL when no table diagnostic
+// is available for that failed selection.
+const loom_low_lower_diagnostic_t* loom_low_lower_rule_set_selection_diagnostic(
+    const loom_low_lower_rule_set_t* rule_set,
+    loom_low_lower_rule_selection_t selection);
+
+// Returns the first descriptor ID emitted by |rule|, or
+// LOOM_LOW_DESCRIPTOR_ID_NONE when the rule does not emit a descriptor-backed
+// packet.
+uint64_t loom_low_lower_rule_first_descriptor_id(
+    const loom_low_lower_rule_set_t* rule_set,
+    const loom_low_lower_rule_t* rule);
 
 // Emits the diagnostic described by a failed selection. If the rule set did not
 // cover the source op kind, emits the generic no-mapping diagnostic.
