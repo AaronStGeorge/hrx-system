@@ -463,6 +463,7 @@ loom_cc_library(
     "lower_structural.c"
     "lower_support.c"
     "lower_table.c"
+    "lower_values.c"
   DEPS
     ::descriptor_ids
     ::hal_kernel_abi

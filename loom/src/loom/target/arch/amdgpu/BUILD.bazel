@@ -577,6 +577,7 @@ loom_cc_library(
         "lower_structural.c",
         "lower_support.c",
         "lower_table.c",
+        "lower_values.c",
     ],
     hdrs = [
         "lower.h",

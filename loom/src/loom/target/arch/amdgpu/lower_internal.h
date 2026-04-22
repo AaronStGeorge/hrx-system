@@ -198,6 +198,27 @@ bool loom_amdgpu_value_can_materialize_as_vgpr_address(
 // Target-local rule table for regular arithmetic source ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_rule_set;
 
+// Stores a target-local lowering selection in a generic low lowering plan.
+static inline void loom_amdgpu_set_selected_plan(
+    loom_low_lower_plan_id_t id, uint64_t payload, const void* target_data,
+    loom_low_lower_plan_t* out_plan) {
+  *out_plan = (loom_low_lower_plan_t){
+      .id = id,
+      .payload = payload,
+      .target_data = target_data,
+  };
+}
+
+// Selects a plan for value-construction source ops.
+iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
+                                            const loom_op_t* source_op,
+                                            loom_low_lower_plan_t* out_plan);
+
+// Lowers a value-construction source op using its selected plan.
+iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
+                                         const loom_op_t* source_op,
+                                         loom_low_lower_plan_t plan);
+
 // Looks up a lowered i32 value and materializes exact source constants into
 // VGPRs when a vector-style packet cannot consume the existing lowering.
 iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
