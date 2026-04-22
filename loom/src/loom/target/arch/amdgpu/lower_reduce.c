@@ -11,52 +11,79 @@
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
 
+typedef struct loom_amdgpu_vector_reduce_descriptor_t {
+  // Source vector element type matched by this row.
+  loom_scalar_type_t element_type;
+  // Source vector.reduce kind matched by this row.
+  uint8_t kind;
+  // Stable descriptor ID selected for the reduction lane operation.
+  uint64_t descriptor_id;
+} loom_amdgpu_vector_reduce_descriptor_t;
+
+static const loom_amdgpu_vector_reduce_descriptor_t
+    kAmdgpuVectorReduceDescriptors[] = {
+        {
+            .element_type = LOOM_SCALAR_TYPE_I32,
+            .kind = LOOM_VECTOR_REDUCE_KIND_ADDI,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32,
+        },
+        {
+            .element_type = LOOM_SCALAR_TYPE_I32,
+            .kind = LOOM_VECTOR_REDUCE_KIND_MULI,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_LO_U32,
+        },
+        {
+            .element_type = LOOM_SCALAR_TYPE_I32,
+            .kind = LOOM_VECTOR_REDUCE_KIND_ANDI,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32,
+        },
+        {
+            .element_type = LOOM_SCALAR_TYPE_I32,
+            .kind = LOOM_VECTOR_REDUCE_KIND_ORI,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_OR_B32,
+        },
+        {
+            .element_type = LOOM_SCALAR_TYPE_I32,
+            .kind = LOOM_VECTOR_REDUCE_KIND_XORI,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_XOR_B32,
+        },
+        {
+            .element_type = LOOM_SCALAR_TYPE_F32,
+            .kind = LOOM_VECTOR_REDUCE_KIND_ADDF,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_F32,
+        },
+        {
+            .element_type = LOOM_SCALAR_TYPE_F32,
+            .kind = LOOM_VECTOR_REDUCE_KIND_MULF,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_F32,
+        },
+        {
+            .element_type = LOOM_SCALAR_TYPE_F32,
+            .kind = LOOM_VECTOR_REDUCE_KIND_MINNUMF,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MIN_F32,
+        },
+        {
+            .element_type = LOOM_SCALAR_TYPE_F32,
+            .kind = LOOM_VECTOR_REDUCE_KIND_MAXNUMF,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MAX_F32,
+        },
+};
+
 static bool loom_amdgpu_vector_reduce_descriptor_id(
     loom_scalar_type_t element_type, uint8_t kind,
     uint64_t* out_descriptor_id) {
   IREE_ASSERT_ARGUMENT(out_descriptor_id);
   *out_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
-  switch (element_type) {
-    case LOOM_SCALAR_TYPE_I32:
-      switch ((loom_vector_reduce_kind_t)kind) {
-        case LOOM_VECTOR_REDUCE_KIND_ADDI:
-          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32;
-          return true;
-        case LOOM_VECTOR_REDUCE_KIND_MULI:
-          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_LO_U32;
-          return true;
-        case LOOM_VECTOR_REDUCE_KIND_ANDI:
-          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_AND_B32;
-          return true;
-        case LOOM_VECTOR_REDUCE_KIND_ORI:
-          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_OR_B32;
-          return true;
-        case LOOM_VECTOR_REDUCE_KIND_XORI:
-          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_XOR_B32;
-          return true;
-        default:
-          return false;
-      }
-    case LOOM_SCALAR_TYPE_F32:
-      switch ((loom_vector_reduce_kind_t)kind) {
-        case LOOM_VECTOR_REDUCE_KIND_ADDF:
-          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_F32;
-          return true;
-        case LOOM_VECTOR_REDUCE_KIND_MULF:
-          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_F32;
-          return true;
-        case LOOM_VECTOR_REDUCE_KIND_MINNUMF:
-          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MIN_F32;
-          return true;
-        case LOOM_VECTOR_REDUCE_KIND_MAXNUMF:
-          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MAX_F32;
-          return true;
-        default:
-          return false;
-      }
-    default:
-      return false;
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kAmdgpuVectorReduceDescriptors); ++i) {
+    const loom_amdgpu_vector_reduce_descriptor_t* row =
+        &kAmdgpuVectorReduceDescriptors[i];
+    if (row->element_type == element_type && row->kind == kind) {
+      *out_descriptor_id = row->descriptor_id;
+      return true;
+    }
   }
+  return false;
 }
 
 bool loom_amdgpu_select_vector_reduce_descriptor_id(
