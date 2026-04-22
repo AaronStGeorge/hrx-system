@@ -822,6 +822,7 @@ loom_cc_test(
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
+        "low_hal_structural.loom-test",
         "low_packet_diagnostics.loom-test",
         "source_low.loom-test",
         "source_low_addtid.loom-test",

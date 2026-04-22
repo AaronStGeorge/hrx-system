@@ -53,7 +53,8 @@ static const loom_check_run_provider_t* const kLoomAmdgpuCheckRunProviders[] = {
 static bool loom_amdgpu_check_requirement_is_hal(
     iree_string_view_t requirement) {
   return iree_string_view_equal(requirement, IREE_SV("amdgpu-hal")) ||
-         iree_string_view_equal(requirement, IREE_SV("amdgpu-hal-b128"));
+         iree_string_view_equal(requirement, IREE_SV("amdgpu-hal-b128")) ||
+         iree_string_view_equal(requirement, IREE_SV("amdgpu-hal-gfx11"));
 }
 
 static bool loom_amdgpu_check_unavailable_hal_requirement_matches(
@@ -85,7 +86,8 @@ static iree_status_t loom_amdgpu_check_unavailable_hal_requirement_append_names(
     iree_string_builder_t* builder) {
   (void)provider;
   return iree_string_builder_append_cstring(builder,
-                                            "amdgpu-hal, amdgpu-hal-b128");
+                                            "amdgpu-hal, amdgpu-hal-b128, "
+                                            "amdgpu-hal-gfx11");
 }
 
 static const loom_check_requirement_provider_t

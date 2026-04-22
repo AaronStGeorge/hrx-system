@@ -979,6 +979,28 @@ low.func.def target(@gfx_target) abi(hal_kernel) @loom_kernel() {
 [SUCCESS] all HAL bindings matched their expected values.
 
 // ====
+// REQUIRES: amdgpu-hal-gfx11
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=1,2,3,4 --expected_binding=4xi32=0,0,0,0
+
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) abi(hal_kernel) @loom_kernel() {
+  %output = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %zero_s = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %a = low.concat(%zero, %zero, %zero, %zero) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %b = low.concat(%zero, %zero, %zero, %zero) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %acc_low = low.concat(%zero, %zero, %zero, %zero) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %acc = low.concat(%acc_low, %acc_low) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
+  %wmma = low.op<amdgpu.v_wmma_i32_16x16x16_iu8>(%a, %b, %acc) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x8>) -> %acc as reg<amdgpu.vgpr x8>
+  %stored = low.slice %wmma[0] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr x4>
+  low.op<amdgpu.buffer_store_b128>(%stored, %output, %zero, %zero_s) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&1xi32=0 --expected_binding=1xi32=42
 
 target.profile @gfx_target preset("amdgpu-current")
