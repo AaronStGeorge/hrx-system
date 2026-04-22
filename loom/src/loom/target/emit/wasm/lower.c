@@ -696,6 +696,10 @@ static const loom_low_lower_rule_set_t loom_wasm_rule_set = {
     .diagnostic_count = IREE_ARRAYSIZE(loom_wasm_diagnostics),
 };
 
+static const loom_low_lower_rule_set_t* const kWasmRuleSets[] = {
+    &loom_wasm_rule_set,
+};
+
 static bool loom_wasm_memory_space_is_linear(
     loom_value_fact_memory_space_t memory_space) {
   switch (memory_space) {
@@ -956,7 +960,11 @@ static const loom_low_lower_policy_t kWasmLowLowerPolicy = {
     .name = IREE_SVL("wasm-lower"),
     .map_type = {.fn = loom_wasm_map_type, .user_data = NULL},
     .map_argument = {.fn = loom_wasm_map_argument, .user_data = NULL},
-    .rule_set = &loom_wasm_rule_set,
+    .rule_sets =
+        {
+            .count = IREE_ARRAYSIZE(kWasmRuleSets),
+            .values = kWasmRuleSets,
+        },
     .select_op = {.fn = loom_wasm_select_op, .user_data = NULL},
     .emit_op = {.fn = loom_wasm_emit_op, .user_data = NULL},
 };

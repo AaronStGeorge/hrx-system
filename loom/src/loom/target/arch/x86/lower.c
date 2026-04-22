@@ -830,6 +830,10 @@ static const loom_low_lower_rule_set_t loom_x86_avx512_rule_set = {
     .diagnostic_count = IREE_ARRAYSIZE(loom_x86_avx512_diagnostics),
 };
 
+static const loom_low_lower_rule_set_t* const kX86Avx512RuleSets[] = {
+    &loom_x86_avx512_rule_set,
+};
+
 static bool loom_x86_memory_space_is_object_memory(
     loom_value_fact_memory_space_t memory_space) {
   switch (memory_space) {
@@ -1373,7 +1377,11 @@ static const loom_low_lower_policy_t kX86Avx512LowLowerPolicy = {
     .name = IREE_SVL("x86-avx512-low-lower"),
     .map_type = {.fn = loom_x86_map_avx512_type, .user_data = NULL},
     .map_argument = {.fn = loom_x86_map_avx512_argument, .user_data = NULL},
-    .rule_set = &loom_x86_avx512_rule_set,
+    .rule_sets =
+        {
+            .count = IREE_ARRAYSIZE(kX86Avx512RuleSets),
+            .values = kX86Avx512RuleSets,
+        },
     .select_op = {.fn = loom_x86_select_avx512_op, .user_data = NULL},
     .emit_op = {.fn = loom_x86_emit_avx512_op, .user_data = NULL},
 };

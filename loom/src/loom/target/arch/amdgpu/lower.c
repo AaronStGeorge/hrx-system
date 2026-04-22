@@ -224,13 +224,22 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
   }
 }
 
+static const loom_low_lower_rule_set_t* const kAmdgpuRuleSets[] = {
+    &loom_amdgpu_arithmetic_rule_set,
+    &loom_amdgpu_integer_rule_set,
+};
+
 static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .name = IREE_SVL("amdgpu-register-lower"),
     .map_type = {.fn = loom_amdgpu_map_type, .user_data = NULL},
     .map_value = {.fn = loom_amdgpu_map_value, .user_data = NULL},
     .map_argument = {.fn = loom_amdgpu_map_argument, .user_data = NULL},
     .emit_preamble = {.fn = loom_amdgpu_emit_preamble, .user_data = NULL},
-    .rule_set = &loom_amdgpu_arithmetic_rule_set,
+    .rule_sets =
+        {
+            .count = IREE_ARRAYSIZE(kAmdgpuRuleSets),
+            .values = kAmdgpuRuleSets,
+        },
     .select_op = {.fn = loom_amdgpu_select_op, .user_data = NULL},
     .emit_op = {.fn = loom_amdgpu_emit_op, .user_data = NULL},
 };

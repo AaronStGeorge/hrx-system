@@ -23,6 +23,8 @@
 typedef struct loom_low_lower_selected_plan_t {
   // Source op this selected plan lowers.
   const loom_op_t* source_op;
+  // Rule set owning |rule|, or NULL for target-owned callbacks.
+  const loom_low_lower_rule_set_t* rule_set;
   // Table rule selected during planning, or NULL for target-owned callbacks.
   const loom_low_lower_rule_t* rule;
   // Target-owned plan selected during planning, or empty for table rules.
@@ -749,24 +751,40 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     return iree_ok_status();
   }
 
-  loom_low_lower_rule_selection_t rule_selection = {0};
-  if (context->policy->rule_set != NULL) {
+  const loom_low_lower_rule_set_t* failed_rule_set = NULL;
+  loom_low_lower_rule_selection_t failed_rule_selection = {0};
+  for (iree_host_size_t i = 0; i < context->policy->rule_sets.count; ++i) {
+    const loom_low_lower_rule_set_t* rule_set =
+        context->policy->rule_sets.values[i];
+    loom_low_lower_rule_selection_t rule_selection = {0};
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select(
-        context, context->policy->rule_set, source_op, &rule_selection));
+        context, rule_set, source_op, &rule_selection));
     if (rule_selection.rule != NULL) {
       return loom_low_lower_record_selected_plan(
           context, (loom_low_lower_selected_plan_t){
                        .source_op = source_op,
+                       .rule_set = rule_set,
                        .rule = rule_selection.rule,
                        .plan = loom_low_lower_plan_empty(),
                    });
     }
+    if (rule_selection.has_source_op_span &&
+        (failed_rule_set == NULL ||
+         rule_selection.matched_guard_count >
+             failed_rule_selection.matched_guard_count)) {
+      failed_rule_set = rule_set;
+      failed_rule_selection = rule_selection;
+    }
   }
 
   if (context->policy->select_op.fn == NULL) {
-    IREE_ASSERT(context->policy->rule_set != NULL);
+    if (failed_rule_set == NULL &&
+        !loom_low_lower_rule_set_list_is_empty(context->policy->rule_sets)) {
+      failed_rule_set = context->policy->rule_sets.values[0];
+    }
+    IREE_ASSERT(failed_rule_set != NULL);
     return loom_low_lower_rule_set_emit_selection_failure(
-        context, context->policy->rule_set, source_op, rule_selection);
+        context, failed_rule_set, source_op, failed_rule_selection);
   }
 
   loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
@@ -776,14 +794,15 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     return loom_low_lower_record_selected_plan(context,
                                                (loom_low_lower_selected_plan_t){
                                                    .source_op = source_op,
+                                                   .rule_set = NULL,
                                                    .rule = NULL,
                                                    .plan = plan,
                                                });
   }
 
-  if (context->policy->rule_set != NULL && rule_selection.has_source_op_span) {
+  if (failed_rule_set != NULL) {
     return loom_low_lower_rule_set_emit_selection_failure(
-        context, context->policy->rule_set, source_op, rule_selection);
+        context, failed_rule_set, source_op, failed_rule_selection);
   }
   return loom_low_lower_emit_reject(
       context, source_op, IREE_SV("op"),
@@ -1175,8 +1194,8 @@ static iree_status_t loom_low_lower_emit_selected_plan(
       context->selected_plans[context->selected_plan_emit_index++];
   IREE_ASSERT_EQ(selected_plan.source_op, source_op);
   if (selected_plan.rule != NULL) {
-    IREE_ASSERT(context->policy->rule_set != NULL);
-    return loom_low_lower_rule_set_emit_rule(context, context->policy->rule_set,
+    IREE_ASSERT(selected_plan.rule_set != NULL);
+    return loom_low_lower_rule_set_emit_rule(context, selected_plan.rule_set,
                                              source_op, selected_plan.rule);
   }
   IREE_ASSERT_FALSE(loom_low_lower_plan_is_empty(selected_plan.plan));

@@ -33,6 +33,25 @@ extern "C" {
 typedef struct loom_low_lower_context_t loom_low_lower_context_t;
 typedef struct loom_low_lower_rule_set_t loom_low_lower_rule_set_t;
 
+typedef struct loom_low_lower_rule_set_list_t {
+  // Total number of rule sets in the list.
+  iree_host_size_t count;
+  // Rule set list or NULL if no rule sets.
+  const loom_low_lower_rule_set_t* const* values;
+} loom_low_lower_rule_set_list_t;
+
+// Returns an empty rule set list.
+static inline loom_low_lower_rule_set_list_t loom_low_lower_rule_set_list_empty(
+    void) {
+  return (loom_low_lower_rule_set_list_t){0, NULL};
+}
+
+// Returns true when |list| contains no rule sets.
+static inline bool loom_low_lower_rule_set_list_is_empty(
+    loom_low_lower_rule_set_list_t list) {
+  return list.count == 0;
+}
+
 typedef iree_status_t (*loom_low_lower_map_type_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_type_t source_type,
@@ -188,8 +207,10 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_map_argument_callback_t map_argument;
   // Optionally emits target live-ins or other structural preamble packets.
   loom_low_lower_emit_preamble_callback_t emit_preamble;
-  // Optional table-driven source-op lowering rules.
-  const loom_low_lower_rule_set_t* rule_set;
+  // Optional table-driven source-op lowering rule sets in selection order. Rule
+  // sets may overlap; the first matching rule wins and failed diagnostics use
+  // the most-specific rejected candidate.
+  loom_low_lower_rule_set_list_t rule_sets;
   // Optional target-owned selector used before a target has table rules.
   loom_low_lower_select_op_callback_t select_op;
   // Optional target-owned emitter for plans selected by |select_op|.

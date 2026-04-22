@@ -599,6 +599,50 @@ static const loom_low_lower_rule_set_t kTestLowerRuleSet = {
     .diagnostic_count = IREE_ARRAYSIZE(kTestLowerDiagnostics),
 };
 
+static const loom_low_lower_rule_t kTestRejectedScalarAddRules[] = {
+    {
+        .source_op_kind = LOOM_OP_SCALAR_ADDI,
+        .guard_start = kTestLowerVectorLhsGuard,
+        .guard_count = 3,
+        .emit_start = kTestLowerEmitAddV4I32,
+        .emit_count = 1,
+    },
+};
+
+static const loom_low_lower_rule_span_t kTestRejectedScalarAddSpans[] = {
+    {
+        .source_op_kind = LOOM_OP_SCALAR_ADDI,
+        .rule_start = 0,
+        .rule_count = 1,
+    },
+};
+
+static const loom_low_lower_rule_set_t kTestRejectedScalarAddRuleSet = {
+    .spans = kTestRejectedScalarAddSpans,
+    .span_count = IREE_ARRAYSIZE(kTestRejectedScalarAddSpans),
+    .rules = kTestRejectedScalarAddRules,
+    .rule_count = IREE_ARRAYSIZE(kTestRejectedScalarAddRules),
+    .type_patterns = kTestLowerTypePatterns,
+    .type_pattern_count = IREE_ARRAYSIZE(kTestLowerTypePatterns),
+    .value_refs = kTestLowerValueRefs,
+    .value_ref_count = IREE_ARRAYSIZE(kTestLowerValueRefs),
+    .guards = kTestLowerGuards,
+    .guard_count = IREE_ARRAYSIZE(kTestLowerGuards),
+    .emits = kTestLowerEmits,
+    .emit_count = IREE_ARRAYSIZE(kTestLowerEmits),
+    .diagnostics = kTestLowerDiagnostics,
+    .diagnostic_count = IREE_ARRAYSIZE(kTestLowerDiagnostics),
+};
+
+static const loom_low_lower_rule_set_t* const kTestLowerRuleSets[] = {
+    &kTestLowerRuleSet,
+};
+
+static const loom_low_lower_rule_set_t* const kTestComposedRuleSets[] = {
+    &kTestRejectedScalarAddRuleSet,
+    &kTestLowerRuleSet,
+};
+
 static iree_status_t TestEmitPreamble(void* user_data,
                                       loom_low_lower_context_t* context) {
   (void)user_data;
@@ -679,7 +723,11 @@ static const loom_low_lower_policy_t kTestLowerPolicy = {
     .name = IREE_SVL("test-lower-policy"),
     .map_type = {.fn = TestMapType, .user_data = nullptr},
     .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
-    .rule_set = &kTestLowerRuleSet,
+    .rule_sets =
+        {
+            .count = IREE_ARRAYSIZE(kTestLowerRuleSets),
+            .values = kTestLowerRuleSets,
+        },
 };
 
 static const loom_low_lower_policy_t kTestPreambleLowerPolicy = {
@@ -687,16 +735,35 @@ static const loom_low_lower_policy_t kTestPreambleLowerPolicy = {
     .map_type = {.fn = TestMapType, .user_data = nullptr},
     .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
     .emit_preamble = {.fn = TestEmitPreamble, .user_data = nullptr},
-    .rule_set = &kTestLowerRuleSet,
+    .rule_sets =
+        {
+            .count = IREE_ARRAYSIZE(kTestLowerRuleSets),
+            .values = kTestLowerRuleSets,
+        },
 };
 
 static const loom_low_lower_policy_t kTestHybridLowerPolicy = {
     .name = IREE_SVL("test-hybrid-lower-policy"),
     .map_type = {.fn = TestMapType, .user_data = nullptr},
     .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
-    .rule_set = &kTestLowerRuleSet,
+    .rule_sets =
+        {
+            .count = IREE_ARRAYSIZE(kTestLowerRuleSets),
+            .values = kTestLowerRuleSets,
+        },
     .select_op = {.fn = TestSelectCallbackOp, .user_data = nullptr},
     .emit_op = {.fn = TestEmitCallbackOp, .user_data = nullptr},
+};
+
+static const loom_low_lower_policy_t kTestComposedLowerPolicy = {
+    .name = IREE_SVL("test-composed-lower-policy"),
+    .map_type = {.fn = TestMapType, .user_data = nullptr},
+    .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
+    .rule_sets =
+        {
+            .count = IREE_ARRAYSIZE(kTestComposedRuleSets),
+            .values = kTestComposedRuleSets,
+        },
 };
 
 static loom_low_lower_policy_registry_t MakeTestPolicyRegistry() {
@@ -730,6 +797,19 @@ static loom_low_lower_policy_registry_t MakeTestHybridPolicyRegistry() {
       {
           .contract_set_key = IREE_SVL("test.low.core"),
           .policy = &kTestHybridLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_t registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &registry, kEntries, IREE_ARRAYSIZE(kEntries));
+  return registry;
+}
+
+static loom_low_lower_policy_registry_t MakeTestComposedPolicyRegistry() {
+  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &kTestComposedLowerPolicy,
       },
   };
   loom_low_lower_policy_registry_t registry = {};
@@ -1104,6 +1184,34 @@ TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {
   EXPECT_NE(disassembled_text.find("@add_const__low"), std::string::npos);
   EXPECT_NE(disassembled_text.find("asm<test.low.core>"), std::string::npos);
   EXPECT_NE(disassembled_text.find("test.add.i32"), std::string::npos);
+}
+
+TEST_F(LowLowerTest, ComposedRuleSetsContinueAfterRejectedOverlap) {
+  policy_registry_ = MakeTestComposedPolicyRegistry();
+  IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
+
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+
+  const loom_text_print_options_t print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+  };
+  std::string text;
+  IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
+  EXPECT_NE(text.find("@add__low"), std::string::npos);
+  EXPECT_NE(text.find("low.op<test.add.i32>"), std::string::npos);
 }
 
 TEST_F(LowLowerTest, LowersScalarFunctionTargetingProfile) {

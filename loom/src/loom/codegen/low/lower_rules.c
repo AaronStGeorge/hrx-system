@@ -326,6 +326,7 @@ iree_status_t loom_low_lower_rule_set_select(
       .rule = NULL,
       .has_source_op_span = false,
       .diagnostic_index = LOOM_LOW_LOWER_DIAGNOSTIC_NONE,
+      .matched_guard_count = 0,
   };
 
   const loom_low_lower_rule_span_t* span =
@@ -359,6 +360,7 @@ iree_status_t loom_low_lower_rule_set_select(
   }
 
   out_selection->diagnostic_index = best_diagnostic_index;
+  out_selection->matched_guard_count = best_matched_guard_count;
   return iree_ok_status();
 }
 

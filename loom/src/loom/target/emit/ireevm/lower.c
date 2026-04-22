@@ -396,10 +396,18 @@ static const loom_low_lower_rule_set_t loom_ireevm_rule_set = {
     .diagnostic_count = IREE_ARRAYSIZE(loom_ireevm_diagnostics),
 };
 
+static const loom_low_lower_rule_set_t* const kIreeVmRuleSets[] = {
+    &loom_ireevm_rule_set,
+};
+
 static const loom_low_lower_policy_t kIreeVmLowLowerPolicy = {
     .name = IREE_SVL("iree-vm-lower"),
     .map_type = {.fn = loom_ireevm_map_type, .user_data = NULL},
-    .rule_set = &loom_ireevm_rule_set,
+    .rule_sets =
+        {
+            .count = IREE_ARRAYSIZE(kIreeVmRuleSets),
+            .values = kIreeVmRuleSets,
+        },
 };
 
 const loom_low_lower_policy_t* loom_ireevm_low_lower_policy(void) {

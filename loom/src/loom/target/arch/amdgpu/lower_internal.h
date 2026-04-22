@@ -203,6 +203,9 @@ bool loom_amdgpu_value_can_materialize_as_vgpr_address(
 // Target-local rule table for regular arithmetic source ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_rule_set;
 
+// Target-local rule table for scalar integer and index arithmetic source ops.
+extern const loom_low_lower_rule_set_t loom_amdgpu_integer_rule_set;
+
 // Selects a plan for value-construction source ops.
 iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,

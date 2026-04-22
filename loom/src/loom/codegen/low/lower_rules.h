@@ -293,6 +293,8 @@ typedef struct loom_low_lower_rule_selection_t {
   bool has_source_op_span;
   // Diagnostic row describing the best failed guard when |rule| is NULL.
   uint16_t diagnostic_index;
+  // Number of guards matched by the best failed rule candidate.
+  uint16_t matched_guard_count;
 } loom_low_lower_rule_selection_t;
 
 // Selects the exact lowering rule for |source_op| without emitting user

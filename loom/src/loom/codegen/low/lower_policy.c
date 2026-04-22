@@ -41,7 +41,20 @@ iree_status_t loom_low_lower_policy_verify(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low lowering policy name is required");
   }
-  const bool has_rule_set = policy->rule_set != NULL;
+  if (policy->rule_sets.count != 0 && policy->rule_sets.values == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target-low lowering policy rule set list is required");
+  }
+  for (iree_host_size_t i = 0; i < policy->rule_sets.count; ++i) {
+    if (policy->rule_sets.values[i] == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "target-low lowering policy rule set entries are required");
+    }
+  }
+  const bool has_rule_sets =
+      !loom_low_lower_rule_set_list_is_empty(policy->rule_sets);
   const bool has_select_op = policy->select_op.fn != NULL;
   const bool has_emit_op = policy->emit_op.fn != NULL;
   if (has_select_op != has_emit_op) {
@@ -51,7 +64,7 @@ iree_status_t loom_low_lower_policy_verify(
   }
   const bool has_callback_lowering = has_select_op && has_emit_op;
   if (policy->map_type.fn == NULL ||
-      (!has_rule_set && !has_callback_lowering)) {
+      (!has_rule_sets && !has_callback_lowering)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "complete target-low lowering policy is required");
   }
