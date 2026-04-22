@@ -63,6 +63,23 @@ typedef struct loom_amdgpu_memory_access_diagnostic_t {
   loom_amdgpu_memory_access_rejection_flags_t rejection_bits;
 } loom_amdgpu_memory_access_diagnostic_t;
 
+typedef uint32_t loom_amdgpu_memory_cache_policy_attr_flags_t;
+
+#define LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE ((uint32_t)1u << 0)
+#define LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_TH ((uint32_t)1u << 1)
+#define LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_NT ((uint32_t)1u << 2)
+
+typedef struct loom_amdgpu_memory_cache_policy_attrs_t {
+  // Encoded attribute bits present for the selected descriptor-set encoding.
+  loom_amdgpu_memory_cache_policy_attr_flags_t flags;
+  // SCOPE immediate value for GFX12 vector memory packets.
+  int64_t scope;
+  // TH immediate value for GFX12 vector memory packets.
+  int64_t th;
+  // NT immediate value for GFX950 vector memory packets.
+  int64_t nt;
+} loom_amdgpu_memory_cache_policy_attrs_t;
+
 // Returns the target memory operation represented by a source access plan.
 loom_amdgpu_memory_operation_kind_t
 loom_amdgpu_memory_operation_kind_from_source(
@@ -87,9 +104,12 @@ bool loom_amdgpu_memory_cache_policy_can_lower(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_plan_t* access);
 
-// Returns the GFX12 TH immediate value for a vector memory temporal policy.
-bool loom_amdgpu_memory_cache_policy_gfx12_th(uint8_t temporal,
-                                              int64_t* out_th);
+// Encodes the target-specific cache-policy attributes for a selected memory
+// access plan. Missing source cache policy encodes as an empty attrs struct.
+bool loom_amdgpu_memory_cache_policy_encode(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_memory_access_plan_t* access,
+    loom_amdgpu_memory_cache_policy_attrs_t* out_attrs);
 
 // Returns a status explaining why the access cache policy cannot be encoded.
 iree_status_t loom_amdgpu_memory_cache_policy_rejected_status(

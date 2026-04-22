@@ -67,50 +67,104 @@ static bool loom_amdgpu_memory_cache_policy_is_complete(
   return policy->build_flags == 0 || policy->build_flags == required_flags;
 }
 
-static bool loom_amdgpu_memory_cache_policy_is_regular_device(
-    const loom_vector_memory_cache_policy_t* policy) {
-  return policy->cache_scope == LOOM_CACHE_SCOPE_DEVICE &&
-         policy->cache_temporal == LOOM_CACHE_TEMPORAL_REGULAR;
-}
+typedef struct loom_amdgpu_memory_cache_policy_encoding_row_t {
+  // Descriptor-set cache-policy encoding selected by target info.
+  loom_amdgpu_vector_memory_cache_policy_encoding_t encoding;
+  // Accepted cache-scope bits indexed by loom_cache_scope_t.
+  uint32_t scope_bits;
+  // Accepted cache-temporal bits indexed by loom_cache_temporal_t.
+  uint32_t temporal_bits;
+  // Attribute fields materialized by this encoding.
+  loom_amdgpu_memory_cache_policy_attr_flags_t attr_flags;
+} loom_amdgpu_memory_cache_policy_encoding_row_t;
 
-bool loom_amdgpu_memory_cache_policy_gfx12_th(uint8_t temporal,
-                                              int64_t* out_th) {
-  IREE_ASSERT_ARGUMENT(out_th);
-  *out_th = 0;
-  switch (temporal) {
-    case LOOM_CACHE_TEMPORAL_REGULAR:
-      *out_th = 0;
-      return true;
-    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL:
-      *out_th = 1;
-      return true;
-    case LOOM_CACHE_TEMPORAL_HIGH_TEMPORAL:
-      *out_th = 2;
-      return true;
-    case LOOM_CACHE_TEMPORAL_LAST_USE:
-    case LOOM_CACHE_TEMPORAL_WRITEBACK:
-    case LOOM_CACHE_TEMPORAL_BYPASS:
-      *out_th = 3;
-      return true;
-    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR:
-      *out_th = 4;
-      return true;
-    case LOOM_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL:
-      *out_th = 5;
-      return true;
-    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL:
-      *out_th = 6;
-      return true;
-    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK:
-      *out_th = 7;
-      return true;
+#define LOOM_AMDGPU_CACHE_SCOPE_BIT(scope) \
+  ((uint32_t)1u << LOOM_CACHE_SCOPE_##scope)
+#define LOOM_AMDGPU_CACHE_TEMPORAL_BIT(temporal) \
+  ((uint32_t)1u << LOOM_CACHE_TEMPORAL_##temporal)
+
+#define LOOM_AMDGPU_ALL_CACHE_SCOPE_BITS                               \
+  (LOOM_AMDGPU_CACHE_SCOPE_BIT(CU) | LOOM_AMDGPU_CACHE_SCOPE_BIT(SE) | \
+   LOOM_AMDGPU_CACHE_SCOPE_BIT(DEVICE) | LOOM_AMDGPU_CACHE_SCOPE_BIT(SYSTEM))
+
+#define LOOM_AMDGPU_ALL_CACHE_TEMPORAL_BITS                     \
+  (LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR) |                    \
+   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL) |               \
+   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(HIGH_TEMPORAL) |              \
+   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(LAST_USE) |                   \
+   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(WRITEBACK) |                  \
+   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL_REGULAR) |       \
+   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR_NON_TEMPORAL) |       \
+   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL_HIGH_TEMPORAL) | \
+   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL_WRITEBACK) |     \
+   LOOM_AMDGPU_CACHE_TEMPORAL_BIT(BYPASS))
+
+static const int64_t kAmdgpuGfx12CacheTemporalTh[] = {
+    [LOOM_CACHE_TEMPORAL_REGULAR] = 0,
+    [LOOM_CACHE_TEMPORAL_NON_TEMPORAL] = 1,
+    [LOOM_CACHE_TEMPORAL_HIGH_TEMPORAL] = 2,
+    [LOOM_CACHE_TEMPORAL_LAST_USE] = 3,
+    [LOOM_CACHE_TEMPORAL_WRITEBACK] = 3,
+    [LOOM_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR] = 4,
+    [LOOM_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL] = 5,
+    [LOOM_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL] = 6,
+    [LOOM_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK] = 7,
+    [LOOM_CACHE_TEMPORAL_BYPASS] = 3,
+};
+
+static const loom_amdgpu_memory_cache_policy_encoding_row_t
+    kAmdgpuMemoryCachePolicyEncodingRows[] = {
+        {
+            .encoding =
+                LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
+            .scope_bits = LOOM_AMDGPU_ALL_CACHE_SCOPE_BITS,
+            .temporal_bits = LOOM_AMDGPU_ALL_CACHE_TEMPORAL_BITS,
+            .attr_flags = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE |
+                          LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_TH,
+        },
+        {
+            .encoding =
+                LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+            .scope_bits = LOOM_AMDGPU_CACHE_SCOPE_BIT(DEVICE),
+            .temporal_bits = LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR) |
+                             LOOM_AMDGPU_CACHE_TEMPORAL_BIT(NON_TEMPORAL),
+            .attr_flags = LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_NT,
+        },
+        {
+            .encoding =
+                LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
+            .scope_bits = LOOM_AMDGPU_CACHE_SCOPE_BIT(DEVICE),
+            .temporal_bits = LOOM_AMDGPU_CACHE_TEMPORAL_BIT(REGULAR),
+            .attr_flags = 0,
+        },
+};
+
+static const loom_amdgpu_memory_cache_policy_encoding_row_t*
+loom_amdgpu_memory_cache_policy_encoding_row(
+    loom_amdgpu_vector_memory_cache_policy_encoding_t encoding) {
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kAmdgpuMemoryCachePolicyEncodingRows); ++i) {
+    const loom_amdgpu_memory_cache_policy_encoding_row_t* row =
+        &kAmdgpuMemoryCachePolicyEncodingRows[i];
+    if (row->encoding == encoding) {
+      return row;
+    }
   }
-  return false;
+  return NULL;
 }
 
-bool loom_amdgpu_memory_cache_policy_can_lower(
+static bool loom_amdgpu_memory_cache_policy_bits_contain(uint32_t bits,
+                                                         uint8_t ordinal) {
+  return ordinal < 32 && iree_any_bit_set(bits, (uint32_t)1u << ordinal);
+}
+
+bool loom_amdgpu_memory_cache_policy_encode(
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_amdgpu_memory_access_plan_t* access) {
+    const loom_amdgpu_memory_access_plan_t* access,
+    loom_amdgpu_memory_cache_policy_attrs_t* out_attrs) {
+  IREE_ASSERT_ARGUMENT(out_attrs);
+  *out_attrs = (loom_amdgpu_memory_cache_policy_attrs_t){0};
+
   const loom_vector_memory_cache_policy_t* policy =
       &access->source.cache_policy;
   if (!loom_amdgpu_memory_cache_policy_is_present(policy)) {
@@ -126,23 +180,43 @@ bool loom_amdgpu_memory_cache_policy_can_lower(
   if (descriptor_set_info == NULL) {
     return false;
   }
-  switch (descriptor_set_info->vector_memory_cache_policy_encoding) {
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH: {
-      int64_t th = 0;
-      return loom_cache_scope_is_valid(policy->cache_scope) &&
-             loom_amdgpu_memory_cache_policy_gfx12_th(policy->cache_temporal,
-                                                      &th);
-    }
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1:
-      return policy->cache_scope == LOOM_CACHE_SCOPE_DEVICE &&
-             (policy->cache_temporal == LOOM_CACHE_TEMPORAL_REGULAR ||
-              policy->cache_temporal == LOOM_CACHE_TEMPORAL_NON_TEMPORAL);
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC:
-      return loom_amdgpu_memory_cache_policy_is_regular_device(policy);
-    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE:
-      return false;
+  const loom_amdgpu_memory_cache_policy_encoding_row_t* row =
+      loom_amdgpu_memory_cache_policy_encoding_row(
+          descriptor_set_info->vector_memory_cache_policy_encoding);
+  if (row == NULL ||
+      !loom_amdgpu_memory_cache_policy_bits_contain(row->scope_bits,
+                                                    policy->cache_scope) ||
+      !loom_amdgpu_memory_cache_policy_bits_contain(row->temporal_bits,
+                                                    policy->cache_temporal)) {
+    return false;
   }
-  return false;
+
+  if (iree_any_bit_set(row->attr_flags,
+                       LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE)) {
+    out_attrs->flags |= LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE;
+    out_attrs->scope = policy->cache_scope;
+  }
+  if (iree_any_bit_set(row->attr_flags,
+                       LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_TH)) {
+    IREE_ASSERT(policy->cache_temporal <
+                IREE_ARRAYSIZE(kAmdgpuGfx12CacheTemporalTh));
+    out_attrs->flags |= LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_TH;
+    out_attrs->th = kAmdgpuGfx12CacheTemporalTh[policy->cache_temporal];
+  }
+  if (iree_any_bit_set(row->attr_flags,
+                       LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_NT) &&
+      policy->cache_temporal == LOOM_CACHE_TEMPORAL_NON_TEMPORAL) {
+    out_attrs->flags |= LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_NT;
+    out_attrs->nt = 1;
+  }
+  return true;
+}
+
+bool loom_amdgpu_memory_cache_policy_can_lower(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_memory_access_plan_t* access) {
+  loom_amdgpu_memory_cache_policy_attrs_t attrs;
+  return loom_amdgpu_memory_cache_policy_encode(descriptor_set, access, &attrs);
 }
 
 iree_status_t loom_amdgpu_memory_cache_policy_rejected_status(
