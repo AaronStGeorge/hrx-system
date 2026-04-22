@@ -21,6 +21,17 @@ typedef struct loom_amdgpu_vector_iota_plan_t {
   uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
 } loom_amdgpu_vector_iota_plan_t;
 
+typedef struct loom_amdgpu_vector_from_elements_plan_t {
+  // Result vector assembled from the selected source elements.
+  loom_value_id_t result;
+  // Static source element count.
+  uint32_t element_count;
+  // Source and result scalar element type.
+  loom_scalar_type_t element_type;
+  // Source scalar values in result lane order.
+  loom_value_id_t elements[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
+} loom_amdgpu_vector_from_elements_plan_t;
+
 static bool loom_amdgpu_iota_i32_lane_value(int64_t base, int64_t step,
                                             uint32_t lane, int64_t* out_value) {
   IREE_ASSERT_ARGUMENT(out_value);
@@ -152,8 +163,11 @@ static bool loom_amdgpu_select_vector_extract_plan(
   return true;
 }
 
-static bool loom_amdgpu_can_lower_vector_from_elements(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+static bool loom_amdgpu_select_vector_from_elements_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_from_elements_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_amdgpu_vector_from_elements_plan_t){0};
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_slice_t elements =
       loom_vector_from_elements_elements(source_op);
@@ -167,6 +181,10 @@ static bool loom_amdgpu_can_lower_vector_from_elements(
     return false;
   }
   const loom_scalar_type_t element_type = loom_type_element_type(result_type);
+  if (element_type != LOOM_SCALAR_TYPE_I32 &&
+      element_type != LOOM_SCALAR_TYPE_F32) {
+    return false;
+  }
   for (uint32_t i = 0; i < elements.count; ++i) {
     const loom_value_id_t element = elements.values[i];
     const loom_type_t source_type = loom_module_value_type(module, element);
@@ -178,7 +196,11 @@ static bool loom_amdgpu_can_lower_vector_from_elements(
         !loom_amdgpu_value_can_materialize_as_vgpr_i32(context, element)) {
       return false;
     }
+    out_plan->elements[i] = element;
   }
+  out_plan->result = result;
+  out_plan->element_count = elements.count;
+  out_plan->element_type = element_type;
   return true;
 }
 
@@ -223,9 +245,16 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
       }
       return iree_ok_status();
     }
-    case LOOM_OP_VECTOR_FROM_ELEMENTS:
-      LOOM_AMDGPU_SELECT_IF(
-          loom_amdgpu_can_lower_vector_from_elements(context, source_op));
+    case LOOM_OP_VECTOR_FROM_ELEMENTS: {
+      loom_amdgpu_vector_from_elements_plan_t* plan_data = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+          context, sizeof(*plan_data), (void**)&plan_data));
+      if (loom_amdgpu_select_vector_from_elements_plan(context, source_op,
+                                                       plan_data)) {
+        *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
+      }
+      return iree_ok_status();
+    }
     default:
       return iree_ok_status();
   }
@@ -415,34 +444,39 @@ static iree_status_t loom_amdgpu_lower_vector_extract(
 }
 
 static iree_status_t loom_amdgpu_lower_vector_from_elements(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  const loom_value_slice_t elements =
-      loom_vector_from_elements_elements(source_op);
-  const loom_value_id_t source_result =
-      loom_vector_from_elements_result(source_op);
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_from_elements_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t lanes[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-  for (uint32_t i = 0; i < elements.count; ++i) {
-    const loom_value_id_t element = elements.values[i];
-    if (loom_amdgpu_value_is_i32(context, element)) {
-      IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
-          context, source_op, element, &lanes[i]));
-    } else {
-      IREE_RETURN_IF_ERROR(
-          loom_low_lower_lookup_value(context, element, &lanes[i]));
-    }
+  switch (plan->element_type) {
+    case LOOM_SCALAR_TYPE_I32:
+      for (uint32_t i = 0; i < plan->element_count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
+            context, source_op, plan->elements[i], &lanes[i]));
+      }
+      break;
+    case LOOM_SCALAR_TYPE_F32:
+      for (uint32_t i = 0; i < plan->element_count; ++i) {
+        IREE_RETURN_IF_ERROR(
+            loom_low_lower_lookup_value(context, plan->elements[i], &lanes[i]));
+      }
+      break;
+    default:
+      IREE_ASSERT_UNREACHABLE();
+      return iree_ok_status();
   }
-  if (elements.count == 1) {
-    return loom_low_lower_bind_value(context, source_result, lanes[0]);
+  if (plan->element_count == 1) {
+    return loom_low_lower_bind_value(context, plan->result, lanes[0]);
   }
 
   loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
-      context, source_op, source_result, &result_type));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
+                                                   plan->result, &result_type));
   loom_op_t* concat_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lanes, elements.count,
+      loom_low_lower_context_builder(context), lanes, plan->element_count,
       result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, source_result,
+  return loom_low_lower_bind_value(context, plan->result,
                                    loom_low_concat_result(concat_op));
 }
 
@@ -465,7 +499,9 @@ iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
           context, source_op,
           (const loom_amdgpu_vector_extract_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_FROM_ELEMENTS:
-      return loom_amdgpu_lower_vector_from_elements(context, source_op);
+      return loom_amdgpu_lower_vector_from_elements(
+          context, source_op,
+          (const loom_amdgpu_vector_from_elements_plan_t*)plan.target_data);
     default:
       IREE_ASSERT_UNREACHABLE();
       return iree_ok_status();
