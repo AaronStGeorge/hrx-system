@@ -830,6 +830,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_slice"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_slice.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "vector_corpus"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus.loom-test"

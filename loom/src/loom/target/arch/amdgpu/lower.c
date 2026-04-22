@@ -538,6 +538,9 @@ static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
     case LOOM_OP_VECTOR_BITCAST:
       *out_handled = loom_amdgpu_can_lower_vector_bitcast(context, source_op);
       return iree_ok_status();
+    case LOOM_OP_VECTOR_SLICE:
+      *out_handled = loom_amdgpu_can_lower_vector_slice(context, source_op);
+      return iree_ok_status();
     case LOOM_OP_VECTOR_REDUCE:
       *out_handled = loom_amdgpu_can_lower_vector_reduce(context, source_op);
       return iree_ok_status();
@@ -1800,6 +1803,8 @@ static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
       return loom_amdgpu_lower_vector_bitunpack(context, source_op);
     case LOOM_OP_VECTOR_BITCAST:
       return loom_amdgpu_lower_vector_bitcast(context, source_op);
+    case LOOM_OP_VECTOR_SLICE:
+      return loom_amdgpu_lower_vector_slice(context, source_op);
     case LOOM_OP_VECTOR_REDUCE:
       return loom_amdgpu_lower_vector_reduce(context, source_op);
     case LOOM_OP_VECTOR_DOT4I:
@@ -1856,6 +1861,10 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
     case LOOM_OP_BUFFER_VIEW:
       return loom_amdgpu_low_legality_verify_buffer_view(provider, context, op,
                                                          out_handled);
+    case LOOM_OP_VECTOR_BITCAST:
+    case LOOM_OP_VECTOR_SLICE:
+      return loom_amdgpu_low_legality_verify_vector_structural(
+          provider, context, op, out_handled);
     case LOOM_OP_VECTOR_LOAD:
     case LOOM_OP_VECTOR_STORE:
       return loom_amdgpu_low_legality_verify_vector_memory(provider, context,

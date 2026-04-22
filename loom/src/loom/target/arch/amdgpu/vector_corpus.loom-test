@@ -178,8 +178,10 @@ func.def target(@gfx11_q4_chunk_dot2_shape_target) @amdgpu_q4_chunk_dot2_shape(%
 // RUN: emit source-low @amdgpu_q6_high2_chunk_dot2_shape output=none
 target.profile @gfx11_q6_high2_chunk_dot2_shape_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_q6_high2_chunk_dot2_shape_target) @amdgpu_q6_high2_chunk_dot2_shape(%low_packed: vector<1xi32>, %high_packed: vector<2xi8>, %rhs_packed: vector<2xi32>, %acc: vector<2xi32>) -> (vector<2xi32>) {
+func.def target(@gfx11_q6_high2_chunk_dot2_shape_target) @amdgpu_q6_high2_chunk_dot2_shape(%low_packed: vector<1xi32>, %high_word: vector<1xi32>, %rhs_packed: vector<2xi32>, %acc: vector<2xi32>) -> (vector<2xi32>) {
   %low4 = vector.bitunpacku<4> %low_packed : vector<1xi32> -> vector<8xi32>
+  %high_bytes = vector.bitcast %high_word : vector<1xi32> to vector<4xi8>
+  %high_packed = vector.slice %high_bytes[2] : vector<4xi8> -> vector<2xi8>
   %high2 = vector.bitunpacku<2> %high_packed : vector<2xi8> -> vector<8xi32>
   %q6 = vector.bitfield.insert %high2 into %low4 {offset = 4, width = 2} : vector<8xi32>, vector<8xi32>
   %bias = vector.constant 32 : vector<8xi32>
