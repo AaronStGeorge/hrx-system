@@ -300,7 +300,16 @@ static const loom_low_lower_guard_t kTestLowerGuards[] = {
 enum TestLowerEmit : uint16_t {
   kTestLowerEmitConstI32,
   kTestLowerEmitAddI32,
+  kTestLowerEmitTiedI32,
   kTestLowerEmitAddV4I32,
+};
+
+static const loom_tied_result_t kTestLowerTiedResults[] = {
+    {
+        .result_index = 0,
+        .operand_index = 0,
+        .has_type_change = false,
+    },
 };
 
 static const loom_low_lower_emit_t kTestLowerEmits[] = {
@@ -322,6 +331,17 @@ static const loom_low_lower_emit_t kTestLowerEmits[] = {
     },
     {
         .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_TIED_ANY,
+        .operand_ref_start = kTestLowerOperand0,
+        .operand_ref_count = 1,
+        .copy_operand_mask = 0x1,
+        .result_ref_start = kTestLowerResult0,
+        .result_ref_count = 1,
+        .tied_result_start = 0,
+        .tied_result_count = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
         .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_V4I32,
         .operand_ref_start = kTestLowerOperand0,
         .operand_ref_count = 2,
@@ -336,6 +356,13 @@ static const loom_low_lower_rule_t kTestLowerRules[] = {
         .guard_start = kTestLowerScalarLhsGuard,
         .guard_count = 3,
         .emit_start = kTestLowerEmitAddI32,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_SUBI,
+        .guard_start = kTestLowerScalarLhsGuard,
+        .guard_count = 3,
+        .emit_start = kTestLowerEmitTiedI32,
         .emit_count = 1,
     },
     {
@@ -361,13 +388,18 @@ static const loom_low_lower_rule_span_t kTestLowerSpans[] = {
         .rule_count = 1,
     },
     {
-        .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
+        .source_op_kind = LOOM_OP_SCALAR_SUBI,
         .rule_start = 1,
         .rule_count = 1,
     },
     {
-        .source_op_kind = LOOM_OP_VECTOR_ADDI,
+        .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
         .rule_start = 2,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ADDI,
+        .rule_start = 3,
         .rule_count = 1,
     },
 };
@@ -385,6 +417,8 @@ static const loom_low_lower_rule_set_t kTestLowerRuleSet = {
     .guard_count = IREE_ARRAYSIZE(kTestLowerGuards),
     .attr_copies = kTestLowerAttrCopies,
     .attr_copy_count = IREE_ARRAYSIZE(kTestLowerAttrCopies),
+    .tied_results = kTestLowerTiedResults,
+    .tied_result_count = IREE_ARRAYSIZE(kTestLowerTiedResults),
     .emits = kTestLowerEmits,
     .emit_count = IREE_ARRAYSIZE(kTestLowerEmits),
     .diagnostics = kTestLowerDiagnostics,
@@ -856,6 +890,44 @@ TEST_F(LowLowerTest, LowersScalarFunctionTargetingProfile) {
   EXPECT_NE(text.find("test.const.i32"), std::string::npos);
   EXPECT_NE(text.find("test.add.i32"), std::string::npos);
   EXPECT_EQ(text.find("target.bundle"), std::string::npos);
+}
+
+TEST_F(LowLowerTest, RuleEmissionCopiesTiedOperandsBeforeDestructiveOp) {
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @destructive(%lhs: i32, %rhs: i32) -> "
+      "(i32) {\n"
+      "  %result = scalar.subi %lhs, %rhs : i32\n"
+      "  func.return %result : i32\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+
+  EmissionCollector verify_collector;
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      VerifyLowModule(module.get(), &verify_collector, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+  EXPECT_TRUE(verify_collector.emissions.empty());
+
+  const loom_text_print_options_t print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+  };
+  std::string text;
+  IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
+  const size_t copy_position = text.find("low.copy %lhs");
+  const size_t tied_position = text.find("low.op<test.tied.any>");
+  ASSERT_NE(copy_position, std::string::npos);
+  ASSERT_NE(tied_position, std::string::npos);
+  EXPECT_LT(copy_position, tied_position);
+  EXPECT_NE(text.find("-> %"), std::string::npos);
+  EXPECT_NE(text.find(" as reg<test.i32>"), std::string::npos);
 }
 
 TEST_F(LowLowerTest, LowersVectorCfgFunction) {

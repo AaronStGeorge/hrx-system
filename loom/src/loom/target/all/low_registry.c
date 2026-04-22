@@ -67,8 +67,8 @@ void loom_all_low_lower_policy_registry_initialize(
   };
   kLowLowerPolicyEntries[0].policy = loom_ireevm_low_lower_policy();
   kLowLowerPolicyEntries[1].policy = loom_wasm_low_lower_policy();
-  kLowLowerPolicyEntries[2].policy = loom_x86_low_lower_policy();
-  kLowLowerPolicyEntries[3].policy = loom_x86_low_lower_policy();
+  kLowLowerPolicyEntries[2].policy = loom_x86_avx512_low_lower_policy();
+  kLowLowerPolicyEntries[3].policy = loom_x86_packed_dot_low_lower_policy();
   kLowLowerPolicyEntries[4].policy = loom_amdgpu_low_lower_policy();
   kLowLowerPolicyEntries[5].policy = loom_amdgpu_low_lower_policy();
   kLowLowerPolicyEntries[6].policy = loom_amdgpu_low_lower_policy();

@@ -141,6 +141,10 @@ typedef struct loom_low_lower_emit_t {
   uint16_t operand_ref_start;
   // Number of low operands to copy from value-ref rows.
   uint16_t operand_ref_count;
+  // Bitmask of emitted low operand ordinals copied through low.copy before the
+  // descriptor op consumes them. Used for destructive/tied packet operands
+  // without clobbering the source SSA value's later uses.
+  uint16_t copy_operand_mask;
   // First value-ref table row mapped as a low result.
   uint16_t result_ref_start;
   // Number of low results to map from value-ref rows.

@@ -6,6 +6,8 @@
 
 #include "loom/codegen/low/lower_rules.h"
 
+#include <stdint.h>
+
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -53,39 +55,22 @@ static iree_status_t loom_low_lower_rule_emit_diagnostic(
       diagnostic->reason);
 }
 
-static iree_status_t loom_low_lower_rule_source_value(
+static loom_value_id_t loom_low_lower_rule_source_value(
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
-    uint16_t value_ref_index, loom_value_id_t* out_value_id) {
-  IREE_ASSERT_ARGUMENT(out_value_id);
-  *out_value_id = LOOM_VALUE_ID_INVALID;
-  if (value_ref_index >= rule_set->value_ref_count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "source-to-low lowering rule references a missing "
-                            "value-ref row");
-  }
+    uint16_t value_ref_index) {
+  IREE_ASSERT_LT(value_ref_index, rule_set->value_ref_count);
   const loom_low_lower_value_ref_t* value_ref =
       &rule_set->value_refs[value_ref_index];
   switch (value_ref->kind) {
     case LOOM_LOW_LOWER_VALUE_REF_OPERAND:
-      if (value_ref->index >= source_op->operand_count) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "source-to-low lowering rule references a missing source operand");
-      }
-      *out_value_id = loom_op_const_operands(source_op)[value_ref->index];
-      return iree_ok_status();
+      IREE_ASSERT_LT(value_ref->index, source_op->operand_count);
+      return loom_op_const_operands(source_op)[value_ref->index];
     case LOOM_LOW_LOWER_VALUE_REF_RESULT:
-      if (value_ref->index >= source_op->result_count) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "source-to-low lowering rule references a missing source result");
-      }
-      *out_value_id = loom_op_const_results(source_op)[value_ref->index];
-      return iree_ok_status();
+      IREE_ASSERT_LT(value_ref->index, source_op->result_count);
+      return loom_op_const_results(source_op)[value_ref->index];
     default:
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "source-to-low lowering rule has an invalid "
-                              "value-ref kind");
+      IREE_ASSERT_UNREACHABLE();
+      return LOOM_VALUE_ID_INVALID;
   }
 }
 
@@ -118,70 +103,55 @@ static bool loom_low_lower_rule_type_matches(
   return true;
 }
 
-static iree_status_t loom_low_lower_rule_guard_matches(
+static bool loom_low_lower_rule_guard_matches(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
-    const loom_low_lower_guard_t* guard, bool* out_matches) {
-  IREE_ASSERT_ARGUMENT(out_matches);
-  *out_matches = false;
+    const loom_low_lower_guard_t* guard) {
   switch (guard->kind) {
     case LOOM_LOW_LOWER_GUARD_VALUE_TYPE: {
-      if (guard->type_pattern_index >= rule_set->type_pattern_count) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "source-to-low lowering rule references a missing type-pattern "
-            "row");
-      }
-      loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_low_lower_rule_source_value(
-          rule_set, source_op, guard->value_ref_index, &value_id));
+      IREE_ASSERT_LT(guard->type_pattern_index, rule_set->type_pattern_count);
+      loom_value_id_t value_id = loom_low_lower_rule_source_value(
+          rule_set, source_op, guard->value_ref_index);
       loom_type_t type = loom_module_value_type(
           loom_low_lower_context_module(context), value_id);
-      *out_matches = loom_low_lower_rule_type_matches(
+      return loom_low_lower_rule_type_matches(
           &rule_set->type_patterns[guard->type_pattern_index], type);
-      return iree_ok_status();
     }
     case LOOM_LOW_LOWER_GUARD_ATTR_KIND:
       if (guard->attr_index >= source_op->attribute_count) {
-        return iree_ok_status();
+        return false;
       }
-      *out_matches = loom_op_const_attrs(source_op)[guard->attr_index].kind ==
-                     guard->attr_kind;
-      return iree_ok_status();
+      return loom_op_const_attrs(source_op)[guard->attr_index].kind ==
+             guard->attr_kind;
     case LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ:
       if (guard->attr_index >= source_op->attribute_count) {
-        return iree_ok_status();
+        return false;
       }
-      *out_matches =
-          loom_op_const_attrs(source_op)[guard->attr_index].kind ==
-              LOOM_ATTR_ENUM &&
-          loom_op_const_attrs(source_op)[guard->attr_index].raw == guard->u64;
-      return iree_ok_status();
+      return loom_op_const_attrs(source_op)[guard->attr_index].kind ==
+                 LOOM_ATTR_ENUM &&
+             loom_op_const_attrs(source_op)[guard->attr_index].raw ==
+                 guard->u64;
     case LOOM_LOW_LOWER_GUARD_ATTR_I64_RANGE:
       if (guard->attr_index >= source_op->attribute_count ||
           loom_op_const_attrs(source_op)[guard->attr_index].kind !=
               LOOM_ATTR_I64) {
-        return iree_ok_status();
+        return false;
       }
-      *out_matches = loom_op_const_attrs(source_op)[guard->attr_index].i64 >=
-                         guard->minimum_i64 &&
-                     loom_op_const_attrs(source_op)[guard->attr_index].i64 <=
-                         guard->maximum_i64;
-      return iree_ok_status();
+      return loom_op_const_attrs(source_op)[guard->attr_index].i64 >=
+                 guard->minimum_i64 &&
+             loom_op_const_attrs(source_op)[guard->attr_index].i64 <=
+                 guard->maximum_i64;
     case LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE:
-      *out_matches =
-          loom_low_descriptor_set_lookup_descriptor_by_id(
-              loom_low_lower_context_descriptor_set(context),
-              guard->descriptor_id) != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-      return iree_ok_status();
+      return loom_low_descriptor_set_lookup_descriptor_by_id(
+                 loom_low_lower_context_descriptor_set(context),
+                 guard->descriptor_id) != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
     default:
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "source-to-low lowering rule has an invalid "
-                              "guard kind");
+      IREE_ASSERT_UNREACHABLE();
+      return false;
   }
 }
 
-static iree_status_t loom_low_lower_rule_matches(
+static void loom_low_lower_rule_matches(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     const loom_low_lower_rule_t* rule, bool* out_matches,
@@ -194,24 +164,18 @@ static iree_status_t loom_low_lower_rule_matches(
   *out_matched_guard_count = 0;
   for (uint16_t i = 0; i < rule->guard_count; ++i) {
     uint16_t guard_index = (uint16_t)(rule->guard_start + i);
-    if (guard_index >= rule_set->guard_count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "source-to-low lowering rule references a "
-                              "missing guard row");
-    }
+    IREE_ASSERT_LT(guard_index, rule_set->guard_count);
     const loom_low_lower_guard_t* guard = &rule_set->guards[guard_index];
-    bool guard_matches = false;
-    IREE_RETURN_IF_ERROR(loom_low_lower_rule_guard_matches(
-        context, rule_set, source_op, guard, &guard_matches));
+    bool guard_matches =
+        loom_low_lower_rule_guard_matches(context, rule_set, source_op, guard);
     if (!guard_matches) {
       *out_diagnostic_index = guard->diagnostic_index;
       *out_matched_guard_count = i;
-      return iree_ok_status();
+      return;
     }
   }
   *out_matches = true;
   *out_matched_guard_count = rule->guard_count;
-  return iree_ok_status();
 }
 
 iree_status_t loom_low_lower_rule_set_select_op(
@@ -234,18 +198,14 @@ iree_status_t loom_low_lower_rule_set_select_op(
   uint16_t best_matched_guard_count = 0;
   for (uint16_t i = 0; i < span->rule_count; ++i) {
     uint16_t rule_index = (uint16_t)(span->rule_start + i);
-    if (rule_index >= rule_set->rule_count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "source-to-low lowering span references a "
-                              "missing rule row");
-    }
+    IREE_ASSERT_LT(rule_index, rule_set->rule_count);
     const loom_low_lower_rule_t* rule = &rule_set->rules[rule_index];
     bool rule_matches = false;
     uint16_t diagnostic_index = LOOM_LOW_LOWER_DIAGNOSTIC_NONE;
     uint16_t matched_guard_count = 0;
-    IREE_RETURN_IF_ERROR(loom_low_lower_rule_matches(
-        context, rule_set, source_op, rule, &rule_matches, &diagnostic_index,
-        &matched_guard_count));
+    loom_low_lower_rule_matches(context, rule_set, source_op, rule,
+                                &rule_matches, &diagnostic_index,
+                                &matched_guard_count);
     if (rule_matches) {
       *out_rule = rule;
       return iree_ok_status();
@@ -275,18 +235,10 @@ static iree_status_t loom_low_lower_rule_build_attrs(
       context, emit->attr_copy_count, sizeof(*attrs), (void**)&attrs));
   for (uint16_t i = 0; i < emit->attr_copy_count; ++i) {
     uint16_t attr_copy_index = (uint16_t)(emit->attr_copy_start + i);
-    if (attr_copy_index >= rule_set->attr_copy_count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "source-to-low lowering emit references a "
-                              "missing attribute-copy row");
-    }
+    IREE_ASSERT_LT(attr_copy_index, rule_set->attr_copy_count);
     const loom_low_lower_attr_copy_t* attr_copy =
         &rule_set->attr_copies[attr_copy_index];
-    if (attr_copy->source_attr_index >= source_op->attribute_count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "source-to-low lowering emit references a "
-                              "missing source attribute");
-    }
+    IREE_ASSERT_LT(attr_copy->source_attr_index, source_op->attribute_count);
     IREE_RETURN_IF_ERROR(
         loom_module_intern_string(loom_low_lower_context_module(context),
                                   attr_copy->target_name, &attrs[i].name_id));
@@ -304,11 +256,7 @@ static iree_status_t loom_low_lower_rule_map_result_type(
   *out_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
       loom_low_lower_map_value(context, source_op, source_value_id, out_type));
-  if (!loom_type_is_register(*out_type)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "source-to-low lowering rule mapped a result to a "
-                            "non-register type");
-  }
+  IREE_ASSERT(loom_type_is_register(*out_type));
   return iree_ok_status();
 }
 
@@ -326,14 +274,42 @@ static iree_status_t loom_low_lower_rule_build_low_operands(
       context, emit->operand_ref_count, sizeof(*low_operands),
       (void**)&low_operands));
   for (uint16_t i = 0; i < emit->operand_ref_count; ++i) {
-    loom_value_id_t source_value_id = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_low_lower_rule_source_value(
-        rule_set, source_op, (uint16_t)(emit->operand_ref_start + i),
-        &source_value_id));
+    loom_value_id_t source_value_id = loom_low_lower_rule_source_value(
+        rule_set, source_op, (uint16_t)(emit->operand_ref_start + i));
     IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(context, source_value_id,
                                                      &low_operands[i]));
   }
   *out_operands = low_operands;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_rule_copy_low_operands(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_lower_emit_t* emit, loom_value_id_t* low_operands) {
+  if (emit->copy_operand_mask == 0) {
+    return iree_ok_status();
+  }
+  IREE_ASSERT_LE(emit->operand_ref_count, 16);
+  const uint16_t valid_operand_mask =
+      emit->operand_ref_count == 16
+          ? UINT16_MAX
+          : (uint16_t)(((uint16_t)1u << emit->operand_ref_count) - 1u);
+  IREE_ASSERT_FALSE(
+      iree_any_bit_set(emit->copy_operand_mask, (uint16_t)~valid_operand_mask));
+  for (uint16_t i = 0; i < emit->operand_ref_count; ++i) {
+    const uint16_t operand_bit = (uint16_t)((uint16_t)1u << i);
+    if (!iree_any_bit_set(emit->copy_operand_mask, operand_bit)) {
+      continue;
+    }
+    loom_type_t copy_type = loom_module_value_type(
+        loom_low_lower_context_module(context), low_operands[i]);
+    IREE_ASSERT(loom_type_is_register(copy_type));
+    loom_op_t* copy_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_low_copy_build(
+        loom_low_lower_context_builder(context), low_operands[i], copy_type,
+        source_op->location, &copy_op));
+    low_operands[i] = loom_low_copy_result(copy_op);
+  }
   return iree_ok_status();
 }
 
@@ -351,10 +327,8 @@ static iree_status_t loom_low_lower_rule_build_result_types(
       context, emit->result_ref_count, sizeof(*result_types),
       (void**)&result_types));
   for (uint16_t i = 0; i < emit->result_ref_count; ++i) {
-    loom_value_id_t source_value_id = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_low_lower_rule_source_value(
-        rule_set, source_op, (uint16_t)(emit->result_ref_start + i),
-        &source_value_id));
+    loom_value_id_t source_value_id = loom_low_lower_rule_source_value(
+        rule_set, source_op, (uint16_t)(emit->result_ref_start + i));
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_map_result_type(
         context, source_op, source_value_id, &result_types[i]));
   }
@@ -367,10 +341,8 @@ static iree_status_t loom_low_lower_rule_bind_results(
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     const loom_low_lower_emit_t* emit, const loom_value_id_t* low_results) {
   for (uint16_t i = 0; i < emit->result_ref_count; ++i) {
-    loom_value_id_t source_value_id = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_low_lower_rule_source_value(
-        rule_set, source_op, (uint16_t)(emit->result_ref_start + i),
-        &source_value_id));
+    loom_value_id_t source_value_id = loom_low_lower_rule_source_value(
+        rule_set, source_op, (uint16_t)(emit->result_ref_start + i));
     IREE_RETURN_IF_ERROR(
         loom_low_lower_bind_value(context, source_value_id, low_results[i]));
   }
@@ -381,14 +353,10 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_const(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     const loom_low_lower_emit_t* emit) {
-  if (emit->operand_ref_count != 0 || emit->result_ref_count != 1) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "source-to-low const emit must have no operands "
-                            "and exactly one result");
-  }
-  loom_value_id_t source_result = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_rule_source_value(
-      rule_set, source_op, emit->result_ref_start, &source_result));
+  IREE_ASSERT_EQ(emit->operand_ref_count, 0);
+  IREE_ASSERT_EQ(emit->result_ref_count, 1);
+  loom_value_id_t source_result = loom_low_lower_rule_source_value(
+      rule_set, source_op, emit->result_ref_start);
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_map_result_type(
       context, source_op, source_result, &result_type));
@@ -412,6 +380,8 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op(
   loom_value_id_t* low_operands = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_low_operands(
       context, rule_set, source_op, emit, &low_operands));
+  IREE_RETURN_IF_ERROR(loom_low_lower_rule_copy_low_operands(
+      context, source_op, emit, low_operands));
 
   loom_type_t* result_types = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_result_types(
@@ -423,12 +393,8 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op(
 
   const loom_tied_result_t* tied_results = NULL;
   if (emit->tied_result_count != 0) {
-    if ((uint32_t)emit->tied_result_start + emit->tied_result_count >
-        rule_set->tied_result_count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "source-to-low emit references missing tied "
-                              "result rows");
-    }
+    IREE_ASSERT_LE((uint32_t)emit->tied_result_start + emit->tied_result_count,
+                   rule_set->tied_result_count);
     tied_results = &rule_set->tied_results[emit->tied_result_start];
   }
 
@@ -453,11 +419,7 @@ iree_status_t loom_low_lower_rule_set_emit_rule(
 
   for (uint16_t i = 0; i < rule->emit_count; ++i) {
     uint16_t emit_index = (uint16_t)(rule->emit_start + i);
-    if (emit_index >= rule_set->emit_count) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "source-to-low lowering rule references a "
-                              "missing emit row");
-    }
+    IREE_ASSERT_LT(emit_index, rule_set->emit_count);
     const loom_low_lower_emit_t* emit = &rule_set->emits[emit_index];
     switch (emit->kind) {
       case LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP: {
@@ -471,9 +433,8 @@ iree_status_t loom_low_lower_rule_set_emit_rule(
         break;
       }
       default:
-        return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                                "source-to-low lowering rule has an invalid "
-                                "emit kind");
+        IREE_ASSERT_UNREACHABLE();
+        break;
     }
   }
   return iree_ok_status();

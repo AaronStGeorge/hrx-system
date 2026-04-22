@@ -19,16 +19,20 @@
 extern "C" {
 #endif
 
-// Returns the x86 register lowering policy.
+// Returns the x86 AVX512 register lowering policy.
 //
-// The policy is selected by contract set. The AVX512 core contract maps
-// vector<16xi32> values to ZMM registers and lowers vector.addi/vector.muli to
-// vpaddd/vpmulld packets. The packed-dot contract maps supported static dot
-// vectors to XMM/YMM/ZMM registers and lowers target-legal vector.dot2f and
-// vector.dot4i ops through descriptor-selected packed-dot packets. Memory
-// operands and object-function ABI pinning are intentionally owned by later
-// low.resource/ABI work.
-const loom_low_lower_policy_t* loom_x86_low_lower_policy(void);
+// The policy maps vector<16xi32>/vector<16xf32> values to ZMM registers and
+// lowers direct vector arithmetic through table-driven AVX512 descriptor rules.
+// Memory operands and object-function ABI pinning are intentionally owned by
+// later low.resource/ABI work.
+const loom_low_lower_policy_t* loom_x86_avx512_low_lower_policy(void);
+
+// Returns the x86 packed-dot register lowering policy.
+//
+// The policy maps supported static dot vectors to XMM/YMM/ZMM registers and
+// lowers target-legal vector.dot2f/vector.dot4i ops through descriptor-selected
+// packed-dot packets.
+const loom_low_lower_policy_t* loom_x86_packed_dot_low_lower_policy(void);
 
 // Returns the x86 source legality provider for target-low lowering.
 //
