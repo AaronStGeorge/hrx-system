@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/codegen/low/lower_rules.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
@@ -12,6 +13,8 @@
 enum loom_amdgpu_arithmetic_type_pattern_e {
   LOOM_AMDGPU_ARITHMETIC_TYPE_VI32 = 0,
   LOOM_AMDGPU_ARITHMETIC_TYPE_VF32 = 1,
+  LOOM_AMDGPU_ARITHMETIC_TYPE_SI32 = 2,
+  LOOM_AMDGPU_ARITHMETIC_TYPE_SF32 = 3,
 };
 
 static const loom_low_lower_type_pattern_t kAmdgpuArithmeticTypePatterns[] = {
@@ -40,6 +43,22 @@ static const loom_low_lower_type_pattern_t kAmdgpuArithmeticTypePatterns[] = {
             .rank = 1,
             .static_dim0_min = 1,
             .static_dim0_max = LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_TYPE_SI32] =
+        {
+            .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT,
+            .type_kind = LOOM_TYPE_SCALAR,
+            .element_type_mask =
+                LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
+        },
+    [LOOM_AMDGPU_ARITHMETIC_TYPE_SF32] =
+        {
+            .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT,
+            .type_kind = LOOM_TYPE_SCALAR,
+            .element_type_mask =
+                LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_F32),
         },
 };
 
@@ -76,7 +95,9 @@ static const loom_low_lower_value_ref_t kAmdgpuArithmeticValueRefs[] = {
 enum loom_amdgpu_arithmetic_diagnostic_e {
   LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_VI32 = 0,
   LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_VF32 = 1,
-  LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_DESCRIPTOR = 2,
+  LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SI32 = 2,
+  LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32 = 3,
+  LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_DESCRIPTOR = 4,
 };
 
 static const loom_low_lower_diagnostic_t kAmdgpuArithmeticDiagnostics[] = {
@@ -93,6 +114,20 @@ static const loom_low_lower_diagnostic_t kAmdgpuArithmeticDiagnostics[] = {
             .subject_name = IREE_SVL("vector<f32>"),
             .reason = IREE_SVL("AMDGPU arithmetic lowering requires a rank-1 "
                                "static f32 vector with 1 to 8 lanes"),
+        },
+    [LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SI32] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("i32"),
+            .reason =
+                IREE_SVL("AMDGPU arithmetic lowering requires an i32 scalar"),
+        },
+    [LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("f32"),
+            .reason =
+                IREE_SVL("AMDGPU arithmetic lowering requires an f32 scalar"),
         },
     [LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_DESCRIPTOR] =
         {
@@ -319,6 +354,99 @@ static const loom_low_lower_guard_t kAmdgpuArithmeticGuards[] = {
                                        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_VF32),
     LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
         LOOM_AMDGPU_DESCRIPTOR_ID_V_CVT_F32_U32),
+
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND1,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_RESULT0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_F32),
+
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND1,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_RESULT0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_SUB_F32),
+
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND1,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_RESULT0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_F32),
+
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND1,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_RESULT0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_MIN_F32),
+
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND1,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_RESULT0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_MAX_F32),
+
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND1,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND2,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_RESULT0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_FMA_F32),
+
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SI32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SI32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_RESULT0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_CVT_F32_I32),
+
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_OPERAND0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SI32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SI32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(LOOM_AMDGPU_ARITHMETIC_RESULT0,
+                                       LOOM_AMDGPU_ARITHMETIC_TYPE_SF32,
+                                       LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_CVT_F32_U32),
 };
 
 #undef LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR
@@ -377,8 +505,32 @@ enum loom_amdgpu_arithmetic_guard_range_e {
   LOOM_AMDGPU_ARITHMETIC_GUARDS_VECTOR_UITOFP =
       LOOM_AMDGPU_ARITHMETIC_GUARDS_VECTOR_SITOFP +
       LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_UNARY,
-  LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_ =
+  LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_ADDF =
       LOOM_AMDGPU_ARITHMETIC_GUARDS_VECTOR_UITOFP +
+      LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_UNARY,
+  LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_SUBF =
+      LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_ADDF +
+      LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_BINARY,
+  LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_MULF =
+      LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_SUBF +
+      LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_BINARY,
+  LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_MINNUMF =
+      LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_MULF +
+      LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_BINARY,
+  LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_MAXNUMF =
+      LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_MINNUMF +
+      LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_BINARY,
+  LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_FMAF =
+      LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_MAXNUMF +
+      LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_BINARY,
+  LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_SITOFP =
+      LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_FMAF +
+      LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_TERNARY,
+  LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_UITOFP =
+      LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_SITOFP +
+      LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_UNARY,
+  LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_ =
+      LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_UITOFP +
       LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_UNARY,
 };
 
@@ -404,6 +556,14 @@ enum loom_amdgpu_arithmetic_emit_e {
   LOOM_AMDGPU_ARITHMETIC_EMIT_VECTOR_SHRUI = 14,
   LOOM_AMDGPU_ARITHMETIC_EMIT_VECTOR_SITOFP = 15,
   LOOM_AMDGPU_ARITHMETIC_EMIT_VECTOR_UITOFP = 16,
+  LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_ADDF = 17,
+  LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_SUBF = 18,
+  LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_MULF = 19,
+  LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_MINNUMF = 20,
+  LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_MAXNUMF = 21,
+  LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_FMAF = 22,
+  LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_SITOFP = 23,
+  LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UITOFP = 24,
 };
 
 #define LOOM_AMDGPU_ARITHMETIC_EMIT_BINARY(descriptor)      \
@@ -435,6 +595,26 @@ enum loom_amdgpu_arithmetic_emit_e {
       .operand_ref_count = 1,                               \
       .result_ref_start = LOOM_AMDGPU_ARITHMETIC_RESULT0,   \
       .result_ref_count = 1,                                \
+  }
+
+#define LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_BINARY(descriptor) \
+  {                                                           \
+      .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,              \
+      .descriptor_id = descriptor,                            \
+      .operand_ref_start = LOOM_AMDGPU_ARITHMETIC_OPERAND0,   \
+      .operand_ref_count = 2,                                 \
+      .result_ref_start = LOOM_AMDGPU_ARITHMETIC_RESULT0,     \
+      .result_ref_count = 1,                                  \
+  }
+
+#define LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UNARY(descriptor) \
+  {                                                          \
+      .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,             \
+      .descriptor_id = descriptor,                           \
+      .operand_ref_start = LOOM_AMDGPU_ARITHMETIC_OPERAND0,  \
+      .operand_ref_count = 1,                                \
+      .result_ref_start = LOOM_AMDGPU_ARITHMETIC_RESULT0,    \
+      .result_ref_count = 1,                                 \
   }
 
 static const loom_low_lower_emit_t kAmdgpuArithmeticEmits[] = {
@@ -485,8 +665,40 @@ static const loom_low_lower_emit_t kAmdgpuArithmeticEmits[] = {
     [LOOM_AMDGPU_ARITHMETIC_EMIT_VECTOR_UITOFP] =
         LOOM_AMDGPU_ARITHMETIC_EMIT_UNARY(
             LOOM_AMDGPU_DESCRIPTOR_ID_V_CVT_F32_U32),
+    [LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_ADDF] =
+        LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_BINARY(
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_F32),
+    [LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_SUBF] =
+        LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_BINARY(
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_SUB_F32),
+    [LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_MULF] =
+        LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_BINARY(
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_F32),
+    [LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_MINNUMF] =
+        LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_BINARY(
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_MIN_F32),
+    [LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_MAXNUMF] =
+        LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_BINARY(
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_MAX_F32),
+    [LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_FMAF] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_FMA_F32,
+            .operand_ref_start = LOOM_AMDGPU_ARITHMETIC_OPERAND0,
+            .operand_ref_count = 3,
+            .result_ref_start = LOOM_AMDGPU_ARITHMETIC_RESULT0,
+            .result_ref_count = 1,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_SITOFP] =
+        LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UNARY(
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_CVT_F32_I32),
+    [LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UITOFP] =
+        LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UNARY(
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_CVT_F32_U32),
 };
 
+#undef LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UNARY
+#undef LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_BINARY
 #undef LOOM_AMDGPU_ARITHMETIC_EMIT_UNARY
 #undef LOOM_AMDGPU_ARITHMETIC_EMIT_BINARY_SWAPPED
 #undef LOOM_AMDGPU_ARITHMETIC_EMIT_BINARY
@@ -509,7 +721,15 @@ enum loom_amdgpu_arithmetic_rule_e {
   LOOM_AMDGPU_ARITHMETIC_RULE_VECTOR_SHRUI = 14,
   LOOM_AMDGPU_ARITHMETIC_RULE_VECTOR_SITOFP = 15,
   LOOM_AMDGPU_ARITHMETIC_RULE_VECTOR_UITOFP = 16,
-  LOOM_AMDGPU_ARITHMETIC_RULE_COUNT_ = 17,
+  LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_ADDF = 17,
+  LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_SUBF = 18,
+  LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_MULF = 19,
+  LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_MINNUMF = 20,
+  LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_MAXNUMF = 21,
+  LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_FMAF = 22,
+  LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_SITOFP = 23,
+  LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_UITOFP = 24,
+  LOOM_AMDGPU_ARITHMETIC_RULE_COUNT_ = 25,
 };
 
 static const loom_low_lower_rule_t kAmdgpuArithmeticRules[] = {
@@ -649,6 +869,70 @@ static const loom_low_lower_rule_t kAmdgpuArithmeticRules[] = {
             .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_VECTOR_UITOFP,
             .emit_count = 1,
         },
+    [LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_ADDF] =
+        {
+            .source_op_kind = LOOM_OP_SCALAR_ADDF,
+            .guard_start = LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_ADDF,
+            .guard_count = LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_BINARY,
+            .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_ADDF,
+            .emit_count = 1,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_SUBF] =
+        {
+            .source_op_kind = LOOM_OP_SCALAR_SUBF,
+            .guard_start = LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_SUBF,
+            .guard_count = LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_BINARY,
+            .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_SUBF,
+            .emit_count = 1,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_MULF] =
+        {
+            .source_op_kind = LOOM_OP_SCALAR_MULF,
+            .guard_start = LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_MULF,
+            .guard_count = LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_BINARY,
+            .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_MULF,
+            .emit_count = 1,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_MINNUMF] =
+        {
+            .source_op_kind = LOOM_OP_SCALAR_MINNUMF,
+            .guard_start = LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_MINNUMF,
+            .guard_count = LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_BINARY,
+            .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_MINNUMF,
+            .emit_count = 1,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_MAXNUMF] =
+        {
+            .source_op_kind = LOOM_OP_SCALAR_MAXNUMF,
+            .guard_start = LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_MAXNUMF,
+            .guard_count = LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_BINARY,
+            .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_MAXNUMF,
+            .emit_count = 1,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_FMAF] =
+        {
+            .source_op_kind = LOOM_OP_SCALAR_FMAF,
+            .guard_start = LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_FMAF,
+            .guard_count = LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_TERNARY,
+            .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_FMAF,
+            .emit_count = 1,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_SITOFP] =
+        {
+            .source_op_kind = LOOM_OP_SCALAR_SITOFP,
+            .guard_start = LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_SITOFP,
+            .guard_count = LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_UNARY,
+            .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_SITOFP,
+            .emit_count = 1,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_UITOFP] =
+        {
+            .source_op_kind = LOOM_OP_SCALAR_UITOFP,
+            .guard_start = LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_UITOFP,
+            .guard_count = LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_UNARY,
+            .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UITOFP,
+            .emit_count = 1,
+        },
 };
 
 static_assert(IREE_ARRAYSIZE(kAmdgpuArithmeticRules) ==
@@ -656,6 +940,46 @@ static_assert(IREE_ARRAYSIZE(kAmdgpuArithmeticRules) ==
               "AMDGPU arithmetic rule indexes must cover the rule table");
 
 static const loom_low_lower_rule_span_t kAmdgpuArithmeticRuleSpans[] = {
+    {
+        .source_op_kind = LOOM_OP_SCALAR_ADDF,
+        .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_ADDF,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_SUBF,
+        .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_SUBF,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_MULF,
+        .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_MULF,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_MINNUMF,
+        .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_MINNUMF,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_MAXNUMF,
+        .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_MAXNUMF,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_FMAF,
+        .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_FMAF,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_SITOFP,
+        .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_SITOFP,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_UITOFP,
+        .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_UITOFP,
+        .rule_count = 1,
+    },
     {
         .source_op_kind = LOOM_OP_VECTOR_ADDF,
         .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_VECTOR_ADDF,
