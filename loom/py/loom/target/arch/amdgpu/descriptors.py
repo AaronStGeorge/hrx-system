@@ -2737,6 +2737,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             fixed_encoding_fields=(),
             include_fetch_invalid=True,
         ),
+        _v_wmma_f32_16x16x16_f16_overlay(),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),
         _s_wait_dscnt_overlay(),

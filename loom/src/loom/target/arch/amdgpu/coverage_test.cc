@@ -66,7 +66,7 @@ TEST(AmdgpuCoverageTest, FormatsRepresentativeRows) {
   EXPECT_NE(json.find("\"semantic\":\"split-loadcnt-storecnt-alu-workgroup-"
                       "barrier\""),
             std::string::npos);
-  EXPECT_NE(json.find("\"gap\":\"source-lower-matrix-encoding-missing\""),
+  EXPECT_NE(json.find("\"gap\":\"supplemental-matrix-encoding-missing\""),
             std::string::npos);
   iree_string_builder_deinitialize(&builder);
 }

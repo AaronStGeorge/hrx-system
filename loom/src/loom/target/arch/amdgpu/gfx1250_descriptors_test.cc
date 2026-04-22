@@ -276,6 +276,22 @@ TEST(AmdgpuDescriptorsTest, Gfx1250WmmaPseudoModelsRegisterShape) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_amdgpu_gfx1250_core_descriptor_set();
 
+  const loom_low_descriptor_t* xml_wmma_descriptor = LookupDescriptor(
+      descriptor_set, IREE_SV("amdgpu.v_wmma_f32_16x16x16_f16"));
+  ASSERT_NE(xml_wmma_descriptor, nullptr);
+  EXPECT_EQ(xml_wmma_descriptor->encoding_format_id,
+            LOOM_AMDGPU_ENCODING_FORMAT_VOP3P);
+  EXPECT_NE(xml_wmma_descriptor->encoding_id, LOOM_LOW_ID_NONE);
+  EXPECT_EQ(xml_wmma_descriptor->operand_count, 4u);
+  EXPECT_EQ(xml_wmma_descriptor->result_count, 1u);
+
+  const loom_low_operand_t* xml_wmma_operands =
+      &descriptor_set->operands[xml_wmma_descriptor->operand_start];
+  EXPECT_EQ(xml_wmma_operands[0].unit_count, 8u);
+  EXPECT_EQ(xml_wmma_operands[1].unit_count, 4u);
+  EXPECT_EQ(xml_wmma_operands[2].unit_count, 4u);
+  EXPECT_EQ(xml_wmma_operands[3].unit_count, 8u);
+
   const loom_low_descriptor_t* wmma_descriptor = LookupDescriptor(
       descriptor_set, IREE_SV("amdgpu.v_wmma_f32_16x16x32_f16"));
   ASSERT_NE(wmma_descriptor, nullptr);

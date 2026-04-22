@@ -1126,6 +1126,7 @@ TEST_F(AmdgpuEncodingTest, EncodesRdnaWmmaPacketAndReturn) {
   const Case cases[] = {
       {"amdgpu-gfx11", UINT32_C(0xBFB00000)},
       {"amdgpu-gfx12", UINT32_C(0xBFB00000)},
+      {"amdgpu-gfx1250", UINT32_C(0xBFB00000)},
   };
   for (const Case& test_case : cases) {
     SCOPED_TRACE(test_case.preset_key);
