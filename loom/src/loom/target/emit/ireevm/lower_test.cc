@@ -404,5 +404,37 @@ TEST_F(IreeVmLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {
             LOOM_SYMBOL_ID_INVALID);
 }
 
+TEST_F(IreeVmLowerTest, RejectsOutOfRangeI1ConstantBeforeEmission) {
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @vm_target preset(\"iree-vm\")\n"
+      "func.def target(@vm_target) @bad_bool() -> (i1) {\n"
+      "  %bad = scalar.constant 2 : i1\n"
+      "  func.return %bad : i1\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 1u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_EQ(lower_result.low_func_op, nullptr);
+  EXPECT_FALSE(loom_symbol_ref_is_valid(lower_result.low_func_ref));
+  ASSERT_EQ(lower_collector.emissions.size(), 1u);
+  const CollectedEmission& emission = lower_collector.emissions[0];
+  EXPECT_EQ(emission.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1));
+  ASSERT_EQ(emission.string_params.size(), 7u);
+  EXPECT_EQ(emission.string_params[3], "bad_bool");
+  EXPECT_EQ(emission.string_params[4], "attr");
+  EXPECT_EQ(emission.string_params[5], "value");
+  EXPECT_NE(emission.string_params[6].find("zero or one"), std::string::npos);
+
+  loom_string_id_t low_name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(
+      module.get(), IREE_SV("bad_bool__low"), &low_name_id));
+  EXPECT_EQ(loom_module_find_symbol(module.get(), low_name_id),
+            LOOM_SYMBOL_ID_INVALID);
+}
+
 }  // namespace
 }  // namespace loom

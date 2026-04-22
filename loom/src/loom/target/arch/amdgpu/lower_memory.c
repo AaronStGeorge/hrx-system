@@ -2155,7 +2155,7 @@ static iree_status_t loom_amdgpu_emit_memory_soffset(
         LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
-          "preflight accepted AMDGPU scalar dynamic offset with a "
+          "planning accepted AMDGPU scalar dynamic offset with a "
           "non-power-of-two byte stride");
     }
     loom_value_id_t low_shift = LOOM_VALUE_ID_INVALID;
@@ -2345,7 +2345,7 @@ iree_status_t loom_amdgpu_lower_vector_load(loom_low_lower_context_t* context,
   loom_amdgpu_memory_access_t access;
   if (!loom_amdgpu_load_memory_access_select(context, source_op, &access)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector.load "
+                            "planning accepted unsupported AMDGPU vector.load "
                             "memory access");
   }
   loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;
@@ -2453,7 +2453,7 @@ iree_status_t loom_amdgpu_lower_vector_store(loom_low_lower_context_t* context,
   loom_amdgpu_memory_access_t access;
   if (!loom_amdgpu_store_memory_access_select(context, source_op, &access)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.store memory access");
   }
   loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;

@@ -211,7 +211,7 @@ iree_status_t loom_amdgpu_lower_vector_bitpack(
   if (!loom_amdgpu_bitpack_select(loom_low_lower_context_module(context),
                                   source_op, &select, NULL)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.bitpack");
   }
 
@@ -341,7 +341,7 @@ iree_status_t loom_amdgpu_lower_vector_bitunpack(
   if (!loom_amdgpu_bitunpack_select(loom_low_lower_context_module(context),
                                     source_op, &select, NULL)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.bitunpack");
   }
 

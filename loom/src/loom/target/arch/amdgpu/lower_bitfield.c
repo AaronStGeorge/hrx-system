@@ -242,14 +242,14 @@ iree_status_t loom_amdgpu_lower_vector_bitfield_extract(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   if (!loom_amdgpu_can_lower_vector_bitfield_extract(context, source_op)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.bitfield.extract");
   }
 
   loom_amdgpu_bitfield_extract_t select = {0};
   if (!loom_amdgpu_bitfield_extract_select(source_op, &select)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.bitfield.extract");
   }
 
@@ -258,7 +258,7 @@ iree_status_t loom_amdgpu_lower_vector_bitfield_extract(
   const uint32_t lane_count = loom_amdgpu_vector_i32_lane_count(source_type);
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.bitfield.extract lane count");
   }
 
@@ -299,14 +299,14 @@ iree_status_t loom_amdgpu_lower_vector_bitfield_insert(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   if (!loom_amdgpu_can_lower_vector_bitfield_insert(context, source_op)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.bitfield.insert");
   }
 
   loom_amdgpu_bitfield_insert_t select = {0};
   if (!loom_amdgpu_bitfield_insert_select(source_op, &select)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.bitfield.insert");
   }
 
@@ -315,7 +315,7 @@ iree_status_t loom_amdgpu_lower_vector_bitfield_insert(
   const uint32_t lane_count = loom_amdgpu_vector_i32_lane_count(base_type);
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.bitfield.insert lane count");
   }
 

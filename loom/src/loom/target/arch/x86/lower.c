@@ -357,10 +357,18 @@ static bool loom_x86_op_is_vector_dot(loom_op_kind_t kind) {
   }
 }
 
-static iree_status_t loom_x86_can_lower_vector_dot(
+static void loom_x86_set_plan(const loom_op_t* source_op,
+                              uint64_t descriptor_id,
+                              loom_low_lower_plan_t* out_plan) {
+  *out_plan = (loom_low_lower_plan_t){
+      .id = source_op->kind,
+      .payload = descriptor_id,
+  };
+}
+
+static iree_status_t loom_x86_select_vector_dot(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    bool* out_handled) {
-  *out_handled = false;
+    loom_low_lower_plan_t* out_plan) {
   if (!loom_x86_contract_set_key_is_packed_dot_core(
           loom_x86_lower_contract_set_key(context))) {
     return iree_ok_status();
@@ -371,62 +379,85 @@ static iree_status_t loom_x86_can_lower_vector_dot(
       loom_low_lower_context_bundle(context),
       loom_low_lower_context_descriptor_set(context), source_op,
       /*out_diagnostic=*/NULL, &descriptor));
-  *out_handled = descriptor != NULL;
+  if (descriptor != NULL) {
+    loom_x86_set_plan(source_op, descriptor->stable_id, out_plan);
+  }
   return iree_ok_status();
 }
 
-static iree_status_t loom_x86_can_lower_op(void* user_data,
-                                           loom_low_lower_context_t* context,
-                                           const loom_op_t* source_op,
-                                           bool* out_handled) {
+static iree_status_t loom_x86_select_op(void* user_data,
+                                        loom_low_lower_context_t* context,
+                                        const loom_op_t* source_op,
+                                        loom_low_lower_plan_t* out_plan) {
   (void)user_data;
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = loom_low_lower_plan_empty();
   const iree_string_view_t contract_set_key =
       loom_x86_lower_contract_set_key(context);
   switch (source_op->kind) {
     case LOOM_OP_VECTOR_ADDI:
-      *out_handled =
-          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
-          loom_x86_can_lower_vector_addi(context, source_op);
+      if (loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_addi(context, source_op)) {
+        loom_x86_set_plan(source_op,
+                          X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPADDD_ZMM,
+                          out_plan);
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_SUBI:
-      *out_handled =
-          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
-          loom_x86_can_lower_vector_subi(context, source_op);
+      if (loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_subi(context, source_op)) {
+        loom_x86_set_plan(source_op,
+                          X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPSUBD_ZMM,
+                          out_plan);
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_MULI:
-      *out_handled =
-          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
-          loom_x86_can_lower_vector_muli(context, source_op);
+      if (loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_muli(context, source_op)) {
+        loom_x86_set_plan(source_op,
+                          X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPMULLD_ZMM,
+                          out_plan);
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_ADDF:
-      *out_handled =
-          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
-          loom_x86_can_lower_vector_addf(context, source_op);
+      if (loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_addf(context, source_op)) {
+        loom_x86_set_plan(source_op,
+                          X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VADDPS_ZMM,
+                          out_plan);
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_SUBF:
-      *out_handled =
-          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
-          loom_x86_can_lower_vector_subf(context, source_op);
+      if (loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_subf(context, source_op)) {
+        loom_x86_set_plan(source_op,
+                          X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VSUBPS_ZMM,
+                          out_plan);
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_MULF:
-      *out_handled =
-          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
-          loom_x86_can_lower_vector_mulf(context, source_op);
+      if (loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_mulf(context, source_op)) {
+        loom_x86_set_plan(source_op,
+                          X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMULPS_ZMM,
+                          out_plan);
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_FMAF:
-      *out_handled =
-          loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
-          loom_x86_can_lower_vector_fmaf(context, source_op);
+      if (loom_x86_contract_set_key_is_avx512_core(contract_set_key) &&
+          loom_x86_can_lower_vector_fmaf(context, source_op)) {
+        loom_x86_set_plan(
+            source_op, X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VFMADD231PS_ZMM,
+            out_plan);
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_DOT2F:
     case LOOM_OP_VECTOR_DOT4I:
-      return loom_x86_can_lower_vector_dot(context, source_op, out_handled);
+      return loom_x86_select_vector_dot(context, source_op, out_plan);
     case LOOM_OP_VECTOR_DOT4F8:
     case LOOM_OP_VECTOR_DOT8I4:
-      *out_handled = false;
       return iree_ok_status();
     default:
-      *out_handled = false;
       return iree_ok_status();
   }
 }
@@ -473,51 +504,51 @@ static iree_status_t loom_x86_lower_binary_op(loom_low_lower_context_t* context,
 }
 
 static iree_status_t loom_x86_lower_vector_addi(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id) {
   return loom_x86_lower_binary_op(
-      context, source_op, X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPADDD_ZMM,
-      loom_vector_addi_lhs(source_op), loom_vector_addi_rhs(source_op),
-      loom_vector_addi_result(source_op));
+      context, source_op, descriptor_id, loom_vector_addi_lhs(source_op),
+      loom_vector_addi_rhs(source_op), loom_vector_addi_result(source_op));
 }
 
 static iree_status_t loom_x86_lower_vector_subi(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id) {
   return loom_x86_lower_binary_op(
-      context, source_op, X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPSUBD_ZMM,
-      loom_vector_subi_lhs(source_op), loom_vector_subi_rhs(source_op),
-      loom_vector_subi_result(source_op));
+      context, source_op, descriptor_id, loom_vector_subi_lhs(source_op),
+      loom_vector_subi_rhs(source_op), loom_vector_subi_result(source_op));
 }
 
 static iree_status_t loom_x86_lower_vector_muli(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id) {
   return loom_x86_lower_binary_op(
-      context, source_op, X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPMULLD_ZMM,
-      loom_vector_muli_lhs(source_op), loom_vector_muli_rhs(source_op),
-      loom_vector_muli_result(source_op));
+      context, source_op, descriptor_id, loom_vector_muli_lhs(source_op),
+      loom_vector_muli_rhs(source_op), loom_vector_muli_result(source_op));
 }
 
 static iree_status_t loom_x86_lower_vector_addf(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id) {
   return loom_x86_lower_binary_op(
-      context, source_op, X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VADDPS_ZMM,
-      loom_vector_addf_lhs(source_op), loom_vector_addf_rhs(source_op),
-      loom_vector_addf_result(source_op));
+      context, source_op, descriptor_id, loom_vector_addf_lhs(source_op),
+      loom_vector_addf_rhs(source_op), loom_vector_addf_result(source_op));
 }
 
 static iree_status_t loom_x86_lower_vector_subf(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id) {
   return loom_x86_lower_binary_op(
-      context, source_op, X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VSUBPS_ZMM,
-      loom_vector_subf_lhs(source_op), loom_vector_subf_rhs(source_op),
-      loom_vector_subf_result(source_op));
+      context, source_op, descriptor_id, loom_vector_subf_lhs(source_op),
+      loom_vector_subf_rhs(source_op), loom_vector_subf_result(source_op));
 }
 
 static iree_status_t loom_x86_lower_vector_mulf(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id) {
   return loom_x86_lower_binary_op(
-      context, source_op, X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMULPS_ZMM,
-      loom_vector_mulf_lhs(source_op), loom_vector_mulf_rhs(source_op),
-      loom_vector_mulf_result(source_op));
+      context, source_op, descriptor_id, loom_vector_mulf_lhs(source_op),
+      loom_vector_mulf_rhs(source_op), loom_vector_mulf_result(source_op));
 }
 
 static iree_status_t loom_x86_lower_tied_ternary_op(
@@ -563,81 +594,70 @@ static iree_status_t loom_x86_lower_tied_ternary_op(
 }
 
 static iree_status_t loom_x86_lower_vector_fmaf(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id) {
   return loom_x86_lower_tied_ternary_op(
-      context, source_op,
-      X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VFMADD231PS_ZMM,
-      loom_vector_fmaf_a(source_op), loom_vector_fmaf_b(source_op),
-      loom_vector_fmaf_c(source_op), loom_vector_fmaf_result(source_op));
+      context, source_op, descriptor_id, loom_vector_fmaf_a(source_op),
+      loom_vector_fmaf_b(source_op), loom_vector_fmaf_c(source_op),
+      loom_vector_fmaf_result(source_op));
 }
 
 static iree_status_t loom_x86_lower_packed_dot_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_lhs, loom_value_id_t source_rhs,
-    loom_value_id_t source_accumulator, loom_value_id_t source_result) {
-  const loom_x86_packed_dot_descriptor_t* descriptor = NULL;
-  IREE_RETURN_IF_ERROR(loom_x86_select_packed_dot_descriptor(
-      loom_low_lower_context_module(context),
-      loom_low_lower_context_bundle(context),
-      loom_low_lower_context_descriptor_set(context), source_op,
-      /*out_diagnostic=*/NULL, &descriptor));
-  if (descriptor == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "x86 packed-dot lowering reached an unselected descriptor");
-  }
-  return loom_x86_lower_tied_ternary_op(
-      context, source_op, descriptor->stable_id, source_lhs, source_rhs,
-      source_accumulator, source_result);
+    uint64_t descriptor_id, loom_value_id_t source_lhs,
+    loom_value_id_t source_rhs, loom_value_id_t source_accumulator,
+    loom_value_id_t source_result) {
+  return loom_x86_lower_tied_ternary_op(context, source_op, descriptor_id,
+                                        source_lhs, source_rhs,
+                                        source_accumulator, source_result);
 }
 
 static iree_status_t loom_x86_lower_vector_dot2f(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id) {
   return loom_x86_lower_packed_dot_op(
-      context, source_op, loom_vector_dot2f_lhs(source_op),
+      context, source_op, descriptor_id, loom_vector_dot2f_lhs(source_op),
       loom_vector_dot2f_rhs(source_op), loom_vector_dot2f_acc(source_op),
       loom_vector_dot2f_result(source_op));
 }
 
 static iree_status_t loom_x86_lower_vector_dot4i(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id) {
   return loom_x86_lower_packed_dot_op(
-      context, source_op, loom_vector_dot4i_lhs(source_op),
+      context, source_op, descriptor_id, loom_vector_dot4i_lhs(source_op),
       loom_vector_dot4i_rhs(source_op), loom_vector_dot4i_acc(source_op),
       loom_vector_dot4i_result(source_op));
 }
 
-static iree_status_t loom_x86_try_lower_op(void* user_data,
-                                           loom_low_lower_context_t* context,
-                                           const loom_op_t* source_op,
-                                           bool* out_handled) {
-  IREE_RETURN_IF_ERROR(
-      loom_x86_can_lower_op(user_data, context, source_op, out_handled));
-  if (!*out_handled) {
-    return iree_ok_status();
-  }
-
-  switch (source_op->kind) {
+static iree_status_t loom_x86_emit_op(void* user_data,
+                                      loom_low_lower_context_t* context,
+                                      const loom_op_t* source_op,
+                                      loom_low_lower_plan_t plan) {
+  (void)user_data;
+  switch (plan.id) {
     case LOOM_OP_VECTOR_ADDI:
-      return loom_x86_lower_vector_addi(context, source_op);
+      return loom_x86_lower_vector_addi(context, source_op, plan.payload);
     case LOOM_OP_VECTOR_SUBI:
-      return loom_x86_lower_vector_subi(context, source_op);
+      return loom_x86_lower_vector_subi(context, source_op, plan.payload);
     case LOOM_OP_VECTOR_MULI:
-      return loom_x86_lower_vector_muli(context, source_op);
+      return loom_x86_lower_vector_muli(context, source_op, plan.payload);
     case LOOM_OP_VECTOR_ADDF:
-      return loom_x86_lower_vector_addf(context, source_op);
+      return loom_x86_lower_vector_addf(context, source_op, plan.payload);
     case LOOM_OP_VECTOR_SUBF:
-      return loom_x86_lower_vector_subf(context, source_op);
+      return loom_x86_lower_vector_subf(context, source_op, plan.payload);
     case LOOM_OP_VECTOR_MULF:
-      return loom_x86_lower_vector_mulf(context, source_op);
+      return loom_x86_lower_vector_mulf(context, source_op, plan.payload);
     case LOOM_OP_VECTOR_FMAF:
-      return loom_x86_lower_vector_fmaf(context, source_op);
+      return loom_x86_lower_vector_fmaf(context, source_op, plan.payload);
     case LOOM_OP_VECTOR_DOT2F:
-      return loom_x86_lower_vector_dot2f(context, source_op);
+      return loom_x86_lower_vector_dot2f(context, source_op, plan.payload);
     case LOOM_OP_VECTOR_DOT4I:
-      return loom_x86_lower_vector_dot4i(context, source_op);
+      return loom_x86_lower_vector_dot4i(context, source_op, plan.payload);
     default:
-      return iree_ok_status();
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "x86 lowering received an unknown selected "
+                              "plan");
   }
 }
 
@@ -693,8 +713,8 @@ static iree_status_t loom_x86_low_legality_try_verify_op(
 static const loom_low_lower_policy_t kX86LowLowerPolicy = {
     .name = IREE_SVL("x86-low-lower"),
     .map_type = {.fn = loom_x86_map_type, .user_data = NULL},
-    .can_lower_op = {.fn = loom_x86_can_lower_op, .user_data = NULL},
-    .try_lower_op = {.fn = loom_x86_try_lower_op, .user_data = NULL},
+    .select_op = {.fn = loom_x86_select_op, .user_data = NULL},
+    .emit_op = {.fn = loom_x86_emit_op, .user_data = NULL},
 };
 
 const loom_target_low_legality_provider_t

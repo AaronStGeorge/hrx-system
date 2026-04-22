@@ -215,7 +215,7 @@ iree_status_t loom_amdgpu_lower_vector_table_lookup(
   if (!loom_amdgpu_table_lookup_select(loom_low_lower_context_module(context),
                                        source_op, &select)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.table.lookup");
   }
 

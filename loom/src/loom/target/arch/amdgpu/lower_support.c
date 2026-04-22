@@ -837,7 +837,7 @@ iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
   int64_t value = 0;
   if (!loom_amdgpu_value_as_i32_constant(context, source_value, &value)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted AMDGPU i32 value that cannot "
+                            "planning accepted AMDGPU i32 value that cannot "
                             "materialize as a VGPR operand");
   }
   loom_type_t vgpr_type = loom_type_none();
@@ -871,7 +871,7 @@ iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_address(
       value < 0 || value > UINT32_MAX) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "preflight accepted AMDGPU address value that cannot materialize as a "
+        "planning accepted AMDGPU address value that cannot materialize as a "
         "VGPR operand");
   }
   loom_type_t vgpr_type = loom_type_none();

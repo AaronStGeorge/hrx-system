@@ -14,6 +14,7 @@
 #include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/lower_rules.h"
 #include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
@@ -155,149 +156,240 @@ static iree_status_t TestMapArgument(
                      &out_argument->abi_type);
 }
 
-static bool IsI32Value(loom_low_lower_context_t* context,
-                       loom_value_id_t value_id) {
-  return IsI32(
-      loom_module_value_type(loom_low_lower_context_module(context), value_id));
-}
+enum TestLowerTypePattern : uint16_t {
+  kTestLowerTypeI32,
+  kTestLowerTypeV4I32,
+};
 
-static bool CanLowerScalarConstant(loom_low_lower_context_t* context,
-                                   const loom_op_t* source_op) {
-  return loom_scalar_constant_value(source_op).kind == LOOM_ATTR_I64 &&
-         IsI32Value(context, loom_scalar_constant_result(source_op));
-}
+static const loom_low_lower_type_pattern_t kTestLowerTypePatterns[] = {
+    {
+        .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT,
+        .type_kind = LOOM_TYPE_SCALAR,
+        .element_type_mask =
+            LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
+    },
+    {
+        .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0,
+        .type_kind = LOOM_TYPE_VECTOR,
+        .element_type_mask =
+            LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
+        .rank = 1,
+        .static_dim0 = 4,
+    },
+};
 
-static bool CanLowerScalarAddi(loom_low_lower_context_t* context,
-                               const loom_op_t* source_op) {
-  return IsI32Value(context, loom_scalar_addi_lhs(source_op)) &&
-         IsI32Value(context, loom_scalar_addi_rhs(source_op)) &&
-         IsI32Value(context, loom_scalar_addi_result(source_op));
-}
+enum TestLowerValueRef : uint16_t {
+  kTestLowerOperand0,
+  kTestLowerOperand1,
+  kTestLowerResult0,
+};
 
-static bool CanLowerVectorAddi(loom_low_lower_context_t* context,
-                               const loom_op_t* source_op) {
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  return IsVector4xi32(
-             loom_module_value_type(module, loom_vector_addi_lhs(source_op))) &&
-         IsVector4xi32(
-             loom_module_value_type(module, loom_vector_addi_rhs(source_op))) &&
-         IsVector4xi32(loom_module_value_type(
-             module, loom_vector_addi_result(source_op)));
-}
+static const loom_low_lower_value_ref_t kTestLowerValueRefs[] = {
+    {
+        .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+        .index = 0,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+        .index = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_VALUE_REF_RESULT,
+        .index = 0,
+    },
+};
 
-static iree_status_t TestCanLowerOp(void* user_data,
-                                    loom_low_lower_context_t* context,
-                                    const loom_op_t* source_op,
-                                    bool* out_handled) {
-  (void)user_data;
-  switch (source_op->kind) {
-    case LOOM_OP_SCALAR_CONSTANT:
-      *out_handled = CanLowerScalarConstant(context, source_op);
-      return iree_ok_status();
-    case LOOM_OP_SCALAR_ADDI:
-      *out_handled = CanLowerScalarAddi(context, source_op);
-      return iree_ok_status();
-    case LOOM_OP_VECTOR_ADDI:
-      *out_handled = CanLowerVectorAddi(context, source_op);
-      return iree_ok_status();
-    default:
-      *out_handled = false;
-      return iree_ok_status();
-  }
-}
+static const loom_low_lower_attr_copy_t kTestLowerAttrCopies[] = {
+    {
+        .target_name = IREE_SVL("i32_value"),
+        .source_attr_index = 0,
+    },
+};
 
-static iree_status_t TestLowerScalarConstant(loom_low_lower_context_t* context,
-                                             const loom_op_t* source_op) {
-  loom_string_id_t value_name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(loom_low_lower_context_module(context),
-                                IREE_SV("i32_value"), &value_name_id));
+enum TestLowerDiagnostic : uint16_t {
+  kTestLowerDiagnosticI32,
+  kTestLowerDiagnosticV4I32,
+  kTestLowerDiagnosticI64Attr,
+};
 
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
-      context, source_op, loom_scalar_constant_result(source_op),
-      &result_type));
-  if (!loom_type_is_register(result_type)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "test policy did not map scalar.constant result to a register");
-  }
+static const loom_low_lower_diagnostic_t kTestLowerDiagnostics[] = {
+    {
+        .subject_kind = IREE_SVL("type"),
+        .subject_name = IREE_SVL("i32"),
+        .reason = IREE_SVL("test lowering requires i32 scalar values"),
+    },
+    {
+        .subject_kind = IREE_SVL("type"),
+        .subject_name = IREE_SVL("vector<4xi32>"),
+        .reason =
+            IREE_SVL("test lowering requires vector<4xi32> vector values"),
+    },
+    {
+        .subject_kind = IREE_SVL("attr"),
+        .subject_name = IREE_SVL("value"),
+        .reason = IREE_SVL("test constant lowering requires an i64 value"),
+    },
+};
 
-  loom_named_attr_t attrs[] = {
-      {
-          .name_id = value_name_id,
-          .value = loom_scalar_constant_value(source_op),
-      },
-  };
-  loom_op_t* low_const_op = nullptr;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_const(
-      context, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_CONST_I32,
-      loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)), result_type,
-      source_op->location, &low_const_op));
-  return loom_low_lower_bind_value(context,
-                                   loom_scalar_constant_result(source_op),
-                                   loom_low_const_result(low_const_op));
-}
+enum TestLowerGuard : uint16_t {
+  kTestLowerConstValueGuard,
+  kTestLowerConstResultGuard,
+  kTestLowerScalarLhsGuard,
+  kTestLowerScalarRhsGuard,
+  kTestLowerScalarResultGuard,
+  kTestLowerVectorLhsGuard,
+  kTestLowerVectorRhsGuard,
+  kTestLowerVectorResultGuard,
+};
 
-static iree_status_t TestLowerBinaryOp(loom_low_lower_context_t* context,
-                                       const loom_op_t* source_op,
-                                       uint64_t descriptor_id,
-                                       loom_value_id_t source_lhs,
-                                       loom_value_id_t source_rhs,
-                                       loom_value_id_t source_result) {
-  loom_value_id_t low_operands[2] = {LOOM_VALUE_ID_INVALID,
-                                     LOOM_VALUE_ID_INVALID};
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, source_lhs, &low_operands[0]));
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, source_rhs, &low_operands[1]));
+static const loom_low_lower_guard_t kTestLowerGuards[] = {
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_ATTR_KIND,
+        .attr_index = 0,
+        .diagnostic_index = kTestLowerDiagnosticI64Attr,
+        .attr_kind = LOOM_ATTR_I64,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestLowerResult0,
+        .type_pattern_index = kTestLowerTypeI32,
+        .diagnostic_index = kTestLowerDiagnosticI32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestLowerOperand0,
+        .type_pattern_index = kTestLowerTypeI32,
+        .diagnostic_index = kTestLowerDiagnosticI32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestLowerOperand1,
+        .type_pattern_index = kTestLowerTypeI32,
+        .diagnostic_index = kTestLowerDiagnosticI32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestLowerResult0,
+        .type_pattern_index = kTestLowerTypeI32,
+        .diagnostic_index = kTestLowerDiagnosticI32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestLowerOperand0,
+        .type_pattern_index = kTestLowerTypeV4I32,
+        .diagnostic_index = kTestLowerDiagnosticV4I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestLowerOperand1,
+        .type_pattern_index = kTestLowerTypeV4I32,
+        .diagnostic_index = kTestLowerDiagnosticV4I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestLowerResult0,
+        .type_pattern_index = kTestLowerTypeV4I32,
+        .diagnostic_index = kTestLowerDiagnosticV4I32,
+    },
+};
 
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_low_lower_map_value(context, source_op,
-                                                source_result, &result_type));
-  if (!loom_type_is_register(result_type)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "test policy did not map binary op result to a register");
-  }
+enum TestLowerEmit : uint16_t {
+  kTestLowerEmitConstI32,
+  kTestLowerEmitAddI32,
+  kTestLowerEmitAddV4I32,
+};
 
-  loom_op_t* low_op = nullptr;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, descriptor_id, low_operands, IREE_ARRAYSIZE(low_operands),
-      loom_make_named_attr_slice(NULL, 0), &result_type, 1,
-      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
-      &low_op));
-  return loom_low_lower_bind_value(
-      context, source_result,
-      loom_value_slice_get(loom_low_op_results(low_op), 0));
-}
+static const loom_low_lower_emit_t kTestLowerEmits[] = {
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_CONST_I32,
+        .result_ref_start = kTestLowerResult0,
+        .result_ref_count = 1,
+        .attr_copy_start = 0,
+        .attr_copy_count = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
+        .operand_ref_start = kTestLowerOperand0,
+        .operand_ref_count = 2,
+        .result_ref_start = kTestLowerResult0,
+        .result_ref_count = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_V4I32,
+        .operand_ref_start = kTestLowerOperand0,
+        .operand_ref_count = 2,
+        .result_ref_start = kTestLowerResult0,
+        .result_ref_count = 1,
+    },
+};
 
-static iree_status_t TestTryLowerOp(void* user_data,
-                                    loom_low_lower_context_t* context,
-                                    const loom_op_t* source_op,
-                                    bool* out_handled) {
-  (void)user_data;
-  switch (source_op->kind) {
-    case LOOM_OP_SCALAR_CONSTANT:
-      *out_handled = true;
-      return TestLowerScalarConstant(context, source_op);
-    case LOOM_OP_SCALAR_ADDI:
-      *out_handled = true;
-      return TestLowerBinaryOp(
-          context, source_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
-          loom_scalar_addi_lhs(source_op), loom_scalar_addi_rhs(source_op),
-          loom_scalar_addi_result(source_op));
-    case LOOM_OP_VECTOR_ADDI:
-      *out_handled = true;
-      return TestLowerBinaryOp(
-          context, source_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_V4I32,
-          loom_vector_addi_lhs(source_op), loom_vector_addi_rhs(source_op),
-          loom_vector_addi_result(source_op));
-    default:
-      *out_handled = false;
-      return iree_ok_status();
-  }
-}
+static const loom_low_lower_rule_t kTestLowerRules[] = {
+    {
+        .source_op_kind = LOOM_OP_SCALAR_ADDI,
+        .guard_start = kTestLowerScalarLhsGuard,
+        .guard_count = 3,
+        .emit_start = kTestLowerEmitAddI32,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
+        .guard_start = kTestLowerConstValueGuard,
+        .guard_count = 2,
+        .emit_start = kTestLowerEmitConstI32,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ADDI,
+        .guard_start = kTestLowerVectorLhsGuard,
+        .guard_count = 3,
+        .emit_start = kTestLowerEmitAddV4I32,
+        .emit_count = 1,
+    },
+};
+
+static const loom_low_lower_rule_span_t kTestLowerSpans[] = {
+    {
+        .source_op_kind = LOOM_OP_SCALAR_ADDI,
+        .rule_start = 0,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
+        .rule_start = 1,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ADDI,
+        .rule_start = 2,
+        .rule_count = 1,
+    },
+};
+
+static const loom_low_lower_rule_set_t kTestLowerRuleSet = {
+    .spans = kTestLowerSpans,
+    .span_count = IREE_ARRAYSIZE(kTestLowerSpans),
+    .rules = kTestLowerRules,
+    .rule_count = IREE_ARRAYSIZE(kTestLowerRules),
+    .type_patterns = kTestLowerTypePatterns,
+    .type_pattern_count = IREE_ARRAYSIZE(kTestLowerTypePatterns),
+    .value_refs = kTestLowerValueRefs,
+    .value_ref_count = IREE_ARRAYSIZE(kTestLowerValueRefs),
+    .guards = kTestLowerGuards,
+    .guard_count = IREE_ARRAYSIZE(kTestLowerGuards),
+    .attr_copies = kTestLowerAttrCopies,
+    .attr_copy_count = IREE_ARRAYSIZE(kTestLowerAttrCopies),
+    .emits = kTestLowerEmits,
+    .emit_count = IREE_ARRAYSIZE(kTestLowerEmits),
+    .diagnostics = kTestLowerDiagnostics,
+    .diagnostic_count = IREE_ARRAYSIZE(kTestLowerDiagnostics),
+};
 
 static iree_status_t TestEmitPreamble(void* user_data,
                                       loom_low_lower_context_t* context) {
@@ -320,8 +412,7 @@ static const loom_low_lower_policy_t kTestLowerPolicy = {
     .name = IREE_SVL("test-lower-policy"),
     .map_type = {.fn = TestMapType, .user_data = nullptr},
     .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
-    .can_lower_op = {.fn = TestCanLowerOp, .user_data = nullptr},
-    .try_lower_op = {.fn = TestTryLowerOp, .user_data = nullptr},
+    .rule_set = &kTestLowerRuleSet,
 };
 
 static const loom_low_lower_policy_t kTestPreambleLowerPolicy = {
@@ -329,8 +420,7 @@ static const loom_low_lower_policy_t kTestPreambleLowerPolicy = {
     .map_type = {.fn = TestMapType, .user_data = nullptr},
     .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
     .emit_preamble = {.fn = TestEmitPreamble, .user_data = nullptr},
-    .can_lower_op = {.fn = TestCanLowerOp, .user_data = nullptr},
-    .try_lower_op = {.fn = TestTryLowerOp, .user_data = nullptr},
+    .rule_set = &kTestLowerRuleSet,
 };
 
 static loom_low_lower_policy_registry_t MakeTestPolicyRegistry() {

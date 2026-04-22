@@ -345,11 +345,9 @@ static bool loom_amdgpu_can_lower_workgroup_id(
              context, loom_kernel_workgroup_id_result(source_op));
 }
 
-static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
-                                              loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op,
-                                              bool* out_handled) {
-  (void)user_data;
+static iree_status_t loom_amdgpu_select_plan_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    bool* out_handled) {
   switch (source_op->kind) {
     case LOOM_OP_INDEX_CONSTANT:
       *out_handled = loom_amdgpu_can_lower_index_constant(context, source_op);
@@ -647,6 +645,25 @@ static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
   }
 }
 
+static iree_status_t loom_amdgpu_select_op(void* user_data,
+                                           loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op,
+                                           loom_low_lower_plan_t* out_plan) {
+  (void)user_data;
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = loom_low_lower_plan_empty();
+  bool handled = false;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_select_plan_id(context, source_op, &handled));
+  if (handled) {
+    *out_plan = (loom_low_lower_plan_t){
+        .id = source_op->kind,
+        .payload = 0,
+    };
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_bind_vgpr_u32_lane_constants(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_result, const uint32_t* lane_bit_patterns,
@@ -654,7 +671,7 @@ static iree_status_t loom_amdgpu_bind_vgpr_u32_lane_constants(
   IREE_ASSERT_ARGUMENT(lane_bit_patterns);
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector "
+                            "planning accepted unsupported AMDGPU vector "
                             "constant lane count");
   }
 
@@ -690,7 +707,7 @@ static iree_status_t loom_amdgpu_bind_vgpr_i32_lane_constants(
   IREE_ASSERT_ARGUMENT(lane_values);
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector "
+                            "planning accepted unsupported AMDGPU vector "
                             "constant lane count");
   }
 
@@ -698,7 +715,7 @@ static iree_status_t loom_amdgpu_bind_vgpr_i32_lane_constants(
   for (uint32_t i = 0; i < lane_count; ++i) {
     if (lane_values[i] < INT32_MIN || lane_values[i] > INT32_MAX) {
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "preflight accepted out-of-range AMDGPU vector "
+                              "planning accepted out-of-range AMDGPU vector "
                               "constant lane");
     }
     lane_bit_patterns[i] = (uint32_t)(int32_t)lane_values[i];
@@ -805,7 +822,7 @@ static iree_status_t loom_amdgpu_lower_vector_constant(
   }
 
   return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "preflight accepted unsupported AMDGPU vector "
+                          "planning accepted unsupported AMDGPU vector "
                           "constant lane count");
 }
 
@@ -817,7 +834,7 @@ static iree_status_t loom_amdgpu_lower_vector_iota(
       loom_module_value_type(module, source_result));
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector "
+                            "planning accepted unsupported AMDGPU vector "
                             "iota lane count");
   }
   int64_t base = 0;
@@ -827,7 +844,7 @@ static iree_status_t loom_amdgpu_lower_vector_iota(
       !loom_amdgpu_value_as_i32_constant(
           context, loom_vector_iota_step(source_op), &step)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector "
+                            "planning accepted unsupported AMDGPU vector "
                             "iota base/step");
   }
 
@@ -835,7 +852,7 @@ static iree_status_t loom_amdgpu_lower_vector_iota(
   for (uint32_t i = 0; i < lane_count; ++i) {
     if (!loom_amdgpu_iota_i32_lane_value(base, step, i, &lane_values[i])) {
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "preflight accepted out-of-range AMDGPU vector "
+                              "planning accepted out-of-range AMDGPU vector "
                               "iota lane");
     }
   }
@@ -916,7 +933,7 @@ static iree_status_t loom_amdgpu_lower_vector_binary_op_ordered(
   }
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector "
+                            "planning accepted unsupported AMDGPU vector "
                             "binary lane count");
   }
 
@@ -982,7 +999,7 @@ static iree_status_t loom_amdgpu_lower_vector_ternary_op(
   }
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector "
+                            "planning accepted unsupported AMDGPU vector "
                             "ternary lane count");
   }
 
@@ -1064,7 +1081,7 @@ static iree_status_t loom_amdgpu_lower_i32_binary_op(
   }
   if (scalar_descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted uniform AMDGPU scalar integer "
+                            "planning accepted uniform AMDGPU scalar integer "
                             "op without a scalar descriptor");
   }
   return loom_amdgpu_lower_binary_op(context, source_op, scalar_descriptor_id,
@@ -1184,7 +1201,7 @@ static iree_status_t loom_amdgpu_lower_address_binary_op(
   if (scalar_descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "preflight accepted uniform AMDGPU address op without a scalar "
+        "planning accepted uniform AMDGPU address op without a scalar "
         "descriptor");
   }
   return loom_amdgpu_lower_binary_op(context, source_op, scalar_descriptor_id,
@@ -1394,7 +1411,7 @@ static iree_status_t loom_amdgpu_lower_vector_i32_to_f32(
   }
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector "
+                            "planning accepted unsupported AMDGPU vector "
                             "integer-to-float conversion lane count");
   }
 
@@ -1511,7 +1528,7 @@ static iree_status_t loom_amdgpu_lower_vector_extract(
   uint32_t lane_offset = 0;
   if (!loom_amdgpu_vector_extract_select(context, source_op, &lane_offset)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.extract");
   }
 
@@ -1541,7 +1558,7 @@ static iree_status_t loom_amdgpu_lower_vector_from_elements(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   if (!loom_amdgpu_can_lower_vector_from_elements(context, source_op)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.from_elements");
   }
   loom_value_slice_t elements = loom_vector_from_elements_elements(source_op);
@@ -1581,7 +1598,7 @@ static iree_status_t loom_amdgpu_lower_buffer_alloca(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   if (!loom_amdgpu_can_lower_buffer_alloca(context, source_op)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "buffer.alloca");
   }
 
@@ -1594,7 +1611,7 @@ static iree_status_t loom_amdgpu_lower_buffer_alloca(
           &byte_length) ||
       byte_length <= 0) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted AMDGPU buffer.alloca with "
+                            "planning accepted AMDGPU buffer.alloca with "
                             "unsupported byte length");
   }
 
@@ -1912,17 +1929,12 @@ static iree_status_t loom_amdgpu_lower_workgroup_id(
       context, loom_kernel_workgroup_id_result(source_op), &low_result);
 }
 
-static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
-                                              loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op,
-                                              bool* out_handled) {
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_can_lower_op(user_data, context, source_op, out_handled));
-  if (!*out_handled) {
-    return iree_ok_status();
-  }
-
-  switch (source_op->kind) {
+static iree_status_t loom_amdgpu_emit_op(void* user_data,
+                                         loom_low_lower_context_t* context,
+                                         const loom_op_t* source_op,
+                                         loom_low_lower_plan_t plan) {
+  (void)user_data;
+  switch (plan.id) {
     case LOOM_OP_INDEX_CONSTANT:
       return loom_amdgpu_lower_index_constant(context, source_op);
     case LOOM_OP_SCALAR_CONSTANT:
@@ -2056,7 +2068,9 @@ static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
     case LOOM_OP_VECTOR_STORE:
       return loom_amdgpu_lower_vector_store(context, source_op);
     default:
-      return iree_ok_status();
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "AMDGPU lowering received an unknown selected "
+                              "plan");
   }
 }
 
@@ -2130,8 +2144,8 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .map_value = {.fn = loom_amdgpu_map_value, .user_data = NULL},
     .map_argument = {.fn = loom_amdgpu_map_argument, .user_data = NULL},
     .emit_preamble = {.fn = loom_amdgpu_emit_preamble, .user_data = NULL},
-    .can_lower_op = {.fn = loom_amdgpu_can_lower_op, .user_data = NULL},
-    .try_lower_op = {.fn = loom_amdgpu_try_lower_op, .user_data = NULL},
+    .select_op = {.fn = loom_amdgpu_select_op, .user_data = NULL},
+    .emit_op = {.fn = loom_amdgpu_emit_op, .user_data = NULL},
 };
 
 const loom_target_low_legality_provider_t

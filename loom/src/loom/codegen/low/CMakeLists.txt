@@ -443,8 +443,10 @@ loom_cc_library(
     lower
   HDRS
     "lower.h"
+    "lower_rules.h"
   SRCS
     "lower.c"
+    "lower_rules.c"
   DEPS
     ::builder
     ::descriptors

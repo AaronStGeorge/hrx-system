@@ -127,57 +127,110 @@ static bool loom_wasm_can_lower_i32x4_splat(loom_low_lower_context_t* context,
          loom_wasm_value_is_vector_4xi32(context, result);
 }
 
-static iree_status_t loom_wasm_can_lower_op(void* user_data,
-                                            loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op,
-                                            bool* out_handled) {
+static iree_status_t loom_wasm_select_op(void* user_data,
+                                         loom_low_lower_context_t* context,
+                                         const loom_op_t* source_op,
+                                         loom_low_lower_plan_t* out_plan) {
   (void)user_data;
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = loom_low_lower_plan_empty();
   switch (source_op->kind) {
     case LOOM_OP_SCALAR_CONSTANT:
-      *out_handled = loom_wasm_can_lower_constant(context, source_op);
+      if (loom_wasm_can_lower_constant(context, source_op)) {
+        *out_plan = (loom_low_lower_plan_t){
+            .id = source_op->kind,
+            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_CONST,
+        };
+      }
       return iree_ok_status();
     case LOOM_OP_SCALAR_ADDI:
-      *out_handled = loom_wasm_can_lower_i32_binary(
-          context, loom_scalar_addi_lhs(source_op),
-          loom_scalar_addi_rhs(source_op), loom_scalar_addi_result(source_op));
+      if (loom_wasm_can_lower_i32_binary(context,
+                                         loom_scalar_addi_lhs(source_op),
+                                         loom_scalar_addi_rhs(source_op),
+                                         loom_scalar_addi_result(source_op))) {
+        *out_plan = (loom_low_lower_plan_t){
+            .id = source_op->kind,
+            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD,
+        };
+      }
       return iree_ok_status();
     case LOOM_OP_SCALAR_SUBI:
-      *out_handled = loom_wasm_can_lower_i32_binary(
-          context, loom_scalar_subi_lhs(source_op),
-          loom_scalar_subi_rhs(source_op), loom_scalar_subi_result(source_op));
+      if (loom_wasm_can_lower_i32_binary(context,
+                                         loom_scalar_subi_lhs(source_op),
+                                         loom_scalar_subi_rhs(source_op),
+                                         loom_scalar_subi_result(source_op))) {
+        *out_plan = (loom_low_lower_plan_t){
+            .id = source_op->kind,
+            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_SUB,
+        };
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_ADDI:
-      *out_handled = loom_wasm_can_lower_vector_4xi32_binary(
-          context, loom_vector_addi_lhs(source_op),
-          loom_vector_addi_rhs(source_op), loom_vector_addi_result(source_op));
+      if (loom_wasm_can_lower_vector_4xi32_binary(
+              context, loom_vector_addi_lhs(source_op),
+              loom_vector_addi_rhs(source_op),
+              loom_vector_addi_result(source_op))) {
+        *out_plan = (loom_low_lower_plan_t){
+            .id = source_op->kind,
+            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_ADD,
+        };
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_SUBI:
-      *out_handled = loom_wasm_can_lower_vector_4xi32_binary(
-          context, loom_vector_subi_lhs(source_op),
-          loom_vector_subi_rhs(source_op), loom_vector_subi_result(source_op));
+      if (loom_wasm_can_lower_vector_4xi32_binary(
+              context, loom_vector_subi_lhs(source_op),
+              loom_vector_subi_rhs(source_op),
+              loom_vector_subi_result(source_op))) {
+        *out_plan = (loom_low_lower_plan_t){
+            .id = source_op->kind,
+            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SUB,
+        };
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_MULI:
-      *out_handled = loom_wasm_can_lower_vector_4xi32_binary(
-          context, loom_vector_muli_lhs(source_op),
-          loom_vector_muli_rhs(source_op), loom_vector_muli_result(source_op));
+      if (loom_wasm_can_lower_vector_4xi32_binary(
+              context, loom_vector_muli_lhs(source_op),
+              loom_vector_muli_rhs(source_op),
+              loom_vector_muli_result(source_op))) {
+        *out_plan = (loom_low_lower_plan_t){
+            .id = source_op->kind,
+            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_MUL,
+        };
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_ADDF:
-      *out_handled = loom_wasm_can_lower_vector_4xf32_binary(
-          context, loom_vector_addf_lhs(source_op),
-          loom_vector_addf_rhs(source_op), loom_vector_addf_result(source_op));
+      if (loom_wasm_can_lower_vector_4xf32_binary(
+              context, loom_vector_addf_lhs(source_op),
+              loom_vector_addf_rhs(source_op),
+              loom_vector_addf_result(source_op))) {
+        *out_plan = (loom_low_lower_plan_t){
+            .id = source_op->kind,
+            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_ADD,
+        };
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_MULF:
-      *out_handled = loom_wasm_can_lower_vector_4xf32_binary(
-          context, loom_vector_mulf_lhs(source_op),
-          loom_vector_mulf_rhs(source_op), loom_vector_mulf_result(source_op));
+      if (loom_wasm_can_lower_vector_4xf32_binary(
+              context, loom_vector_mulf_lhs(source_op),
+              loom_vector_mulf_rhs(source_op),
+              loom_vector_mulf_result(source_op))) {
+        *out_plan = (loom_low_lower_plan_t){
+            .id = source_op->kind,
+            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_MUL,
+        };
+      }
       return iree_ok_status();
     case LOOM_OP_VECTOR_SPLAT:
-      *out_handled = loom_wasm_can_lower_i32x4_splat(
-          context, loom_vector_splat_scalar(source_op),
-          loom_vector_splat_result(source_op));
+      if (loom_wasm_can_lower_i32x4_splat(
+              context, loom_vector_splat_scalar(source_op),
+              loom_vector_splat_result(source_op))) {
+        *out_plan = (loom_low_lower_plan_t){
+            .id = source_op->kind,
+            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SPLAT,
+        };
+      }
       return iree_ok_status();
     default:
-      *out_handled = false;
       return iree_ok_status();
   }
 }
@@ -202,7 +255,8 @@ static iree_status_t loom_wasm_low_result_type(
 }
 
 static iree_status_t loom_wasm_lower_constant(loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op) {
+                                              const loom_op_t* source_op,
+                                              uint64_t descriptor_id) {
   loom_string_id_t value_name_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_wasm_intern(context, IREE_SV("i32_value"), &value_name_id));
@@ -220,7 +274,7 @@ static iree_status_t loom_wasm_lower_constant(loom_low_lower_context_t* context,
   };
   loom_op_t* low_const = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_const(
-      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_CONST,
+      context, descriptor_id,
       loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)), result_type,
       source_op->location, &low_const));
   return loom_low_lower_bind_value(context,
@@ -280,70 +334,58 @@ static iree_status_t loom_wasm_lower_binary(loom_low_lower_context_t* context,
       loom_value_slice_get(loom_low_op_results(low_op), 0));
 }
 
-static iree_status_t loom_wasm_try_lower_op(void* user_data,
-                                            loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op,
-                                            bool* out_handled) {
+static iree_status_t loom_wasm_emit_op(void* user_data,
+                                       loom_low_lower_context_t* context,
+                                       const loom_op_t* source_op,
+                                       loom_low_lower_plan_t plan) {
   (void)user_data;
-  IREE_RETURN_IF_ERROR(
-      loom_wasm_can_lower_op(user_data, context, source_op, out_handled));
-  if (!*out_handled) {
-    return iree_ok_status();
-  }
-
-  switch (source_op->kind) {
+  switch (plan.id) {
     case LOOM_OP_SCALAR_CONSTANT:
-      return loom_wasm_lower_constant(context, source_op);
+      return loom_wasm_lower_constant(context, source_op, plan.payload);
     case LOOM_OP_SCALAR_ADDI:
       return loom_wasm_lower_binary(
-          context, source_op, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD,
-          loom_scalar_addi_lhs(source_op), loom_scalar_addi_rhs(source_op),
-          loom_scalar_addi_result(source_op));
+          context, source_op, plan.payload, loom_scalar_addi_lhs(source_op),
+          loom_scalar_addi_rhs(source_op), loom_scalar_addi_result(source_op));
     case LOOM_OP_SCALAR_SUBI:
       return loom_wasm_lower_binary(
-          context, source_op, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_SUB,
-          loom_scalar_subi_lhs(source_op), loom_scalar_subi_rhs(source_op),
-          loom_scalar_subi_result(source_op));
+          context, source_op, plan.payload, loom_scalar_subi_lhs(source_op),
+          loom_scalar_subi_rhs(source_op), loom_scalar_subi_result(source_op));
     case LOOM_OP_VECTOR_ADDI:
       return loom_wasm_lower_binary(
-          context, source_op, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_ADD,
-          loom_vector_addi_lhs(source_op), loom_vector_addi_rhs(source_op),
-          loom_vector_addi_result(source_op));
+          context, source_op, plan.payload, loom_vector_addi_lhs(source_op),
+          loom_vector_addi_rhs(source_op), loom_vector_addi_result(source_op));
     case LOOM_OP_VECTOR_SUBI:
       return loom_wasm_lower_binary(
-          context, source_op, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SUB,
-          loom_vector_subi_lhs(source_op), loom_vector_subi_rhs(source_op),
-          loom_vector_subi_result(source_op));
+          context, source_op, plan.payload, loom_vector_subi_lhs(source_op),
+          loom_vector_subi_rhs(source_op), loom_vector_subi_result(source_op));
     case LOOM_OP_VECTOR_MULI:
       return loom_wasm_lower_binary(
-          context, source_op, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_MUL,
-          loom_vector_muli_lhs(source_op), loom_vector_muli_rhs(source_op),
-          loom_vector_muli_result(source_op));
+          context, source_op, plan.payload, loom_vector_muli_lhs(source_op),
+          loom_vector_muli_rhs(source_op), loom_vector_muli_result(source_op));
     case LOOM_OP_VECTOR_ADDF:
       return loom_wasm_lower_binary(
-          context, source_op, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_ADD,
-          loom_vector_addf_lhs(source_op), loom_vector_addf_rhs(source_op),
-          loom_vector_addf_result(source_op));
+          context, source_op, plan.payload, loom_vector_addf_lhs(source_op),
+          loom_vector_addf_rhs(source_op), loom_vector_addf_result(source_op));
     case LOOM_OP_VECTOR_MULF:
       return loom_wasm_lower_binary(
-          context, source_op, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_MUL,
-          loom_vector_mulf_lhs(source_op), loom_vector_mulf_rhs(source_op),
-          loom_vector_mulf_result(source_op));
+          context, source_op, plan.payload, loom_vector_mulf_lhs(source_op),
+          loom_vector_mulf_rhs(source_op), loom_vector_mulf_result(source_op));
     case LOOM_OP_VECTOR_SPLAT:
-      return loom_wasm_lower_unary(
-          context, source_op, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SPLAT,
-          loom_vector_splat_scalar(source_op),
-          loom_vector_splat_result(source_op));
+      return loom_wasm_lower_unary(context, source_op, plan.payload,
+                                   loom_vector_splat_scalar(source_op),
+                                   loom_vector_splat_result(source_op));
     default:
-      return iree_ok_status();
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "Wasm lowering received an unknown selected "
+                              "plan");
   }
 }
 
 static const loom_low_lower_policy_t kWasmLowLowerPolicy = {
     .name = IREE_SVL("wasm-lower"),
     .map_type = {.fn = loom_wasm_map_type, .user_data = NULL},
-    .can_lower_op = {.fn = loom_wasm_can_lower_op, .user_data = NULL},
-    .try_lower_op = {.fn = loom_wasm_try_lower_op, .user_data = NULL},
+    .select_op = {.fn = loom_wasm_select_op, .user_data = NULL},
+    .emit_op = {.fn = loom_wasm_emit_op, .user_data = NULL},
 };
 
 const loom_low_lower_policy_t* loom_wasm_low_lower_policy(void) {

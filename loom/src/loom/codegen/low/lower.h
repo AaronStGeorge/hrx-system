@@ -31,6 +31,7 @@ extern "C" {
 #endif
 
 typedef struct loom_low_lower_context_t loom_low_lower_context_t;
+typedef struct loom_low_lower_rule_set_t loom_low_lower_rule_set_t;
 
 typedef iree_status_t (*loom_low_lower_map_type_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
@@ -111,27 +112,52 @@ typedef struct loom_low_lower_emit_preamble_callback_t {
   void* user_data;
 } loom_low_lower_emit_preamble_callback_t;
 
-typedef iree_status_t (*loom_low_lower_can_lower_op_fn_t)(
-    void* user_data, loom_low_lower_context_t* context,
-    const loom_op_t* source_op, bool* out_handled);
+typedef uint64_t loom_low_lower_plan_id_t;
 
-typedef struct loom_low_lower_can_lower_op_callback_t {
-  // Callback invoked during preflight to prove |source_op| has a lowering.
-  loom_low_lower_can_lower_op_fn_t fn;
+#define LOOM_LOW_LOWER_PLAN_ID_NONE UINT64_MAX
+
+typedef struct loom_low_lower_plan_t {
+  // Target-owned dense plan id selected during planning.
+  loom_low_lower_plan_id_t id;
+  // Target-owned auxiliary value, usually a selected descriptor stable id.
+  uint64_t payload;
+} loom_low_lower_plan_t;
+
+static inline loom_low_lower_plan_t loom_low_lower_plan_empty(void) {
+  return (loom_low_lower_plan_t){
+      .id = LOOM_LOW_LOWER_PLAN_ID_NONE,
+      .payload = 0,
+  };
+}
+
+static inline bool loom_low_lower_plan_is_empty(loom_low_lower_plan_t plan) {
+  return plan.id == LOOM_LOW_LOWER_PLAN_ID_NONE;
+}
+
+typedef iree_status_t (*loom_low_lower_select_op_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_low_lower_plan_t* out_plan);
+
+typedef struct loom_low_lower_select_op_callback_t {
+  // Callback invoked during planning to select the exact lowering plan for
+  // one non-structural source op. Missing or unsupported plans must return
+  // loom_low_lower_plan_empty().
+  loom_low_lower_select_op_fn_t fn;
   // Caller-owned payload passed to |fn|.
   void* user_data;
-} loom_low_lower_can_lower_op_callback_t;
+} loom_low_lower_select_op_callback_t;
 
-typedef iree_status_t (*loom_low_lower_try_op_fn_t)(
+typedef iree_status_t (*loom_low_lower_emit_op_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
-    const loom_op_t* source_op, bool* out_handled);
+    const loom_op_t* source_op, loom_low_lower_plan_t plan);
 
-typedef struct loom_low_lower_try_op_callback_t {
-  // Callback invoked during emission to lower one non-structural source op.
-  loom_low_lower_try_op_fn_t fn;
+typedef struct loom_low_lower_emit_op_callback_t {
+  // Callback invoked during emission to execute a plan selected during
+  // planning for one non-structural source op.
+  loom_low_lower_emit_op_fn_t fn;
   // Caller-owned payload passed to |fn|.
   void* user_data;
-} loom_low_lower_try_op_callback_t;
+} loom_low_lower_emit_op_callback_t;
 
 typedef struct loom_low_lower_policy_t {
   // Stable policy name used in diagnostics and status messages.
@@ -145,10 +171,12 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_map_argument_callback_t map_argument;
   // Optionally emits target live-ins or other structural preamble packets.
   loom_low_lower_emit_preamble_callback_t emit_preamble;
-  // Preflights a non-structural source op without mutating IR.
-  loom_low_lower_can_lower_op_callback_t can_lower_op;
-  // Emits target-low ops for a preflighted non-structural source op.
-  loom_low_lower_try_op_callback_t try_lower_op;
+  // Optional table-driven source-op lowering rules.
+  const loom_low_lower_rule_set_t* rule_set;
+  // Optional target-owned selector used before a target has table rules.
+  loom_low_lower_select_op_callback_t select_op;
+  // Optional target-owned emitter for plans selected by |select_op|.
+  loom_low_lower_emit_op_callback_t emit_op;
 } loom_low_lower_policy_t;
 
 typedef struct loom_low_lower_policy_registry_entry_t {
@@ -248,8 +276,8 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
 // Returns the module being mutated by the current lowering.
 loom_module_t* loom_low_lower_context_module(loom_low_lower_context_t* context);
 
-// Returns the builder positioned in the current low block. Only valid while an
-// emit_preamble or try_lower_op callback is emitting; preflight callbacks must
+// Returns the builder positioned in the current low block. Only valid while
+// emit_preamble or emit_op callback code is emitting; select_op callbacks must
 // not mutate IR.
 loom_builder_t* loom_low_lower_context_builder(
     loom_low_lower_context_t* context);
@@ -258,7 +286,7 @@ loom_builder_t* loom_low_lower_context_builder(
 loom_func_like_t loom_low_lower_context_source_function(
     const loom_low_lower_context_t* context);
 
-// Returns the emitted low.func.def op, or NULL during preflight.
+// Returns the emitted low.func.def op, or NULL during planning.
 loom_op_t* loom_low_lower_context_low_function(
     const loom_low_lower_context_t* context);
 
@@ -270,10 +298,16 @@ const loom_target_bundle_t* loom_low_lower_context_bundle(
 const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
     const loom_low_lower_context_t* context);
 
-// Returns source value facts computed before preflight. The table describes
+// Returns source value facts computed before planning. The table describes
 // the source function being lowered and remains valid only during callbacks.
 const loom_value_fact_table_t* loom_low_lower_context_fact_table(
     const loom_low_lower_context_t* context);
+
+// Allocates transient storage from the current lowering arena. The allocation
+// remains valid until the current loom_low_lower_function call returns.
+iree_status_t loom_low_lower_allocate_scratch_array(
+    loom_low_lower_context_t* context, iree_host_size_t count,
+    iree_host_size_t element_size, void** out_ptr);
 
 // Creates a module-local symbol derived from the emitted low function symbol.
 // The result is suitable for target-owned function records such as low.slot

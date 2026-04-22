@@ -178,7 +178,7 @@ static iree_status_t loom_amdgpu_lower_vector_compare(
       loom_module_value_type(module, source_result));
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector "
+                            "planning accepted unsupported AMDGPU vector "
                             "compare mask lane count");
   }
 
@@ -234,7 +234,7 @@ iree_status_t loom_amdgpu_lower_vector_cmpi(loom_low_lower_context_t* context,
   if (!loom_amdgpu_vector_cmpi_descriptor_id(
           loom_vector_cmpi_predicate(source_op), &descriptor_id)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector.cmpi "
+                            "planning accepted unsupported AMDGPU vector.cmpi "
                             "predicate");
   }
   return loom_amdgpu_lower_vector_compare(
@@ -249,7 +249,7 @@ iree_status_t loom_amdgpu_lower_vector_cmpf(loom_low_lower_context_t* context,
   if (!loom_amdgpu_vector_cmpf_descriptor_id(
           loom_vector_cmpf_predicate(source_op), &descriptor_id)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector.cmpf "
+                            "planning accepted unsupported AMDGPU vector.cmpf "
                             "predicate");
   }
   return loom_amdgpu_lower_vector_compare(
@@ -266,7 +266,7 @@ iree_status_t loom_amdgpu_lower_vector_select(loom_low_lower_context_t* context,
       loom_module_value_type(module, source_result));
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU vector "
+                            "planning accepted unsupported AMDGPU vector "
                             "select lane count");
   }
 

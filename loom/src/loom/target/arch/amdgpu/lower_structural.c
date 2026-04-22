@@ -208,7 +208,7 @@ iree_status_t loom_amdgpu_lower_vector_bitcast(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   if (!loom_amdgpu_can_lower_vector_bitcast(context, source_op)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.bitcast");
   }
 
@@ -289,7 +289,7 @@ iree_status_t loom_amdgpu_lower_vector_slice(loom_low_lower_context_t* context,
   if (!loom_amdgpu_vector_slice_select(loom_low_lower_context_module(context),
                                        source_op, &select)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.slice");
   }
 

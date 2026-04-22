@@ -93,7 +93,7 @@ iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op) {
   if (!loom_amdgpu_can_lower_vector_reduce(context, source_op)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.reduce");
   }
 
@@ -110,7 +110,7 @@ iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
       !loom_amdgpu_vector_reduce_descriptor_id(
           element_type, loom_vector_reduce_kind(source_op), &descriptor_id)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted unsupported AMDGPU "
+                            "planning accepted unsupported AMDGPU "
                             "vector.reduce kind or lane count");
   }
 
@@ -122,7 +122,7 @@ iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
       context, result_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &result_is_vgpr));
   if (!result_is_vgpr) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted AMDGPU vector.reduce result "
+                            "planning accepted AMDGPU vector.reduce result "
                             "that does not map to a VGPR");
   }
 

@@ -433,8 +433,14 @@ loom_cc_library(
 
 loom_cc_library(
     name = "lower",
-    srcs = ["lower.c"],
-    hdrs = ["lower.h"],
+    srcs = [
+        "lower.c",
+        "lower_rules.c",
+    ],
+    hdrs = [
+        "lower.h",
+        "lower_rules.h",
+    ],
     deps = [
         ":builder",
         ":descriptors",

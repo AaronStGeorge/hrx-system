@@ -10,6 +10,7 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/builder.h"
+#include "loom/codegen/low/lower_rules.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -18,6 +19,13 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
+
+typedef struct loom_low_lower_selected_plan_t {
+  // Table rule selected during planning, or NULL for target-owned callbacks.
+  const loom_low_lower_rule_t* rule;
+  // Target-owned plan selected during planning, or empty for table rules.
+  loom_low_lower_plan_t plan;
+} loom_low_lower_selected_plan_t;
 
 struct loom_low_lower_context_t {
   // Module being mutated by this lowering run.
@@ -34,7 +42,7 @@ struct loom_low_lower_context_t {
   loom_low_lower_result_t* result;
   // Scratch arena for transient maps and remapped operand lists.
   iree_arena_allocator_t arena;
-  // Source value facts computed once before preflight.
+  // Source value facts computed once before planning.
   loom_value_fact_table_t fact_table;
   // Builder used while emitting the low function.
   loom_builder_t builder;
@@ -50,6 +58,14 @@ struct loom_low_lower_context_t {
   loom_low_lower_abi_argument_t* argument_map;
   // Number of entries in |argument_map|.
   uint16_t argument_map_count;
+  // Selected lowering plans for non-structural source ops.
+  loom_low_lower_selected_plan_t* selected_plans;
+  // Number of selected plan slots used during planning.
+  iree_host_size_t selected_plan_count;
+  // Number of selected plan slots allocated for planning.
+  iree_host_size_t selected_plan_capacity;
+  // Next selected plan consumed by the emission walk.
+  iree_host_size_t selected_plan_emit_index;
 };
 
 static bool loom_low_lower_type_is_none(loom_type_t type) {
@@ -79,8 +95,22 @@ static iree_status_t loom_low_lower_policy_verify(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low lowering policy name is required");
   }
-  if (policy->map_type.fn == NULL || policy->can_lower_op.fn == NULL ||
-      policy->try_lower_op.fn == NULL) {
+  const bool has_rule_set = policy->rule_set != NULL;
+  const bool has_select_op = policy->select_op.fn != NULL;
+  const bool has_emit_op = policy->emit_op.fn != NULL;
+  if (has_select_op != has_emit_op) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low lowering policy must provide both "
+                            "select_op and emit_op callbacks or neither");
+  }
+  const bool has_callback_lowering = has_select_op && has_emit_op;
+  if (has_rule_set && (has_select_op || has_emit_op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low lowering policy must provide either "
+                            "rule_set or select/emit callbacks");
+  }
+  if (policy->map_type.fn == NULL ||
+      (!has_rule_set && !has_callback_lowering)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "complete target-low lowering policy is required");
   }
@@ -388,6 +418,19 @@ const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
 const loom_value_fact_table_t* loom_low_lower_context_fact_table(
     const loom_low_lower_context_t* context) {
   return &context->fact_table;
+}
+
+iree_status_t loom_low_lower_allocate_scratch_array(
+    loom_low_lower_context_t* context, iree_host_size_t count,
+    iree_host_size_t element_size, void** out_ptr) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(out_ptr);
+  *out_ptr = NULL;
+  if (count == 0) {
+    return iree_ok_status();
+  }
+  return iree_arena_allocate_array(&context->arena, count, element_size,
+                                   out_ptr);
 }
 
 iree_status_t loom_low_lower_register_class_string_id(
@@ -831,8 +874,49 @@ static bool loom_low_lower_op_is_source_metadata(loom_op_kind_t kind) {
   }
 }
 
-static iree_status_t loom_low_lower_preflight_op(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+static bool loom_low_lower_op_uses_policy(loom_op_kind_t kind) {
+  return !loom_low_lower_op_is_structural(kind) &&
+         !loom_low_lower_op_is_source_metadata(kind);
+}
+
+static iree_status_t loom_low_lower_prepare_plan(
+    loom_low_lower_context_t* context, loom_region_t* source_body) {
+  iree_host_size_t plan_capacity = 0;
+  for (uint16_t block_index = 0; block_index < source_body->block_count;
+       ++block_index) {
+    loom_block_t* block = loom_region_block(source_body, block_index);
+    loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (loom_low_lower_op_uses_policy(op->kind)) {
+        ++plan_capacity;
+      }
+    }
+  }
+  context->selected_plan_capacity = plan_capacity;
+  context->selected_plan_count = 0;
+  context->selected_plan_emit_index = 0;
+  if (plan_capacity == 0) {
+    return iree_ok_status();
+  }
+  return loom_low_lower_allocate_scratch_array(
+      context, plan_capacity, sizeof(*context->selected_plans),
+      (void**)&context->selected_plans);
+}
+
+static iree_status_t loom_low_lower_record_selected_plan(
+    loom_low_lower_context_t* context,
+    loom_low_lower_selected_plan_t selected_plan) {
+  if (context->selected_plan_count >= context->selected_plan_capacity) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "source-to-low lowering selected more plans than "
+                            "the planned source op count");
+  }
+  context->selected_plans[context->selected_plan_count++] = selected_plan;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
+                                            const loom_op_t* source_op) {
   if (source_op->region_count != 0) {
     return loom_low_lower_emit_reject(
         context, source_op, IREE_SV("op"),
@@ -847,25 +931,41 @@ static iree_status_t loom_low_lower_preflight_op(
     return iree_ok_status();
   }
 
-  bool handled = false;
-  IREE_RETURN_IF_ERROR(context->policy->can_lower_op.fn(
-      context->policy->can_lower_op.user_data, context, source_op, &handled));
-  if (!handled) {
+  if (context->policy->rule_set != NULL) {
+    const loom_low_lower_rule_t* selected_rule = NULL;
+    IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select_op(
+        context, context->policy->rule_set, source_op, &selected_rule));
+    return loom_low_lower_record_selected_plan(
+        context, (loom_low_lower_selected_plan_t){
+                     .rule = selected_rule,
+                     .plan = loom_low_lower_plan_empty(),
+                 });
+  }
+
+  loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
+  IREE_RETURN_IF_ERROR(context->policy->select_op.fn(
+      context->policy->select_op.user_data, context, source_op, &plan));
+  if (loom_low_lower_plan_is_empty(plan)) {
     return loom_low_lower_emit_reject(
         context, source_op, IREE_SV("op"),
         loom_op_name(context->module, source_op),
         IREE_SV("the selected target-low lowering policy has no descriptor "
                 "mapping for this op"));
   }
-  return iree_ok_status();
+  return loom_low_lower_record_selected_plan(context,
+                                             (loom_low_lower_selected_plan_t){
+                                                 .rule = NULL,
+                                                 .plan = plan,
+                                             });
 }
 
-static iree_status_t loom_low_lower_preflight_body(
-    loom_low_lower_context_t* context, loom_region_t* source_body) {
+static iree_status_t loom_low_lower_plan_body(loom_low_lower_context_t* context,
+                                              loom_region_t* source_body) {
   IREE_RETURN_IF_ERROR(loom_low_lower_check_function_signature(context));
   if (loom_low_lower_should_stop(context)) {
     return iree_ok_status();
   }
+  IREE_RETURN_IF_ERROR(loom_low_lower_prepare_plan(context, source_body));
 
   for (uint16_t block_index = 0; block_index < source_body->block_count;
        ++block_index) {
@@ -883,7 +983,7 @@ static iree_status_t loom_low_lower_preflight_body(
     }
     loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
-      IREE_RETURN_IF_ERROR(loom_low_lower_preflight_op(context, op));
+      IREE_RETURN_IF_ERROR(loom_low_lower_plan_op(context, op));
       if (loom_low_lower_should_stop(context)) {
         return iree_ok_status();
       }
@@ -920,7 +1020,7 @@ static iree_status_t loom_low_lower_map_signature_types(
       if (loom_low_lower_type_is_none(arg_types[direct_argument_index])) {
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
-            "preflight accepted an unmapped function argument type");
+            "planning accepted an unmapped function argument type");
       }
       ++direct_argument_index;
     }
@@ -941,7 +1041,7 @@ static iree_status_t loom_low_lower_map_signature_types(
       if (loom_low_lower_type_is_none(result_types[i])) {
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
-            "preflight accepted an unmapped function result type");
+            "planning accepted an unmapped function result type");
       }
     }
   }
@@ -1080,7 +1180,7 @@ static iree_status_t loom_low_lower_map_blocks(
           source_block->arg_ids[arg_index], &low_type));
       if (loom_low_lower_type_is_none(low_type)) {
         return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                                "preflight accepted an unmapped block type");
+                                "planning accepted an unmapped block type");
       }
       loom_value_id_t low_arg = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
@@ -1257,6 +1357,34 @@ static iree_status_t loom_low_lower_validate_op_results_bound(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_lower_emit_selected_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  if (context->selected_plan_emit_index >= context->selected_plan_count) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "source-to-low lowering emission consumed more "
+                            "plans than planning selected");
+  }
+  const loom_low_lower_selected_plan_t selected_plan =
+      context->selected_plans[context->selected_plan_emit_index++];
+  if (context->policy->rule_set != NULL) {
+    if (selected_plan.rule == NULL) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "source-to-low lowering tried to emit an op rejected during "
+          "planning");
+    }
+    return loom_low_lower_rule_set_emit_rule(context, context->policy->rule_set,
+                                             source_op, selected_plan.rule);
+  }
+  if (loom_low_lower_plan_is_empty(selected_plan.plan)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "source-to-low lowering tried to emit an op rejected during planning");
+  }
+  return context->policy->emit_op.fn(context->policy->emit_op.user_data,
+                                     context, source_op, selected_plan.plan);
+}
+
 static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
                                               loom_region_t* source_body) {
   loom_region_t* low_body = loom_low_func_def_body(context->low_func_op);
@@ -1281,20 +1409,8 @@ static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
         if (loom_low_lower_op_is_source_metadata(source_op->kind)) {
           continue;
         }
-        status = context->policy->try_lower_op.fn(
-            context->policy->try_lower_op.user_data, context, source_op,
-            &handled);
+        status = loom_low_lower_emit_selected_plan(context, source_op);
         if (!iree_status_is_ok(status)) {
-          break;
-        }
-        if (!handled) {
-          status = iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
-              "target-low policy '%.*s' failed to lower preflighted op %.*s",
-              (int)loom_low_lower_policy_name(context->policy).size,
-              loom_low_lower_policy_name(context->policy).data,
-              (int)loom_op_name(context->module, source_op).size,
-              loom_op_name(context->module, source_op).data);
           break;
         }
       }
@@ -1306,6 +1422,12 @@ static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
   }
 
   loom_builder_restore(&context->builder, saved_ip);
+  if (iree_status_is_ok(status) &&
+      context->selected_plan_emit_index != context->selected_plan_count) {
+    status = iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "source-to-low lowering emission consumed fewer "
+                              "plans than planning selected");
+  }
   return status;
 }
 
@@ -1381,7 +1503,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     }
   }
   if (iree_status_is_ok(status)) {
-    status = loom_low_lower_preflight_body(&context, source_body);
+    status = loom_low_lower_plan_body(&context, source_body);
   }
   if (iree_status_is_ok(status) && context.result->error_count == 0) {
     loom_symbol_ref_t low_func_ref = loom_symbol_ref_null();
