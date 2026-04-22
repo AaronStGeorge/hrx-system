@@ -456,6 +456,7 @@ loom_cc_library(
     "lower_arithmetic_rules.c"
     "lower_bitfield.c"
     "lower_bitpack.c"
+    "lower_buffer.c"
     "lower_dot.c"
     "lower_integer.c"
     "lower_mask.c"
