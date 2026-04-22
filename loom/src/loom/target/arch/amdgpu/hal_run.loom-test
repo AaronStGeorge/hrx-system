@@ -681,6 +681,34 @@ func.def target(@gfx_target) @loom_kernel(%lhs_buffer: buffer, %rhs_buffer: buff
 
 // ====
 // REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=2,1,1 --binding=&8xi8=16,50,84,118,-104,-70,-36,-2 --binding=&4xi8=33,67,101,7 --binding=&2xi32=0 --expected_binding=8xi8=16,50,84,118,-104,-70,-36,-2 --expected_binding=4xi8=33,67,101,7 --expected_binding=2xi32=-112,112
+
+target.profile @gfx_target preset("amdgpu-current")
+
+func.def target(@gfx_target) @loom_kernel(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero_offset = index.constant 0 : offset
+  %four = index.constant 4 : index
+  %byte_base = index.mul %tid, %four : index
+  %lhs_view = buffer.view %lhs_buffer[%zero_offset] : buffer -> view<8xi8, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero_offset] : buffer -> view<4xi8, #dense>
+  %output_view = buffer.view %output[%zero_offset] : buffer -> view<2xi32, #dense>
+  %lhs_bytes = vector.load %lhs_view[%byte_base] : view<8xi8, #dense> -> vector<4xi8>
+  %lhs_offset_q4 = vector.bitcast %lhs_bytes : vector<4xi8> to vector<1xi32>
+  %offset_binary_mask = vector.constant -2004318072 : vector<1xi32>
+  %lhs_signed_q4 = vector.xori %lhs_offset_q4, %offset_binary_mask : vector<1xi32>
+  %rhs_bytes = vector.load %rhs_view[0] : view<4xi8, #dense> -> vector<4xi8>
+  %rhs_u4 = vector.bitcast %rhs_bytes : vector<4xi8> to vector<1xi32>
+  %acc = vector.constant 0 : vector<1xi32>
+  %dot = vector.dot8i4<s4u4> %lhs_signed_q4, %rhs_u4, %acc : vector<1xi32>
+  vector.store %dot, %output_view[%tid] : vector<1xi32>, view<2xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=4,1,1 --binding=&4xi32=1985229328,1985229328,0,0 --binding=&4xi32=1431633920,0,1431633920,0 --binding=&2xi32=16843009,16843009 --binding=&2xf32=0.5,2 --binding=&8xf32=0 --expected_binding=4xi32=1985229328,1985229328,0,0 --expected_binding=4xi32=1431633920,0,1431633920,0 --expected_binding=2xi32=16843009,16843009 --expected_binding=2xf32=0.5,2 --expected_binding=8xf32=-29,-84,-61,-212,-32,-128,-64,-256
 
 target.profile @gfx_target preset("amdgpu-current")
