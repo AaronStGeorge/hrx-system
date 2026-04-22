@@ -130,6 +130,7 @@ _OP_I32_CONST = 0x41
 _OP_I32_LT_U = 0x49
 _OP_I32_ADD = 0x6A
 _OP_I32_SUB = 0x6B
+_OP_I32_MUL = 0x6C
 _OP_SIMD_PREFIX = 0xFD
 
 
@@ -289,6 +290,16 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="i32.sub",
             semantic_tag="integer.sub.i32",
             encoding_id=_OP_I32_SUB,
+            operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SCALAR_I32,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32.mul",
+            mnemonic="i32.mul",
+            semantic_tag="integer.mul.i32",
+            encoding_id=_OP_I32_MUL,
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_I32,

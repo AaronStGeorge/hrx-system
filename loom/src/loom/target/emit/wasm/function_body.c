@@ -24,6 +24,7 @@ enum {
   LOOM_WASM_OPCODE_I32_CONST = 0x41,
   LOOM_WASM_OPCODE_I32_ADD = 0x6A,
   LOOM_WASM_OPCODE_I32_SUB = 0x6B,
+  LOOM_WASM_OPCODE_I32_MUL = 0x6C,
   LOOM_WASM_OPCODE_I32_LT_U = 0x49,
   LOOM_WASM_OPCODE_SIMD_PREFIX = 0xFD,
 };
@@ -558,6 +559,7 @@ static iree_status_t loom_wasm_emit_descriptor_packet(
                                        packet->descriptor);
     case LOOM_WASM_OPCODE_I32_ADD:
     case LOOM_WASM_OPCODE_I32_SUB:
+    case LOOM_WASM_OPCODE_I32_MUL:
     case LOOM_WASM_OPCODE_I32_LT_U:
     case LOOM_WASM_ENCODING_I32X4_ADD:
     case LOOM_WASM_ENCODING_I32X4_SUB:

@@ -19,11 +19,10 @@ func.def target(@wasm_f32_mix_target) @wasm_f32_mix4(%lhs: vector<4xf32>, %rhs: 
 }
 
 // ====
-// RUN: emit source-low @wasm_memory_gap output=none
-// XFAIL: Wasm source-to-low does not yet lower vector memory accesses.
-target.profile @wasm_memory_gap_target preset("wasm-simd128")
+// RUN: emit source-low @wasm_memory_copy output=none
+target.profile @wasm_memory_copy_target preset("wasm-simd128")
 
-func.def target(@wasm_memory_gap_target) @wasm_memory_gap(%input: buffer, %output: buffer) {
+func.def target(@wasm_memory_copy_target) @wasm_memory_copy(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>

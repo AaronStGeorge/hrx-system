@@ -33,18 +33,23 @@ namespace {
 
 constexpr uint8_t kWasmSectionType = 1;
 constexpr uint8_t kWasmSectionFunction = 3;
+constexpr uint8_t kWasmSectionMemory = 5;
 constexpr uint8_t kWasmSectionExport = 7;
 constexpr uint8_t kWasmSectionCode = 10;
 constexpr uint8_t kWasmTypeI32 = 0x7F;
 constexpr uint8_t kWasmTypeV128 = 0x7B;
 constexpr uint8_t kWasmFunctionType = 0x60;
 constexpr uint8_t kWasmExportFunction = 0;
+constexpr uint8_t kWasmLimitsMinOnly = 0;
 constexpr uint8_t kWasmOpcodeReturn = 0x0F;
 constexpr uint8_t kWasmOpcodeI32Const = 0x41;
 constexpr uint8_t kWasmOpcodeI32Add = 0x6A;
 constexpr uint8_t kWasmOpcodeI32Sub = 0x6B;
+constexpr uint8_t kWasmOpcodeI32Mul = 0x6C;
 constexpr uint8_t kWasmOpcodeEnd = 0x0B;
 constexpr uint8_t kWasmOpcodeSimdPrefix = 0xFD;
+constexpr uint8_t kWasmSimdV128Load = 0x00;
+constexpr uint8_t kWasmSimdV128Store = 0x0B;
 constexpr uint8_t kWasmSimdI32x4AddLeb0 = 0xAE;
 constexpr uint8_t kWasmSimdI32x4MulLeb0 = 0xB5;
 constexpr uint8_t kWasmSimdI32x4Leb1 = 0x01;
@@ -441,6 +446,95 @@ TEST_F(WasmLowerTest, LowersSemanticSimdFunctionAndEmitsWasmModule) {
       body,
       {kWasmOpcodeSimdPrefix, kWasmSimdI32x4MulLeb0, kWasmSimdI32x4Leb1}));
   EXPECT_TRUE(ByteVectorContains(body, kWasmOpcodeReturn));
+  EXPECT_EQ(body.back(), kWasmOpcodeEnd);
+}
+
+TEST_F(WasmLowerTest, LowersSemanticMemoryFunctionAndEmitsWasmMemoryModule) {
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @wasm_target preset(\"wasm-simd128\")\n"
+      "func.def target(@wasm_target) @copy_indexed(%input: buffer, %output: "
+      "buffer, %i: index) {\n"
+      "  %zero = index.constant 0 : offset\n"
+      "  %input_view = buffer.view %input[%zero] : buffer -> view<16xi32, "
+      "#dense>\n"
+      "  %output_view = buffer.view %output[%zero] : buffer -> view<16xi32, "
+      "#dense>\n"
+      "  %loaded = vector.load %input_view[%i] : view<16xi32, #dense> -> "
+      "vector<4xi32>\n"
+      "  vector.store %loaded, %output_view[%i] : vector<4xi32>, "
+      "view<16xi32, #dense>\n"
+      "  func.return\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  ASSERT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+  VerifyLowModule(module.get());
+
+  loom_low_packetization_t packetization = {};
+  Packetize(module.get(), lower_result.low_func_op, &packetization);
+
+  WasmModuleOwner owner;
+  IREE_ASSERT_OK(loom_wasm_emit_single_function_module(
+      &packetization.schedule, &packetization.allocation,
+      IREE_SV("copy_indexed"), iree_allocator_system(), &owner.module));
+
+  EXPECT_GT(owner.module.data_length, 8u);
+  EXPECT_TRUE(owner.module.has_memory);
+
+  WasmReader reader(owner.module.data, owner.module.data_length);
+  ExpectWasmHeader(&reader);
+
+  WasmReader type_section;
+  reader.ReadSection(kWasmSectionType, &type_section);
+  EXPECT_EQ(type_section.ReadU32Leb(), 1u);
+  type_section.ExpectU8(kWasmFunctionType);
+  EXPECT_EQ(type_section.ReadU32Leb(), 3u);
+  type_section.ExpectU8(kWasmTypeI32);
+  type_section.ExpectU8(kWasmTypeI32);
+  type_section.ExpectU8(kWasmTypeI32);
+  EXPECT_EQ(type_section.ReadU32Leb(), 0u);
+  type_section.ExpectConsumed();
+
+  WasmReader function_section;
+  reader.ReadSection(kWasmSectionFunction, &function_section);
+  EXPECT_EQ(function_section.ReadU32Leb(), 1u);
+  EXPECT_EQ(function_section.ReadU32Leb(), 0u);
+  function_section.ExpectConsumed();
+
+  WasmReader memory_section;
+  reader.ReadSection(kWasmSectionMemory, &memory_section);
+  EXPECT_EQ(memory_section.ReadU32Leb(), 1u);
+  memory_section.ExpectU8(kWasmLimitsMinOnly);
+  EXPECT_EQ(memory_section.ReadU32Leb(), 1u);
+  memory_section.ExpectConsumed();
+
+  WasmReader export_section;
+  reader.ReadSection(kWasmSectionExport, &export_section);
+  EXPECT_EQ(export_section.ReadU32Leb(), 1u);
+  EXPECT_EQ(export_section.ReadName(), "copy_indexed");
+  export_section.ExpectU8(kWasmExportFunction);
+  EXPECT_EQ(export_section.ReadU32Leb(), 0u);
+  export_section.ExpectConsumed();
+
+  WasmReader code_section;
+  reader.ReadSection(kWasmSectionCode, &code_section);
+  const std::vector<uint8_t> body = code_section.ReadCodeBodyBytes();
+  code_section.ExpectConsumed();
+  reader.ExpectConsumed();
+
+  ASSERT_FALSE(body.empty());
+  EXPECT_TRUE(ByteVectorContains(body, kWasmOpcodeI32Const));
+  EXPECT_TRUE(ByteVectorContains(body, kWasmOpcodeI32Mul));
+  EXPECT_TRUE(ByteVectorContains(body, kWasmOpcodeI32Add));
+  EXPECT_TRUE(ByteVectorContainsSubsequence(
+      body, {kWasmOpcodeSimdPrefix, kWasmSimdV128Load, 4, 0}));
+  EXPECT_TRUE(ByteVectorContainsSubsequence(
+      body, {kWasmOpcodeSimdPrefix, kWasmSimdV128Store, 4, 0}));
   EXPECT_EQ(body.back(), kWasmOpcodeEnd);
 }
 

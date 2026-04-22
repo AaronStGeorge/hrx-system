@@ -46,3 +46,51 @@ low.func.def target(@wasm_splat_target) abi(wasm_function) @wasm_splat__low(%val
   %sum = low.op<wasm.i32x4.add>(%splat, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
   low.return %sum : reg<wasm.v128>
 }
+
+// ====
+// RUN: emit source-low @wasm_memory_copy output=low
+target.profile @wasm_memory_target preset("wasm-simd128")
+
+func.def target(@wasm_memory_target) @wasm_memory_copy(%input: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[0] : vector<4xi32>, view<4xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@wasm_memory_target) abi(wasm_function) @wasm_memory_copy__low(%input_view: reg<wasm.i32>, %output_view: reg<wasm.i32>) {
+  %zero = low.const<wasm.i32.const> {i32_value = 0} : reg<wasm.i32>
+  %loaded = low.op<wasm.v128.load>(%input_view) : (reg<wasm.i32>) -> reg<wasm.v128>
+  low.op<wasm.v128.store>(%output_view, %loaded) : (reg<wasm.i32>, reg<wasm.v128>)
+  low.return
+}
+
+// ====
+// RUN: emit source-low @wasm_memory_indexed output=low
+target.profile @wasm_memory_indexed_target preset("wasm-simd128")
+
+func.def target(@wasm_memory_indexed_target) @wasm_memory_indexed(%input: buffer, %output: buffer, %i: index) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<16xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<16xi32, #dense>
+  %loaded = vector.load %input_view[%i] : view<16xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[%i] : vector<4xi32>, view<16xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@wasm_memory_indexed_target) abi(wasm_function) @wasm_memory_indexed__low(%input_view: reg<wasm.i32>, %output_view: reg<wasm.i32>, %i: reg<wasm.i32>) {
+  %zero = low.const<wasm.i32.const> {i32_value = 0} : reg<wasm.i32>
+  %11 = low.const<wasm.i32.const> {i32_value = 4} : reg<wasm.i32>
+  %12 = low.op<wasm.i32.mul>(%i, %11) : (reg<wasm.i32>, reg<wasm.i32>) -> reg<wasm.i32>
+  %13 = low.op<wasm.i32.add>(%input_view, %12) : (reg<wasm.i32>, reg<wasm.i32>) -> reg<wasm.i32>
+  %loaded = low.op<wasm.v128.load>(%13) : (reg<wasm.i32>) -> reg<wasm.v128>
+  %15 = low.const<wasm.i32.const> {i32_value = 4} : reg<wasm.i32>
+  %16 = low.op<wasm.i32.mul>(%i, %15) : (reg<wasm.i32>, reg<wasm.i32>) -> reg<wasm.i32>
+  %17 = low.op<wasm.i32.add>(%output_view, %16) : (reg<wasm.i32>, reg<wasm.i32>) -> reg<wasm.i32>
+  low.op<wasm.v128.store>(%17, %loaded) : (reg<wasm.i32>, reg<wasm.v128>)
+  low.return
+}
