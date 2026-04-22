@@ -472,6 +472,10 @@ static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
       *out_handled =
           loom_amdgpu_can_lower_vector_bitfield_extract(context, source_op);
       return iree_ok_status();
+    case LOOM_OP_VECTOR_BITFIELD_INSERT:
+      *out_handled =
+          loom_amdgpu_can_lower_vector_bitfield_insert(context, source_op);
+      return iree_ok_status();
     case LOOM_OP_VECTOR_REDUCE:
       *out_handled = loom_amdgpu_can_lower_vector_reduce(context, source_op);
       return iree_ok_status();
@@ -1628,6 +1632,8 @@ static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
     case LOOM_OP_VECTOR_BITFIELD_EXTRACTU:
     case LOOM_OP_VECTOR_BITFIELD_EXTRACTS:
       return loom_amdgpu_lower_vector_bitfield_extract(context, source_op);
+    case LOOM_OP_VECTOR_BITFIELD_INSERT:
+      return loom_amdgpu_lower_vector_bitfield_insert(context, source_op);
     case LOOM_OP_VECTOR_REDUCE:
       return loom_amdgpu_lower_vector_reduce(context, source_op);
     case LOOM_OP_VECTOR_DOT4I:

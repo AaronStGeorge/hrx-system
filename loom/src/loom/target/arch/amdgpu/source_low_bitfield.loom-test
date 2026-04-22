@@ -54,6 +54,41 @@ low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_extrac
 }
 
 // ====
+// RUN: emit source-low @i32_bitfield_insert output=low
+target.profile @gfx11_bitfield_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_bitfield_target) @i32_bitfield_insert(%field_buffer: buffer, %base_buffer: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %field_view = buffer.view %field_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %base_view = buffer.view %base_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %field = vector.load %field_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %base = vector.load %base_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %inserted = vector.bitfield.insert %field into %base {offset = 8, width = 4} : vector<1xi32>, vector<1xi32>
+  vector.store %inserted, %output_view[0] : vector<1xi32>, view<1xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_insert__low() {
+  %field_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %base_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %output_view = low.resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %field = low.op<amdgpu.buffer_load_dword_off_zero>(%field_view) {offset = 0} : (reg<amdgpu.sgpr x4>) -> reg<amdgpu.vgpr>
+  %base = low.op<amdgpu.buffer_load_dword_off_zero>(%base_view) {offset = 0} : (reg<amdgpu.sgpr x4>) -> reg<amdgpu.vgpr>
+  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 15} : reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_and_b32>(%field, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 8} : reg<amdgpu.vgpr>
+  %19 = low.op<amdgpu.v_lshlrev_b32>(%18, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %20 = low.const<amdgpu.v_mov_b32> {imm32 = 4294963455} : reg<amdgpu.vgpr>
+  %21 = low.op<amdgpu.v_and_b32>(%base, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %inserted = low.op<amdgpu.v_or_b32>(%21, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_dword_off_zero>(%inserted, %output_view) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>)
+  low.return
+}
+
+// ====
 // RUN: emit source-low @i32_bitfield_b128_shape output=none
 target.profile @gfx11_bitfield_target preset("amdgpu-gfx11")
 
@@ -63,8 +98,10 @@ func.def target(@gfx11_bitfield_target) @i32_bitfield_b128_shape(%input: buffer,
   %output_view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>
   %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
   %low = vector.bitfield.extractu %loaded {offset = 0, width = 4} : vector<4xi32> -> vector<4xi32>
-  %high = vector.bitfield.extracts %loaded {offset = 4, width = 4} : vector<4xi32> -> vector<4xi32>
-  %result = vector.xori %low, %high : vector<4xi32>
+  %high = vector.bitfield.extractu %loaded {offset = 4, width = 2} : vector<4xi32> -> vector<4xi32>
+  %merged = vector.bitfield.insert %high into %low {offset = 4, width = 2} : vector<4xi32>, vector<4xi32>
+  %bias = vector.constant 32 : vector<4xi32>
+  %result = vector.subi %merged, %bias : vector<4xi32>
   vector.store %result, %output_view[0] : vector<4xi32>, view<4xi32, #dense>
   func.return
 }

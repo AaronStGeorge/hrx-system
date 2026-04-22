@@ -94,6 +94,27 @@ func.def target(@gfx11_q4_decode_shape_target) @amdgpu_q4_decode_shape(%input: b
 }
 
 // ====
+// RUN: emit source-low @amdgpu_q6_merge_shape output=none
+target.profile @gfx11_q6_merge_shape_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_q6_merge_shape_target) @amdgpu_q6_merge_shape(%low_buffer: buffer, %high_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %low_view = buffer.view %low_buffer[%zero] : buffer -> view<64x4xi32, #dense>
+  %high_view = buffer.view %high_buffer[%zero] : buffer -> view<64x4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
+  %low_packed = vector.load %low_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  %high_packed = vector.load %high_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  %low4 = vector.bitfield.extractu %low_packed {offset = 0, width = 4} : vector<4xi32> -> vector<4xi32>
+  %high2 = vector.bitfield.extractu %high_packed {offset = 0, width = 2} : vector<4xi32> -> vector<4xi32>
+  %q6 = vector.bitfield.insert %high2 into %low4 {offset = 4, width = 2} : vector<4xi32>, vector<4xi32>
+  %bias = vector.constant 32 : vector<4xi32>
+  %signed_q6 = vector.subi %q6, %bias : vector<4xi32>
+  vector.store %signed_q6, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  func.return
+}
+
+// ====
 // RUN: emit source-low @amdgpu_dot4i_s8s8 output=none
 target.profile @gfx11_dot4i_s8s8_target preset("amdgpu-gfx11")
 

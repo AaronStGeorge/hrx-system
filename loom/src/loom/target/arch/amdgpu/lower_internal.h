@@ -250,6 +250,16 @@ bool loom_amdgpu_can_lower_vector_bitfield_extract(
 iree_status_t loom_amdgpu_lower_vector_bitfield_extract(
     loom_low_lower_context_t* context, const loom_op_t* source_op);
 
+// Returns true when a source vector.bitfield.insert op can lower through the
+// current AMDGPU i32 VGPR bit-manipulation descriptor family.
+bool loom_amdgpu_can_lower_vector_bitfield_insert(
+    loom_low_lower_context_t* context, const loom_op_t* source_op);
+
+// Lowers a source vector.bitfield.insert op to AMDGPU descriptor-backed low
+// packets.
+iree_status_t loom_amdgpu_lower_vector_bitfield_insert(
+    loom_low_lower_context_t* context, const loom_op_t* source_op);
+
 // Verifies source vector-dot legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_vector_dot(
     const loom_target_low_legality_provider_t* provider,
