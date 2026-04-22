@@ -44,12 +44,6 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
-    name = "target_records_no_llvmir_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target:records",
-)
-
-iree_assert_no_dependency(
     name = "target_low_descriptor_registry_no_llvmir_dep",
     dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
     target = "//loom/src/loom/target:low_descriptor_registry",
@@ -529,7 +523,6 @@ loom_cc_test(
         ":core",
         ":target_env",
         ":target_presets",
-        "//loom/src/loom/target:records",
         "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
         "//loom/src/loom/target/emit/llvmir/x86:target_env",
         "//loom/src/loom/util:stream",

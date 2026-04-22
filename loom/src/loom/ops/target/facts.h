@@ -6,7 +6,7 @@
 
 // Target dialect symbol facts.
 //
-// These facts resolve compact target.profile records into dense target-neutral
+// These facts resolve compact target.profile ops into dense target-neutral
 // structs. Backend-specific facts remain in backend packages; this layer only
 // owns the shared profile shape and the provider-injected preset registry.
 

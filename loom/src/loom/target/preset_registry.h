@@ -8,7 +8,7 @@
 //
 // This is the target-neutral lookup layer shared by command-line-style target
 // selection and target.profile symbol fact resolution. It deliberately knows
-// only about target record payloads, not IR mutation or backend descriptor
+// only about target payloads, not IR mutation or backend descriptor
 // tables.
 
 #ifndef LOOM_TARGET_PRESET_REGISTRY_H_

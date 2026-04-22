@@ -279,7 +279,6 @@ static iree_status_t loom_func_symbol_fact_compute(
     facts->target_bundle = &facts->target_profile->bundle;
     facts->export_plan = facts->target_profile->export_plan;
     facts->export_plan.name = facts->name;
-    facts->export_plan.source_symbol = iree_string_view_empty();
     facts->export_plan.export_symbol = iree_string_view_empty();
     if (has_abi_attr) {
       facts->export_plan.abi_kind =

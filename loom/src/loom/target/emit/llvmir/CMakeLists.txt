@@ -458,7 +458,6 @@ loom_cc_test(
     ::target_presets
     loom::src::loom::target::emit::llvmir::amdgpu::target_env
     loom::src::loom::target::emit::llvmir::x86::target_env
-    loom::src::loom::target::records
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main

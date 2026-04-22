@@ -51,12 +51,6 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
-    name = "target_records_no_packed_dot_contract_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target:records",
-)
-
-iree_assert_no_dependency(
     name = "target_preset_registry_no_packed_dot_contract_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/target:preset_registry",

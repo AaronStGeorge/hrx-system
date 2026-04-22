@@ -267,26 +267,6 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_validate_target(
         (int)target_bundle->name.size, target_bundle->name.data,
         (int)target_symbol_name.size, target_symbol_name.data);
   }
-
-  if (iree_string_view_is_empty(target_bundle->export_plan->source_symbol)) {
-    return iree_ok_status();
-  }
-  iree_string_view_t function_symbol_name = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_symbol_name(
-      module, loom_low_func_def_callee(function_op), IREE_SV("function"),
-      &function_symbol_name));
-
-  bool matches_function = iree_string_view_equal(
-      target_bundle->export_plan->source_symbol, function_symbol_name);
-  if (!matches_function) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU HAL kernel ABI export plan source '%.*s' does not match low "
-        "function '%.*s'",
-        (int)target_bundle->export_plan->source_symbol.size,
-        target_bundle->export_plan->source_symbol.data,
-        (int)function_symbol_name.size, function_symbol_name.data);
-  }
   return iree_ok_status();
 }
 

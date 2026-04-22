@@ -249,9 +249,6 @@ static iree_status_t loom_target_profile_apply_override(
   } else if (iree_string_view_equal(name, IREE_SV("memory_space_descriptor"))) {
     return loom_target_profile_u32_attr(
         value, name, 0, UINT32_MAX, &facts->snapshot.memory_spaces.descriptor);
-  } else if (iree_string_view_equal(name, IREE_SV("export_symbol"))) {
-    return loom_target_profile_string_attr(module, value, name,
-                                           &facts->export_plan.export_symbol);
   } else if (iree_string_view_equal(name, IREE_SV("abi"))) {
     return loom_target_profile_abi_attr(module, value,
                                         &facts->export_plan.abi_kind);
@@ -480,8 +477,8 @@ static iree_status_t loom_target_profile_symbol_fact_compute(
   facts->config = *facts->preset_bundle->config;
   facts->snapshot.name = facts->name;
   facts->export_plan.name = facts->name;
+  facts->export_plan.export_symbol = iree_string_view_empty();
   facts->config.name = facts->name;
-  facts->export_plan.source_symbol = iree_string_view_empty();
   facts->bundle = (loom_target_bundle_t){
       .name = facts->name,
       .snapshot = &facts->snapshot,

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Shared target record types.
+// Shared target payload types.
 //
 // This header intentionally contains only target-neutral data shapes. It must
 // not include target-family descriptors, presets, feature catalogs, scheduling
@@ -129,8 +129,6 @@ typedef struct loom_target_hal_kernel_abi_t {
 typedef struct loom_target_export_plan_t {
   // Stable export plan name for diagnostics and tests.
   iree_string_view_t name;
-  // Source symbol selected for export, or empty for reusable fixture plans.
-  iree_string_view_t source_symbol;
   // Output symbol exposed by this export, or empty to preserve the source name.
   iree_string_view_t export_symbol;
   // Callable/package ABI used for this export.
@@ -164,17 +162,17 @@ typedef struct loom_target_bundle_t {
 } loom_target_bundle_t;
 
 typedef struct loom_target_bundle_storage_t {
-  // Materialized snapshot record owned by this storage object.
+  // Materialized target snapshot owned by this storage object.
   loom_target_snapshot_t snapshot;
-  // Materialized export plan record owned by this storage object.
+  // Materialized function ABI/export contract owned by this storage object.
   loom_target_export_plan_t export_plan;
-  // Materialized target config record owned by this storage object.
+  // Materialized target configuration owned by this storage object.
   loom_target_config_t config;
   // Bundle view pointing at snapshot, export_plan, and config above.
   loom_target_bundle_t bundle;
 } loom_target_bundle_storage_t;
 
-// Rebinds |storage->bundle| to the records embedded in |storage|. Call this
+// Rebinds |storage->bundle| to the payloads embedded in |storage|. Call this
 // after copying a storage object by value; the embedded bundle is a view and
 // its pointers must refer to the same enclosing storage object.
 static inline void loom_target_bundle_storage_rebind(

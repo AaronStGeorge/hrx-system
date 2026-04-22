@@ -210,28 +210,6 @@ static iree_status_t loom_amdgpu_kernel_record_validate_target(
       snapshot->target_cpu, IREE_SV("target_cpu"));
 }
 
-static iree_status_t loom_amdgpu_kernel_record_validate_export_source(
-    const loom_low_resolved_target_t* target, const loom_module_t* module,
-    const loom_op_t* function_op) {
-  iree_string_view_t source_symbol =
-      target->bundle_storage.export_plan.source_symbol;
-  if (iree_string_view_is_empty(source_symbol)) {
-    return iree_ok_status();
-  }
-  iree_string_view_t function_symbol = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_symbol_name(
-      module, function_op, &function_symbol));
-  if (!iree_string_view_equal(source_symbol, function_symbol)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU kernel emission export plan source '%.*s' does not match low "
-        "function '%.*s'",
-        (int)source_symbol.size, source_symbol.data, (int)function_symbol.size,
-        function_symbol.data);
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_amdgpu_kernel_record_validate_function_shape(
     const loom_op_t* function_op) {
   if (!loom_low_func_def_isa(function_op)) {
@@ -563,8 +541,6 @@ iree_status_t loom_amdgpu_kernel_record_build(
       loom_amdgpu_kernel_record_validate_target(&schedule->target));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_record_validate_function_shape(schedule->function_op));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_export_source(
-      &schedule->target, schedule->module, schedule->function_op));
 
   iree_string_view_t symbol = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_export_symbol(

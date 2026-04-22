@@ -17,7 +17,6 @@
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/target/emit/llvmir/x86/target_env.h"
-#include "loom/target/records.h"
 #include "loom/util/stream.h"
 
 namespace loom {
@@ -81,12 +80,6 @@ void ExpectSnapshotMatchesLlvmEnv(const loom_target_snapshot_t* snapshot,
             target_env->address_spaces.private_memory);
   EXPECT_EQ(snapshot->memory_spaces.descriptor,
             target_env->address_spaces.buffer_resource);
-}
-
-void ExpectBundleFingerprint(const loom_target_bundle_t* bundle) {
-  uint64_t fingerprint = 0;
-  IREE_ASSERT_OK(loom_target_bundle_fingerprint(bundle, &fingerprint));
-  EXPECT_NE(fingerprint, 0u);
 }
 
 void ExpectDerivedProfileMatchesStatic(
@@ -203,7 +196,6 @@ TEST(LlvmIrTargetEnvTest, X86ObjectProfileHasGenericTargetBundle) {
   EXPECT_EQ(bundle->export_plan->linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
   ASSERT_NE(bundle->config, nullptr);
   EXPECT_TRUE(iree_string_view_is_empty(bundle->config->contract_set_key));
-  ExpectBundleFingerprint(bundle);
 }
 
 TEST(LlvmIrTargetEnvTest, X86PackedDotProfileHasGenericTargetBundle) {
@@ -222,14 +214,10 @@ TEST(LlvmIrTargetEnvTest, X86PackedDotProfileHasGenericTargetBundle) {
   ASSERT_NE(bundle->config, nullptr);
   EXPECT_EQ(ToString(bundle->config->contract_set_key),
             "x86.packed_dot.avx512bf16-avx512vl-avxvnni-avxvnniint8");
-
-  uint64_t object_fingerprint = 0;
-  IREE_ASSERT_OK(loom_target_bundle_fingerprint(
-      loom_llvmir_target_bundle_x86_64_object(), &object_fingerprint));
-  uint64_t packed_dot_fingerprint = 0;
-  IREE_ASSERT_OK(
-      loom_target_bundle_fingerprint(bundle, &packed_dot_fingerprint));
-  EXPECT_NE(object_fingerprint, packed_dot_fingerprint);
+  EXPECT_NE(
+      ToString(bundle->config->contract_set_key),
+      ToString(
+          loom_llvmir_target_bundle_x86_64_object()->config->contract_set_key));
 }
 
 TEST(LlvmIrTargetEnvTest, DerivesX86ObjectProfileFromGenericBundle) {
@@ -324,7 +312,6 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileHasGenericTargetBundle) {
             profile->amdgpu_hal.buffer_resource_flags);
   ASSERT_NE(bundle->config, nullptr);
   EXPECT_TRUE(iree_string_view_is_empty(bundle->config->contract_set_key));
-  ExpectBundleFingerprint(bundle);
 }
 
 TEST(LlvmIrTargetEnvTest, DerivesAmdgpuHalProfileFromGenericBundle) {

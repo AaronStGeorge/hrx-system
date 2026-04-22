@@ -36,19 +36,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    records
-  HDRS
-    "records.h"
-  SRCS
-    "records.c"
-  DEPS
-    ::types
-    iree::base
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     artifact_plan
   HDRS
     "artifact_plan.h"
@@ -206,17 +193,6 @@ loom_cc_library(
     ::low_descriptor_registry
     loom::src::loom::target::test::low_registry
   PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    records_test
-  SRCS
-    "records_test.cc"
-  DEPS
-    ::records
-    iree::testing::gtest
-    iree::testing::gtest_main
 )
 
 loom_cc_test(

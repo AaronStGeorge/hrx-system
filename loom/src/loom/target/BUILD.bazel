@@ -38,16 +38,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "records",
-    srcs = ["records.c"],
-    hdrs = ["records.h"],
-    deps = [
-        ":types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "artifact_plan",
     srcs = ["artifact_plan.c"],
     hdrs = ["artifact_plan.h"],
@@ -178,16 +168,6 @@ loom_cc_library(
     deps = [
         ":low_descriptor_registry",
         "//loom/src/loom/target/test:low_registry",
-    ],
-)
-
-loom_cc_test(
-    name = "records_test",
-    srcs = ["records_test.cc"],
-    deps = [
-        ":records",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

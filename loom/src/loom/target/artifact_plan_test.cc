@@ -54,7 +54,6 @@ static const loom_target_snapshot_t kPresetSnapshot = {
 
 static const loom_target_export_plan_t kPresetExportPlan = {
     .name = IREE_SVL("test.profile"),
-    .source_symbol = IREE_SVL(""),
     .export_symbol = IREE_SVL(""),
     .abi_kind = LOOM_TARGET_ABI_WASM_FUNCTION,
     .linkage = LOOM_TARGET_LINKAGE_DEFAULT,

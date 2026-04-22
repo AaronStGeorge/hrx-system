@@ -53,7 +53,6 @@ static const loom_target_snapshot_t kPresetSnapshot = {
 
 static const loom_target_export_plan_t kPresetExportPlan = {
     .name = IREE_SVL("test.profile"),
-    .source_symbol = IREE_SVL("must_not_escape"),
     .export_symbol = IREE_SVL("must_not_escape"),
     .abi_kind = LOOM_TARGET_ABI_WASM_FUNCTION,
     .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
@@ -223,7 +222,6 @@ low.func.def target(@wasm) @kernel() {
   ASSERT_NE(facts->target_bundle, nullptr);
   EXPECT_EQ(facts->target_bundle->snapshot, &facts->target_profile->snapshot);
   EXPECT_EQ(facts->export_plan.abi_kind, LOOM_TARGET_ABI_WASM_FUNCTION);
-  EXPECT_TRUE(iree_string_view_is_empty(facts->export_plan.source_symbol));
   EXPECT_TRUE(iree_string_view_is_empty(facts->export_plan.export_symbol));
 }
 

@@ -333,9 +333,6 @@ static iree_status_t loom_target_low_manifest_write_bundle_summary(
       stream, "name", bundle->export_plan->name));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ','));
   IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
-      stream, "source_symbol", bundle->export_plan->source_symbol));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ','));
-  IREE_RETURN_IF_ERROR(loom_target_low_manifest_write_string_field(
       stream, "export_symbol", bundle->export_plan->export_symbol));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_format(stream, ",\"abi_kind\":%u,\"linkage\":%u",

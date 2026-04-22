@@ -52,7 +52,6 @@ static const loom_target_snapshot_t kPresetSnapshot = {
 
 static const loom_target_export_plan_t kPresetExportPlan = {
     .name = IREE_SVL("test.profile"),
-    .source_symbol = IREE_SVL("should_not_escape"),
     .export_symbol = IREE_SVL("kernel"),
     .abi_kind = LOOM_TARGET_ABI_WASM_FUNCTION,
     .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
@@ -197,7 +196,7 @@ target.profile @wasm preset("test.profile")
   EXPECT_EQ(facts->snapshot.default_pointer_bitwidth, 32u);
   EXPECT_TRUE(iree_string_view_equal(facts->snapshot.target_features,
                                      IREE_SV("+simd128")));
-  EXPECT_TRUE(iree_string_view_is_empty(facts->export_plan.source_symbol));
+  EXPECT_TRUE(iree_string_view_is_empty(facts->export_plan.export_symbol));
   EXPECT_EQ(facts->export_plan.abi_kind, LOOM_TARGET_ABI_WASM_FUNCTION);
   EXPECT_TRUE(iree_string_view_equal(facts->config.contract_set_key,
                                      IREE_SV("wasm.core.simd128")));

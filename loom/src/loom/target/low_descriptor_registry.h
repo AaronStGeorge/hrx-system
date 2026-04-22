@@ -74,7 +74,7 @@ loom_target_low_descriptor_registry_presets(
 
 // Verifies that the linked target-low registry package is internally
 // consistent. This checks the descriptor registry, bundle table, unique bundle
-// keys, required target records, and that each bundle selects a linked
+// keys, required target payloads, and that each bundle selects a linked
 // descriptor set satisfying |requirements|.
 iree_status_t loom_target_low_descriptor_registry_verify(
     const loom_target_low_descriptor_registry_t* registry,
