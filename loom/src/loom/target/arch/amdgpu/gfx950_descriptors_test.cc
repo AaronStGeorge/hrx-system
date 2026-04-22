@@ -19,6 +19,7 @@ namespace loom {
 namespace {
 
 using ::loom::testing::ExpectAmdgpuCacheControlDescriptor;
+using ::loom::testing::ExpectAmdgpuDcacheDiscardDescriptor;
 using ::loom::testing::ExpectAmdgpuDs2AddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsAddtidMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsCrosslaneDescriptors;
@@ -249,6 +250,10 @@ TEST(AmdgpuDescriptorsTest, Gfx950CoreDescriptorLookupUsesStableKeys) {
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.s_icache_inv"),
                                      LOOM_AMDGPU_ENCODING_FORMAT_SOPP, 19u);
+  ExpectAmdgpuDcacheDiscardDescriptor(descriptor_set,
+                                      IREE_SV("amdgpu.s_dcache_discard"), 40u);
+  ExpectAmdgpuDcacheDiscardDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_dcache_discard_x2"), 41u);
 
   const loom_low_descriptor_t* wait_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_waitcnt"));

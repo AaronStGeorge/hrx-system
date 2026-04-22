@@ -23,6 +23,7 @@ using ::loom::testing::ExpectAmdgpuDsCrosslaneDescriptors;
 using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
 using ::loom::testing::ExpectAmdgpuGlobalMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
+using ::loom::testing::ExpectAmdgpuPrefetchDescriptor;
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
@@ -234,6 +235,21 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.s_icache_inv"),
                                      LOOM_AMDGPU_ENCODING_FORMAT_SOPP, 60u);
+  ExpectAmdgpuPrefetchDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_prefetch_inst"), 36u, 2u, 2u,
+      LOOM_LOW_OPERAND_ROLE_OPERAND, LOOM_LOW_MEMORY_SPACE_GENERIC);
+  ExpectAmdgpuPrefetchDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_prefetch_inst_pc_rel"), 37u, 1u, 0u,
+      LOOM_LOW_OPERAND_ROLE_UNKNOWN, LOOM_LOW_MEMORY_SPACE_GENERIC);
+  ExpectAmdgpuPrefetchDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_prefetch_data"), 38u, 2u, 2u,
+      LOOM_LOW_OPERAND_ROLE_OPERAND, LOOM_LOW_MEMORY_SPACE_GLOBAL);
+  ExpectAmdgpuPrefetchDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_buffer_prefetch_data"), 39u, 2u, 4u,
+      LOOM_LOW_OPERAND_ROLE_RESOURCE, LOOM_LOW_MEMORY_SPACE_GLOBAL);
+  ExpectAmdgpuPrefetchDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_prefetch_data_pc_rel"), 40u, 1u, 0u,
+      LOOM_LOW_OPERAND_ROLE_UNKNOWN, LOOM_LOW_MEMORY_SPACE_GLOBAL);
 
   const loom_low_descriptor_t* load_wait_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_loadcnt"));

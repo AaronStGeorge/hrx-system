@@ -26,6 +26,7 @@ using ::loom::testing::ExpectAmdgpuDsCrosslaneDescriptors;
 using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
 using ::loom::testing::ExpectAmdgpuGlobalMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
+using ::loom::testing::ExpectAmdgpuInstructionPrefetchDistanceDescriptor;
 using ::loom::testing::LowFuncAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
@@ -292,6 +293,7 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.s_icache_inv"),
                                      LOOM_AMDGPU_ENCODING_FORMAT_SOPP, 60u);
+  ExpectAmdgpuInstructionPrefetchDistanceDescriptor(descriptor_set);
 
   const loom_low_descriptor_t* scalar_load_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_load_dwordx2"));
@@ -469,6 +471,7 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowAsmRegionRoundTrips) {
       "  %sum = s_add_u32 %c0, %c1\n"
       "  %v = v_mov_b32 42\n"
       "  s_icache_inv\n"
+      "  s_set_inst_prefetch_distance {distance = 2}\n"
       "  s_waitcnt {vmcnt = 0, lgkmcnt = 0}\n"
       "  return %sum\n"
       "}\n";

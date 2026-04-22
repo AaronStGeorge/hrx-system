@@ -267,6 +267,112 @@ inline void ExpectAmdgpuCacheControlDescriptor(
   EXPECT_NE(effect->flags & LOOM_LOW_EFFECT_FLAG_DEPENDENCY, 0u);
 }
 
+inline void ExpectAmdgpuDcacheDiscardDescriptor(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
+    uint16_t expected_encoding_id) {
+  const loom_low_descriptor_t* descriptor =
+      LookupAmdgpuDescriptorForTest(descriptor_set, key);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->operand_count, 2u);
+  EXPECT_EQ(descriptor->result_count, 0u);
+  EXPECT_EQ(descriptor->immediate_count, 0u);
+  EXPECT_EQ(descriptor->effect_count, 1u);
+  EXPECT_EQ(descriptor->encoding_format_id, LOOM_AMDGPU_ENCODING_FORMAT_SMEM);
+  EXPECT_EQ(descriptor->encoding_id, expected_encoding_id);
+  EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
+
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[descriptor->operand_start];
+  EXPECT_EQ(operands[0].role, LOOM_LOW_OPERAND_ROLE_OPERAND);
+  EXPECT_EQ(operands[0].unit_count, 2u);
+  EXPECT_EQ(operands[1].role, LOOM_LOW_OPERAND_ROLE_OPERAND);
+  EXPECT_EQ(operands[1].unit_count, 1u);
+
+  const loom_low_effect_t* effect =
+      &descriptor_set->effects[descriptor->effect_start];
+  EXPECT_EQ(effect->kind, LOOM_LOW_EFFECT_KIND_BARRIER);
+  EXPECT_EQ(effect->memory_space, LOOM_LOW_MEMORY_SPACE_GENERIC);
+  EXPECT_NE(effect->flags & LOOM_LOW_EFFECT_FLAG_ORDERED, 0u);
+  EXPECT_NE(effect->flags & LOOM_LOW_EFFECT_FLAG_DEPENDENCY, 0u);
+}
+
+inline void ExpectAmdgpuInstructionPrefetchDistanceDescriptor(
+    const loom_low_descriptor_set_t* descriptor_set) {
+  const loom_low_descriptor_t* descriptor = LookupAmdgpuDescriptorForTest(
+      descriptor_set, IREE_SV("amdgpu.s_set_inst_prefetch_distance"));
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->operand_count, 0u);
+  EXPECT_EQ(descriptor->result_count, 0u);
+  EXPECT_EQ(descriptor->immediate_count, 1u);
+  EXPECT_EQ(descriptor->effect_count, 1u);
+  EXPECT_EQ(descriptor->encoding_format_id, LOOM_AMDGPU_ENCODING_FORMAT_SOPP);
+  EXPECT_EQ(descriptor->encoding_id, 4u);
+  EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
+
+  const loom_low_immediate_t* immediate =
+      &descriptor_set->immediates[descriptor->immediate_start];
+  EXPECT_EQ(immediate->kind, LOOM_LOW_IMMEDIATE_KIND_UNSIGNED);
+  EXPECT_EQ(immediate->bit_width, 16u);
+  EXPECT_EQ(immediate->unsigned_max, 65535u);
+
+  const loom_low_effect_t* effect =
+      &descriptor_set->effects[descriptor->effect_start];
+  EXPECT_EQ(effect->kind, LOOM_LOW_EFFECT_KIND_BARRIER);
+  EXPECT_EQ(effect->memory_space, LOOM_LOW_MEMORY_SPACE_GENERIC);
+  EXPECT_NE(effect->flags & LOOM_LOW_EFFECT_FLAG_ORDERED, 0u);
+  EXPECT_NE(effect->flags & LOOM_LOW_EFFECT_FLAG_DEPENDENCY, 0u);
+}
+
+inline void ExpectAmdgpuPrefetchDescriptor(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
+    uint16_t expected_encoding_id, uint16_t expected_operand_count,
+    uint16_t expected_base_units, loom_low_operand_role_t expected_base_role,
+    loom_low_memory_space_t expected_memory_space) {
+  ASSERT_TRUE(expected_operand_count == 1u || expected_operand_count == 2u);
+  const loom_low_descriptor_t* descriptor =
+      LookupAmdgpuDescriptorForTest(descriptor_set, key);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->operand_count, expected_operand_count);
+  EXPECT_EQ(descriptor->result_count, 0u);
+  EXPECT_EQ(descriptor->immediate_count, 2u);
+  EXPECT_EQ(descriptor->effect_count, 1u);
+  EXPECT_EQ(descriptor->encoding_format_id, LOOM_AMDGPU_ENCODING_FORMAT_SMEM);
+  EXPECT_EQ(descriptor->encoding_id, expected_encoding_id);
+  EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
+  ASSERT_NE(descriptor->schedule_class_id, LOOM_LOW_SCHEDULE_CLASS_NONE);
+  const loom_low_schedule_class_t* schedule_class =
+      &descriptor_set->schedule_classes[descriptor->schedule_class_id];
+  EXPECT_NE(schedule_class->flags & LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD, 0u);
+
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[descriptor->operand_start];
+  if (expected_operand_count == 2u) {
+    EXPECT_EQ(operands[0].role, expected_base_role);
+    EXPECT_EQ(operands[0].unit_count, expected_base_units);
+    EXPECT_EQ(operands[1].role, LOOM_LOW_OPERAND_ROLE_OPERAND);
+    EXPECT_EQ(operands[1].unit_count, 1u);
+  } else {
+    EXPECT_EQ(operands[0].role, LOOM_LOW_OPERAND_ROLE_OPERAND);
+    EXPECT_EQ(operands[0].unit_count, 1u);
+  }
+
+  const loom_low_immediate_t* immediates =
+      &descriptor_set->immediates[descriptor->immediate_start];
+  EXPECT_EQ(immediates[0].kind, LOOM_LOW_IMMEDIATE_KIND_UNSIGNED);
+  EXPECT_EQ(immediates[0].bit_width, 24u);
+  EXPECT_EQ(immediates[0].encoding_id,
+            LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_BYTE);
+  EXPECT_EQ(immediates[1].kind, LOOM_LOW_IMMEDIATE_KIND_UNSIGNED);
+  EXPECT_EQ(immediates[1].bit_width, 5u);
+  EXPECT_EQ(immediates[1].unsigned_max, 31u);
+
+  const loom_low_effect_t* effect =
+      &descriptor_set->effects[descriptor->effect_start];
+  EXPECT_EQ(effect->kind, LOOM_LOW_EFFECT_KIND_READ);
+  EXPECT_EQ(effect->memory_space, expected_memory_space);
+  EXPECT_NE(effect->flags & LOOM_LOW_EFFECT_FLAG_DEPENDENCY, 0u);
+}
+
 inline void ExpectAmdgpuDs2AddrMemoryDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
     loom_low_effect_kind_t expected_effect_kind, uint16_t expected_value_units,

@@ -295,6 +295,7 @@ loom_cc_test(
     ::encoding_defs
     ::gfx12_descriptors
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::text_asm_roundtrip_test_util
     iree::testing::gtest
     iree::testing::gtest_main
 )

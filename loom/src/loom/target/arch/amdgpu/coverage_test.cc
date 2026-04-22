@@ -63,8 +63,9 @@ TEST(AmdgpuCoverageTest, FormatsRepresentativeRows) {
             std::string::npos);
   EXPECT_NE(json.find("\"semantic\":\"cache-policy-invalidate\""),
             std::string::npos);
-  EXPECT_NE(json.find("\"semantic\":\"cache-swizzle-prefetch\""),
+  EXPECT_NE(json.find("\"semantic\":\"scalar-data-inst-prefetch\""),
             std::string::npos);
+  EXPECT_NE(json.find("\"semantic\":\"cache-swizzle\""), std::string::npos);
   EXPECT_NE(json.find("\"semantic\":\"split-loadcnt-storecnt-alu-workgroup-"
                       "barrier\""),
             std::string::npos);

@@ -353,6 +353,38 @@ TEST_F(AmdgpuEncodingTest, EncodesGenericSoppCacheControl) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest, EncodesGfx12SmemPrefetchPackets) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildSidecarsForPreset(
+      "amdgpu-gfx12",
+      "low.func.def target(@gfx_target) @gfx_kernel(%base : "
+      "reg<amdgpu.sgpr x2>, %resource : reg<amdgpu.sgpr x4>, "
+      "%soffset : reg<amdgpu.sgpr>) {\n"
+      "  low.op<amdgpu.s_prefetch_data>(%base, %soffset) {offset = 64, "
+      "count = 2} : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>)\n"
+      "  low.op<amdgpu.s_buffer_prefetch_data>(%resource, %soffset) "
+      "{offset = 128, count = 1} : (reg<amdgpu.sgpr x4>, "
+      "reg<amdgpu.sgpr>)\n"
+      "  low.op<amdgpu.s_prefetch_inst_pc_rel>(%soffset) {offset = 0, "
+      "count = 1} : (reg<amdgpu.sgpr>)\n"
+      "  low.return\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_GE(text.data_length, 16u);
+  ASSERT_EQ(text.data_length % 4, 0u);
+  EXPECT_NE(ReadU32LE(text.data), UINT32_C(0));
+  EXPECT_NE(ReadU32LE(text.data + 4), UINT32_C(0));
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(AmdgpuEncodingTest, SequencesOverlappingCopyBeforeClobber) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);

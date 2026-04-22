@@ -10,6 +10,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm_roundtrip_test_util.h"
 #include "loom/target/arch/amdgpu/descriptor_test_util.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 
@@ -23,6 +24,8 @@ using ::loom::testing::ExpectAmdgpuDsCrosslaneDescriptors;
 using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
 using ::loom::testing::ExpectAmdgpuGlobalMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
+using ::loom::testing::ExpectAmdgpuPrefetchDescriptor;
+using ::loom::testing::LowTextAsmRoundTripHarness;
 
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
@@ -228,6 +231,21 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorLookupUsesStableKeys) {
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.s_icache_inv"),
                                      LOOM_AMDGPU_ENCODING_FORMAT_SOPP, 60u);
+  ExpectAmdgpuPrefetchDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_prefetch_inst"), 36u, 2u, 2u,
+      LOOM_LOW_OPERAND_ROLE_OPERAND, LOOM_LOW_MEMORY_SPACE_GENERIC);
+  ExpectAmdgpuPrefetchDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_prefetch_inst_pc_rel"), 37u, 1u, 0u,
+      LOOM_LOW_OPERAND_ROLE_UNKNOWN, LOOM_LOW_MEMORY_SPACE_GENERIC);
+  ExpectAmdgpuPrefetchDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_prefetch_data"), 38u, 2u, 2u,
+      LOOM_LOW_OPERAND_ROLE_OPERAND, LOOM_LOW_MEMORY_SPACE_GLOBAL);
+  ExpectAmdgpuPrefetchDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_buffer_prefetch_data"), 39u, 2u, 4u,
+      LOOM_LOW_OPERAND_ROLE_RESOURCE, LOOM_LOW_MEMORY_SPACE_GLOBAL);
+  ExpectAmdgpuPrefetchDescriptor(
+      descriptor_set, IREE_SV("amdgpu.s_prefetch_data_pc_rel"), 40u, 1u, 0u,
+      LOOM_LOW_OPERAND_ROLE_UNKNOWN, LOOM_LOW_MEMORY_SPACE_GLOBAL);
 
   const loom_low_descriptor_t* load_wait_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_loadcnt"));
@@ -305,6 +323,23 @@ TEST(AmdgpuDescriptorsTest, Gfx12WmmaPacketMatchesRdnaRegisterShape) {
   EXPECT_EQ(accumulator_alts[1].reg_class_id, LOOM_LOW_REG_CLASS_NONE);
   EXPECT_NE(accumulator_alts[1].flags & LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE,
             0u);
+}
+
+TEST(AmdgpuDescriptorsTest, Gfx12LowAsmRegionRoundTripsPrefetch) {
+  LowTextAsmRoundTripHarness harness;
+  IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx12_core_descriptor_set));
+
+  const char* source =
+      "test.low_asm_region asm<amdgpu.gfx12.core> {\n"
+      "  %soffset = s_mov_b32 0\n"
+      "  s_prefetch_data_pc_rel %soffset {offset = 64, count = 1}\n"
+      "  s_prefetch_inst_pc_rel %soffset {offset = 128, count = 2}\n"
+      "  return %soffset\n"
+      "}\n";
+  std::string printed;
+  IREE_ASSERT_OK(harness.RoundTrip(IREE_SV(source),
+                                   IREE_SV("amdgpu.gfx12.core"), &printed));
+  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

@@ -444,6 +444,20 @@ _DEPCTR_IMMEDIATE = Immediate(
     unsigned_max=(2**16) - 1,
 )
 
+_PREFETCH_COUNT_IMMEDIATE = Immediate(
+    "count",
+    ImmediateKind.UNSIGNED,
+    bit_width=5,
+    unsigned_max=(2**5) - 1,
+)
+
+_PREFETCH_DISTANCE_IMMEDIATE = Immediate(
+    "distance",
+    ImmediateKind.UNSIGNED,
+    bit_width=16,
+    unsigned_max=(2**16) - 1,
+)
+
 _MATRIX_A_FORMAT_IMMEDIATE = Immediate(
     "matrix_a_fmt",
     ImmediateKind.UNSIGNED,
@@ -569,6 +583,18 @@ _CACHE_CONTROL_EFFECT = Effect(
     EffectKind.BARRIER,
     memory_space=MemorySpace.GENERIC,
     flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
+)
+
+_GLOBAL_PREFETCH_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+)
+
+_INSTRUCTION_PREFETCH_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.GENERIC,
+    flags=(EffectFlag.DEPENDENCY,),
 )
 
 _CONVERGENT_EFFECT = Effect(
@@ -2479,6 +2505,121 @@ def _cache_control_overlay(
     )
 
 
+def _s_set_inst_prefetch_distance_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_set_inst_prefetch_distance",
+        instruction_name="S_SET_INST_PREFETCH_DISTANCE",
+        mnemonic="s_set_inst_prefetch_distance",
+        encoding_name="ENC_SOPP",
+        semantic_tag="memory.cache.prefetch.instruction.distance",
+        schedule_class=_SCHEDULE_CACHE_CONTROL,
+        operands=(),
+        immediate_fields=("SIMM16",),
+        immediates=(_PREFETCH_DISTANCE_IMMEDIATE,),
+        effects=(_CACHE_CONTROL_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _s_dcache_discard_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_SMEM",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_CACHE_CONTROL,
+        operands=(
+            AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        ),
+        effects=(_CACHE_CONTROL_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _s_prefetch_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    base_operand: Operand | None,
+    effect: Effect,
+) -> AmdgpuDescriptorOverlay:
+    operands = []
+    if base_operand is not None:
+        operands.append(AmdgpuOperandOverlay("SBASE", base_operand))
+    operands.append(AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")))
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_SMEM",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_SMEM_LOAD,
+        operands=tuple(operands),
+        immediate_fields=("IOFFSET", "SDATA"),
+        immediates=(
+            _offset_immediate(24),
+            _PREFETCH_COUNT_IMMEDIATE,
+        ),
+        effects=(effect,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _gfx12_prefetch_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _s_prefetch_overlay(
+            descriptor_key="amdgpu.s_prefetch_inst",
+            instruction_name="S_PREFETCH_INST",
+            mnemonic="s_prefetch_inst",
+            semantic_tag="memory.cache.prefetch.instruction",
+            base_operand=_sgpr_operand("base", units=2),
+            effect=_INSTRUCTION_PREFETCH_EFFECT,
+        ),
+        _s_prefetch_overlay(
+            descriptor_key="amdgpu.s_prefetch_inst_pc_rel",
+            instruction_name="S_PREFETCH_INST_PC_REL",
+            mnemonic="s_prefetch_inst_pc_rel",
+            semantic_tag="memory.cache.prefetch.instruction.pc_relative",
+            base_operand=None,
+            effect=_INSTRUCTION_PREFETCH_EFFECT,
+        ),
+        _s_prefetch_overlay(
+            descriptor_key="amdgpu.s_prefetch_data",
+            instruction_name="S_PREFETCH_DATA",
+            mnemonic="s_prefetch_data",
+            semantic_tag="memory.cache.prefetch.data",
+            base_operand=_sgpr_operand("base", units=2),
+            effect=_GLOBAL_PREFETCH_EFFECT,
+        ),
+        _s_prefetch_overlay(
+            descriptor_key="amdgpu.s_buffer_prefetch_data",
+            instruction_name="S_BUFFER_PREFETCH_DATA",
+            mnemonic="s_buffer_prefetch_data",
+            semantic_tag="memory.cache.prefetch.data.buffer",
+            base_operand=_sgpr_resource("resource", units=4),
+            effect=_GLOBAL_PREFETCH_EFFECT,
+        ),
+        _s_prefetch_overlay(
+            descriptor_key="amdgpu.s_prefetch_data_pc_rel",
+            instruction_name="S_PREFETCH_DATA_PC_REL",
+            mnemonic="s_prefetch_data_pc_rel",
+            semantic_tag="memory.cache.prefetch.data.pc_relative",
+            base_operand=None,
+            effect=_GLOBAL_PREFETCH_EFFECT,
+        ),
+    )
+
+
 def _gfx950_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _cache_control_overlay(
@@ -2530,6 +2671,18 @@ def _gfx950_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             encoding_name="ENC_SOPP",
             semantic_tag="memory.cache.invalidate.instruction",
         ),
+        _s_dcache_discard_overlay(
+            descriptor_key="amdgpu.s_dcache_discard",
+            instruction_name="S_DCACHE_DISCARD",
+            mnemonic="s_dcache_discard",
+            semantic_tag="memory.cache.discard.data",
+        ),
+        _s_dcache_discard_overlay(
+            descriptor_key="amdgpu.s_dcache_discard_x2",
+            instruction_name="S_DCACHE_DISCARD_X2",
+            mnemonic="s_dcache_discard_x2",
+            semantic_tag="memory.cache.discard.data.x2",
+        ),
     )
 
 
@@ -2570,6 +2723,7 @@ def _gfx11_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             encoding_name="ENC_SOPP",
             semantic_tag="memory.cache.invalidate.instruction",
         ),
+        _s_set_inst_prefetch_distance_overlay(),
     )
 
 
@@ -2943,6 +3097,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_dot4_i32_i8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         *_gfx12_cache_control_overlays(),
+        *_gfx12_prefetch_overlays(),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),
         _s_wait_dscnt_overlay(),
@@ -3055,6 +3210,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_dot4_i32_i8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         *_gfx12_cache_control_overlays(),
+        *_gfx12_prefetch_overlays(),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),
         _s_wait_dscnt_overlay(),
