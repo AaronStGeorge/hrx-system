@@ -31,14 +31,10 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_memory(
   loom_amdgpu_memory_access_plan_t access = {0};
   loom_low_source_memory_access_diagnostic_t source_diagnostic = {0};
   loom_amdgpu_memory_access_diagnostic_t diagnostic = {0};
-  const loom_func_like_t source_function =
-      iree_any_bit_set(loom_target_low_legality_diagnostic_flags(context),
-                       LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS)
-          ? loom_target_low_legality_function(context)
-          : (loom_func_like_t){0};
   if (!loom_amdgpu_memory_access_select(
           module, loom_target_low_legality_fact_table(context), descriptor_set,
-          source_function, op, &access, &source_diagnostic, &diagnostic)) {
+          loom_target_low_legality_function(context), op, &access,
+          &source_diagnostic, &diagnostic)) {
     const iree_string_view_t detail =
         source_diagnostic.rejection_bits != 0
             ? loom_low_source_memory_access_rejection_detail(
