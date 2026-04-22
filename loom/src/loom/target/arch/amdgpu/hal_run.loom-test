@@ -394,6 +394,30 @@ func.def target(@gfx_target) @loom_kernel(%lhs_buffer: buffer, %rhs_buffer: buff
 
 // ====
 // REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=2,2,1 --binding=&4xf32=1,2,3,4 --binding=&4xf32=5,7,6,8 --binding=&4xf32=0 --expected_binding=4xf32=1,2,3,4 --expected_binding=4xf32=5,7,6,8 --expected_binding=4xf32=19,22,43,50
+
+target.profile @gfx_target preset("amdgpu-current")
+
+func.def target(@gfx_target) @loom_kernel(%lhs_buffer: buffer, %rhs_t_buffer: buffer, %output: buffer) {
+  %x = kernel.workitem.id<x> : index
+  %y = kernel.workitem.id<y> : index
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<2x2xf32, #dense>
+  %rhs_t_view = buffer.view %rhs_t_buffer[%zero] : buffer -> view<2x2xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<2x2xf32, #dense>
+  %lhs = vector.load %lhs_view[%y, 0] : view<2x2xf32, #dense> -> vector<2xf32>
+  %rhs = vector.load %rhs_t_view[%x, 0] : view<2x2xf32, #dense> -> vector<2xf32>
+  %acc = scalar.constant 0.0 : f32
+  %dot = vector.dotf %lhs, %rhs, %acc : vector<2xf32>, vector<2xf32>, f32
+  %stored = vector.from_elements %dot : vector<1xf32>
+  vector.store %stored, %output_view[%y, %x] : vector<1xf32>, view<2x2xf32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&1xi32=336134112 --binding=&1xi32=67305985 --binding=&1xi32=0 --expected_binding=1xi32=336134112 --expected_binding=1xi32=67305985 --expected_binding=1xi32=75
 
 target.profile @gfx_target preset("amdgpu-current")

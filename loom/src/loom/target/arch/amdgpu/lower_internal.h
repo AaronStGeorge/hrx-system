@@ -275,6 +275,15 @@ bool loom_amdgpu_low_legality_bundle_is_amdgpu(
 // Returns true for source vector-dot ops handled by the AMDGPU dot lowerer.
 bool loom_amdgpu_op_is_vector_dot(loom_op_kind_t kind);
 
+// Returns true when a source vector.dotf op can lower through explicit f32 FMA
+// packets under the active AMDGPU descriptor set.
+bool loom_amdgpu_can_lower_vector_dotf(loom_low_lower_context_t* context,
+                                       const loom_op_t* source_op);
+
+// Lowers a source vector.dotf op to an AMDGPU f32 FMA chain.
+iree_status_t loom_amdgpu_lower_vector_dotf(loom_low_lower_context_t* context,
+                                            const loom_op_t* source_op);
+
 // Returns true when a source vector.dot4i op can lower under the active AMDGPU
 // descriptor set.
 bool loom_amdgpu_can_lower_vector_dot4i(loom_low_lower_context_t* context,

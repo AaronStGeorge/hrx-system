@@ -1,0 +1,25 @@
+// RUN: emit source-low @f32_dotf output=low
+target.profile @gfx11_dotf_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_dotf_target) @f32_dotf(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: f32) -> (f32) {
+  // REMARK@+1: BACKEND/002 "selected AMDGPU f32 dot FMA contract"
+  %dot = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32>, f32
+  func.return %dot : f32
+}
+
+// ----
+low.func.def target(@gfx11_dotf_target) abi(hal_kernel) @f32_dotf__low(%lhs: reg<amdgpu.vgpr x4>, %rhs: reg<amdgpu.vgpr x4>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %9 = low.slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %10 = low.slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %11 = low.op<amdgpu.v_fma_f32>(%9, %10, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %12 = low.slice %lhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %13 = low.slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %14 = low.op<amdgpu.v_fma_f32>(%12, %13, %11) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %15 = low.slice %lhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %16 = low.slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_fma_f32>(%15, %16, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %18 = low.slice %lhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %19 = low.slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %dot = low.op<amdgpu.v_fma_f32>(%18, %19, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %dot : reg<amdgpu.vgpr>
+}

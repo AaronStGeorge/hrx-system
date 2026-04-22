@@ -812,6 +812,7 @@ loom_check_test_suite(
         "source_low_cache_policy.loom-test",
         "source_low_conversion.loom-test",
         "source_low_diagnostics.loom-test",
+        "source_low_dot.loom-test",
         "source_low_index.loom-test",
         "source_low_mask.loom-test",
         "source_low_minmax.loom-test",
