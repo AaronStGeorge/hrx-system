@@ -607,11 +607,38 @@ TEST(AmdgpuModuleCompilerTest,
   ASSERT_NE(module, nullptr);
 
   loom_amdgpu_hal_executable_t executable = {};
+  loom_target_compile_report_t report = {};
+  loom_amdgpu_module_compile_options_t options = {
+      .report = &report,
+  };
   IREE_ASSERT_OK(loom_amdgpu_compile_hal_executable(
-      module, /*options=*/nullptr, iree_allocator_system(), &executable));
+      module, &options, iree_allocator_system(), &executable));
   ExpectHalExecutableHasSingleExport(executable, "amdgcn-amd-amdhsa--gfx1100",
                                      "loom_kernel.kd",
                                      /*expected_binding_count=*/3);
+  EXPECT_EQ(report.artifact_kind,
+            LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE);
+  EXPECT_EQ(report.status_code, IREE_STATUS_OK);
+  EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
+  EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION));
+  EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_EMISSION));
+  EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_MEMORY));
+  EXPECT_FALSE(iree_string_view_is_empty(report.target_bundle_name));
+  EXPECT_FALSE(iree_string_view_is_empty(report.lowered_symbol));
+  EXPECT_GT(report.schedule_node_count, 0u);
+  EXPECT_GT(report.scheduled_node_count, 0u);
+  EXPECT_GT(report.schedule_dependency_count, 0u);
+  EXPECT_GT(report.schedule_resource_use_count, 0u);
+  EXPECT_GT(report.allocation_assignment_count, 0u);
+  EXPECT_EQ(report.allocation_spill_count, 0u);
+  EXPECT_GT(report.emitted_instruction_count, 0u);
+  EXPECT_GT(report.emitted_code_byte_count, 0u);
+  EXPECT_EQ(report.private_memory_bytes, 0u);
+  EXPECT_EQ(report.local_memory_bytes, 0u);
 
   loom_amdgpu_hal_executable_deinitialize(&executable, iree_allocator_system());
   loom_module_free(module);
