@@ -580,6 +580,7 @@ loom_cc_library(
     hdrs = [
         "lower.h",
         "lower_internal.h",
+        "lower_plan.h",
     ],
     deps = [
         ":descriptor_ids",

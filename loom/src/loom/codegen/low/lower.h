@@ -121,12 +121,16 @@ typedef struct loom_low_lower_plan_t {
   loom_low_lower_plan_id_t id;
   // Target-owned auxiliary value, usually a selected descriptor stable id.
   uint64_t payload;
+  // Arena-owned target plan data selected during planning and consumed by
+  // emission during the same lowering run. Core lowering never interprets it.
+  const void* target_data;
 } loom_low_lower_plan_t;
 
 static inline loom_low_lower_plan_t loom_low_lower_plan_empty(void) {
   return (loom_low_lower_plan_t){
       .id = LOOM_LOW_LOWER_PLAN_ID_NONE,
       .payload = 0,
+      .target_data = NULL,
   };
 }
 

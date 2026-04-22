@@ -450,6 +450,7 @@ loom_cc_library(
   HDRS
     "lower.h"
     "lower_internal.h"
+    "lower_plan.h"
   SRCS
     "lower.c"
     "lower_bitfield.c"

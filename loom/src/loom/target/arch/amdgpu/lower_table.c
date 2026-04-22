@@ -11,48 +11,25 @@
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
 
-typedef enum loom_amdgpu_table_index_kind_e {
-  LOOM_AMDGPU_TABLE_INDEX_KIND_NONE = 0,
-  LOOM_AMDGPU_TABLE_INDEX_KIND_I32 = 1,
-  LOOM_AMDGPU_TABLE_INDEX_KIND_PACKED_I8 = 2,
-} loom_amdgpu_table_index_kind_t;
-
-typedef struct loom_amdgpu_table_lookup_t {
-  // Register table value selected by each index lane.
-  loom_value_id_t table;
-  // Index vector selecting table lanes.
-  loom_value_id_t indices;
-  // Result vector receiving selected table lanes.
-  loom_value_id_t result;
-  // Selected index payload representation.
-  loom_amdgpu_table_index_kind_t index_kind;
-  // Static number of table lanes.
-  uint32_t table_lane_count;
-  // Static number of result lanes.
-  uint32_t result_lane_count;
-  // Number of 32-bit registers occupied by the index vector.
-  uint32_t index_register_count;
-} loom_amdgpu_table_lookup_t;
-
-static bool loom_amdgpu_table_lookup_select(
+static bool loom_amdgpu_table_lookup_plan_from_op(
     const loom_module_t* module, const loom_op_t* source_op,
-    loom_amdgpu_table_lookup_t* out_select) {
-  IREE_ASSERT_ARGUMENT(out_select);
-  *out_select = (loom_amdgpu_table_lookup_t){0};
+    loom_amdgpu_table_lookup_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_amdgpu_table_lookup_plan_t){0};
   if (!loom_vector_table_lookup_isa(source_op)) {
     return false;
   }
 
-  out_select->table = loom_vector_table_lookup_table(source_op);
-  out_select->indices = loom_vector_table_lookup_indices(source_op);
-  out_select->result = loom_vector_table_lookup_result(source_op);
+  out_plan->table = loom_vector_table_lookup_table(source_op);
+  out_plan->indices = loom_vector_table_lookup_indices(source_op);
+  out_plan->result = loom_vector_table_lookup_result(source_op);
 
   const loom_type_t table_type =
-      loom_module_value_type(module, out_select->table);
+      loom_module_value_type(module, out_plan->table);
   const loom_type_t indices_type =
-      loom_module_value_type(module, out_select->indices);
+      loom_module_value_type(module, out_plan->indices);
   const loom_type_t result_type =
-      loom_module_value_type(module, out_select->result);
+      loom_module_value_type(module, out_plan->result);
 
   const uint32_t table_lane_count = loom_amdgpu_static_vector_lane_count(
       table_type, LOOM_SCALAR_TYPE_F32, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
@@ -66,8 +43,8 @@ static bool loom_amdgpu_table_lookup_select(
   if (loom_amdgpu_static_vector_lane_count(
           indices_type, LOOM_SCALAR_TYPE_I32,
           LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) == result_lane_count) {
-    out_select->index_kind = LOOM_AMDGPU_TABLE_INDEX_KIND_I32;
-    out_select->index_register_count = result_lane_count;
+    out_plan->index_kind = LOOM_AMDGPU_TABLE_INDEX_KIND_I32;
+    out_plan->index_register_count = result_lane_count;
   } else {
     uint32_t index_payload_bit_count = 0;
     uint32_t index_register_count = 0;
@@ -79,20 +56,20 @@ static bool loom_amdgpu_table_lookup_select(
         index_payload_bit_count != result_lane_count * 8u) {
       return false;
     }
-    out_select->index_kind = LOOM_AMDGPU_TABLE_INDEX_KIND_PACKED_I8;
-    out_select->index_register_count = index_register_count;
+    out_plan->index_kind = LOOM_AMDGPU_TABLE_INDEX_KIND_PACKED_I8;
+    out_plan->index_register_count = index_register_count;
   }
 
-  out_select->table_lane_count = table_lane_count;
-  out_select->result_lane_count = result_lane_count;
+  out_plan->table_lane_count = table_lane_count;
+  out_plan->result_lane_count = result_lane_count;
   return true;
 }
 
-bool loom_amdgpu_can_lower_vector_table_lookup(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  loom_amdgpu_table_lookup_t select = {0};
-  return loom_amdgpu_table_lookup_select(loom_low_lower_context_module(context),
-                                         source_op, &select);
+bool loom_amdgpu_select_vector_table_lookup_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_table_lookup_plan_t* out_plan) {
+  return loom_amdgpu_table_lookup_plan_from_op(
+      loom_low_lower_context_module(context), source_op, out_plan);
 }
 
 static iree_status_t loom_amdgpu_table_lookup_slice_if_needed(
@@ -111,17 +88,17 @@ static iree_status_t loom_amdgpu_table_lookup_slice_if_needed(
 
 static iree_status_t loom_amdgpu_table_lookup_extract_i32_index_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_table_lookup_t* select, loom_value_id_t low_indices,
+    const loom_amdgpu_table_lookup_plan_t* plan, loom_value_id_t low_indices,
     uint32_t result_lane, loom_type_t lane_type,
     loom_value_id_t* out_index_lane) {
   return loom_amdgpu_table_lookup_slice_if_needed(
-      context, source_op, low_indices, select->index_register_count,
-      result_lane, lane_type, out_index_lane);
+      context, source_op, low_indices, plan->index_register_count, result_lane,
+      lane_type, out_index_lane);
 }
 
 static iree_status_t loom_amdgpu_table_lookup_extract_i8_index_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_table_lookup_t* select, loom_value_id_t low_indices,
+    const loom_amdgpu_table_lookup_plan_t* plan, loom_value_id_t low_indices,
     uint32_t result_lane, loom_type_t lane_type,
     loom_value_id_t* out_index_lane) {
   IREE_ASSERT_ARGUMENT(out_index_lane);
@@ -130,7 +107,7 @@ static iree_status_t loom_amdgpu_table_lookup_extract_i8_index_lane(
   const uint32_t byte_offset = result_lane & 3u;
   loom_value_id_t source_register = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_table_lookup_slice_if_needed(
-      context, source_op, low_indices, select->index_register_count,
+      context, source_op, low_indices, plan->index_register_count,
       register_offset, lane_type, &source_register));
 
   loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
@@ -149,32 +126,32 @@ static iree_status_t loom_amdgpu_table_lookup_extract_i8_index_lane(
 
 static iree_status_t loom_amdgpu_table_lookup_extract_index_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_table_lookup_t* select, loom_value_id_t low_indices,
+    const loom_amdgpu_table_lookup_plan_t* plan, loom_value_id_t low_indices,
     uint32_t result_lane, loom_type_t lane_type,
     loom_value_id_t* out_index_lane) {
-  if (select->index_kind == LOOM_AMDGPU_TABLE_INDEX_KIND_I32) {
+  if (plan->index_kind == LOOM_AMDGPU_TABLE_INDEX_KIND_I32) {
     return loom_amdgpu_table_lookup_extract_i32_index_lane(
-        context, source_op, select, low_indices, result_lane, lane_type,
+        context, source_op, plan, low_indices, result_lane, lane_type,
         out_index_lane);
   }
   return loom_amdgpu_table_lookup_extract_i8_index_lane(
-      context, source_op, select, low_indices, result_lane, lane_type,
+      context, source_op, plan, low_indices, result_lane, lane_type,
       out_index_lane);
 }
 
 static iree_status_t loom_amdgpu_table_lookup_extract_table_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_table_lookup_t* select, loom_value_id_t low_table,
+    const loom_amdgpu_table_lookup_plan_t* plan, loom_value_id_t low_table,
     uint32_t table_lane, loom_type_t lane_type,
     loom_value_id_t* out_table_lane) {
   return loom_amdgpu_table_lookup_slice_if_needed(
-      context, source_op, low_table, select->table_lane_count, table_lane,
+      context, source_op, low_table, plan->table_lane_count, table_lane,
       lane_type, out_table_lane);
 }
 
 static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_table_lookup_t* select,
+    const loom_amdgpu_table_lookup_plan_t* plan,
     const loom_value_id_t* table_lanes, const loom_value_id_t* ordinals,
     loom_value_id_t index_lane, loom_type_t lane_type,
     loom_type_t mask_lane_type, loom_value_id_t* out_selected_lane) {
@@ -183,7 +160,7 @@ static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
   IREE_ASSERT_ARGUMENT(out_selected_lane);
   *out_selected_lane = LOOM_VALUE_ID_INVALID;
   loom_value_id_t selected_lane = table_lanes[0];
-  for (uint32_t i = 1; i < select->table_lane_count; ++i) {
+  for (uint32_t i = 1; i < plan->table_lane_count; ++i) {
     const loom_value_id_t compare_operands[] = {
         index_lane,
         ordinals[i],
@@ -210,21 +187,15 @@ static iree_status_t loom_amdgpu_table_lookup_select_table_lane(
 }
 
 iree_status_t loom_amdgpu_lower_vector_table_lookup(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  loom_amdgpu_table_lookup_t select = {0};
-  if (!loom_amdgpu_table_lookup_select(loom_low_lower_context_module(context),
-                                       source_op, &select)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "planning accepted unsupported AMDGPU "
-                            "vector.table.lookup");
-  }
-
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_table_lookup_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_table = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, select.table, &low_table));
+      loom_low_lower_lookup_value(context, plan->table, &low_table));
   loom_value_id_t low_indices = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, select.indices, &low_indices));
+      loom_low_lower_lookup_value(context, plan->indices, &low_indices));
 
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
@@ -233,9 +204,9 @@ iree_status_t loom_amdgpu_lower_vector_table_lookup(
       loom_amdgpu_make_sgpr_range_type(context, 2, &mask_lane_type));
   loom_value_id_t table_lanes[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   loom_value_id_t ordinals[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES] = {0};
-  for (uint32_t i = 0; i < select.table_lane_count; ++i) {
+  for (uint32_t i = 0; i < plan->table_lane_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_table_lookup_extract_table_lane(
-        context, source_op, &select, low_table, i, lane_type, &table_lanes[i]));
+        context, source_op, plan, low_table, i, lane_type, &table_lanes[i]));
     if (i == 0) {
       continue;
     }
@@ -245,27 +216,27 @@ iree_status_t loom_amdgpu_lower_vector_table_lookup(
   }
 
   loom_value_id_t result_lanes[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-  for (uint32_t i = 0; i < select.result_lane_count; ++i) {
+  for (uint32_t i = 0; i < plan->result_lane_count; ++i) {
     loom_value_id_t index_lane = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_table_lookup_extract_index_lane(
-        context, source_op, &select, low_indices, i, lane_type, &index_lane));
+        context, source_op, plan, low_indices, i, lane_type, &index_lane));
     IREE_RETURN_IF_ERROR(loom_amdgpu_table_lookup_select_table_lane(
-        context, source_op, &select, table_lanes, ordinals, index_lane,
-        lane_type, mask_lane_type, &result_lanes[i]));
+        context, source_op, plan, table_lanes, ordinals, index_lane, lane_type,
+        mask_lane_type, &result_lanes[i]));
   }
 
-  if (select.result_lane_count == 1) {
-    return loom_low_lower_bind_value(context, select.result, result_lanes[0]);
+  if (plan->result_lane_count == 1) {
+    return loom_low_lower_bind_value(context, plan->result, result_lanes[0]);
   }
 
   loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
-      context, source_op, select.result, &result_type));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
+                                                   plan->result, &result_type));
   loom_op_t* concat_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_concat_build(
       loom_low_lower_context_builder(context), result_lanes,
-      select.result_lane_count, result_type, source_op->location, &concat_op));
-  return loom_low_lower_bind_value(context, select.result,
+      plan->result_lane_count, result_type, source_op->location, &concat_op));
+  return loom_low_lower_bind_value(context, plan->result,
                                    loom_low_concat_result(concat_op));
 }
 
@@ -280,8 +251,8 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_table(
   *out_handled = true;
 
   const loom_module_t* module = loom_target_low_legality_module(context);
-  loom_amdgpu_table_lookup_t unused_select = {0};
-  if (loom_amdgpu_table_lookup_select(module, op, &unused_select)) {
+  loom_amdgpu_table_lookup_plan_t unused_plan = {0};
+  if (loom_amdgpu_table_lookup_plan_from_op(module, op, &unused_plan)) {
     return iree_ok_status();
   }
   return loom_target_low_legality_reject(

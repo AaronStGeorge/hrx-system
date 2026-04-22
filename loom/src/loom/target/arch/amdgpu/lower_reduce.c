@@ -59,8 +59,11 @@ static bool loom_amdgpu_vector_reduce_descriptor_id(
   }
 }
 
-bool loom_amdgpu_can_lower_vector_reduce(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op) {
+bool loom_amdgpu_select_vector_reduce_descriptor_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t* out_descriptor_id) {
+  IREE_ASSERT_ARGUMENT(out_descriptor_id);
+  *out_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_id_t source_input = loom_vector_reduce_input(source_op);
   const loom_value_id_t source_init = loom_vector_reduce_init(source_op);
@@ -76,11 +79,10 @@ bool loom_amdgpu_can_lower_vector_reduce(loom_low_lower_context_t* context,
     return false;
   }
 
-  uint64_t unused_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
   const loom_scalar_type_t element_type = loom_type_element_type(input_type);
   if (!loom_amdgpu_vector_reduce_descriptor_id(
           element_type, loom_vector_reduce_kind(source_op),
-          &unused_descriptor_id)) {
+          out_descriptor_id)) {
     return false;
   }
   if (element_type == LOOM_SCALAR_TYPE_I32) {
@@ -90,13 +92,9 @@ bool loom_amdgpu_can_lower_vector_reduce(loom_low_lower_context_t* context,
 }
 
 iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op) {
-  if (!loom_amdgpu_can_lower_vector_reduce(context, source_op)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "planning accepted unsupported AMDGPU "
-                            "vector.reduce");
-  }
-
+                                              const loom_op_t* source_op,
+                                              uint64_t descriptor_id) {
+  IREE_ASSERT_NE(descriptor_id, LOOM_LOW_DESCRIPTOR_ID_NONE);
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_id_t source_input = loom_vector_reduce_input(source_op);
   const loom_value_id_t source_init = loom_vector_reduce_init(source_op);
@@ -104,15 +102,7 @@ iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
   const loom_type_t input_type = loom_module_value_type(module, source_input);
   const loom_scalar_type_t element_type = loom_type_element_type(input_type);
   const uint32_t lane_count = loom_amdgpu_vector_32bit_lane_count(input_type);
-
-  uint64_t descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
-  if (lane_count == 0 ||
-      !loom_amdgpu_vector_reduce_descriptor_id(
-          element_type, loom_vector_reduce_kind(source_op), &descriptor_id)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "planning accepted unsupported AMDGPU "
-                            "vector.reduce kind or lane count");
-  }
+  IREE_ASSERT_GT(lane_count, 0);
 
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
@@ -120,11 +110,7 @@ iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
   bool result_is_vgpr = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, result_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &result_is_vgpr));
-  if (!result_is_vgpr) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "planning accepted AMDGPU vector.reduce result "
-                            "that does not map to a VGPR");
-  }
+  IREE_ASSERT(result_is_vgpr);
 
   loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
   if (element_type == LOOM_SCALAR_TYPE_I32) {

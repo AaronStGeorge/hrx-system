@@ -21,6 +21,7 @@
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/lower_plan.h"
 #include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
@@ -302,32 +303,35 @@ bool loom_amdgpu_can_lower_vector_dot8i4(loom_low_lower_context_t* context,
 iree_status_t loom_amdgpu_lower_vector_dot8i4(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op);
 
-// Returns true when a source vector.reduce op can lower through the current
-// AMDGPU source value placement and supported reduction descriptor family.
-bool loom_amdgpu_can_lower_vector_reduce(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op);
+// Selects the AMDGPU descriptor used by a source vector.reduce op.
+bool loom_amdgpu_select_vector_reduce_descriptor_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t* out_descriptor_id);
 
 // Lowers a source vector.reduce op to AMDGPU descriptor-backed low packets.
 iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op);
+                                              const loom_op_t* source_op,
+                                              uint64_t descriptor_id);
 
-// Returns true when a source vector.cmpi op can lower through explicit
-// SGPR-pair masks.
-bool loom_amdgpu_can_lower_vector_cmpi(loom_low_lower_context_t* context,
-                                       const loom_op_t* source_op);
+// Selects the AMDGPU descriptor used by a source vector.cmpi op.
+bool loom_amdgpu_select_vector_cmpi_descriptor_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t* out_descriptor_id);
 
 // Lowers a source vector.cmpi op to AMDGPU descriptor-backed low packets.
 iree_status_t loom_amdgpu_lower_vector_cmpi(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op);
+                                            const loom_op_t* source_op,
+                                            uint64_t descriptor_id);
 
-// Returns true when a source vector.cmpf op can lower through explicit
-// SGPR-pair masks.
-bool loom_amdgpu_can_lower_vector_cmpf(loom_low_lower_context_t* context,
-                                       const loom_op_t* source_op);
+// Selects the AMDGPU descriptor used by a source vector.cmpf op.
+bool loom_amdgpu_select_vector_cmpf_descriptor_id(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t* out_descriptor_id);
 
 // Lowers a source vector.cmpf op to AMDGPU descriptor-backed low packets.
 iree_status_t loom_amdgpu_lower_vector_cmpf(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op);
+                                            const loom_op_t* source_op,
+                                            uint64_t descriptor_id);
 
 // Returns true when a source vector.select op can lower through explicit
 // SGPR-pair masks and b32 cndmask packets.
@@ -338,14 +342,15 @@ bool loom_amdgpu_can_lower_vector_select(loom_low_lower_context_t* context,
 iree_status_t loom_amdgpu_lower_vector_select(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op);
 
-// Returns true when a source vector.table.lookup op can lower as a small
-// register-table selection chain.
-bool loom_amdgpu_can_lower_vector_table_lookup(
-    loom_low_lower_context_t* context, const loom_op_t* source_op);
+// Selects an AMDGPU register-table lookup plan.
+bool loom_amdgpu_select_vector_table_lookup_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_table_lookup_plan_t* out_plan);
 
 // Lowers a source vector.table.lookup op to AMDGPU compare/select packets.
 iree_status_t loom_amdgpu_lower_vector_table_lookup(
-    loom_low_lower_context_t* context, const loom_op_t* source_op);
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_table_lookup_plan_t* plan);
 
 // Verifies source vector table op legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_vector_table(
@@ -353,43 +358,47 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_table(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
-// Returns true when a source vector.bitfield.extract* op can lower through the
-// current AMDGPU i32 VGPR bit-manipulation descriptor family.
-bool loom_amdgpu_can_lower_vector_bitfield_extract(
-    loom_low_lower_context_t* context, const loom_op_t* source_op);
+// Selects an AMDGPU vector.bitfield.extract* plan.
+bool loom_amdgpu_select_vector_bitfield_extract_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_bitfield_extract_plan_t* out_plan);
 
 // Lowers a source vector.bitfield.extract* op to AMDGPU descriptor-backed low
 // packets.
 iree_status_t loom_amdgpu_lower_vector_bitfield_extract(
-    loom_low_lower_context_t* context, const loom_op_t* source_op);
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_bitfield_extract_plan_t* plan);
 
-// Returns true when a source vector.bitfield.insert op can lower through the
-// current AMDGPU i32 VGPR bit-manipulation descriptor family.
-bool loom_amdgpu_can_lower_vector_bitfield_insert(
-    loom_low_lower_context_t* context, const loom_op_t* source_op);
+// Selects an AMDGPU vector.bitfield.insert plan.
+bool loom_amdgpu_select_vector_bitfield_insert_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_bitfield_insert_plan_t* out_plan);
 
 // Lowers a source vector.bitfield.insert op to AMDGPU descriptor-backed low
 // packets.
 iree_status_t loom_amdgpu_lower_vector_bitfield_insert(
-    loom_low_lower_context_t* context, const loom_op_t* source_op);
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_bitfield_insert_plan_t* plan);
 
-// Returns true when a source vector.bitpack op can lower through the current
-// AMDGPU packed byte descriptor family.
-bool loom_amdgpu_can_lower_vector_bitpack(loom_low_lower_context_t* context,
-                                          const loom_op_t* source_op);
+// Selects an AMDGPU vector.bitpack plan.
+bool loom_amdgpu_select_vector_bitpack_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_bitpack_plan_t* out_plan);
 
 // Lowers a source vector.bitpack op to AMDGPU descriptor-backed low packets.
 iree_status_t loom_amdgpu_lower_vector_bitpack(
-    loom_low_lower_context_t* context, const loom_op_t* source_op);
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_bitpack_plan_t* plan);
 
-// Returns true when a source vector.bitunpack op can lower through the current
-// AMDGPU bitstream expansion path.
-bool loom_amdgpu_can_lower_vector_bitunpack(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op);
+// Selects an AMDGPU vector.bitunpack plan.
+bool loom_amdgpu_select_vector_bitunpack_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_bitunpack_plan_t* out_plan);
 
 // Lowers a source vector.bitunpack op to AMDGPU descriptor-backed low packets.
 iree_status_t loom_amdgpu_lower_vector_bitunpack(
-    loom_low_lower_context_t* context, const loom_op_t* source_op);
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_bitunpack_plan_t* plan);
 
 // Verifies source vector bitstream op legality for AMDGPU target-low
 // selection.
@@ -398,23 +407,25 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_bitstream(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
-// Returns true when a source vector.bitcast op can lower as an AMDGPU register
-// reinterpretation.
-bool loom_amdgpu_can_lower_vector_bitcast(loom_low_lower_context_t* context,
-                                          const loom_op_t* source_op);
+// Selects an AMDGPU vector.bitcast register reinterpretation plan.
+bool loom_amdgpu_select_vector_bitcast_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_bitcast_plan_t* out_plan);
 
 // Lowers a source vector.bitcast op as an AMDGPU register reinterpretation.
 iree_status_t loom_amdgpu_lower_vector_bitcast(
-    loom_low_lower_context_t* context, const loom_op_t* source_op);
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_bitcast_plan_t* plan);
 
-// Returns true when a source vector.slice op can lower as AMDGPU register
-// slicing.
-bool loom_amdgpu_can_lower_vector_slice(loom_low_lower_context_t* context,
-                                        const loom_op_t* source_op);
+// Selects an AMDGPU vector.slice register slicing plan.
+bool loom_amdgpu_select_vector_slice_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_slice_plan_t* out_plan);
 
 // Lowers a source vector.slice op as AMDGPU register slicing.
-iree_status_t loom_amdgpu_lower_vector_slice(loom_low_lower_context_t* context,
-                                             const loom_op_t* source_op);
+iree_status_t loom_amdgpu_lower_vector_slice(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_slice_plan_t* plan);
 
 // Verifies source vector structural op legality for AMDGPU target-low
 // selection.
@@ -429,23 +440,25 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_dot(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
-// Returns true when a vector.load can lower to one supported AMDGPU memory
-// packet form under the active descriptor set.
-bool loom_amdgpu_can_lower_vector_load(loom_low_lower_context_t* context,
-                                       const loom_op_t* source_op);
+// Selects an AMDGPU vector.load memory packet plan.
+bool loom_amdgpu_select_vector_load_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_memory_access_plan_t* out_plan);
 
-// Returns true when a vector.store can lower to one supported AMDGPU memory
-// packet form under the active descriptor set.
-bool loom_amdgpu_can_lower_vector_store(loom_low_lower_context_t* context,
-                                        const loom_op_t* source_op);
+// Selects an AMDGPU vector.store memory packet plan.
+bool loom_amdgpu_select_vector_store_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_memory_access_plan_t* out_plan);
 
 // Lowers a source vector.load to an AMDGPU memory packet.
-iree_status_t loom_amdgpu_lower_vector_load(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op);
+iree_status_t loom_amdgpu_lower_vector_load(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_plan_t* plan);
 
 // Lowers a source vector.store to an AMDGPU memory packet.
-iree_status_t loom_amdgpu_lower_vector_store(loom_low_lower_context_t* context,
-                                             const loom_op_t* source_op);
+iree_status_t loom_amdgpu_lower_vector_store(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_plan_t* plan);
 
 // Verifies source vector memory legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_vector_memory(
