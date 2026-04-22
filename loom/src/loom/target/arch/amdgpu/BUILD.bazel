@@ -843,9 +843,17 @@ loom_check_test_suite(
     ],
 )
 
-loom_check_test(
+loom_check_test_suite(
     name = "hal_run",
-    src = "hal_run.loom-test",
+    srcs = [
+        "hal_run_basic.loom-test",
+        "hal_run_dot.loom-test",
+        "hal_run_low.loom-test",
+        "hal_run_memory.loom-test",
+        "hal_run_quant_decode.loom-test",
+        "hal_run_quant_gemm.loom-test",
+        "hal_run_vector.loom-test",
+    ],
     tags = [
         "driver=amdgpu",
         "nodocker",

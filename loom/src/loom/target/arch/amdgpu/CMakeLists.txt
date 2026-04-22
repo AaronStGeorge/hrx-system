@@ -965,9 +965,93 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
-    "hal_run"
+    "hal_run_basic"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_basic.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "driver=amdgpu"
+    "nodocker"
+    "requires-gpu-amd"
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "hal_run_dot"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_dot.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "driver=amdgpu"
+    "nodocker"
+    "requires-gpu-amd"
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "hal_run_low"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_low.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "driver=amdgpu"
+    "nodocker"
+    "requires-gpu-amd"
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "hal_run_memory"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_memory.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "driver=amdgpu"
+    "nodocker"
+    "requires-gpu-amd"
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "hal_run_quant_decode"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_quant_decode.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "driver=amdgpu"
+    "nodocker"
+    "requires-gpu-amd"
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "hal_run_quant_gemm"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_quant_gemm.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "driver=amdgpu"
+    "nodocker"
+    "requires-gpu-amd"
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "hal_run_vector"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_vector.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
