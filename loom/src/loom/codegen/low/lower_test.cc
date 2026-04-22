@@ -99,12 +99,13 @@ static bool IsVector4xi32(loom_type_t type) {
 
 static iree_status_t MakeRegisterType(loom_low_lower_context_t* context,
                                       iree_string_view_t register_class,
+                                      uint32_t unit_count,
                                       loom_type_t* out_type) {
   loom_string_id_t register_class_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(loom_low_lower_context_module(context),
                                 register_class, &register_class_id));
-  *out_type = loom_type_register(register_class_id, 1);
+  *out_type = loom_type_register(register_class_id, unit_count);
   return iree_ok_status();
 }
 
@@ -115,10 +116,10 @@ static iree_status_t TestMapType(void* user_data,
                                  loom_type_t* out_low_type) {
   (void)user_data;
   if (IsI32(source_type) || IsI1(source_type)) {
-    return MakeRegisterType(context, IREE_SV("test.i32"), out_low_type);
+    return MakeRegisterType(context, IREE_SV("test.i32"), 1, out_low_type);
   }
   if (IsVector4xi32(source_type)) {
-    return MakeRegisterType(context, IREE_SV("test.v4i32"), out_low_type);
+    return MakeRegisterType(context, IREE_SV("test.i32"), 4, out_low_type);
   }
   return loom_low_lower_emit_reject(
       context, source_op, IREE_SV("type"), IREE_SV("source"),
@@ -136,7 +137,7 @@ static iree_status_t TestMapArgument(
   if (loom_type_is_buffer(source_type)) {
     loom_type_t resource_type = loom_type_none();
     IREE_RETURN_IF_ERROR(
-        MakeRegisterType(context, IREE_SV("test.i32"), &resource_type));
+        MakeRegisterType(context, IREE_SV("test.i32"), 1, &resource_type));
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE,
         .abi_type = resource_type,
@@ -173,12 +174,13 @@ static const loom_low_lower_type_pattern_t kTestLowerTypePatterns[] = {
         .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
                  LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT |
                  LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
-                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0,
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE,
         .type_kind = LOOM_TYPE_VECTOR,
         .element_type_mask =
             LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
         .rank = 1,
-        .static_dim0 = 4,
+        .static_dim0_min = 4,
+        .static_dim0_max = 4,
     },
 };
 
@@ -302,6 +304,7 @@ enum TestLowerEmit : uint16_t {
   kTestLowerEmitAddI32,
   kTestLowerEmitTiedI32,
   kTestLowerEmitAddV4I32,
+  kTestLowerEmitSwappedAddV4I32,
 };
 
 static const loom_tied_result_t kTestLowerTiedResults[] = {
@@ -341,8 +344,17 @@ static const loom_low_lower_emit_t kTestLowerEmits[] = {
         .tied_result_count = 1,
     },
     {
-        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_V4I32,
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
+        .operand_ref_start = kTestLowerOperand0,
+        .operand_ref_count = 2,
+        .result_ref_start = kTestLowerResult0,
+        .result_ref_count = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
+        .flags = LOOM_LOW_LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
         .operand_ref_start = kTestLowerOperand0,
         .operand_ref_count = 2,
         .result_ref_start = kTestLowerResult0,
@@ -379,6 +391,13 @@ static const loom_low_lower_rule_t kTestLowerRules[] = {
         .emit_start = kTestLowerEmitAddV4I32,
         .emit_count = 1,
     },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SUBI,
+        .guard_start = kTestLowerVectorLhsGuard,
+        .guard_count = 3,
+        .emit_start = kTestLowerEmitSwappedAddV4I32,
+        .emit_count = 1,
+    },
 };
 
 static const loom_low_lower_rule_span_t kTestLowerSpans[] = {
@@ -400,6 +419,11 @@ static const loom_low_lower_rule_span_t kTestLowerSpans[] = {
     {
         .source_op_kind = LOOM_OP_VECTOR_ADDI,
         .rule_start = 3,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SUBI,
+        .rule_start = 4,
         .rule_count = 1,
     },
 };
@@ -434,7 +458,7 @@ static iree_status_t TestEmitPreamble(void* user_data,
                                 IREE_SV("test.thread_id"), &source_id));
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
-      MakeRegisterType(context, IREE_SV("test.i32"), &result_type));
+      MakeRegisterType(context, IREE_SV("test.i32"), 1, &result_type));
   loom_op_t* live_in_op = nullptr;
   return loom_low_live_in_build(
       loom_low_lower_context_builder(context), source_id,
@@ -968,11 +992,68 @@ TEST_F(LowLowerTest, LowersVectorCfgFunction) {
   IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
   EXPECT_NE(text.find("@select_vector__low"), std::string::npos);
   EXPECT_EQ(text.find("source(@"), std::string::npos);
-  EXPECT_NE(text.find("reg<test.v4i32>"), std::string::npos);
-  EXPECT_NE(text.find("test.add.v4i32"), std::string::npos);
+  EXPECT_NE(text.find("reg<test.i32 x4>"), std::string::npos);
+  EXPECT_NE(text.find("low.slice"), std::string::npos);
+  EXPECT_NE(text.find("low.concat"), std::string::npos);
+  EXPECT_NE(text.find("test.add.i32"), std::string::npos);
   EXPECT_NE(text.find("low.cond_br"), std::string::npos);
   EXPECT_NE(text.find("low.br"), std::string::npos);
   EXPECT_EQ(text.find("low.abi"), std::string::npos);
+}
+
+TEST_F(LowLowerTest, RuleEmissionSwapsPerLaneOperands) {
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @sub_vector(%lhs: vector<4xi32>, "
+      "%rhs: vector<4xi32>) -> (vector<4xi32>) {\n"
+      "  %result = vector.subi %lhs, %rhs : vector<4xi32>\n"
+      "  func.return %result : vector<4xi32>\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+
+  EmissionCollector verify_collector;
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      VerifyLowModule(module.get(), &verify_collector, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+  EXPECT_TRUE(verify_collector.emissions.empty());
+
+  loom_region_t* low_body = loom_low_func_def_body(lower_result.low_func_op);
+  ASSERT_NE(low_body, nullptr);
+  ASSERT_GT(low_body->block_count, 0u);
+  const loom_block_t* entry_block = loom_region_const_entry_block(low_body);
+  ASSERT_GE(entry_block->arg_count, 2u);
+  const loom_value_id_t low_lhs = entry_block->arg_ids[0];
+  const loom_value_id_t low_rhs = entry_block->arg_ids[1];
+
+  const loom_op_t* first_lane_op = nullptr;
+  loom_op_t* op = nullptr;
+  loom_block_for_each_op(entry_block, op) {
+    if (!loom_low_op_isa(op) || loom_low_op_descriptor_id(op) !=
+                                    TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32) {
+      continue;
+    }
+    first_lane_op = op;
+    break;
+  }
+  ASSERT_NE(first_lane_op, nullptr);
+
+  loom_value_slice_t operands = loom_low_op_operands(first_lane_op);
+  ASSERT_EQ(operands.count, 2u);
+  const loom_op_t* first_operand_def =
+      loom_value_def_op(loom_module_value(module.get(), operands.values[0]));
+  const loom_op_t* second_operand_def =
+      loom_value_def_op(loom_module_value(module.get(), operands.values[1]));
+  ASSERT_TRUE(loom_low_slice_isa(first_operand_def));
+  ASSERT_TRUE(loom_low_slice_isa(second_operand_def));
+  EXPECT_EQ(loom_low_slice_source(first_operand_def), low_rhs);
+  EXPECT_EQ(loom_low_slice_source(second_operand_def), low_lhs);
 }
 
 TEST_F(LowLowerTest, LowersResourceArgumentsWithoutDirectAbiOperands) {

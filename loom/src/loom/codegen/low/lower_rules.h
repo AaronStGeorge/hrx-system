@@ -37,6 +37,8 @@ typedef uint16_t loom_low_lower_type_pattern_flags_t;
 #define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK ((uint16_t)1u << 2)
 // First shaped dimension must be statically equal to static_dim0.
 #define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0 ((uint16_t)1u << 3)
+// First shaped dimension must be inside [static_dim0_min, static_dim0_max].
+#define LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE ((uint16_t)1u << 4)
 
 typedef struct loom_low_lower_type_pattern_t {
   // Type fields this pattern checks.
@@ -49,6 +51,10 @@ typedef struct loom_low_lower_type_pattern_t {
   uint8_t rank;
   // Required static dimension 0 when the STATIC_DIM0 flag is set.
   int64_t static_dim0;
+  // Inclusive minimum static dimension 0 when STATIC_DIM0_RANGE is set.
+  int64_t static_dim0_min;
+  // Inclusive maximum static dimension 0 when STATIC_DIM0_RANGE is set.
+  int64_t static_dim0_max;
 } loom_low_lower_type_pattern_t;
 
 typedef enum loom_low_lower_value_ref_kind_e {
@@ -130,11 +136,21 @@ typedef enum loom_low_lower_emit_kind_e {
   LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP = 1,
   // Emits a descriptor-backed low.const with copied attributes.
   LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST = 2,
+  // Slices register-range operands, emits one descriptor-backed low.op per
+  // register lane, and concatenates the lane results.
+  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE = 3,
 } loom_low_lower_emit_kind_t;
+
+typedef uint16_t loom_low_lower_emit_flags_t;
+
+// Swaps emitted descriptor operands 0 and 1 after operand lookup/copy/slicing.
+#define LOOM_LOW_LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1 ((uint16_t)1u << 0)
 
 typedef struct loom_low_lower_emit_t {
   // Emit action to perform.
   loom_low_lower_emit_kind_t kind;
+  // Emit behavior flags.
+  loom_low_lower_emit_flags_t flags;
   // Stable low descriptor ID consumed by the selected descriptor set.
   uint64_t descriptor_id;
   // First value-ref table row copied as a low operand.
