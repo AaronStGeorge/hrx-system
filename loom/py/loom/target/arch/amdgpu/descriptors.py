@@ -2587,10 +2587,29 @@ def _v_mfma_f32_16x16x16_f16_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-def _v_dot4_i32_i8_overlay() -> AmdgpuDescriptorOverlay:
+def _vop3p_packed_dot_fixed_fields(
+    *,
+    op_sel_hi_field: str = "OP_SEL_HI",
+    lhs_signed: bool = False,
+    rhs_signed: bool = False,
+) -> tuple[tuple[str, int], ...]:
+    # Packed VOP3P dot instructions use high-half source selection as the
+    # canonical no-op modifier spelling. IU dot instructions additionally use
+    # NEG low bits as integer signedness selectors for src0/src1.
+    neg = (1 if lhs_signed else 0) | (2 if rhs_signed else 0)
+    fields = [(op_sel_hi_field, 0x7)]
+    if neg != 0:
+        fields.append(("NEG", neg))
+    return tuple(fields)
+
+
+def _v_dot4_i32_i8_overlay(
+    *, op_sel_hi_field: str = "OP_SEL_HI", signedness_modifiers: bool
+) -> AmdgpuDescriptorOverlay:
+    instruction_name = "V_DOT4_I32_IU8" if signedness_modifiers else "V_DOT4_I32_I8"
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_dot4_i32_i8",
-        instruction_name="V_DOT4_I32_I8",
+        instruction_name=instruction_name,
         mnemonic="v_dot4_i32_i8",
         encoding_name="ENC_VOP3P",
         semantic_tag="dot.s8s8.i32x1",
@@ -2601,11 +2620,49 @@ def _v_dot4_i32_i8_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
             AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc")),
         ),
+        fixed_encoding_fields=_vop3p_packed_dot_fixed_fields(
+            op_sel_hi_field=op_sel_hi_field,
+            lhs_signed=signedness_modifiers,
+            rhs_signed=signedness_modifiers,
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
 
-def _v_dot4_u32_u8_overlay() -> AmdgpuDescriptorOverlay:
+def _v_dot4_i32_iu8_overlay(
+    *, op_sel_hi_field: str = "OP_SEL_HI", lhs_signed: bool, rhs_signed: bool
+) -> AmdgpuDescriptorOverlay:
+    lhs_tag = "s8" if lhs_signed else "u8"
+    rhs_tag = "s8" if rhs_signed else "u8"
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.v_dot4_i32_iu8.{lhs_tag}{rhs_tag}",
+        instruction_name="V_DOT4_I32_IU8",
+        mnemonic="v_dot4_i32_iu8",
+        encoding_name="ENC_VOP3P",
+        semantic_tag=f"dot.{lhs_tag}{rhs_tag}.i32x1",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
+            AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc")),
+        ),
+        fixed_encoding_fields=_vop3p_packed_dot_fixed_fields(
+            op_sel_hi_field=op_sel_hi_field,
+            lhs_signed=lhs_signed,
+            rhs_signed=rhs_signed,
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        # Native asm forms cannot yet spell the fixed NEG source selectors, so
+        # the target-low descriptor key remains the only unambiguous text form.
+        asm_forms=(),
+    )
+
+
+def _v_dot4_u32_u8_overlay(
+    *,
+    op_sel_hi_field: str = "OP_SEL_HI",
+) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_dot4_u32_u8",
         instruction_name="V_DOT4_U32_U8",
@@ -2619,11 +2676,73 @@ def _v_dot4_u32_u8_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
             AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc")),
         ),
+        fixed_encoding_fields=_vop3p_packed_dot_fixed_fields(
+            op_sel_hi_field=op_sel_hi_field
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
 
-def _v_dot8_u32_u4_overlay() -> AmdgpuDescriptorOverlay:
+def _v_dot8_i32_i4_overlay(
+    *, op_sel_hi_field: str = "OP_SEL_HI", signedness_modifiers: bool
+) -> AmdgpuDescriptorOverlay:
+    instruction_name = "V_DOT8_I32_IU4" if signedness_modifiers else "V_DOT8_I32_I4"
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_dot8_i32_i4",
+        instruction_name=instruction_name,
+        mnemonic="v_dot8_i32_i4",
+        encoding_name="ENC_VOP3P",
+        semantic_tag="dot.s4s4.i32x1",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
+            AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc")),
+        ),
+        fixed_encoding_fields=_vop3p_packed_dot_fixed_fields(
+            op_sel_hi_field=op_sel_hi_field,
+            lhs_signed=signedness_modifiers,
+            rhs_signed=signedness_modifiers,
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_dot8_i32_iu4_overlay(
+    *, op_sel_hi_field: str = "OP_SEL_HI", lhs_signed: bool, rhs_signed: bool
+) -> AmdgpuDescriptorOverlay:
+    lhs_tag = "s4" if lhs_signed else "u4"
+    rhs_tag = "s4" if rhs_signed else "u4"
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.v_dot8_i32_iu4.{lhs_tag}{rhs_tag}",
+        instruction_name="V_DOT8_I32_IU4",
+        mnemonic="v_dot8_i32_iu4",
+        encoding_name="ENC_VOP3P",
+        semantic_tag=f"dot.{lhs_tag}{rhs_tag}.i32x1",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
+            AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc")),
+        ),
+        fixed_encoding_fields=_vop3p_packed_dot_fixed_fields(
+            op_sel_hi_field=op_sel_hi_field,
+            lhs_signed=lhs_signed,
+            rhs_signed=rhs_signed,
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        # Native asm forms cannot yet spell the fixed NEG source selectors, so
+        # the target-low descriptor key remains the only unambiguous text form.
+        asm_forms=(),
+    )
+
+
+def _v_dot8_u32_u4_overlay(
+    *,
+    op_sel_hi_field: str = "OP_SEL_HI",
+) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_dot8_u32_u4",
         instruction_name="V_DOT8_U32_U4",
@@ -2636,6 +2755,9 @@ def _v_dot8_u32_u4_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
             AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
             AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc")),
+        ),
+        fixed_encoding_fields=_vop3p_packed_dot_fixed_fields(
+            op_sel_hi_field=op_sel_hi_field
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
@@ -3193,8 +3315,9 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),
-        _v_dot4_i32_i8_overlay(),
+        _v_dot4_i32_i8_overlay(signedness_modifiers=False),
         _v_dot4_u32_u8_overlay(),
+        _v_dot8_i32_i4_overlay(signedness_modifiers=False),
         _v_dot8_u32_u4_overlay(),
         *_gfx950_ds_transpose_read_overlays(),
         _v_mfma_f32_16x16x16_f16_overlay(),
@@ -3308,8 +3431,13 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),
-        _v_dot4_i32_i8_overlay(),
+        _v_dot4_i32_i8_overlay(signedness_modifiers=True),
+        _v_dot4_i32_iu8_overlay(lhs_signed=True, rhs_signed=False),
+        _v_dot4_i32_iu8_overlay(lhs_signed=False, rhs_signed=True),
         _v_dot4_u32_u8_overlay(),
+        _v_dot8_i32_i4_overlay(signedness_modifiers=True),
+        _v_dot8_i32_iu4_overlay(lhs_signed=True, rhs_signed=False),
+        _v_dot8_i32_iu4_overlay(lhs_signed=False, rhs_signed=True),
         _v_dot8_u32_u4_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(operand_units=8),
         _v_wmma_i32_16x16x16_iu8_overlay(operand_units=4),
@@ -3435,9 +3563,22 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             fixed_encoding_fields=(),
             include_fetch_invalid=True,
         ),
-        _v_dot4_i32_i8_overlay(),
-        _v_dot4_u32_u8_overlay(),
-        _v_dot8_u32_u4_overlay(),
+        _v_dot4_i32_i8_overlay(op_sel_hi_field="OPSEL_HI", signedness_modifiers=True),
+        _v_dot4_i32_iu8_overlay(
+            op_sel_hi_field="OPSEL_HI", lhs_signed=True, rhs_signed=False
+        ),
+        _v_dot4_i32_iu8_overlay(
+            op_sel_hi_field="OPSEL_HI", lhs_signed=False, rhs_signed=True
+        ),
+        _v_dot4_u32_u8_overlay(op_sel_hi_field="OPSEL_HI"),
+        _v_dot8_i32_i4_overlay(op_sel_hi_field="OPSEL_HI", signedness_modifiers=True),
+        _v_dot8_i32_iu4_overlay(
+            op_sel_hi_field="OPSEL_HI", lhs_signed=True, rhs_signed=False
+        ),
+        _v_dot8_i32_iu4_overlay(
+            op_sel_hi_field="OPSEL_HI", lhs_signed=False, rhs_signed=True
+        ),
+        _v_dot8_u32_u4_overlay(op_sel_hi_field="OPSEL_HI"),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _v_wmma_i32_16x16x16_iu8_overlay(),
         _v_wmma_i32_16x16x16_iu4_overlay(),
@@ -3558,9 +3699,22 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             fixed_encoding_fields=(),
             include_fetch_invalid=True,
         ),
-        _v_dot4_i32_i8_overlay(),
-        _v_dot4_u32_u8_overlay(),
-        _v_dot8_u32_u4_overlay(),
+        _v_dot4_i32_i8_overlay(op_sel_hi_field="OPSEL_HI", signedness_modifiers=True),
+        _v_dot4_i32_iu8_overlay(
+            op_sel_hi_field="OPSEL_HI", lhs_signed=True, rhs_signed=False
+        ),
+        _v_dot4_i32_iu8_overlay(
+            op_sel_hi_field="OPSEL_HI", lhs_signed=False, rhs_signed=True
+        ),
+        _v_dot4_u32_u8_overlay(op_sel_hi_field="OPSEL_HI"),
+        _v_dot8_i32_i4_overlay(op_sel_hi_field="OPSEL_HI", signedness_modifiers=True),
+        _v_dot8_i32_iu4_overlay(
+            op_sel_hi_field="OPSEL_HI", lhs_signed=True, rhs_signed=False
+        ),
+        _v_dot8_i32_iu4_overlay(
+            op_sel_hi_field="OPSEL_HI", lhs_signed=False, rhs_signed=True
+        ),
+        _v_dot8_u32_u4_overlay(op_sel_hi_field="OPSEL_HI"),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _v_wmma_i32_16x16x16_iu8_overlay(),
         _v_wmma_i32_16x16x16_iu4_overlay(),

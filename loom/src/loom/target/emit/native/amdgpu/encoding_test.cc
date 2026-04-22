@@ -33,6 +33,16 @@ bool IsSop1SMovB32(uint32_t word) {
   return (word & UINT32_C(0xFF80FF00)) == UINT32_C(0xBE800000);
 }
 
+uint32_t ReadVop3pOpSelHi(const uint8_t* data) {
+  const uint32_t word0 = ReadU32LE(data);
+  const uint32_t word1 = ReadU32LE(data + 4);
+  return ((word1 >> 27) & 0x3u) | (((word0 >> 14) & 0x1u) << 2);
+}
+
+uint32_t ReadVop3pNeg(const uint8_t* data) {
+  return (ReadU32LE(data + 4) >> 29) & 0x7u;
+}
+
 std::string AmdgpuVgprRegisterType(uint32_t unit_count) {
   if (unit_count == 1) {
     return "reg<amdgpu.vgpr>";
@@ -551,6 +561,52 @@ TEST_F(AmdgpuEncodingTest,
     EXPECT_EQ(text.data_length % 4, 0u);
     EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4),
               test_case.expected_return_word);
+    iree_arena_deinitialize(&arena);
+  }
+}
+
+TEST_F(AmdgpuEncodingTest, EncodesGfx11PackedDotSourceModifiers) {
+  struct Case {
+    const char* low_op_name;
+    uint32_t expected_neg;
+  };
+  const Case cases[] = {
+      {"amdgpu.v_dot8_i32_i4", 3},
+      {"amdgpu.v_dot8_i32_iu4.s4u4", 1},
+      {"amdgpu.v_dot8_i32_iu4.u4s4", 2},
+      {"amdgpu.v_dot8_u32_u4", 0},
+  };
+  for (const Case& test_case : cases) {
+    SCOPED_TRACE(test_case.low_op_name);
+    iree_arena_allocator_t arena;
+    iree_arena_initialize(&block_pool_, &arena);
+    loom_low_packetization_t packetization = {};
+    std::string body =
+        "low.func.def target(@gfx_target) @gfx_kernel(%lhs : "
+        "reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %acc : "
+        "reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : "
+        "reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {\n"
+        "  %dot = low.op<";
+    body += test_case.low_op_name;
+    body +=
+        ">(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, "
+        "reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+        "  low.op<amdgpu.buffer_store_dword>(%dot, %resource, %vaddr, "
+        "%soffset) {offset = 0} : (reg<amdgpu.vgpr>, "
+        "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
+        "  low.return\n"
+        "}\n";
+    BuildGfx11Sidecars(body.c_str(), &arena, &packetization);
+
+    iree_const_byte_span_t text = iree_const_byte_span_empty();
+    IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+        &packetization.schedule, &packetization.allocation, &text, &arena));
+
+    ASSERT_GE(text.data_length, 20u);
+    EXPECT_EQ(ReadVop3pOpSelHi(text.data), 7u);
+    EXPECT_EQ(ReadVop3pNeg(text.data), test_case.expected_neg);
+    EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4),
+              UINT32_C(0xBFB00000));
     iree_arena_deinitialize(&arena);
   }
 }

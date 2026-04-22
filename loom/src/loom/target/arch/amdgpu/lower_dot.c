@@ -41,7 +41,11 @@ static bool loom_amdgpu_dot4i_descriptor_id(uint8_t kind,
       *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_U32_U8;
       return true;
     case LOOM_VECTOR_DOT4I_KIND_U8S8:
+      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_IU8_U8S8;
+      return true;
     case LOOM_VECTOR_DOT4I_KIND_S8U8:
+      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_IU8_S8U8;
+      return true;
     case LOOM_VECTOR_DOT4I_KIND_COUNT_:
       return false;
   }
@@ -52,12 +56,18 @@ static bool loom_amdgpu_dot8i4_descriptor_id(uint8_t kind,
                                              uint64_t* out_descriptor_id) {
   IREE_ASSERT_ARGUMENT(out_descriptor_id);
   switch (kind) {
+    case LOOM_VECTOR_DOT8I4_KIND_S4S4:
+      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_I4;
+      return true;
+    case LOOM_VECTOR_DOT8I4_KIND_S4U4:
+      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_IU4_S4U4;
+      return true;
+    case LOOM_VECTOR_DOT8I4_KIND_U4S4:
+      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_IU4_U4S4;
+      return true;
     case LOOM_VECTOR_DOT8I4_KIND_U4U4:
       *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_U32_U4;
       return true;
-    case LOOM_VECTOR_DOT8I4_KIND_S4S4:
-    case LOOM_VECTOR_DOT8I4_KIND_U4S4:
-    case LOOM_VECTOR_DOT8I4_KIND_S4U4:
     case LOOM_VECTOR_DOT8I4_KIND_COUNT_:
       return false;
   }
@@ -69,8 +79,18 @@ static iree_string_view_t loom_amdgpu_dot_descriptor_key(
   switch (descriptor_id) {
     case LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_I8:
       return IREE_SV("amdgpu.v_dot4_i32_i8");
+    case LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_IU8_S8U8:
+      return IREE_SV("amdgpu.v_dot4_i32_iu8.s8u8");
+    case LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_IU8_U8S8:
+      return IREE_SV("amdgpu.v_dot4_i32_iu8.u8s8");
     case LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_U32_U8:
       return IREE_SV("amdgpu.v_dot4_u32_u8");
+    case LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_I4:
+      return IREE_SV("amdgpu.v_dot8_i32_i4");
+    case LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_IU4_S4U4:
+      return IREE_SV("amdgpu.v_dot8_i32_iu4.s4u4");
+    case LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_IU4_U4S4:
+      return IREE_SV("amdgpu.v_dot8_i32_iu4.u4s4");
     case LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_U32_U4:
       return IREE_SV("amdgpu.v_dot8_u32_u4");
     default:
@@ -226,10 +246,9 @@ static iree_string_view_t loom_amdgpu_dot_rejection_detail(
     loom_amdgpu_dot_rejection_flags_t rejection_bits) {
   if (iree_any_bit_set(rejection_bits, LOOM_AMDGPU_DOT_REJECTION_KIND)) {
     return IREE_SV(
-        "AMDGPU source-to-low currently supports vector.dot4i<s8s8>, "
-        "vector.dot4i<u8u8>, and vector.dot8i4<u4u4>; mixed signedness "
-        "and signed nibble forms require explicit IU8/IU4 operand signedness "
-        "contracts");
+        "AMDGPU source-to-low supports vector.dot4i and vector.dot8i4 "
+        "packed integer dot forms; other vector dot families require "
+        "additional target contracts");
   }
   if (iree_any_bit_set(rejection_bits, LOOM_AMDGPU_DOT_REJECTION_LHS_SHAPE)) {
     return IREE_SV(
@@ -255,8 +274,8 @@ static iree_string_view_t loom_amdgpu_dot_rejection_detail(
   if (iree_any_bit_set(rejection_bits,
                        LOOM_AMDGPU_DOT_REJECTION_DESCRIPTOR_MISSING)) {
     return IREE_SV(
-        "selected AMDGPU descriptor set has no selected packed dot "
-        "descriptor");
+        "selected AMDGPU descriptor set does not contain the selected packed "
+        "dot descriptor");
   }
   return IREE_SV("AMDGPU vector dot op is not target-legal");
 }
