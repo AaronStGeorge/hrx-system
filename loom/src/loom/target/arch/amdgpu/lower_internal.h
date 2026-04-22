@@ -73,6 +73,13 @@ uint32_t loom_amdgpu_vector_f32_lane_count(loom_type_t type);
 // when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_i8_lane_count(loom_type_t type);
 
+// Returns true when the source type is an integer vector payload that can be
+// stored in packed 32-bit registers. The payload occupies the low bits of the
+// register range; unused high bits in the final register are unspecified.
+bool loom_amdgpu_type_packed_integer_storage(loom_type_t type,
+                                             uint32_t* out_payload_bit_count,
+                                             uint32_t* out_register_count);
+
 // Returns true when the source type is a 32-bit-element view that can map to an
 // AMDGPU HAL/global buffer resource or LDS root.
 bool loom_amdgpu_type_is_32bit_view(loom_type_t type);

@@ -21,7 +21,7 @@ typedef struct loom_amdgpu_bitpack_t {
 } loom_amdgpu_bitpack_t;
 
 typedef struct loom_amdgpu_bitunpack_t {
-  // Source vector value containing packed i32 dwords.
+  // Source vector value containing packed integer bitstream storage.
   loom_value_id_t source;
   // Result vector value containing unpacked i32 lanes.
   loom_value_id_t result;
@@ -94,14 +94,15 @@ static bool loom_amdgpu_bitunpack_select(loom_low_lower_context_t* context,
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_type_t source_type =
       loom_module_value_type(module, out_select->source);
-  const uint32_t source_register_count =
-      loom_amdgpu_vector_i32_lane_count(source_type);
-  if (source_register_count == 0 ||
-      source_register_count > LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS) {
+  uint32_t source_payload_bit_count = 0;
+  uint32_t source_register_count = 0;
+  if (!loom_amdgpu_type_packed_integer_storage(
+          source_type, &source_payload_bit_count, &source_register_count) ||
+      (source_payload_bit_count % (uint32_t)width) != 0) {
     return false;
   }
 
-  const uint32_t lane_count = (32u * source_register_count) / (uint32_t)width;
+  const uint32_t lane_count = source_payload_bit_count / (uint32_t)width;
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return false;
   }

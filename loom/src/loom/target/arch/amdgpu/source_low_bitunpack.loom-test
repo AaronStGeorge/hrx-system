@@ -89,3 +89,41 @@ low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i32_to_u4x8_bitunp
   %unpacked = low.concat(%6, %9, %12, %15, %18, %21, %24, %27) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
   low.return %unpacked : reg<amdgpu.vgpr x8>
 }
+
+// ====
+// RUN: emit source-low @i8x2_to_u2x8_bitunpack output=low
+target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_bitunpack_target) @i8x2_to_u2x8_bitunpack(%packed: vector<2xi8>) -> (vector<8xi32>) {
+  %unpacked = vector.bitunpacku<2> %packed : vector<2xi8> -> vector<8xi32>
+  func.return %unpacked : vector<8xi32>
+}
+
+// ----
+low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i8x2_to_u2x8_bitunpack__low(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) {
+  %5 = low.const<amdgpu.v_mov_b32> {imm32 = 3} : reg<amdgpu.vgpr>
+  %6 = low.op<amdgpu.v_and_b32>(%packed, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %7 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %8 = low.op<amdgpu.v_lshrrev_b32>(%7, %packed) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %9 = low.op<amdgpu.v_and_b32>(%8, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %10 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %11 = low.op<amdgpu.v_lshrrev_b32>(%10, %packed) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %12 = low.op<amdgpu.v_and_b32>(%11, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 6} : reg<amdgpu.vgpr>
+  %14 = low.op<amdgpu.v_lshrrev_b32>(%13, %packed) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %15 = low.op<amdgpu.v_and_b32>(%14, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 8} : reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_lshrrev_b32>(%16, %packed) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %18 = low.op<amdgpu.v_and_b32>(%17, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %19 = low.const<amdgpu.v_mov_b32> {imm32 = 10} : reg<amdgpu.vgpr>
+  %20 = low.op<amdgpu.v_lshrrev_b32>(%19, %packed) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %21 = low.op<amdgpu.v_and_b32>(%20, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %22 = low.const<amdgpu.v_mov_b32> {imm32 = 12} : reg<amdgpu.vgpr>
+  %23 = low.op<amdgpu.v_lshrrev_b32>(%22, %packed) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %24 = low.op<amdgpu.v_and_b32>(%23, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %25 = low.const<amdgpu.v_mov_b32> {imm32 = 14} : reg<amdgpu.vgpr>
+  %26 = low.op<amdgpu.v_lshrrev_b32>(%25, %packed) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %27 = low.op<amdgpu.v_and_b32>(%26, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %unpacked = low.concat(%6, %9, %12, %15, %18, %21, %24, %27) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
+  low.return %unpacked : reg<amdgpu.vgpr x8>
+}

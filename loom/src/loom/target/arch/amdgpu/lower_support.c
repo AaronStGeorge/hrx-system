@@ -81,31 +81,42 @@ uint32_t loom_amdgpu_vector_i8_lane_count(loom_type_t type) {
                                               LOOM_AMDGPU_MAX_PACKED_I8_LANES);
 }
 
-static uint32_t loom_amdgpu_packed_register_count(loom_type_t type) {
+bool loom_amdgpu_type_packed_integer_storage(loom_type_t type,
+                                             uint32_t* out_payload_bit_count,
+                                             uint32_t* out_register_count) {
+  IREE_ASSERT_ARGUMENT(out_payload_bit_count);
+  IREE_ASSERT_ARGUMENT(out_register_count);
+  *out_payload_bit_count = 0;
+  *out_register_count = 0;
   if (!loom_type_is_vector(type) || loom_type_rank(type) != 1 ||
       !loom_type_is_all_static(type)) {
-    return 0;
+    return false;
   }
   const int64_t lane_count = loom_type_dim_static_size_at(type, 0);
   if (lane_count < 1 || lane_count > INT32_MAX) {
-    return 0;
+    return false;
   }
-  const int32_t element_bit_count =
-      loom_scalar_type_bitwidth(loom_type_element_type(type));
+  const loom_scalar_type_t element_type = loom_type_element_type(type);
+  if (!loom_scalar_type_is_integer(element_type)) {
+    return false;
+  }
+  const int32_t element_bit_count = loom_scalar_type_bitwidth(element_type);
   if (element_bit_count <= 0) {
-    return 0;
+    return false;
   }
   int64_t total_bit_count = 0;
   if (!iree_checked_mul_i64(lane_count, element_bit_count, &total_bit_count) ||
-      total_bit_count <= 0 || (total_bit_count % 32) != 0) {
-    return 0;
+      total_bit_count <= 0) {
+    return false;
   }
-  const int64_t register_count = total_bit_count / 32;
+  const int64_t register_count = (total_bit_count + 31) / 32;
   if (register_count < 1 ||
       register_count > (int64_t)LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS) {
-    return 0;
+    return false;
   }
-  return (uint32_t)register_count;
+  *out_payload_bit_count = (uint32_t)total_bit_count;
+  *out_register_count = (uint32_t)register_count;
+  return true;
 }
 
 bool loom_amdgpu_type_is_32bit_view(loom_type_t type) {
@@ -374,12 +385,13 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
                                           LOOM_AMDGPU_REG_CLASS_ID_VGPR,
                                           vector_lane_count, out_low_type);
   }
-  const uint32_t packed_register_count =
-      loom_amdgpu_packed_register_count(source_type);
-  if (packed_register_count == 1) {
-    return loom_amdgpu_make_vgpr_type(context, out_low_type);
-  }
-  if (packed_register_count > 1) {
+  uint32_t unused_payload_bit_count = 0;
+  uint32_t packed_register_count = 0;
+  if (loom_amdgpu_type_packed_integer_storage(
+          source_type, &unused_payload_bit_count, &packed_register_count)) {
+    if (packed_register_count == 1) {
+      return loom_amdgpu_make_vgpr_type(context, out_low_type);
+    }
     return loom_amdgpu_make_register_type(context,
                                           LOOM_AMDGPU_REG_CLASS_ID_VGPR,
                                           packed_register_count, out_low_type);
@@ -388,8 +400,8 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
       context, source_op, IREE_SV("type"), IREE_SV("source"),
       IREE_SV("AMDGPU lowering currently supports only i32 scalar values, "
               "address scalar values, rank-1 static i32/f32 vectors with "
-              "1 to 8 lanes, and rank-1 static vectors that pack to 1 to 4 "
-              "32-bit registers"));
+              "1 to 8 lanes, and rank-1 static integer vectors that fit in "
+              "1 to 4 packed 32-bit registers"));
 }
 
 iree_status_t loom_amdgpu_map_value(void* user_data,
