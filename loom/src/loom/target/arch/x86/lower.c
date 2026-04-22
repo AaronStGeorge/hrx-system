@@ -608,10 +608,46 @@ static bool loom_x86_op_is_vector_dot(loom_op_kind_t kind) {
   }
 }
 
-static void loom_x86_set_plan(const loom_op_t* source_op,
-                              uint64_t descriptor_id,
-                              loom_low_lower_plan_t* out_plan) {
-  *out_plan = loom_low_lower_plan_make(source_op->kind, descriptor_id, NULL);
+typedef struct loom_x86_packed_dot_plan_t {
+  // Stable descriptor ID selected for the packed-dot instruction.
+  uint64_t descriptor_id;
+  // Left-hand payload vector value.
+  loom_value_id_t lhs;
+  // Right-hand payload vector value.
+  loom_value_id_t rhs;
+  // Accumulator vector value.
+  loom_value_id_t accumulator;
+  // Result vector value.
+  loom_value_id_t result;
+} loom_x86_packed_dot_plan_t;
+
+static bool loom_x86_init_packed_dot_plan(
+    const loom_op_t* source_op, uint64_t descriptor_id,
+    loom_x86_packed_dot_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_x86_packed_dot_plan_t){0};
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_DOT2F:
+      *out_plan = (loom_x86_packed_dot_plan_t){
+          .descriptor_id = descriptor_id,
+          .lhs = loom_vector_dot2f_lhs(source_op),
+          .rhs = loom_vector_dot2f_rhs(source_op),
+          .accumulator = loom_vector_dot2f_acc(source_op),
+          .result = loom_vector_dot2f_result(source_op),
+      };
+      return true;
+    case LOOM_OP_VECTOR_DOT4I:
+      *out_plan = (loom_x86_packed_dot_plan_t){
+          .descriptor_id = descriptor_id,
+          .lhs = loom_vector_dot4i_lhs(source_op),
+          .rhs = loom_vector_dot4i_rhs(source_op),
+          .accumulator = loom_vector_dot4i_acc(source_op),
+          .result = loom_vector_dot4i_result(source_op),
+      };
+      return true;
+    default:
+      return false;
+  }
 }
 
 static iree_status_t loom_x86_select_packed_dot_op(
@@ -630,7 +666,13 @@ static iree_status_t loom_x86_select_packed_dot_op(
           loom_low_lower_context_descriptor_set(context), source_op,
           /*out_diagnostic=*/NULL, &descriptor));
       if (descriptor != NULL) {
-        loom_x86_set_plan(source_op, descriptor->stable_id, out_plan);
+        loom_x86_packed_dot_plan_t* plan_data = NULL;
+        IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+            context, sizeof(*plan_data), (void**)&plan_data));
+        if (loom_x86_init_packed_dot_plan(source_op, descriptor->stable_id,
+                                          plan_data)) {
+          *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
+        }
       }
       return iree_ok_status();
     }
@@ -684,30 +726,11 @@ static iree_status_t loom_x86_lower_tied_ternary_op(
 
 static iree_status_t loom_x86_lower_packed_dot_op(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t descriptor_id, loom_value_id_t source_lhs,
-    loom_value_id_t source_rhs, loom_value_id_t source_accumulator,
-    loom_value_id_t source_result) {
-  return loom_x86_lower_tied_ternary_op(context, source_op, descriptor_id,
-                                        source_lhs, source_rhs,
-                                        source_accumulator, source_result);
-}
-
-static iree_status_t loom_x86_lower_vector_dot2f(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t descriptor_id) {
-  return loom_x86_lower_packed_dot_op(
-      context, source_op, descriptor_id, loom_vector_dot2f_lhs(source_op),
-      loom_vector_dot2f_rhs(source_op), loom_vector_dot2f_acc(source_op),
-      loom_vector_dot2f_result(source_op));
-}
-
-static iree_status_t loom_x86_lower_vector_dot4i(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t descriptor_id) {
-  return loom_x86_lower_packed_dot_op(
-      context, source_op, descriptor_id, loom_vector_dot4i_lhs(source_op),
-      loom_vector_dot4i_rhs(source_op), loom_vector_dot4i_acc(source_op),
-      loom_vector_dot4i_result(source_op));
+    const loom_x86_packed_dot_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+  return loom_x86_lower_tied_ternary_op(context, source_op, plan->descriptor_id,
+                                        plan->lhs, plan->rhs, plan->accumulator,
+                                        plan->result);
 }
 
 static iree_status_t loom_x86_emit_packed_dot_op(
@@ -716,9 +739,10 @@ static iree_status_t loom_x86_emit_packed_dot_op(
   (void)user_data;
   switch (plan.id) {
     case LOOM_OP_VECTOR_DOT2F:
-      return loom_x86_lower_vector_dot2f(context, source_op, plan.payload);
     case LOOM_OP_VECTOR_DOT4I:
-      return loom_x86_lower_vector_dot4i(context, source_op, plan.payload);
+      return loom_x86_lower_packed_dot_op(
+          context, source_op,
+          (const loom_x86_packed_dot_plan_t*)plan.target_data);
     default:
       IREE_ASSERT_UNREACHABLE();
       return iree_ok_status();
