@@ -465,6 +465,18 @@ static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
           context, loom_scalar_mulf_lhs(source_op),
           loom_scalar_mulf_rhs(source_op), loom_scalar_mulf_result(source_op));
       return iree_ok_status();
+    case LOOM_OP_SCALAR_MINNUMF:
+      *out_handled = loom_amdgpu_can_lower_f32_binary(
+          context, loom_scalar_minnumf_lhs(source_op),
+          loom_scalar_minnumf_rhs(source_op),
+          loom_scalar_minnumf_result(source_op));
+      return iree_ok_status();
+    case LOOM_OP_SCALAR_MAXNUMF:
+      *out_handled = loom_amdgpu_can_lower_f32_binary(
+          context, loom_scalar_maxnumf_lhs(source_op),
+          loom_scalar_maxnumf_rhs(source_op),
+          loom_scalar_maxnumf_result(source_op));
+      return iree_ok_status();
     case LOOM_OP_SCALAR_FMAF:
       *out_handled = loom_amdgpu_can_lower_f32_ternary(
           context, loom_scalar_fmaf_a(source_op), loom_scalar_fmaf_b(source_op),
@@ -541,6 +553,18 @@ static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
       *out_handled = loom_amdgpu_can_lower_vector_f32_binary(
           context, loom_vector_mulf_lhs(source_op),
           loom_vector_mulf_rhs(source_op), loom_vector_mulf_result(source_op));
+      return iree_ok_status();
+    case LOOM_OP_VECTOR_MINNUMF:
+      *out_handled = loom_amdgpu_can_lower_vector_f32_binary(
+          context, loom_vector_minnumf_lhs(source_op),
+          loom_vector_minnumf_rhs(source_op),
+          loom_vector_minnumf_result(source_op));
+      return iree_ok_status();
+    case LOOM_OP_VECTOR_MAXNUMF:
+      *out_handled = loom_amdgpu_can_lower_vector_f32_binary(
+          context, loom_vector_maxnumf_lhs(source_op),
+          loom_vector_maxnumf_rhs(source_op),
+          loom_vector_maxnumf_result(source_op));
       return iree_ok_status();
     case LOOM_OP_VECTOR_FMAF:
       *out_handled = loom_amdgpu_can_lower_vector_f32_ternary(
@@ -1294,6 +1318,22 @@ static iree_status_t loom_amdgpu_lower_vector_mulf(
       loom_vector_mulf_result(source_op));
 }
 
+static iree_status_t loom_amdgpu_lower_vector_minnumf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  return loom_amdgpu_lower_vector_binary_op(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MIN_F32,
+      loom_vector_minnumf_lhs(source_op), loom_vector_minnumf_rhs(source_op),
+      loom_vector_minnumf_result(source_op));
+}
+
+static iree_status_t loom_amdgpu_lower_vector_maxnumf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  return loom_amdgpu_lower_vector_binary_op(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MAX_F32,
+      loom_vector_maxnumf_lhs(source_op), loom_vector_maxnumf_rhs(source_op),
+      loom_vector_maxnumf_result(source_op));
+}
+
 static iree_status_t loom_amdgpu_lower_vector_fmaf(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   return loom_amdgpu_lower_vector_ternary_op(
@@ -1421,6 +1461,22 @@ static iree_status_t loom_amdgpu_lower_mulf(loom_low_lower_context_t* context,
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_F32,
       loom_scalar_mulf_lhs(source_op), loom_scalar_mulf_rhs(source_op),
       loom_scalar_mulf_result(source_op));
+}
+
+static iree_status_t loom_amdgpu_lower_minnumf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  return loom_amdgpu_lower_binary_op(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MIN_F32,
+      loom_scalar_minnumf_lhs(source_op), loom_scalar_minnumf_rhs(source_op),
+      loom_scalar_minnumf_result(source_op));
+}
+
+static iree_status_t loom_amdgpu_lower_maxnumf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  return loom_amdgpu_lower_binary_op(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MAX_F32,
+      loom_scalar_maxnumf_lhs(source_op), loom_scalar_maxnumf_rhs(source_op),
+      loom_scalar_maxnumf_result(source_op));
 }
 
 static iree_status_t loom_amdgpu_lower_fmaf(loom_low_lower_context_t* context,
@@ -1898,6 +1954,10 @@ static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
       return loom_amdgpu_lower_subf(context, source_op);
     case LOOM_OP_SCALAR_MULF:
       return loom_amdgpu_lower_mulf(context, source_op);
+    case LOOM_OP_SCALAR_MINNUMF:
+      return loom_amdgpu_lower_minnumf(context, source_op);
+    case LOOM_OP_SCALAR_MAXNUMF:
+      return loom_amdgpu_lower_maxnumf(context, source_op);
     case LOOM_OP_SCALAR_FMAF:
       return loom_amdgpu_lower_fmaf(context, source_op);
     case LOOM_OP_SCALAR_SITOFP:
@@ -1928,6 +1988,10 @@ static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
       return loom_amdgpu_lower_vector_subf(context, source_op);
     case LOOM_OP_VECTOR_MULF:
       return loom_amdgpu_lower_vector_mulf(context, source_op);
+    case LOOM_OP_VECTOR_MINNUMF:
+      return loom_amdgpu_lower_vector_minnumf(context, source_op);
+    case LOOM_OP_VECTOR_MAXNUMF:
+      return loom_amdgpu_lower_vector_maxnumf(context, source_op);
     case LOOM_OP_VECTOR_FMAF:
       return loom_amdgpu_lower_vector_fmaf(context, source_op);
     case LOOM_OP_VECTOR_SITOFP:

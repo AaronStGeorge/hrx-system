@@ -45,6 +45,12 @@ static bool loom_amdgpu_vector_reduce_descriptor_id(
         case LOOM_VECTOR_REDUCE_KIND_MULF:
           *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_F32;
           return true;
+        case LOOM_VECTOR_REDUCE_KIND_MINNUMF:
+          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MIN_F32;
+          return true;
+        case LOOM_VECTOR_REDUCE_KIND_MAXNUMF:
+          *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MAX_F32;
+          return true;
         default:
           return false;
       }
