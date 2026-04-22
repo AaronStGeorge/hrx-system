@@ -197,15 +197,21 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
     return count;
   }
 
-  void BuildModule(const char* function_body, const char* resource_records) {
-    std::string source =
-        "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n";
+  void BuildModuleForPreset(const char* preset, const char* function_body,
+                            const char* resource_records) {
+    std::string source = "target.profile @gfx_target preset(\"";
+    source += preset;
+    source += "\")\n";
     source += function_body;
     source += resource_records;
 
     ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
+  }
+
+  void BuildModule(const char* function_body, const char* resource_records) {
+    BuildModuleForPreset("amdgpu-gfx11", function_body, resource_records);
   }
 
   void BuildBundle(loom_target_bundle_storage_t* out_storage) {
@@ -357,6 +363,62 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   EXPECT_FALSE(HasLowResourceOp());
   EXPECT_TRUE(HasLowConstWithI64Attr("amdgpu.s_mov_b32", "imm32", 64));
   VerifyModule();
+}
+
+TEST_F(AmdgpuHalResourceMaterializationTest,
+       MaterializesGfx950CacheSwizzledHalBufferResource) {
+  BuildModuleForPreset(
+      "amdgpu-gfx950",
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
+      "semantic_type = hal.buffer, cache_swizzle_stride = 64} : "
+      "reg<amdgpu.sgpr x4>\n"
+      "  low.return\n"
+      "}\n",
+      "");
+
+  loom_op_t* function_op = FindFirstLowFunction();
+  ASSERT_NE(function_op, nullptr);
+  loom_target_bundle_storage_t bundle_storage = {};
+  BuildBundle(&bundle_storage);
+  const loom_low_descriptor_set_t* descriptor_set =
+      SelectDescriptorSet(&bundle_storage.bundle);
+
+  loom_amdgpu_hal_resource_materialization_result_t result = {};
+  IREE_ASSERT_OK(loom_amdgpu_hal_resource_materialize(
+      module_, function_op, &bundle_storage.bundle, descriptor_set, &result,
+      &arena_));
+  EXPECT_FALSE(HasLowResourceOp());
+  EXPECT_EQ(CountLowOpsWithOpcode("amdgpu.s_and_b32"), 1);
+  EXPECT_EQ(CountLowOpsWithOpcode("amdgpu.s_or_b32"), 1);
+  EXPECT_TRUE(HasLowConstWithI64Attr("amdgpu.s_mov_b32", "imm32", 0x0000FFFF));
+  EXPECT_TRUE(HasLowConstWithI64Attr("amdgpu.s_mov_b32", "imm32", 0x40400000));
+  VerifyModule();
+}
+
+TEST_F(AmdgpuHalResourceMaterializationTest,
+       RejectsCacheSwizzleOnUnsupportedTarget) {
+  BuildModule(
+      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
+      "semantic_type = hal.buffer, cache_swizzle_stride = 64} : "
+      "reg<amdgpu.sgpr x4>\n"
+      "  low.return\n"
+      "}\n",
+      "");
+
+  loom_op_t* function_op = FindFirstLowFunction();
+  ASSERT_NE(function_op, nullptr);
+  loom_target_bundle_storage_t bundle_storage = {};
+  BuildBundle(&bundle_storage);
+  const loom_low_descriptor_set_t* descriptor_set =
+      SelectDescriptorSet(&bundle_storage.bundle);
+
+  loom_amdgpu_hal_resource_materialization_result_t result = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
+                        loom_amdgpu_hal_resource_materialize(
+                            module_, function_op, &bundle_storage.bundle,
+                            descriptor_set, &result, &arena_));
 }
 
 TEST_F(AmdgpuHalResourceMaterializationTest,

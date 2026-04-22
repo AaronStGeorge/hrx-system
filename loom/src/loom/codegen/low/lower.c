@@ -1128,6 +1128,7 @@ static iree_status_t loom_low_lower_emit_argument_resource_imports(
         (uint8_t)context->argument_map[i].resource_import_kind,
         context->argument_map[i].resource_index, semantic_type_id,
         context->argument_map[i].resource_valid_byte_count,
+        context->argument_map[i].resource_cache_swizzle_stride,
         context->argument_map[i].abi_type,
         context->source_function.op->location, &resource_op);
     if (iree_status_is_ok(status)) {

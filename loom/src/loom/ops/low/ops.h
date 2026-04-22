@@ -500,8 +500,10 @@ LOOM_DEFINE_ATTR_ENUM(loom_low_resource_import_kind, 0)
 LOOM_DEFINE_ATTR_I64(loom_low_resource_index, 1)
 LOOM_DEFINE_ATTR_TYPE(loom_low_resource_semantic_type, 2)
 LOOM_DEFINE_ATTR_I64(loom_low_resource_valid_byte_count, 3)
+LOOM_DEFINE_ATTR_I64(loom_low_resource_cache_swizzle_stride, 4)
 enum loom_low_resource_build_flag_bits_e {
   LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_VALID_BYTE_COUNT = 1u << 0,
+  LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_CACHE_SWIZZLE_STRIDE = 1u << 1,
 };
 typedef uint32_t loom_low_resource_build_flags_t;
 iree_status_t loom_low_resource_build(
@@ -511,6 +513,7 @@ iree_status_t loom_low_resource_build(
     int64_t index,
     uint32_t semantic_type,
     loom_optional int64_t valid_byte_count,
+    loom_optional int64_t cache_swizzle_stride,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

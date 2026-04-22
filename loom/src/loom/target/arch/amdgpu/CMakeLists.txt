@@ -23,6 +23,16 @@ loom_low_descriptor_data_archive(
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    target_info_defs
+  HDRS
+    "target_info_defs.h"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
 loom_target_table_cc_library(
   NAME
     target_info
@@ -38,6 +48,7 @@ loom_target_table_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_target_info.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
   DEPS
+    ::target_info_defs
     iree::base
 )
 
@@ -603,6 +614,7 @@ loom_cc_library(
   DEPS
     ::descriptor_ids
     ::hal_kernel_abi
+    ::target_info
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation

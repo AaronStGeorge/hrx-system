@@ -859,6 +859,12 @@ low_resource = Op(
             optional=True,
             doc="Optional byte-addressable extent guaranteed valid for the imported resource.",
         ),
+        AttrDef(
+            "cache_swizzle_stride",
+            ATTR_TYPE_I64,
+            optional=True,
+            doc="Optional byte stride that enables target resource-level cache swizzling.",
+        ),
     ],
     results=[Result("result", REGISTER)],
     traits=[PURE],
@@ -872,6 +878,7 @@ low_resource = Op(
     examples=[
         "%state = low.resource<vm_state> {index = 0, semantic_type = i64} : reg<vm.i64>",
         "%binding = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>",
+        "%swizzled = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, cache_swizzle_stride = 64} : reg<amdgpu.sgpr x4>",
     ],
 )
 

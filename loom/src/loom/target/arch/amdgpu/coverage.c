@@ -302,9 +302,10 @@ static const loom_target_coverage_row_t kLoomAmdgpuTargetCoverageRows[] = {
     LOOM_AMDGPU_GFX1250_ROW(
         "memory.cache", "cache-swizzle", LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
         LOOM_TARGET_COVERAGE_PHASE_NONE, "descriptor-cache-swizzle-missing"),
-    LOOM_AMDGPU_GFX950_ROW(
-        "memory.cache", "cache-swizzle", LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
-        LOOM_TARGET_COVERAGE_PHASE_NONE, "descriptor-cache-swizzle-missing"),
+    LOOM_AMDGPU_GFX950_ROW("memory.cache", "cache-swizzle",
+                           LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
+                           LOOM_AMDGPU_AUTHORED_LOW_BINARY_PHASES,
+                           "source-lower-cache-swizzle-missing"),
 
     LOOM_AMDGPU_GFX11_ROW("memory.atomic", "buffer-global-flat-ds-atomics",
                           LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,

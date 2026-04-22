@@ -30,9 +30,9 @@ void ExpectMissingDescriptor(const loom_low_descriptor_set_t* descriptor_set,
             LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
 }
 
-void ExpectImmediateEncoding(const loom_low_descriptor_set_t* descriptor_set,
-                             uint64_t descriptor_id,
-                             uint16_t expected_encoding_id) {
+void ExpectAddressImmediateEncoding(
+    const loom_low_descriptor_set_t* descriptor_set, uint64_t descriptor_id,
+    uint16_t expected_encoding_id) {
   const uint32_t descriptor_ordinal =
       loom_low_descriptor_set_lookup_descriptor_by_id(descriptor_set,
                                                       descriptor_id);
@@ -43,9 +43,20 @@ void ExpectImmediateEncoding(const loom_low_descriptor_set_t* descriptor_set,
   ASSERT_GT(descriptor->immediate_count, 0u);
   const loom_low_immediate_t* immediates =
       &descriptor_set->immediates[descriptor->immediate_start];
+  bool found_address_offset = false;
   for (uint16_t i = 0; i < descriptor->immediate_count; ++i) {
+    iree_string_view_t field_name = iree_string_view_empty();
+    IREE_ASSERT_OK(loom_low_descriptor_set_string(
+        descriptor_set, immediates[i].field_name_string_offset, &field_name));
+    if (!iree_string_view_equal(field_name, IREE_SV("offset")) &&
+        !iree_string_view_equal(field_name, IREE_SV("offset0")) &&
+        !iree_string_view_equal(field_name, IREE_SV("offset1"))) {
+      continue;
+    }
+    found_address_offset = true;
     EXPECT_EQ(immediates[i].encoding_id, expected_encoding_id);
   }
+  EXPECT_TRUE(found_address_offset);
 }
 
 TEST(AmdgpuDescriptorIdsTest, CommonLoweringIdsResolveAcrossDescriptorSets) {
@@ -116,39 +127,39 @@ TEST(AmdgpuDescriptorIdsTest, AddressImmediateEncodingIdsMatchDescriptorSets) {
         loom_amdgpu_gfx12_core_descriptor_set(),
         loom_amdgpu_gfx1250_core_descriptor_set(),
         loom_amdgpu_gfx950_core_descriptor_set()}) {
-    ExpectImmediateEncoding(
+    ExpectAddressImmediateEncoding(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_LOAD_DWORD,
         LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_BYTE);
-    ExpectImmediateEncoding(
+    ExpectAddressImmediateEncoding(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_STORE_DWORD,
         LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_BYTE);
-    ExpectImmediateEncoding(
+    ExpectAddressImmediateEncoding(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_READ_B32,
         LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_BYTE);
-    ExpectImmediateEncoding(
+    ExpectAddressImmediateEncoding(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_READ2_B32,
         LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD);
-    ExpectImmediateEncoding(
+    ExpectAddressImmediateEncoding(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_READ2ST64_B32,
         LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD_STRIDE64);
-    ExpectImmediateEncoding(
+    ExpectAddressImmediateEncoding(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_SWIZZLE_B32,
         LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
-    ExpectImmediateEncoding(
+    ExpectAddressImmediateEncoding(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_PERMUTE_B32,
         LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
-    ExpectImmediateEncoding(
+    ExpectAddressImmediateEncoding(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_B32,
         LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
   }
   for (const loom_low_descriptor_set_t* descriptor_set :
        {loom_amdgpu_gfx12_core_descriptor_set(),
         loom_amdgpu_gfx1250_core_descriptor_set()}) {
-    ExpectImmediateEncoding(
+    ExpectAddressImmediateEncoding(
         descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_DS_BPERMUTE_FI_B32,
         LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);
   }
-  ExpectImmediateEncoding(
+  ExpectAddressImmediateEncoding(
       loom_amdgpu_gfx950_core_descriptor_set(),
       LOOM_AMDGPU_DESCRIPTOR_ID_DS_READ_B64_TR_B4,
       LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16);

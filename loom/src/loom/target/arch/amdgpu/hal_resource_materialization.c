@@ -14,6 +14,12 @@
 #include "loom/rewrite/rewriter.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
+#include "loom/target/arch/amdgpu/target_info.h"
+
+#define LOOM_AMDGPU_HAL_RESOURCE_POINTER_HIGH_MASK UINT32_C(0x0000FFFF)
+#define LOOM_AMDGPU_HAL_RESOURCE_CACHE_SWIZZLE_STRIDE_MASK UINT32_C(0x3FFF)
+#define LOOM_AMDGPU_HAL_RESOURCE_CACHE_SWIZZLE_ENABLE_BIT UINT32_C(0x4000)
+#define LOOM_AMDGPU_HAL_RESOURCE_CACHE_SWIZZLE_WORD_SHIFT 16u
 
 static iree_string_view_t loom_amdgpu_hal_resource_string_or_empty(
     const loom_module_t* module, loom_string_id_t string_id) {
@@ -95,6 +101,42 @@ static iree_status_t loom_amdgpu_hal_resource_descriptor_range_word(
     return iree_ok_status();
   }
   *out_range_word = (uint32_t)valid_byte_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hal_resource_cache_swizzle_stride(
+    const loom_op_t* resource_op, bool* out_present, uint32_t* out_stride) {
+  IREE_ASSERT_ARGUMENT(out_present);
+  IREE_ASSERT_ARGUMENT(out_stride);
+  *out_present = false;
+  *out_stride = 0;
+  loom_attribute_t attr = loom_op_attrs(
+      resource_op)[loom_low_resource_cache_swizzle_stride_ATTR_INDEX];
+  if (loom_attr_is_absent(attr)) {
+    return iree_ok_status();
+  }
+  const int64_t stride = loom_low_resource_cache_swizzle_stride(resource_op);
+  if (stride < 0 ||
+      stride > LOOM_AMDGPU_HAL_RESOURCE_CACHE_SWIZZLE_STRIDE_MASK) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL resource cache_swizzle_stride must fit a 14-bit byte "
+        "stride");
+  }
+  *out_present = true;
+  *out_stride = (uint32_t)stride;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hal_resource_cache_swizzle_kind(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_amdgpu_buffer_resource_cache_swizzle_t* out_kind) {
+  IREE_ASSERT_ARGUMENT(out_kind);
+  *out_kind = LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE;
+  const loom_amdgpu_descriptor_set_info_t* descriptor_set_info = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
+      descriptor_set->stable_id, &descriptor_set_info));
+  *out_kind = descriptor_set_info->buffer_resource_cache_swizzle;
   return iree_ok_status();
 }
 
@@ -230,6 +272,38 @@ static iree_status_t loom_amdgpu_hal_resource_build_s_mov_b32(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_hal_resource_build_low_slice(
+    loom_rewriter_t* rewriter, loom_value_id_t source, uint32_t offset,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  IREE_ASSERT_ARGUMENT(out_value);
+  *out_value = LOOM_VALUE_ID_INVALID;
+  loom_op_t* slice_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_slice_build(&rewriter->builder, source, offset,
+                                            result_type, location, &slice_op));
+  *out_value = loom_low_slice_result(slice_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hal_resource_build_s_binary_b32(
+    loom_rewriter_t* rewriter, const loom_low_descriptor_set_t* descriptor_set,
+    uint64_t descriptor_id, loom_value_id_t lhs, loom_value_id_t rhs,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_value_id_t* out_value) {
+  IREE_ASSERT_ARGUMENT(out_value);
+  *out_value = LOOM_VALUE_ID_INVALID;
+  const loom_value_id_t operands[] = {lhs, rhs};
+  const loom_type_t result_types[] = {result_type};
+  loom_op_t* binary_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_build_descriptor_op(
+      &rewriter->builder, descriptor_set, descriptor_id, operands,
+      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0),
+      result_types, IREE_ARRAYSIZE(result_types), /*tied_results=*/NULL,
+      /*tied_result_count=*/0, location, &binary_op));
+  *out_value = loom_value_slice_get(loom_low_op_results(binary_op), 0);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_hal_resource_build_pointer_load(
     loom_rewriter_t* rewriter, const loom_low_descriptor_set_t* descriptor_set,
     loom_value_id_t kernarg_ptr, loom_value_id_t soffset,
@@ -253,6 +327,76 @@ static iree_status_t loom_amdgpu_hal_resource_build_pointer_load(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_hal_resource_build_descriptor_pointer(
+    loom_rewriter_t* rewriter, const loom_op_t* resource_op,
+    const loom_target_bundle_t* target_bundle,
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_value_id_t loaded_pointer, loom_type_t sgpr_type,
+    loom_type_t sgpr_x2_type, loom_location_id_t location,
+    loom_value_id_t* out_pointer) {
+  IREE_ASSERT_ARGUMENT(out_pointer);
+  *out_pointer = LOOM_VALUE_ID_INVALID;
+  bool has_cache_swizzle = false;
+  uint32_t cache_swizzle_stride = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_cache_swizzle_stride(
+      resource_op, &has_cache_swizzle, &cache_swizzle_stride));
+  if (!has_cache_swizzle) {
+    *out_pointer = loaded_pointer;
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_buffer_resource_cache_swizzle_t cache_swizzle_kind =
+      LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_cache_swizzle_kind(
+      descriptor_set, &cache_swizzle_kind));
+  if (cache_swizzle_kind !=
+      LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU HAL resource cache swizzle is not supported by target '%.*s'",
+        (int)target_bundle->name.size, target_bundle->name.data);
+  }
+
+  loom_value_id_t pointer_low = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_low_slice(
+      rewriter, loaded_pointer, 0, sgpr_type, location, &pointer_low));
+  loom_value_id_t pointer_high = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_low_slice(
+      rewriter, loaded_pointer, 1, sgpr_type, location, &pointer_high));
+
+  loom_value_id_t pointer_high_mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_mov_b32(
+      rewriter, descriptor_set, LOOM_AMDGPU_HAL_RESOURCE_POINTER_HIGH_MASK,
+      sgpr_type, location, &pointer_high_mask));
+  loom_value_id_t masked_pointer_high = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_binary_b32(
+      rewriter, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_S_AND_B32,
+      pointer_high, pointer_high_mask, sgpr_type, location,
+      &masked_pointer_high));
+
+  const uint32_t cache_swizzle_word =
+      ((cache_swizzle_stride |
+        LOOM_AMDGPU_HAL_RESOURCE_CACHE_SWIZZLE_ENABLE_BIT)
+       << LOOM_AMDGPU_HAL_RESOURCE_CACHE_SWIZZLE_WORD_SHIFT);
+  loom_value_id_t cache_swizzle = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_mov_b32(
+      rewriter, descriptor_set, cache_swizzle_word, sgpr_type, location,
+      &cache_swizzle));
+  loom_value_id_t swizzled_pointer_high = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_binary_b32(
+      rewriter, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_S_OR_B32,
+      masked_pointer_high, cache_swizzle, sgpr_type, location,
+      &swizzled_pointer_high));
+
+  const loom_value_id_t sources[] = {pointer_low, swizzled_pointer_high};
+  loom_op_t* concat_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_concat_build(
+      &rewriter->builder, sources, IREE_ARRAYSIZE(sources), sgpr_x2_type,
+      location, &concat_op));
+  *out_pointer = loom_low_concat_result(concat_op);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_hal_resource_materialize_one(
     loom_rewriter_t* rewriter, loom_op_t* op,
     const loom_amdgpu_hal_kernarg_resource_t* resource,
@@ -269,6 +413,9 @@ static iree_status_t loom_amdgpu_hal_resource_materialize_one(
   loom_value_id_t pointer = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_pointer_load(
       rewriter, descriptor_set, kernarg_ptr, soffset, resource->kernarg_offset,
+      sgpr_x2_type, op->location, &pointer));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_descriptor_pointer(
+      rewriter, op, target_bundle, descriptor_set, pointer, sgpr_type,
       sgpr_x2_type, op->location, &pointer));
   uint32_t range_word = 0;
   IREE_RETURN_IF_ERROR(

@@ -696,6 +696,19 @@ static iree_status_t loom_low_verify_resource_op(
         IREE_SV("valid_byte_count must be non-negative"), emitter);
   }
 
+  loom_attribute_t cache_swizzle_stride =
+      loom_op_attrs(op)[loom_low_resource_cache_swizzle_stride_ATTR_INDEX];
+  if (!loom_attr_is_absent(cache_swizzle_stride)) {
+    const int64_t stride = loom_low_resource_cache_swizzle_stride(op);
+    if (stride < 0 || stride > 0x3FFF) {
+      return loom_low_emit_structural_storage_attr_error(
+          module, op, loom_low_resource_cache_swizzle_stride_ATTR_INDEX,
+          IREE_SV("cache_swizzle_stride"),
+          IREE_SV("cache_swizzle_stride must fit a 14-bit byte stride"),
+          emitter);
+    }
+  }
+
   const loom_type_t semantic_type =
       loom_low_type_attr(module, loom_low_resource_semantic_type(op));
   if (loom_type_kind(semantic_type) == LOOM_TYPE_NONE) {

@@ -199,6 +199,12 @@ _AMDGPU_TARGET_INFO_GENERATOR_DEPS = [
     "//loom/py/loom:target/arch/amdgpu/target_info.py",
 ]
 
+loom_cc_library(
+    name = "target_info_defs",
+    hdrs = ["target_info_defs.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
 loom_target_table_cc_library(
     name = "target_info",
     cmake_generator = _AMDGPU_TARGET_INFO_GENERATOR_SCRIPT,
@@ -206,7 +212,10 @@ loom_target_table_cc_library(
     generator = _AMDGPU_TARGET_INFO_GENERATOR,
     header = "target_info.h",
     source = "target_info.c",
-    deps = ["//runtime/src/iree/base"],
+    deps = [
+        ":target_info_defs",
+        "//runtime/src/iree/base",
+    ],
 )
 
 loom_cc_test(
@@ -720,6 +729,7 @@ loom_cc_library(
     deps = [
         ":descriptor_ids",
         ":hal_kernel_abi",
+        ":target_info",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:builder",
         "//loom/src/loom/codegen/low:descriptors",

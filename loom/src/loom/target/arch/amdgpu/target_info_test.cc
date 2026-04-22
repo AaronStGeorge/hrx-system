@@ -53,6 +53,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
   EXPECT_EQ(descriptor_set_by_id, descriptor_set);
   EXPECT_NE(descriptor_set->s_endpgm_opcode, 0u);
   EXPECT_TRUE(descriptor_set->supports_descriptor_packet_encoding);
+  EXPECT_EQ(descriptor_set->buffer_resource_cache_swizzle,
+            LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpMatrixOnlyProcessor) {

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-AMDGPU_TARGET_KEY = "amdgpu"
 AMDGPU_AMDHSA_TARGET_TRIPLE = "amdgcn-amd-amdhsa"
 
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE = "none"
@@ -25,6 +24,9 @@ AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11 = "wmma_gfx11"
 AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12 = "wmma_gfx12"
 AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250 = "wmma_gfx1250"
 
+AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE = "none"
+AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT = "stride14_enable_bit"
+
 AMDGPU_SOPP_S_ENDPGM_GFX9_GFX10_GFX13_OPCODE = 0x001
 AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE = 0x030
 
@@ -35,6 +37,7 @@ class AmdgpuDescriptorSetInfo:
     low_preset_key: str
     s_endpgm_opcode: int
     supports_descriptor_packet_encoding: bool
+    buffer_resource_cache_swizzle: str = AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +101,7 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         low_preset_key="amdgpu-gfx950",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX9_GFX10_GFX13_OPCODE,
         supports_descriptor_packet_encoding=True,
+        buffer_resource_cache_swizzle=AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT,
     ),
 )
 

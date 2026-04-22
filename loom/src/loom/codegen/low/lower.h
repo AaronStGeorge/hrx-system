@@ -81,6 +81,9 @@ typedef struct loom_low_lower_abi_argument_t {
   // Valid byte extent for byte-addressable resources when the corresponding
   // builder flag is set.
   int64_t resource_valid_byte_count;
+  // Resource-level cache swizzle byte stride when the corresponding builder
+  // flag is set.
+  int64_t resource_cache_swizzle_stride;
 } loom_low_lower_abi_argument_t;
 
 typedef iree_status_t (*loom_low_lower_map_argument_fn_t)(
