@@ -906,11 +906,7 @@ static iree_status_t loom_low_lower_prepare_plan(
 static iree_status_t loom_low_lower_record_selected_plan(
     loom_low_lower_context_t* context,
     loom_low_lower_selected_plan_t selected_plan) {
-  if (context->selected_plan_count >= context->selected_plan_capacity) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "source-to-low lowering selected more plans than "
-                            "the planned source op count");
-  }
+  IREE_ASSERT_LT(context->selected_plan_count, context->selected_plan_capacity);
   context->selected_plans[context->selected_plan_count++] = selected_plan;
   return iree_ok_status();
 }
@@ -1017,11 +1013,8 @@ static iree_status_t loom_low_lower_map_signature_types(
         continue;
       }
       arg_types[direct_argument_index] = context->argument_map[i].abi_type;
-      if (loom_low_lower_type_is_none(arg_types[direct_argument_index])) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "planning accepted an unmapped function argument type");
-      }
+      IREE_ASSERT_FALSE(
+          loom_low_lower_type_is_none(arg_types[direct_argument_index]));
       ++direct_argument_index;
     }
   }
@@ -1038,11 +1031,7 @@ static iree_status_t loom_low_lower_map_signature_types(
       IREE_RETURN_IF_ERROR(
           loom_low_lower_map_value(context, context->source_function.op,
                                    result_ids[i], &result_types[i]));
-      if (loom_low_lower_type_is_none(result_types[i])) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "planning accepted an unmapped function result type");
-      }
+      IREE_ASSERT_FALSE(loom_low_lower_type_is_none(result_types[i]));
     }
   }
 
@@ -1151,12 +1140,7 @@ static iree_status_t loom_low_lower_map_blocks(
     if (block_index == 0) {
       const uint16_t direct_argument_count =
           loom_low_lower_direct_argument_count(context);
-      if (low_block->arg_count != direct_argument_count) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "emitted low entry block argument count does not match direct "
-            "source arguments");
-      }
+      IREE_ASSERT_EQ(low_block->arg_count, direct_argument_count);
       uint16_t direct_argument_index = 0;
       for (uint16_t arg_index = 0; arg_index < source_block->arg_count;
            ++arg_index) {
@@ -1178,10 +1162,7 @@ static iree_status_t loom_low_lower_map_blocks(
       IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
           context, context->source_function.op,
           source_block->arg_ids[arg_index], &low_type));
-      if (loom_low_lower_type_is_none(low_type)) {
-        return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                                "planning accepted an unmapped block type");
-      }
+      IREE_ASSERT_FALSE(loom_low_lower_type_is_none(low_type));
       loom_value_id_t low_arg = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
           &context->builder, low_block, low_type, &low_arg));
@@ -1343,44 +1324,24 @@ static iree_status_t loom_low_lower_validate_op_results_bound(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   const loom_value_id_t* source_results = loom_op_const_results(source_op);
   for (uint16_t i = 0; i < source_op->result_count; ++i) {
-    if (source_results[i] >= context->value_map_count ||
-        context->value_map[source_results[i]] == LOOM_VALUE_ID_INVALID) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "target-low policy '%.*s' did not bind result %u of %.*s",
-          (int)loom_low_lower_policy_name(context->policy).size,
-          loom_low_lower_policy_name(context->policy).data, (unsigned)i,
-          (int)loom_op_name(context->module, source_op).size,
-          loom_op_name(context->module, source_op).data);
-    }
+    IREE_ASSERT_LT(source_results[i], context->value_map_count);
+    IREE_ASSERT(context->value_map[source_results[i]] != LOOM_VALUE_ID_INVALID);
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_low_lower_emit_selected_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  if (context->selected_plan_emit_index >= context->selected_plan_count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "source-to-low lowering emission consumed more "
-                            "plans than planning selected");
-  }
+  IREE_ASSERT_LT(context->selected_plan_emit_index,
+                 context->selected_plan_count);
   const loom_low_lower_selected_plan_t selected_plan =
       context->selected_plans[context->selected_plan_emit_index++];
   if (context->policy->rule_set != NULL) {
-    if (selected_plan.rule == NULL) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "source-to-low lowering tried to emit an op rejected during "
-          "planning");
-    }
+    IREE_ASSERT(selected_plan.rule != NULL);
     return loom_low_lower_rule_set_emit_rule(context, context->policy->rule_set,
                                              source_op, selected_plan.rule);
   }
-  if (loom_low_lower_plan_is_empty(selected_plan.plan)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "source-to-low lowering tried to emit an op rejected during planning");
-  }
+  IREE_ASSERT_FALSE(loom_low_lower_plan_is_empty(selected_plan.plan));
   return context->policy->emit_op.fn(context->policy->emit_op.user_data,
                                      context, source_op, selected_plan.plan);
 }
@@ -1422,12 +1383,8 @@ static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
   }
 
   loom_builder_restore(&context->builder, saved_ip);
-  if (iree_status_is_ok(status) &&
-      context->selected_plan_emit_index != context->selected_plan_count) {
-    status = iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "source-to-low lowering emission consumed fewer "
-                              "plans than planning selected");
-  }
+  IREE_ASSERT_EQ(context->selected_plan_emit_index,
+                 context->selected_plan_count);
   return status;
 }
 
