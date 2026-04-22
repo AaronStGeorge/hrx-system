@@ -23,6 +23,58 @@ typedef struct loom_amdgpu_dot_diagnostic_t {
   loom_amdgpu_dot_rejection_flags_t rejection_bits;
 } loom_amdgpu_dot_diagnostic_t;
 
+typedef struct loom_amdgpu_dot_kind_descriptor_t {
+  // Source op kind this descriptor row handles.
+  loom_op_kind_t op_kind;
+  // Source op dot-kind attribute value matched by this row.
+  uint8_t kind;
+  // Stable descriptor ID selected by this source dot-kind attribute.
+  uint64_t descriptor_id;
+} loom_amdgpu_dot_kind_descriptor_t;
+
+static const loom_amdgpu_dot_kind_descriptor_t kAmdgpuDotKindDescriptors[] = {
+    {
+        .op_kind = LOOM_OP_VECTOR_DOT4I,
+        .kind = LOOM_VECTOR_DOT4I_KIND_S8S8,
+        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_I8,
+    },
+    {
+        .op_kind = LOOM_OP_VECTOR_DOT4I,
+        .kind = LOOM_VECTOR_DOT4I_KIND_U8U8,
+        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_U32_U8,
+    },
+    {
+        .op_kind = LOOM_OP_VECTOR_DOT4I,
+        .kind = LOOM_VECTOR_DOT4I_KIND_U8S8,
+        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_IU8_U8S8,
+    },
+    {
+        .op_kind = LOOM_OP_VECTOR_DOT4I,
+        .kind = LOOM_VECTOR_DOT4I_KIND_S8U8,
+        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_IU8_S8U8,
+    },
+    {
+        .op_kind = LOOM_OP_VECTOR_DOT8I4,
+        .kind = LOOM_VECTOR_DOT8I4_KIND_S4S4,
+        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_I4,
+    },
+    {
+        .op_kind = LOOM_OP_VECTOR_DOT8I4,
+        .kind = LOOM_VECTOR_DOT8I4_KIND_S4U4,
+        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_IU4_S4U4,
+    },
+    {
+        .op_kind = LOOM_OP_VECTOR_DOT8I4,
+        .kind = LOOM_VECTOR_DOT8I4_KIND_U4S4,
+        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_IU4_U4S4,
+    },
+    {
+        .op_kind = LOOM_OP_VECTOR_DOT8I4,
+        .kind = LOOM_VECTOR_DOT8I4_KIND_U4U4,
+        .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_U32_U4,
+    },
+};
+
 static bool loom_amdgpu_descriptor_set_has_descriptor(
     const loom_low_descriptor_set_t* descriptor_set, uint64_t descriptor_id) {
   return descriptor_set != NULL &&
@@ -30,46 +82,19 @@ static bool loom_amdgpu_descriptor_set_has_descriptor(
              descriptor_set, descriptor_id) != LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
 }
 
-static bool loom_amdgpu_dot4i_descriptor_id(uint8_t kind,
-                                            uint64_t* out_descriptor_id) {
+static bool loom_amdgpu_dot_kind_descriptor_id(loom_op_kind_t op_kind,
+                                               uint8_t kind,
+                                               uint64_t* out_descriptor_id) {
   IREE_ASSERT_ARGUMENT(out_descriptor_id);
-  switch (kind) {
-    case LOOM_VECTOR_DOT4I_KIND_S8S8:
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_I8;
+  *out_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kAmdgpuDotKindDescriptors);
+       ++i) {
+    const loom_amdgpu_dot_kind_descriptor_t* row =
+        &kAmdgpuDotKindDescriptors[i];
+    if (row->op_kind == op_kind && row->kind == kind) {
+      *out_descriptor_id = row->descriptor_id;
       return true;
-    case LOOM_VECTOR_DOT4I_KIND_U8U8:
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_U32_U8;
-      return true;
-    case LOOM_VECTOR_DOT4I_KIND_U8S8:
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_IU8_U8S8;
-      return true;
-    case LOOM_VECTOR_DOT4I_KIND_S8U8:
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT4_I32_IU8_S8U8;
-      return true;
-    case LOOM_VECTOR_DOT4I_KIND_COUNT_:
-      return false;
-  }
-  return false;
-}
-
-static bool loom_amdgpu_dot8i4_descriptor_id(uint8_t kind,
-                                             uint64_t* out_descriptor_id) {
-  IREE_ASSERT_ARGUMENT(out_descriptor_id);
-  switch (kind) {
-    case LOOM_VECTOR_DOT8I4_KIND_S4S4:
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_I4;
-      return true;
-    case LOOM_VECTOR_DOT8I4_KIND_S4U4:
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_IU4_S4U4;
-      return true;
-    case LOOM_VECTOR_DOT8I4_KIND_U4S4:
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_I32_IU4_U4S4;
-      return true;
-    case LOOM_VECTOR_DOT8I4_KIND_U4U4:
-      *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_DOT8_U32_U4;
-      return true;
-    case LOOM_VECTOR_DOT8I4_KIND_COUNT_:
-      return false;
+    }
   }
   return false;
 }
@@ -103,13 +128,11 @@ static iree_string_view_t loom_amdgpu_dot_descriptor_key(
 static bool loom_amdgpu_dotf_select(
     const loom_module_t* module,
     const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* source_op,
-    uint32_t* out_lane_count, uint64_t* out_descriptor_id,
+    loom_amdgpu_dot_plan_t* out_plan,
     loom_amdgpu_dot_diagnostic_t* out_diagnostic) {
-  IREE_ASSERT_ARGUMENT(out_lane_count);
-  IREE_ASSERT_ARGUMENT(out_descriptor_id);
+  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_diagnostic);
-  *out_lane_count = 0;
-  *out_descriptor_id = 0;
+  *out_plan = (loom_amdgpu_dot_plan_t){0};
   *out_diagnostic = (loom_amdgpu_dot_diagnostic_t){0};
   if (!loom_vector_dotf_isa(source_op)) {
     out_diagnostic->rejection_bits |= LOOM_AMDGPU_DOT_REJECTION_KIND;
@@ -149,29 +172,29 @@ static bool loom_amdgpu_dotf_select(
     return false;
   }
 
-  *out_lane_count = lane_count;
-  *out_descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_FMA_F32;
+  *out_plan = (loom_amdgpu_dot_plan_t){
+      .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_FMA_F32,
+      .iteration_count = lane_count,
+  };
   return true;
 }
 
 static bool loom_amdgpu_dot4i_select(
     const loom_module_t* module,
     const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* source_op,
-    uint32_t* out_group_count, uint64_t* out_descriptor_id,
+    loom_amdgpu_dot_plan_t* out_plan,
     loom_amdgpu_dot_diagnostic_t* out_diagnostic) {
-  IREE_ASSERT_ARGUMENT(out_group_count);
-  IREE_ASSERT_ARGUMENT(out_descriptor_id);
+  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_diagnostic);
-  *out_group_count = 0;
-  *out_descriptor_id = 0;
+  *out_plan = (loom_amdgpu_dot_plan_t){0};
   *out_diagnostic = (loom_amdgpu_dot_diagnostic_t){0};
   if (!loom_vector_dot4i_isa(source_op)) {
     out_diagnostic->rejection_bits |= LOOM_AMDGPU_DOT_REJECTION_KIND;
     return false;
   }
   uint64_t descriptor_id = 0;
-  if (!loom_amdgpu_dot4i_descriptor_id(loom_vector_dot4i_kind(source_op),
-                                       &descriptor_id)) {
+  if (!loom_amdgpu_dot_kind_descriptor_id(
+          source_op->kind, loom_vector_dot4i_kind(source_op), &descriptor_id)) {
     out_diagnostic->rejection_bits |= LOOM_AMDGPU_DOT_REJECTION_KIND;
     return false;
   }
@@ -210,29 +233,30 @@ static bool loom_amdgpu_dot4i_select(
     return false;
   }
 
-  *out_group_count = group_count;
-  *out_descriptor_id = descriptor_id;
+  *out_plan = (loom_amdgpu_dot_plan_t){
+      .descriptor_id = descriptor_id,
+      .iteration_count = group_count,
+  };
   return true;
 }
 
 static bool loom_amdgpu_dot8i4_select(
     const loom_module_t* module,
     const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* source_op,
-    uint32_t* out_group_count, uint64_t* out_descriptor_id,
+    loom_amdgpu_dot_plan_t* out_plan,
     loom_amdgpu_dot_diagnostic_t* out_diagnostic) {
-  IREE_ASSERT_ARGUMENT(out_group_count);
-  IREE_ASSERT_ARGUMENT(out_descriptor_id);
+  IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_diagnostic);
-  *out_group_count = 0;
-  *out_descriptor_id = 0;
+  *out_plan = (loom_amdgpu_dot_plan_t){0};
   *out_diagnostic = (loom_amdgpu_dot_diagnostic_t){0};
   if (!loom_vector_dot8i4_isa(source_op)) {
     out_diagnostic->rejection_bits |= LOOM_AMDGPU_DOT_REJECTION_KIND;
     return false;
   }
   uint64_t descriptor_id = 0;
-  if (!loom_amdgpu_dot8i4_descriptor_id(loom_vector_dot8i4_kind(source_op),
-                                        &descriptor_id)) {
+  if (!loom_amdgpu_dot_kind_descriptor_id(source_op->kind,
+                                          loom_vector_dot8i4_kind(source_op),
+                                          &descriptor_id)) {
     out_diagnostic->rejection_bits |= LOOM_AMDGPU_DOT_REJECTION_KIND;
     return false;
   }
@@ -271,42 +295,45 @@ static bool loom_amdgpu_dot8i4_select(
     return false;
   }
 
-  *out_group_count = group_count;
-  *out_descriptor_id = descriptor_id;
+  *out_plan = (loom_amdgpu_dot_plan_t){
+      .descriptor_id = descriptor_id,
+      .iteration_count = group_count,
+  };
   return true;
 }
 
-bool loom_amdgpu_can_lower_vector_dot4i(loom_low_lower_context_t* context,
-                                        const loom_op_t* source_op) {
-  uint32_t unused_group_count = 0;
-  uint64_t unused_descriptor_id = 0;
-  loom_amdgpu_dot_diagnostic_t diagnostic = {0};
-  return loom_amdgpu_dot4i_select(
-      loom_low_lower_context_module(context),
-      loom_low_lower_context_descriptor_set(context), source_op,
-      &unused_group_count, &unused_descriptor_id, &diagnostic);
+static bool loom_amdgpu_vector_dot_plan_select(
+    const loom_module_t* module,
+    const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* source_op,
+    loom_amdgpu_dot_plan_t* out_plan,
+    loom_amdgpu_dot_diagnostic_t* out_diagnostic) {
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_DOTF:
+      return loom_amdgpu_dotf_select(module, descriptor_set, source_op,
+                                     out_plan, out_diagnostic);
+    case LOOM_OP_VECTOR_DOT4I:
+      return loom_amdgpu_dot4i_select(module, descriptor_set, source_op,
+                                      out_plan, out_diagnostic);
+    case LOOM_OP_VECTOR_DOT8I4:
+      return loom_amdgpu_dot8i4_select(module, descriptor_set, source_op,
+                                       out_plan, out_diagnostic);
+    default:
+      *out_plan = (loom_amdgpu_dot_plan_t){0};
+      *out_diagnostic = (loom_amdgpu_dot_diagnostic_t){
+          .rejection_bits = LOOM_AMDGPU_DOT_REJECTION_KIND,
+      };
+      return false;
+  }
 }
 
-bool loom_amdgpu_can_lower_vector_dot8i4(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op) {
-  uint32_t unused_group_count = 0;
-  uint64_t unused_descriptor_id = 0;
+bool loom_amdgpu_select_vector_dot_plan(loom_low_lower_context_t* context,
+                                        const loom_op_t* source_op,
+                                        loom_amdgpu_dot_plan_t* out_plan) {
   loom_amdgpu_dot_diagnostic_t diagnostic = {0};
-  return loom_amdgpu_dot8i4_select(
+  return loom_amdgpu_vector_dot_plan_select(
       loom_low_lower_context_module(context),
-      loom_low_lower_context_descriptor_set(context), source_op,
-      &unused_group_count, &unused_descriptor_id, &diagnostic);
-}
-
-bool loom_amdgpu_can_lower_vector_dotf(loom_low_lower_context_t* context,
-                                       const loom_op_t* source_op) {
-  uint32_t unused_lane_count = 0;
-  uint64_t unused_descriptor_id = 0;
-  loom_amdgpu_dot_diagnostic_t diagnostic = {0};
-  return loom_amdgpu_dotf_select(loom_low_lower_context_module(context),
-                                 loom_low_lower_context_descriptor_set(context),
-                                 source_op, &unused_lane_count,
-                                 &unused_descriptor_id, &diagnostic);
+      loom_low_lower_context_descriptor_set(context), source_op, out_plan,
+      &diagnostic);
 }
 
 static iree_string_view_t loom_amdgpu_dot_rejection_detail(
@@ -347,21 +374,9 @@ static iree_string_view_t loom_amdgpu_dot_rejection_detail(
   return IREE_SV("AMDGPU vector dot op is not target-legal");
 }
 
-iree_status_t loom_amdgpu_lower_vector_dotf(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op) {
-  uint32_t lane_count = 0;
-  uint64_t descriptor_id = 0;
-  loom_amdgpu_dot_diagnostic_t diagnostic = {0};
-  if (!loom_amdgpu_dotf_select(loom_low_lower_context_module(context),
-                               loom_low_lower_context_descriptor_set(context),
-                               source_op, &lane_count, &descriptor_id,
-                               &diagnostic)) {
-    const iree_string_view_t detail =
-        loom_amdgpu_dot_rejection_detail(diagnostic.rejection_bits);
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION, "%.*s",
-                            (int)detail.size, detail.data);
-  }
-
+static iree_status_t loom_amdgpu_lower_vector_dotf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_dot_plan_t* plan) {
   loom_value_id_t low_lhs = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, loom_vector_dotf_lhs(source_op), &low_lhs));
@@ -375,10 +390,10 @@ iree_status_t loom_amdgpu_lower_vector_dotf(loom_low_lower_context_t* context,
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
       context, source_op, loom_vector_dotf_result(source_op), &result_type));
-  for (uint32_t i = 0; i < lane_count; ++i) {
+  for (uint32_t i = 0; i < plan->iteration_count; ++i) {
     loom_value_id_t lane_lhs = low_lhs;
     loom_value_id_t lane_rhs = low_rhs;
-    if (lane_count != 1) {
+    if (plan->iteration_count != 1) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
           context, source_op, low_lhs, i, result_type, &lane_lhs));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
@@ -391,8 +406,9 @@ iree_status_t loom_amdgpu_lower_vector_dotf(loom_low_lower_context_t* context,
     };
     loom_op_t* lane_op = NULL;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, descriptor_id, operands, IREE_ARRAYSIZE(operands),
-        loom_make_named_attr_slice(NULL, 0), &result_type, 1, &lane_op));
+        context, source_op, plan->descriptor_id, operands,
+        IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0),
+        &result_type, 1, &lane_op));
     accumulator = loom_value_slice_get(loom_low_op_results(lane_op), 0);
   }
   return loom_low_lower_bind_value(context, loom_vector_dotf_result(source_op),
@@ -457,44 +473,29 @@ static iree_status_t loom_amdgpu_lower_packed_dot_groups(
                                    loom_low_concat_result(concat_op));
 }
 
-iree_status_t loom_amdgpu_lower_vector_dot4i(loom_low_lower_context_t* context,
-                                             const loom_op_t* source_op) {
-  uint32_t group_count = 0;
-  uint64_t descriptor_id = 0;
-  loom_amdgpu_dot_diagnostic_t diagnostic = {0};
-  if (!loom_amdgpu_dot4i_select(loom_low_lower_context_module(context),
-                                loom_low_lower_context_descriptor_set(context),
-                                source_op, &group_count, &descriptor_id,
-                                &diagnostic)) {
-    const iree_string_view_t detail =
-        loom_amdgpu_dot_rejection_detail(diagnostic.rejection_bits);
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION, "%.*s",
-                            (int)detail.size, detail.data);
+iree_status_t loom_amdgpu_lower_vector_dot(loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op,
+                                           const loom_amdgpu_dot_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_DOTF:
+      return loom_amdgpu_lower_vector_dotf(context, source_op, plan);
+    case LOOM_OP_VECTOR_DOT4I:
+      return loom_amdgpu_lower_packed_dot_groups(
+          context, source_op, plan->descriptor_id, plan->iteration_count,
+          loom_vector_dot4i_lhs(source_op), loom_vector_dot4i_rhs(source_op),
+          loom_vector_dot4i_acc(source_op),
+          loom_vector_dot4i_result(source_op));
+    case LOOM_OP_VECTOR_DOT8I4:
+      return loom_amdgpu_lower_packed_dot_groups(
+          context, source_op, plan->descriptor_id, plan->iteration_count,
+          loom_vector_dot8i4_lhs(source_op), loom_vector_dot8i4_rhs(source_op),
+          loom_vector_dot8i4_acc(source_op),
+          loom_vector_dot8i4_result(source_op));
+    default:
+      IREE_ASSERT_UNREACHABLE();
+      return iree_ok_status();
   }
-  return loom_amdgpu_lower_packed_dot_groups(
-      context, source_op, descriptor_id, group_count,
-      loom_vector_dot4i_lhs(source_op), loom_vector_dot4i_rhs(source_op),
-      loom_vector_dot4i_acc(source_op), loom_vector_dot4i_result(source_op));
-}
-
-iree_status_t loom_amdgpu_lower_vector_dot8i4(loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op) {
-  uint32_t group_count = 0;
-  uint64_t descriptor_id = 0;
-  loom_amdgpu_dot_diagnostic_t diagnostic = {0};
-  if (!loom_amdgpu_dot8i4_select(loom_low_lower_context_module(context),
-                                 loom_low_lower_context_descriptor_set(context),
-                                 source_op, &group_count, &descriptor_id,
-                                 &diagnostic)) {
-    const iree_string_view_t detail =
-        loom_amdgpu_dot_rejection_detail(diagnostic.rejection_bits);
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION, "%.*s",
-                            (int)detail.size, detail.data);
-  }
-  return loom_amdgpu_lower_packed_dot_groups(
-      context, source_op, descriptor_id, group_count,
-      loom_vector_dot8i4_lhs(source_op), loom_vector_dot8i4_rhs(source_op),
-      loom_vector_dot8i4_acc(source_op), loom_vector_dot8i4_result(source_op));
 }
 
 bool loom_amdgpu_op_is_vector_dot(loom_op_kind_t kind) {
@@ -520,33 +521,12 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_dot(
   }
   *out_handled = true;
 
-  bool selected = false;
-  uint32_t unused_group_count = 0;
-  uint64_t descriptor_id = 0;
+  loom_amdgpu_dot_plan_t plan = {0};
   loom_amdgpu_dot_diagnostic_t diagnostic = {0};
-  if (loom_vector_dotf_isa(op)) {
-    selected = loom_amdgpu_dotf_select(
-        loom_target_low_legality_module(context),
-        loom_target_low_legality_descriptor_set(context), op,
-        &unused_group_count, &descriptor_id, &diagnostic);
-  } else if (loom_vector_dot4i_isa(op)) {
-    selected = loom_amdgpu_dot4i_select(
-        loom_target_low_legality_module(context),
-        loom_target_low_legality_descriptor_set(context), op,
-        &unused_group_count, &descriptor_id, &diagnostic);
-  } else if (loom_vector_dot8i4_isa(op)) {
-    selected = loom_amdgpu_dot8i4_select(
-        loom_target_low_legality_module(context),
-        loom_target_low_legality_descriptor_set(context), op,
-        &unused_group_count, &descriptor_id, &diagnostic);
-  } else {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("contract"),
-        loom_op_name(loom_target_low_legality_module(context), op),
-        loom_amdgpu_dot_rejection_detail(LOOM_AMDGPU_DOT_REJECTION_KIND));
-  }
-
-  if (!selected) {
+  if (!loom_amdgpu_vector_dot_plan_select(
+          loom_target_low_legality_module(context),
+          loom_target_low_legality_descriptor_set(context), op, &plan,
+          &diagnostic)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("contract"),
         loom_op_name(loom_target_low_legality_module(context), op),
@@ -554,10 +534,10 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_dot(
   }
 
   const iree_string_view_t reason =
-      descriptor_id == LOOM_AMDGPU_DESCRIPTOR_ID_V_FMA_F32
+      plan.descriptor_id == LOOM_AMDGPU_DESCRIPTOR_ID_V_FMA_F32
           ? IREE_SV("selected AMDGPU f32 dot FMA contract")
           : IREE_SV("selected AMDGPU packed dot descriptor");
   return loom_target_low_legality_record_contract(
-      context, provider, op, loom_amdgpu_dot_descriptor_key(descriptor_id),
+      context, provider, op, loom_amdgpu_dot_descriptor_key(plan.descriptor_id),
       IREE_SV("selected"), reason);
 }

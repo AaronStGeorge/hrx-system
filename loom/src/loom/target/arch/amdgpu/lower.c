@@ -106,14 +106,10 @@ static iree_status_t loom_amdgpu_select_plan_id(
       LOOM_AMDGPU_SELECT_DESCRIPTOR(
           loom_amdgpu_select_vector_reduce_descriptor_id);
     case LOOM_OP_VECTOR_DOTF:
-      LOOM_AMDGPU_SELECT_IF(
-          loom_amdgpu_can_lower_vector_dotf(context, source_op));
     case LOOM_OP_VECTOR_DOT4I:
-      LOOM_AMDGPU_SELECT_IF(
-          loom_amdgpu_can_lower_vector_dot4i(context, source_op));
     case LOOM_OP_VECTOR_DOT8I4:
-      LOOM_AMDGPU_SELECT_IF(
-          loom_amdgpu_can_lower_vector_dot8i4(context, source_op));
+      LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_dot_plan_t,
+                              loom_amdgpu_select_vector_dot_plan);
     case LOOM_OP_VECTOR_EXTRACT:
     case LOOM_OP_VECTOR_FROM_ELEMENTS:
       return loom_amdgpu_select_value_plan(context, source_op, out_plan);
@@ -211,11 +207,10 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
     case LOOM_OP_VECTOR_REDUCE:
       return loom_amdgpu_lower_vector_reduce(context, source_op, plan.payload);
     case LOOM_OP_VECTOR_DOTF:
-      return loom_amdgpu_lower_vector_dotf(context, source_op);
     case LOOM_OP_VECTOR_DOT4I:
-      return loom_amdgpu_lower_vector_dot4i(context, source_op);
     case LOOM_OP_VECTOR_DOT8I4:
-      return loom_amdgpu_lower_vector_dot8i4(context, source_op);
+      return loom_amdgpu_lower_vector_dot(
+          context, source_op, (const loom_amdgpu_dot_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_EXTRACT:
     case LOOM_OP_VECTOR_FROM_ELEMENTS:
       return loom_amdgpu_lower_value_op(context, source_op, plan);

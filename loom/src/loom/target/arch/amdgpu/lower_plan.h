@@ -113,6 +113,13 @@ typedef struct loom_amdgpu_table_lookup_plan_t {
   uint32_t index_register_count;
 } loom_amdgpu_table_lookup_plan_t;
 
+typedef struct loom_amdgpu_dot_plan_t {
+  // Stable descriptor ID selected for the active descriptor set.
+  uint64_t descriptor_id;
+  // Number of scalar FMA lanes or packed dot register groups emitted.
+  uint32_t iteration_count;
+} loom_amdgpu_dot_plan_t;
+
 typedef enum loom_amdgpu_vector_slice_kind_e {
   LOOM_AMDGPU_VECTOR_SLICE_KIND_NONE = 0,
   LOOM_AMDGPU_VECTOR_SLICE_KIND_32BIT_LANES = 1,
