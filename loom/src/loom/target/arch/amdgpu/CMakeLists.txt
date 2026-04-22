@@ -473,6 +473,7 @@ loom_cc_library(
     "lower_reduce.c"
     "lower_structural.c"
     "lower_support.c"
+    "lower_table.c"
   DEPS
     ::descriptor_ids
     ::hal_kernel_abi
@@ -879,6 +880,17 @@ iree_executable_test(
     "source_low_slice"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_slice.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_table"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_table.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

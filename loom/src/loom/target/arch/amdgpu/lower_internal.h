@@ -329,6 +329,21 @@ bool loom_amdgpu_can_lower_vector_select(loom_low_lower_context_t* context,
 iree_status_t loom_amdgpu_lower_vector_select(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op);
 
+// Returns true when a source vector.table.lookup op can lower as a small
+// register-table selection chain.
+bool loom_amdgpu_can_lower_vector_table_lookup(
+    loom_low_lower_context_t* context, const loom_op_t* source_op);
+
+// Lowers a source vector.table.lookup op to AMDGPU compare/select packets.
+iree_status_t loom_amdgpu_lower_vector_table_lookup(
+    loom_low_lower_context_t* context, const loom_op_t* source_op);
+
+// Verifies source vector table op legality for AMDGPU target-low selection.
+iree_status_t loom_amdgpu_low_legality_verify_vector_table(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
 // Returns true when a source vector.bitfield.extract* op can lower through the
 // current AMDGPU i32 VGPR bit-manipulation descriptor family.
 bool loom_amdgpu_can_lower_vector_bitfield_extract(

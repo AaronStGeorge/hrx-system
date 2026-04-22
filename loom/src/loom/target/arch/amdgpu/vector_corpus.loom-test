@@ -235,6 +235,28 @@ func.def target(@gfx11_q8_0_byte_storage_scaled_gemv2_shape_target) @amdgpu_q8_0
 }
 
 // ====
+// RUN: emit source-low @amdgpu_iq4_table_lookup_decode_shape output=none
+target.profile @gfx11_iq4_table_lookup_decode_shape_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_iq4_table_lookup_decode_shape_target) @amdgpu_iq4_table_lookup_decode_shape(%codes_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero_offset = index.constant 0 : offset
+  %four = index.constant 4 : index
+  %byte_base = index.mul %tid, %four : index
+  %codes_view = buffer.view %codes_buffer[%zero_offset] : buffer -> view<8xi8, #dense>
+  %output_view = buffer.view %output[%zero_offset] : buffer -> view<8xf32, #dense>
+  %codes = vector.load %codes_view[%byte_base] : view<8xi8, #dense> -> vector<4xi8>
+  %g0 = scalar.constant -1.0 : f32
+  %g1 = scalar.constant -0.5 : f32
+  %g2 = scalar.constant 0.5 : f32
+  %g3 = scalar.constant 1.5 : f32
+  %grid = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xf32>
+  %decoded = vector.table.lookup %grid[%codes] : vector<4xf32>, vector<4xi8> -> vector<4xf32>
+  vector.store %decoded, %output_view[%byte_base] : vector<4xf32>, view<8xf32, #dense>
+  func.return
+}
+
+// ====
 // RUN: emit source-low @amdgpu_q6_high2_chunk_dot2_shape output=none
 target.profile @gfx11_q6_high2_chunk_dot2_shape_target preset("amdgpu-gfx11")
 

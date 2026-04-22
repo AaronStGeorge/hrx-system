@@ -955,6 +955,32 @@ func.def target(@gfx_target) @loom_kernel(%low_buffer: buffer, %high_buffer: buf
 
 // ====
 // REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=2,1,1 --binding=&8xi8=0,1,2,3,3,2,1,0 --binding=&8xf32=0 --expected_binding=8xi8=0,1,2,3,3,2,1,0 --expected_binding=8xf32=-1,-0.5,0.5,1.5,1.5,0.5,-0.5,-1
+
+target.profile @gfx_target preset("amdgpu-current")
+
+func.def target(@gfx_target) @loom_kernel(%codes_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %four = index.constant 4 : index
+  %base = index.mul %tid, %four : index
+  %codes_view = buffer.view %codes_buffer[%zero] : buffer -> view<8xi8, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<8xf32, #dense>
+  %codes = vector.load %codes_view[%base] : view<8xi8, #dense> -> vector<4xi8>
+  %g0 = scalar.constant -1.0 : f32
+  %g1 = scalar.constant -0.5 : f32
+  %g2 = scalar.constant 0.5 : f32
+  %g3 = scalar.constant 1.5 : f32
+  %grid = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xf32>
+  %decoded = vector.table.lookup %grid[%codes] : vector<4xf32>, vector<4xi8> -> vector<4xf32>
+  vector.store %decoded, %output_view[%base] : vector<4xf32>, view<8xf32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&8xi32=1,2,3,4,5,6,7,8 --binding=&8xi32=10,10,10,10,10,10,10,10 --binding=&8xi32=0 --expected_binding=8xi32=1,2,3,4,5,6,7,8 --expected_binding=8xi32=10,10,10,10,10,10,10,10 --expected_binding=8xi32=0,0,0,0,15,16,17,18
 
 target.profile @gfx_target preset("amdgpu-current")

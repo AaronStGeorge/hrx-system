@@ -590,6 +590,10 @@ static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
     case LOOM_OP_VECTOR_SELECT:
       *out_handled = loom_amdgpu_can_lower_vector_select(context, source_op);
       return iree_ok_status();
+    case LOOM_OP_VECTOR_TABLE_LOOKUP:
+      *out_handled =
+          loom_amdgpu_can_lower_vector_table_lookup(context, source_op);
+      return iree_ok_status();
     case LOOM_OP_VECTOR_BITFIELD_EXTRACTU:
     case LOOM_OP_VECTOR_BITFIELD_EXTRACTS:
       *out_handled =
@@ -2016,6 +2020,8 @@ static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
       return loom_amdgpu_lower_vector_cmpf(context, source_op);
     case LOOM_OP_VECTOR_SELECT:
       return loom_amdgpu_lower_vector_select(context, source_op);
+    case LOOM_OP_VECTOR_TABLE_LOOKUP:
+      return loom_amdgpu_lower_vector_table_lookup(context, source_op);
     case LOOM_OP_VECTOR_BITFIELD_EXTRACTU:
     case LOOM_OP_VECTOR_BITFIELD_EXTRACTS:
       return loom_amdgpu_lower_vector_bitfield_extract(context, source_op);
@@ -2097,6 +2103,9 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
     case LOOM_OP_VECTOR_SLICE:
       return loom_amdgpu_low_legality_verify_vector_structural(
           provider, context, op, out_handled);
+    case LOOM_OP_VECTOR_TABLE_LOOKUP:
+      return loom_amdgpu_low_legality_verify_vector_table(provider, context, op,
+                                                          out_handled);
     case LOOM_OP_VECTOR_LOAD:
     case LOOM_OP_VECTOR_STORE:
       return loom_amdgpu_low_legality_verify_vector_memory(provider, context,

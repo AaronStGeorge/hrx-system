@@ -1,0 +1,48 @@
+// RUN: emit source-low @f32_table_lookup_i8_codes output=none
+target.profile @gfx11_table_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_table_target) @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %four = index.constant 4 : index
+  %base = index.mul %tid, %four : index
+  %codes_view = buffer.view %codes_buffer[%zero] : buffer -> view<8xi8, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<8xf32, #dense>
+  %codes = vector.load %codes_view[%base] : view<8xi8, #dense> -> vector<4xi8>
+  %g0 = scalar.constant -1.0 : f32
+  %g1 = scalar.constant -0.5 : f32
+  %g2 = scalar.constant 0.5 : f32
+  %g3 = scalar.constant 1.5 : f32
+  %grid = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xf32>
+  %decoded = vector.table.lookup %grid[%codes] : vector<4xf32>, vector<4xi8> -> vector<4xf32>
+  vector.store %decoded, %output_view[%base] : vector<4xf32>, view<8xf32, #dense>
+  func.return
+}
+
+// ====
+// RUN: emit source-low @f32_table_lookup_i32_codes output=none
+target.profile @gfx11_table_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_table_target) @f32_table_lookup_i32_codes(%codes: vector<2xi32>) -> (vector<2xf32>) {
+  %g0 = scalar.constant 2.0 : f32
+  %g1 = scalar.constant -3.0 : f32
+  %g2 = scalar.constant 5.0 : f32
+  %grid = vector.from_elements %g0, %g1, %g2 : vector<3xf32>
+  %decoded = vector.table.lookup %grid[%codes] : vector<3xf32>, vector<2xi32> -> vector<2xf32>
+  func.return %decoded : vector<2xf32>
+}
+
+// ====
+// RUN: emit source-low @i16_table_lookup_rejected output=none
+target.profile @gfx11_table_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_table_target) @i16_table_lookup_rejected(%codes: vector<4xi16>) -> (vector<4xf32>) {
+  %g0 = scalar.constant -1.0 : f32
+  %g1 = scalar.constant 0.0 : f32
+  %g2 = scalar.constant 1.0 : f32
+  %g3 = scalar.constant 2.0 : f32
+  %grid = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xf32>
+  // ERROR@+1: BACKEND/001 "AMDGPU vector.table.lookup currently requires"
+  %decoded = vector.table.lookup %grid[%codes] : vector<4xf32>, vector<4xi16> -> vector<4xf32>
+  func.return %decoded : vector<4xf32>
+}
