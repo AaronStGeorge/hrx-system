@@ -289,6 +289,15 @@ bool loom_amdgpu_can_lower_vector_dot4i(loom_low_lower_context_t* context,
 iree_status_t loom_amdgpu_lower_vector_dot4i(loom_low_lower_context_t* context,
                                              const loom_op_t* source_op);
 
+// Returns true when a source vector.dot8i4 op can lower under the active AMDGPU
+// descriptor set.
+bool loom_amdgpu_can_lower_vector_dot8i4(loom_low_lower_context_t* context,
+                                         const loom_op_t* source_op);
+
+// Lowers a source vector.dot8i4 op to AMDGPU descriptor-backed low packets.
+iree_status_t loom_amdgpu_lower_vector_dot8i4(loom_low_lower_context_t* context,
+                                              const loom_op_t* source_op);
+
 // Returns true when a source vector.reduce op can lower through the current
 // AMDGPU source value placement and supported reduction descriptor family.
 bool loom_amdgpu_can_lower_vector_reduce(loom_low_lower_context_t* context,

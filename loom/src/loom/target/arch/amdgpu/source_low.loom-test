@@ -468,11 +468,37 @@ low.func.def target(@gfx11_dot4i_u8u8_target) abi(hal_kernel) @dot4i_u8u8__low(%
 }
 
 // ====
+// RUN: emit source-low @dot8i4_u4u4 output=low
+target.profile @gfx11_dot8i4_u4u4_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_dot8i4_u4u4_target) @dot8i4_u4u4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
+  %dot = vector.dot8i4<u4u4> %lhs, %rhs, %acc : vector<1xi32>
+  func.return %dot : vector<1xi32>
+}
+
+// ----
+low.func.def target(@gfx11_dot8i4_u4u4_target) abi(hal_kernel) @dot8i4_u4u4__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %dot = low.op<amdgpu.v_dot8_u32_u4>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %dot : reg<amdgpu.vgpr>
+}
+
+// ====
 // RUN: emit source-low @dot4i_u8s8_rejected output=low
 target.profile @gfx11_dot4i_mixed_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_dot4i_mixed_target) @dot4i_u8s8_rejected(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
-  // ERROR@+1: BACKEND/001 "mixed signedness forms require an explicit IU8 operand signedness contract"
+  // ERROR@+1: BACKEND/001 "mixed signedness and signed nibble forms require explicit IU8/IU4 operand signedness contracts"
   %dot = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  func.return %dot : vector<1xi32>
+}
+
+// ====
+// RUN: emit source-low @dot8i4_s4s4_rejected output=low
+target.profile @gfx11_dot8i4_signed_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_dot8i4_signed_target) @dot8i4_s4s4_rejected(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  // ERROR@+1: BACKEND/001 "mixed signedness and signed nibble forms require explicit IU8/IU4 operand signedness contracts"
+  %dot = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<1xi32>
   func.return %dot : vector<1xi32>
 }

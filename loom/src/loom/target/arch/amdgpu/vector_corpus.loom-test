@@ -175,6 +175,16 @@ func.def target(@gfx11_q4_chunk_dot2_shape_target) @amdgpu_q4_chunk_dot2_shape(%
 }
 
 // ====
+// RUN: emit source-low @amdgpu_q4_direct_dot2_shape output=none
+target.profile @gfx11_q4_direct_dot2_shape_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_q4_direct_dot2_shape_target) @amdgpu_q4_direct_dot2_shape(%lhs_packed: vector<2xi32>, %rhs_packed: vector<2xi32>, %acc: vector<2xi32>) -> (vector<2xi32>) {
+  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
+  %dot = vector.dot8i4<u4u4> %lhs_packed, %rhs_packed, %acc : vector<2xi32>
+  func.return %dot : vector<2xi32>
+}
+
+// ====
 // RUN: emit source-low @amdgpu_q6_high2_chunk_dot2_shape output=none
 target.profile @gfx11_q6_high2_chunk_dot2_shape_target preset("amdgpu-gfx11")
 

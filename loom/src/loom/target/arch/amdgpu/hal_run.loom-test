@@ -562,6 +562,29 @@ func.def target(@gfx_target) @loom_kernel(%low_buffer: buffer, %high_buffer: buf
 
 // ====
 // REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&2xi32=1985229328,1985229328 --binding=&2xi32=286331153,572662306 --binding=&2xi32=5,10 --binding=&2xi32=0 --expected_binding=2xi32=1985229328,1985229328 --expected_binding=2xi32=286331153,572662306 --expected_binding=2xi32=5,10 --expected_binding=2xi32=33,66
+
+target.profile @gfx_target preset("amdgpu-current")
+
+func.def target(@gfx_target) @loom_kernel(%lhs_buffer: buffer, %rhs_buffer: buffer, %acc_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<1x2xi32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<1x2xi32, #dense>
+  %acc_view = buffer.view %acc_buffer[%zero] : buffer -> view<1x2xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1x2xi32, #dense>
+  %lhs = vector.load %lhs_view[%tid, 0] : view<1x2xi32, #dense> -> vector<2xi32>
+  %rhs = vector.load %rhs_view[%tid, 0] : view<1x2xi32, #dense> -> vector<2xi32>
+  %acc = vector.load %acc_view[%tid, 0] : view<1x2xi32, #dense> -> vector<2xi32>
+  %dot = vector.dot8i4<u4u4> %lhs, %rhs, %acc : vector<2xi32>
+  vector.store %dot, %output_view[%tid, 0] : vector<2xi32>, view<1x2xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=4,1,1 --binding=&4xi32=1985229328,1985229328,0,0 --binding=&4xi32=1431633920,0,1431633920,0 --binding=&2xi32=16843009,16843009 --binding=&2xf32=0.5,2 --binding=&8xf32=0 --expected_binding=4xi32=1985229328,1985229328,0,0 --expected_binding=4xi32=1431633920,0,1431633920,0 --expected_binding=2xi32=16843009,16843009 --expected_binding=2xf32=0.5,2 --expected_binding=8xf32=-29,-84,-61,-212,-32,-128,-64,-256
 
 target.profile @gfx_target preset("amdgpu-current")

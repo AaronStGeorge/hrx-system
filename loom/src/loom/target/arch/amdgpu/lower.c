@@ -618,6 +618,9 @@ static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
     case LOOM_OP_VECTOR_DOT4I:
       *out_handled = loom_amdgpu_can_lower_vector_dot4i(context, source_op);
       return iree_ok_status();
+    case LOOM_OP_VECTOR_DOT8I4:
+      *out_handled = loom_amdgpu_can_lower_vector_dot8i4(context, source_op);
+      return iree_ok_status();
     case LOOM_OP_VECTOR_EXTRACT:
       *out_handled = loom_amdgpu_can_lower_vector_extract(context, source_op);
       return iree_ok_status();
@@ -2031,6 +2034,8 @@ static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
       return loom_amdgpu_lower_vector_reduce(context, source_op);
     case LOOM_OP_VECTOR_DOT4I:
       return loom_amdgpu_lower_vector_dot4i(context, source_op);
+    case LOOM_OP_VECTOR_DOT8I4:
+      return loom_amdgpu_lower_vector_dot8i4(context, source_op);
     case LOOM_OP_VECTOR_EXTRACT:
       return loom_amdgpu_lower_vector_extract(context, source_op);
     case LOOM_OP_VECTOR_FROM_ELEMENTS:
