@@ -171,12 +171,12 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             loom_low_lower_plan_t* out_plan) {
   IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = loom_low_lower_plan_empty();
-#define LOOM_AMDGPU_SELECT_IF(condition)                                 \
-  do {                                                                   \
-    if (condition) {                                                     \
-      loom_amdgpu_set_selected_plan(source_op->kind, 0, NULL, out_plan); \
-    }                                                                    \
-    return iree_ok_status();                                             \
+#define LOOM_AMDGPU_SELECT_IF(condition)                              \
+  do {                                                                \
+    if (condition) {                                                  \
+      *out_plan = loom_low_lower_plan_make(source_op->kind, 0, NULL); \
+    }                                                                 \
+    return iree_ok_status();                                          \
   } while (false)
   switch (source_op->kind) {
     case LOOM_OP_INDEX_CONSTANT:
@@ -193,11 +193,11 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
           loom_amdgpu_can_lower_vector_iota(context, source_op));
     case LOOM_OP_VECTOR_EXTRACT: {
       loom_amdgpu_vector_extract_plan_t* plan_data = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
-          context, 1, sizeof(*plan_data), (void**)&plan_data));
+      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+          context, sizeof(*plan_data), (void**)&plan_data));
       if (loom_amdgpu_select_vector_extract_plan(context, source_op,
                                                  plan_data)) {
-        loom_amdgpu_set_selected_plan(source_op->kind, 0, plan_data, out_plan);
+        *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
       }
       return iree_ok_status();
     }

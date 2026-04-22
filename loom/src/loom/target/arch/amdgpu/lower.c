@@ -13,45 +13,35 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
 
-static iree_status_t loom_amdgpu_allocate_selected_plan_data(
-    loom_low_lower_context_t* context, iree_host_size_t data_length,
-    void** out_data) {
-  IREE_ASSERT_GT(data_length, 0);
-  IREE_ASSERT_ARGUMENT(out_data);
-  *out_data = NULL;
-  return loom_low_lower_allocate_scratch_array(context, 1, data_length,
-                                               out_data);
-}
-
 static iree_status_t loom_amdgpu_select_plan_id(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan) {
   *out_plan = loom_low_lower_plan_empty();
-#define LOOM_AMDGPU_SELECT_IF(condition)                                 \
-  do {                                                                   \
-    if (condition) {                                                     \
-      loom_amdgpu_set_selected_plan(source_op->kind, 0, NULL, out_plan); \
-    }                                                                    \
-    return iree_ok_status();                                             \
+#define LOOM_AMDGPU_SELECT_IF(condition)                              \
+  do {                                                                \
+    if (condition) {                                                  \
+      *out_plan = loom_low_lower_plan_make(source_op->kind, 0, NULL); \
+    }                                                                 \
+    return iree_ok_status();                                          \
   } while (false)
 #define LOOM_AMDGPU_SELECT_DESCRIPTOR(select_fn)                          \
   do {                                                                    \
     uint64_t descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;                 \
     if (select_fn(context, source_op, &descriptor_id)) {                  \
-      loom_amdgpu_set_selected_plan(source_op->kind, descriptor_id, NULL, \
-                                    out_plan);                            \
+      *out_plan =                                                         \
+          loom_low_lower_plan_make(source_op->kind, descriptor_id, NULL); \
     }                                                                     \
     return iree_ok_status();                                              \
   } while (false)
-#define LOOM_AMDGPU_SELECT_DATA(plan_type, select_fn)                         \
-  do {                                                                        \
-    plan_type* plan_data = NULL;                                              \
-    IREE_RETURN_IF_ERROR(loom_amdgpu_allocate_selected_plan_data(             \
-        context, sizeof(*plan_data), (void**)&plan_data));                    \
-    if (select_fn(context, source_op, plan_data)) {                           \
-      loom_amdgpu_set_selected_plan(source_op->kind, 0, plan_data, out_plan); \
-    }                                                                         \
-    return iree_ok_status();                                                  \
+#define LOOM_AMDGPU_SELECT_DATA(plan_type, select_fn)                      \
+  do {                                                                     \
+    plan_type* plan_data = NULL;                                           \
+    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(                \
+        context, sizeof(*plan_data), (void**)&plan_data));                 \
+    if (select_fn(context, source_op, plan_data)) {                        \
+      *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data); \
+    }                                                                      \
+    return iree_ok_status();                                               \
   } while (false)
   switch (source_op->kind) {
     case LOOM_OP_INDEX_CONSTANT:

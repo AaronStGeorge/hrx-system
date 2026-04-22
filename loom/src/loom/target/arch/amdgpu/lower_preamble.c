@@ -44,7 +44,7 @@ iree_status_t loom_amdgpu_select_preamble_plan(
       return iree_ok_status();
   }
   if (selected) {
-    loom_amdgpu_set_selected_plan(source_op->kind, 0, NULL, out_plan);
+    *out_plan = loom_low_lower_plan_make(source_op->kind, 0, NULL);
   }
   return iree_ok_status();
 }

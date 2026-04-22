@@ -126,12 +126,20 @@ typedef struct loom_low_lower_plan_t {
   const void* target_data;
 } loom_low_lower_plan_t;
 
-static inline loom_low_lower_plan_t loom_low_lower_plan_empty(void) {
+// Returns a selected lowering plan. |target_data| points at immutable
+// target-owned payload storage allocated from the current lowering arena, or
+// NULL when |id| and |payload| fully describe the plan.
+static inline loom_low_lower_plan_t loom_low_lower_plan_make(
+    loom_low_lower_plan_id_t id, uint64_t payload, const void* target_data) {
   return (loom_low_lower_plan_t){
-      .id = LOOM_LOW_LOWER_PLAN_ID_NONE,
-      .payload = 0,
-      .target_data = NULL,
+      .id = id,
+      .payload = payload,
+      .target_data = target_data,
   };
+}
+
+static inline loom_low_lower_plan_t loom_low_lower_plan_empty(void) {
+  return loom_low_lower_plan_make(LOOM_LOW_LOWER_PLAN_ID_NONE, 0, NULL);
 }
 
 static inline bool loom_low_lower_plan_is_empty(loom_low_lower_plan_t plan) {
@@ -312,6 +320,14 @@ const loom_value_fact_table_t* loom_low_lower_context_fact_table(
 iree_status_t loom_low_lower_allocate_scratch_array(
     loom_low_lower_context_t* context, iree_host_size_t count,
     iree_host_size_t element_size, void** out_ptr);
+
+// Allocates one target-owned selected-plan payload from the current lowering
+// arena. The returned storage remains valid until the current
+// loom_low_lower_function call returns. Targets should populate the payload in
+// place during planning and treat it as immutable during emission.
+iree_status_t loom_low_lower_allocate_plan_data(
+    loom_low_lower_context_t* context, iree_host_size_t data_length,
+    void** out_data);
 
 // Creates a module-local symbol derived from the emitted low function symbol.
 // The result is suitable for target-owned function records such as low.slot

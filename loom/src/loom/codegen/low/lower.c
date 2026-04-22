@@ -428,6 +428,17 @@ iree_status_t loom_low_lower_allocate_scratch_array(
                                    out_ptr);
 }
 
+iree_status_t loom_low_lower_allocate_plan_data(
+    loom_low_lower_context_t* context, iree_host_size_t data_length,
+    void** out_data) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_GT(data_length, 0);
+  IREE_ASSERT_ARGUMENT(out_data);
+  *out_data = NULL;
+  return loom_low_lower_allocate_scratch_array(context, 1, data_length,
+                                               out_data);
+}
+
 iree_status_t loom_low_lower_register_class_string_id(
     loom_low_lower_context_t* context, uint16_t reg_class_id,
     loom_string_id_t* out_string_id) {

@@ -611,10 +611,7 @@ static bool loom_x86_op_is_vector_dot(loom_op_kind_t kind) {
 static void loom_x86_set_plan(const loom_op_t* source_op,
                               uint64_t descriptor_id,
                               loom_low_lower_plan_t* out_plan) {
-  *out_plan = (loom_low_lower_plan_t){
-      .id = source_op->kind,
-      .payload = descriptor_id,
-  };
+  *out_plan = loom_low_lower_plan_make(source_op->kind, descriptor_id, NULL);
 }
 
 static iree_status_t loom_x86_select_packed_dot_op(
