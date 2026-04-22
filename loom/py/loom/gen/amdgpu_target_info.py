@@ -37,6 +37,10 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
     AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
+    AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE,
     AmdgpuDescriptorSetInfo,
     AmdgpuProcessorInfo,
     sorted_descriptor_set_infos,
@@ -101,6 +105,18 @@ def _buffer_resource_cache_swizzle_expr(kind: str) -> str:
     raise ValueError(f"unknown AMDGPU buffer-resource cache swizzle kind '{kind}'")
 
 
+def _vector_memory_cache_policy_encoding_expr(kind: str) -> str:
+    if kind == AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE:
+        return "LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE"
+    if kind == AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC:
+        return "LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC"
+    if kind == AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH:
+        return "LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH"
+    if kind == AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1:
+        return "LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1"
+    raise ValueError(f"unknown AMDGPU vector-memory cache-policy encoding '{kind}'")
+
+
 def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]) -> None:
     keys = [info.key for info in descriptor_sets]
     if keys != sorted(keys):
@@ -118,6 +134,7 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
         if info.s_endpgm_opcode < 0 or info.s_endpgm_opcode > 0xFFFF:
             raise ValueError(f"AMDGPU s_endpgm opcode for {info.key} must fit u16")
         _buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle)
+        _vector_memory_cache_policy_encoding_expr(info.vector_memory_cache_policy_encoding)
 
 
 def _validate_processors(
@@ -179,8 +196,9 @@ def _emit_descriptor_set_rows(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
     preset_width = max(len(_c_string_arg(info.low_preset_key)) for info in descriptor_sets)
     opcode_width = len("0x000")
     packet_encoding_width = len("packet_encoding")
+    cache_swizzle_width = len("LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT")
     lines = [
-        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(stable_id_, descriptor_set_key_, low_preset_key_, s_endpgm_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_) \\",
+        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(stable_id_, descriptor_set_key_, low_preset_key_, s_endpgm_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
         "  { \\",
         "    .descriptor_set_stable_id = stable_id_, \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
@@ -188,10 +206,11 @@ def _emit_descriptor_set_rows(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
         "    .s_endpgm_opcode = UINT16_C(s_endpgm_opcode_), \\",
         "    .supports_descriptor_packet_encoding = supports_descriptor_packet_encoding_, \\",
         "    .buffer_resource_cache_swizzle = buffer_resource_cache_swizzle_, \\",
+        "    .vector_memory_cache_policy_encoding = vector_memory_cache_policy_encoding_, \\",
         "  }",
         "",
         "static const loom_amdgpu_descriptor_set_info_t kAmdgpuDescriptorSetInfos[] = {",
-        "  // stable_id            descriptor_set_key     low_preset_key   s_endpgm packet_encoding cache_swizzle",
+        "  // stable_id            descriptor_set_key     low_preset_key   s_endpgm packet_encoding cache_swizzle cache_policy",
     ]
     lines.extend(
         (
@@ -201,7 +220,9 @@ def _emit_descriptor_set_rows(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
             f"{_padded_arg(_c_string_arg(info.low_preset_key), preset_width)}"
             f"{_padded_arg(f'0x{info.s_endpgm_opcode:03x}', opcode_width)}"
             f"{_padded_arg(_bool_literal(info.supports_descriptor_packet_encoding), packet_encoding_width)}"
-            f"{_buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle)}),"
+            f"{_padded_arg(_buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle), cache_swizzle_width)}"
+            f"{_vector_memory_cache_policy_encoding_expr(info.vector_memory_cache_policy_encoding)}"
+            "),"
         )
         for info in descriptor_sets
     )
@@ -371,6 +392,27 @@ def _emit_source(
             "      (int)descriptor_set_key.size, descriptor_set_key.data);",
             "}",
             "",
+            "const loom_amdgpu_descriptor_set_info_t*",
+            "loom_amdgpu_target_info_descriptor_set_by_id(",
+            "    uint64_t descriptor_set_stable_id) {",
+            "  switch (descriptor_set_stable_id) {",
+        ]
+    )
+    for index, info in enumerate(descriptor_sets):
+        lines.extend(
+            [
+                f"    case {_u64_expr(descriptor_stable_id(info.key))}:",
+                f"      return &kAmdgpuDescriptorSetInfos[{index}];",
+            ]
+        )
+    lines.extend(
+        [
+            "    default:",
+            "      break;",
+            "  }",
+            "  return NULL;",
+            "}",
+            "",
             "iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_id(",
             "    uint64_t descriptor_set_stable_id,",
             "    const loom_amdgpu_descriptor_set_info_t** out_descriptor_set) {",
@@ -380,26 +422,18 @@ def _emit_source(
             "    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,",
             '                            "AMDGPU descriptor set stable ID is required");',
             "  }",
-            "  switch (descriptor_set_stable_id) {",
-        ]
-    )
-    for index, info in enumerate(descriptor_sets):
-        lines.extend(
-            [
-                f"    case {_u64_expr(descriptor_stable_id(info.key))}:",
-                f"      *out_descriptor_set = &kAmdgpuDescriptorSetInfos[{index}];",
-                "      return iree_ok_status();",
-            ]
-        )
-    lines.extend(
-        [
-            "    default:",
-            "      return iree_make_status(",
-            "          IREE_STATUS_UNIMPLEMENTED,",
-            '          "AMDGPU descriptor set stable ID 0x%016" PRIx64',
-            '          " is not supported by native emission",',
+            "  const loom_amdgpu_descriptor_set_info_t* descriptor_set =",
+            "      loom_amdgpu_target_info_descriptor_set_by_id(",
             "          descriptor_set_stable_id);",
+            "  if (descriptor_set != NULL) {",
+            "    *out_descriptor_set = descriptor_set;",
+            "    return iree_ok_status();",
             "  }",
+            "  return iree_make_status(",
+            "      IREE_STATUS_UNIMPLEMENTED,",
+            '      "AMDGPU descriptor set stable ID 0x%016" PRIx64',
+            '      " is not supported by native emission",',
+            "      descriptor_set_stable_id);",
             "}",
             "",
             "static iree_status_t loom_amdgpu_target_info_validate_target_id_chars(",

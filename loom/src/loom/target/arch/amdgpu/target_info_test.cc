@@ -55,6 +55,13 @@ TEST(AmdgpuTargetInfoTest, LooksUpDescriptorSetEncodingProfile) {
   EXPECT_TRUE(descriptor_set->supports_descriptor_packet_encoding);
   EXPECT_EQ(descriptor_set->buffer_resource_cache_swizzle,
             LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT);
+  EXPECT_EQ(descriptor_set->vector_memory_cache_policy_encoding,
+            LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1);
+}
+
+TEST(AmdgpuTargetInfoTest, DescriptorSetByIdReturnsNullForUnknownId) {
+  EXPECT_EQ(loom_amdgpu_target_info_descriptor_set_by_id(0), nullptr);
+  EXPECT_EQ(loom_amdgpu_target_info_descriptor_set_by_id(UINT64_MAX), nullptr);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpMatrixOnlyProcessor) {

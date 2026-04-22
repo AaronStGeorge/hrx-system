@@ -4,16 +4,19 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <inttypes.h>
 #include <stdint.h>
 
 #include "loom/ir/context.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/cache.h"
 #include "loom/ops/encoding/storage.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
+#include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/util/fact_table.h"
 
 static bool loom_amdgpu_module_value_is_workitem_id_x(
@@ -203,6 +206,46 @@ static iree_string_view_t loom_amdgpu_memory_operation_name(
       return IREE_SV("load");
     case LOOM_AMDGPU_MEMORY_OPERATION_STORE:
       return IREE_SV("store");
+  }
+  return IREE_SV("invalid");
+}
+
+static iree_string_view_t loom_amdgpu_cache_scope_name(uint8_t scope) {
+  switch (scope) {
+    case LOOM_CACHE_SCOPE_CU:
+      return IREE_SV("cu");
+    case LOOM_CACHE_SCOPE_SE:
+      return IREE_SV("se");
+    case LOOM_CACHE_SCOPE_DEVICE:
+      return IREE_SV("device");
+    case LOOM_CACHE_SCOPE_SYSTEM:
+      return IREE_SV("system");
+  }
+  return IREE_SV("invalid");
+}
+
+static iree_string_view_t loom_amdgpu_cache_temporal_name(uint8_t temporal) {
+  switch (temporal) {
+    case LOOM_CACHE_TEMPORAL_REGULAR:
+      return IREE_SV("regular");
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL:
+      return IREE_SV("non_temporal");
+    case LOOM_CACHE_TEMPORAL_HIGH_TEMPORAL:
+      return IREE_SV("high_temporal");
+    case LOOM_CACHE_TEMPORAL_LAST_USE:
+      return IREE_SV("last_use");
+    case LOOM_CACHE_TEMPORAL_WRITEBACK:
+      return IREE_SV("writeback");
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR:
+      return IREE_SV("non_temporal_regular");
+    case LOOM_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL:
+      return IREE_SV("regular_non_temporal");
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL:
+      return IREE_SV("non_temporal_high_temporal");
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK:
+      return IREE_SV("non_temporal_writeback");
+    case LOOM_CACHE_TEMPORAL_BYPASS:
+      return IREE_SV("bypass");
   }
   return IREE_SV("invalid");
 }
@@ -1752,28 +1795,131 @@ static bool loom_amdgpu_store_memory_access_select(
       out_access);
 }
 
+static bool loom_amdgpu_memory_cache_policy_is_present(
+    const loom_vector_memory_cache_policy_t* policy) {
+  return iree_any_bit_set(
+      policy->build_flags,
+      LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_SCOPE |
+          LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_TEMPORAL);
+}
+
+static bool loom_amdgpu_memory_cache_policy_is_complete(
+    const loom_vector_memory_cache_policy_t* policy) {
+  const uint32_t required_flags =
+      LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_SCOPE |
+      LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_TEMPORAL;
+  return policy->build_flags == 0 || policy->build_flags == required_flags;
+}
+
+static bool loom_amdgpu_memory_cache_policy_is_regular_device(
+    const loom_vector_memory_cache_policy_t* policy) {
+  return policy->cache_scope == LOOM_CACHE_SCOPE_DEVICE &&
+         policy->cache_temporal == LOOM_CACHE_TEMPORAL_REGULAR;
+}
+
+static bool loom_amdgpu_memory_cache_policy_gfx12_th(uint8_t temporal,
+                                                     int64_t* out_th) {
+  *out_th = 0;
+  switch (temporal) {
+    case LOOM_CACHE_TEMPORAL_REGULAR:
+      *out_th = 0;
+      return true;
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL:
+      *out_th = 1;
+      return true;
+    case LOOM_CACHE_TEMPORAL_HIGH_TEMPORAL:
+      *out_th = 2;
+      return true;
+    case LOOM_CACHE_TEMPORAL_LAST_USE:
+    case LOOM_CACHE_TEMPORAL_WRITEBACK:
+    case LOOM_CACHE_TEMPORAL_BYPASS:
+      *out_th = 3;
+      return true;
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR:
+      *out_th = 4;
+      return true;
+    case LOOM_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL:
+      *out_th = 5;
+      return true;
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL:
+      *out_th = 6;
+      return true;
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK:
+      *out_th = 7;
+      return true;
+  }
+  return false;
+}
+
+static bool loom_amdgpu_memory_cache_policy_can_lower(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_memory_access_t* access, const loom_op_t* source_op) {
+  loom_vector_memory_cache_policy_t policy = {0};
+  if (!loom_vector_memory_cache_policy_from_op(source_op, &policy)) {
+    return false;
+  }
+  if (!loom_amdgpu_memory_cache_policy_is_present(&policy)) {
+    return true;
+  }
+  if (!loom_amdgpu_memory_cache_policy_is_complete(&policy) ||
+      access->memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    return false;
+  }
+
+  const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
+      loom_amdgpu_target_info_descriptor_set_by_id(descriptor_set->stable_id);
+  if (descriptor_set_info == NULL) {
+    return false;
+  }
+  switch (descriptor_set_info->vector_memory_cache_policy_encoding) {
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH: {
+      int64_t th = 0;
+      return loom_cache_scope_is_valid(policy.cache_scope) &&
+             loom_amdgpu_memory_cache_policy_gfx12_th(policy.cache_temporal,
+                                                      &th);
+    }
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1:
+      return policy.cache_scope == LOOM_CACHE_SCOPE_DEVICE &&
+             (policy.cache_temporal == LOOM_CACHE_TEMPORAL_REGULAR ||
+              policy.cache_temporal == LOOM_CACHE_TEMPORAL_NON_TEMPORAL);
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC:
+      return loom_amdgpu_memory_cache_policy_is_regular_device(&policy);
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE:
+      return false;
+  }
+  return false;
+}
+
 bool loom_amdgpu_can_lower_vector_load(loom_low_lower_context_t* context,
                                        const loom_op_t* source_op) {
   loom_amdgpu_memory_access_t access;
   const loom_func_like_t no_source_function = {0};
-  return loom_amdgpu_value_is_32bit_view(context,
-                                         loom_vector_load_view(source_op)) &&
-         loom_amdgpu_value_is_vector_32bit_lane_range(
-             context, loom_vector_load_result(source_op)) &&
-         loom_amdgpu_load_memory_access_select_with_source_function(
-             context, source_op, no_source_function, &access);
+  if (!loom_amdgpu_value_is_32bit_view(context,
+                                       loom_vector_load_view(source_op)) ||
+      !loom_amdgpu_value_is_vector_32bit_lane_range(
+          context, loom_vector_load_result(source_op)) ||
+      !loom_amdgpu_load_memory_access_select_with_source_function(
+          context, source_op, no_source_function, &access)) {
+    return false;
+  }
+  return loom_amdgpu_memory_cache_policy_can_lower(
+      loom_low_lower_context_descriptor_set(context), &access, source_op);
 }
 
 bool loom_amdgpu_can_lower_vector_store(loom_low_lower_context_t* context,
                                         const loom_op_t* source_op) {
   loom_amdgpu_memory_access_t access;
   const loom_func_like_t no_source_function = {0};
-  return loom_amdgpu_value_is_vector_32bit_lane_range(
-             context, loom_vector_store_value(source_op)) &&
-         loom_amdgpu_value_is_32bit_view(context,
-                                         loom_vector_store_view(source_op)) &&
-         loom_amdgpu_store_memory_access_select_with_source_function(
-             context, source_op, no_source_function, &access);
+  if (!loom_amdgpu_value_is_vector_32bit_lane_range(
+          context, loom_vector_store_value(source_op)) ||
+      !loom_amdgpu_value_is_32bit_view(context,
+                                       loom_vector_store_view(source_op)) ||
+      !loom_amdgpu_store_memory_access_select_with_source_function(
+          context, source_op, no_source_function, &access)) {
+    return false;
+  }
+  return loom_amdgpu_memory_cache_policy_can_lower(
+      loom_low_lower_context_descriptor_set(context), &access, source_op);
 }
 
 bool loom_amdgpu_source_op_selects_m0_descriptor(
@@ -1956,8 +2102,117 @@ static iree_status_t loom_amdgpu_emit_memory_saddr(
                                     /*offset=*/0, sgpr_x2_type, out_low_saddr);
 }
 
-static iree_status_t loom_amdgpu_make_memory_offset_attrs(
-    loom_low_lower_context_t* context,
+static iree_status_t loom_amdgpu_memory_cache_policy_rejected_status(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_memory_access_t* access,
+    const loom_vector_memory_cache_policy_t* policy) {
+  if (!loom_amdgpu_memory_cache_policy_is_complete(policy)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU vector memory cache policy requires both cache_scope and "
+        "cache_temporal");
+  }
+  const iree_string_view_t scope_name =
+      loom_amdgpu_cache_scope_name(policy->cache_scope);
+  const iree_string_view_t temporal_name =
+      loom_amdgpu_cache_temporal_name(policy->cache_temporal);
+  if (access->memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU workgroup memory packets cannot encode cache policy "
+        "%.*s/%.*s",
+        (int)scope_name.size, scope_name.data, (int)temporal_name.size,
+        temporal_name.data);
+  }
+  const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
+      loom_amdgpu_target_info_descriptor_set_by_id(descriptor_set->stable_id);
+  if (descriptor_set_info == NULL) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "AMDGPU descriptor set stable ID 0x%016" PRIx64
+                            " has no cache-policy target-info row",
+                            descriptor_set->stable_id);
+  }
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "AMDGPU descriptor set '%.*s' cannot faithfully encode vector memory "
+      "cache policy %.*s/%.*s",
+      (int)descriptor_set_info->descriptor_set_key.size,
+      descriptor_set_info->descriptor_set_key.data, (int)scope_name.size,
+      scope_name.data, (int)temporal_name.size, temporal_name.data);
+}
+
+static iree_status_t loom_amdgpu_append_memory_attr(
+    loom_low_lower_context_t* context, iree_string_view_t name, int64_t value,
+    loom_named_attr_t* attrs, iree_host_size_t attr_capacity,
+    iree_host_size_t* inout_attr_count) {
+  if (*inout_attr_count >= attr_capacity) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "AMDGPU memory attr capacity exceeded");
+  }
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_intern(context, name, &name_id));
+  attrs[*inout_attr_count] = (loom_named_attr_t){
+      .name_id = name_id,
+      .value = loom_attr_i64(value),
+  };
+  *inout_attr_count += 1;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_append_memory_cache_attrs(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_t* access, loom_named_attr_t* attrs,
+    iree_host_size_t attr_capacity, iree_host_size_t* inout_attr_count) {
+  loom_vector_memory_cache_policy_t policy = {0};
+  if (!loom_vector_memory_cache_policy_from_op(source_op, &policy)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU vector memory op has malformed cache "
+                            "policy attributes");
+  }
+  if (!loom_amdgpu_memory_cache_policy_is_present(&policy)) {
+    return iree_ok_status();
+  }
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  if (!loom_amdgpu_memory_cache_policy_can_lower(descriptor_set, access,
+                                                 source_op)) {
+    return loom_amdgpu_memory_cache_policy_rejected_status(descriptor_set,
+                                                           access, &policy);
+  }
+
+  const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
+      loom_amdgpu_target_info_descriptor_set_by_id(descriptor_set->stable_id);
+  switch (descriptor_set_info->vector_memory_cache_policy_encoding) {
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH: {
+      int64_t th = 0;
+      if (!loom_amdgpu_memory_cache_policy_gfx12_th(policy.cache_temporal,
+                                                    &th)) {
+        return loom_amdgpu_memory_cache_policy_rejected_status(descriptor_set,
+                                                               access, &policy);
+      }
+      IREE_RETURN_IF_ERROR(loom_amdgpu_append_memory_attr(
+          context, IREE_SV("scope"), policy.cache_scope, attrs, attr_capacity,
+          inout_attr_count));
+      return loom_amdgpu_append_memory_attr(context, IREE_SV("th"), th, attrs,
+                                            attr_capacity, inout_attr_count);
+    }
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1:
+      if (policy.cache_temporal == LOOM_CACHE_TEMPORAL_NON_TEMPORAL) {
+        return loom_amdgpu_append_memory_attr(context, IREE_SV("nt"), 1, attrs,
+                                              attr_capacity, inout_attr_count);
+      }
+      return iree_ok_status();
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC:
+      return iree_ok_status();
+    case LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE:
+      break;
+  }
+  return loom_amdgpu_memory_cache_policy_rejected_status(descriptor_set, access,
+                                                         &policy);
+}
+
+static iree_status_t loom_amdgpu_make_memory_attrs(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_t* access, loom_named_attr_t* attrs,
     iree_host_size_t attr_capacity, iree_host_size_t* out_attr_count) {
   IREE_ASSERT_ARGUMENT(access);
@@ -1965,35 +2220,19 @@ static iree_status_t loom_amdgpu_make_memory_offset_attrs(
   IREE_ASSERT_ARGUMENT(out_attr_count);
   *out_attr_count = 0;
   if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR) {
-    IREE_ASSERT_GE(attr_capacity, 2);
-    loom_string_id_t offset0_id = LOOM_STRING_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_intern(context, IREE_SV("offset0"), &offset0_id));
-    loom_string_id_t offset1_id = LOOM_STRING_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_intern(context, IREE_SV("offset1"), &offset1_id));
-    attrs[0] = (loom_named_attr_t){
-        .name_id = offset0_id,
-        .value = loom_attr_i64(access->immediate_offset),
-    };
-    attrs[1] = (loom_named_attr_t){
-        .name_id = offset1_id,
-        .value = loom_attr_i64(access->secondary_immediate_offset),
-    };
-    *out_attr_count = 2;
-    return iree_ok_status();
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_memory_attr(
+        context, IREE_SV("offset0"), access->immediate_offset, attrs,
+        attr_capacity, out_attr_count));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_memory_attr(
+        context, IREE_SV("offset1"), access->secondary_immediate_offset, attrs,
+        attr_capacity, out_attr_count));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_memory_attr(
+        context, IREE_SV("offset"), access->immediate_offset, attrs,
+        attr_capacity, out_attr_count));
   }
-
-  IREE_ASSERT_GE(attr_capacity, 1);
-  loom_string_id_t offset_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_intern(context, IREE_SV("offset"), &offset_id));
-  attrs[0] = (loom_named_attr_t){
-      .name_id = offset_id,
-      .value = loom_attr_i64(access->immediate_offset),
-  };
-  *out_attr_count = 1;
-  return iree_ok_status();
+  return loom_amdgpu_append_memory_cache_attrs(
+      context, source_op, access, attrs, attr_capacity, out_attr_count);
 }
 
 iree_status_t loom_amdgpu_lower_vector_load(loom_low_lower_context_t* context,
@@ -2023,10 +2262,10 @@ iree_status_t loom_amdgpu_lower_vector_load(loom_low_lower_context_t* context,
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
       context, source_op, loom_vector_load_result(source_op), &result_type));
 
-  loom_named_attr_t attrs[2] = {0};
+  loom_named_attr_t attrs[5] = {0};
   iree_host_size_t attr_count = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_memory_offset_attrs(
-      context, &access, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_memory_attrs(
+      context, source_op, &access, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
   if (access.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     if (access.address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
       loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
@@ -2127,10 +2366,10 @@ iree_status_t loom_amdgpu_lower_vector_store(loom_low_lower_context_t* context,
         context, source_op, &access, low_base_addr, &low_vaddr));
   }
 
-  loom_named_attr_t attrs[2] = {0};
+  loom_named_attr_t attrs[5] = {0};
   iree_host_size_t attr_count = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_memory_offset_attrs(
-      context, &access, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_memory_attrs(
+      context, source_op, &access, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
   if (access.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     if (access.address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
       loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
@@ -2277,6 +2516,12 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_memory(
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("memory"), loom_op_name(module, op),
         loom_amdgpu_memory_access_rejection_detail(diagnostic.rejection_bits));
+  }
+  if (!loom_amdgpu_memory_cache_policy_can_lower(descriptor_set, &access, op)) {
+    return loom_target_low_legality_reject(
+        context, provider, op, IREE_SV("cache"), loom_op_name(module, op),
+        IREE_SV("AMDGPU vector memory cache policy is not representable by "
+                "the selected descriptor set"));
   }
   return loom_amdgpu_record_memory_access_diagnostic(
       provider, context, op, descriptor_set, &access, kind);

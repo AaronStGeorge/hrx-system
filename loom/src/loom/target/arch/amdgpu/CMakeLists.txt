@@ -470,12 +470,14 @@ loom_cc_library(
   DEPS
     ::descriptor_ids
     ::hal_kernel_abi
+    ::target_info
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::buffer
+    loom::src::loom::ops::cache
     loom::src::loom::ops::encoding
     loom::src::loom::ops::index
     loom::src::loom::ops::kernel
@@ -728,6 +730,17 @@ iree_executable_test(
     "source_low_addtid"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_addtid.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_cache_policy"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_cache_policy.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

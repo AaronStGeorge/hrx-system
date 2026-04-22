@@ -59,6 +59,17 @@ typedef enum loom_amdgpu_buffer_resource_cache_swizzle_e {
   LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT = 1,
 } loom_amdgpu_buffer_resource_cache_swizzle_t;
 
+typedef enum loom_amdgpu_vector_memory_cache_policy_encoding_e {
+  // Vector memory descriptors do not expose cache-policy immediates.
+  LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE = 0,
+  // Vector memory descriptors expose GLC/SLC/DLC cache controls.
+  LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC = 1,
+  // Vector memory descriptors expose NV/SCOPE/TH cache controls.
+  LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH = 2,
+  // Vector memory descriptors expose NT/SC0/SC1 cache controls.
+  LOOM_AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = 3,
+} loom_amdgpu_vector_memory_cache_policy_encoding_t;
+
 typedef struct loom_amdgpu_descriptor_set_info_t {
   // Durable descriptor-set identity derived from the descriptor-set key.
   uint64_t descriptor_set_stable_id;
@@ -72,6 +83,9 @@ typedef struct loom_amdgpu_descriptor_set_info_t {
   bool supports_descriptor_packet_encoding;
   // Buffer resource descriptor cache-swizzle encoding shape.
   loom_amdgpu_buffer_resource_cache_swizzle_t buffer_resource_cache_swizzle;
+  // Vector memory packet cache-policy immediate encoding shape.
+  loom_amdgpu_vector_memory_cache_policy_encoding_t
+      vector_memory_cache_policy_encoding;
 } loom_amdgpu_descriptor_set_info_t;
 
 typedef struct loom_amdgpu_processor_info_t {
@@ -135,6 +149,10 @@ iree_status_t loom_amdgpu_target_info_lookup_descriptor_set(
 iree_status_t loom_amdgpu_target_info_lookup_descriptor_set_by_id(
     uint64_t descriptor_set_stable_id,
     const loom_amdgpu_descriptor_set_info_t** out_descriptor_set);
+
+// Returns descriptor-set facts by stable ID, or NULL when unsupported.
+const loom_amdgpu_descriptor_set_info_t*
+loom_amdgpu_target_info_descriptor_set_by_id(uint64_t descriptor_set_stable_id);
 
 // Parses an AMDHSA target ID such as `amdgcn-amd-amdhsa--gfx1100`.
 iree_status_t loom_amdgpu_target_info_parse_amdhsa_target_id(

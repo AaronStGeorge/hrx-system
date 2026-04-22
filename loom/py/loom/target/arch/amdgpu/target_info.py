@@ -32,6 +32,11 @@ AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250 = "wmma_gfx1250"
 AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE = "none"
 AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT = "stride14_enable_bit"
 
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE = "none"
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC = "gfx9_11_glc_slc_dlc"
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH = "gfx12_nv_scope_th"
+AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = "gfx950_nt_sc0_sc1"
+
 AMDGPU_SOPP_S_ENDPGM_GFX9_GFX10_GFX13_OPCODE = 0x001
 AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE = 0x030
 
@@ -43,6 +48,9 @@ class AmdgpuDescriptorSetInfo:
     s_endpgm_opcode: int
     supports_descriptor_packet_encoding: bool
     buffer_resource_cache_swizzle: str = AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE
+    vector_memory_cache_policy_encoding: str = (
+        AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_NONE
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,18 +96,21 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         low_preset_key="amdgpu-gfx1250",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE,
         supports_descriptor_packet_encoding=True,
+        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     ),
     AmdgpuDescriptorSetInfo(
         key="amdgpu.gfx11.core",
         low_preset_key="amdgpu-gfx11",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE,
         supports_descriptor_packet_encoding=True,
+        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
     ),
     AmdgpuDescriptorSetInfo(
         key="amdgpu.gfx12.core",
         low_preset_key="amdgpu-gfx12",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE,
         supports_descriptor_packet_encoding=True,
+        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     ),
     AmdgpuDescriptorSetInfo(
         key="amdgpu.gfx950.core",
@@ -107,6 +118,7 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX9_GFX10_GFX13_OPCODE,
         supports_descriptor_packet_encoding=True,
         buffer_resource_cache_swizzle=AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT,
+        vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
     ),
 )
 
