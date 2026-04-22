@@ -8,8 +8,7 @@
 
 #include <stdint.h>
 
-#include "loom/ir/module.h"
-#include "loom/ops/low/ops.h"
+#include "loom/codegen/low/lower_rules.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/wasm/descriptors.h"
@@ -31,24 +30,6 @@ static bool loom_wasm_type_is_vector_4xf32(loom_type_t type) {
          loom_type_is_all_static(type) &&
          loom_type_element_type(type) == LOOM_SCALAR_TYPE_F32 &&
          loom_type_dim_static_size_at(type, 0) == 4;
-}
-
-static bool loom_wasm_value_is_i32(loom_low_lower_context_t* context,
-                                   loom_value_id_t value_id) {
-  return loom_wasm_type_is_i32(
-      loom_module_value_type(loom_low_lower_context_module(context), value_id));
-}
-
-static bool loom_wasm_value_is_vector_4xi32(loom_low_lower_context_t* context,
-                                            loom_value_id_t value_id) {
-  return loom_wasm_type_is_vector_4xi32(
-      loom_module_value_type(loom_low_lower_context_module(context), value_id));
-}
-
-static bool loom_wasm_value_is_vector_4xf32(loom_low_lower_context_t* context,
-                                            loom_value_id_t value_id) {
-  return loom_wasm_type_is_vector_4xf32(
-      loom_module_value_type(loom_low_lower_context_module(context), value_id));
 }
 
 static iree_status_t loom_wasm_make_i32_register_type(
@@ -84,308 +65,473 @@ static iree_status_t loom_wasm_map_type(void* user_data,
               "vector<4xi32>/vector<4xf32> SIMD values"));
 }
 
-static bool loom_wasm_can_lower_constant(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op) {
-  if (!loom_wasm_value_is_i32(context,
-                              loom_scalar_constant_result(source_op))) {
-    return false;
-  }
-  const loom_attribute_t value = loom_scalar_constant_value(source_op);
-  return value.kind == LOOM_ATTR_I64 && value.i64 >= INT32_MIN &&
-         value.i64 <= INT32_MAX;
-}
+enum loom_wasm_type_pattern_e {
+  LOOM_WASM_TYPE_I32 = 0,
+  LOOM_WASM_TYPE_V4I32 = 1,
+  LOOM_WASM_TYPE_V4F32 = 2,
+};
 
-static bool loom_wasm_can_lower_i32_binary(loom_low_lower_context_t* context,
-                                           loom_value_id_t lhs,
-                                           loom_value_id_t rhs,
-                                           loom_value_id_t result) {
-  return loom_wasm_value_is_i32(context, lhs) &&
-         loom_wasm_value_is_i32(context, rhs) &&
-         loom_wasm_value_is_i32(context, result);
-}
+static const loom_low_lower_type_pattern_t loom_wasm_type_patterns[] = {
+    [LOOM_WASM_TYPE_I32] =
+        {
+            .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT,
+            .type_kind = LOOM_TYPE_SCALAR,
+            .element_type_mask =
+                LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
+        },
+    [LOOM_WASM_TYPE_V4I32] =
+        {
+            .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0,
+            .type_kind = LOOM_TYPE_VECTOR,
+            .element_type_mask =
+                LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
+            .rank = 1,
+            .static_dim0 = 4,
+        },
+    [LOOM_WASM_TYPE_V4F32] =
+        {
+            .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0,
+            .type_kind = LOOM_TYPE_VECTOR,
+            .element_type_mask =
+                LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_F32),
+            .rank = 1,
+            .static_dim0 = 4,
+        },
+};
 
-static bool loom_wasm_can_lower_vector_4xi32_binary(
-    loom_low_lower_context_t* context, loom_value_id_t lhs, loom_value_id_t rhs,
-    loom_value_id_t result) {
-  return loom_wasm_value_is_vector_4xi32(context, lhs) &&
-         loom_wasm_value_is_vector_4xi32(context, rhs) &&
-         loom_wasm_value_is_vector_4xi32(context, result);
-}
+enum loom_wasm_value_ref_e {
+  LOOM_WASM_OPERAND0 = 0,
+  LOOM_WASM_OPERAND1 = 1,
+  LOOM_WASM_RESULT0 = 2,
+};
 
-static bool loom_wasm_can_lower_vector_4xf32_binary(
-    loom_low_lower_context_t* context, loom_value_id_t lhs, loom_value_id_t rhs,
-    loom_value_id_t result) {
-  return loom_wasm_value_is_vector_4xf32(context, lhs) &&
-         loom_wasm_value_is_vector_4xf32(context, rhs) &&
-         loom_wasm_value_is_vector_4xf32(context, result);
-}
+static const loom_low_lower_value_ref_t loom_wasm_value_refs[] = {
+    [LOOM_WASM_OPERAND0] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+            .index = 0,
+        },
+    [LOOM_WASM_OPERAND1] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+            .index = 1,
+        },
+    [LOOM_WASM_RESULT0] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_RESULT,
+            .index = 0,
+        },
+};
 
-static bool loom_wasm_can_lower_i32x4_splat(loom_low_lower_context_t* context,
-                                            loom_value_id_t scalar,
-                                            loom_value_id_t result) {
-  return loom_wasm_value_is_i32(context, scalar) &&
-         loom_wasm_value_is_vector_4xi32(context, result);
-}
+static const loom_low_lower_attr_copy_t loom_wasm_attr_copies[] = {
+    {
+        .target_name = IREE_SVL("i32_value"),
+        .source_attr_index = 0,
+    },
+};
 
-static iree_status_t loom_wasm_select_op(void* user_data,
-                                         loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op,
-                                         loom_low_lower_plan_t* out_plan) {
-  (void)user_data;
-  IREE_ASSERT_ARGUMENT(out_plan);
-  *out_plan = loom_low_lower_plan_empty();
-  switch (source_op->kind) {
-    case LOOM_OP_SCALAR_CONSTANT:
-      if (loom_wasm_can_lower_constant(context, source_op)) {
-        *out_plan = (loom_low_lower_plan_t){
-            .id = source_op->kind,
-            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_CONST,
-        };
-      }
-      return iree_ok_status();
-    case LOOM_OP_SCALAR_ADDI:
-      if (loom_wasm_can_lower_i32_binary(context,
-                                         loom_scalar_addi_lhs(source_op),
-                                         loom_scalar_addi_rhs(source_op),
-                                         loom_scalar_addi_result(source_op))) {
-        *out_plan = (loom_low_lower_plan_t){
-            .id = source_op->kind,
-            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD,
-        };
-      }
-      return iree_ok_status();
-    case LOOM_OP_SCALAR_SUBI:
-      if (loom_wasm_can_lower_i32_binary(context,
-                                         loom_scalar_subi_lhs(source_op),
-                                         loom_scalar_subi_rhs(source_op),
-                                         loom_scalar_subi_result(source_op))) {
-        *out_plan = (loom_low_lower_plan_t){
-            .id = source_op->kind,
-            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_SUB,
-        };
-      }
-      return iree_ok_status();
-    case LOOM_OP_VECTOR_ADDI:
-      if (loom_wasm_can_lower_vector_4xi32_binary(
-              context, loom_vector_addi_lhs(source_op),
-              loom_vector_addi_rhs(source_op),
-              loom_vector_addi_result(source_op))) {
-        *out_plan = (loom_low_lower_plan_t){
-            .id = source_op->kind,
-            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_ADD,
-        };
-      }
-      return iree_ok_status();
-    case LOOM_OP_VECTOR_SUBI:
-      if (loom_wasm_can_lower_vector_4xi32_binary(
-              context, loom_vector_subi_lhs(source_op),
-              loom_vector_subi_rhs(source_op),
-              loom_vector_subi_result(source_op))) {
-        *out_plan = (loom_low_lower_plan_t){
-            .id = source_op->kind,
-            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SUB,
-        };
-      }
-      return iree_ok_status();
-    case LOOM_OP_VECTOR_MULI:
-      if (loom_wasm_can_lower_vector_4xi32_binary(
-              context, loom_vector_muli_lhs(source_op),
-              loom_vector_muli_rhs(source_op),
-              loom_vector_muli_result(source_op))) {
-        *out_plan = (loom_low_lower_plan_t){
-            .id = source_op->kind,
-            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_MUL,
-        };
-      }
-      return iree_ok_status();
-    case LOOM_OP_VECTOR_ADDF:
-      if (loom_wasm_can_lower_vector_4xf32_binary(
-              context, loom_vector_addf_lhs(source_op),
-              loom_vector_addf_rhs(source_op),
-              loom_vector_addf_result(source_op))) {
-        *out_plan = (loom_low_lower_plan_t){
-            .id = source_op->kind,
-            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_ADD,
-        };
-      }
-      return iree_ok_status();
-    case LOOM_OP_VECTOR_MULF:
-      if (loom_wasm_can_lower_vector_4xf32_binary(
-              context, loom_vector_mulf_lhs(source_op),
-              loom_vector_mulf_rhs(source_op),
-              loom_vector_mulf_result(source_op))) {
-        *out_plan = (loom_low_lower_plan_t){
-            .id = source_op->kind,
-            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_MUL,
-        };
-      }
-      return iree_ok_status();
-    case LOOM_OP_VECTOR_SPLAT:
-      if (loom_wasm_can_lower_i32x4_splat(
-              context, loom_vector_splat_scalar(source_op),
-              loom_vector_splat_result(source_op))) {
-        *out_plan = (loom_low_lower_plan_t){
-            .id = source_op->kind,
-            .payload = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SPLAT,
-        };
-      }
-      return iree_ok_status();
-    default:
-      return iree_ok_status();
-  }
-}
+enum loom_wasm_diagnostic_e {
+  LOOM_WASM_DIAGNOSTIC_I32 = 0,
+  LOOM_WASM_DIAGNOSTIC_V4I32 = 1,
+  LOOM_WASM_DIAGNOSTIC_V4F32 = 2,
+  LOOM_WASM_DIAGNOSTIC_I64_ATTR = 3,
+  LOOM_WASM_DIAGNOSTIC_I32_CONSTANT_RANGE = 4,
+};
 
-static iree_status_t loom_wasm_intern(loom_low_lower_context_t* context,
-                                      iree_string_view_t string,
-                                      loom_string_id_t* out_string_id) {
-  return loom_module_intern_string(loom_low_lower_context_module(context),
-                                   string, out_string_id);
-}
+static const loom_low_lower_diagnostic_t loom_wasm_diagnostics[] = {
+    [LOOM_WASM_DIAGNOSTIC_I32] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("i32"),
+            .reason = IREE_SVL("Wasm lowering requires i32 scalar values"),
+        },
+    [LOOM_WASM_DIAGNOSTIC_V4I32] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("vector<4xi32>"),
+            .reason =
+                IREE_SVL("Wasm SIMD lowering requires vector<4xi32> values"),
+        },
+    [LOOM_WASM_DIAGNOSTIC_V4F32] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("vector<4xf32>"),
+            .reason =
+                IREE_SVL("Wasm SIMD lowering requires vector<4xf32> values"),
+        },
+    [LOOM_WASM_DIAGNOSTIC_I64_ATTR] =
+        {
+            .subject_kind = IREE_SVL("attr"),
+            .subject_name = IREE_SVL("value"),
+            .reason = IREE_SVL("Wasm constant lowering requires an i64 value"),
+        },
+    [LOOM_WASM_DIAGNOSTIC_I32_CONSTANT_RANGE] =
+        {
+            .subject_kind = IREE_SVL("attr"),
+            .subject_name = IREE_SVL("value"),
+            .reason = IREE_SVL("Wasm i32 constants must fit in signed i32"),
+        },
+};
 
-static iree_status_t loom_wasm_low_result_type(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_result, loom_type_t* out_low_type) {
-  IREE_RETURN_IF_ERROR(loom_low_lower_map_value(context, source_op,
-                                                source_result, out_low_type));
-  if (!loom_type_is_register(*out_low_type)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "Wasm source type did not map to a register type");
-  }
-  return iree_ok_status();
-}
+enum loom_wasm_guard_e {
+  LOOM_WASM_CONST_VALUE_GUARD = 0,
+  LOOM_WASM_CONST_RESULT_GUARD = 1,
+  LOOM_WASM_CONST_RANGE_GUARD = 2,
+  LOOM_WASM_SCALAR_LHS_GUARD = 3,
+  LOOM_WASM_SCALAR_RHS_GUARD = 4,
+  LOOM_WASM_SCALAR_RESULT_GUARD = 5,
+  LOOM_WASM_SPLAT_SCALAR_GUARD = 6,
+  LOOM_WASM_SPLAT_RESULT_GUARD = 7,
+  LOOM_WASM_V4F32_LHS_GUARD = 8,
+  LOOM_WASM_V4F32_RHS_GUARD = 9,
+  LOOM_WASM_V4F32_RESULT_GUARD = 10,
+  LOOM_WASM_V4I32_LHS_GUARD = 11,
+  LOOM_WASM_V4I32_RHS_GUARD = 12,
+  LOOM_WASM_V4I32_RESULT_GUARD = 13,
+};
 
-static iree_status_t loom_wasm_lower_constant(loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op,
-                                              uint64_t descriptor_id) {
-  loom_string_id_t value_name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_wasm_intern(context, IREE_SV("i32_value"), &value_name_id));
+static const loom_low_lower_guard_t loom_wasm_guards[] = {
+    [LOOM_WASM_CONST_VALUE_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_ATTR_KIND,
+            .attr_index = 0,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_I64_ATTR,
+            .attr_kind = LOOM_ATTR_I64,
+        },
+    [LOOM_WASM_CONST_RESULT_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_RESULT0,
+            .type_pattern_index = LOOM_WASM_TYPE_I32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_I32,
+        },
+    [LOOM_WASM_CONST_RANGE_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_ATTR_I64_RANGE,
+            .attr_index = 0,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_I32_CONSTANT_RANGE,
+            .minimum_i64 = INT32_MIN,
+            .maximum_i64 = INT32_MAX,
+        },
+    [LOOM_WASM_SCALAR_LHS_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_OPERAND0,
+            .type_pattern_index = LOOM_WASM_TYPE_I32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_I32,
+        },
+    [LOOM_WASM_SCALAR_RHS_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_OPERAND1,
+            .type_pattern_index = LOOM_WASM_TYPE_I32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_I32,
+        },
+    [LOOM_WASM_SCALAR_RESULT_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_RESULT0,
+            .type_pattern_index = LOOM_WASM_TYPE_I32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_I32,
+        },
+    [LOOM_WASM_SPLAT_SCALAR_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_OPERAND0,
+            .type_pattern_index = LOOM_WASM_TYPE_I32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_I32,
+        },
+    [LOOM_WASM_SPLAT_RESULT_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_RESULT0,
+            .type_pattern_index = LOOM_WASM_TYPE_V4I32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_V4I32,
+        },
+    [LOOM_WASM_V4F32_LHS_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_OPERAND0,
+            .type_pattern_index = LOOM_WASM_TYPE_V4F32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_V4F32,
+        },
+    [LOOM_WASM_V4F32_RHS_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_OPERAND1,
+            .type_pattern_index = LOOM_WASM_TYPE_V4F32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_V4F32,
+        },
+    [LOOM_WASM_V4F32_RESULT_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_RESULT0,
+            .type_pattern_index = LOOM_WASM_TYPE_V4F32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_V4F32,
+        },
+    [LOOM_WASM_V4I32_LHS_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_OPERAND0,
+            .type_pattern_index = LOOM_WASM_TYPE_V4I32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_V4I32,
+        },
+    [LOOM_WASM_V4I32_RHS_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_OPERAND1,
+            .type_pattern_index = LOOM_WASM_TYPE_V4I32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_V4I32,
+        },
+    [LOOM_WASM_V4I32_RESULT_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_WASM_RESULT0,
+            .type_pattern_index = LOOM_WASM_TYPE_V4I32,
+            .diagnostic_index = LOOM_WASM_DIAGNOSTIC_V4I32,
+        },
+};
 
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_wasm_low_result_type(
-      context, source_op, loom_scalar_constant_result(source_op),
-      &result_type));
+enum loom_wasm_emit_e {
+  LOOM_WASM_EMIT_I32_CONST = 0,
+  LOOM_WASM_EMIT_I32_ADD = 1,
+  LOOM_WASM_EMIT_I32_SUB = 2,
+  LOOM_WASM_EMIT_I32X4_SPLAT = 3,
+  LOOM_WASM_EMIT_F32X4_ADD = 4,
+  LOOM_WASM_EMIT_F32X4_MUL = 5,
+  LOOM_WASM_EMIT_I32X4_ADD = 6,
+  LOOM_WASM_EMIT_I32X4_SUB = 7,
+  LOOM_WASM_EMIT_I32X4_MUL = 8,
+};
 
-  loom_named_attr_t attrs[] = {
-      {
-          .name_id = value_name_id,
-          .value = loom_scalar_constant_value(source_op),
-      },
-  };
-  loom_op_t* low_const = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_const(
-      context, descriptor_id,
-      loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(attrs)), result_type,
-      source_op->location, &low_const));
-  return loom_low_lower_bind_value(context,
-                                   loom_scalar_constant_result(source_op),
-                                   loom_low_const_result(low_const));
-}
+static const loom_low_lower_emit_t loom_wasm_emits[] = {
+    [LOOM_WASM_EMIT_I32_CONST] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST,
+            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_CONST,
+            .result_ref_start = LOOM_WASM_RESULT0,
+            .result_ref_count = 1,
+            .attr_copy_start = 0,
+            .attr_copy_count = 1,
+        },
+    [LOOM_WASM_EMIT_I32_ADD] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD,
+            .operand_ref_start = LOOM_WASM_OPERAND0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_WASM_RESULT0,
+            .result_ref_count = 1,
+        },
+    [LOOM_WASM_EMIT_I32_SUB] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_SUB,
+            .operand_ref_start = LOOM_WASM_OPERAND0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_WASM_RESULT0,
+            .result_ref_count = 1,
+        },
+    [LOOM_WASM_EMIT_I32X4_SPLAT] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SPLAT,
+            .operand_ref_start = LOOM_WASM_OPERAND0,
+            .operand_ref_count = 1,
+            .result_ref_start = LOOM_WASM_RESULT0,
+            .result_ref_count = 1,
+        },
+    [LOOM_WASM_EMIT_F32X4_ADD] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_ADD,
+            .operand_ref_start = LOOM_WASM_OPERAND0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_WASM_RESULT0,
+            .result_ref_count = 1,
+        },
+    [LOOM_WASM_EMIT_F32X4_MUL] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_MUL,
+            .operand_ref_start = LOOM_WASM_OPERAND0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_WASM_RESULT0,
+            .result_ref_count = 1,
+        },
+    [LOOM_WASM_EMIT_I32X4_ADD] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_ADD,
+            .operand_ref_start = LOOM_WASM_OPERAND0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_WASM_RESULT0,
+            .result_ref_count = 1,
+        },
+    [LOOM_WASM_EMIT_I32X4_SUB] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SUB,
+            .operand_ref_start = LOOM_WASM_OPERAND0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_WASM_RESULT0,
+            .result_ref_count = 1,
+        },
+    [LOOM_WASM_EMIT_I32X4_MUL] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_MUL,
+            .operand_ref_start = LOOM_WASM_OPERAND0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_WASM_RESULT0,
+            .result_ref_count = 1,
+        },
+};
 
-static iree_status_t loom_wasm_lower_unary(loom_low_lower_context_t* context,
-                                           const loom_op_t* source_op,
-                                           uint64_t descriptor_id,
-                                           loom_value_id_t source_operand,
-                                           loom_value_id_t source_result) {
-  loom_value_id_t low_operand = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, source_operand, &low_operand));
+static const loom_low_lower_rule_t loom_wasm_rules[] = {
+    {
+        .source_op_kind = LOOM_OP_SCALAR_ADDI,
+        .guard_start = LOOM_WASM_SCALAR_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_WASM_EMIT_I32_ADD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_SUBI,
+        .guard_start = LOOM_WASM_SCALAR_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_WASM_EMIT_I32_SUB,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
+        .guard_start = LOOM_WASM_CONST_VALUE_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_WASM_EMIT_I32_CONST,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SPLAT,
+        .guard_start = LOOM_WASM_SPLAT_SCALAR_GUARD,
+        .guard_count = 2,
+        .emit_start = LOOM_WASM_EMIT_I32X4_SPLAT,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ADDF,
+        .guard_start = LOOM_WASM_V4F32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_WASM_EMIT_F32X4_ADD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_MULF,
+        .guard_start = LOOM_WASM_V4F32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_WASM_EMIT_F32X4_MUL,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ADDI,
+        .guard_start = LOOM_WASM_V4I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_WASM_EMIT_I32X4_ADD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SUBI,
+        .guard_start = LOOM_WASM_V4I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_WASM_EMIT_I32X4_SUB,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_MULI,
+        .guard_start = LOOM_WASM_V4I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_WASM_EMIT_I32X4_MUL,
+        .emit_count = 1,
+    },
+};
 
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_wasm_low_result_type(context, source_op,
-                                                 source_result, &result_type));
+static const loom_low_lower_rule_span_t loom_wasm_rule_spans[] = {
+    {
+        .source_op_kind = LOOM_OP_SCALAR_ADDI,
+        .rule_start = 0,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_SUBI,
+        .rule_start = 1,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
+        .rule_start = 2,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SPLAT,
+        .rule_start = 3,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ADDF,
+        .rule_start = 4,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_MULF,
+        .rule_start = 5,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ADDI,
+        .rule_start = 6,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SUBI,
+        .rule_start = 7,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_MULI,
+        .rule_start = 8,
+        .rule_count = 1,
+    },
+};
 
-  loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, descriptor_id, &low_operand, 1,
-      loom_make_named_attr_slice(NULL, 0), &result_type, 1,
-      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
-      &low_op));
-  return loom_low_lower_bind_value(
-      context, source_result,
-      loom_value_slice_get(loom_low_op_results(low_op), 0));
-}
-
-static iree_status_t loom_wasm_lower_binary(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op,
-                                            uint64_t descriptor_id,
-                                            loom_value_id_t source_lhs,
-                                            loom_value_id_t source_rhs,
-                                            loom_value_id_t source_result) {
-  loom_value_id_t low_operands[2] = {LOOM_VALUE_ID_INVALID,
-                                     LOOM_VALUE_ID_INVALID};
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, source_lhs, &low_operands[0]));
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, source_rhs, &low_operands[1]));
-
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_wasm_low_result_type(context, source_op,
-                                                 source_result, &result_type));
-
-  loom_op_t* low_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, descriptor_id, low_operands, IREE_ARRAYSIZE(low_operands),
-      loom_make_named_attr_slice(NULL, 0), &result_type, 1,
-      /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
-      &low_op));
-  return loom_low_lower_bind_value(
-      context, source_result,
-      loom_value_slice_get(loom_low_op_results(low_op), 0));
-}
-
-static iree_status_t loom_wasm_emit_op(void* user_data,
-                                       loom_low_lower_context_t* context,
-                                       const loom_op_t* source_op,
-                                       loom_low_lower_plan_t plan) {
-  (void)user_data;
-  switch (plan.id) {
-    case LOOM_OP_SCALAR_CONSTANT:
-      return loom_wasm_lower_constant(context, source_op, plan.payload);
-    case LOOM_OP_SCALAR_ADDI:
-      return loom_wasm_lower_binary(
-          context, source_op, plan.payload, loom_scalar_addi_lhs(source_op),
-          loom_scalar_addi_rhs(source_op), loom_scalar_addi_result(source_op));
-    case LOOM_OP_SCALAR_SUBI:
-      return loom_wasm_lower_binary(
-          context, source_op, plan.payload, loom_scalar_subi_lhs(source_op),
-          loom_scalar_subi_rhs(source_op), loom_scalar_subi_result(source_op));
-    case LOOM_OP_VECTOR_ADDI:
-      return loom_wasm_lower_binary(
-          context, source_op, plan.payload, loom_vector_addi_lhs(source_op),
-          loom_vector_addi_rhs(source_op), loom_vector_addi_result(source_op));
-    case LOOM_OP_VECTOR_SUBI:
-      return loom_wasm_lower_binary(
-          context, source_op, plan.payload, loom_vector_subi_lhs(source_op),
-          loom_vector_subi_rhs(source_op), loom_vector_subi_result(source_op));
-    case LOOM_OP_VECTOR_MULI:
-      return loom_wasm_lower_binary(
-          context, source_op, plan.payload, loom_vector_muli_lhs(source_op),
-          loom_vector_muli_rhs(source_op), loom_vector_muli_result(source_op));
-    case LOOM_OP_VECTOR_ADDF:
-      return loom_wasm_lower_binary(
-          context, source_op, plan.payload, loom_vector_addf_lhs(source_op),
-          loom_vector_addf_rhs(source_op), loom_vector_addf_result(source_op));
-    case LOOM_OP_VECTOR_MULF:
-      return loom_wasm_lower_binary(
-          context, source_op, plan.payload, loom_vector_mulf_lhs(source_op),
-          loom_vector_mulf_rhs(source_op), loom_vector_mulf_result(source_op));
-    case LOOM_OP_VECTOR_SPLAT:
-      return loom_wasm_lower_unary(context, source_op, plan.payload,
-                                   loom_vector_splat_scalar(source_op),
-                                   loom_vector_splat_result(source_op));
-    default:
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "Wasm lowering received an unknown selected "
-                              "plan");
-  }
-}
+static const loom_low_lower_rule_set_t loom_wasm_rule_set = {
+    .spans = loom_wasm_rule_spans,
+    .span_count = IREE_ARRAYSIZE(loom_wasm_rule_spans),
+    .rules = loom_wasm_rules,
+    .rule_count = IREE_ARRAYSIZE(loom_wasm_rules),
+    .type_patterns = loom_wasm_type_patterns,
+    .type_pattern_count = IREE_ARRAYSIZE(loom_wasm_type_patterns),
+    .value_refs = loom_wasm_value_refs,
+    .value_ref_count = IREE_ARRAYSIZE(loom_wasm_value_refs),
+    .guards = loom_wasm_guards,
+    .guard_count = IREE_ARRAYSIZE(loom_wasm_guards),
+    .attr_copies = loom_wasm_attr_copies,
+    .attr_copy_count = IREE_ARRAYSIZE(loom_wasm_attr_copies),
+    .emits = loom_wasm_emits,
+    .emit_count = IREE_ARRAYSIZE(loom_wasm_emits),
+    .diagnostics = loom_wasm_diagnostics,
+    .diagnostic_count = IREE_ARRAYSIZE(loom_wasm_diagnostics),
+};
 
 static const loom_low_lower_policy_t kWasmLowLowerPolicy = {
     .name = IREE_SVL("wasm-lower"),
     .map_type = {.fn = loom_wasm_map_type, .user_data = NULL},
-    .select_op = {.fn = loom_wasm_select_op, .user_data = NULL},
-    .emit_op = {.fn = loom_wasm_emit_op, .user_data = NULL},
+    .rule_set = &loom_wasm_rule_set,
 };
 
 const loom_low_lower_policy_t* loom_wasm_low_lower_policy(void) {

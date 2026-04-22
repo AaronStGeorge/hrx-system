@@ -23,9 +23,9 @@ extern "C" {
 // Returns the package-local lowering policy for the Wasm scalar and SIMD
 // subset.
 //
-// The policy maps i32 source values to reg<wasm.i32>, vector<4xi32> source
-// values to reg<wasm.v128>, and currently lowers scalar.constant,
-// scalar.addi/subi, and vector.addi/muli over those target-legal values.
+// The policy maps i32 source values to reg<wasm.i32> and vector<4xi32>/
+// vector<4xf32> source values to reg<wasm.v128>. It lowers the scalar and
+// fixed-width SIMD arithmetic subset described by the Wasm descriptor tables.
 // Unsupported source ops are rejected through the generic backend diagnostic
 // sink instead of producing partial low IR.
 const loom_low_lower_policy_t* loom_wasm_low_lower_policy(void);
