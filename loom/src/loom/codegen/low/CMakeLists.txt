@@ -446,6 +446,7 @@ loom_cc_library(
     "lower_rules.h"
   SRCS
     "lower.c"
+    "lower_policy.c"
     "lower_rules.c"
   DEPS
     ::builder

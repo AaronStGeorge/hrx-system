@@ -188,6 +188,12 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_emit_op_callback_t emit_op;
 } loom_low_lower_policy_t;
 
+// Verifies that |policy| is complete enough to lower source ops. Policy
+// validation is an infrastructure contract: malformed policies return status
+// failures instead of user IR diagnostics.
+iree_status_t loom_low_lower_policy_verify(
+    const loom_low_lower_policy_t* policy);
+
 typedef struct loom_low_lower_policy_registry_entry_t {
   // Target contract-set key that selects |policy|.
   iree_string_view_t contract_set_key;

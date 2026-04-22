@@ -437,6 +437,7 @@ loom_cc_library(
     name = "lower",
     srcs = [
         "lower.c",
+        "lower_policy.c",
         "lower_rules.c",
     ],
     hdrs = [
