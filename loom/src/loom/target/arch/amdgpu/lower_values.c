@@ -12,6 +12,15 @@
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
 
+typedef struct loom_amdgpu_vector_iota_plan_t {
+  // Result vector receiving the generated i32 lane constants.
+  loom_value_id_t result;
+  // Static number of generated lanes.
+  uint32_t lane_count;
+  // Precomputed lane bit patterns emitted as VGPR constants.
+  uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
+} loom_amdgpu_vector_iota_plan_t;
+
 static bool loom_amdgpu_iota_i32_lane_value(int64_t base, int64_t step,
                                             uint32_t lane, int64_t* out_value) {
   IREE_ASSERT_ARGUMENT(out_value);
@@ -26,17 +35,6 @@ static bool loom_amdgpu_iota_i32_lane_value(int64_t base, int64_t step,
     return false;
   }
   *out_value = value;
-  return true;
-}
-
-static bool loom_amdgpu_iota_i32_lanes_fit(int64_t base, int64_t step,
-                                           uint32_t lane_count) {
-  for (uint32_t i = 0; i < lane_count; ++i) {
-    int64_t unused = 0;
-    if (!loom_amdgpu_iota_i32_lane_value(base, step, i, &unused)) {
-      return false;
-    }
-  }
   return true;
 }
 
@@ -76,19 +74,37 @@ static bool loom_amdgpu_can_lower_vector_constant(
   return false;
 }
 
-static bool loom_amdgpu_can_lower_vector_iota(loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op) {
+static bool loom_amdgpu_select_vector_iota_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_iota_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_amdgpu_vector_iota_plan_t){0};
   const loom_module_t* module = loom_low_lower_context_module(context);
-  const uint32_t lane_count = loom_amdgpu_vector_i32_lane_count(
-      loom_module_value_type(module, loom_vector_iota_result(source_op)));
+  const loom_value_id_t result = loom_vector_iota_result(source_op);
+  const uint32_t lane_count =
+      loom_amdgpu_vector_i32_lane_count(loom_module_value_type(module, result));
+  if (lane_count == 0) {
+    return false;
+  }
   int64_t base = 0;
   int64_t step = 0;
-  return lane_count != 0 &&
-         loom_amdgpu_value_as_i32_constant(
-             context, loom_vector_iota_base(source_op), &base) &&
-         loom_amdgpu_value_as_i32_constant(
-             context, loom_vector_iota_step(source_op), &step) &&
-         loom_amdgpu_iota_i32_lanes_fit(base, step, lane_count);
+  if (!loom_amdgpu_value_as_i32_constant(
+          context, loom_vector_iota_base(source_op), &base) ||
+      !loom_amdgpu_value_as_i32_constant(
+          context, loom_vector_iota_step(source_op), &step)) {
+    return false;
+  }
+
+  for (uint32_t i = 0; i < lane_count; ++i) {
+    int64_t lane_value = 0;
+    if (!loom_amdgpu_iota_i32_lane_value(base, step, i, &lane_value)) {
+      return false;
+    }
+    out_plan->lane_bit_patterns[i] = (uint32_t)(int32_t)lane_value;
+  }
+  out_plan->result = result;
+  out_plan->lane_count = lane_count;
+  return true;
 }
 
 static bool loom_amdgpu_select_vector_extract_plan(
@@ -188,9 +204,15 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
     case LOOM_OP_VECTOR_CONSTANT:
       LOOM_AMDGPU_SELECT_IF(
           loom_amdgpu_can_lower_vector_constant(context, source_op));
-    case LOOM_OP_VECTOR_IOTA:
-      LOOM_AMDGPU_SELECT_IF(
-          loom_amdgpu_can_lower_vector_iota(context, source_op));
+    case LOOM_OP_VECTOR_IOTA: {
+      loom_amdgpu_vector_iota_plan_t* plan_data = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+          context, sizeof(*plan_data), (void**)&plan_data));
+      if (loom_amdgpu_select_vector_iota_plan(context, source_op, plan_data)) {
+        *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
+      }
+      return iree_ok_status();
+    }
     case LOOM_OP_VECTOR_EXTRACT: {
       loom_amdgpu_vector_extract_plan_t* plan_data = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
@@ -363,30 +385,12 @@ static iree_status_t loom_amdgpu_lower_vector_constant(
 }
 
 static iree_status_t loom_amdgpu_lower_vector_iota(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  const loom_value_id_t source_result = loom_vector_iota_result(source_op);
-  const uint32_t lane_count = loom_amdgpu_vector_i32_lane_count(
-      loom_module_value_type(module, source_result));
-  IREE_ASSERT_GT(lane_count, 0);
-  IREE_ASSERT_LE(lane_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
-  int64_t base = 0;
-  int64_t step = 0;
-  const bool has_i32_base = loom_amdgpu_value_as_i32_constant(
-      context, loom_vector_iota_base(source_op), &base);
-  const bool has_i32_step = loom_amdgpu_value_as_i32_constant(
-      context, loom_vector_iota_step(source_op), &step);
-  IREE_ASSERT(has_i32_base);
-  IREE_ASSERT(has_i32_step);
-
-  int64_t lane_values[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-  for (uint32_t i = 0; i < lane_count; ++i) {
-    const bool lane_value_fits =
-        loom_amdgpu_iota_i32_lane_value(base, step, i, &lane_values[i]);
-    IREE_ASSERT(lane_value_fits);
-  }
-  return loom_amdgpu_bind_vgpr_i32_lane_constants(
-      context, source_op, source_result, lane_values, lane_count);
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_iota_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+  return loom_amdgpu_bind_vgpr_u32_lane_constants(
+      context, source_op, plan->result, plan->lane_bit_patterns,
+      plan->lane_count);
 }
 
 static iree_status_t loom_amdgpu_lower_vector_extract(
@@ -453,7 +457,9 @@ iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
     case LOOM_OP_VECTOR_CONSTANT:
       return loom_amdgpu_lower_vector_constant(context, source_op);
     case LOOM_OP_VECTOR_IOTA:
-      return loom_amdgpu_lower_vector_iota(context, source_op);
+      return loom_amdgpu_lower_vector_iota(
+          context, source_op,
+          (const loom_amdgpu_vector_iota_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_EXTRACT:
       return loom_amdgpu_lower_vector_extract(
           context, source_op,
