@@ -464,6 +464,7 @@ loom_cc_library(
     "lower_internal.h"
   SRCS
     "lower.c"
+    "lower_bitfield.c"
     "lower_dot.c"
     "lower_memory.c"
     "lower_reduce.c"
@@ -731,6 +732,17 @@ iree_executable_test(
     "source_low_addtid"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_addtid.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_bitfield"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_bitfield.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

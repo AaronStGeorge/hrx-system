@@ -245,14 +245,13 @@ func.def target(@gfx_target) @loom_kernel(%input: buffer, %output: buffer) {
   %input_view = buffer.view %input[%zero] : buffer -> view<1x4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<1x4xi32, #dense>
   %loaded = vector.load %input_view[%tid, 0] : view<1x4xi32, #dense> -> vector<4xi32>
-  %mask = vector.constant 15 : vector<4xi32>
   %shift = vector.constant 4 : vector<4xi32>
-  %low_nibble = vector.andi %loaded, %mask : vector<4xi32>
-  %high_shifted = vector.shrui %loaded, %shift : vector<4xi32>
-  %high_nibble = vector.andi %high_shifted, %mask : vector<4xi32>
+  %low_nibble = vector.bitfield.extractu %loaded {offset = 0, width = 4} : vector<4xi32> -> vector<4xi32>
+  %high_nibble = vector.bitfield.extractu %loaded {offset = 4, width = 4} : vector<4xi32> -> vector<4xi32>
   %low_shifted = vector.shli %low_nibble, %shift : vector<4xi32>
   %swapped = vector.ori %low_shifted, %high_nibble : vector<4xi32>
-  %signed_high = vector.shrsi %loaded, %shift : vector<4xi32>
+  %signed_high = vector.bitfield.extracts %loaded {offset = 4, width = 4} : vector<4xi32> -> vector<4xi32>
+  %mask = vector.constant 15 : vector<4xi32>
   %signed_nibble = vector.andi %signed_high, %mask : vector<4xi32>
   %result = vector.xori %swapped, %signed_nibble : vector<4xi32>
   vector.store %result, %output_view[%tid, 0] : vector<4xi32>, view<1x4xi32, #dense>

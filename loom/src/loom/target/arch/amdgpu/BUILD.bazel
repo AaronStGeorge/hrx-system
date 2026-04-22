@@ -577,6 +577,7 @@ loom_cc_library(
     name = "lower",
     srcs = [
         "lower.c",
+        "lower_bitfield.c",
         "lower_dot.c",
         "lower_memory.c",
         "lower_reduce.c",
@@ -821,6 +822,7 @@ loom_check_test_suite(
         "low_packet_diagnostics.loom-test",
         "source_low.loom-test",
         "source_low_addtid.loom-test",
+        "source_low_bitfield.loom-test",
         "source_low_cache_policy.loom-test",
         "source_low_diagnostics.loom-test",
         "source_low_reduce.loom-test",

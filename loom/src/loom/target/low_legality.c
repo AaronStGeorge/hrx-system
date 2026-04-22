@@ -527,6 +527,8 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_VECTOR_ADDI:
     case LOOM_OP_VECTOR_ANDI:
     case LOOM_OP_VECTOR_BITCAST:
+    case LOOM_OP_VECTOR_BITFIELD_EXTRACTS:
+    case LOOM_OP_VECTOR_BITFIELD_EXTRACTU:
     case LOOM_OP_VECTOR_CMPF:
     case LOOM_OP_VECTOR_CMPI:
     case LOOM_OP_VECTOR_CONSTANT:

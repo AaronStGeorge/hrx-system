@@ -84,11 +84,9 @@ func.def target(@gfx11_q4_decode_shape_target) @amdgpu_q4_decode_shape(%input: b
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
   %packed = vector.load %input_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
-  %mask = vector.constant 15 : vector<4xi32>
   %shift = vector.constant 4 : vector<4xi32>
-  %low_nibble = vector.andi %packed, %mask : vector<4xi32>
-  %high_shifted = vector.shrui %packed, %shift : vector<4xi32>
-  %high_nibble = vector.andi %high_shifted, %mask : vector<4xi32>
+  %low_nibble = vector.bitfield.extractu %packed {offset = 0, width = 4} : vector<4xi32> -> vector<4xi32>
+  %high_nibble = vector.bitfield.extractu %packed {offset = 4, width = 4} : vector<4xi32> -> vector<4xi32>
   %low_shifted = vector.shli %low_nibble, %shift : vector<4xi32>
   %swapped = vector.ori %low_shifted, %high_nibble : vector<4xi32>
   vector.store %swapped, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
