@@ -28,3 +28,23 @@ low.func.def target(@gfx11_bitpack_target) abi(hal_kernel) @i32x4_to_i8x4_bitpac
   %packed = low.op<amdgpu.v_or_b32>(%17, %21) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %packed : reg<amdgpu.vgpr>
 }
+
+// ====
+// RUN: emit source-low @bitpack_width_rejected output=low
+target.profile @gfx11_bitpack_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_bitpack_target) @bitpack_width_rejected(%codes: vector<8xi32>) -> (vector<4xi8>) {
+  // ERROR@+1: BACKEND/001 "AMDGPU vector.bitpack currently lowers byte packing width 8"
+  %packed = vector.bitpack<4> %codes : vector<8xi32> -> vector<4xi8>
+  func.return %packed : vector<4xi8>
+}
+
+// ====
+// RUN: emit source-low @bitpack_source_type_rejected output=low
+target.profile @gfx11_bitpack_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_bitpack_target) @bitpack_source_type_rejected(%codes: vector<4xi8>) -> (vector<4xi8>) {
+  // ERROR@+1: BACKEND/001 "static rank-1 i32 source vector"
+  %packed = vector.bitpack<8> %codes : vector<4xi8> -> vector<4xi8>
+  func.return %packed : vector<4xi8>
+}

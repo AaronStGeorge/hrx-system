@@ -1861,6 +1861,11 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
     case LOOM_OP_BUFFER_VIEW:
       return loom_amdgpu_low_legality_verify_buffer_view(provider, context, op,
                                                          out_handled);
+    case LOOM_OP_VECTOR_BITPACK:
+    case LOOM_OP_VECTOR_BITUNPACKS:
+    case LOOM_OP_VECTOR_BITUNPACKU:
+      return loom_amdgpu_low_legality_verify_vector_bitstream(provider, context,
+                                                              op, out_handled);
     case LOOM_OP_VECTOR_BITCAST:
     case LOOM_OP_VECTOR_SLICE:
       return loom_amdgpu_low_legality_verify_vector_structural(

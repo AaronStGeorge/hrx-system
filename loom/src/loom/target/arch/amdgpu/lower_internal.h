@@ -332,6 +332,13 @@ bool loom_amdgpu_can_lower_vector_bitunpack(loom_low_lower_context_t* context,
 iree_status_t loom_amdgpu_lower_vector_bitunpack(
     loom_low_lower_context_t* context, const loom_op_t* source_op);
 
+// Verifies source vector bitstream op legality for AMDGPU target-low
+// selection.
+iree_status_t loom_amdgpu_low_legality_verify_vector_bitstream(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
 // Returns true when a source vector.bitcast op can lower as an AMDGPU register
 // reinterpretation.
 bool loom_amdgpu_can_lower_vector_bitcast(loom_low_lower_context_t* context,
