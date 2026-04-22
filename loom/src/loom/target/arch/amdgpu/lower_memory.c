@@ -1120,7 +1120,7 @@ bool loom_amdgpu_memory_access_select(
       descriptor_set, kind, out_access, out_diagnostic);
 }
 
-static bool loom_amdgpu_load_memory_access_select_with_source_function(
+static bool loom_amdgpu_memory_access_select_with_source_function(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_func_like_t source_function,
     loom_amdgpu_memory_access_plan_t* out_access) {
@@ -1133,31 +1133,10 @@ static bool loom_amdgpu_load_memory_access_select_with_source_function(
       source_op, out_access, &source_diagnostic, &diagnostic);
 }
 
-static bool loom_amdgpu_load_memory_access_select(
+static bool loom_amdgpu_memory_access_select_from_context(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_memory_access_plan_t* out_access) {
-  return loom_amdgpu_load_memory_access_select_with_source_function(
-      context, source_op, loom_low_lower_context_source_function(context),
-      out_access);
-}
-
-static bool loom_amdgpu_store_memory_access_select_with_source_function(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_func_like_t source_function,
-    loom_amdgpu_memory_access_plan_t* out_access) {
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  loom_low_source_memory_access_diagnostic_t source_diagnostic = {0};
-  loom_amdgpu_memory_access_diagnostic_t diagnostic = {0};
-  return loom_amdgpu_memory_access_select(
-      module, loom_low_lower_context_fact_table(context),
-      loom_low_lower_context_descriptor_set(context), source_function,
-      source_op, out_access, &source_diagnostic, &diagnostic);
-}
-
-static bool loom_amdgpu_store_memory_access_select(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_memory_access_plan_t* out_access) {
-  return loom_amdgpu_store_memory_access_select_with_source_function(
+  return loom_amdgpu_memory_access_select_with_source_function(
       context, source_op, loom_low_lower_context_source_function(context),
       out_access);
 }
@@ -1165,7 +1144,8 @@ static bool loom_amdgpu_store_memory_access_select(
 bool loom_amdgpu_select_vector_load_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_memory_access_plan_t* out_plan) {
-  if (!loom_amdgpu_load_memory_access_select(context, source_op, out_plan)) {
+  if (!loom_amdgpu_memory_access_select_from_context(context, source_op,
+                                                     out_plan)) {
     return false;
   }
   return loom_amdgpu_memory_cache_policy_can_lower(
@@ -1175,7 +1155,8 @@ bool loom_amdgpu_select_vector_load_plan(
 bool loom_amdgpu_select_vector_store_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_memory_access_plan_t* out_plan) {
-  if (!loom_amdgpu_store_memory_access_select(context, source_op, out_plan)) {
+  if (!loom_amdgpu_memory_access_select_from_context(context, source_op,
+                                                     out_plan)) {
     return false;
   }
   return loom_amdgpu_memory_cache_policy_can_lower(
