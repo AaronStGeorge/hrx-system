@@ -6,7 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_assert_no_dependency",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -25,172 +25,57 @@ package(
 # Layering checks
 #===------------------------------------------------------------------------===#
 
-iree_assert_no_dependency(
-    name = "core_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/llvmir:core",
+loom_assert_no_dependencies(
+    name = "llvmir_core_no_target_specific_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
+        "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
+    ],
+    targets = [":core"],
 )
 
-iree_assert_no_dependency(
-    name = "core_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/emit/llvmir:core",
+loom_assert_no_dependencies(
+    name = "core_target_interfaces_no_llvmir_deps",
+    dependencies = [":llvmir"],
+    targets = [
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/target:types",
+    ],
 )
 
-iree_assert_no_dependency(
-    name = "target_types_no_llvmir_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target:types",
+loom_assert_no_dependencies(
+    name = "core_tools_no_llvmir_tooling_deps",
+    dependencies = [
+        ":core",
+        ":loom_check",
+        ":target_registry",
+        "//loom/src/loom/target/tool:llvm",
+    ],
+    targets = [
+        "//loom/src/loom/tools/iree-run-loom",
+        "//loom/src/loom/tools/iree-run-loom:main",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//loom/src/loom/tools/loom-check:loom-check-test",
+        "//loom/src/loom/tools/loom-check:main",
+    ],
 )
 
-iree_assert_no_dependency(
-    name = "target_low_descriptor_registry_no_llvmir_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target:low_descriptor_registry",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_execute_no_llvmir_core_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:core",
-    target = "//loom/src/loom/tools/loom-check:execute",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_execute_no_llvmir_target_registry_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:target_registry",
-    target = "//loom/src/loom/tools/loom-check:execute",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_execute_no_llvmir_provider_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:loom_check",
-    target = "//loom/src/loom/tools/loom-check:execute",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_execute_no_llvm_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/tools/loom-check:execute",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_main_no_llvmir_core_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:core",
-    target = "//loom/src/loom/tools/loom-check:main",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_main_no_llvmir_target_registry_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:target_registry",
-    target = "//loom/src/loom/tools/loom-check:main",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_main_no_llvmir_provider_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:loom_check",
-    target = "//loom/src/loom/tools/loom-check:main",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_main_no_llvm_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/tools/loom-check:main",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_test_no_llvmir_core_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:core",
-    target = "//loom/src/loom/tools/loom-check:loom-check-test",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_test_no_llvmir_target_registry_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:target_registry",
-    target = "//loom/src/loom/tools/loom-check:loom-check-test",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_test_no_llvmir_provider_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:loom_check",
-    target = "//loom/src/loom/tools/loom-check:loom-check-test",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_test_no_llvm_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/tools/loom-check:loom-check-test",
-)
-
-iree_assert_no_dependency(
-    name = "iree_run_loom_main_no_llvmir_core_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:core",
-    target = "//loom/src/loom/tools/iree-run-loom:main",
-)
-
-iree_assert_no_dependency(
-    name = "iree_run_loom_tool_no_llvmir_core_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:core",
-    target = "//loom/src/loom/tools/iree-run-loom",
-)
-
-iree_assert_no_dependency(
-    name = "iree_run_loom_tool_no_llvm_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/tools/iree-run-loom",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_x86_packed_dot_vector_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_vector",
-    target = "//loom/src/loom/target/emit/llvmir:lower",
-)
-
-iree_assert_no_dependency(
-    name = "legality_no_x86_packed_dot_vector_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_vector",
-    target = "//loom/src/loom/target/emit/llvmir:legality",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_x86_llvmir_intrinsics_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
-    target = "//loom/src/loom/target/emit/llvmir:lower",
-)
-
-iree_assert_no_dependency(
-    name = "legality_no_x86_provider_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir/x86:legality",
-    target = "//loom/src/loom/target/emit/llvmir:legality",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_amdgpu_llvmir_intrinsics_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
-    target = "//loom/src/loom/target/emit/llvmir:lower",
-)
-
-iree_assert_no_dependency(
-    name = "legality_no_amdgpu_provider_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir/amdgpu:legality",
-    target = "//loom/src/loom/target/emit/llvmir:legality",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_amdgpu_target_env_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
-    target = "//loom/src/loom/target/emit/llvmir:lower",
-)
-
-iree_assert_no_dependency(
-    name = "core_no_x86_llvmir_intrinsics_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
-    target = "//loom/src/loom/target/emit/llvmir:core",
-)
-
-iree_assert_no_dependency(
-    name = "core_no_amdgpu_llvmir_intrinsics_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
-    target = "//loom/src/loom/target/emit/llvmir:core",
+loom_assert_no_dependencies(
+    name = "llvmir_lowering_no_target_specific_provider_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/x86:packed_dot_vector",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:legality",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
+        "//loom/src/loom/target/emit/llvmir/x86:legality",
+    ],
+    targets = [
+        ":legality",
+        ":lower",
+    ],
 )
 
 #===------------------------------------------------------------------------===#

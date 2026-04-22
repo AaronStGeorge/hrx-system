@@ -6,7 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_assert_no_dependency",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -17,10 +17,10 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-iree_assert_no_dependency(
+loom_assert_no_dependencies(
     name = "target_env_no_packed_dot_contract_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/llvmir/x86:target_env",
+    dependencies = ["//loom/src/loom/target/arch/x86:packed_dot_contract"],
+    targets = [":target_env"],
 )
 
 loom_cc_library(

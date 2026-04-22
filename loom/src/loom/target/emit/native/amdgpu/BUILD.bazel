@@ -6,7 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_assert_no_dependency",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -25,442 +25,69 @@ package(
 # Layering checks
 #===------------------------------------------------------------------------===#
 
-iree_assert_no_dependency(
-    name = "assembly_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:assembly",
-)
-
-iree_assert_no_dependency(
-    name = "assembly_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:assembly",
-)
-
-iree_assert_no_dependency(
-    name = "assembly_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:assembly",
-)
-
-iree_assert_no_dependency(
-    name = "assembly_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:assembly",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_assembly_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_assembly",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_assembly_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_assembly",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_assembly_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_assembly",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_assembly_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_assembly",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_assembly_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_assembly",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_assembly_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_assembly",
-)
-
-iree_assert_no_dependency(
-    name = "iree_run_loom_main_no_module_compiler_dep",
-    dependency = "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-    target = "//loom/src/loom/tools/iree-run-loom:main",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_hsaco_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_hsaco_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_hsaco_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_hsaco_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_hsaco_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_hsaco_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_hsaco_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_record_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_record",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_record_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_record",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_record_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_record",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_record_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_record",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_record_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_record",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_record_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_record",
-)
-
-iree_assert_no_dependency(
-    name = "kernel_record_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/emit/native/amdgpu:kernel_record",
-)
-
-iree_assert_no_dependency(
-    name = "metadata_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
-)
-
-iree_assert_no_dependency(
-    name = "metadata_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
-)
-
-iree_assert_no_dependency(
-    name = "metadata_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
-)
-
-iree_assert_no_dependency(
-    name = "metadata_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
-)
-
-iree_assert_no_dependency(
-    name = "metadata_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
-)
-
-iree_assert_no_dependency(
-    name = "metadata_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
-)
-
-iree_assert_no_dependency(
-    name = "metadata_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/emit/native/amdgpu:metadata",
-)
-
-iree_assert_no_dependency(
-    name = "descriptor_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
-)
-
-iree_assert_no_dependency(
-    name = "descriptor_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
-)
-
-iree_assert_no_dependency(
-    name = "descriptor_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
-)
-
-iree_assert_no_dependency(
-    name = "descriptor_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
-)
-
-iree_assert_no_dependency(
-    name = "descriptor_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
-)
-
-iree_assert_no_dependency(
-    name = "descriptor_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
-)
-
-iree_assert_no_dependency(
-    name = "descriptor_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/emit/native/amdgpu:descriptor",
-)
-
-iree_assert_no_dependency(
-    name = "encoding_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
-)
-
-iree_assert_no_dependency(
-    name = "encoding_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
-)
-
-iree_assert_no_dependency(
-    name = "encoding_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
-)
-
-iree_assert_no_dependency(
-    name = "encoding_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
-)
-
-iree_assert_no_dependency(
-    name = "encoding_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
-)
-
-iree_assert_no_dependency(
-    name = "encoding_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
-)
-
-iree_assert_no_dependency(
-    name = "encoding_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/emit/native/amdgpu:encoding",
-)
-
-iree_assert_no_dependency(
-    name = "hsaco_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "hsaco_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "hsaco_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "hsaco_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "hsaco_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "hsaco_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "hsaco_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hsaco",
-)
-
-iree_assert_no_dependency(
-    name = "hal_executable_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
-)
-
-iree_assert_no_dependency(
-    name = "hal_executable_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
-)
-
-iree_assert_no_dependency(
-    name = "hal_executable_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
-)
-
-iree_assert_no_dependency(
-    name = "hal_executable_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
-)
-
-iree_assert_no_dependency(
-    name = "hal_executable_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
-)
-
-iree_assert_no_dependency(
-    name = "hal_executable_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
-)
-
-iree_assert_no_dependency(
-    name = "hal_executable_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
-)
-
-iree_assert_no_dependency(
-    name = "module_compiler_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-)
-
-iree_assert_no_dependency(
-    name = "module_compiler_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-)
-
-iree_assert_no_dependency(
-    name = "module_compiler_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-)
-
-iree_assert_no_dependency(
-    name = "module_compiler_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-)
-
-iree_assert_no_dependency(
-    name = "module_compiler_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-)
-
-iree_assert_no_dependency(
-    name = "module_compiler_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/emit/native/amdgpu:module_compiler",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native/amdgpu:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native/amdgpu:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native/amdgpu:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/emit/native/amdgpu:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native/amdgpu:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/emit/native/amdgpu:loom_check",
+loom_assert_no_dependencies(
+    name = "amdgpu_native_emit_no_other_target_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/wasm:descriptors",
+        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//loom/src/loom/target/emit/llvmir:llvmir",
+        "//loom/src/loom/target/tool:llvm",
+    ],
+    targets = [
+        ":assembly",
+        ":descriptor",
+        ":encoding",
+        ":hal_executable",
+        ":hsaco",
+        ":kernel_assembly",
+        ":kernel_hsaco",
+        ":kernel_record",
+        ":loom_check",
+        ":metadata",
+        ":module_compiler",
+    ],
+)
+
+loom_assert_no_dependencies(
+    name = "amdgpu_native_emit_no_arch_low_registry_dep",
+    dependencies = ["//loom/src/loom/target/arch/amdgpu:low_registry"],
+    targets = [
+        ":assembly",
+        ":descriptor",
+        ":encoding",
+        ":hal_executable",
+        ":hsaco",
+        ":kernel_assembly",
+        ":kernel_hsaco",
+        ":kernel_record",
+        ":loom_check",
+        ":metadata",
+    ],
+)
+
+loom_assert_no_dependencies(
+    name = "amdgpu_native_emit_no_hal_driver_dep",
+    dependencies = ["//runtime/src/iree/hal/drivers/amdgpu"],
+    targets = [
+        ":assembly",
+        ":descriptor",
+        ":encoding",
+        ":hal_executable",
+        ":hsaco",
+        ":kernel_assembly",
+        ":kernel_hsaco",
+        ":kernel_record",
+        ":loom_check",
+        ":metadata",
+        ":module_compiler",
+    ],
+)
+
+loom_assert_no_dependencies(
+    name = "core_run_tool_no_amdgpu_module_compiler_dep",
+    dependencies = [":module_compiler"],
+    targets = ["//loom/src/loom/tools/iree-run-loom:main"],
 )
 
 #===------------------------------------------------------------------------===#

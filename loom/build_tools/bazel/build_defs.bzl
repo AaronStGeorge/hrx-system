@@ -18,6 +18,70 @@ load(
     "loom_cc_library",
 )
 
+def _loom_canonical_query_labels(labels):
+    canonical_labels = []
+    package_name = native.package_name()
+    for label in labels:
+        if label.startswith(":"):
+            canonical_labels.append("//%s%s" % (package_name, label))
+        else:
+            canonical_labels.append(label)
+    return canonical_labels
+
+def _loom_query_set(labels):
+    if len(labels) == 0:
+        fail("query label set must not be empty")
+    return "set(%s)" % " ".join(labels)
+
+def loom_assert_no_dependencies(
+        name,
+        targets,
+        dependencies,
+        tags = [],
+        **kwargs):
+    """Asserts that target boundary labels do not depend on forbidden labels.
+
+    This is the Loom package-boundary form of iree_assert_no_dependency. Use it
+    for architectural isolation checks over public/interface targets, not for
+    duplicating every private rule edge in a package. The generated query is a
+    single transitive check from the target set to the forbidden dependency set.
+
+    Bazel genquery does not accept wildcard package patterns such as :all or
+    ... in a portable way, so callers should pass explicit package boundary
+    labels: public interface libraries, provider entry points, or other small
+    roots that represent the component contract.
+
+    Args:
+      name: Test target name.
+      targets: Boundary target labels that must remain independent.
+      dependencies: Forbidden dependency labels.
+      tags: Additional tags for the test target.
+      **kwargs: Additional arguments forwarded to genquery and sh_test.
+    """
+
+    canonical_targets = _loom_canonical_query_labels(targets)
+    canonical_dependencies = _loom_canonical_query_labels(dependencies)
+    query_name = name + "_query"
+    native.genquery(
+        name = query_name,
+        expression = "deps(%s) intersect %s" % (
+            _loom_query_set(canonical_targets),
+            _loom_query_set(canonical_dependencies),
+        ),
+        scope = canonical_targets + canonical_dependencies,
+        tags = ["manual"],
+        **kwargs
+    )
+    native.sh_test(
+        name = name,
+        srcs = ["//build_tools/bazel:assert_empty_query.sh"],
+        args = ["$(location :%s)" % query_name],
+        data = [":%s" % query_name],
+        size = "small",
+        tags = tags,
+        **kwargs
+    )
+
 def loom_low_descriptor_data_archive(
         name,
         repo_name,

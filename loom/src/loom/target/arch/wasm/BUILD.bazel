@@ -6,15 +6,15 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_assert_no_dependency",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_low_descriptor_cc_library",
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
     "loom_check_test_suite",
 )
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_low_descriptor_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -26,94 +26,42 @@ package(
 # Layering checks
 #===------------------------------------------------------------------------===#
 
-iree_assert_no_dependency(
-    name = "descriptors_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/wasm:descriptors",
+loom_assert_no_dependencies(
+    name = "wasm_target_no_other_target_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//loom/src/loom/target/emit/llvmir:llvmir",
+    ],
+    targets = [
+        ":descriptors",
+        ":low_registry",
+    ],
 )
 
-iree_assert_no_dependency(
-    name = "descriptors_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/arch/wasm:descriptors",
+loom_assert_no_dependencies(
+    name = "core_target_interfaces_no_wasm_target_deps",
+    dependencies = [
+        ":descriptors",
+        ":low_registry",
+    ],
+    targets = [
+        "//loom/src/loom/target:coverage",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/target:low_legality",
+    ],
 )
 
-iree_assert_no_dependency(
-    name = "descriptors_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/wasm:descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "descriptors_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/wasm:descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "target_low_descriptor_registry_no_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target:low_descriptor_registry",
-)
-
-iree_assert_no_dependency(
-    name = "target_coverage_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:low_registry",
-    target = "//loom/src/loom/target:coverage",
-)
-
-iree_assert_no_dependency(
-    name = "target_low_legality_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:low_registry",
-    target = "//loom/src/loom/target:low_legality",
-)
-
-iree_assert_no_dependency(
-    name = "low_registry_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/wasm:low_registry",
-)
-
-iree_assert_no_dependency(
-    name = "low_registry_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/arch/wasm:low_registry",
-)
-
-iree_assert_no_dependency(
-    name = "low_registry_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/wasm:low_registry",
-)
-
-iree_assert_no_dependency(
-    name = "low_registry_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/wasm:low_registry",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_execute_no_wasm_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:low_registry",
-    target = "//loom/src/loom/tools/loom-check:execute",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_main_no_wasm_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:low_registry",
-    target = "//loom/src/loom/tools/loom-check:main",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_test_no_wasm_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:low_registry",
-    target = "//loom/src/loom/tools/loom-check:loom-check-test",
-)
-
-iree_assert_no_dependency(
-    name = "iree_run_loom_main_no_wasm_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:low_registry",
-    target = "//loom/src/loom/tools/iree-run-loom:main",
+loom_assert_no_dependencies(
+    name = "core_tools_no_wasm_low_registry_dep",
+    dependencies = [":low_registry"],
+    targets = [
+        "//loom/src/loom/tools/iree-run-loom:main",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//loom/src/loom/tools/loom-check:loom-check-test",
+        "//loom/src/loom/tools/loom-check:main",
+    ],
 )
 
 #===------------------------------------------------------------------------===#

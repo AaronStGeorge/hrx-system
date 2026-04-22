@@ -6,7 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_assert_no_dependency",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
 )
 
@@ -20,64 +20,19 @@ package(
 # Layering checks
 #===------------------------------------------------------------------------===#
 
-iree_assert_no_dependency(
-    name = "llvm_no_llvmir_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:core",
-    target = "//loom/src/loom/target/tool:llvm",
-)
-
-iree_assert_no_dependency(
-    name = "llvm_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/tool:llvm",
-)
-
-iree_assert_no_dependency(
-    name = "llvm_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/tool:llvm",
-)
-
-iree_assert_no_dependency(
-    name = "llvm_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/tool:llvm",
-)
-
-iree_assert_no_dependency(
-    name = "llvm_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/tool:llvm",
-)
-
-iree_assert_no_dependency(
-    name = "process_no_llvmir_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:core",
-    target = "//loom/src/loom/target/tool:process",
-)
-
-iree_assert_no_dependency(
-    name = "process_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/tool:process",
-)
-
-iree_assert_no_dependency(
-    name = "process_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/tool:process",
-)
-
-iree_assert_no_dependency(
-    name = "process_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/tool:process",
-)
-
-iree_assert_no_dependency(
-    name = "process_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/tool:process",
+loom_assert_no_dependencies(
+    name = "tool_runners_no_target_implementation_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/amdgpu:low_registry",
+        "//loom/src/loom/target/arch/wasm:descriptors",
+        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//loom/src/loom/target/emit/llvmir:core",
+    ],
+    targets = [
+        ":llvm",
+        ":process",
+    ],
 )
 
 #===------------------------------------------------------------------------===#

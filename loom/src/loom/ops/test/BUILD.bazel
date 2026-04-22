@@ -6,7 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_assert_no_dependency",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -21,34 +21,16 @@ package(
 # Layering checks
 #===------------------------------------------------------------------------===#
 
-iree_assert_no_dependency(
-    name = "production_op_registry_no_test_dialect_dep",
-    dependency = "//loom/src/loom/ops/test",
-    target = "//loom/src/loom/ops:op_registry",
-)
-
-iree_assert_no_dependency(
-    name = "text_parser_no_test_dialect_dep",
-    dependency = "//loom/src/loom/ops/test",
-    target = "//loom/src/loom/format/text:parser",
-)
-
-iree_assert_no_dependency(
-    name = "text_printer_no_test_dialect_dep",
-    dependency = "//loom/src/loom/ops/test",
-    target = "//loom/src/loom/format/text:printer",
-)
-
-iree_assert_no_dependency(
-    name = "bytecode_reader_no_test_dialect_dep",
-    dependency = "//loom/src/loom/ops/test",
-    target = "//loom/src/loom/format/bytecode:reader",
-)
-
-iree_assert_no_dependency(
-    name = "bytecode_writer_no_test_dialect_dep",
-    dependency = "//loom/src/loom/ops/test",
-    target = "//loom/src/loom/format/bytecode:writer",
+loom_assert_no_dependencies(
+    name = "production_interfaces_no_test_dialect_dep",
+    dependencies = ["//loom/src/loom/ops/test"],
+    targets = [
+        "//loom/src/loom/format/bytecode:reader",
+        "//loom/src/loom/format/bytecode:writer",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ops:op_registry",
+    ],
 )
 
 #===------------------------------------------------------------------------===#

@@ -6,7 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_assert_no_dependency",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -21,106 +21,21 @@ package(
 # Layering checks
 #===------------------------------------------------------------------------===#
 
-iree_assert_no_dependency(
-    name = "assembly_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native:assembly",
-)
-
-iree_assert_no_dependency(
-    name = "assembly_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/emit/native:assembly",
-)
-
-iree_assert_no_dependency(
-    name = "assembly_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native:assembly",
-)
-
-iree_assert_no_dependency(
-    name = "assembly_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native:assembly",
-)
-
-iree_assert_no_dependency(
-    name = "assembly_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native:assembly",
-)
-
-iree_assert_no_dependency(
-    name = "elf_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native:elf",
-)
-
-iree_assert_no_dependency(
-    name = "elf_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/emit/native:elf",
-)
-
-iree_assert_no_dependency(
-    name = "elf_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native:elf",
-)
-
-iree_assert_no_dependency(
-    name = "elf_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native:elf",
-)
-
-iree_assert_no_dependency(
-    name = "elf_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native:elf",
-)
-
-iree_assert_no_dependency(
-    name = "elf_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native:elf",
-)
-
-iree_assert_no_dependency(
-    name = "contribution_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/native:contribution",
-)
-
-iree_assert_no_dependency(
-    name = "contribution_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/emit/native:contribution",
-)
-
-iree_assert_no_dependency(
-    name = "contribution_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/native:contribution",
-)
-
-iree_assert_no_dependency(
-    name = "contribution_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/native:contribution",
-)
-
-iree_assert_no_dependency(
-    name = "contribution_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/native:contribution",
-)
-
-iree_assert_no_dependency(
-    name = "contribution_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/emit/native:contribution",
+loom_assert_no_dependencies(
+    name = "native_emit_core_no_target_implementation_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+        "//loom/src/loom/target/arch/wasm:descriptors",
+        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//loom/src/loom/target/emit/llvmir:llvmir",
+        "//runtime/src/iree/hal/drivers/amdgpu",
+    ],
+    targets = [
+        ":assembly",
+        ":contribution",
+        ":elf",
+    ],
 )
 
 #===------------------------------------------------------------------------===#

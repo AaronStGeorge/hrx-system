@@ -6,7 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_assert_no_dependency",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
 )
@@ -25,118 +25,38 @@ package(
 # Layering checks
 #===------------------------------------------------------------------------===#
 
-iree_assert_no_dependency(
-    name = "function_body_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/wasm:function_body",
+loom_assert_no_dependencies(
+    name = "wasm_emit_no_other_target_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//loom/src/loom/target/emit/llvmir:llvmir",
+    ],
+    targets = [
+        ":function_body",
+        ":loom_check",
+        ":lower",
+        ":module_binary",
+    ],
 )
 
-iree_assert_no_dependency(
-    name = "function_body_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/emit/wasm:function_body",
+loom_assert_no_dependencies(
+    name = "wasm_lower_no_wasm_descriptor_dep",
+    dependencies = ["//loom/src/loom/target/arch/wasm:descriptors"],
+    targets = [":lower"],
 )
 
-iree_assert_no_dependency(
-    name = "function_body_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/wasm:function_body",
+loom_assert_no_dependencies(
+    name = "wasm_emit_check_no_wasm_low_registry_dep",
+    dependencies = ["//loom/src/loom/target/arch/wasm:low_registry"],
+    targets = [":loom_check"],
 )
 
-iree_assert_no_dependency(
-    name = "function_body_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/wasm:function_body",
-)
-
-iree_assert_no_dependency(
-    name = "module_binary_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/wasm:module_binary",
-)
-
-iree_assert_no_dependency(
-    name = "module_binary_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/emit/wasm:module_binary",
-)
-
-iree_assert_no_dependency(
-    name = "module_binary_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/wasm:module_binary",
-)
-
-iree_assert_no_dependency(
-    name = "module_binary_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/wasm:module_binary",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/emit/wasm:lower",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/wasm:lower",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/emit/wasm:lower",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/wasm:lower",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/wasm:lower",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/emit/wasm:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_amdgpu_arch_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/emit/wasm:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/emit/wasm:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/emit/wasm:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:low_registry",
-    target = "//loom/src/loom/target/emit/wasm:loom_check",
-)
-
-iree_assert_no_dependency(
-    name = "iree_run_loom_main_no_wasm_module_binary_dep",
-    dependency = "//loom/src/loom/target/emit/wasm:module_binary",
-    target = "//loom/src/loom/tools/iree-run-loom:main",
+loom_assert_no_dependencies(
+    name = "core_run_tool_no_wasm_emit_dep",
+    dependencies = [":module_binary"],
+    targets = ["//loom/src/loom/tools/iree-run-loom:main"],
 )
 
 #===------------------------------------------------------------------------===#

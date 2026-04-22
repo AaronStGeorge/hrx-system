@@ -2,7 +2,7 @@ load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
-    "iree_assert_no_dependency",
+    "loom_assert_no_dependencies",
     "loom_cc_binary",
     "loom_cc_library",
     "loom_cc_test",
@@ -45,28 +45,16 @@ string_list_flag(
 # Layering checks
 #===------------------------------------------------------------------------===#
 
-iree_assert_no_dependency(
-    name = "execute_no_test_dialect_dep",
-    dependency = "//loom/src/loom/ops/test",
-    target = "//loom/src/loom/tools/loom-check:execute",
-)
-
-iree_assert_no_dependency(
-    name = "execute_no_core_test_low_registry_dep",
-    dependency = "//loom/src/loom/target:low_descriptor_registry_core_test",
-    target = "//loom/src/loom/tools/loom-check:execute",
-)
-
-iree_assert_no_dependency(
-    name = "main_no_test_dialect_dep",
-    dependency = "//loom/src/loom/ops/test",
-    target = "//loom/src/loom/tools/loom-check:main",
-)
-
-iree_assert_no_dependency(
-    name = "main_no_core_test_low_registry_dep",
-    dependency = "//loom/src/loom/target:low_descriptor_registry_core_test",
-    target = "//loom/src/loom/tools/loom-check:main",
+loom_assert_no_dependencies(
+    name = "core_no_test_dependencies",
+    dependencies = [
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/target:low_descriptor_registry_core_test",
+    ],
+    targets = [
+        ":execute",
+        ":main",
+    ],
 )
 
 _AMDGPU_CHECK_COPTS = iree_select({

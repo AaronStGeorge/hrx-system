@@ -7,7 +7,6 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
-    "iree_assert_no_dependency",
     "iree_cmake_extra_content",
     "loom_cc_library",
     "loom_cc_test",
@@ -19,6 +18,7 @@ load(
 )
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_assert_no_dependencies",
     "loom_low_descriptor_cc_library",
     "loom_low_descriptor_data_archive",
     "loom_low_descriptor_exclude_from_cmake_all",
@@ -43,562 +43,139 @@ config_setting(
 # Layering checks
 #===------------------------------------------------------------------------===#
 
-iree_assert_no_dependency(
-    name = "matrix_contract_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-)
-
-iree_assert_no_dependency(
-    name = "matrix_facts_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:matrix_facts",
-)
-
-iree_assert_no_dependency(
-    name = "wait_plan_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:wait_plan",
-)
-
-iree_assert_no_dependency(
-    name = "wait_packets_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:wait_packets",
-)
-
-iree_assert_no_dependency(
-    name = "occupancy_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:occupancy",
-)
-
-iree_assert_no_dependency(
-    name = "target_info_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/arch/amdgpu:target_info",
-)
-
-iree_assert_no_dependency(
-    name = "target_info_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:target_info",
-)
-
-iree_assert_no_dependency(
-    name = "target_info_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:target_info",
-)
-
-iree_assert_no_dependency(
-    name = "target_info_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:target_info",
-)
-
-iree_assert_no_dependency(
-    name = "target_info_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:target_info",
-)
-
-iree_assert_no_dependency(
-    name = "wait_plan_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/arch/amdgpu:wait_plan",
-)
-
-iree_assert_no_dependency(
-    name = "wait_packets_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/arch/amdgpu:wait_packets",
-)
-
-iree_assert_no_dependency(
-    name = "occupancy_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/arch/amdgpu:occupancy",
-)
-
-iree_assert_no_dependency(
-    name = "matrix_contract_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-)
-
-iree_assert_no_dependency(
-    name = "target_types_no_matrix_contract_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target:types",
-)
-
-iree_assert_no_dependency(
-    name = "target_preset_registry_no_matrix_contract_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target:preset_registry",
-)
-
-iree_assert_no_dependency(
-    name = "target_low_descriptor_registry_no_matrix_contract_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target:low_descriptor_registry",
-)
-
-iree_assert_no_dependency(
-    name = "target_coverage_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target:coverage",
-)
-
-iree_assert_no_dependency(
-    name = "gfx950_descriptors_no_matrix_contract_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "target_low_descriptor_registry_no_gfx950_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
-    target = "//loom/src/loom/target:low_descriptor_registry",
-)
-
-iree_assert_no_dependency(
-    name = "gfx11_descriptors_no_matrix_contract_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "target_low_descriptor_registry_no_gfx11_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
-    target = "//loom/src/loom/target:low_descriptor_registry",
-)
-
-iree_assert_no_dependency(
-    name = "gfx12_descriptors_no_matrix_contract_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "target_low_descriptor_registry_no_gfx12_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
-    target = "//loom/src/loom/target:low_descriptor_registry",
-)
-
-iree_assert_no_dependency(
-    name = "gfx1250_descriptors_no_matrix_contract_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "target_low_descriptor_registry_no_gfx1250_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors",
-    target = "//loom/src/loom/target:low_descriptor_registry",
-)
-
-iree_assert_no_dependency(
-    name = "descriptor_ids_no_gfx11_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:descriptor_ids",
-)
-
-iree_assert_no_dependency(
-    name = "descriptor_ids_no_gfx950_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:descriptor_ids",
-)
-
-iree_assert_no_dependency(
-    name = "target_low_legality_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target:low_legality",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/arch/amdgpu:lower",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_gfx11_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:lower",
-)
-
-iree_assert_no_dependency(
-    name = "lower_no_gfx950_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:lower",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_gfx11_descriptors_ids_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors_ids",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_gfx12_descriptors_ids_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors_ids",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_gfx1250_descriptors_ids_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors_ids",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_kernel_abi_no_gfx950_descriptors_ids_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors_ids",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_kernel_abi",
-)
-
-iree_assert_no_dependency(
-    name = "hal_resource_materialization_no_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
-)
-
-iree_assert_no_dependency(
-    name = "hal_resource_materialization_no_gfx11_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
-)
-
-iree_assert_no_dependency(
-    name = "hal_resource_materialization_no_gfx950_descriptors_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
-)
-
-iree_assert_no_dependency(
-    name = "hal_resource_materialization_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
-)
-
-iree_assert_no_dependency(
-    name = "hal_resource_materialization_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
-)
-
-iree_assert_no_dependency(
-    name = "hal_resource_materialization_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
-)
-
-iree_assert_no_dependency(
-    name = "hal_resource_materialization_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
-)
-
-iree_assert_no_dependency(
-    name = "hal_resource_materialization_no_hal_amdgpu_dep",
-    dependency = "//runtime/src/iree/hal/drivers/amdgpu",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
-)
-
-iree_assert_no_dependency(
-    name = "hal_resource_materialization_no_target_tool_dep",
-    dependency = "//loom/src/loom/target/tool:llvm",
-    target = "//loom/src/loom/target/arch/amdgpu:hal_resource_materialization",
-)
-
-iree_assert_no_dependency(
-    name = "gfx950_descriptors_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx11_descriptors_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx12_descriptors_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx1250_descriptors_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx950_descriptors_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx11_descriptors_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx12_descriptors_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx1250_descriptors_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx950_descriptors_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx11_descriptors_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx12_descriptors_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx1250_descriptors_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx950_descriptors_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx11_descriptors_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx12_descriptors_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "gfx1250_descriptors_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors",
-)
-
-iree_assert_no_dependency(
-    name = "low_registry_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:low_registry",
-)
-
-iree_assert_no_dependency(
-    name = "low_registry_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:low_registry",
-)
-
-iree_assert_no_dependency(
-    name = "wait_plan_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:wait_plan",
-)
-
-iree_assert_no_dependency(
-    name = "wait_packets_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:wait_packets",
-)
-
-iree_assert_no_dependency(
-    name = "occupancy_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:occupancy",
-)
-
-iree_assert_no_dependency(
-    name = "low_registry_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:low_registry",
-)
-
-iree_assert_no_dependency(
-    name = "wait_plan_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:wait_plan",
-)
-
-iree_assert_no_dependency(
-    name = "wait_packets_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:wait_packets",
-)
-
-iree_assert_no_dependency(
-    name = "occupancy_no_ireevm_emit_dep",
-    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
-    target = "//loom/src/loom/target/arch/amdgpu:occupancy",
-)
-
-iree_assert_no_dependency(
-    name = "low_registry_no_llvmir_emit_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target/arch/amdgpu:low_registry",
-)
-
-iree_assert_no_dependency(
-    name = "wait_plan_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:wait_plan",
-)
-
-iree_assert_no_dependency(
-    name = "wait_packets_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:wait_packets",
-)
-
-iree_assert_no_dependency(
-    name = "occupancy_no_x86_arch_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target/arch/amdgpu:occupancy",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_execute_no_amdgpu_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/tools/loom-check:execute",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_execute_no_amdgpu_requirements_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:loom_check_requirements",
-    target = "//loom/src/loom/tools/loom-check:execute",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_execute_no_amdgpu_check_provider_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:check_provider",
-    target = "//loom/src/loom/tools/loom-check:execute",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_main_no_amdgpu_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/tools/loom-check:main",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_main_no_amdgpu_requirements_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:loom_check_requirements",
-    target = "//loom/src/loom/tools/loom-check:main",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_main_no_amdgpu_check_provider_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:check_provider",
-    target = "//loom/src/loom/tools/loom-check:main",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_test_no_amdgpu_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/tools/loom-check:loom-check-test",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_test_no_amdgpu_requirements_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:loom_check_requirements",
-    target = "//loom/src/loom/tools/loom-check:loom-check-test",
-)
-
-iree_assert_no_dependency(
-    name = "loom_check_test_no_amdgpu_check_provider_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:check_provider",
-    target = "//loom/src/loom/tools/loom-check:loom-check-test",
-)
-
-iree_assert_no_dependency(
-    name = "iree_run_loom_main_no_amdgpu_low_registry_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:low_registry",
-    target = "//loom/src/loom/tools/iree-run-loom:main",
-)
-
-iree_assert_no_dependency(
-    name = "iree_run_loom_main_no_amdgpu_hal_backend_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:amdgpu_hal_backend",
-    target = "//loom/src/loom/tools/iree-run-loom:main",
-)
-
-iree_assert_no_dependency(
-    name = "iree_run_loom_main_no_amdgpu_execution_provider_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:execution_provider",
-    target = "//loom/src/loom/tools/iree-run-loom:main",
+loom_assert_no_dependencies(
+    name = "amdgpu_target_no_other_target_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/wasm:descriptors",
+        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//loom/src/loom/target/emit/llvmir:llvmir",
+    ],
+    targets = [
+        ":gfx11_descriptors",
+        ":gfx1250_descriptors",
+        ":gfx12_descriptors",
+        ":gfx950_descriptors",
+        ":hal_kernel_abi",
+        ":hal_resource_materialization",
+        ":low_registry",
+        ":matrix_contract",
+        ":matrix_facts",
+        ":occupancy",
+        ":target_info",
+        ":wait_packets",
+        ":wait_plan",
+    ],
+)
+
+loom_assert_no_dependencies(
+    name = "amdgpu_lightweight_analysis_no_low_registry_dep",
+    dependencies = [":low_registry"],
+    targets = [
+        ":occupancy",
+        ":target_info",
+        ":wait_packets",
+        ":wait_plan",
+    ],
+)
+
+loom_assert_no_dependencies(
+    name = "amdgpu_descriptor_shards_no_matrix_contract_dep",
+    dependencies = [":matrix_contract"],
+    targets = [
+        ":gfx11_descriptors",
+        ":gfx1250_descriptors",
+        ":gfx12_descriptors",
+        ":gfx950_descriptors",
+    ],
+)
+
+loom_assert_no_dependencies(
+    name = "core_target_interfaces_no_amdgpu_target_deps",
+    dependencies = [
+        ":gfx11_descriptors",
+        ":gfx1250_descriptors",
+        ":gfx12_descriptors",
+        ":gfx950_descriptors",
+        ":low_registry",
+        ":matrix_contract",
+    ],
+    targets = [
+        "//loom/src/loom/target:coverage",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target:preset_registry",
+        "//loom/src/loom/target:types",
+    ],
+)
+
+loom_assert_no_dependencies(
+    name = "amdgpu_descriptor_ids_no_descriptor_shard_deps",
+    dependencies = [
+        ":gfx11_descriptors",
+        ":gfx950_descriptors",
+    ],
+    targets = [":descriptor_ids"],
+)
+
+loom_assert_no_dependencies(
+    name = "amdgpu_lower_no_registry_or_descriptor_deps",
+    dependencies = [
+        ":gfx11_descriptors",
+        ":gfx950_descriptors",
+        ":low_registry",
+    ],
+    targets = [":lower"],
+)
+
+loom_assert_no_dependencies(
+    name = "amdgpu_hal_abi_no_backend_runtime_or_descriptor_deps",
+    dependencies = [
+        ":gfx11_descriptors_ids",
+        ":gfx1250_descriptors_ids",
+        ":gfx12_descriptors_ids",
+        ":gfx950_descriptors_ids",
+        ":low_registry",
+        "//loom/src/loom/target/tool:llvm",
+        "//runtime/src/iree/hal/drivers/amdgpu",
+    ],
+    targets = [":hal_kernel_abi"],
+)
+
+loom_assert_no_dependencies(
+    name = "amdgpu_hal_resource_materialization_no_backend_runtime_or_descriptor_deps",
+    dependencies = [
+        ":gfx11_descriptors",
+        ":gfx950_descriptors",
+        ":low_registry",
+        "//loom/src/loom/target/tool:llvm",
+        "//runtime/src/iree/hal/drivers/amdgpu",
+    ],
+    targets = [":hal_resource_materialization"],
+)
+
+loom_assert_no_dependencies(
+    name = "core_tools_no_amdgpu_check_deps",
+    dependencies = [
+        ":check_provider",
+        ":loom_check_requirements",
+        ":low_registry",
+    ],
+    targets = [
+        "//loom/src/loom/tools/loom-check:execute",
+        "//loom/src/loom/tools/loom-check:loom-check-test",
+        "//loom/src/loom/tools/loom-check:main",
+    ],
+)
+
+loom_assert_no_dependencies(
+    name = "core_run_tool_no_amdgpu_execution_deps",
+    dependencies = [
+        ":execution_provider",
+        ":low_registry",
+        ":amdgpu_hal_backend",
+    ],
+    targets = ["//loom/src/loom/tools/iree-run-loom:main"],
 )
 
 #===------------------------------------------------------------------------===#
