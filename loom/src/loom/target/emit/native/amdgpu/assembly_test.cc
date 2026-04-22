@@ -1176,9 +1176,9 @@ TEST_F(AmdgpuAssemblyTest, DropsDeadPureFragmentsFromSourceLowering) {
 TEST_F(AmdgpuAssemblyTest, RejectsUnsupportedVectorSourceLowering) {
   ExpectSourceLoweringRejects(
       "amdgpu-gfx11",
-      "func.def target(@gfx_target) @gfx_source(%lhs: vector<5xi32>, %rhs: "
-      "vector<5xi32>) {\n"
-      "  %sum = vector.addi %lhs, %rhs : vector<5xi32>\n"
+      "func.def target(@gfx_target) @gfx_source(%lhs: vector<9xi32>, %rhs: "
+      "vector<9xi32>) {\n"
+      "  %sum = vector.addi %lhs, %rhs : vector<9xi32>\n"
       "  func.return\n"
       "}\n");
 }

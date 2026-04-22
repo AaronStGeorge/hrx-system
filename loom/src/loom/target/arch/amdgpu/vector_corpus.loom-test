@@ -256,6 +256,41 @@ func.def target(@gfx11_q6_high2_gemv4_shape_target) @amdgpu_q6_high2_gemv4_shape
 }
 
 // ====
+// RUN: emit source-low @amdgpu_q6_high2_scaled_gemv4_shape output=none
+target.profile @gfx11_q6_high2_scaled_gemv4_shape_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_q6_high2_scaled_gemv4_shape_target) @amdgpu_q6_high2_scaled_gemv4_shape(%low_buffer: buffer, %high_buffer: buffer, %rhs_buffer: buffer, %scale_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %low_view = buffer.view %low_buffer[%zero] : buffer -> view<4xi32, #dense>
+  %high_view = buffer.view %high_buffer[%zero] : buffer -> view<4xi32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<2xi32, #dense>
+  %scale_view = buffer.view %scale_buffer[%zero] : buffer -> view<2xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<4x2xf32, #dense>
+  %low_packed = vector.load %low_view[%tid] : view<4xi32, #dense> -> vector<1xi32>
+  %high_word = vector.load %high_view[%tid] : view<4xi32, #dense> -> vector<1xi32>
+  %rhs_packed = vector.load %rhs_view[0] : view<2xi32, #dense> -> vector<2xi32>
+  %scale = vector.load %scale_view[0] : view<2xf32, #dense> -> vector<2xf32>
+  %low4 = vector.bitunpacku<4> %low_packed : vector<1xi32> -> vector<8xi32>
+  %high_bytes = vector.bitcast %high_word : vector<1xi32> to vector<4xi8>
+  %high_packed = vector.slice %high_bytes[2] : vector<4xi8> -> vector<2xi8>
+  %high2 = vector.bitunpacku<2> %high_packed : vector<2xi8> -> vector<8xi32>
+  %q6 = vector.bitfield.insert %high2 into %low4 {offset = 4, width = 2} : vector<8xi32>, vector<8xi32>
+  %bias = vector.constant 32 : vector<8xi32>
+  %signed_q6 = vector.subi %q6, %bias : vector<8xi32>
+  %lhs = vector.bitpack<8> %signed_q6 : vector<8xi32> -> vector<8xi8>
+  %rhs_i32 = vector.bitunpacku<8> %rhs_packed : vector<2xi32> -> vector<8xi32>
+  %rhs = vector.bitpack<8> %rhs_i32 : vector<8xi32> -> vector<8xi8>
+  %acc = vector.constant 0 : vector<2xi32>
+  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<8xi8>, vector<8xi8>, vector<2xi32>
+  %converted = vector.sitofp %dot : vector<2xi32> to vector<2xf32>
+  %scaled = vector.mulf %converted, %scale : vector<2xf32>
+  vector.store %scaled, %output_view[%tid, 0] : vector<2xf32>, view<4x2xf32, #dense>
+  func.return
+}
+
+// ====
 // RUN: emit source-low @amdgpu_packed_i8_dot_shape output=none
 target.profile @gfx11_packed_i8_dot_shape_target preset("amdgpu-gfx11")
 

@@ -170,6 +170,7 @@ _GLOBAL_GFX950_SADDR_OFF = 0x7F
 
 _SGPR_ALT = (RegClassAlt(_REG_SGPR),)
 _VGPR_ALT = (RegClassAlt(_REG_VGPR),)
+_SGPR_VGPR_ALT = (RegClassAlt(_REG_SGPR), RegClassAlt(_REG_VGPR))
 _VGPR_CONST_ALT = (
     RegClassAlt(_REG_VGPR),
     RegClassAlt(None, flags=(RegClassAltFlag.IMMEDIATE,)),
@@ -353,6 +354,10 @@ def _vgpr_result(field_name: str = "dst", *, units: int = 1) -> Operand:
 
 def _vgpr_operand(field_name: str, *, units: int = 1) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _VGPR_ALT, unit_count=units)
+
+
+def _sgpr_vgpr_operand(field_name: str, *, units: int = 1) -> Operand:
+    return Operand(field_name, OperandRole.OPERAND, _SGPR_VGPR_ALT, unit_count=units)
 
 
 def _vgpr_const_operand(field_name: str, *, units: int = 1) -> Operand:
@@ -1178,6 +1183,38 @@ def _v_fma_f32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SRC0", _vgpr_operand("a")),
             AmdgpuOperandOverlay("SRC1", _vgpr_operand("b")),
             AmdgpuOperandOverlay("SRC2", _vgpr_operand("c")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_cvt_f32_i32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_cvt_f32_i32",
+        instruction_name="V_CVT_F32_I32",
+        mnemonic="v_cvt_f32_i32",
+        encoding_name="ENC_VOP1",
+        semantic_tag="convert.signed.i32.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("input")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_cvt_f32_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_cvt_f32_u32",
+        instruction_name="V_CVT_F32_U32",
+        mnemonic="v_cvt_f32_u32",
+        encoding_name="ENC_VOP1",
+        semantic_tag="convert.unsigned.u32.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("input")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
@@ -2780,6 +2817,8 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_sub_f32_overlay(),
         _v_mul_f32_overlay(),
         _v_fma_f32_overlay(),
+        _v_cvt_f32_i32_overlay(),
+        _v_cvt_f32_u32_overlay(),
         _s_load_dwordx2_overlay(),
         _s_buffer_load_dword_overlay(),
         _s_buffer_load_64_overlay(
@@ -2905,6 +2944,8 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_sub_f32_overlay(),
         _v_mul_f32_overlay(),
         _v_fma_f32_overlay(),
+        _v_cvt_f32_i32_overlay(),
+        _v_cvt_f32_u32_overlay(),
         _s_load_dwordx2_overlay(),
         _s_buffer_load_dword_overlay(),
         _s_buffer_load_64_overlay(),
@@ -3013,6 +3054,8 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_sub_f32_overlay(),
         _v_mul_f32_overlay(),
         _v_fma_f32_overlay(),
+        _v_cvt_f32_i32_overlay(),
+        _v_cvt_f32_u32_overlay(),
         _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
         _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
         _s_buffer_load_64_overlay(offset_field_name="IOFFSET", offset_bit_width=24),
@@ -3126,6 +3169,8 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_sub_f32_overlay(),
         _v_mul_f32_overlay(),
         _v_fma_f32_overlay(),
+        _v_cvt_f32_i32_overlay(),
+        _v_cvt_f32_u32_overlay(),
         _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
         _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
         _s_buffer_load_64_overlay(offset_field_name="IOFFSET", offset_bit_width=24),
