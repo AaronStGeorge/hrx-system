@@ -149,7 +149,9 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
     case LOOM_OP_SCALAR_SHLI:
     case LOOM_OP_SCALAR_SHRSI:
     case LOOM_OP_SCALAR_SHRUI:
-      return loom_amdgpu_lower_integer_op(context, source_op);
+      return loom_amdgpu_lower_integer_op(
+          context, source_op,
+          (const loom_amdgpu_integer_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_CMPI:
       return loom_amdgpu_lower_vector_cmpi(
           context, source_op,

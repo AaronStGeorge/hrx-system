@@ -97,6 +97,39 @@ typedef struct loom_amdgpu_buffer_alloca_plan_t {
   int64_t base_alignment;
 } loom_amdgpu_buffer_alloca_plan_t;
 
+typedef enum loom_amdgpu_integer_emit_kind_e {
+  LOOM_AMDGPU_INTEGER_EMIT_KIND_NONE = 0,
+  LOOM_AMDGPU_INTEGER_EMIT_KIND_BINARY = 1,
+  LOOM_AMDGPU_INTEGER_EMIT_KIND_MADD = 2,
+} loom_amdgpu_integer_emit_kind_t;
+
+typedef enum loom_amdgpu_integer_operand_kind_e {
+  LOOM_AMDGPU_INTEGER_OPERAND_KIND_NONE = 0,
+  LOOM_AMDGPU_INTEGER_OPERAND_KIND_I32_DIRECT = 1,
+  LOOM_AMDGPU_INTEGER_OPERAND_KIND_I32_VGPR = 2,
+  LOOM_AMDGPU_INTEGER_OPERAND_KIND_ADDRESS_DIRECT = 3,
+  LOOM_AMDGPU_INTEGER_OPERAND_KIND_ADDRESS_VGPR = 4,
+} loom_amdgpu_integer_operand_kind_t;
+
+typedef struct loom_amdgpu_integer_plan_t {
+  // Emission shape selected for this integer source op.
+  loom_amdgpu_integer_emit_kind_t emit_kind;
+  // Operand lookup/materialization domain selected during planning.
+  loom_amdgpu_integer_operand_kind_t operand_kind;
+  // Primary descriptor ID selected for binary ops or the multiply in madd.
+  uint64_t descriptor_id;
+  // Secondary descriptor ID selected for the add in madd.
+  uint64_t secondary_descriptor_id;
+  // First source operand in target descriptor order.
+  loom_value_id_t source_lhs;
+  // Second source operand in target descriptor order.
+  loom_value_id_t source_rhs;
+  // Third source operand used by madd, or invalid for binary ops.
+  loom_value_id_t source_accumulator;
+  // Source result value receiving the low op result.
+  loom_value_id_t source_result;
+} loom_amdgpu_integer_plan_t;
+
 typedef enum loom_amdgpu_table_index_kind_e {
   LOOM_AMDGPU_TABLE_INDEX_KIND_NONE = 0,
   LOOM_AMDGPU_TABLE_INDEX_KIND_I32 = 1,

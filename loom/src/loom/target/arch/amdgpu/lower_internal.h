@@ -233,8 +233,9 @@ iree_status_t loom_amdgpu_select_integer_plan(loom_low_lower_context_t* context,
 
 // Lowers a scalar integer or index arithmetic source op using its selected
 // plan.
-iree_status_t loom_amdgpu_lower_integer_op(loom_low_lower_context_t* context,
-                                           const loom_op_t* source_op);
+iree_status_t loom_amdgpu_lower_integer_op(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_integer_plan_t* plan);
 
 // Selects a plan for buffer construction source ops.
 iree_status_t loom_amdgpu_select_buffer_plan(loom_low_lower_context_t* context,
