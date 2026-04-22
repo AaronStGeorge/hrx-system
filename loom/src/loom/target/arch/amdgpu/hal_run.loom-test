@@ -286,6 +286,39 @@ func.def target(@gfx_target) @loom_kernel(%low_buffer: buffer, %high_buffer: buf
 
 // ====
 // REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&4xi32=0,15,8,4 --binding=&4xi32=0,1,2,3 --binding=&1xi32=0 --expected_binding=4xi32=0,15,8,4 --expected_binding=4xi32=0,1,2,3 --expected_binding=1xi32=75
+
+target.profile @gfx_target preset("amdgpu-current")
+
+func.def target(@gfx_target) @loom_kernel(%low_buffer: buffer, %high_buffer: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %low_view = buffer.view %low_buffer[%zero] : buffer -> view<4xi32, #dense>
+  %high_view = buffer.view %high_buffer[%zero] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %low_packed = vector.load %low_view[0] : view<4xi32, #dense> -> vector<4xi32>
+  %high_packed = vector.load %high_view[0] : view<4xi32, #dense> -> vector<4xi32>
+  %low4 = vector.bitfield.extractu %low_packed {offset = 0, width = 4} : vector<4xi32> -> vector<4xi32>
+  %high2 = vector.bitfield.extractu %high_packed {offset = 0, width = 2} : vector<4xi32> -> vector<4xi32>
+  %q6 = vector.bitfield.insert %high2 into %low4 {offset = 4, width = 2} : vector<4xi32>, vector<4xi32>
+  %bias = vector.constant 32 : vector<4xi32>
+  %signed_q6 = vector.subi %q6, %bias : vector<4xi32>
+  %lhs = vector.bitpack<8> %signed_q6 : vector<4xi32> -> vector<4xi8>
+  %rhs0 = scalar.constant 1 : i32
+  %rhs1 = scalar.constant 2 : i32
+  %rhs2 = scalar.constant 3 : i32
+  %rhs3 = scalar.constant 4 : i32
+  %rhs_i32 = vector.from_elements %rhs0, %rhs1, %rhs2, %rhs3 : vector<4xi32>
+  %rhs = vector.bitpack<8> %rhs_i32 : vector<4xi32> -> vector<4xi8>
+  %acc = vector.constant 5 : vector<1xi32>
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  vector.store %dot, %output_view[0] : vector<1xi32>, view<1xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&8xi32=1,2,3,4,5,6,7,8 --binding=&8xi32=10,10,10,10,10,10,10,10 --binding=&8xi32=0 --expected_binding=8xi32=1,2,3,4,5,6,7,8 --expected_binding=8xi32=10,10,10,10,10,10,10,10 --expected_binding=8xi32=0,0,0,0,15,16,17,18
 
 target.profile @gfx_target preset("amdgpu-current")
