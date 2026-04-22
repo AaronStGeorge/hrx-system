@@ -163,6 +163,58 @@ typedef enum loom_amdgpu_memory_descriptor_domain_e {
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS = 2,
 } loom_amdgpu_memory_descriptor_domain_t;
 
+typedef struct loom_amdgpu_memory_space_descriptor_domain_t {
+  // Source memory-space fact matched by this row.
+  loom_value_fact_memory_space_t memory_space;
+  // Default descriptor domain selected for this memory space.
+  loom_amdgpu_memory_descriptor_domain_t descriptor_domain;
+} loom_amdgpu_memory_space_descriptor_domain_t;
+
+static const loom_amdgpu_memory_space_descriptor_domain_t
+    kAmdgpuMemorySpaceDescriptorDomains[] = {
+        {
+            .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
+            .descriptor_domain =
+                LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
+        },
+        {
+            .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL,
+            .descriptor_domain =
+                LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
+        },
+        {
+            .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT,
+            .descriptor_domain =
+                LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
+        },
+        {
+            .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR,
+            .descriptor_domain =
+                LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
+        },
+        {
+            .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP,
+            .descriptor_domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS,
+        },
+};
+
+static bool loom_amdgpu_memory_descriptor_domain_from_memory_space(
+    loom_value_fact_memory_space_t memory_space,
+    loom_amdgpu_memory_descriptor_domain_t* out_descriptor_domain) {
+  IREE_ASSERT_ARGUMENT(out_descriptor_domain);
+  *out_descriptor_domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE;
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kAmdgpuMemorySpaceDescriptorDomains); ++i) {
+    const loom_amdgpu_memory_space_descriptor_domain_t* row =
+        &kAmdgpuMemorySpaceDescriptorDomains[i];
+    if (row->memory_space == memory_space) {
+      *out_descriptor_domain = row->descriptor_domain;
+      return true;
+    }
+  }
+  return false;
+}
+
 typedef struct loom_amdgpu_memory_descriptor_candidate_t {
   // Memory resource domain accepted by this row.
   loom_amdgpu_memory_descriptor_domain_t domain;
@@ -486,22 +538,19 @@ static bool loom_amdgpu_select_memory_descriptor(
     const loom_amdgpu_memory_access_plan_t* access,
     loom_amdgpu_memory_operation_kind_t kind, uint64_t* out_descriptor_id,
     uint32_t* out_descriptor_ordinal) {
-  switch (access->source.memory_space) {
-    case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
-      return loom_amdgpu_select_ds_memory_descriptor(descriptor_set, access,
-                                                     kind, out_descriptor_id,
-                                                     out_descriptor_ordinal);
-    case LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT:
-    case LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR:
-      return loom_amdgpu_select_buffer_memory_descriptor(
-          descriptor_set, access, access->address_form, kind, out_descriptor_id,
-          out_descriptor_ordinal);
-    default:
-      break;
+  loom_amdgpu_memory_descriptor_domain_t descriptor_domain;
+  if (!loom_amdgpu_memory_descriptor_domain_from_memory_space(
+          access->source.memory_space, &descriptor_domain)) {
+    return false;
   }
-  return false;
+  if (descriptor_domain == LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS) {
+    return loom_amdgpu_select_ds_memory_descriptor(descriptor_set, access, kind,
+                                                   out_descriptor_id,
+                                                   out_descriptor_ordinal);
+  }
+  return loom_amdgpu_select_buffer_memory_descriptor(
+      descriptor_set, access, access->address_form, kind, out_descriptor_id,
+      out_descriptor_ordinal);
 }
 
 typedef struct loom_amdgpu_descriptor_offset_immediate_info_t {
@@ -1092,8 +1141,15 @@ bool loom_amdgpu_memory_access_select(
     return false;
   }
 
-  if (out_access->source.memory_space ==
-      LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+  loom_amdgpu_memory_descriptor_domain_t descriptor_domain;
+  if (!loom_amdgpu_memory_descriptor_domain_from_memory_space(
+          out_access->source.memory_space, &descriptor_domain)) {
+    out_diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_MEMORY_SPACE;
+    return false;
+  }
+
+  if (descriptor_domain == LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS) {
     if (out_access->source.root_value_id >= module->values.count) {
       out_diagnostic->rejection_bits |=
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_ROOT;
@@ -1124,17 +1180,6 @@ bool loom_amdgpu_memory_access_select(
       return loom_amdgpu_select_ds2_memory_descriptor(
           descriptor_set, out_access, kind, out_diagnostic);
     }
-  } else if (out_access->source.memory_space !=
-                 LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN &&
-             out_access->source.memory_space !=
-                 LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL &&
-             out_access->source.memory_space !=
-                 LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT &&
-             out_access->source.memory_space !=
-                 LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR) {
-    out_diagnostic->rejection_bits |=
-        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_MEMORY_SPACE;
-    return false;
   }
   if (out_access->source.vector_lane_byte_stride !=
       out_access->source.element_byte_count) {
@@ -1143,8 +1188,7 @@ bool loom_amdgpu_memory_access_select(
     return false;
   }
 
-  if (out_access->source.memory_space ==
-      LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+  if (descriptor_domain == LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS) {
     uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
     if (!loom_amdgpu_select_memory_descriptor(descriptor_set, out_access, kind,
                                               &out_access->descriptor_id,
