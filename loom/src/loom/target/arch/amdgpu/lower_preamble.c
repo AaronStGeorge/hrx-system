@@ -185,73 +185,56 @@ iree_status_t loom_amdgpu_lookup_m0_live_in(loom_low_lower_context_t* context,
   return iree_ok_status();
 }
 
-static void loom_amdgpu_select_m0_live_in(loom_low_lower_context_t* context,
-                                          const loom_op_t** out_source_op,
-                                          uint64_t* out_descriptor_id) {
-  IREE_ASSERT_ARGUMENT(out_source_op);
-  IREE_ASSERT_ARGUMENT(out_descriptor_id);
-  *out_source_op = NULL;
-  *out_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
-  const iree_host_size_t plan_count =
-      loom_low_lower_context_selected_plan_count(context);
-  for (iree_host_size_t i = 0; i < plan_count; ++i) {
-    const loom_low_lower_plan_t plan =
-        loom_low_lower_context_selected_plan(context, i);
-    if (plan.id != LOOM_OP_VECTOR_LOAD && plan.id != LOOM_OP_VECTOR_STORE) {
-      continue;
-    }
-    const loom_amdgpu_memory_access_plan_t* access =
-        (const loom_amdgpu_memory_access_plan_t*)plan.target_data;
-    IREE_ASSERT(access != NULL);
-    if (access->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
-      continue;
-    }
-    *out_source_op = loom_low_lower_context_selected_plan_source_op(context, i);
-    *out_descriptor_id = access->descriptor_id;
-    return;
-  }
-}
-
 iree_status_t loom_amdgpu_emit_preamble(void* user_data,
                                         loom_low_lower_context_t* context) {
   (void)user_data;
-  loom_func_like_t source_function =
-      loom_low_lower_context_source_function(context);
-  loom_region_t* source_body = loom_func_like_body(source_function);
-  if (source_body == NULL) {
-    return iree_ok_status();
-  }
   const loom_op_t* first_workitem_id_ops[LOOM_KERNEL_DIMENSION_COUNT_] = {0};
   const loom_op_t* first_workgroup_id_ops[LOOM_KERNEL_DIMENSION_COUNT_] = {0};
   const loom_op_t* first_m0_op = NULL;
   uint64_t m0_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
-  loom_amdgpu_select_m0_live_in(context, &first_m0_op, &m0_descriptor_id);
-  for (uint16_t block_index = 0; block_index < source_body->block_count;
-       ++block_index) {
-    const loom_block_t* source_block =
-        loom_region_const_block(source_body, block_index);
-    const loom_op_t* source_op = NULL;
-    loom_block_for_each_op(source_block, source_op) {
-      if (!loom_kernel_workitem_id_isa(source_op)) {
-        if (!loom_kernel_workgroup_id_isa(source_op)) {
+  const iree_host_size_t plan_count =
+      loom_low_lower_context_selected_plan_count(context);
+  for (iree_host_size_t i = 0; i < plan_count; ++i) {
+    const loom_op_t* source_op =
+        loom_low_lower_context_selected_plan_source_op(context, i);
+    const loom_low_lower_plan_t plan =
+        loom_low_lower_context_selected_plan(context, i);
+    switch (plan.id) {
+      case LOOM_OP_VECTOR_LOAD:
+      case LOOM_OP_VECTOR_STORE: {
+        if (first_m0_op != NULL) {
           continue;
         }
-        const loom_kernel_dimension_t dimension =
-            loom_kernel_workgroup_id_dimension(source_op);
-        if (dimension >= LOOM_KERNEL_DIMENSION_COUNT_ ||
-            first_workgroup_id_ops[dimension] != NULL) {
+        const loom_amdgpu_memory_access_plan_t* access =
+            (const loom_amdgpu_memory_access_plan_t*)plan.target_data;
+        IREE_ASSERT(access != NULL);
+        if (access->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
           continue;
         }
-        first_workgroup_id_ops[dimension] = source_op;
-      } else {
+        first_m0_op = source_op;
+        m0_descriptor_id = access->descriptor_id;
+        break;
+      }
+      case LOOM_OP_KERNEL_WORKITEM_ID: {
         const loom_kernel_dimension_t dimension =
             loom_kernel_workitem_id_dimension(source_op);
-        if (dimension >= LOOM_KERNEL_DIMENSION_COUNT_ ||
-            first_workitem_id_ops[dimension] != NULL) {
-          continue;
+        IREE_ASSERT_LT(dimension, LOOM_KERNEL_DIMENSION_COUNT_);
+        if (first_workitem_id_ops[dimension] == NULL) {
+          first_workitem_id_ops[dimension] = source_op;
         }
-        first_workitem_id_ops[dimension] = source_op;
+        break;
       }
+      case LOOM_OP_KERNEL_WORKGROUP_ID: {
+        const loom_kernel_dimension_t dimension =
+            loom_kernel_workgroup_id_dimension(source_op);
+        IREE_ASSERT_LT(dimension, LOOM_KERNEL_DIMENSION_COUNT_);
+        if (first_workgroup_id_ops[dimension] == NULL) {
+          first_workgroup_id_ops[dimension] = source_op;
+        }
+        break;
+      }
+      default:
+        break;
     }
   }
 
@@ -284,36 +267,34 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
         &low_workitem_ids[i]));
   }
 
-  for (uint16_t block_index = 0; block_index < source_body->block_count;
-       ++block_index) {
-    const loom_block_t* source_block =
-        loom_region_const_block(source_body, block_index);
-    const loom_op_t* source_op = NULL;
-    loom_block_for_each_op(source_block, source_op) {
-      if (!loom_kernel_workitem_id_isa(source_op)) {
-        if (!loom_kernel_workgroup_id_isa(source_op)) {
-          continue;
-        }
-        const loom_kernel_dimension_t dimension =
-            loom_kernel_workgroup_id_dimension(source_op);
-        if (dimension >= LOOM_KERNEL_DIMENSION_COUNT_ ||
-            low_workgroup_ids[dimension] == LOOM_VALUE_ID_INVALID) {
-          continue;
-        }
-        IREE_RETURN_IF_ERROR(loom_low_lower_bind_value(
-            context, loom_kernel_workgroup_id_result(source_op),
-            low_workgroup_ids[dimension]));
-      } else {
+  for (iree_host_size_t i = 0; i < plan_count; ++i) {
+    const loom_op_t* source_op =
+        loom_low_lower_context_selected_plan_source_op(context, i);
+    const loom_low_lower_plan_t plan =
+        loom_low_lower_context_selected_plan(context, i);
+    switch (plan.id) {
+      case LOOM_OP_KERNEL_WORKITEM_ID: {
         const loom_kernel_dimension_t dimension =
             loom_kernel_workitem_id_dimension(source_op);
-        if (dimension >= LOOM_KERNEL_DIMENSION_COUNT_ ||
-            low_workitem_ids[dimension] == LOOM_VALUE_ID_INVALID) {
-          continue;
-        }
+        IREE_ASSERT_LT(dimension, LOOM_KERNEL_DIMENSION_COUNT_);
+        IREE_ASSERT_NE(low_workitem_ids[dimension], LOOM_VALUE_ID_INVALID);
         IREE_RETURN_IF_ERROR(loom_low_lower_bind_value(
             context, loom_kernel_workitem_id_result(source_op),
             low_workitem_ids[dimension]));
+        break;
       }
+      case LOOM_OP_KERNEL_WORKGROUP_ID: {
+        const loom_kernel_dimension_t dimension =
+            loom_kernel_workgroup_id_dimension(source_op);
+        IREE_ASSERT_LT(dimension, LOOM_KERNEL_DIMENSION_COUNT_);
+        IREE_ASSERT_NE(low_workgroup_ids[dimension], LOOM_VALUE_ID_INVALID);
+        IREE_RETURN_IF_ERROR(loom_low_lower_bind_value(
+            context, loom_kernel_workgroup_id_result(source_op),
+            low_workgroup_ids[dimension]));
+        break;
+      }
+      default:
+        break;
     }
   }
   return iree_ok_status();
