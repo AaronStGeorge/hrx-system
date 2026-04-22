@@ -17,22 +17,6 @@ static iree_status_t loom_amdgpu_select_plan_id(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan) {
   *out_plan = loom_low_lower_plan_empty();
-#define LOOM_AMDGPU_SELECT_IF(condition)                              \
-  do {                                                                \
-    if (condition) {                                                  \
-      *out_plan = loom_low_lower_plan_make(source_op->kind, 0, NULL); \
-    }                                                                 \
-    return iree_ok_status();                                          \
-  } while (false)
-#define LOOM_AMDGPU_SELECT_DESCRIPTOR(select_fn)                          \
-  do {                                                                    \
-    uint64_t descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;                 \
-    if (select_fn(context, source_op, &descriptor_id)) {                  \
-      *out_plan =                                                         \
-          loom_low_lower_plan_make(source_op->kind, descriptor_id, NULL); \
-    }                                                                     \
-    return iree_ok_status();                                              \
-  } while (false)
 #define LOOM_AMDGPU_SELECT_DATA(plan_type, select_fn)                      \
   do {                                                                     \
     plan_type* plan_data = NULL;                                           \
@@ -123,8 +107,6 @@ static iree_status_t loom_amdgpu_select_plan_id(
       return iree_ok_status();
   }
 #undef LOOM_AMDGPU_SELECT_DATA
-#undef LOOM_AMDGPU_SELECT_DESCRIPTOR
-#undef LOOM_AMDGPU_SELECT_IF
 }
 
 static iree_status_t loom_amdgpu_select_op(void* user_data,
