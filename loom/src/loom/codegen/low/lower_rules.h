@@ -172,6 +172,10 @@ typedef enum loom_low_lower_emit_kind_e {
   // Slices register-range operands, emits one descriptor-backed low.op per
   // register lane, and concatenates the lane results.
   LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE = 3,
+  // Slices register-range operands, emits one descriptor-backed low.op per
+  // register lane, and threads one scalar accumulator operand through the
+  // emitted results.
+  LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES = 4,
 } loom_low_lower_emit_kind_t;
 
 typedef uint16_t loom_low_lower_emit_flags_t;
@@ -197,6 +201,9 @@ typedef struct loom_low_lower_emit_t {
   // descriptor op consumes them. Used for destructive/tied packet operands
   // without clobbering the source SSA value's later uses.
   uint16_t copy_operand_mask;
+  // Operand ordinal that carries the threaded scalar accumulator for
+  // DESCRIPTOR_OP_ACCUMULATE_LANES.
+  uint16_t accumulator_operand_index;
   // First value-ref table row mapped as a low result.
   //
   // Result type refs must address source results. When

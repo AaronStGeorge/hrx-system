@@ -727,6 +727,85 @@ static iree_status_t loom_low_lower_rule_emit_descriptor_op_per_lane(
                                           emit, &low_result);
 }
 
+static iree_status_t loom_low_lower_rule_emit_descriptor_op_accumulate_lanes(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_emit_state_t* state,
+    const loom_low_lower_emit_t* emit) {
+  IREE_ASSERT_GT(emit->operand_ref_count, 1);
+  IREE_ASSERT_LT(emit->accumulator_operand_index, emit->operand_ref_count);
+  IREE_ASSERT_EQ(emit->result_ref_count, 1);
+  IREE_ASSERT_EQ(emit->attr_copy_count, 0);
+  IREE_ASSERT_EQ(emit->tied_result_count, 0);
+  IREE_ASSERT_EQ(emit->flags, 0);
+
+  loom_value_id_t* low_operands = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_rule_build_low_operands(
+      context, rule_set, source_op, state, emit, &low_operands));
+  IREE_RETURN_IF_ERROR(loom_low_lower_rule_copy_low_operands(
+      context, source_op, emit, low_operands));
+
+  loom_value_id_t source_result = loom_low_lower_rule_source_value(
+      rule_set, source_op, emit->result_ref_start);
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_lower_rule_map_result_type(
+      context, source_op, source_result, &result_type));
+  IREE_ASSERT(loom_type_is_register(result_type));
+  IREE_ASSERT_EQ(loom_type_register_unit_count(result_type), 1);
+
+  uint32_t lane_count = 0;
+  for (uint16_t i = 0; i < emit->operand_ref_count; ++i) {
+    if (i == emit->accumulator_operand_index) {
+      continue;
+    }
+    const loom_type_t operand_type = loom_module_value_type(
+        loom_low_lower_context_module(context), low_operands[i]);
+    IREE_ASSERT(loom_type_is_register(operand_type));
+    IREE_ASSERT_EQ(loom_type_register_class_id(operand_type),
+                   loom_type_register_class_id(result_type));
+    if (lane_count == 0) {
+      lane_count = loom_type_register_unit_count(operand_type);
+      IREE_ASSERT_GT(lane_count, 0);
+    } else {
+      IREE_ASSERT_EQ(loom_type_register_unit_count(operand_type), lane_count);
+    }
+  }
+  IREE_ASSERT_GT(lane_count, 0);
+
+  loom_value_id_t* lane_operands = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
+      context, emit->operand_ref_count, sizeof(*lane_operands),
+      (void**)&lane_operands));
+  loom_value_id_t accumulator = low_operands[emit->accumulator_operand_index];
+  const loom_type_t accumulator_type = loom_module_value_type(
+      loom_low_lower_context_module(context), accumulator);
+  IREE_ASSERT(loom_type_is_register(accumulator_type));
+  IREE_ASSERT_EQ(loom_type_register_class_id(accumulator_type),
+                 loom_type_register_class_id(result_type));
+  IREE_ASSERT_EQ(loom_type_register_unit_count(accumulator_type), 1);
+  for (uint32_t lane_index = 0; lane_index < lane_count; ++lane_index) {
+    for (uint16_t operand_index = 0; operand_index < emit->operand_ref_count;
+         ++operand_index) {
+      if (operand_index == emit->accumulator_operand_index) {
+        lane_operands[operand_index] = accumulator;
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_slice_lane(
+          context, source_op, low_operands[operand_index], lane_index,
+          result_type, &lane_operands[operand_index]));
+    }
+    loom_op_t* lane_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
+        context, emit->descriptor_id, lane_operands, emit->operand_ref_count,
+        loom_make_named_attr_slice(NULL, 0), &result_type, 1, NULL, 0,
+        source_op->location, &lane_op));
+    accumulator = loom_value_slice_get(loom_low_op_results(lane_op), 0);
+  }
+
+  return loom_low_lower_rule_bind_results(context, rule_set, source_op, state,
+                                          emit, &accumulator);
+}
+
 iree_status_t loom_low_lower_rule_set_emit_rule(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -757,6 +836,12 @@ iree_status_t loom_low_lower_rule_set_emit_rule(
       case LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE: {
         IREE_RETURN_IF_ERROR(loom_low_lower_rule_emit_descriptor_op_per_lane(
             context, rule_set, source_op, &state, emit));
+        break;
+      }
+      case LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES: {
+        IREE_RETURN_IF_ERROR(
+            loom_low_lower_rule_emit_descriptor_op_accumulate_lanes(
+                context, rule_set, source_op, &state, emit));
         break;
       }
       default:

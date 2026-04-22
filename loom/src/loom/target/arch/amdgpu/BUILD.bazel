@@ -582,7 +582,7 @@ loom_cc_library(
         "lower_memory_emit.c",
         "lower_memory_legality.c",
         "lower_preamble.c",
-        "lower_reduce.c",
+        "lower_reduce_rules.c",
         "lower_structural.c",
         "lower_support.c",
         "lower_table.c",

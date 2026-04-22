@@ -206,6 +206,9 @@ extern const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_rule_set;
 // Target-local rule table for scalar integer and index arithmetic source ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_integer_rule_set;
 
+// Target-local rule table for vector reduce source ops.
+extern const loom_low_lower_rule_set_t loom_amdgpu_reduce_rule_set;
+
 // Selects a plan for value-construction source ops.
 iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
@@ -330,16 +333,6 @@ bool loom_amdgpu_select_vector_dot_plan(loom_low_lower_context_t* context,
 iree_status_t loom_amdgpu_lower_vector_dot(loom_low_lower_context_t* context,
                                            const loom_op_t* source_op,
                                            const loom_amdgpu_dot_plan_t* plan);
-
-// Selects the AMDGPU reduction packet plan for a source vector.reduce op.
-bool loom_amdgpu_select_vector_reduce_plan(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_vector_reduce_plan_t* out_plan);
-
-// Lowers a source vector.reduce op from its selected AMDGPU reduction plan.
-iree_status_t loom_amdgpu_lower_vector_reduce(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_vector_reduce_plan_t* plan);
 
 // Selects the AMDGPU mask compare plan for a source vector.cmpi op.
 bool loom_amdgpu_select_vector_cmpi_plan(

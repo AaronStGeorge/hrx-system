@@ -72,9 +72,6 @@ static iree_status_t loom_amdgpu_select_plan_id(
     case LOOM_OP_VECTOR_SLICE:
       LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_vector_slice_plan_t,
                               loom_amdgpu_select_vector_slice_plan);
-    case LOOM_OP_VECTOR_REDUCE:
-      LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_vector_reduce_plan_t,
-                              loom_amdgpu_select_vector_reduce_plan);
     case LOOM_OP_VECTOR_DOTF:
     case LOOM_OP_VECTOR_DOT4I:
     case LOOM_OP_VECTOR_DOT8I4:
@@ -164,10 +161,6 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
       return loom_amdgpu_lower_vector_slice(
           context, source_op,
           (const loom_amdgpu_vector_slice_plan_t*)plan.target_data);
-    case LOOM_OP_VECTOR_REDUCE:
-      return loom_amdgpu_lower_vector_reduce(
-          context, source_op,
-          (const loom_amdgpu_vector_reduce_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_DOTF:
     case LOOM_OP_VECTOR_DOT4I:
     case LOOM_OP_VECTOR_DOT8I4:
@@ -227,6 +220,7 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
 static const loom_low_lower_rule_set_t* const kAmdgpuRuleSets[] = {
     &loom_amdgpu_arithmetic_rule_set,
     &loom_amdgpu_integer_rule_set,
+    &loom_amdgpu_reduce_rule_set,
 };
 
 static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
