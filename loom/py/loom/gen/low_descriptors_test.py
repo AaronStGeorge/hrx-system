@@ -29,6 +29,7 @@ from loom.target.low_descriptors import (
     EnumValue,
     Hazard,
     HazardKind,
+    ImmediateFlag,
     ImmediateKind,
     OperandRole,
 )
@@ -480,6 +481,92 @@ def test_generator_rejects_non_enum_immediate_domain() -> None:
     with pytest.raises(
         ValueError,
         match=("descriptor 'iree.vm.const.i32' non-enum immediate 'i32_value' references enum domain 'vm.condition'"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_emits_defaulted_immediate() -> None:
+    immediate = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
+        default_value=7,
+    )
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        immediates=(immediate,),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    generated = generate_descriptor_set(descriptor_set)
+
+    assert "LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE" in generated.source
+    assert ".default_value = INT64_C(7)" in generated.source
+
+
+def test_generator_rejects_default_without_default_flag() -> None:
+    immediate = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        default_value=7,
+    )
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        immediates=(immediate,),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.const.i32' immediate 'i32_value' has a default value without the default-value flag"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_default_outside_unsigned_range() -> None:
+    immediate = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        kind=ImmediateKind.UNSIGNED,
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
+        unsigned_max=3,
+        default_value=4,
+    )
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        immediates=(immediate,),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.const.i32' immediate 'i32_value' default value is out of unsigned range"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_default_outside_enum_domain() -> None:
+    domain = EnumDomain(
+        "vm.condition",
+        values=(EnumValue("ne", 1), EnumValue("eq", 0)),
+    )
+    immediate = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        kind=ImmediateKind.ENUM,
+        enum_domain="vm.condition",
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
+        default_value=7,
+    )
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        immediates=(immediate,),
+    )
+    descriptor_set = replace(
+        IREEVM_CORE_DESCRIPTOR_SET,
+        enum_domains=(domain,),
+        descriptors=(descriptor,),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.const.i32' immediate 'i32_value' default value is not in enum domain 'vm.condition'"),
     ):
         generate_descriptor_set(descriptor_set)
 

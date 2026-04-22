@@ -97,9 +97,10 @@ inline void ExpectAmdgpuGlobalMemoryDescriptor(
   const uint16_t expected_operand_count = 2u +
                                           (expected_saddr_operand ? 1u : 0u) +
                                           (expected_implicit_m0 ? 1u : 0u);
+  const uint16_t expected_cache_immediate_count = 3u;
   EXPECT_EQ(descriptor->operand_count, expected_operand_count);
   EXPECT_EQ(descriptor->result_count, is_read ? 1u : 0u);
-  EXPECT_EQ(descriptor->immediate_count, 1u);
+  EXPECT_EQ(descriptor->immediate_count, 1u + expected_cache_immediate_count);
   EXPECT_EQ(descriptor->effect_count, 1u);
   EXPECT_EQ(descriptor->encoding_format_id, expected_encoding_format_id);
   EXPECT_EQ(descriptor->canonical_asm_form_ordinal,
@@ -146,6 +147,18 @@ inline void ExpectAmdgpuGlobalMemoryDescriptor(
             -(INT64_C(1) << (expected_offset_bit_width - 1)));
   EXPECT_EQ(immediate->unsigned_max,
             (UINT64_C(1) << (expected_offset_bit_width - 1)) - 1);
+  for (uint16_t i = 1; i < descriptor->immediate_count; ++i) {
+    const loom_low_immediate_t* cache_immediate =
+        &descriptor_set->immediates[descriptor->immediate_start + i];
+    EXPECT_EQ(cache_immediate->kind, LOOM_LOW_IMMEDIATE_KIND_UNSIGNED);
+    EXPECT_GT(cache_immediate->bit_width, 0u);
+    ASSERT_LT(cache_immediate->bit_width, 64u);
+    EXPECT_EQ(cache_immediate->unsigned_max,
+              (UINT64_C(1) << cache_immediate->bit_width) - 1);
+    EXPECT_EQ(cache_immediate->default_value, 0);
+    EXPECT_TRUE(iree_any_bit_set(cache_immediate->flags,
+                                 LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE));
+  }
 
   const loom_low_effect_t* effect =
       &descriptor_set->effects[descriptor->effect_start];

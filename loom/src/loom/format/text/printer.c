@@ -1515,12 +1515,31 @@ static iree_status_t loom_print_low_asm_find_immediate_attr(
       return iree_ok_status();
     }
   }
+  if (out_immediate->has_default_value) {
+    return iree_ok_status();
+  }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
       "low asm packet '%.*s' is missing immediate "
       "attribute '%.*s'",
       (int)statement->packet.opcode_key.size, statement->packet.opcode_key.data,
       (int)out_immediate->field_name.size, out_immediate->field_name.data);
+}
+
+static iree_status_t loom_print_low_asm_has_immediate_attr(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement,
+    iree_string_view_t attr_name, bool* out_has_immediate) {
+  *out_has_immediate = false;
+  for (uint16_t i = 0; i < statement->packet.immediate_count; ++i) {
+    loom_text_low_asm_immediate_descriptor_t immediate = {0};
+    IREE_RETURN_IF_ERROR(ctx->low_asm_environment.vtable->immediate_descriptor(
+        ctx->low_asm_environment.user_data, &statement->packet, i, &immediate));
+    if (iree_string_view_equal(attr_name, immediate.field_name)) {
+      *out_has_immediate = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_print_low_asm_validate_result_types(
@@ -1618,12 +1637,28 @@ static iree_status_t loom_print_low_asm_validate_statement(
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "low asm packet immediates are missing");
       }
-      if (statement->attributes.count != statement->packet.immediate_count) {
+      if (statement->attributes.count > statement->packet.immediate_count) {
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
-            "low asm packet '%.*s' immediate count does not match descriptor",
+            "low asm packet '%.*s' has more immediates than its descriptor",
             (int)statement->packet.opcode_key.size,
             statement->packet.opcode_key.data);
+      }
+      for (iree_host_size_t i = 0; i < statement->attributes.count; ++i) {
+        iree_string_view_t attr_name = iree_string_view_empty();
+        IREE_RETURN_IF_ERROR(loom_print_low_asm_attr_name(
+            ctx->module, &statement->attributes.entries[i], &attr_name));
+        bool has_immediate = false;
+        IREE_RETURN_IF_ERROR(loom_print_low_asm_has_immediate_attr(
+            ctx, statement, attr_name, &has_immediate));
+        if (!has_immediate) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm packet '%.*s' has unexpected "
+                                  "immediate attribute '%.*s'",
+                                  (int)statement->packet.opcode_key.size,
+                                  statement->packet.opcode_key.data,
+                                  (int)attr_name.size, attr_name.data);
+        }
       }
       for (uint16_t i = 0; i < statement->packet.immediate_count; ++i) {
         loom_text_low_asm_immediate_descriptor_t immediate = {0};
@@ -1714,22 +1749,42 @@ static iree_status_t loom_print_low_asm_value_list(
 
 static iree_status_t loom_print_low_asm_named_immediates(
     loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
-  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-  iree_host_size_t start = ctx->stream->offset;
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '{'));
+  bool has_printed_immediate = false;
   for (uint16_t i = 0; i < statement->packet.immediate_count; ++i) {
-    if (i > 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
-    }
     loom_text_low_asm_immediate_descriptor_t immediate = {0};
     const loom_named_attr_t* attr = NULL;
     IREE_RETURN_IF_ERROR(loom_print_low_asm_find_immediate_attr(
         ctx, statement, i, &immediate, &attr));
+    if (attr != NULL) {
+      has_printed_immediate = true;
+      break;
+    }
+  }
+  if (!has_printed_immediate) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  iree_host_size_t start = ctx->stream->offset;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '{'));
+  iree_host_size_t printed_count = 0;
+  for (uint16_t i = 0; i < statement->packet.immediate_count; ++i) {
+    loom_text_low_asm_immediate_descriptor_t immediate = {0};
+    const loom_named_attr_t* attr = NULL;
+    IREE_RETURN_IF_ERROR(loom_print_low_asm_find_immediate_attr(
+        ctx, statement, i, &immediate, &attr));
+    if (attr == NULL) {
+      continue;
+    }
+    if (printed_count > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
+    }
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write(ctx->stream, immediate.spelling));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, " = "));
     IREE_RETURN_IF_ERROR(
         loom_print_attr(ctx->stream, &attr->value, ctx->module, NULL));
+    ++printed_count;
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
   loom_print_did_write(ctx);
@@ -1753,6 +1808,14 @@ static iree_status_t loom_print_low_asm_positional_immediates(
     const loom_named_attr_t* attr = NULL;
     IREE_RETURN_IF_ERROR(loom_print_low_asm_find_immediate_attr(
         ctx, statement, i, &immediate, &attr));
+    if (attr == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low asm packet '%.*s' cannot omit positional immediate '%.*s'",
+          (int)statement->packet.opcode_key.size,
+          statement->packet.opcode_key.data, (int)immediate.field_name.size,
+          immediate.field_name.data);
+    }
     IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
     iree_host_size_t start = ctx->stream->offset;
     IREE_RETURN_IF_ERROR(

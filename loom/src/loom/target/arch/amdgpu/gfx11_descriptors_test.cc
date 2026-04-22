@@ -475,7 +475,8 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorMemoryAndMatrix) {
       "reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {\n"
       "  %sum = v_add_u32 %lhs, %rhs\n"
       "  %product = v_mul_lo_u32 %sum, %rhs\n"
-      "  %loaded = buffer_load_b128 %resource, %vaddr, %soffset {offset = 16}\n"
+      "  %loaded = buffer_load_b128 %resource, %vaddr, %soffset {offset = 16, "
+      "glc = 1}\n"
       "  buffer_store_b128 %loaded, %resource, %vaddr, %soffset {offset = 32}\n"
       "  %matrix = v_wmma_f32_16x16x16_f16 %a, %b, %acc\n"
       "  return %product, %loaded, %matrix\n"
@@ -487,9 +488,13 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorMemoryAndMatrix) {
   EXPECT_NE(printed.find("v_mul_lo_u32 %sum, %rhs"), std::string::npos);
   EXPECT_NE(printed.find("buffer_load_b128 %resource, %vaddr, %soffset"),
             std::string::npos);
+  EXPECT_NE(printed.find("{offset = 16, glc = 1}"), std::string::npos);
   EXPECT_NE(printed.find("buffer_store_b128 %loaded, %resource, %vaddr, "
                          "%soffset"),
             std::string::npos);
+  EXPECT_NE(printed.find("{offset = 32}"), std::string::npos);
+  EXPECT_EQ(printed.find("slc = 0"), std::string::npos);
+  EXPECT_EQ(printed.find("dlc = 0"), std::string::npos);
   EXPECT_NE(printed.find("v_wmma_f32_16x16x16_f16 %a, %b, %acc"),
             std::string::npos);
 }

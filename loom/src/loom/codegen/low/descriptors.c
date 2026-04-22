@@ -1133,7 +1133,8 @@ static iree_status_t loom_low_verify_immediate(
       &descriptor_set->immediates[immediate_index];
   IREE_RETURN_IF_ERROR(loom_low_verify_known_flags(
       immediate->flags,
-      LOOM_LOW_IMMEDIATE_FLAG_SYMBOLIC | LOOM_LOW_IMMEDIATE_FLAG_RELATIVE,
+      LOOM_LOW_IMMEDIATE_FLAG_SYMBOLIC | LOOM_LOW_IMMEDIATE_FLAG_RELATIVE |
+          LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE,
       "immediate", immediate_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_required_string(
       descriptor_set, immediate->field_name_string_offset,
@@ -1173,6 +1174,68 @@ static iree_status_t loom_low_verify_immediate(
                             "low immediate %" PRIu32
                             " has unsupported bit width %" PRIu16,
                             immediate_index, immediate->bit_width);
+  }
+  if (!iree_any_bit_set(immediate->flags,
+                        LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE)) {
+    if (immediate->default_value != 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low immediate %" PRIu32
+                              " has a default value without the "
+                              "default-value flag",
+                              immediate_index);
+    }
+    return iree_ok_status();
+  }
+  switch (immediate->kind) {
+    case LOOM_LOW_IMMEDIATE_KIND_SIGNED: {
+      const int64_t maximum = immediate->unsigned_max > INT64_MAX
+                                  ? INT64_MAX
+                                  : (int64_t)immediate->unsigned_max;
+      if (immediate->default_value < immediate->signed_min ||
+          immediate->default_value > maximum) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low signed immediate %" PRIu32
+                                " default value %" PRId64 " is out of range",
+                                immediate_index, immediate->default_value);
+      }
+      break;
+    }
+    case LOOM_LOW_IMMEDIATE_KIND_UNSIGNED:
+    case LOOM_LOW_IMMEDIATE_KIND_ORDINAL:
+      if (immediate->default_value < 0 ||
+          (uint64_t)immediate->default_value > immediate->unsigned_max) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low unsigned immediate %" PRIu32
+                                " default value %" PRId64 " is out of range",
+                                immediate_index, immediate->default_value);
+      }
+      break;
+    case LOOM_LOW_IMMEDIATE_KIND_ENUM: {
+      const loom_low_enum_domain_t* domain =
+          &descriptor_set->enum_domains[immediate->enum_domain_id];
+      IREE_RETURN_IF_ERROR(loom_low_verify_span(
+          domain->value_start, domain->value_count,
+          descriptor_set->enum_value_count, "enum_values"));
+      bool found = false;
+      for (uint16_t i = 0; i < domain->value_count; ++i) {
+        const loom_low_enum_value_t* value =
+            &descriptor_set->enum_values[domain->value_start + i];
+        if (value->value == immediate->default_value) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low enum immediate %" PRIu32
+                                " default value %" PRId64
+                                " is not in its enum domain",
+                                immediate_index, immediate->default_value);
+      }
+      break;
+    }
+    default:
+      break;
   }
   return iree_ok_status();
 }
@@ -1796,6 +1859,7 @@ static const loom_low_manifest_flag_name_t kLoomLowOperandFlagNames[] = {
 static const loom_low_manifest_flag_name_t kLoomLowImmediateFlagNames[] = {
     {LOOM_LOW_IMMEDIATE_FLAG_SYMBOLIC, "symbolic"},
     {LOOM_LOW_IMMEDIATE_FLAG_RELATIVE, "relative"},
+    {LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE, "default_value"},
 };
 
 static const loom_low_manifest_flag_name_t kLoomLowEffectFlagNames[] = {
@@ -2143,10 +2207,11 @@ static iree_status_t loom_low_append_manifest_immediate(
       builder,
       ",\"bit_width\":%" PRIu16 ",\"enum_domain\":%" PRIu16
       ",\"encoding_field\":%" PRIu16 ",\"encoding\":%" PRIu16
-      ",\"signed_min\":%" PRId64 ",\"unsigned_max\":%" PRIu64 "}",
+      ",\"signed_min\":%" PRId64 ",\"unsigned_max\":%" PRIu64
+      ",\"default_value\":%" PRId64 "}",
       immediate->bit_width, immediate->enum_domain_id,
       immediate->encoding_field_id, immediate->encoding_id,
-      immediate->signed_min, immediate->unsigned_max);
+      immediate->signed_min, immediate->unsigned_max, immediate->default_value);
 }
 
 static iree_status_t loom_low_append_manifest_effect(

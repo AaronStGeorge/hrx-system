@@ -53,6 +53,10 @@ typedef struct loom_text_low_asm_immediate_descriptor_t {
   iree_string_view_t field_name;
   // Surface spelling accepted by the asm parser for this immediate.
   iree_string_view_t spelling;
+  // True when the packet may omit this immediate attribute.
+  bool has_default_value;
+  // Effective i64 value used when the packet omits this immediate.
+  int64_t default_value;
 } loom_text_low_asm_immediate_descriptor_t;
 
 typedef enum loom_text_low_asm_statement_kind_e {

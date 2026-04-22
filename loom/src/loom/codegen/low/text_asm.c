@@ -45,6 +45,9 @@ static iree_status_t loom_low_descriptor_text_asm_immediate_info(
   IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_string(
       descriptor_set, immediate->field_name_string_offset,
       &out_immediate->field_name));
+  out_immediate->has_default_value =
+      iree_any_bit_set(immediate->flags, LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE);
+  out_immediate->default_value = immediate->default_value;
   if (asm_immediate->name_string_offset != LOOM_LOW_STRING_OFFSET_NONE) {
     IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_string(
         descriptor_set, asm_immediate->name_string_offset,
@@ -96,6 +99,24 @@ static iree_status_t loom_low_descriptor_text_asm_make_packet(
         &descriptor_set
              ->asm_immediates[asm_form->immediate_start + (uint32_t)i];
     if (asm_immediate->name_string_offset != LOOM_LOW_STRING_OFFSET_NONE) {
+      has_named_immediates = true;
+      break;
+    }
+    if (asm_immediate->immediate_index >= descriptor->immediate_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "low asm immediate references an invalid descriptor field");
+    }
+    const uint32_t immediate_index =
+        descriptor->immediate_start + asm_immediate->immediate_index;
+    if (immediate_index >= descriptor_set->immediate_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low asm immediate field is out of range");
+    }
+    const loom_low_immediate_t* immediate =
+        &descriptor_set->immediates[immediate_index];
+    if (iree_any_bit_set(immediate->flags,
+                         LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE)) {
       has_named_immediates = true;
       break;
     }
@@ -940,10 +961,11 @@ static iree_status_t loom_low_descriptor_text_asm_validate_immediates(
     const loom_module_t* module,
     const loom_text_low_asm_packet_descriptor_t* packet,
     loom_named_attr_slice_t attrs) {
-  if (attrs.count != packet->immediate_count) {
+  if (attrs.count > packet->immediate_count) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "low asm packet '%.*s' expects %u immediate attributes but op has "
+        "low asm packet '%.*s' expects at most %u immediate attributes but op "
+        "has "
         "%" PRIhsz,
         (int)packet->opcode_key.size, packet->opcode_key.data,
         packet->immediate_count, attrs.count);
@@ -980,7 +1002,7 @@ static iree_status_t loom_low_descriptor_text_asm_validate_immediates(
     bool found = false;
     IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_find_attr(
         module, attrs, immediate.field_name, &found));
-    if (!found) {
+    if (!found && !immediate.has_default_value) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "low asm packet '%.*s' is missing immediate "

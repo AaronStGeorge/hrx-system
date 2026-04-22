@@ -14,7 +14,7 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 13
+LOW_DESCRIPTOR_SET_ABI_VERSION = 14
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 
@@ -75,6 +75,7 @@ class ImmediateKind(CEnum):
 class ImmediateFlag(CEnum):
     SYMBOLIC = "LOOM_LOW_IMMEDIATE_FLAG_SYMBOLIC"
     RELATIVE = "LOOM_LOW_IMMEDIATE_FLAG_RELATIVE"
+    DEFAULT_VALUE = "LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE"
 
 
 class EffectKind(CEnum):
@@ -203,6 +204,7 @@ class Immediate:
     encoding_id: int = 0
     signed_min: int = 0
     unsigned_max: int = 0
+    default_value: int = 0
 
 
 @dataclass(frozen=True, slots=True)

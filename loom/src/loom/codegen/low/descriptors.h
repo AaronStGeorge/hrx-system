@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 13u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 14u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -142,6 +142,8 @@ typedef uint16_t loom_low_immediate_flags_t;
 #define LOOM_LOW_IMMEDIATE_FLAG_SYMBOLIC ((uint16_t)1u << 0)
 // Immediate value is encoded relative to the current packet or block.
 #define LOOM_LOW_IMMEDIATE_FLAG_RELATIVE ((uint16_t)1u << 1)
+// Immediate may be omitted from packet attributes and uses default_value.
+#define LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE ((uint16_t)1u << 2)
 
 typedef enum loom_low_effect_kind_e {
   // Unknown or uninitialized effect kind.
@@ -374,6 +376,8 @@ typedef struct loom_low_immediate_t {
   int64_t signed_min;
   // Inclusive unsigned maximum when kind is unsigned or ordinal.
   uint64_t unsigned_max;
+  // Value used when a packet omits this immediate attribute.
+  int64_t default_value;
 } loom_low_immediate_t;
 
 typedef struct loom_low_encoding_field_value_t {

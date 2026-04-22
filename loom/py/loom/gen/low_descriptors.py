@@ -38,6 +38,7 @@ from loom.target.low_descriptors import (
     Hazard,
     HazardReferenceKind,
     Immediate,
+    ImmediateFlag,
     ImmediateKind,
     IssueUse,
     Operand,
@@ -355,6 +356,26 @@ def _validate_enum_domain(domain: EnumDomain) -> tuple[EnumValue, ...]:
     return tuple(sorted(domain.values, key=lambda value: value.token))
 
 
+def _validate_immediate_default(descriptor: Descriptor, immediate: Immediate, enum_domains: dict[str, EnumDomain]) -> None:
+    if ImmediateFlag.DEFAULT_VALUE not in immediate.flags:
+        if immediate.default_value != 0:
+            raise ValueError(f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' has a default value without the default-value flag")
+        return
+    match immediate.kind:
+        case ImmediateKind.SIGNED:
+            maximum = min(immediate.unsigned_max, (1 << 63) - 1)
+            if immediate.default_value < immediate.signed_min or immediate.default_value > maximum:
+                raise ValueError(f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' default value is out of signed range")
+        case ImmediateKind.UNSIGNED | ImmediateKind.ORDINAL:
+            if immediate.default_value < 0 or immediate.default_value > immediate.unsigned_max:
+                raise ValueError(f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' default value is out of unsigned range")
+        case ImmediateKind.ENUM:
+            assert immediate.enum_domain is not None
+            domain = enum_domains[immediate.enum_domain]
+            if all(value.value != immediate.default_value for value in domain.values):
+                raise ValueError(f"descriptor '{descriptor.key}' immediate '{immediate.field_name}' default value is not in enum domain '{domain.name}'")
+
+
 def _asm_form_mnemonic(descriptor: Descriptor, asm_form: AsmForm) -> str:
     mnemonic = descriptor.mnemonic if asm_form.mnemonic is None else asm_form.mnemonic
     if mnemonic is None:
@@ -539,6 +560,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
                 used_enum_domain_names.add(immediate.enum_domain)
             elif immediate.enum_domain is not None:
                 raise ValueError(f"descriptor '{descriptor.key}' non-enum immediate '{immediate.field_name}' references enum domain '{immediate.enum_domain}'")
+            _validate_immediate_default(descriptor, immediate, enum_domain_inputs)
         for operand in descriptor.operands:
             _validate_u16(
                 operand.encoding_field_id,
@@ -1024,6 +1046,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".encoding_id = {immediate.encoding_id},",
                 f".signed_min = {_i64_literal(immediate.signed_min)},",
                 f".unsigned_max = {_u64_literal(immediate.unsigned_max)},",
+                f".default_value = {_i64_literal(immediate.default_value)},",
             ]
             for i, immediate in enumerate(compiled.immediates)
         ],

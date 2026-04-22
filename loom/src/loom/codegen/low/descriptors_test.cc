@@ -923,6 +923,47 @@ TEST(LowDescriptorsTest, RejectsUnknownImmediateFlagBits) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
+TEST(LowDescriptorsTest, AcceptsDefaultedImmediate) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].flags = LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE;
+  tables.immediates[0].default_value = 7;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsDefaultWithoutDefaultFlag) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].default_value = 7;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsDefaultOutsideSignedImmediateRange) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].flags = LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE;
+  tables.immediates[0].default_value = INT64_C(8);
+  tables.immediates[0].signed_min = -8;
+  tables.immediates[0].unsigned_max = 7;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsDefaultOutsideUnsignedImmediateRange) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].kind = LOOM_LOW_IMMEDIATE_KIND_UNSIGNED;
+  tables.immediates[0].flags = LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE;
+  tables.immediates[0].default_value = -1;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
+}
+
 TEST(LowDescriptorsTest, RejectsUnknownEffectFlagBits) {
   TestTables tables;
   InitializeTestTables(&tables);
@@ -1337,6 +1378,37 @@ TEST(LowDescriptorsTest, AcceptsEnumImmediateDomain) {
   tables.set.enum_value_count = 2;
 
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, AcceptsEnumImmediateDefaultInDomain) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].field_name_string_offset =
+      TEST_STRING_OFFSET(field_mode);
+  tables.immediates[0].kind = LOOM_LOW_IMMEDIATE_KIND_ENUM;
+  tables.immediates[0].flags = LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE;
+  tables.immediates[0].enum_domain_id = 0;
+  tables.immediates[0].default_value = 1;
+  tables.set.enum_domain_count = 1;
+  tables.set.enum_value_count = 2;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsEnumImmediateDefaultOutsideDomain) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].field_name_string_offset =
+      TEST_STRING_OFFSET(field_mode);
+  tables.immediates[0].kind = LOOM_LOW_IMMEDIATE_KIND_ENUM;
+  tables.immediates[0].flags = LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE;
+  tables.immediates[0].enum_domain_id = 0;
+  tables.immediates[0].default_value = 7;
+  tables.set.enum_domain_count = 1;
+  tables.set.enum_value_count = 2;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
 }
 
 TEST(LowDescriptorsTest, RejectsEnumImmediateWithoutDomain) {

@@ -37,6 +37,7 @@ from loom.target.low_descriptors import (
     Hazard,
     HazardKind,
     Immediate,
+    ImmediateFlag,
     ImmediateKind,
     IssueUse,
     LatencyKind,
@@ -149,6 +150,9 @@ _WAIT_COUNTER_VMEM_STORE_ENCODING_ID = 19
 _WAIT_COUNTER_LDS_ENCODING_ID = 20
 _WAIT_COUNTER_SMEM_ENCODING_ID = 21
 _WAIT_COUNTER_ALU_ENCODING_ID = 22
+_GFX9_11_VECTOR_CACHE_FIELDS = (("GLC", 1), ("SLC", 1), ("DLC", 1))
+_GFX950_VECTOR_CACHE_FIELDS = (("NT", 1), ("SC0", 1), ("SC1", 1))
+_GFX12_VECTOR_CACHE_FIELDS = (("NV", 1), ("SCOPE", 2), ("TH", 3))
 _ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS = frozenset(
     (
         _ADDRESS_OFFSET_BYTE_ENCODING_ID,
@@ -635,6 +639,30 @@ def _signed_offset_immediate(
         encoding_id=encoding_id,
         signed_min=-(2 ** (bit_width - 1)),
         unsigned_max=(2 ** (bit_width - 1)) - 1,
+    )
+
+
+def _cache_immediate(field_name: str, bit_width: int) -> Immediate:
+    return Immediate(
+        field_name.lower(),
+        ImmediateKind.UNSIGNED,
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
+        bit_width=bit_width,
+        unsigned_max=(2**bit_width) - 1,
+        default_value=0,
+    )
+
+
+def _cache_field_names(cache_fields: tuple[tuple[str, int], ...]) -> tuple[str, ...]:
+    return tuple(field_name for field_name, _bit_width in cache_fields)
+
+
+def _cache_immediates(
+    cache_fields: tuple[tuple[str, int], ...],
+) -> tuple[Immediate, ...]:
+    return tuple(
+        _cache_immediate(field_name, bit_width)
+        for field_name, bit_width in cache_fields
     )
 
 
@@ -1212,6 +1240,7 @@ def _buffer_load_dword_overlay(
     resource_field_name: str,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_load_dword",
@@ -1229,8 +1258,11 @@ def _buffer_load_dword_overlay(
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
         fixed_encoding_fields=(("OFFEN", 1),),
         effects=(_GLOBAL_LOAD_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -1243,6 +1275,7 @@ def _buffer_load_dword_off_zero_overlay(
     resource_field_name: str,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_load_dword_off_zero",
@@ -1258,8 +1291,11 @@ def _buffer_load_dword_off_zero_overlay(
             ),
         ),
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
         fixed_encoding_fields=(
             ("VADDR", 0),
             ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
@@ -1280,6 +1316,7 @@ def _buffer_load_64_overlay(
     resource_field_name: str,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -1297,8 +1334,11 @@ def _buffer_load_64_overlay(
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B64,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
         fixed_encoding_fields=(("OFFEN", 1),),
         effects=(_GLOBAL_LOAD_B64_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -1314,6 +1354,7 @@ def _buffer_load_128_overlay(
     resource_field_name: str,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -1331,8 +1372,11 @@ def _buffer_load_128_overlay(
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B128,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
         fixed_encoding_fields=(("OFFEN", 1),),
         effects=(_GLOBAL_LOAD_B128_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -1345,6 +1389,7 @@ def _buffer_store_dword_overlay(
     resource_field_name: str,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_store_dword",
@@ -1362,8 +1407,11 @@ def _buffer_store_dword_overlay(
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_WRITE_MEMORY,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
         fixed_encoding_fields=(("OFFEN", 1),),
         effects=(_GLOBAL_STORE_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -1376,6 +1424,7 @@ def _buffer_store_dword_off_zero_overlay(
     resource_field_name: str,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_store_dword_off_zero",
@@ -1391,8 +1440,11 @@ def _buffer_store_dword_off_zero_overlay(
             ),
         ),
         implicit_operands=(_IGNORE_GLOBAL_WRITE_MEMORY,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
         fixed_encoding_fields=(
             ("VADDR", 0),
             ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
@@ -1413,6 +1465,7 @@ def _buffer_store_64_overlay(
     resource_field_name: str,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -1430,8 +1483,11 @@ def _buffer_store_64_overlay(
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_WRITE_MEMORY_B64,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
         fixed_encoding_fields=(("OFFEN", 1),),
         effects=(_GLOBAL_STORE_B64_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -1447,6 +1503,7 @@ def _buffer_store_128_overlay(
     resource_field_name: str,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -1464,8 +1521,11 @@ def _buffer_store_128_overlay(
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
         implicit_operands=(_IGNORE_GLOBAL_WRITE_MEMORY_B128,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
         fixed_encoding_fields=(("OFFEN", 1),),
         effects=(_GLOBAL_STORE_B128_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -1487,6 +1547,7 @@ def _global_load_overlay(
     units: int,
     address_units: int,
     implicit_m0: bool = False,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
         _ignore_global_read_memory(width_bits),
@@ -1513,8 +1574,11 @@ def _global_load_overlay(
         schedule_class=_SCHEDULE_VMEM_LOAD,
         operands=operands,
         implicit_operands=implicit_operands,
-        immediate_fields=(offset_field_name,),
-        immediates=(_signed_offset_immediate(offset_bit_width),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _signed_offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_read_effect(width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -1537,6 +1601,7 @@ def _global_store_overlay(
     units: int,
     address_units: int,
     implicit_m0: bool = False,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
         _ignore_global_write_memory(width_bits),
@@ -1563,8 +1628,11 @@ def _global_store_overlay(
         schedule_class=_SCHEDULE_VMEM_STORE,
         operands=operands,
         implicit_operands=implicit_operands,
-        immediate_fields=(offset_field_name,),
-        immediates=(_signed_offset_immediate(offset_bit_width),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _signed_offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_write_effect(width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -1586,6 +1654,7 @@ def _global_memory_overlays(
     address_units: int,
     descriptor_key_suffix: str = "",
     implicit_m0: bool = False,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     widths = ((32, 1), (64, 2), (128, 4))
     return (
@@ -1606,6 +1675,7 @@ def _global_memory_overlays(
                 units=units,
                 address_units=address_units,
                 implicit_m0=implicit_m0,
+                cache_fields=cache_fields,
             )
             for (width_bits, units), instruction_suffix, mnemonic_suffix in zip(
                 widths, instruction_suffixes, mnemonic_suffixes, strict=True
@@ -1628,6 +1698,7 @@ def _global_memory_overlays(
                 units=units,
                 address_units=address_units,
                 implicit_m0=implicit_m0,
+                cache_fields=cache_fields,
             )
             for (width_bits, units), instruction_suffix, mnemonic_suffix in zip(
                 widths, instruction_suffixes, mnemonic_suffixes, strict=True
@@ -2393,10 +2464,14 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="s_buffer_load_dwordx2",
         ),
         _buffer_load_dword_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         _buffer_load_dword_off_zero_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         _buffer_load_64_overlay(
             descriptor_key="amdgpu.buffer_load_dwordx2",
@@ -2404,6 +2479,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="buffer_load_dwordx2",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         _buffer_load_128_overlay(
             descriptor_key="amdgpu.buffer_load_dwordx4",
@@ -2411,12 +2487,17 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="buffer_load_dwordx4",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_dword_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_dword_off_zero_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_64_overlay(
             descriptor_key="amdgpu.buffer_store_dwordx2",
@@ -2424,6 +2505,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="buffer_store_dwordx2",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_128_overlay(
             descriptor_key="amdgpu.buffer_store_dwordx4",
@@ -2431,6 +2513,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="buffer_store_dwordx4",
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(
             instruction_suffixes=("DWORD", "DWORDX2", "DWORDX4"),
@@ -2444,6 +2527,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             saddr_off=_GLOBAL_GFX950_SADDR_OFF,
             address_units=2,
             implicit_m0=True,
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(
             instruction_suffixes=("DWORD", "DWORDX2", "DWORDX4"),
@@ -2458,6 +2542,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             address_units=1,
             descriptor_key_suffix="_saddr",
             implicit_m0=True,
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),
@@ -2499,26 +2584,44 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_buffer_load_dword_overlay(),
         _s_buffer_load_64_overlay(),
         _buffer_load_dword_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
         _buffer_load_dword_off_zero_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
-        _buffer_load_64_overlay(encoding_name="ENC_MUBUF", resource_field_name="SRSRC"),
+        _buffer_load_64_overlay(
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
+        ),
         _buffer_load_128_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_dword_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_dword_off_zero_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_64_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_128_overlay(
-            encoding_name="ENC_MUBUF", resource_field_name="SRSRC"
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
@@ -2531,6 +2634,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_bit_width=13,
             saddr_off=_GLOBAL_SADDR_OFF,
             address_units=2,
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
@@ -2544,6 +2648,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             saddr_off=None,
             address_units=1,
             descriptor_key_suffix="_saddr",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),
@@ -2590,36 +2695,42 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         _buffer_load_64_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         _buffer_load_128_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_dword_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_64_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_128_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
@@ -2632,6 +2743,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_bit_width=24,
             saddr_off=_GLOBAL_SADDR_OFF,
             address_units=2,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
@@ -2645,6 +2757,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             saddr_off=None,
             address_units=1,
             descriptor_key_suffix="_saddr",
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         *_ds_memory_overlays(
             encoding_name="ENC_VDS",
@@ -2693,36 +2806,42 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         _buffer_load_64_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         _buffer_load_128_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_dword_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_64_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         _buffer_store_128_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
             offset_field_name="IOFFSET",
             offset_bit_width=24,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
@@ -2735,6 +2854,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_bit_width=24,
             saddr_off=_GLOBAL_SADDR_OFF,
             address_units=2,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
@@ -2748,6 +2868,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             saddr_off=None,
             address_units=1,
             descriptor_key_suffix="_saddr",
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
         *_ds_memory_overlays(
             encoding_name="ENC_VDS",

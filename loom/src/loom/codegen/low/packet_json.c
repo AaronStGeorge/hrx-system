@@ -629,6 +629,10 @@ static iree_status_t loom_low_packet_json_write_low_packet_attrs(
     if (attr) {
       IREE_RETURN_IF_ERROR(
           loom_low_packet_json_write_attr(module, &attr->value, stream, 0));
+    } else if (iree_any_bit_set(immediate->flags,
+                                LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE)) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          stream, "%" PRId64 ",\"defaulted\":true", immediate->default_value));
     } else {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
     }

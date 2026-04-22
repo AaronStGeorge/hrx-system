@@ -138,13 +138,8 @@ static iree_status_t loom_low_packet_asm_append_immediates(
   const loom_low_descriptor_set_t* descriptor_set =
       state->schedule->target.descriptor_set;
   const loom_module_t* module = state->schedule->module;
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(state->builder, " {"));
+  iree_host_size_t printed_count = 0;
   for (uint16_t i = 0; i < asm_form->immediate_count; ++i) {
-    if (i > 0) {
-      IREE_RETURN_IF_ERROR(
-          iree_string_builder_append_cstring(state->builder, ", "));
-    }
     const uint32_t asm_immediate_index = asm_form->immediate_start + i;
     if (asm_immediate_index >= descriptor_set->asm_immediate_count) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -175,10 +170,21 @@ static iree_status_t loom_low_packet_asm_append_immediates(
     const loom_named_attr_t* attr =
         loom_low_packet_asm_find_attr(module, attrs, field_name);
     if (attr == NULL) {
+      if (iree_any_bit_set(immediate->flags,
+                           LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE)) {
+        continue;
+      }
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "low packet asm descriptor immediate '%.*s' is missing",
           (int)field_name.size, field_name.data);
+    }
+    if (printed_count == 0) {
+      IREE_RETURN_IF_ERROR(
+          iree_string_builder_append_cstring(state->builder, " {"));
+    } else {
+      IREE_RETURN_IF_ERROR(
+          iree_string_builder_append_cstring(state->builder, ", "));
     }
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_string(state->builder, spelling));
@@ -186,6 +192,10 @@ static iree_status_t loom_low_packet_asm_append_immediates(
         iree_string_builder_append_cstring(state->builder, " = "));
     IREE_RETURN_IF_ERROR(
         loom_low_packet_asm_append_attr(module, &attr->value, state->builder));
+    ++printed_count;
+  }
+  if (printed_count == 0) {
+    return iree_ok_status();
   }
   return iree_string_builder_append_cstring(state->builder, "}");
 }

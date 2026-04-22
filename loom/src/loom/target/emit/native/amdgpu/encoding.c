@@ -468,6 +468,11 @@ static iree_status_t loom_amdgpu_read_immediate_field_value(
       state->schedule->target.descriptor_set,
       immediate->field_name_string_offset, &field_name));
   if (attr == NULL) {
+    if (iree_any_bit_set(immediate->flags,
+                         LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE)) {
+      *out_value = immediate->default_value;
+      return iree_ok_status();
+    }
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU native encoding immediate '%.*s' is "
                             "required",

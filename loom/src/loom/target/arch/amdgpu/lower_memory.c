@@ -986,7 +986,7 @@ static bool loom_amdgpu_immediate_encoding_address_unit_byte_count(
 
 static bool loom_amdgpu_descriptor_offset_immediate_info(
     const loom_low_descriptor_set_t* descriptor_set,
-    uint32_t descriptor_ordinal, uint16_t expected_immediate_count,
+    uint32_t descriptor_ordinal, uint16_t expected_offset_immediate_count,
     loom_low_immediate_kind_t expected_kind,
     loom_amdgpu_descriptor_offset_immediate_info_t* out_info) {
   IREE_ASSERT_ARGUMENT(out_info);
@@ -1000,27 +1000,28 @@ static bool loom_amdgpu_descriptor_offset_immediate_info(
   }
   const loom_low_descriptor_t* descriptor =
       &descriptor_set->descriptors[descriptor_ordinal];
-  if (descriptor->immediate_count != expected_immediate_count ||
+  if (descriptor->immediate_count != 0 &&
       descriptor->immediate_start >= descriptor_set->immediate_count) {
     return false;
   }
+  uint16_t offset_immediate_count = 0;
   uint64_t unsigned_max = UINT64_MAX;
-  for (uint16_t i = 0; i < expected_immediate_count; ++i) {
+  for (uint16_t i = 0; i < descriptor->immediate_count; ++i) {
     const uint32_t immediate_index = descriptor->immediate_start + i;
     if (immediate_index >= descriptor_set->immediate_count) {
       return false;
     }
     const loom_low_immediate_t* immediate =
         &descriptor_set->immediates[immediate_index];
-    if (immediate->kind != expected_kind) {
-      return false;
-    }
     uint32_t unit_byte_count = 0;
     if (!loom_amdgpu_immediate_encoding_address_unit_byte_count(
             immediate->encoding_id, &unit_byte_count)) {
+      continue;
+    }
+    if (immediate->kind != expected_kind) {
       return false;
     }
-    if (i == 0) {
+    if (offset_immediate_count == 0) {
       out_info->unit_byte_count = unit_byte_count;
     } else if (out_info->unit_byte_count != unit_byte_count) {
       return false;
@@ -1030,6 +1031,10 @@ static bool loom_amdgpu_descriptor_offset_immediate_info(
           iree_max(out_info->signed_min, immediate->signed_min);
     }
     unsigned_max = iree_min(unsigned_max, immediate->unsigned_max);
+    ++offset_immediate_count;
+  }
+  if (offset_immediate_count != expected_offset_immediate_count) {
+    return false;
   }
   out_info->unsigned_max = unsigned_max;
   return true;

@@ -546,6 +546,12 @@ static iree_string_view_t loom_low_verify_expected_immediate_kind(
   }
 }
 
+static bool loom_low_immediate_has_default(
+    const loom_low_immediate_t* immediate) {
+  return iree_any_bit_set(immediate->flags,
+                          LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE);
+}
+
 static iree_status_t loom_low_verify_descriptor_immediate_attr(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     iree_string_view_t opcode, uint16_t opcode_attr_index,
@@ -644,9 +650,11 @@ static iree_status_t loom_low_verify_descriptor_immediates(
     const loom_named_attr_t* attr =
         loom_low_verify_find_named_attr(module, attrs, immediate_name);
     if (!attr) {
-      IREE_RETURN_IF_ERROR(loom_low_verify_emit_missing_immediate(
-          function_state, op, opcode, opcode_attr_index, immediate_name,
-          attrs_attr_index));
+      if (!loom_low_immediate_has_default(immediate)) {
+        IREE_RETURN_IF_ERROR(loom_low_verify_emit_missing_immediate(
+            function_state, op, opcode, opcode_attr_index, immediate_name,
+            attrs_attr_index));
+      }
     } else {
       IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_immediate_attr(
           function_state, op, opcode, opcode_attr_index, immediate_name,
