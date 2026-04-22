@@ -420,32 +420,61 @@ typedef struct loom_amdgpu_descriptor_offset_immediate_info_t {
   uint32_t unit_byte_count;
 } loom_amdgpu_descriptor_offset_immediate_info_t;
 
+typedef struct loom_amdgpu_offset_immediate_encoding_t {
+  // Target immediate encoding ID.
+  uint16_t encoding_id;
+  // Byte count represented by one encoded offset unit.
+  uint32_t unit_byte_count;
+} loom_amdgpu_offset_immediate_encoding_t;
+
+static const loom_amdgpu_offset_immediate_encoding_t
+    kAmdgpuOffsetImmediateEncodings[] = {
+        {
+            .encoding_id =
+                LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_BYTE,
+            .unit_byte_count = 1,
+        },
+        {
+            .encoding_id =
+                LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD,
+            .unit_byte_count = 4,
+        },
+        {
+            .encoding_id =
+                LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_QWORD,
+            .unit_byte_count = 8,
+        },
+        {
+            .encoding_id =
+                LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD_STRIDE64,
+            .unit_byte_count = 4 * 64,
+        },
+        {
+            .encoding_id =
+                LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_QWORD_STRIDE64,
+            .unit_byte_count = 8 * 64,
+        },
+        {
+            .encoding_id =
+                LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16,
+            .unit_byte_count = 1,
+        },
+};
+
 static bool loom_amdgpu_immediate_encoding_address_unit_byte_count(
     uint16_t encoding_id, uint32_t* out_unit_byte_count) {
   IREE_ASSERT_ARGUMENT(out_unit_byte_count);
   *out_unit_byte_count = 0;
-  switch (encoding_id) {
-    case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_BYTE:
-      *out_unit_byte_count = 1;
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kAmdgpuOffsetImmediateEncodings); ++i) {
+    const loom_amdgpu_offset_immediate_encoding_t* encoding =
+        &kAmdgpuOffsetImmediateEncodings[i];
+    if (encoding->encoding_id == encoding_id) {
+      *out_unit_byte_count = encoding->unit_byte_count;
       return true;
-    case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD:
-      *out_unit_byte_count = 4;
-      return true;
-    case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_QWORD:
-      *out_unit_byte_count = 8;
-      return true;
-    case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DWORD_STRIDE64:
-      *out_unit_byte_count = 4 * 64;
-      return true;
-    case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_QWORD_STRIDE64:
-      *out_unit_byte_count = 8 * 64;
-      return true;
-    case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_ADDRESS_OFFSET_DS16:
-      *out_unit_byte_count = 1;
-      return true;
-    default:
-      return false;
+    }
   }
+  return false;
 }
 
 static bool loom_amdgpu_descriptor_offset_immediate_info(
