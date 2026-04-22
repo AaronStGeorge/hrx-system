@@ -627,23 +627,11 @@ static uint16_t loom_low_lower_direct_argument_count(
 iree_status_t loom_low_lower_lookup_value(loom_low_lower_context_t* context,
                                           loom_value_id_t source_value_id,
                                           loom_value_id_t* out_low_value_id) {
-  if (!out_low_value_id) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low value output is required");
-  }
+  IREE_ASSERT_ARGUMENT(out_low_value_id);
   *out_low_value_id = LOOM_VALUE_ID_INVALID;
-  if (source_value_id >= context->value_map_count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "source value %u is outside the value map captured for lowering",
-        (unsigned)source_value_id);
-  }
+  IREE_ASSERT_LT(source_value_id, context->value_map_count);
   loom_value_id_t low_value_id = context->value_map[source_value_id];
-  if (low_value_id == LOOM_VALUE_ID_INVALID) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "source value %u has no target-low mapping",
-                            (unsigned)source_value_id);
-  }
+  IREE_ASSERT(low_value_id != LOOM_VALUE_ID_INVALID);
   *out_low_value_id = low_value_id;
   return iree_ok_status();
 }
@@ -663,17 +651,10 @@ static iree_status_t loom_low_lower_copy_value_name(
 iree_status_t loom_low_lower_bind_value(loom_low_lower_context_t* context,
                                         loom_value_id_t source_value_id,
                                         loom_value_id_t low_value_id) {
-  if (source_value_id >= context->value_map_count ||
-      low_value_id >= context->module->values.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source or low value id is out of range");
-  }
+  IREE_ASSERT_LT(source_value_id, context->value_map_count);
+  IREE_ASSERT_LT(low_value_id, context->module->values.count);
   loom_value_id_t existing = context->value_map[source_value_id];
-  if (existing != LOOM_VALUE_ID_INVALID && existing != low_value_id) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "source value %u is already bound to low value %u",
-                            (unsigned)source_value_id, (unsigned)existing);
-  }
+  IREE_ASSERT(existing == LOOM_VALUE_ID_INVALID || existing == low_value_id);
   context->value_map[source_value_id] = low_value_id;
   return loom_low_lower_copy_value_name(context, source_value_id, low_value_id);
 }
@@ -785,12 +766,7 @@ iree_status_t loom_low_lower_create_function_symbol(
     bool append_index, uint32_t index, loom_symbol_ref_t* out_symbol_ref) {
   IREE_ASSERT_ARGUMENT(out_symbol_ref);
   *out_symbol_ref = loom_symbol_ref_null();
-  if (context->low_func_op == NULL) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "target-low function symbols can only be created after low.func.def "
-        "emission starts");
-  }
+  IREE_ASSERT(context->low_func_op != NULL);
   iree_string_view_t low_function_name = loom_low_lower_symbol_name(
       context->module, loom_low_func_def_callee(context->low_func_op));
   return loom_low_lower_create_derived_symbol(
