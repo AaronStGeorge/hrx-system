@@ -76,6 +76,11 @@ uint32_t loom_amdgpu_vector_f32_lane_count(loom_type_t type) {
   return loom_amdgpu_vector_lane_count(type, LOOM_SCALAR_TYPE_F32);
 }
 
+uint32_t loom_amdgpu_vector_i1_lane_count(loom_type_t type) {
+  return loom_amdgpu_static_vector_lane_count(
+      type, LOOM_SCALAR_TYPE_I1, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
+}
+
 uint32_t loom_amdgpu_vector_i8_lane_count(loom_type_t type) {
   return loom_amdgpu_static_vector_lane_count(type, LOOM_SCALAR_TYPE_I8,
                                               LOOM_AMDGPU_MAX_PACKED_I8_LANES);
@@ -385,6 +390,12 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
                                           LOOM_AMDGPU_REG_CLASS_ID_VGPR,
                                           vector_lane_count, out_low_type);
   }
+  const uint32_t mask_lane_count =
+      loom_amdgpu_vector_i1_lane_count(source_type);
+  if (mask_lane_count != 0) {
+    return loom_amdgpu_make_sgpr_range_type(context, mask_lane_count * 2u,
+                                            out_low_type);
+  }
   uint32_t unused_payload_bit_count = 0;
   uint32_t packed_register_count = 0;
   if (loom_amdgpu_type_packed_integer_storage(
@@ -400,8 +411,9 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
       context, source_op, IREE_SV("type"), IREE_SV("source"),
       IREE_SV("AMDGPU lowering currently supports only i32 scalar values, "
               "address scalar values, rank-1 static i32/f32 vectors with "
-              "1 to 8 lanes, and rank-1 static integer vectors that fit in "
-              "1 to 4 packed 32-bit registers"));
+              "1 to 8 lanes, rank-1 static i1 mask vectors with 1 to 8 lanes, "
+              "and rank-1 static integer vectors that fit in 1 to 4 packed "
+              "32-bit registers"));
 }
 
 iree_status_t loom_amdgpu_map_value(void* user_data,

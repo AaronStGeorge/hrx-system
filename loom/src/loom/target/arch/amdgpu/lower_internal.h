@@ -69,6 +69,10 @@ uint32_t loom_amdgpu_vector_i32_lane_count(loom_type_t type);
 // zero when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_f32_lane_count(loom_type_t type);
 
+// Returns the i1 lane count for a supported AMDGPU mask vector payload, or zero
+// when the source type is not representable as that payload.
+uint32_t loom_amdgpu_vector_i1_lane_count(loom_type_t type);
+
 // Returns the i8 lane count for a supported AMDGPU packed byte payload, or zero
 // when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_i8_lane_count(loom_type_t type);
@@ -292,6 +296,33 @@ bool loom_amdgpu_can_lower_vector_reduce(loom_low_lower_context_t* context,
 
 // Lowers a source vector.reduce op to AMDGPU descriptor-backed low packets.
 iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
+                                              const loom_op_t* source_op);
+
+// Returns true when a source vector.cmpi op can lower through explicit
+// SGPR-pair masks.
+bool loom_amdgpu_can_lower_vector_cmpi(loom_low_lower_context_t* context,
+                                       const loom_op_t* source_op);
+
+// Lowers a source vector.cmpi op to AMDGPU descriptor-backed low packets.
+iree_status_t loom_amdgpu_lower_vector_cmpi(loom_low_lower_context_t* context,
+                                            const loom_op_t* source_op);
+
+// Returns true when a source vector.cmpf op can lower through explicit
+// SGPR-pair masks.
+bool loom_amdgpu_can_lower_vector_cmpf(loom_low_lower_context_t* context,
+                                       const loom_op_t* source_op);
+
+// Lowers a source vector.cmpf op to AMDGPU descriptor-backed low packets.
+iree_status_t loom_amdgpu_lower_vector_cmpf(loom_low_lower_context_t* context,
+                                            const loom_op_t* source_op);
+
+// Returns true when a source vector.select op can lower through explicit
+// SGPR-pair masks and b32 cndmask packets.
+bool loom_amdgpu_can_lower_vector_select(loom_low_lower_context_t* context,
+                                         const loom_op_t* source_op);
+
+// Lowers a source vector.select op to AMDGPU descriptor-backed low packets.
+iree_status_t loom_amdgpu_lower_vector_select(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op);
 
 // Returns true when a source vector.bitfield.extract* op can lower through the

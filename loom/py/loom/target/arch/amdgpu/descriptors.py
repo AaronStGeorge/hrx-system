@@ -334,6 +334,10 @@ def _sgpr_operand(field_name: str, *, units: int = 1) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _SGPR_ALT, unit_count=units)
 
 
+def _sgpr_predicate(field_name: str, *, units: int = 1) -> Operand:
+    return Operand(field_name, OperandRole.PREDICATE, _SGPR_ALT, unit_count=units)
+
+
 def _sgpr_resource(field_name: str, *, units: int = 1) -> Operand:
     return Operand(field_name, OperandRole.RESOURCE, _SGPR_ALT, unit_count=units)
 
@@ -1249,6 +1253,161 @@ def _v_cvt_f32_u32_overlay() -> AmdgpuDescriptorOverlay:
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("input")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_cmp_i32_overlay(
+    *, predicate: str, instruction_suffix: str, semantic_suffix: str
+) -> AmdgpuDescriptorOverlay:
+    instruction_predicate = instruction_suffix.lower()
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.v_cmp_{predicate}_i32",
+        instruction_name=f"V_CMP_{instruction_suffix}_I32",
+        mnemonic=f"v_cmp_{instruction_predicate}_i32",
+        encoding_name="ENC_VOP3",
+        semantic_tag=f"cmp.i32.{semantic_suffix}",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _sgpr_result("mask", units=2)),
+            AmdgpuOperandOverlay("SRC0", _vgpr_const_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_const_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_cmp_u32_overlay(
+    *, predicate: str, instruction_suffix: str, semantic_suffix: str
+) -> AmdgpuDescriptorOverlay:
+    instruction_predicate = instruction_suffix.lower()
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.v_cmp_{predicate}_u32",
+        instruction_name=f"V_CMP_{instruction_suffix}_U32",
+        mnemonic=f"v_cmp_{instruction_predicate}_u32",
+        encoding_name="ENC_VOP3",
+        semantic_tag=f"cmp.u32.{semantic_suffix}",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _sgpr_result("mask", units=2)),
+            AmdgpuOperandOverlay("SRC0", _vgpr_const_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_const_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_cmp_f32_overlay(
+    *, predicate: str, instruction_suffix: str, semantic_suffix: str
+) -> AmdgpuDescriptorOverlay:
+    instruction_predicate = instruction_suffix.lower()
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.v_cmp_{predicate}_f32",
+        instruction_name=f"V_CMP_{instruction_suffix}_F32",
+        mnemonic=f"v_cmp_{instruction_predicate}_f32",
+        encoding_name="ENC_VOP3",
+        semantic_tag=f"cmp.f32.{semantic_suffix}",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _sgpr_result("mask", units=2)),
+            AmdgpuOperandOverlay("SRC0", _vgpr_const_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_const_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_cmp_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_cmp_i32_overlay(
+            predicate="eq", instruction_suffix="EQ", semantic_suffix="eq"
+        ),
+        _v_cmp_i32_overlay(
+            predicate="ne", instruction_suffix="NE", semantic_suffix="ne"
+        ),
+        _v_cmp_i32_overlay(
+            predicate="slt", instruction_suffix="LT", semantic_suffix="slt"
+        ),
+        _v_cmp_i32_overlay(
+            predicate="sle", instruction_suffix="LE", semantic_suffix="sle"
+        ),
+        _v_cmp_i32_overlay(
+            predicate="sgt", instruction_suffix="GT", semantic_suffix="sgt"
+        ),
+        _v_cmp_i32_overlay(
+            predicate="sge", instruction_suffix="GE", semantic_suffix="sge"
+        ),
+        _v_cmp_u32_overlay(
+            predicate="ult", instruction_suffix="LT", semantic_suffix="ult"
+        ),
+        _v_cmp_u32_overlay(
+            predicate="ule", instruction_suffix="LE", semantic_suffix="ule"
+        ),
+        _v_cmp_u32_overlay(
+            predicate="ugt", instruction_suffix="GT", semantic_suffix="ugt"
+        ),
+        _v_cmp_u32_overlay(
+            predicate="uge", instruction_suffix="GE", semantic_suffix="uge"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="oeq", instruction_suffix="EQ", semantic_suffix="oeq"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="ogt", instruction_suffix="GT", semantic_suffix="ogt"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="oge", instruction_suffix="GE", semantic_suffix="oge"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="olt", instruction_suffix="LT", semantic_suffix="olt"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="ole", instruction_suffix="LE", semantic_suffix="ole"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="one", instruction_suffix="LG", semantic_suffix="one"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="ord", instruction_suffix="O", semantic_suffix="ord"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="ueq", instruction_suffix="NLG", semantic_suffix="ueq"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="ugt", instruction_suffix="NLE", semantic_suffix="ugt"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="uge", instruction_suffix="NLT", semantic_suffix="uge"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="ult", instruction_suffix="NGE", semantic_suffix="ult"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="ule", instruction_suffix="NGT", semantic_suffix="ule"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="une", instruction_suffix="NEQ", semantic_suffix="une"
+        ),
+        _v_cmp_f32_overlay(
+            predicate="uno", instruction_suffix="U", semantic_suffix="uno"
+        ),
+    )
+
+
+def _v_cndmask_b32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_cndmask_b32",
+        instruction_name="V_CNDMASK_B32",
+        mnemonic="v_cndmask_b32",
+        encoding_name="ENC_VOP3",
+        semantic_tag="select.mask.b32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_const_operand("false_value")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_const_operand("true_value")),
+            AmdgpuOperandOverlay("SRC2", _sgpr_predicate("mask", units=2)),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
@@ -2873,6 +3032,8 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fma_f32_overlay(),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
+        *_v_cmp_overlays(),
+        _v_cndmask_b32_overlay(),
         _s_load_dwordx2_overlay(),
         _s_buffer_load_dword_overlay(),
         _s_buffer_load_64_overlay(
@@ -3003,6 +3164,8 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fma_f32_overlay(),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
+        *_v_cmp_overlays(),
+        _v_cndmask_b32_overlay(),
         _s_load_dwordx2_overlay(),
         _s_buffer_load_dword_overlay(),
         _s_buffer_load_64_overlay(),
@@ -3116,6 +3279,8 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fma_f32_overlay(),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
+        *_v_cmp_overlays(),
+        _v_cndmask_b32_overlay(),
         _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
         _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
         _s_buffer_load_64_overlay(offset_field_name="IOFFSET", offset_bit_width=24),
@@ -3234,6 +3399,8 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_fma_f32_overlay(),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
+        *_v_cmp_overlays(),
+        _v_cndmask_b32_overlay(),
         _s_load_dwordx2_overlay("IOFFSET", offset_bit_width=24),
         _s_buffer_load_dword_overlay("IOFFSET", offset_bit_width=24),
         _s_buffer_load_64_overlay(offset_field_name="IOFFSET", offset_bit_width=24),

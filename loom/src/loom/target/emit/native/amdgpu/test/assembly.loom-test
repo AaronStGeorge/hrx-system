@@ -95,6 +95,24 @@ buffer_store_dword
 s_endpgm
 
 // ====
+// RUN: emit amdgpu-assembly @gfx11_mask_select waits=none
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_mask_select(%lhs : reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %true_value : reg<amdgpu.vgpr>, %false_value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {
+  %mask = low.op<amdgpu.v_cmp_slt_i32>(%lhs, %rhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %selected = low.op<amdgpu.v_cndmask_b32>(%false_value, %true_value, %mask) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_dword>(%selected, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  v_cmp_lt_i32 s[6:7], v0, v1
+  v_cndmask_b32 v0, v3, v2, s[6:7]
+  buffer_store_dword v0, v4, s[0:3], s4 offen offset:0
+  s_endpgm
+
+// ====
 // RUN: emit amdgpu-assembly-mnemonics @gfx11_dot4i waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 

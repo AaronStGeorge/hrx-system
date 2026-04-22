@@ -1,0 +1,46 @@
+// RUN: emit source-low @i32_cmpi_select output=low
+target.profile @gfx11_mask_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_mask_target) @i32_cmpi_select(%lhs: vector<2xi32>, %rhs: vector<2xi32>, %true_value: vector<2xi32>, %false_value: vector<2xi32>) -> (vector<2xi32>) {
+  %mask = vector.cmpi slt, %lhs, %rhs : vector<2xi32> -> vector<2xi1>
+  %selected = vector.select %mask, %true_value, %false_value : vector<2xi32>
+  func.return %selected : vector<2xi32>
+}
+
+// ----
+low.func.def target(@gfx11_mask_target) abi(hal_kernel) @i32_cmpi_select__low(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>, %true_value: reg<amdgpu.vgpr x2>, %false_value: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) {
+  %12 = low.slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %13 = low.slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = low.op<amdgpu.v_cmp_slt_i32>(%12, %13) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %15 = low.slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %16 = low.slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_cmp_slt_i32>(%15, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %mask = low.concat(%14, %17) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %19 = low.slice %mask[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %20 = low.slice %true_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %21 = low.slice %false_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %22 = low.op<amdgpu.v_cndmask_b32>(%21, %20, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %23 = low.slice %mask[2] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %24 = low.slice %true_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %25 = low.slice %false_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %26 = low.op<amdgpu.v_cndmask_b32>(%25, %24, %23) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %selected = low.concat(%22, %26) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  low.return %selected : reg<amdgpu.vgpr x2>
+}
+
+// ====
+// RUN: emit source-low @f32_cmpf_select output=low
+target.profile @gfx11_mask_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_mask_target) @f32_cmpf_select(%lhs: vector<1xf32>, %rhs: vector<1xf32>, %true_value: vector<1xf32>, %false_value: vector<1xf32>) -> (vector<1xf32>) {
+  %mask = vector.cmpf olt, %lhs, %rhs : vector<1xf32> -> vector<1xi1>
+  %selected = vector.select %mask, %true_value, %false_value : vector<1xf32>
+  func.return %selected : vector<1xf32>
+}
+
+// ----
+low.func.def target(@gfx11_mask_target) abi(hal_kernel) @f32_cmpf_select__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %mask = low.op<amdgpu.v_cmp_olt_f32>(%lhs, %rhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  %selected = low.op<amdgpu.v_cndmask_b32>(%false_value, %true_value, %mask) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.return %selected : reg<amdgpu.vgpr>
+}
