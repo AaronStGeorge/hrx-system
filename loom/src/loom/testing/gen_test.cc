@@ -29,6 +29,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
 
@@ -63,6 +64,13 @@ class GenTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_FUNC,
                                                  func_vtables,
                                                  (uint16_t)func_vtable_count));
+
+    iree_host_size_t vector_vtable_count = 0;
+    const loom_op_vtable_t* const* vector_vtables =
+        loom_vector_dialect_vtables(&vector_vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_VECTOR, vector_vtables,
+        (uint16_t)vector_vtable_count));
 
     IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
@@ -230,6 +238,33 @@ TEST_F(GenTest, FormatStressPresetVerifies) {
 
   loom_module_t* module = nullptr;
   IREE_ASSERT_OK(generate_and_verify(500, config, &module));
+  loom_module_free(module);
+}
+
+TEST_F(GenTest, VectorHooksVerifyAndEmitVectorOps) {
+  loom_test_gen_body_config_t body =
+      loom_test_gen_body_config_representative(1);
+  iree_host_size_t vector_hook_count = 0;
+  const loom_test_gen_op_hook_t* vector_hooks =
+      loom_test_gen_vector_hooks(&vector_hook_count);
+  ASSERT_LE(vector_hook_count, IREE_ARRAYSIZE(body.hooks));
+  for (iree_host_size_t i = 0; i < vector_hook_count; ++i) {
+    body.hooks[i] = vector_hooks[i];
+  }
+  body.hook_count = vector_hook_count;
+  body.op_count = 30;
+  body.block_arg_count = 0;
+
+  loom_test_gen_module_config_t config = {0};
+  config.function_count = 1;
+  config.declaration_count = 0;
+  config.calls_per_function = 0;
+  config.body_config = body;
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(generate_and_verify(550, config, &module));
+  std::string text = print_module(module);
+  EXPECT_NE(text.find("vector."), std::string::npos);
   loom_module_free(module);
 }
 

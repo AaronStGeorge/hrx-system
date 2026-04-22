@@ -270,6 +270,31 @@ loom_value_id_t loom_test_gen_values_pick_typed(loom_test_gen_t* gen,
   return values->entries[entry_index];
 }
 
+loom_value_id_t loom_test_gen_values_pick_exact_type(
+    loom_test_gen_t* gen, const loom_test_gen_values_t* values,
+    loom_type_t type) {
+  uint16_t candidate_count = 0;
+  for (uint16_t i = 0; i < values->count; ++i) {
+    if (loom_type_equal(values->types[i], type)) {
+      ++candidate_count;
+    }
+  }
+  if (candidate_count == 0) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  uint32_t pick = loom_test_gen_next_range(gen, candidate_count);
+  for (uint16_t i = 0; i < values->count; ++i) {
+    if (!loom_type_equal(values->types[i], type)) {
+      continue;
+    }
+    if (pick == 0) {
+      return values->entries[i];
+    }
+    --pick;
+  }
+  return LOOM_VALUE_ID_INVALID;
+}
+
 loom_value_id_t loom_test_gen_values_pick_integer(
     loom_test_gen_t* gen, loom_test_gen_values_t* values) {
   loom_test_gen_values_rebuild_buckets(values);
@@ -389,20 +414,21 @@ loom_value_id_t loom_test_gen_values_pick_for_constraint(
       }
       return id;
     }
-    case LOOM_TYPE_CONSTRAINT_ANY:
-    case LOOM_TYPE_CONSTRAINT_SCALAR: {
+    case LOOM_TYPE_CONSTRAINT_ANY: {
       loom_value_id_t id = loom_test_gen_values_pick_any(gen, values);
       if (id != LOOM_VALUE_ID_INVALID && out_type) {
         *out_type = loom_test_gen_values_type_of(values, id);
       }
       return id;
     }
+    case LOOM_TYPE_CONSTRAINT_SCALAR:
+      break;
     default:
       break;
   }
   // General path: scan all values for those satisfying the constraint.
-  // This handles TILE, TENSOR, POOL, GROUP, ENCODING, and any future
-  // constraints without needing per-constraint bucket infrastructure.
+  // This handles SCALAR, VECTOR, TILE, TENSOR, POOL, GROUP, ENCODING, and any
+  // future constraints without needing per-constraint bucket infrastructure.
   uint16_t candidates[LOOM_TEST_GEN_VALUES_MAX_CAPACITY];
   uint16_t candidate_count = 0;
   for (uint16_t i = 0; i < values->count; ++i) {
@@ -410,9 +436,13 @@ loom_value_id_t loom_test_gen_values_pick_for_constraint(
       candidates[candidate_count++] = i;
     }
   }
-  if (candidate_count == 0) return LOOM_VALUE_ID_INVALID;
+  if (candidate_count == 0) {
+    return LOOM_VALUE_ID_INVALID;
+  }
   uint16_t chosen = candidates[loom_test_gen_next_range(gen, candidate_count)];
-  if (out_type) *out_type = values->types[chosen];
+  if (out_type) {
+    *out_type = values->types[chosen];
+  }
   return values->entries[chosen];
 }
 
@@ -432,26 +462,20 @@ bool loom_test_gen_values_pick_binary_for_constraint(
     default:
       break;
   }
-  // General path: pick first, then pick second of the same type.
+  // General path: pick first, then pick second of the same exact type.
   loom_type_t type = {0};
   loom_value_id_t first =
       loom_test_gen_values_pick_for_constraint(gen, values, constraint, &type);
-  if (first == LOOM_VALUE_ID_INVALID) return false;
-  // For scalar types, use the bucket picker for the second operand.
-  if (loom_type_is_scalar(type)) {
-    loom_scalar_type_t scalar = loom_type_element_type(type);
-    loom_value_id_t second =
-        loom_test_gen_values_pick_typed(gen, values, scalar);
-    if (second == LOOM_VALUE_ID_INVALID) second = first;
-    *out_lhs = first;
-    *out_rhs = second;
-    *out_type = type;
-    return true;
+  if (first == LOOM_VALUE_ID_INVALID) {
+    return false;
   }
-  // Non-scalar: just use the same value for both (may be refined later
-  // when the generator produces tile/tensor values).
+  loom_value_id_t second =
+      loom_test_gen_values_pick_exact_type(gen, values, type);
+  if (second == LOOM_VALUE_ID_INVALID) {
+    second = first;
+  }
   *out_lhs = first;
-  *out_rhs = first;
+  *out_rhs = second;
   *out_type = type;
   return true;
 }
@@ -831,24 +855,28 @@ iree_status_t loom_test_gen_module(loom_test_gen_t* gen,
   return iree_ok_status();
 }
 
-// Populates the config's inline hooks array with the scalar + test
-// dialect hooks. The hooks are copied by value so the config is
-// self-contained.
+// Populates the config's inline hooks array with the scalar, vector, and test
+// dialect hooks. The hooks are copied by value so the config is self-contained.
 static void loom_test_gen_config_add_default_hooks(
     loom_test_gen_body_config_t* config) {
   iree_host_size_t scalar_count = 0;
   const loom_test_gen_op_hook_t* scalar_hooks =
       loom_test_gen_scalar_hooks(&scalar_count);
+  iree_host_size_t vector_count = 0;
+  const loom_test_gen_op_hook_t* vector_hooks =
+      loom_test_gen_vector_hooks(&vector_count);
   iree_host_size_t test_count = 0;
   const loom_test_gen_op_hook_t* test_hooks =
       loom_test_gen_test_hooks(&test_count);
 
-  iree_host_size_t total = scalar_count + test_count;
+  iree_host_size_t total = scalar_count + vector_count + test_count;
   IREE_ASSERT(total <= LOOM_TEST_GEN_MAX_BUILTIN_HOOKS);
 
   memcpy(config->hooks, scalar_hooks,
          scalar_count * sizeof(loom_test_gen_op_hook_t));
-  memcpy(config->hooks + scalar_count, test_hooks,
+  memcpy(config->hooks + scalar_count, vector_hooks,
+         vector_count * sizeof(loom_test_gen_op_hook_t));
+  memcpy(config->hooks + scalar_count + vector_count, test_hooks,
          test_count * sizeof(loom_test_gen_op_hook_t));
   config->hook_count = total;
 }

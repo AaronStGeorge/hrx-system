@@ -253,11 +253,20 @@ loom_value_id_t loom_test_gen_values_pick_any(
     loom_test_gen_t* gen, const loom_test_gen_values_t* values);
 
 // Picks a random value whose scalar type matches |type|. Rebuilds
-// bucket indices if dirty. Returns LOOM_VALUE_ID_INVALID if no
-// values of the requested type exist.
+// bucket indices if dirty. Only scalar values are eligible; shaped values with
+// the same element type are intentionally excluded. Returns
+// LOOM_VALUE_ID_INVALID if no values of the requested scalar type exist.
 loom_value_id_t loom_test_gen_values_pick_typed(loom_test_gen_t* gen,
                                                 loom_test_gen_values_t* values,
                                                 loom_scalar_type_t type);
+
+// Picks a random value whose type structurally equals |type|. This is the
+// shape-preserving companion to loom_test_gen_values_pick_typed() and is used
+// by hooks that need same-shaped vector/tile/tensor operands. Returns
+// LOOM_VALUE_ID_INVALID if no value of the exact type exists.
+loom_value_id_t loom_test_gen_values_pick_exact_type(
+    loom_test_gen_t* gen, const loom_test_gen_values_t* values,
+    loom_type_t type);
 
 // Picks a random value with any integer scalar type (i1, i8, i16,
 // i32, i64). Rebuilds bucket indices if dirty. Returns
@@ -508,6 +517,13 @@ const loom_test_gen_op_hook_t* loom_test_gen_test_hooks(
 // Func hooks generate return and call ops. |out_hook_count|
 // receives the number of hooks.
 const loom_test_gen_op_hook_t* loom_test_gen_func_hooks(
+    iree_host_size_t* out_hook_count);
+
+// Returns the built-in vector dialect op hooks. The returned array
+// is in static storage and valid for the lifetime of the program.
+// Vector hooks generate target-agnostic vector construction, arithmetic, and
+// extraction ops. |out_hook_count| receives the number of hooks.
+const loom_test_gen_op_hook_t* loom_test_gen_vector_hooks(
     iree_host_size_t* out_hook_count);
 
 //===----------------------------------------------------------------------===//

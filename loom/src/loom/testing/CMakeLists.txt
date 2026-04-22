@@ -73,6 +73,7 @@ loom_cc_library(
     "gen_func_dialect.c"
     "gen_scalar_dialect.c"
     "gen_test_dialect.c"
+    "gen_vector_dialect.c"
   DEPS
     iree::base
     iree::base::internal::prng
@@ -81,6 +82,7 @@ loom_cc_library(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::ops::test
+    loom::src::loom::ops::vector
   TESTONLY
   PUBLIC
 )
@@ -100,6 +102,7 @@ loom_cc_test(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::ops::test
+    loom::src::loom::ops::vector
     loom::src::loom::util::stream
     loom::src::loom::verify
     iree::testing::gtest
@@ -119,6 +122,7 @@ loom_cc_fuzz(
     loom::src::loom::ops::func
     loom::src::loom::ops::scalar
     loom::src::loom::ops::test
+    loom::src::loom::ops::vector
     loom::src::loom::verify
 )
 

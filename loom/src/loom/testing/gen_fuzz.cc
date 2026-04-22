@@ -25,8 +25,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
-#include <cstring>
 
 #include "loom/error/diagnostic.h"
 #include "loom/ir/context.h"
@@ -34,6 +32,7 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/testing/gen.h"
 #include "loom/verify/verify.h"
 
@@ -45,32 +44,38 @@ static loom_context_t g_context;
 static bool g_initialized = false;
 
 static void trap_with_status(iree_status_t status) {
-  if (iree_status_is_ok(status)) return;
-  iree_status_fprint(stderr, status);
-  iree_status_ignore(status);
-  __builtin_trap();
+  if (iree_status_is_ok(status)) {
+    return;
+  }
+  iree_status_abort(status);
 }
 
 static void ensure_context() {
-  if (g_initialized) return;
+  if (g_initialized) {
+    return;
+  }
   loom_context_initialize(iree_allocator_system(), &g_context);
 
   iree_host_size_t count = 0;
   const loom_op_vtable_t* const* vtables;
 
   vtables = loom_test_dialect_vtables(&count);
-  iree_status_ignore(loom_context_register_dialect(
-      &g_context, LOOM_DIALECT_TEST, vtables, (uint16_t)count));
+  trap_with_status(loom_context_register_dialect(&g_context, LOOM_DIALECT_TEST,
+                                                 vtables, (uint16_t)count));
 
   vtables = loom_scalar_dialect_vtables(&count);
-  iree_status_ignore(loom_context_register_dialect(
+  trap_with_status(loom_context_register_dialect(
       &g_context, LOOM_DIALECT_SCALAR, vtables, (uint16_t)count));
 
   vtables = loom_func_dialect_vtables(&count);
-  iree_status_ignore(loom_context_register_dialect(
-      &g_context, LOOM_DIALECT_FUNC, vtables, (uint16_t)count));
+  trap_with_status(loom_context_register_dialect(&g_context, LOOM_DIALECT_FUNC,
+                                                 vtables, (uint16_t)count));
 
-  iree_status_ignore(loom_context_finalize(&g_context));
+  vtables = loom_vector_dialect_vtables(&count);
+  trap_with_status(loom_context_register_dialect(
+      &g_context, LOOM_DIALECT_VECTOR, vtables, (uint16_t)count));
+
+  trap_with_status(loom_context_finalize(&g_context));
   g_initialized = true;
 }
 
