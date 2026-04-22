@@ -95,6 +95,23 @@ buffer_store_dword
 s_endpgm
 
 // ====
+// RUN: emit amdgpu-assembly-mnemonics @gfx11_dot4i waits=none
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_dot4i(%lhs : reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %acc : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {
+  %dot_s = low.op<amdgpu.v_dot4_i32_i8>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %dot_u = low.op<amdgpu.v_dot4_u32_u8>(%lhs, %rhs, %dot_s) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_dword>(%dot_u, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ----
+v_dot4_i32_i8
+v_dot4_u32_u8
+buffer_store_dword
+s_endpgm
+
+// ====
 // RUN: emit amdgpu-assembly-mnemonics @gfx11_global_b64 waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 

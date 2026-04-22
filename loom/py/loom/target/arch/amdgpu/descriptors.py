@@ -2395,6 +2395,24 @@ def _v_dot4_i32_i8_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_dot4_u32_u8_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_dot4_u32_u8",
+        instruction_name="V_DOT4_U32_U8",
+        mnemonic="v_dot4_u32_u8",
+        encoding_name="ENC_VOP3P",
+        semantic_tag="dot.u8u8.i32x1",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
+            AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _s_waitcnt_overlay(
     *,
     effects: tuple[Effect, ...],
@@ -2946,6 +2964,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),
         _v_dot4_i32_i8_overlay(),
+        _v_dot4_u32_u8_overlay(),
         *_gfx950_ds_transpose_read_overlays(),
         _v_mfma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
@@ -3057,6 +3076,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),
         _v_dot4_i32_i8_overlay(),
+        _v_dot4_u32_u8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
         *_gfx11_cache_control_overlays(),
@@ -3178,6 +3198,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             include_fetch_invalid=True,
         ),
         _v_dot4_i32_i8_overlay(),
+        _v_dot4_u32_u8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         *_gfx12_cache_control_overlays(),
         *_gfx12_prefetch_overlays(),
@@ -3295,6 +3316,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             include_fetch_invalid=True,
         ),
         _v_dot4_i32_i8_overlay(),
+        _v_dot4_u32_u8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         *_gfx12_cache_control_overlays(),
         *_gfx12_prefetch_overlays(),

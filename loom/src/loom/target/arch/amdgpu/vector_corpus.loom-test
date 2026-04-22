@@ -512,3 +512,13 @@ func.def target(@gfx11_dot4i_s8s8_target) @amdgpu_dot4i_s8s8(%lhs: vector<4xi8>,
   %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
   func.return %dot : vector<1xi32>
 }
+
+// ====
+// RUN: emit source-low @amdgpu_dot4i_u8u8 output=none
+target.profile @gfx11_dot4i_u8u8_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_dot4i_u8u8_target) @amdgpu_dot4i_u8u8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
+  %dot = vector.dot4i<u8u8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  func.return %dot : vector<1xi32>
+}
