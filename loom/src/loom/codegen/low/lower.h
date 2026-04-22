@@ -312,6 +312,20 @@ const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
 const loom_value_fact_table_t* loom_low_lower_context_fact_table(
     const loom_low_lower_context_t* context);
 
+// Returns the number of non-structural source-op lowering plans selected during
+// planning. Preamble callbacks may inspect these plans before body emission.
+iree_host_size_t loom_low_lower_context_selected_plan_count(
+    const loom_low_lower_context_t* context);
+
+// Returns the source op associated with one selected lowering plan.
+const loom_op_t* loom_low_lower_context_selected_plan_source_op(
+    const loom_low_lower_context_t* context, iree_host_size_t index);
+
+// Returns one selected lowering plan. Table-driven rule rows return an empty
+// plan because their rule data is owned by core lowering.
+loom_low_lower_plan_t loom_low_lower_context_selected_plan(
+    const loom_low_lower_context_t* context, iree_host_size_t index);
+
 // Allocates transient storage from the current lowering arena. The allocation
 // remains valid until the current loom_low_lower_function call returns.
 iree_status_t loom_low_lower_allocate_scratch_array(

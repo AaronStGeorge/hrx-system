@@ -1372,30 +1372,3 @@ bool loom_amdgpu_select_vector_store_plan(
   return loom_amdgpu_memory_cache_policy_can_lower(
       loom_low_lower_context_descriptor_set(context), out_plan);
 }
-
-bool loom_amdgpu_source_op_selects_m0_descriptor(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t* out_descriptor_id) {
-  IREE_ASSERT_ARGUMENT(out_descriptor_id);
-  *out_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
-  loom_amdgpu_memory_access_plan_t plan;
-  switch (source_op->kind) {
-    case LOOM_OP_VECTOR_LOAD:
-      if (!loom_amdgpu_select_vector_load_plan(context, source_op, &plan)) {
-        return false;
-      }
-      break;
-    case LOOM_OP_VECTOR_STORE:
-      if (!loom_amdgpu_select_vector_store_plan(context, source_op, &plan)) {
-        return false;
-      }
-      break;
-    default:
-      return false;
-  }
-  if (plan.address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
-    return false;
-  }
-  *out_descriptor_id = plan.descriptor_id;
-  return true;
-}

@@ -21,6 +21,8 @@
 #include "loom/ops/target/ops.h"
 
 typedef struct loom_low_lower_selected_plan_t {
+  // Source op this selected plan lowers.
+  const loom_op_t* source_op;
   // Table rule selected during planning, or NULL for target-owned callbacks.
   const loom_low_lower_rule_t* rule;
   // Target-owned plan selected during planning, or empty for table rules.
@@ -413,6 +415,26 @@ const loom_low_descriptor_set_t* loom_low_lower_context_descriptor_set(
 const loom_value_fact_table_t* loom_low_lower_context_fact_table(
     const loom_low_lower_context_t* context) {
   return &context->fact_table;
+}
+
+iree_host_size_t loom_low_lower_context_selected_plan_count(
+    const loom_low_lower_context_t* context) {
+  IREE_ASSERT_ARGUMENT(context);
+  return context->selected_plan_count;
+}
+
+const loom_op_t* loom_low_lower_context_selected_plan_source_op(
+    const loom_low_lower_context_t* context, iree_host_size_t index) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_LT(index, context->selected_plan_count);
+  return context->selected_plans[index].source_op;
+}
+
+loom_low_lower_plan_t loom_low_lower_context_selected_plan(
+    const loom_low_lower_context_t* context, iree_host_size_t index) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_LT(index, context->selected_plan_count);
+  return context->selected_plans[index].plan;
 }
 
 iree_status_t loom_low_lower_allocate_scratch_array(
@@ -916,6 +938,7 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     if (rule_selection.rule != NULL) {
       return loom_low_lower_record_selected_plan(
           context, (loom_low_lower_selected_plan_t){
+                       .source_op = source_op,
                        .rule = rule_selection.rule,
                        .plan = loom_low_lower_plan_empty(),
                    });
@@ -934,6 +957,7 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
   if (!loom_low_lower_plan_is_empty(plan)) {
     return loom_low_lower_record_selected_plan(context,
                                                (loom_low_lower_selected_plan_t){
+                                                   .source_op = source_op,
                                                    .rule = NULL,
                                                    .plan = plan,
                                                });
@@ -1331,6 +1355,7 @@ static iree_status_t loom_low_lower_emit_selected_plan(
                  context->selected_plan_count);
   const loom_low_lower_selected_plan_t selected_plan =
       context->selected_plans[context->selected_plan_emit_index++];
+  IREE_ASSERT_EQ(selected_plan.source_op, source_op);
   if (selected_plan.rule != NULL) {
     IREE_ASSERT(context->policy->rule_set != NULL);
     return loom_low_lower_rule_set_emit_rule(context, context->policy->rule_set,
