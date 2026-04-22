@@ -1014,7 +1014,15 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
     case LOOM_AMDGPU_ENCODING_FORMAT_SOP1:
       return loom_amdgpu_encode_sop1_s_mov_b32(state, packet);
     case LOOM_AMDGPU_ENCODING_FORMAT_SOPP:
-      return loom_amdgpu_encode_sopp_packet(state, packet);
+      switch (packet->descriptor->encoding_id) {
+        case LOOM_AMDGPU_SOPP_S_WAITCNT_OPCODE:
+        case LOOM_AMDGPU_SOPP_S_WAITCNT_DEPCTR_OPCODE:
+        case LOOM_AMDGPU_SOPP_S_WAIT_IDLE_OPCODE:
+        case LOOM_AMDGPU_SOPP_GFX11_S_BARRIER_OPCODE:
+          return loom_amdgpu_encode_sopp_packet(state, packet);
+        default:
+          return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
+      }
     case LOOM_AMDGPU_ENCODING_FORMAT_SOP2:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP2:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3:

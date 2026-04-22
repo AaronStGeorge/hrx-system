@@ -88,6 +88,7 @@ _SCHEDULE_MFMA = "amdgpu.mfma"
 _SCHEDULE_WMMA = "amdgpu.wmma"
 _SCHEDULE_WMMA_SCALE = "amdgpu.wmma.scale"
 _SCHEDULE_SWMMAC = "amdgpu.swmmac"
+_SCHEDULE_CACHE_CONTROL = "amdgpu.cache.control"
 _SCHEDULE_WAIT_MEMORY = "amdgpu.wait.memory"
 _SCHEDULE_WAIT_VMEM_STORE = "amdgpu.wait.vmem.store"
 _SCHEDULE_WAIT_LDS = "amdgpu.wait.lds"
@@ -288,6 +289,14 @@ def _common_scalar_vector_memory_schedule_classes(
         ),
         ScheduleClass(
             _SCHEDULE_BARRIER,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_CACHE_CONTROL,
             latency_kind=LatencyKind.VARIABLE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
@@ -553,6 +562,12 @@ def _workgroup_memory_effect(kind: EffectKind, width_bits: int) -> Effect:
 _WORKGROUP_BARRIER_EFFECT = Effect(
     EffectKind.BARRIER,
     memory_space=MemorySpace.WORKGROUP,
+    flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
+)
+
+_CACHE_CONTROL_EFFECT = Effect(
+    EffectKind.BARRIER,
+    memory_space=MemorySpace.GENERIC,
     flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
 )
 
@@ -2443,6 +2458,161 @@ def _s_barrier_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _cache_control_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    encoding_name: str,
+    semantic_tag: str,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_CACHE_CONTROL,
+        operands=(),
+        effects=(_CACHE_CONTROL_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _gfx950_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _cache_control_overlay(
+            descriptor_key="amdgpu.buffer_inv",
+            instruction_name="BUFFER_INV",
+            mnemonic="buffer_inv",
+            encoding_name="ENC_MUBUF",
+            semantic_tag="memory.cache.invalidate.buffer",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.buffer_wbl2",
+            instruction_name="BUFFER_WBL2",
+            mnemonic="buffer_wbl2",
+            encoding_name="ENC_MUBUF",
+            semantic_tag="memory.cache.writeback.buffer.l2",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.s_dcache_inv",
+            instruction_name="S_DCACHE_INV",
+            mnemonic="s_dcache_inv",
+            encoding_name="ENC_SMEM",
+            semantic_tag="memory.cache.invalidate.data",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.s_dcache_wb",
+            instruction_name="S_DCACHE_WB",
+            mnemonic="s_dcache_wb",
+            encoding_name="ENC_SMEM",
+            semantic_tag="memory.cache.writeback.data",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.s_dcache_inv_vol",
+            instruction_name="S_DCACHE_INV_VOL",
+            mnemonic="s_dcache_inv_vol",
+            encoding_name="ENC_SMEM",
+            semantic_tag="memory.cache.invalidate.data.volatile",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.s_dcache_wb_vol",
+            instruction_name="S_DCACHE_WB_VOL",
+            mnemonic="s_dcache_wb_vol",
+            encoding_name="ENC_SMEM",
+            semantic_tag="memory.cache.writeback.data.volatile",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.s_icache_inv",
+            instruction_name="S_ICACHE_INV",
+            mnemonic="s_icache_inv",
+            encoding_name="ENC_SOPP",
+            semantic_tag="memory.cache.invalidate.instruction",
+        ),
+    )
+
+
+def _gfx11_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _cache_control_overlay(
+            descriptor_key="amdgpu.buffer_gl0_inv",
+            instruction_name="BUFFER_GL0_INV",
+            mnemonic="buffer_gl0_inv",
+            encoding_name="ENC_MUBUF",
+            semantic_tag="memory.cache.invalidate.buffer.gl0",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.buffer_gl1_inv",
+            instruction_name="BUFFER_GL1_INV",
+            mnemonic="buffer_gl1_inv",
+            encoding_name="ENC_MUBUF",
+            semantic_tag="memory.cache.invalidate.buffer.gl1",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.s_dcache_inv",
+            instruction_name="S_DCACHE_INV",
+            mnemonic="s_dcache_inv",
+            encoding_name="ENC_SMEM",
+            semantic_tag="memory.cache.invalidate.data",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.s_gl1_inv",
+            instruction_name="S_GL1_INV",
+            mnemonic="s_gl1_inv",
+            encoding_name="ENC_SMEM",
+            semantic_tag="memory.cache.invalidate.global.l1",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.s_icache_inv",
+            instruction_name="S_ICACHE_INV",
+            mnemonic="s_icache_inv",
+            encoding_name="ENC_SOPP",
+            semantic_tag="memory.cache.invalidate.instruction",
+        ),
+    )
+
+
+def _gfx12_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _cache_control_overlay(
+            descriptor_key="amdgpu.global_inv",
+            instruction_name="GLOBAL_INV",
+            mnemonic="global_inv",
+            encoding_name="ENC_VGLOBAL",
+            semantic_tag="memory.cache.invalidate.global",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.global_wb",
+            instruction_name="GLOBAL_WB",
+            mnemonic="global_wb",
+            encoding_name="ENC_VGLOBAL",
+            semantic_tag="memory.cache.writeback.global",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.global_wbinv",
+            instruction_name="GLOBAL_WBINV",
+            mnemonic="global_wbinv",
+            encoding_name="ENC_VGLOBAL",
+            semantic_tag="memory.cache.writeback_invalidate.global",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.s_dcache_inv",
+            instruction_name="S_DCACHE_INV",
+            mnemonic="s_dcache_inv",
+            encoding_name="ENC_SMEM",
+            semantic_tag="memory.cache.invalidate.data",
+        ),
+        _cache_control_overlay(
+            descriptor_key="amdgpu.s_icache_inv",
+            instruction_name="S_ICACHE_INV",
+            mnemonic="s_icache_inv",
+            encoding_name="ENC_SOPP",
+            semantic_tag="memory.cache.invalidate.instruction",
+        ),
+    )
+
+
 def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
@@ -2550,6 +2720,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_gfx950_ds_transpose_read_overlays(),
         _v_mfma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
+        *_gfx950_cache_control_overlays(),
         _s_waitcnt_overlay(
             effects=(
                 _VMEM_LOAD_WAIT_EFFECT,
@@ -2655,6 +2826,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_dot4_i32_i8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
         _s_barrier_overlay(),
+        *_gfx11_cache_control_overlays(),
         _s_waitcnt_overlay(
             effects=(
                 _VMEM_LOAD_WAIT_EFFECT,
@@ -2770,6 +2942,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         _v_dot4_i32_i8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
+        *_gfx12_cache_control_overlays(),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),
         _s_wait_dscnt_overlay(),
@@ -2881,6 +3054,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         _v_dot4_i32_i8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
+        *_gfx12_cache_control_overlays(),
         _s_wait_loadcnt_overlay(),
         _s_wait_storecnt_overlay(),
         _s_wait_dscnt_overlay(),

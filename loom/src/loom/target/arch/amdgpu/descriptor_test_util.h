@@ -241,6 +241,32 @@ inline void ExpectAmdgpuGlobalSaddrMemoryDescriptors(
       expected_implicit_m0);
 }
 
+inline void ExpectAmdgpuCacheControlDescriptor(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
+    uint16_t expected_encoding_format_id, uint16_t expected_encoding_id) {
+  const loom_low_descriptor_t* descriptor =
+      LookupAmdgpuDescriptorForTest(descriptor_set, key);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->operand_count, 0u);
+  EXPECT_EQ(descriptor->result_count, 0u);
+  EXPECT_EQ(descriptor->immediate_count, 0u);
+  EXPECT_EQ(descriptor->effect_count, 1u);
+  EXPECT_EQ(descriptor->encoding_format_id, expected_encoding_format_id);
+  EXPECT_EQ(descriptor->encoding_id, expected_encoding_id);
+  EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING, 0u);
+  ASSERT_NE(descriptor->schedule_class_id, LOOM_LOW_SCHEDULE_CLASS_NONE);
+  const loom_low_schedule_class_t* schedule_class =
+      &descriptor_set->schedule_classes[descriptor->schedule_class_id];
+  EXPECT_NE(schedule_class->flags & LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL, 0u);
+
+  const loom_low_effect_t* effect =
+      &descriptor_set->effects[descriptor->effect_start];
+  EXPECT_EQ(effect->kind, LOOM_LOW_EFFECT_KIND_BARRIER);
+  EXPECT_EQ(effect->memory_space, LOOM_LOW_MEMORY_SPACE_GENERIC);
+  EXPECT_NE(effect->flags & LOOM_LOW_EFFECT_FLAG_ORDERED, 0u);
+  EXPECT_NE(effect->flags & LOOM_LOW_EFFECT_FLAG_DEPENDENCY, 0u);
+}
+
 inline void ExpectAmdgpuDs2AddrMemoryDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
     loom_low_effect_kind_t expected_effect_kind, uint16_t expected_value_units,

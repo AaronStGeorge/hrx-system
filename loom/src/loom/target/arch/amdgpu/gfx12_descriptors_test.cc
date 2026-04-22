@@ -16,6 +16,7 @@
 namespace loom {
 namespace {
 
+using ::loom::testing::ExpectAmdgpuCacheControlDescriptor;
 using ::loom::testing::ExpectAmdgpuDs2AddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsAddtidMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsCrosslaneDescriptors;
@@ -211,6 +212,22 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorLookupUsesStableKeys) {
   ExpectAmdgpuDsCrosslaneDescriptors(descriptor_set,
                                      LOOM_AMDGPU_ENCODING_FORMAT_VDS,
                                      /*expect_fetch_invalid=*/true);
+
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.global_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 43u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.global_wb"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 44u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.global_wbinv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 79u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.s_dcache_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM, 33u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.s_icache_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SOPP, 60u);
 
   const loom_low_descriptor_t* load_wait_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_loadcnt"));

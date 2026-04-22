@@ -327,6 +327,32 @@ TEST_F(AmdgpuEncodingTest, EncodesLiveInAsNonEmittingPacket) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest, EncodesGenericSoppCacheControl) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel() {\n"
+      "  low.op<amdgpu.s_icache_inv>() : ()\n"
+      "  low.return\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_GE(text.data_length, 8u);
+  ASSERT_EQ(text.data_length % 4, 0u);
+  bool saw_icache_invalidate = false;
+  for (iree_host_size_t i = 0; i + 4 <= text.data_length; i += 4) {
+    saw_icache_invalidate |= ReadU32LE(text.data + i) == UINT32_C(0xBFBC0000);
+  }
+  EXPECT_TRUE(saw_icache_invalidate);
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(AmdgpuEncodingTest, SequencesOverlappingCopyBeforeClobber) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);

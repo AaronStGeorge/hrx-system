@@ -19,6 +19,7 @@
 namespace loom {
 namespace {
 
+using ::loom::testing::ExpectAmdgpuCacheControlDescriptor;
 using ::loom::testing::ExpectAmdgpuDs2AddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsAddtidMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsCrosslaneDescriptors;
@@ -276,6 +277,22 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorLookupUsesStableKeys) {
   EXPECT_NE(barrier_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
 
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.buffer_gl0_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_MUBUF, 43u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.buffer_gl1_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_MUBUF, 44u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.s_dcache_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM, 33u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.s_gl1_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM, 32u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.s_icache_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SOPP, 60u);
+
   const loom_low_descriptor_t* scalar_load_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_load_dwordx2"));
   ASSERT_NE(scalar_load_descriptor, nullptr);
@@ -451,6 +468,7 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowAsmRegionRoundTrips) {
       "  %c1 = s_mov_b32 5\n"
       "  %sum = s_add_u32 %c0, %c1\n"
       "  %v = v_mov_b32 42\n"
+      "  s_icache_inv\n"
       "  s_waitcnt {vmcnt = 0, lgkmcnt = 0}\n"
       "  return %sum\n"
       "}\n";

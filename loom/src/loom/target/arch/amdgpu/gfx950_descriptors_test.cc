@@ -18,6 +18,7 @@
 namespace loom {
 namespace {
 
+using ::loom::testing::ExpectAmdgpuCacheControlDescriptor;
 using ::loom::testing::ExpectAmdgpuDs2AddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsAddtidMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsCrosslaneDescriptors;
@@ -227,6 +228,28 @@ TEST(AmdgpuDescriptorsTest, Gfx950CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(barrier_descriptor->encoding_format_id,
             LOOM_AMDGPU_ENCODING_FORMAT_SOPP);
 
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.buffer_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_MUBUF, 41u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.buffer_wbl2"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_MUBUF, 40u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.s_dcache_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM, 32u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.s_dcache_wb"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM, 33u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.s_dcache_inv_vol"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM, 34u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.s_dcache_wb_vol"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SMEM, 35u);
+  ExpectAmdgpuCacheControlDescriptor(descriptor_set,
+                                     IREE_SV("amdgpu.s_icache_inv"),
+                                     LOOM_AMDGPU_ENCODING_FORMAT_SOPP, 19u);
+
   const loom_low_descriptor_t* wait_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_waitcnt"));
   ASSERT_NE(wait_descriptor, nullptr);
@@ -312,6 +335,7 @@ TEST(AmdgpuDescriptorsTest, Gfx950LowAsmRegionRoundTrips) {
       "  %c1 = s_mov_b32 5\n"
       "  %sum = s_add_u32 %c0, %c1\n"
       "  %diff = s_sub_u32 %sum, %c1\n"
+      "  buffer_inv\n"
       "  s_waitcnt {vmcnt = 0, lgkmcnt = 0}\n"
       "  return %diff\n"
       "}\n";
