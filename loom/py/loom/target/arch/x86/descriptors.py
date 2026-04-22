@@ -178,6 +178,14 @@ _DISP32_IMMEDIATE = Immediate(
     unsigned_max=(2**31) - 1,
 )
 
+_IMM64_IMMEDIATE = Immediate(
+    "imm64",
+    ImmediateKind.SIGNED,
+    bit_width=64,
+    signed_min=-(2**63) + 1,
+    unsigned_max=(2**63) - 1,
+)
+
 _TARGET_BLOCK_IMMEDIATE = Immediate(
     "target_block",
     ImmediateKind.ORDINAL,
@@ -538,6 +546,15 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.move.i64",
             operands=(_gpr64_result(), _gpr64_operand("src")),
             asm_forms=_asm(results=("dst",), operands=("src",)),
+            schedule_class=_SCHEDULE_SCALAR,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="x86.avx512.movimm.gpr64",
+            mnemonic="mov",
+            semantic_tag="integer.const.i64",
+            operands=(_gpr64_result(),),
+            immediates=(_IMM64_IMMEDIATE,),
             schedule_class=_SCHEDULE_SCALAR,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),

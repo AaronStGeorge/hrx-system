@@ -19,11 +19,10 @@ func.def target(@x86_packed_dot_target) @x86_dot4i_gemv_step(%lhs: vector<32xi8>
 }
 
 // ====
-// RUN: emit source-low @x86_memory_gap output=none
-// XFAIL: x86 source-to-low does not yet model object ABI memory arguments.
-target.profile @x86_memory_gap_target preset("x86-avx512")
+// RUN: emit source-low @x86_memory_copy output=none
+target.profile @x86_memory_copy_target preset("x86-avx512")
 
-func.def target(@x86_memory_gap_target) @x86_memory_gap(%input: buffer, %output: buffer) {
+func.def target(@x86_memory_copy_target) @x86_memory_copy(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<16xf32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<16xf32, #dense>

@@ -247,6 +247,34 @@ TEST_F(X86AssemblyTest, EmitsMaterializedAvx512Copy) {
   iree_arena_deinitialize(&sidecar_arena);
 }
 
+TEST_F(X86AssemblyTest, EmitsAvx512AddressConstant) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  BuildSidecars(
+      "low.func.def target(@x86_target) @x86_fragment(%value : "
+      "reg<x86.zmm>) {\n"
+      "  %addr = low.const<x86.avx512.movimm.gpr64> {imm64 = 1024} : "
+      "reg<x86.gpr64>\n"
+      "  low.op<x86.avx512.vmovdqu32.store.zmm>(%value, %addr) "
+      "{disp32 = -16} : (reg<x86.zmm>, reg<x86.gpr64>)\n"
+      "  low.return\n"
+      "}\n",
+      &sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_x86_emit_assembly_fragment(
+      &packetization.schedule, &packetization.allocation, &builder));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+  EXPECT_NE(output.find("mov rax, 1024"), std::string::npos);
+  EXPECT_NE(output.find("vmovdqu32 [rax - 16], zmm"), std::string::npos);
+  EXPECT_NE(output.find("ret"), std::string::npos);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
 TEST_F(X86AssemblyTest, DropsDeadAvx512FragmentFromSourceLowering) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);

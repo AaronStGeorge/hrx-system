@@ -21,10 +21,11 @@ extern "C" {
 
 // Returns the x86 AVX512 register lowering policy.
 //
-// The policy maps vector<16xi32>/vector<16xf32> values to ZMM registers and
-// lowers direct vector arithmetic through table-driven AVX512 descriptor rules.
-// Memory operands and object-function ABI pinning are intentionally owned by
-// later low.resource/ABI work.
+// The policy maps object-function buffer arguments and address-domain scalar
+// values to GPR64 registers, maps vector<16xi32>/vector<16xf32> values to ZMM
+// registers, lowers direct vector arithmetic through table-driven AVX512
+// descriptor rules, and lowers static ZMM load/store accesses through base plus
+// disp32 memory packets.
 const loom_low_lower_policy_t* loom_x86_avx512_low_lower_policy(void);
 
 // Returns the x86 packed-dot register lowering policy.
