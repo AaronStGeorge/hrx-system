@@ -64,6 +64,8 @@ typedef enum loom_low_lower_value_ref_kind_e {
   LOOM_LOW_LOWER_VALUE_REF_OPERAND = 1,
   // Source op result at |index|.
   LOOM_LOW_LOWER_VALUE_REF_RESULT = 2,
+  // Rule-local temporary low value at |index|.
+  LOOM_LOW_LOWER_VALUE_REF_TEMPORARY = 3,
 } loom_low_lower_value_ref_kind_t;
 
 typedef struct loom_low_lower_value_ref_t {
@@ -145,6 +147,9 @@ typedef uint16_t loom_low_lower_emit_flags_t;
 
 // Swaps emitted descriptor operands 0 and 1 after operand lookup/copy/slicing.
 #define LOOM_LOW_LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1 ((uint16_t)1u << 0)
+// Binds emitted low results to result_bind_ref_start instead of
+// result_ref_start.
+#define LOOM_LOW_LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS ((uint16_t)1u << 1)
 
 typedef struct loom_low_lower_emit_t {
   // Emit action to perform.
@@ -162,9 +167,16 @@ typedef struct loom_low_lower_emit_t {
   // without clobbering the source SSA value's later uses.
   uint16_t copy_operand_mask;
   // First value-ref table row mapped as a low result.
+  //
+  // Result type refs must address source results. When
+  // BIND_RESULTS_TO_REFS is set, result_bind_ref_start controls where the
+  // emitted low results are bound.
   uint16_t result_ref_start;
   // Number of low results to map from value-ref rows.
   uint16_t result_ref_count;
+  // First value-ref table row receiving emitted low results when
+  // BIND_RESULTS_TO_REFS is set.
+  uint16_t result_bind_ref_start;
   // First attr-copy table row emitted onto the low packet.
   uint16_t attr_copy_start;
   // Number of attributes copied onto the low packet.
@@ -178,6 +190,9 @@ typedef struct loom_low_lower_emit_t {
 typedef struct loom_low_lower_rule_t {
   // Source op kind this rule accepts.
   loom_op_kind_t source_op_kind;
+  // Number of rule-local temporary low values available while emitting this
+  // rule.
+  uint16_t temporary_count;
   // First guard table row for this rule.
   uint16_t guard_start;
   // Number of guard rows for this rule.

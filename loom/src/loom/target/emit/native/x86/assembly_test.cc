@@ -336,6 +336,43 @@ TEST_F(X86AssemblyTest, EmitsAvx512LeaAdd) {
   iree_arena_deinitialize(&sidecar_arena);
 }
 
+TEST_F(X86AssemblyTest, EmitsAvx512IndexMaddFromSourceLowering) {
+  iree_arena_allocator_t sidecar_arena;
+  iree_arena_initialize(&block_pool_, &sidecar_arena);
+  loom_low_packetization_t packetization = {};
+  LowerSourceAndBuildSidecars(
+      "x86-avx512",
+      "func.def target(@x86_target) @x86_source(%input: buffer, "
+      "%output: buffer, %row: index, %stride: index, %col: index) {\n"
+      "  %zero = index.constant 0 : offset\n"
+      "  %linear = index.madd %row, %stride, %col : index\n"
+      "  %input_view = buffer.view %input[%zero] : buffer -> "
+      "view<32xf32, #dense>\n"
+      "  %output_view = buffer.view %output[%zero] : buffer -> "
+      "view<32xf32, #dense>\n"
+      "  %loaded = vector.load %input_view[%linear] : view<32xf32, #dense> "
+      "-> vector<16xf32>\n"
+      "  vector.store %loaded, %output_view[%linear] : vector<16xf32>, "
+      "view<32xf32, #dense>\n"
+      "  func.return\n"
+      "}\n",
+      &sidecar_arena, &packetization);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_x86_emit_assembly_fragment(
+      &packetization.schedule, &packetization.allocation, &builder));
+  const std::string output(iree_string_builder_view(&builder).data,
+                           iree_string_builder_view(&builder).size);
+  EXPECT_NE(output.find("imul "), std::string::npos);
+  EXPECT_NE(output.find("lea "), std::string::npos);
+  EXPECT_NE(output.find("vmovdqu32 zmm"), std::string::npos);
+  EXPECT_NE(output.find("vmovdqu32 ["), std::string::npos);
+  EXPECT_NE(output.find("ret"), std::string::npos);
+  iree_string_builder_deinitialize(&builder);
+  iree_arena_deinitialize(&sidecar_arena);
+}
+
 TEST_F(X86AssemblyTest, DropsDeadAvx512FragmentFromSourceLowering) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);

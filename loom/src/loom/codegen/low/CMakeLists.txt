@@ -587,6 +587,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::cfg
     loom::src::loom::ops::func
+    loom::src::loom::ops::index
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector

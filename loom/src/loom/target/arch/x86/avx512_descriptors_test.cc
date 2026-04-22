@@ -154,6 +154,14 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(lea_add_descriptor->result_count, 1u);
   EXPECT_EQ(lea_add_descriptor->immediate_count, 0u);
 
+  const loom_low_descriptor_t* imul_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.imul.gpr64"));
+  ASSERT_NE(imul_descriptor, nullptr);
+  EXPECT_EQ(imul_descriptor->operand_count, 3u);
+  EXPECT_EQ(imul_descriptor->result_count, 1u);
+  EXPECT_EQ(imul_descriptor->immediate_count, 0u);
+  EXPECT_EQ(imul_descriptor->constraint_count, 2u);
+
   const loom_low_descriptor_t* mask_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.kandq"));
   ASSERT_NE(mask_descriptor, nullptr);

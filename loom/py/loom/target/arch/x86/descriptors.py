@@ -229,6 +229,11 @@ _DOT_ACCUMULATOR_CONSTRAINTS = (
     Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
 )
 
+_GPR_DESTRUCTIVE_LHS_CONSTRAINTS = (
+    Constraint(ConstraintKind.TIED, 0, 1),
+    Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+)
+
 _PACKED_DOT_NUMERIC_TAGS = {
     NUMERIC_I8: "s8",
     NUMERIC_U8: "u8",
@@ -617,6 +622,20 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _gpr64_operand("lhs"),
                 _gpr64_operand("rhs"),
             ),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SCALAR,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="x86.avx512.imul.gpr64",
+            mnemonic="imul",
+            semantic_tag="integer.mul.i64",
+            operands=(
+                _gpr64_result(),
+                _gpr64_operand("lhs"),
+                _gpr64_operand("rhs"),
+            ),
+            constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),

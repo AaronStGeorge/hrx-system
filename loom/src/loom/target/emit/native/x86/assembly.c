@@ -337,6 +337,30 @@ static iree_status_t loom_x86_append_tied_ternary_packet(
   return loom_x86_append_operand(state, context, 2);
 }
 
+static iree_status_t loom_x86_append_tied_binary_packet(
+    const loom_x86_assembly_state_t* state,
+    const loom_native_assembly_packet_context_t* context) {
+  const loom_op_t* op = context->packet->node->op;
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  const loom_low_allocation_assignment_t* lhs_assignment = NULL;
+  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
+      context, loom_op_const_results(op)[0], &result_assignment));
+  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
+      context, loom_op_const_operands(op)[0], &lhs_assignment));
+  if (!loom_x86_assignments_match(result_assignment, lhs_assignment)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "x86 tied binary result must share the left-hand physical register");
+  }
+  IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  IREE_RETURN_IF_ERROR(loom_x86_append_result(state, context, 0));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, ", "));
+  return loom_x86_append_operand(state, context, 1);
+}
+
 static iree_status_t loom_x86_append_lea_add_packet(
     const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context) {
@@ -418,6 +442,35 @@ static iree_status_t loom_x86_descriptor_has_effect(
       return iree_ok_status();
     }
   }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_x86_descriptor_uses_tied_binary_form(
+    const loom_native_assembly_packet_context_t* context,
+    bool* out_uses_tied_binary_form) {
+  *out_uses_tied_binary_form = false;
+  const loom_op_t* op = context->packet->node->op;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  if (descriptor->result_count != 1 || descriptor->operand_count != 3 ||
+      op->result_count != 1 || op->operand_count != 2) {
+    return iree_ok_status();
+  }
+  const uint16_t result_operand_index = 0;
+  const uint16_t lhs_operand_index = descriptor->result_count;
+  bool is_tied = false;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_has_constraint(
+      descriptor_set, descriptor, LOOM_LOW_CONSTRAINT_KIND_TIED,
+      result_operand_index, lhs_operand_index, &is_tied));
+  if (!is_tied) {
+    return iree_ok_status();
+  }
+  bool is_destructive = false;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_has_constraint(
+      descriptor_set, descriptor, LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE,
+      result_operand_index, lhs_operand_index, &is_destructive));
+  *out_uses_tied_binary_form = is_destructive;
   return iree_ok_status();
 }
 
@@ -664,6 +717,12 @@ static iree_status_t loom_x86_append_descriptor_packet(
   }
   if (has_write_effect) {
     return loom_x86_append_store_packet(state, context);
+  }
+  bool uses_tied_binary_form = false;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_uses_tied_binary_form(
+      context, &uses_tied_binary_form));
+  if (uses_tied_binary_form) {
+    return loom_x86_append_tied_binary_packet(state, context);
   }
   bool uses_tied_ternary_form = false;
   IREE_RETURN_IF_ERROR(loom_x86_descriptor_uses_tied_ternary_form(
