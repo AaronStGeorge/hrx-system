@@ -669,7 +669,9 @@ TEST(MatrixContractTest, ProcessorFeatureBitsUseTargetInfoAliases) {
   loom_amdgpu_matrix_feature_bits_t gfx1170_features = 0;
   IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(
       IREE_SV("gfx1170"), &gfx1170_features));
-  EXPECT_EQ(gfx1170_features, LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11);
+  EXPECT_EQ(gfx1170_features, LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11 |
+                                  LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX12 |
+                                  LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX12);
 
   loom_amdgpu_matrix_feature_bits_t gfx1252_features = 0;
   IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(

@@ -371,16 +371,16 @@ TEST(AmdgpuDescriptorsTest, Gfx11WmmaPacketMatchesRdnaRegisterShape) {
 
   ExpectAmdgpuWmmaDescriptorForTest(
       descriptor_set, IREE_SV("amdgpu.v_wmma_f32_16x16x16_f16"),
-      /*expected_encoding_id=*/64u, /*expected_lhs_units=*/4u,
-      /*expected_rhs_units=*/4u, /*expected_accumulator_units=*/8u);
+      /*expected_encoding_id=*/64u, /*expected_lhs_units=*/8u,
+      /*expected_rhs_units=*/8u, /*expected_accumulator_units=*/8u);
   ExpectAmdgpuWmmaDescriptorForTest(
       descriptor_set, IREE_SV("amdgpu.v_wmma_i32_16x16x16_iu8"),
-      /*expected_encoding_id=*/68u, /*expected_lhs_units=*/2u,
-      /*expected_rhs_units=*/2u, /*expected_accumulator_units=*/8u);
+      /*expected_encoding_id=*/68u, /*expected_lhs_units=*/4u,
+      /*expected_rhs_units=*/4u, /*expected_accumulator_units=*/8u);
   ExpectAmdgpuWmmaDescriptorForTest(
       descriptor_set, IREE_SV("amdgpu.v_wmma_i32_16x16x16_iu4"),
-      /*expected_encoding_id=*/69u, /*expected_lhs_units=*/1u,
-      /*expected_rhs_units=*/1u, /*expected_accumulator_units=*/8u);
+      /*expected_encoding_id=*/69u, /*expected_lhs_units=*/2u,
+      /*expected_rhs_units=*/2u, /*expected_accumulator_units=*/8u);
 }
 
 TEST(AmdgpuDescriptorsTest, Gfx11AsmFormsExposeNamedWaitcntImmediates) {
@@ -469,8 +469,8 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorMemoryAndMatrix) {
   const char* source =
       "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
       "low.func.def target(@gfx_target) @vector_memory_matrix(%lhs : "
-      "reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %a : reg<amdgpu.vgpr x4>, "
-      "%b : reg<amdgpu.vgpr x4>, %acc : reg<amdgpu.vgpr x8>, "
+      "reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %a : reg<amdgpu.vgpr x8>, "
+      "%b : reg<amdgpu.vgpr x8>, %acc : reg<amdgpu.vgpr x8>, "
       "%resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, "
       "%soffset : reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>, "
       "reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {\n"

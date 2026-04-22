@@ -90,6 +90,19 @@ def gfx11_processor_info(
     )
 
 
+def gfx1170_processor_info() -> AmdgpuProcessorInfo:
+    return AmdgpuProcessorInfo(
+        target_cpu="gfx1170",
+        descriptor_set_key="",
+        low_preset_key="",
+        elf_machine_flags=0x05D,
+        elf_feature_flags=0,
+        default_wavefront_size=32,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+        matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+    )
+
+
 AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
     AmdgpuDescriptorSetInfo(
         key="amdgpu.gfx1250.core",
@@ -182,7 +195,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     gfx11_processor_info(target_cpu="gfx1151", elf_machine_flags=0x04A),
     gfx11_processor_info(target_cpu="gfx1152", elf_machine_flags=0x055),
     gfx11_processor_info(target_cpu="gfx1153", elf_machine_flags=0x058),
-    gfx11_processor_info(target_cpu="gfx1170", elf_machine_flags=0x05D),
+    gfx1170_processor_info(),
     AmdgpuProcessorInfo(
         target_cpu="gfx1200",
         descriptor_set_key="amdgpu.gfx12.core",

@@ -133,9 +133,9 @@ s_endpgm
 // RUN: emit amdgpu-assembly-mnemonics @gfx11_wmma_i32 waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
-low.func.def target(@gfx11_target) @gfx11_wmma_i32(%a8 : reg<amdgpu.vgpr x2>, %b8 : reg<amdgpu.vgpr x2>, %a4 : reg<amdgpu.vgpr>, %b4 : reg<amdgpu.vgpr>, %acc : reg<amdgpu.vgpr x8>, %resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {
-  %i8 = low.op<amdgpu.v_wmma_i32_16x16x16_iu8>(%a8, %b8, %acc) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x8>) -> %acc as reg<amdgpu.vgpr x8>
-  %i4 = low.op<amdgpu.v_wmma_i32_16x16x16_iu4>(%a4, %b4, %i8) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr x8>) -> %i8 as reg<amdgpu.vgpr x8>
+low.func.def target(@gfx11_target) @gfx11_wmma_i32(%a8 : reg<amdgpu.vgpr x4>, %b8 : reg<amdgpu.vgpr x4>, %a4 : reg<amdgpu.vgpr x2>, %b4 : reg<amdgpu.vgpr x2>, %acc : reg<amdgpu.vgpr x8>, %resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {
+  %i8 = low.op<amdgpu.v_wmma_i32_16x16x16_iu8>(%a8, %b8, %acc) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x8>) -> %acc as reg<amdgpu.vgpr x8>
+  %i4 = low.op<amdgpu.v_wmma_i32_16x16x16_iu4>(%a4, %b4, %i8) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x8>) -> %i8 as reg<amdgpu.vgpr x8>
   %stored = low.slice %i4[0] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr x4>
   low.op<amdgpu.buffer_store_b128>(%stored, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
