@@ -13,6 +13,7 @@ from pathlib import Path
 
 from loom.target.arch.amdgpu.descriptor_overlay import (
     AmdgpuDescriptorOverlay,
+    AmdgpuIgnoredOperandOverlay,
     AmdgpuImplicitOperandOverlay,
     AmdgpuOperandOverlay,
     materialize_amdgpu_descriptor_overlays,
@@ -79,6 +80,7 @@ _SCHEDULE_SALU = "amdgpu.salu"
 _SCHEDULE_VALU = "amdgpu.valu"
 _SCHEDULE_SMEM_LOAD = "amdgpu.smem.load"
 _SCHEDULE_VMEM_LOAD = "amdgpu.vmem.load"
+_SCHEDULE_VMEM_LOAD_LDS = "amdgpu.vmem.load.lds"
 _SCHEDULE_VMEM_STORE = "amdgpu.vmem.store"
 _SCHEDULE_LDS_LOAD = "amdgpu.lds.load"
 _SCHEDULE_LDS_STORE = "amdgpu.lds.store"
@@ -843,6 +845,25 @@ def _global_write_effect(width_bits: int) -> Effect:
             return _GLOBAL_STORE_B128_EFFECT
         case _:
             raise ValueError(f"unsupported global write width {width_bits}")
+
+
+def _global_to_lds_effects(width_bits: int) -> tuple[Effect, Effect]:
+    return (
+        Effect(
+            EffectKind.READ,
+            memory_space=MemorySpace.GLOBAL,
+            flags=(EffectFlag.DEPENDENCY,),
+            counter_id=_COUNTER_VMEM_LOAD,
+            width_bits=width_bits,
+        ),
+        Effect(
+            EffectKind.WRITE,
+            memory_space=MemorySpace.WORKGROUP,
+            flags=(EffectFlag.DEPENDENCY,),
+            counter_id=_COUNTER_VMEM_LOAD,
+            width_bits=width_bits,
+        ),
+    )
 
 
 def _implicit_m0_input() -> AmdgpuImplicitOperandOverlay:
@@ -1908,6 +1929,82 @@ def _global_store_overlay(
         effects=(_global_write_effect(width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=(),
+    )
+
+
+def _global_load_lds_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    width_bits: int,
+    address_units: int,
+    saddr_off: int | None,
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 13,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    operands: tuple[AmdgpuOperandOverlay, ...] = (
+        AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr", units=address_units)),
+    )
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = ()
+    if saddr_off is None:
+        operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
+    else:
+        fixed_encoding_fields = (("SADDR", saddr_off),)
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_FLAT_GLBL",
+        semantic_tag=f"memory.global_to_workgroup.u{width_bits}",
+        schedule_class=_SCHEDULE_VMEM_LOAD_LDS,
+        operands=operands,
+        ignored_operands=(
+            AmdgpuIgnoredOperandOverlay(
+                "VDST",
+                ignore_reason="legacy-lds-dma-has-no-vgpr-result",
+                fixed_encoding_value=0,
+            ),
+        ),
+        implicit_operands=(_implicit_m0_input(),),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _signed_offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=_global_to_lds_effects(width_bits),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=(),
+    )
+
+
+def _global_load_lds_overlays(
+    *,
+    descriptor_key_suffix: str = "",
+    address_units: int,
+    saddr_off: int | None,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    variants = (
+        ("DWORD", "dword", 32),
+        ("DWORDX3", "dwordx3", 96),
+        ("DWORDX4", "dwordx4", 128),
+    )
+    return tuple(
+        _global_load_lds_overlay(
+            descriptor_key=(
+                f"amdgpu.global_load_lds_{mnemonic_suffix}{descriptor_key_suffix}"
+            ),
+            instruction_name=f"GLOBAL_LOAD_LDS_{instruction_suffix}",
+            mnemonic=f"global_load_lds_{mnemonic_suffix}",
+            width_bits=width_bits,
+            address_units=address_units,
+            saddr_off=saddr_off,
+            cache_fields=cache_fields,
+        )
+        for instruction_suffix, mnemonic_suffix, width_bits in variants
     )
 
 
@@ -3313,6 +3410,17 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             implicit_m0=True,
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
+        *_global_load_lds_overlays(
+            address_units=2,
+            saddr_off=_GLOBAL_GFX950_SADDR_OFF,
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+        ),
+        *_global_load_lds_overlays(
+            address_units=1,
+            saddr_off=None,
+            descriptor_key_suffix="_saddr",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+        ),
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),
         _v_dot4_i32_i8_overlay(signedness_modifiers=False),
@@ -3790,6 +3898,18 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             lds_load_hazards=_LDS_WAIT_HAZARDS,
             lds_store_hazards=_LDS_WAIT_HAZARDS,
             lds_crosslane_hazards=_LDS_WAIT_HAZARDS,
+        ),
+        ScheduleClass(
+            _SCHEDULE_VMEM_LOAD_LDS,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=16,
+            issue_uses=(
+                IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),
+                IssueUse(_RESOURCE_LDS_STORE, cycles=1, units=1),
+            ),
+            hazards=_VMEM_LOAD_WAIT_HAZARDS,
+            flags=(ScheduleClassFlag.MAY_LOAD, ScheduleClassFlag.MAY_STORE),
+            model_quality=ModelQuality.FALLBACK,
         ),
         ScheduleClass(
             _SCHEDULE_MFMA,

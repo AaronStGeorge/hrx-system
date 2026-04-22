@@ -11,6 +11,7 @@ import pytest
 from loom.target.arch.amdgpu.descriptor_overlay import (
     AmdgpuDescriptorOverlay,
     AmdgpuDescriptorOverlayError,
+    AmdgpuIgnoredOperandOverlay,
     AmdgpuImplicitOperandOverlay,
     AmdgpuOperandOverlay,
     materialize_amdgpu_descriptor_overlay,
@@ -324,6 +325,72 @@ def test_materialize_rejects_operand_role_mismatch() -> None:
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
         match="maps XML field 'SDST' to low operand 'dst' as input",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_accepts_ignored_fixed_binary_operand() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    descriptor = materialize_amdgpu_descriptor_overlay(
+        spec,
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.fixed_vdst",
+            instruction_name="BUFFER_LOAD_DWORD",
+            mnemonic="buffer_load_dword",
+            encoding_name="ENC_VBUFFER",
+            semantic_tag="memory.load.fixed_vdst",
+            schedule_class="amdgpu.vmem.load",
+            operands=(
+                AmdgpuOperandOverlay("VADDR", _operand("vaddr", _VGPR_ALT)),
+                AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+                AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
+            ),
+            ignored_operands=(
+                AmdgpuIgnoredOperandOverlay(
+                    "VDATA",
+                    ignore_reason="covered-by-target-specific-side-effect",
+                    fixed_encoding_value=0,
+                ),
+            ),
+            implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+        ),
+    )
+
+    assert [operand.field_name for operand in descriptor.operands] == [
+        "vaddr",
+        "resource",
+        "soffset",
+    ]
+    assert len(descriptor.encoding_field_values) == 1
+    assert descriptor.encoding_field_values[0].value == 0
+
+
+def test_materialize_rejects_ignored_binary_operand_without_fixed_value() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ignored_without_fixed_value",
+        instruction_name="BUFFER_LOAD_DWORD",
+        mnemonic="buffer_load_dword",
+        encoding_name="ENC_VBUFFER",
+        semantic_tag="memory.load.fixed_vdst",
+        schedule_class="amdgpu.vmem.load",
+        operands=(
+            AmdgpuOperandOverlay("VADDR", _operand("vaddr", _VGPR_ALT)),
+            AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+            AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
+        ),
+        ignored_operands=(
+            AmdgpuIgnoredOperandOverlay(
+                "VDATA",
+                ignore_reason="covered-by-target-specific-side-effect",
+            ),
+        ),
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="ignores binary microcode field 'VDATA' without a fixed encoding value",
     ):
         materialize_amdgpu_descriptor_overlay(spec, overlay)
 

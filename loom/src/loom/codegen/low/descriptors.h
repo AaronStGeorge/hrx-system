@@ -416,7 +416,8 @@ typedef struct loom_low_effect_t {
   uint16_t scope_id;
   // Effect flags used by scheduling and verification.
   loom_low_effect_flags_t flags;
-  // Target counter identifier for counter effects.
+  // Target counter identifier for counter effects, or a target-owned
+  // completion-counter override for memory effects.
   uint16_t counter_id;
   // Access width in bits, or zero when not width-specific.
   uint16_t width_bits;

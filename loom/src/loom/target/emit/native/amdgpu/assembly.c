@@ -232,6 +232,50 @@ static iree_status_t loom_amdgpu_descriptor_has_effect(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_descriptor_has_memory_effect(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, loom_low_effect_kind_t kind,
+    loom_low_memory_space_t memory_space, bool* out_has_effect) {
+  *out_has_effect = false;
+  if (descriptor->effect_count == 0) {
+    return iree_ok_status();
+  }
+  if (descriptor->effect_start > descriptor_set->effect_count ||
+      descriptor->effect_count >
+          descriptor_set->effect_count - descriptor->effect_start) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU descriptor effect range is out of range");
+  }
+  if (descriptor_set->effects == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU descriptor effects table is missing");
+  }
+  for (uint16_t i = 0; i < descriptor->effect_count; ++i) {
+    const loom_low_effect_t* effect =
+        &descriptor_set->effects[descriptor->effect_start + i];
+    if (effect->kind == kind && effect->memory_space == memory_space) {
+      *out_has_effect = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_descriptor_is_global_to_lds(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, bool* out_is_global_to_lds) {
+  bool has_global_read = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_memory_effect(
+      descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_READ,
+      LOOM_LOW_MEMORY_SPACE_GLOBAL, &has_global_read));
+  bool has_workgroup_write = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_memory_effect(
+      descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_WRITE,
+      LOOM_LOW_MEMORY_SPACE_WORKGROUP, &has_workgroup_write));
+  *out_is_global_to_lds = has_global_read && has_workgroup_write;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_descriptor_uses_resource_kind(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, loom_low_resource_kind_t kind,
@@ -616,6 +660,22 @@ static iree_status_t loom_amdgpu_append_global_load_packet(
       iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(context, 0));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  if (loom_amdgpu_descriptor_uses_global_scalar_base_format(context)) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "off"));
+  }
+  return loom_amdgpu_append_offset_suffix(context);
+}
+
+static iree_status_t loom_amdgpu_append_global_load_lds_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
   if (loom_amdgpu_descriptor_uses_global_scalar_base_format(context)) {
@@ -1137,6 +1197,13 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
       descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_WRITE,
       &has_write_effect));
   if (has_read_effect && has_write_effect) {
+    bool is_global_to_lds = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_is_global_to_lds(
+        descriptor_set, descriptor, &is_global_to_lds));
+    if (is_global_to_lds &&
+        loom_amdgpu_descriptor_uses_global_pointer_format(descriptor)) {
+      return loom_amdgpu_append_global_load_lds_packet(context);
+    }
     iree_string_view_t key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_key(context, &key));
     return iree_make_status(

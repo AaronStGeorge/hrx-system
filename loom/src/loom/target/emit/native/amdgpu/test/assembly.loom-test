@@ -214,7 +214,6 @@ ds_write_b128
 s_waitcnt
 s_barrier
 ds_read_b128
-s_waitcnt
 s_endpgm
 
 // ====
@@ -337,4 +336,38 @@ ds_write_b64
 ds_write_b96
 ds_write_b64
 ds_write_b64
+s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly @gfx950_global_load_lds waits=none
+target.profile @gfx950_target preset("amdgpu-gfx950")
+
+low.func.def target(@gfx950_target) @gfx950_global_load_lds(%addr64 : reg<amdgpu.vgpr x2>, %addr32 : reg<amdgpu.vgpr>, %saddr : reg<amdgpu.sgpr x2>, %m0 : reg<amdgpu.m0>) {
+  low.op<amdgpu.global_load_lds_dword>(%addr64, %m0) {offset = 4} : (reg<amdgpu.vgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%addr32, %saddr, %m0) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  global_load_lds_dword v[0:1], off offset:4
+  global_load_lds_dwordx4 v2, s[0:1] offset:16
+  s_endpgm
+
+// ====
+// RUN: emit amdgpu-assembly-mnemonics @gfx950_global_load_lds_barrier
+target.profile @gfx950_target preset("amdgpu-gfx950")
+
+low.func.def target(@gfx950_target) @gfx950_global_load_lds_barrier(%global_addr : reg<amdgpu.vgpr x2>, %lds_addr : reg<amdgpu.vgpr>, %m0 : reg<amdgpu.m0>) {
+  low.op<amdgpu.global_load_lds_dwordx4>(%global_addr, %m0) {offset = 0} : (reg<amdgpu.vgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.s_barrier>() : ()
+  %loaded = low.op<amdgpu.ds_read_b128>(%lds_addr) {offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  low.return
+}
+
+// ----
+global_load_lds_dwordx4
+s_waitcnt
+s_barrier
+ds_read_b128
 s_endpgm

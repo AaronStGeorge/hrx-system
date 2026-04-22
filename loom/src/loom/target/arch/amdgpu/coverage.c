@@ -304,8 +304,8 @@ static const loom_target_coverage_row_t kLoomAmdgpuTargetCoverageRows[] = {
 
     LOOM_AMDGPU_GFX950_ROW("memory.async", "global-load-lds-async-tdm",
                            LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
-                           LOOM_TARGET_COVERAGE_PHASE_NONE,
-                           "descriptor-async-global-to-lds-missing"),
+                           LOOM_AMDGPU_AUTHORED_LOW_BINARY_PHASES,
+                           "source-lower-async-global-to-lds-missing"),
     LOOM_AMDGPU_GFX950_ROW("memory.transpose", "ds-read-tr",
                            LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
                            LOOM_AMDGPU_AUTHORED_LOW_BINARY_PHASES,

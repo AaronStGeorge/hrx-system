@@ -80,6 +80,7 @@ loom_cc_library(
     "descriptor_test_util.h"
   DEPS
     ::descriptor_ids
+    ::wait_plan
     loom::src::loom::codegen::low::descriptors
     iree::testing::gtest
   TESTONLY

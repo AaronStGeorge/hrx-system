@@ -54,6 +54,13 @@ class AmdgpuOperandOverlay:
 
 
 @dataclass(frozen=True, slots=True)
+class AmdgpuIgnoredOperandOverlay:
+    xml_field_name: str
+    ignore_reason: str
+    fixed_encoding_value: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class AmdgpuImplicitOperandOverlay:
     operand_type: str
     descriptor_operand: Operand | None = None
@@ -72,6 +79,7 @@ class AmdgpuDescriptorOverlay:
     semantic_tag: str
     schedule_class: str
     operands: tuple[AmdgpuOperandOverlay, ...]
+    ignored_operands: tuple[AmdgpuIgnoredOperandOverlay, ...] = ()
     implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = ()
     encoding_condition: str = "default"
     mnemonic: str | None = None
@@ -143,6 +151,14 @@ def materialize_amdgpu_descriptor_overlay(
                 value,
             )
             for field_name, value in overlay.fixed_encoding_fields
+        )
+        + tuple(
+            EncodingFieldValue(
+                amdgpu_encoding_field_id(ignored_operand.xml_field_name),
+                ignored_operand.fixed_encoding_value,
+            )
+            for ignored_operand in overlay.ignored_operands
+            if ignored_operand.fixed_encoding_value is not None
         ),
         asm_forms=_asm_forms_for_overlay(overlay),
         effects=overlay.effects,
@@ -277,6 +293,31 @@ def _validate_operand_overlay(
             )
         _validate_operand_role(overlay, operand_overlay, xml_operand)
         covered_fields.add(operand_overlay.xml_field_name)
+
+    for ignored_operand in overlay.ignored_operands:
+        xml_operand = xml_operands.get(ignored_operand.xml_field_name)
+        if xml_operand is None:
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' ignores missing "
+                f"XML operand field '{ignored_operand.xml_field_name}' on "
+                f"instruction '{instruction.name}' encoding '{encoding.encoding_name}'"
+            )
+        if not ignored_operand.ignore_reason:
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' ignores XML "
+                f"operand field '{ignored_operand.xml_field_name}' without a "
+                "named reason"
+            )
+        if (
+            xml_operand.is_binary_microcode_required
+            and ignored_operand.fixed_encoding_value is None
+        ):
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' ignores binary "
+                f"microcode field '{ignored_operand.xml_field_name}' without a "
+                "fixed encoding value"
+            )
+        covered_fields.add(ignored_operand.xml_field_name)
 
     for immediate_field in overlay.immediate_fields:
         xml_operand = xml_operands.get(immediate_field)
@@ -495,6 +536,14 @@ def _validate_unique_overlay_fields(overlay: AmdgpuDescriptorOverlay) -> None:
                 f"'{operand_overlay.xml_field_name}'"
             )
         covered_fields.add(operand_overlay.xml_field_name)
+    for ignored_operand in overlay.ignored_operands:
+        if ignored_operand.xml_field_name in covered_fields:
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' repeats XML field "
+                f"'{ignored_operand.xml_field_name}' across operands and ignored "
+                "operands"
+            )
+        covered_fields.add(ignored_operand.xml_field_name)
     for immediate_field in overlay.immediate_fields:
         if immediate_field in covered_fields:
             raise AmdgpuDescriptorOverlayError(
