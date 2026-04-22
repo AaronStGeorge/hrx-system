@@ -256,7 +256,7 @@ iree_status_t loom_amdgpu_lower_vector_bitfield_extract(
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_type_t source_type = loom_module_value_type(module, select.source);
   const uint32_t lane_count = loom_amdgpu_vector_i32_lane_count(source_type);
-  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES) {
+  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "preflight accepted unsupported AMDGPU "
                             "vector.bitfield.extract lane count");
@@ -275,7 +275,7 @@ iree_status_t loom_amdgpu_lower_vector_bitfield_extract(
     return loom_low_lower_bind_value(context, select.result, low_result);
   }
 
-  loom_value_id_t lane_results[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES];
+  loom_value_id_t lane_results[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
     loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
@@ -313,7 +313,7 @@ iree_status_t loom_amdgpu_lower_vector_bitfield_insert(
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_type_t base_type = loom_module_value_type(module, select.base);
   const uint32_t lane_count = loom_amdgpu_vector_i32_lane_count(base_type);
-  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES) {
+  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "preflight accepted unsupported AMDGPU "
                             "vector.bitfield.insert lane count");
@@ -336,7 +336,7 @@ iree_status_t loom_amdgpu_lower_vector_bitfield_insert(
     return loom_low_lower_bind_value(context, select.result, low_result);
   }
 
-  loom_value_id_t lane_results[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES];
+  loom_value_id_t lane_results[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
     loom_value_id_t field_lane = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(

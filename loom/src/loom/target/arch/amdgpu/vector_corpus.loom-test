@@ -161,6 +161,20 @@ func.def target(@gfx11_q6_pack_dot_shape_target) @amdgpu_q6_pack_dot_shape(%low_
 }
 
 // ====
+// RUN: emit source-low @amdgpu_q4_chunk_dot2_shape output=none
+target.profile @gfx11_q4_chunk_dot2_shape_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_q4_chunk_dot2_shape_target) @amdgpu_q4_chunk_dot2_shape(%lhs_packed: vector<1xi32>, %rhs_packed: vector<2xi32>, %acc: vector<2xi32>) -> (vector<2xi32>) {
+  %lhs_i32 = vector.bitunpacku<4> %lhs_packed : vector<1xi32> -> vector<8xi32>
+  %rhs_i32 = vector.bitunpacku<8> %rhs_packed : vector<2xi32> -> vector<8xi32>
+  %lhs = vector.bitpack<8> %lhs_i32 : vector<8xi32> -> vector<8xi8>
+  %rhs = vector.bitpack<8> %rhs_i32 : vector<8xi32> -> vector<8xi8>
+  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<8xi8>, vector<8xi8>, vector<2xi32>
+  func.return %dot : vector<2xi32>
+}
+
+// ====
 // RUN: emit source-low @amdgpu_packed_i8_dot_shape output=none
 target.profile @gfx11_packed_i8_dot_shape_target preset("amdgpu-gfx11")
 

@@ -172,7 +172,7 @@ iree_status_t loom_amdgpu_lower_vector_dot4i(loom_low_lower_context_t* context,
 
   loom_type_t group_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &group_type));
-  loom_value_id_t group_results[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES];
+  loom_value_id_t group_results[LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS];
   for (uint32_t i = 0; i < group_count; ++i) {
     loom_value_id_t group_lhs = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(context, source_op, low_lhs,

@@ -396,8 +396,8 @@ static iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
   if (iree_any_bit_set(rejection_bits,
                        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_TYPE)) {
     return IREE_SV(
-        "AMDGPU buffer memory lowering currently supports one-lane "
-        "and four-lane 32-bit vectors");
+        "AMDGPU buffer memory lowering currently supports up to four 32-bit "
+        "memory lanes");
   }
   if (iree_any_bit_set(
           rejection_bits,
@@ -1574,7 +1574,8 @@ static bool loom_amdgpu_memory_access_select(
   }
 
   out_access->vgpr_count = loom_amdgpu_vector_32bit_lane_count(vector_type);
-  if (out_access->vgpr_count == 0) {
+  if (out_access->vgpr_count == 0 ||
+      out_access->vgpr_count > LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES) {
     out_diagnostic->rejection_bits |=
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_TYPE;
     return false;

@@ -565,7 +565,7 @@ static iree_status_t loom_amdgpu_bind_vgpr_u32_lane_constants(
     loom_value_id_t source_result, const uint32_t* lane_bit_patterns,
     uint32_t lane_count) {
   IREE_ASSERT_ARGUMENT(lane_bit_patterns);
-  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES) {
+  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "preflight accepted unsupported AMDGPU vector "
                             "constant lane count");
@@ -573,7 +573,7 @@ static iree_status_t loom_amdgpu_bind_vgpr_u32_lane_constants(
 
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
-  loom_value_id_t low_lane_values[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES];
+  loom_value_id_t low_lane_values[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
         context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
@@ -601,13 +601,13 @@ static iree_status_t loom_amdgpu_bind_vgpr_i32_lane_constants(
     loom_value_id_t source_result, const int64_t* lane_values,
     uint32_t lane_count) {
   IREE_ASSERT_ARGUMENT(lane_values);
-  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES) {
+  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "preflight accepted unsupported AMDGPU vector "
                             "constant lane count");
   }
 
-  uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES];
+  uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
     if (lane_values[i] < INT32_MIN || lane_values[i] > INT32_MAX) {
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -624,7 +624,7 @@ static iree_status_t loom_amdgpu_bind_vgpr_f32_lane_constant(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_result, uint32_t lane_bit_pattern,
     uint32_t lane_count) {
-  uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES];
+  uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
     lane_bit_patterns[i] = lane_bit_pattern;
   }
@@ -700,7 +700,7 @@ static iree_status_t loom_amdgpu_lower_vector_constant(
   }
   if (i32_lane_count > 1) {
     const int64_t source_value = loom_vector_constant_value(source_op).i64;
-    int64_t lane_values[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES];
+    int64_t lane_values[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
     for (uint32_t i = 0; i < i32_lane_count; ++i) {
       lane_values[i] = source_value;
     }
@@ -728,7 +728,7 @@ static iree_status_t loom_amdgpu_lower_vector_iota(
   const loom_value_id_t source_result = loom_vector_iota_result(source_op);
   const uint32_t lane_count = loom_amdgpu_vector_i32_lane_count(
       loom_module_value_type(module, source_result));
-  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES) {
+  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "preflight accepted unsupported AMDGPU vector "
                             "iota lane count");
@@ -744,7 +744,7 @@ static iree_status_t loom_amdgpu_lower_vector_iota(
                             "iota base/step");
   }
 
-  int64_t lane_values[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES];
+  int64_t lane_values[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
     if (!loom_amdgpu_iota_i32_lane_value(base, step, i, &lane_values[i])) {
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
@@ -827,7 +827,7 @@ static iree_status_t loom_amdgpu_lower_vector_binary_op_ordered(
     return loom_amdgpu_lower_binary_op(context, source_op, descriptor_id,
                                        source_lhs, source_rhs, source_result);
   }
-  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES) {
+  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "preflight accepted unsupported AMDGPU vector "
                             "binary lane count");
@@ -842,7 +842,7 @@ static iree_status_t loom_amdgpu_lower_vector_binary_op_ordered(
 
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
-  loom_value_id_t lane_results[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES];
+  loom_value_id_t lane_results[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
     loom_value_id_t lane_lhs = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(context, source_op, low_lhs,
@@ -893,7 +893,7 @@ static iree_status_t loom_amdgpu_lower_vector_ternary_op(
                                         source_a, source_b, source_c,
                                         source_result);
   }
-  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES) {
+  if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "preflight accepted unsupported AMDGPU vector "
                             "ternary lane count");
@@ -908,7 +908,7 @@ static iree_status_t loom_amdgpu_lower_vector_ternary_op(
 
   loom_type_t lane_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
-  loom_value_id_t lane_results[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES];
+  loom_value_id_t lane_results[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
     loom_value_id_t lane_a = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(context, source_op, low_a,
@@ -1336,7 +1336,7 @@ static iree_status_t loom_amdgpu_lower_vector_from_elements(
       loom_module_value_type(module, source_result);
   const bool result_is_i32_vector =
       loom_type_element_type(source_result_type) == LOOM_SCALAR_TYPE_I32;
-  loom_value_id_t low_elements[LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES] = {0};
+  loom_value_id_t low_elements[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES] = {0};
   for (uint32_t i = 0; i < elements.count; ++i) {
     if (result_is_i32_vector) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(

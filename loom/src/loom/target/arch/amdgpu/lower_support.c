@@ -52,7 +52,7 @@ uint32_t loom_amdgpu_static_vector_lane_count(loom_type_t type,
 static uint32_t loom_amdgpu_vector_lane_count(loom_type_t type,
                                               loom_scalar_type_t element_type) {
   return loom_amdgpu_static_vector_lane_count(
-      type, element_type, LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES);
+      type, element_type, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
 }
 
 static bool loom_amdgpu_type_is_vector_32bit_lane_range(loom_type_t type) {
@@ -77,8 +77,8 @@ uint32_t loom_amdgpu_vector_f32_lane_count(loom_type_t type) {
 }
 
 uint32_t loom_amdgpu_vector_i8_lane_count(loom_type_t type) {
-  return loom_amdgpu_static_vector_lane_count(
-      type, LOOM_SCALAR_TYPE_I8, LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES * 4);
+  return loom_amdgpu_static_vector_lane_count(type, LOOM_SCALAR_TYPE_I8,
+                                              LOOM_AMDGPU_MAX_PACKED_I8_LANES);
 }
 
 static uint32_t loom_amdgpu_packed_register_count(loom_type_t type) {
@@ -102,7 +102,7 @@ static uint32_t loom_amdgpu_packed_register_count(loom_type_t type) {
   }
   const int64_t register_count = total_bit_count / 32;
   if (register_count < 1 ||
-      register_count > (int64_t)LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES) {
+      register_count > (int64_t)LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS) {
     return 0;
   }
   return (uint32_t)register_count;
@@ -388,7 +388,7 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
       context, source_op, IREE_SV("type"), IREE_SV("source"),
       IREE_SV("AMDGPU lowering currently supports only i32 scalar values, "
               "address scalar values, rank-1 static i32/f32 vectors with "
-              "1 to 4 lanes, and rank-1 static vectors that pack to 1 to 4 "
+              "1 to 8 lanes, and rank-1 static vectors that pack to 1 to 4 "
               "32-bit registers"));
 }
 

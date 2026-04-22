@@ -27,7 +27,19 @@
 extern "C" {
 #endif
 
-#define LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES 4u
+// Maximum number of 32-bit lanes supported by direct memory descriptors.
+#define LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES 4u
+
+// Maximum number of scalarized 32-bit vector lanes the source-to-low path will
+// keep live as individual VGPRs.
+#define LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES 8u
+
+// Maximum number of packed 32-bit registers accepted for packed byte payloads.
+#define LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS 4u
+
+// Maximum number of packed i8 lanes accepted for packed dot payloads.
+#define LOOM_AMDGPU_MAX_PACKED_I8_LANES \
+  (LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS * 4u)
 
 // Returns true when the source type is a scalar i32.
 bool loom_amdgpu_type_is_i32(loom_type_t type);
