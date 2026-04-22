@@ -467,6 +467,9 @@ static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
           context, loom_vector_fmaf_a(source_op), loom_vector_fmaf_b(source_op),
           loom_vector_fmaf_c(source_op), loom_vector_fmaf_result(source_op));
       return iree_ok_status();
+    case LOOM_OP_VECTOR_REDUCE:
+      *out_handled = loom_amdgpu_can_lower_vector_reduce(context, source_op);
+      return iree_ok_status();
     case LOOM_OP_VECTOR_DOT4I:
       *out_handled = loom_amdgpu_can_lower_vector_dot4i(context, source_op);
       return iree_ok_status();
@@ -487,38 +490,6 @@ static iree_status_t loom_amdgpu_can_lower_op(void* user_data,
       *out_handled = false;
       return iree_ok_status();
   }
-}
-
-static iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_value, loom_value_id_t* out_low_value) {
-  IREE_ASSERT_ARGUMENT(out_low_value);
-  *out_low_value = LOOM_VALUE_ID_INVALID;
-  loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, source_value, &low_value));
-
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  const loom_type_t low_type = loom_module_value_type(module, low_value);
-  bool is_vgpr = false;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
-      context, low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &is_vgpr));
-  if (is_vgpr) {
-    *out_low_value = low_value;
-    return iree_ok_status();
-  }
-
-  int64_t value = 0;
-  if (!loom_amdgpu_value_as_i32_constant(context, source_value, &value)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "preflight accepted AMDGPU i32 value that cannot "
-                            "materialize as a VGPR operand");
-  }
-  loom_type_t vgpr_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
-  return loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
-      (uint32_t)(int32_t)value, vgpr_type, out_low_value);
 }
 
 static iree_status_t loom_amdgpu_bind_vgpr_u32_lane_constants(
@@ -1649,6 +1620,8 @@ static iree_status_t loom_amdgpu_try_lower_op(void* user_data,
       return loom_amdgpu_lower_vector_mulf(context, source_op);
     case LOOM_OP_VECTOR_FMAF:
       return loom_amdgpu_lower_vector_fmaf(context, source_op);
+    case LOOM_OP_VECTOR_REDUCE:
+      return loom_amdgpu_lower_vector_reduce(context, source_op);
     case LOOM_OP_VECTOR_DOT4I:
       return loom_amdgpu_lower_vector_dot4i(context, source_op);
     case LOOM_OP_VECTOR_EXTRACT:

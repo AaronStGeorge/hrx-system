@@ -162,6 +162,12 @@ bool loom_amdgpu_value_as_i32_constant(loom_low_lower_context_t* context,
 bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
     loom_low_lower_context_t* context, loom_value_id_t value_id);
 
+// Looks up a lowered i32 value and materializes exact source constants into
+// VGPRs when a vector-style packet cannot consume the existing lowering.
+iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value, loom_value_id_t* out_low_value);
+
 // Returns true when value is a non-zero power of two.
 bool loom_amdgpu_u32_is_power_of_two(uint32_t value);
 
@@ -224,6 +230,15 @@ bool loom_amdgpu_can_lower_vector_dot4i(loom_low_lower_context_t* context,
 // Lowers a source vector.dot4i op to AMDGPU descriptor-backed low packets.
 iree_status_t loom_amdgpu_lower_vector_dot4i(loom_low_lower_context_t* context,
                                              const loom_op_t* source_op);
+
+// Returns true when a source vector.reduce op can lower through the current
+// AMDGPU source value placement and supported reduction descriptor family.
+bool loom_amdgpu_can_lower_vector_reduce(loom_low_lower_context_t* context,
+                                         const loom_op_t* source_op);
+
+// Lowers a source vector.reduce op to AMDGPU descriptor-backed low packets.
+iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
+                                              const loom_op_t* source_op);
 
 // Verifies source vector-dot legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_vector_dot(

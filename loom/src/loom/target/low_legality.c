@@ -550,6 +550,7 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_VECTOR_NEGF:
     case LOOM_OP_VECTOR_ORI:
     case LOOM_OP_VECTOR_POISON:
+    case LOOM_OP_VECTOR_REDUCE:
     case LOOM_OP_VECTOR_REMF:
     case LOOM_OP_VECTOR_REMSI:
     case LOOM_OP_VECTOR_REMUI:

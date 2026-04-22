@@ -267,6 +267,9 @@ bool loom_amdgpu_value_prefers_vgpr(loom_low_lower_context_t* context,
              LOOM_KERNEL_DIMENSION_X;
     case LOOM_OP_VECTOR_EXTRACT:
       return true;
+    case LOOM_OP_VECTOR_REDUCE:
+      return loom_amdgpu_value_is_vector_32bit_lane_range(
+          context, loom_vector_reduce_input(defining_op));
     case LOOM_OP_SCALAR_ADDI:
       return loom_amdgpu_value_prefers_vgpr(
                  context, loom_scalar_addi_lhs(defining_op)) ||
@@ -698,6 +701,38 @@ iree_status_t loom_amdgpu_emit_const_u32(loom_low_lower_context_t* context,
       source_op->location, &low_const));
   *out_value_id = loom_low_const_result(low_const);
   return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value, loom_value_id_t* out_low_value) {
+  IREE_ASSERT_ARGUMENT(out_low_value);
+  *out_low_value = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, source_value, &low_value));
+
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_type_t low_type = loom_module_value_type(module, low_value);
+  bool is_vgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+      context, low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &is_vgpr));
+  if (is_vgpr) {
+    *out_low_value = low_value;
+    return iree_ok_status();
+  }
+
+  int64_t value = 0;
+  if (!loom_amdgpu_value_as_i32_constant(context, source_value, &value)) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "preflight accepted AMDGPU i32 value that cannot "
+                            "materialize as a VGPR operand");
+  }
+  loom_type_t vgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
+  return loom_amdgpu_emit_const_u32(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+      (uint32_t)(int32_t)value, vgpr_type, out_low_value);
 }
 
 iree_status_t loom_amdgpu_emit_low_slice(loom_low_lower_context_t* context,
