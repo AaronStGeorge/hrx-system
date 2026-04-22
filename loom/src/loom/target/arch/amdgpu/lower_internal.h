@@ -185,6 +185,11 @@ bool loom_amdgpu_value_as_i32_constant(loom_low_lower_context_t* context,
                                        loom_value_id_t value_id,
                                        int64_t* out_value);
 
+// Extracts a source address scalar constant.
+bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,
+                                           loom_value_id_t value_id,
+                                           int64_t* out_value);
+
 // Returns true when a source scalar i32 value can be materialized as a VGPR
 // operand for vector-style packets.
 bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
