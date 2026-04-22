@@ -99,8 +99,8 @@ static bool loom_amdgpu_can_lower_vector_iota(loom_low_lower_context_t* context,
 static bool loom_amdgpu_can_lower_buffer_view(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op) {
   int64_t unused_byte_offset = 0;
-  return loom_amdgpu_value_is_32bit_view(context,
-                                         loom_buffer_view_result(source_op)) &&
+  return loom_amdgpu_value_is_byte_addressable_view(
+             context, loom_buffer_view_result(source_op)) &&
          loom_amdgpu_module_value_as_exact_index_constant(
              loom_low_lower_context_module(context),
              loom_buffer_view_byte_offset(source_op), &unused_byte_offset) &&
@@ -2060,12 +2060,12 @@ static iree_status_t loom_amdgpu_low_legality_verify_buffer_view(
   *out_handled = true;
 
   const loom_module_t* module = loom_target_low_legality_module(context);
-  if (!loom_amdgpu_type_is_32bit_view(
+  if (!loom_amdgpu_type_is_byte_addressable_view(
           loom_module_value_type(module, loom_buffer_view_result(op)))) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("memory"), loom_op_name(module, op),
         IREE_SV("AMDGPU buffer memory lowering currently requires typed views "
-                "over 32-bit elements"));
+                "over byte-addressable scalar elements"));
   }
   int64_t unused_byte_offset = 0;
   if (!loom_amdgpu_module_value_as_exact_index_constant(

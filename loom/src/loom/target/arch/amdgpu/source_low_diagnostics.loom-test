@@ -78,3 +78,31 @@ func.def target(@gfx11_lds_conflict_risk_diagnostics_target) @lds_conflict_risk_
   vector.store %loaded, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
   func.return
 }
+
+// ====
+// RUN: emit source-low @i8x2_load_rejected output=low
+target.profile @gfx11_i8x2_load_rejected_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_i8x2_load_rejected_target) @i8x2_load_rejected(%input: buffer) -> (vector<2xi8>) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<2xi8, #dense>
+  // ERROR@+1: BACKEND/001 "requires the vector footprint to exactly fill complete 32-bit memory registers"
+  %loaded = vector.load %input_view[0] : view<2xi8, #dense> -> vector<2xi8>
+  func.return %loaded : vector<2xi8>
+}
+
+// ====
+// RUN: emit source-low @lds_i8x8_strided_load_rejected output=low
+target.profile @gfx11_lds_i8x8_strided_load_rejected_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_lds_i8x8_strided_load_rejected_target) @lds_i8x8_strided_load_rejected() -> (vector<8xi8>) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 4096 : offset
+  %layout = encoding.layout.strided [8, 2] : encoding<layout>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64x8xi8, %layout>
+  // ERROR@+1: BACKEND/001 "requires unit stride along the vector axis"
+  %loaded = vector.load %scratch_view[%tid, 0] : view<64x8xi8, %layout> -> vector<8xi8>
+  func.return %loaded : vector<8xi8>
+}

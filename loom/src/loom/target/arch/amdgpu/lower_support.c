@@ -124,10 +124,13 @@ bool loom_amdgpu_type_packed_integer_storage(loom_type_t type,
   return true;
 }
 
-bool loom_amdgpu_type_is_32bit_view(loom_type_t type) {
-  return loom_type_is_view(type) &&
-         (loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32 ||
-          loom_type_element_type(type) == LOOM_SCALAR_TYPE_F32);
+bool loom_amdgpu_type_is_byte_addressable_view(loom_type_t type) {
+  if (!loom_type_is_view(type)) {
+    return false;
+  }
+  const int32_t element_bit_count =
+      loom_scalar_type_bitwidth(loom_type_element_type(type));
+  return element_bit_count > 0 && (element_bit_count % 8) == 0;
 }
 
 bool loom_amdgpu_value_is_i32(loom_low_lower_context_t* context,
@@ -148,15 +151,9 @@ bool loom_amdgpu_value_is_f32(loom_low_lower_context_t* context,
       loom_module_value_type(loom_low_lower_context_module(context), value_id));
 }
 
-bool loom_amdgpu_value_is_vector_32bit_lane_range(
+bool loom_amdgpu_value_is_byte_addressable_view(
     loom_low_lower_context_t* context, loom_value_id_t value_id) {
-  return loom_amdgpu_type_is_vector_32bit_lane_range(
-      loom_module_value_type(loom_low_lower_context_module(context), value_id));
-}
-
-bool loom_amdgpu_value_is_32bit_view(loom_low_lower_context_t* context,
-                                     loom_value_id_t value_id) {
-  return loom_amdgpu_type_is_32bit_view(
+  return loom_amdgpu_type_is_byte_addressable_view(
       loom_module_value_type(loom_low_lower_context_module(context), value_id));
 }
 

@@ -113,6 +113,8 @@ typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
   ((uint32_t)1u << 25)
 #define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_GLOBAL_FALLBACK_OFFSET_RANGE \
   ((uint32_t)1u << 26)
+#define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PACKED_REGISTER_FOOTPRINT \
+  ((uint32_t)1u << 27)
 
 typedef struct loom_amdgpu_memory_access_diagnostic_t {
   // Rejection bits explaining why an access is not legal for this target.
@@ -183,6 +185,8 @@ typedef struct loom_amdgpu_memory_access_t {
   uint32_t vector_lane_byte_stride;
   // Number of 32-bit VGPR lanes moved by the selected memory packet.
   uint32_t vgpr_count;
+  // Number of bytes moved by the selected memory packet.
+  uint32_t packet_byte_count;
   // Stable descriptor ID selected for the active descriptor set.
   uint64_t descriptor_id;
 } loom_amdgpu_memory_access_t;
@@ -301,7 +305,9 @@ loom_amdgpu_memory_access_bank_summary(
   summary.conflict_degree = loom_amdgpu_gcd_u32(summary.bank_stride_words,
                                                 LOOM_AMDGPU_LDS_BANK_COUNT);
   const uint32_t vector_footprint_bytes =
-      access->element_byte_count * iree_max(access->vgpr_count, 1u);
+      access->packet_byte_count != 0
+          ? access->packet_byte_count
+          : access->element_byte_count * iree_max(access->vgpr_count, 1u);
   if (summary.conflict_degree == 1) {
     summary.reason = access->dynamic_index_byte_stride > vector_footprint_bytes
                          ? IREE_SV("padded-bank-conflict-free")
@@ -384,7 +390,7 @@ static iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
   if (iree_any_bit_set(rejection_bits,
                        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_ELEMENT_WIDTH)) {
     return IREE_SV(
-        "AMDGPU buffer memory lowering currently requires 32-bit "
+        "AMDGPU buffer memory lowering requires byte-addressable "
         "view elements");
   }
   if (iree_any_bit_set(rejection_bits,
@@ -397,7 +403,7 @@ static iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
                        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_TYPE)) {
     return IREE_SV(
         "AMDGPU buffer memory lowering currently supports up to four 32-bit "
-        "memory lanes");
+        "memory registers");
   }
   if (iree_any_bit_set(
           rejection_bits,
@@ -467,6 +473,13 @@ static iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
     return IREE_SV(
         "AMDGPU buffer memory lowering rejected this access and global pointer "
         "fallback cannot encode the static byte offset");
+  }
+  if (iree_any_bit_set(
+          rejection_bits,
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PACKED_REGISTER_FOOTPRINT)) {
+    return IREE_SV(
+        "AMDGPU packed integer memory lowering requires the vector footprint "
+        "to exactly fill complete 32-bit memory registers");
   }
   if (iree_any_bit_set(
           rejection_bits,
@@ -612,6 +625,40 @@ static bool loom_amdgpu_memory_access_static_byte_offset_is_usable(
     return false;
   }
   return true;
+}
+
+static bool loom_amdgpu_memory_access_register_footprint(
+    loom_type_t vector_type, loom_amdgpu_memory_access_t* access,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  uint32_t register_count = loom_amdgpu_vector_32bit_lane_count(vector_type);
+  if (register_count != 0) {
+    access->vgpr_count = register_count;
+    access->packet_byte_count = register_count * 4u;
+    return true;
+  }
+
+  uint32_t payload_bit_count = 0;
+  if (!loom_amdgpu_type_packed_integer_storage(vector_type, &payload_bit_count,
+                                               &register_count)) {
+    diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_TYPE;
+    return false;
+  }
+  const uint32_t packet_bit_count = register_count * 32u;
+  if (payload_bit_count != packet_bit_count) {
+    diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PACKED_REGISTER_FOOTPRINT;
+    return false;
+  }
+  access->vgpr_count = register_count;
+  access->packet_byte_count = packet_bit_count / 8u;
+  return true;
+}
+
+static bool loom_amdgpu_memory_access_has_32bit_lanes(
+    const loom_amdgpu_memory_access_t* access) {
+  return access->packet_byte_count ==
+         access->element_byte_count * iree_max(access->vgpr_count, 1u);
 }
 
 static bool loom_amdgpu_memory_access_view_reference(
@@ -1560,7 +1607,8 @@ static bool loom_amdgpu_memory_access_select(
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_LAYOUT;
       return false;
   }
-  if (vector_access.static_element_byte_count != 4) {
+  if (vector_access.static_element_byte_count <= 0 ||
+      vector_access.static_element_byte_count > UINT32_MAX) {
     out_diagnostic->rejection_bits |=
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_ELEMENT_WIDTH;
     return false;
@@ -1573,7 +1621,10 @@ static bool loom_amdgpu_memory_access_select(
     return false;
   }
 
-  out_access->vgpr_count = loom_amdgpu_vector_32bit_lane_count(vector_type);
+  if (!loom_amdgpu_memory_access_register_footprint(vector_type, out_access,
+                                                    out_diagnostic)) {
+    return false;
+  }
   if (out_access->vgpr_count == 0 ||
       out_access->vgpr_count > LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES) {
     out_diagnostic->rejection_bits |=
@@ -1752,7 +1803,8 @@ static bool loom_amdgpu_memory_access_select(
       return true;
     }
     if (out_access->vector_lane_byte_stride != out_access->element_byte_count) {
-      if (out_access->vgpr_count != 2) {
+      if (out_access->vgpr_count != 2 ||
+          !loom_amdgpu_memory_access_has_32bit_lanes(out_access)) {
         out_diagnostic->rejection_bits |=
             LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_AXIS_STRIDE;
         return false;
@@ -1951,11 +2003,7 @@ bool loom_amdgpu_can_lower_vector_load(loom_low_lower_context_t* context,
                                        const loom_op_t* source_op) {
   loom_amdgpu_memory_access_t access;
   const loom_func_like_t no_source_function = {0};
-  if (!loom_amdgpu_value_is_32bit_view(context,
-                                       loom_vector_load_view(source_op)) ||
-      !loom_amdgpu_value_is_vector_32bit_lane_range(
-          context, loom_vector_load_result(source_op)) ||
-      !loom_amdgpu_load_memory_access_select_with_source_function(
+  if (!loom_amdgpu_load_memory_access_select_with_source_function(
           context, source_op, no_source_function, &access)) {
     return false;
   }
@@ -1967,11 +2015,7 @@ bool loom_amdgpu_can_lower_vector_store(loom_low_lower_context_t* context,
                                         const loom_op_t* source_op) {
   loom_amdgpu_memory_access_t access;
   const loom_func_like_t no_source_function = {0};
-  if (!loom_amdgpu_value_is_vector_32bit_lane_range(
-          context, loom_vector_store_value(source_op)) ||
-      !loom_amdgpu_value_is_32bit_view(context,
-                                       loom_vector_store_view(source_op)) ||
-      !loom_amdgpu_store_memory_access_select_with_source_function(
+  if (!loom_amdgpu_store_memory_access_select_with_source_function(
           context, source_op, no_source_function, &access)) {
     return false;
   }

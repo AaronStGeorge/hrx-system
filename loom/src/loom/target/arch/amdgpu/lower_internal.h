@@ -84,9 +84,9 @@ bool loom_amdgpu_type_packed_integer_storage(loom_type_t type,
                                              uint32_t* out_payload_bit_count,
                                              uint32_t* out_register_count);
 
-// Returns true when the source type is a 32-bit-element view that can map to an
-// AMDGPU HAL/global buffer resource or LDS root.
-bool loom_amdgpu_type_is_32bit_view(loom_type_t type);
+// Returns true when the source type is a byte-addressable view that can map to
+// an AMDGPU HAL/global buffer resource or LDS root.
+bool loom_amdgpu_type_is_byte_addressable_view(loom_type_t type);
 
 // Returns true when a source value has scalar i32 type.
 bool loom_amdgpu_value_is_i32(loom_low_lower_context_t* context,
@@ -100,14 +100,9 @@ bool loom_amdgpu_value_is_address_scalar(loom_low_lower_context_t* context,
 bool loom_amdgpu_value_is_f32(loom_low_lower_context_t* context,
                               loom_value_id_t value_id);
 
-// Returns true when a source value is a supported rank-1 i32/f32 vector
-// payload.
-bool loom_amdgpu_value_is_vector_32bit_lane_range(
+// Returns true when a source value has a byte-addressable view type.
+bool loom_amdgpu_value_is_byte_addressable_view(
     loom_low_lower_context_t* context, loom_value_id_t value_id);
-
-// Returns true when a source value has a 32-bit-element view type.
-bool loom_amdgpu_value_is_32bit_view(loom_low_lower_context_t* context,
-                                     loom_value_id_t value_id);
 
 // Builds a one-unit SGPR register type in the current lowering context.
 iree_status_t loom_amdgpu_make_sgpr_type(loom_low_lower_context_t* context,
