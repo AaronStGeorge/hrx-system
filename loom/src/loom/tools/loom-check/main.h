@@ -44,6 +44,10 @@ typedef struct loom_check_provider_t {
       initialize_low_lower_policy_registry;
   // Optional target-low source legality providers contributed by this provider.
   loom_target_low_legality_provider_list_t low_legality_provider_list;
+  // Optional target-low packet diagnostic providers contributed by this
+  // provider.
+  loom_target_low_packet_diagnostic_provider_list_t
+      low_packet_diagnostic_provider_list;
   // Optional emit provider table contributed by this provider.
   const loom_check_emit_provider_t* const* emit_providers;
   // Number of entries in |emit_providers|.

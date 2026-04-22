@@ -32,6 +32,7 @@
 #include "loom/target/coverage.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
+#include "loom/target/low_packet_diagnostics.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/report.h"
 #include "loom/tools/loom-check/update.h"
@@ -380,6 +381,9 @@ struct loom_check_environment_t {
       initialize_low_lower_policy_registry;
   // Optional target-low source legality providers linked into this runner.
   loom_target_low_legality_provider_list_t low_legality_provider_list;
+  // Optional target-low packet diagnostic providers linked into this runner.
+  loom_target_low_packet_diagnostic_provider_list_t
+      low_packet_diagnostic_provider_list;
   // Optional emit providers linked into this runner.
   loom_check_emit_provider_registry_t emit_providers;
   // Optional in-process RUN: run providers linked into this runner.

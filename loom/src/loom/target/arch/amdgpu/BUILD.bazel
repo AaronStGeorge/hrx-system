@@ -62,6 +62,7 @@ loom_assert_no_dependencies(
         ":matrix_contract",
         ":matrix_facts",
         ":occupancy",
+        ":packet_diagnostics",
         ":target_info",
         ":wait_packets",
         ":wait_plan",
@@ -73,6 +74,7 @@ loom_assert_no_dependencies(
     dependencies = [":low_registry"],
     targets = [
         ":occupancy",
+        ":packet_diagnostics",
         ":target_info",
         ":wait_packets",
         ":wait_plan",
@@ -99,11 +101,13 @@ loom_assert_no_dependencies(
         ":gfx950_descriptors",
         ":low_registry",
         ":matrix_contract",
+        ":packet_diagnostics",
     ],
     targets = [
         "//loom/src/loom/target:coverage",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target:low_packet_diagnostics",
         "//loom/src/loom/target:preset_registry",
         "//loom/src/loom/target:types",
     ],
@@ -115,7 +119,10 @@ loom_assert_no_dependencies(
         ":gfx11_descriptors",
         ":gfx950_descriptors",
     ],
-    targets = [":descriptor_ids"],
+    targets = [
+        ":descriptor_ids",
+        ":packet_diagnostics",
+    ],
 )
 
 loom_assert_no_dependencies(
@@ -160,6 +167,7 @@ loom_assert_no_dependencies(
         ":check_provider",
         ":loom_check_requirements",
         ":low_registry",
+        ":packet_diagnostics",
     ],
     targets = [
         "//loom/src/loom/tools/loom-check:execute",
@@ -544,6 +552,18 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "packet_diagnostics",
+    srcs = ["packet_diagnostics.c"],
+    hdrs = ["packet_diagnostics.h"],
+    deps = [
+        ":descriptor_ids",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/target:low_packet_diagnostics",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "lower",
     srcs = [
         "lower.c",
@@ -616,6 +636,7 @@ loom_cc_library(
         ":coverage",
         ":low_registry",
         ":lower",
+        ":packet_diagnostics",
         "//loom/src/loom/target/emit/native/amdgpu:loom_check",
         "//loom/src/loom/tools/loom-check:main",
         "//runtime/src/iree/base",
@@ -783,6 +804,7 @@ loom_cc_test(
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
+        "low_packet_diagnostics.loom-test",
         "source_low.loom-test",
         "source_low_diagnostics.loom-test",
         "vector_corpus.loom-test",

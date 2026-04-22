@@ -437,7 +437,9 @@ int loom_check_main(int argc, char** argv,
       "              low-descriptor-manifest, target-low-registry-manifest,\n"
       "              target-coverage-manifest, and source-low. source-low\n"
       "              accepts output=module|low|none and\n"
-      "              diagnostics=none|memory|all. Linked providers may add\n"
+      "              diagnostics=none|memory|all. low-packet-json accepts\n"
+      "              output=json|none, strategy=source|pressure, and\n"
+      "              diagnostics=none|packets|all. Linked providers may add\n"
       "              more.\n"
       "  run <args>  Execute input with a linked run provider and compare "
       "output.\n"
@@ -555,6 +557,7 @@ enum {
   LOOM_CHECK_PROVIDER_TARGET_BUNDLE_CAPACITY = 256,
   LOOM_CHECK_PROVIDER_LOW_LOWER_POLICY_CAPACITY = 128,
   LOOM_CHECK_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY = 64,
+  LOOM_CHECK_PROVIDER_LOW_PACKET_DIAGNOSTIC_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_EMIT_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_RUN_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_REQUIREMENT_PROVIDER_CAPACITY = 64,
@@ -585,6 +588,13 @@ typedef struct loom_check_provider_environment_state_t {
       [LOOM_CHECK_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY];
   // Number of entries in |low_legality_providers|.
   iree_host_size_t low_legality_provider_count;
+  // Target-low packet diagnostic provider table assembled once for the
+  // environment.
+  const loom_target_low_packet_diagnostic_provider_t*
+      low_packet_diagnostic_providers
+          [LOOM_CHECK_PROVIDER_LOW_PACKET_DIAGNOSTIC_PROVIDER_CAPACITY];
+  // Number of entries in |low_packet_diagnostic_providers|.
+  iree_host_size_t low_packet_diagnostic_provider_count;
   // Emit provider table assembled once for the environment.
   const loom_check_emit_provider_t*
       emit_providers[LOOM_CHECK_PROVIDER_EMIT_PROVIDER_CAPACITY];
@@ -647,6 +657,8 @@ static iree_status_t loom_check_provider_validate(
   }
   IREE_RETURN_IF_ERROR(loom_target_low_legality_provider_list_verify(
       provider->low_legality_provider_list));
+  IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostic_provider_list_verify(
+      provider->low_packet_diagnostic_provider_list));
   return iree_ok_status();
 }
 
@@ -664,6 +676,26 @@ static iree_status_t loom_check_provider_append_low_legality_providers(
        ++i) {
     state->low_legality_providers[state->low_legality_provider_count++] =
         provider->low_legality_provider_list.values[i];
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_provider_append_low_packet_diagnostic_providers(
+    loom_check_provider_environment_state_t* state,
+    const loom_check_provider_t* provider) {
+  if (state->low_packet_diagnostic_provider_count +
+          provider->low_packet_diagnostic_provider_list.count >
+      IREE_ARRAYSIZE(state->low_packet_diagnostic_providers)) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "loom-check low packet diagnostic provider capacity exceeded");
+  }
+  for (iree_host_size_t i = 0;
+       i < provider->low_packet_diagnostic_provider_list.count; ++i) {
+    const iree_host_size_t output_index =
+        state->low_packet_diagnostic_provider_count++;
+    state->low_packet_diagnostic_providers[output_index] =
+        provider->low_packet_diagnostic_provider_list.values[i];
   }
   return iree_ok_status();
 }
@@ -750,6 +782,9 @@ static iree_status_t loom_check_provider_environment_state_initialize(
     IREE_RETURN_IF_ERROR(loom_check_provider_validate(provider, i));
     IREE_RETURN_IF_ERROR(
         loom_check_provider_append_low_legality_providers(out_state, provider));
+    IREE_RETURN_IF_ERROR(
+        loom_check_provider_append_low_packet_diagnostic_providers(out_state,
+                                                                   provider));
     IREE_RETURN_IF_ERROR(
         loom_check_provider_append_emit_providers(out_state, provider));
     IREE_RETURN_IF_ERROR(
@@ -867,6 +902,10 @@ int loom_check_provider_main(int argc, char** argv,
           },
       .low_legality_provider_list = loom_target_low_legality_provider_list_make(
           state.low_legality_providers, state.low_legality_provider_count),
+      .low_packet_diagnostic_provider_list =
+          loom_target_low_packet_diagnostic_provider_list_make(
+              state.low_packet_diagnostic_providers,
+              state.low_packet_diagnostic_provider_count),
       .emit_providers =
           {
               .providers = state.emit_providers,

@@ -161,6 +161,25 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    low_packet_diagnostics
+  HDRS
+    "low_packet_diagnostics.h"
+  SRCS
+    "low_packet_diagnostics.c"
+  DEPS
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::diagnostics
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     module_compiler
   HDRS
     "module_compiler.h"

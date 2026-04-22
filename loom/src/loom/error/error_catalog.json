@@ -5128,5 +5128,67 @@
         "kind_name": "STRING"
       }
     ]
+  },
+  {
+    "error_id": "ERR_BACKEND_018",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 18,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Target-low packet decision recorded.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' {decision} {packet_category} low packet '{packet_key}' for '@{function_name}': operands {operand_count}, results {result_count}: {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "packet_category",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "packet_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "decision",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "operand_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "result_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
   }
 ]

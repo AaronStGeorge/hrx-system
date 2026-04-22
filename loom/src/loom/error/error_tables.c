@@ -3442,6 +3442,34 @@ static const loom_error_def_t loom_err_backend_017 = {
     .param_count = 15,
 };
 
+static const loom_error_param_def_t loom_err_backend_018_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"packet_category", LOOM_PARAM_STRING},
+    {"packet_key", LOOM_PARAM_STRING},
+    {"decision", LOOM_PARAM_STRING},
+    {"operand_count", LOOM_PARAM_U32},
+    {"result_count", LOOM_PARAM_U32},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_018 = {
+    .error_id = "ERR_BACKEND_018",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 18,
+    .summary = "Target-low packet decision recorded.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "{decision} {packet_category} low packet '{packet_key}' for "
+        "'@{function_name}': operands {operand_count}, results {result_count}: "
+        "{reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_018_params,
+    .param_count = 10,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -3501,6 +3529,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_backend_009,   &loom_err_backend_010,   &loom_err_backend_011,
     &loom_err_backend_012,   &loom_err_backend_013,   &loom_err_backend_014,
     &loom_err_backend_015,   &loom_err_backend_016,   &loom_err_backend_017,
+    &loom_err_backend_018,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

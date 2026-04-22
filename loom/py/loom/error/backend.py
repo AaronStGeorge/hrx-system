@@ -470,6 +470,32 @@ ERR_BACKEND_017 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_018: Target-low packet selection was recorded.
+ERR_BACKEND_018 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=18,
+    severity=Severity.REMARK,
+    summary="Target-low packet decision recorded.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "{decision} {packet_category} low packet '{packet_key}' for "
+        "'@{function_name}': operands {operand_count}, results "
+        "{result_count}: {reason}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("packet_category", ParamKind.STRING),
+        ErrorParam("packet_key", ParamKind.STRING),
+        ErrorParam("decision", ParamKind.STRING),
+        ErrorParam("operand_count", ParamKind.U32),
+        ErrorParam("result_count", ParamKind.U32),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_001,
     ERR_BACKEND_002,
@@ -488,4 +514,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_015,
     ERR_BACKEND_016,
     ERR_BACKEND_017,
+    ERR_BACKEND_018,
 )

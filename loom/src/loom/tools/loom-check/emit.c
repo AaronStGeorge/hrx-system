@@ -22,6 +22,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/target/low_packet_diagnostics.h"
 #include "loom/target/module_compiler.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
@@ -100,6 +101,10 @@ typedef struct loom_check_emit_request_t {
   loom_low_schedule_strategy_t low_schedule_strategy;
   // True once a low scheduler strategy option has been parsed.
   bool has_low_schedule_strategy_option;
+  // Target-low packet diagnostics requested by the RUN line.
+  loom_target_low_packet_diagnostic_flags_t low_packet_diagnostic_flags;
+  // True once a low packet diagnostics option has been parsed.
+  bool has_low_packet_diagnostics_option;
   // Source-low text output form.
   loom_check_emit_source_low_output_t source_low_output;
   // Source-low legality diagnostics requested by the RUN line.
@@ -412,6 +417,30 @@ static iree_status_t loom_check_emit_parse_low_packet_option(
     request->has_low_schedule_strategy_option = true;
     return iree_ok_status();
   }
+  if (iree_string_view_equal(name, IREE_SV("diagnostics"))) {
+    if (request->has_low_packet_diagnostics_option) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "duplicate low-packet-json option "
+                              "'diagnostics'");
+    }
+    if (iree_string_view_equal(value, IREE_SV("none"))) {
+      request->low_packet_diagnostic_flags = 0;
+    } else if (iree_string_view_equal(value, IREE_SV("packets"))) {
+      request->low_packet_diagnostic_flags =
+          LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_TARGET_PACKETS;
+    } else if (iree_string_view_equal(value, IREE_SV("all"))) {
+      request->low_packet_diagnostic_flags =
+          LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_ALL;
+    } else {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low-packet-json option 'diagnostics' expected 'none', 'packets', "
+          "or 'all', got '%.*s'",
+          (int)value.size, value.data);
+    }
+    request->has_low_packet_diagnostics_option = true;
+    return iree_ok_status();
+  }
   return loom_check_emit_parse_low_allocation_budget(token, request);
 }
 
@@ -511,6 +540,8 @@ static iree_status_t loom_check_emit_parse_request(
       .has_low_schedule_diagnostics_option = false,
       .low_schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .has_low_schedule_strategy_option = false,
+      .low_packet_diagnostic_flags = 0,
+      .has_low_packet_diagnostics_option = false,
       .source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_MODULE,
   };
   iree_string_view_t target_name = iree_string_view_empty();
@@ -944,6 +975,9 @@ static iree_status_t loom_check_emit_write_low_packet_json(
     const loom_low_descriptor_registry_t* descriptor_registry,
     loom_low_schedule_strategy_t strategy,
     const loom_low_allocation_budget_t* budgets, iree_host_size_t budget_count,
+    loom_target_low_packet_diagnostic_provider_list_t
+        packet_diagnostic_provider_list,
+    loom_target_low_packet_diagnostic_flags_t packet_diagnostic_flags,
     iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* analysis_arena,
     bool suppress_output, loom_check_result_t* result) {
   loom_op_t* low_function = NULL;
@@ -960,6 +994,14 @@ static iree_status_t loom_check_emit_write_low_packet_json(
   IREE_RETURN_IF_ERROR(
       loom_low_packetize_function(module, low_function, &packetization_options,
                                   analysis_arena, &packetization));
+  const loom_target_low_packet_diagnostics_options_t diagnostic_options = {
+      .provider_list = packet_diagnostic_provider_list,
+      .diagnostic_flags = packet_diagnostic_flags,
+      .emitter = emitter,
+  };
+  loom_target_low_packet_diagnostics_result_t diagnostic_result = {0};
+  IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostics_emit_function(
+      &packetization, &diagnostic_options, &diagnostic_result));
   if (suppress_output) {
     result->expected_output_defaults_to_empty = true;
     return iree_ok_status();
@@ -1513,6 +1555,8 @@ iree_status_t loom_check_execute_emit(
             module, request.analysis_symbol_name, &low_registry.registry,
             request.low_schedule_strategy, request.low_allocation_budgets,
             request.low_allocation_budget_count,
+            environment->low_packet_diagnostic_provider_list,
+            request.low_packet_diagnostic_flags,
             (iree_diagnostic_emitter_t){
                 .fn = loom_check_diagnostic_emitter_capture_emit,
                 .user_data = &pass_diagnostic_capture,

@@ -431,6 +431,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    packet_diagnostics
+  HDRS
+    "packet_diagnostics.h"
+  SRCS
+    "packet_diagnostics.c"
+  DEPS
+    ::descriptor_ids
+    iree::base
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::target::low_packet_diagnostics
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     lower
   HDRS
     "lower.h"
@@ -506,6 +521,7 @@ loom_cc_library(
     ::coverage
     ::low_registry
     ::lower
+    ::packet_diagnostics
     iree::base
     loom::src::loom::target::emit::native::amdgpu::loom_check
     loom::src::loom::tools::loom-check::main
@@ -670,6 +686,17 @@ loom_cc_test(
     loom::src::loom::tools::loom-check::test_util
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+iree_executable_test(
+  NAME
+    "low_packet_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/low_packet_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
 )
 
 iree_executable_test(

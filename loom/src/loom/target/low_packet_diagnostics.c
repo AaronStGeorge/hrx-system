@@ -1,0 +1,196 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/target/low_packet_diagnostics.h"
+
+#include "loom/codegen/low/diagnostics.h"
+#include "loom/error/error_defs.h"
+
+struct loom_target_low_packet_diagnostic_context_t {
+  // Packetization sidecars being diagnosed.
+  const loom_low_packetization_t* packetization;
+  // Caller-owned diagnostic options.
+  const loom_target_low_packet_diagnostics_options_t* options;
+  // Result object receiving counters.
+  loom_target_low_packet_diagnostics_result_t* result;
+};
+
+iree_status_t loom_target_low_packet_diagnostic_provider_list_verify(
+    loom_target_low_packet_diagnostic_provider_list_t list) {
+  if (loom_target_low_packet_diagnostic_provider_list_is_empty(list)) {
+    return iree_ok_status();
+  }
+  if (list.values == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target-low packet diagnostic provider list is required");
+  }
+  for (iree_host_size_t i = 0; i < list.count; ++i) {
+    const loom_target_low_packet_diagnostic_provider_t* provider =
+        list.values[i];
+    if (provider == NULL || provider->try_diagnose_packet == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "target-low packet diagnostic provider is invalid");
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_target_low_packet_diagnostics_verify_options(
+    const loom_low_packetization_t* packetization,
+    const loom_target_low_packet_diagnostics_options_t* options,
+    loom_target_low_packet_diagnostics_result_t* out_result) {
+  if (packetization == NULL || options == NULL || out_result == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "packetization, options, and output result are required");
+  }
+  const loom_target_low_packet_diagnostic_flags_t unknown_flags =
+      options->diagnostic_flags & ~LOOM_TARGET_LOW_PACKET_DIAGNOSTIC_ALL;
+  if (unknown_flags != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown target-low packet diagnostic flags 0x%08x",
+                            unknown_flags);
+  }
+  IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostic_provider_list_verify(
+      options->provider_list));
+  return loom_low_packet_validate_sidecars(&packetization->schedule,
+                                           &packetization->allocation);
+}
+
+static iree_status_t loom_target_low_packet_diagnostics_emit(
+    loom_target_low_packet_diagnostic_context_t* context,
+    const loom_low_packet_view_t* packet, const loom_error_def_t* error,
+    const loom_diagnostic_param_t* params, iree_host_size_t param_count) {
+  switch (error->severity) {
+    case LOOM_DIAGNOSTIC_ERROR:
+      ++context->result->error_count;
+      break;
+    case LOOM_DIAGNOSTIC_WARNING:
+      ++context->result->warning_count;
+      break;
+    case LOOM_DIAGNOSTIC_REMARK:
+      ++context->result->remark_count;
+      break;
+    default:
+      break;
+  }
+  loom_diagnostic_emission_t emission = {
+      .op = packet->node->op,
+      .error = error,
+      .params = params,
+      .param_count = param_count,
+  };
+  return iree_diagnostic_emit(context->options->emitter, &emission);
+}
+
+static iree_status_t loom_target_low_packet_diagnostics_packet_key(
+    loom_target_low_packet_diagnostic_context_t* context,
+    const loom_low_packet_view_t* packet, iree_string_view_t* out_key) {
+  if (packet->descriptor == NULL) {
+    *out_key = IREE_SV("<structural>");
+    return iree_ok_status();
+  }
+  return loom_low_descriptor_set_string(
+      context->packetization->schedule.target.descriptor_set,
+      packet->descriptor->key_string_offset, out_key);
+}
+
+iree_status_t loom_target_low_packet_diagnostics_record_packet(
+    loom_target_low_packet_diagnostic_context_t* context,
+    const loom_target_low_packet_diagnostic_provider_t* provider,
+    const loom_low_packet_view_t* packet, iree_string_view_t packet_category,
+    iree_string_view_t decision, iree_string_view_t reason) {
+  (void)provider;
+  iree_string_view_t packet_key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostics_packet_key(
+      context, packet, &packet_key));
+  const loom_low_descriptor_t* descriptor = packet->descriptor;
+  const uint32_t operand_count = descriptor ? descriptor->operand_count : 0;
+  const uint32_t result_count = descriptor ? descriptor->result_count : 0;
+  const loom_low_schedule_sidecar_t* schedule =
+      &context->packetization->schedule;
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(&schedule->target)),
+      loom_param_string(loom_low_diagnostic_export_name(&schedule->target)),
+      loom_param_string(loom_low_diagnostic_config_key(&schedule->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          schedule->module, schedule->function_op)),
+      loom_param_string(packet_category),
+      loom_param_string(packet_key),
+      loom_param_string(decision),
+      loom_param_u32(operand_count),
+      loom_param_u32(result_count),
+      loom_param_string(reason),
+  };
+  return loom_target_low_packet_diagnostics_emit(
+      context, packet, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 18),
+      params, IREE_ARRAYSIZE(params));
+}
+
+const loom_module_t* loom_target_low_packet_diagnostics_module(
+    const loom_target_low_packet_diagnostic_context_t* context) {
+  return context->packetization->schedule.module;
+}
+
+const loom_low_schedule_sidecar_t* loom_target_low_packet_diagnostics_schedule(
+    const loom_target_low_packet_diagnostic_context_t* context) {
+  return &context->packetization->schedule;
+}
+
+const loom_low_allocation_sidecar_t*
+loom_target_low_packet_diagnostics_allocation(
+    const loom_target_low_packet_diagnostic_context_t* context) {
+  return &context->packetization->allocation;
+}
+
+loom_target_low_packet_diagnostic_flags_t
+loom_target_low_packet_diagnostics_diagnostic_flags(
+    const loom_target_low_packet_diagnostic_context_t* context) {
+  return context->options->diagnostic_flags;
+}
+
+iree_status_t loom_target_low_packet_diagnostics_emit_function(
+    const loom_low_packetization_t* packetization,
+    const loom_target_low_packet_diagnostics_options_t* options,
+    loom_target_low_packet_diagnostics_result_t* out_result) {
+  IREE_RETURN_IF_ERROR(loom_target_low_packet_diagnostics_verify_options(
+      packetization, options, out_result));
+  *out_result = (loom_target_low_packet_diagnostics_result_t){0};
+  if (options->diagnostic_flags == 0 ||
+      loom_target_low_packet_diagnostic_provider_list_is_empty(
+          options->provider_list)) {
+    return iree_ok_status();
+  }
+
+  loom_target_low_packet_diagnostic_context_t context = {
+      .packetization = packetization,
+      .options = options,
+      .result = out_result,
+  };
+  const iree_host_size_t packet_count =
+      loom_low_packet_count(&packetization->schedule);
+  for (iree_host_size_t packet_index = 0; packet_index < packet_count;
+       ++packet_index) {
+    loom_low_packet_view_t packet = {0};
+    IREE_RETURN_IF_ERROR(loom_low_packet_view_at(&packetization->schedule,
+                                                 &packetization->allocation,
+                                                 packet_index, &packet));
+    for (iree_host_size_t provider_index = 0;
+         provider_index < options->provider_list.count; ++provider_index) {
+      const loom_target_low_packet_diagnostic_provider_t* provider =
+          options->provider_list.values[provider_index];
+      bool handled = false;
+      IREE_RETURN_IF_ERROR(
+          provider->try_diagnose_packet(provider, &context, &packet, &handled));
+      if (handled) {
+        break;
+      }
+    }
+  }
+  return iree_ok_status();
+}

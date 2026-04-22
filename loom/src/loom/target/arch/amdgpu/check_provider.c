@@ -18,6 +18,7 @@
 #include "loom/target/arch/amdgpu/coverage.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
+#include "loom/target/arch/amdgpu/packet_diagnostics.h"
 #if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 #include "loom/target/arch/amdgpu/amdgpu_hal_backend.h"
 #include "loom/tools/loom-check/hal_run_provider.h"
@@ -112,6 +113,11 @@ static const loom_target_low_legality_provider_t* const
         &loom_amdgpu_low_legality_provider_storage,
 };
 
+static const loom_target_low_packet_diagnostic_provider_t* const
+    kLoomAmdgpuLowPacketDiagnosticProviders[] = {
+        &loom_amdgpu_low_packet_diagnostic_provider_storage,
+};
+
 #if LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER
 static const loom_check_requirement_provider_t* const
     kLoomAmdgpuCheckRequirementProviders[] = {
@@ -134,6 +140,11 @@ const loom_check_provider_t loom_amdgpu_check_provider = {
         {
             .count = IREE_ARRAYSIZE(kLoomAmdgpuLowLegalityProviders),
             .values = kLoomAmdgpuLowLegalityProviders,
+        },
+    .low_packet_diagnostic_provider_list =
+        {
+            .count = IREE_ARRAYSIZE(kLoomAmdgpuLowPacketDiagnosticProviders),
+            .values = kLoomAmdgpuLowPacketDiagnosticProviders,
         },
     .emit_providers = kLoomAmdgpuCheckEmitProviders,
     .emit_provider_count = IREE_ARRAYSIZE(kLoomAmdgpuCheckEmitProviders),
