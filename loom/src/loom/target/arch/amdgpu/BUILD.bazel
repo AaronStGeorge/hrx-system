@@ -582,6 +582,7 @@ loom_cc_library(
         "lower_dot.c",
         "lower_memory.c",
         "lower_reduce.c",
+        "lower_structural.c",
         "lower_support.c",
     ],
     hdrs = [
@@ -823,6 +824,7 @@ loom_check_test_suite(
         "low_packet_diagnostics.loom-test",
         "source_low.loom-test",
         "source_low_addtid.loom-test",
+        "source_low_bitcast.loom-test",
         "source_low_bitfield.loom-test",
         "source_low_bitpack.loom-test",
         "source_low_bitunpack.loom-test",
