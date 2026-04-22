@@ -232,6 +232,16 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
 iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op);
 
+// Selects a plan for scalar integer and index arithmetic source ops.
+iree_status_t loom_amdgpu_select_integer_plan(loom_low_lower_context_t* context,
+                                              const loom_op_t* source_op,
+                                              loom_low_lower_plan_t* out_plan);
+
+// Lowers a scalar integer or index arithmetic source op using its selected
+// plan.
+iree_status_t loom_amdgpu_lower_integer_op(loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op);
+
 // Looks up a lowered i32 value and materializes exact source constants into
 // VGPRs when a vector-style packet cannot consume the existing lowering.
 iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
