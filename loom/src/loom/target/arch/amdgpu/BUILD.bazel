@@ -968,11 +968,18 @@ loom_cc_library(
 
 loom_cc_library(
     name = "lower",
-    srcs = ["lower.c"],
-    hdrs = ["lower.h"],
+    srcs = [
+        "lower.c",
+        "lower_dot.c",
+    ],
+    hdrs = [
+        "lower.h",
+        "lower_internal.h",
+    ],
     deps = [
         ":descriptor_ids",
         ":hal_kernel_abi",
+        "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/buffer",
@@ -982,6 +989,7 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target:low_legality",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],

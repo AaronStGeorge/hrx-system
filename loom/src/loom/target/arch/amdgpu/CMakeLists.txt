@@ -434,12 +434,15 @@ loom_cc_library(
     lower
   HDRS
     "lower.h"
+    "lower_internal.h"
   SRCS
     "lower.c"
+    "lower_dot.c"
   DEPS
     ::descriptor_ids
     ::hal_kernel_abi
     iree::base
+    loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir
     loom::src::loom::ops::buffer
@@ -449,6 +452,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
+    loom::src::loom::target::low_legality
     loom::src::loom::util::fact_table
   PUBLIC
 )
