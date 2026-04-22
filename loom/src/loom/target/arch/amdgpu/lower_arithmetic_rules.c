@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/codegen/low/lower_rules.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
@@ -15,6 +16,7 @@ enum loom_amdgpu_arithmetic_type_pattern_e {
   LOOM_AMDGPU_ARITHMETIC_TYPE_VF32 = 1,
   LOOM_AMDGPU_ARITHMETIC_TYPE_SI32 = 2,
   LOOM_AMDGPU_ARITHMETIC_TYPE_SF32 = 3,
+  LOOM_AMDGPU_ARITHMETIC_TYPE_ADDRESS = 4,
 };
 
 static const loom_low_lower_type_pattern_t kAmdgpuArithmeticTypePatterns[] = {
@@ -60,6 +62,15 @@ static const loom_low_lower_type_pattern_t kAmdgpuArithmeticTypePatterns[] = {
             .element_type_mask =
                 LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_F32),
         },
+    [LOOM_AMDGPU_ARITHMETIC_TYPE_ADDRESS] =
+        {
+            .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT,
+            .type_kind = LOOM_TYPE_SCALAR,
+            .element_type_mask =
+                LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_INDEX) |
+                LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_OFFSET),
+        },
 };
 
 enum loom_amdgpu_arithmetic_value_ref_e {
@@ -67,6 +78,38 @@ enum loom_amdgpu_arithmetic_value_ref_e {
   LOOM_AMDGPU_ARITHMETIC_OPERAND1 = 1,
   LOOM_AMDGPU_ARITHMETIC_OPERAND2 = 2,
   LOOM_AMDGPU_ARITHMETIC_RESULT0 = 3,
+  LOOM_AMDGPU_ARITHMETIC_ADDRESS_VGPR_OPERAND0 = 4,
+  LOOM_AMDGPU_ARITHMETIC_ADDRESS_VGPR_OPERAND1 = 5,
+  LOOM_AMDGPU_ARITHMETIC_TEMPORARY0 = 6,
+  LOOM_AMDGPU_ARITHMETIC_ADDRESS_VGPR_OPERAND2 = 7,
+};
+
+enum loom_amdgpu_arithmetic_materializer_e {
+  LOOM_AMDGPU_ARITHMETIC_MATERIALIZER_ADDRESS_VGPR = 1,
+};
+
+static bool loom_amdgpu_arithmetic_can_materialize_address_vgpr(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value_id) {
+  (void)source_op;
+  return loom_amdgpu_value_can_materialize_as_vgpr_address(context,
+                                                           source_value_id);
+}
+
+static iree_status_t loom_amdgpu_arithmetic_materialize_address_vgpr(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value_id, loom_value_id_t* out_low_value_id) {
+  return loom_amdgpu_lookup_or_materialize_vgpr_address(
+      context, source_op, source_value_id, out_low_value_id);
+}
+
+static const loom_low_lower_value_materializer_t
+    kAmdgpuArithmeticMaterializers[] = {
+        {
+            .can_materialize =
+                loom_amdgpu_arithmetic_can_materialize_address_vgpr,
+            .materialize = loom_amdgpu_arithmetic_materialize_address_vgpr,
+        },
 };
 
 static const loom_low_lower_value_ref_t kAmdgpuArithmeticValueRefs[] = {
@@ -90,6 +133,32 @@ static const loom_low_lower_value_ref_t kAmdgpuArithmeticValueRefs[] = {
             .kind = LOOM_LOW_LOWER_VALUE_REF_RESULT,
             .index = 0,
         },
+    [LOOM_AMDGPU_ARITHMETIC_ADDRESS_VGPR_OPERAND0] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+            .index = 0,
+            .materializer_index =
+                LOOM_AMDGPU_ARITHMETIC_MATERIALIZER_ADDRESS_VGPR,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_ADDRESS_VGPR_OPERAND1] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+            .index = 1,
+            .materializer_index =
+                LOOM_AMDGPU_ARITHMETIC_MATERIALIZER_ADDRESS_VGPR,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_TEMPORARY0] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_TEMPORARY,
+            .index = 0,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_ADDRESS_VGPR_OPERAND2] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+            .index = 2,
+            .materializer_index =
+                LOOM_AMDGPU_ARITHMETIC_MATERIALIZER_ADDRESS_VGPR,
+        },
 };
 
 enum loom_amdgpu_arithmetic_diagnostic_e {
@@ -98,6 +167,9 @@ enum loom_amdgpu_arithmetic_diagnostic_e {
   LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SI32 = 2,
   LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32 = 3,
   LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_DESCRIPTOR = 4,
+  LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS = 5,
+  LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS_VGPR = 6,
+  LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_RESULT_VGPR = 7,
 };
 
 static const loom_low_lower_diagnostic_t kAmdgpuArithmeticDiagnostics[] = {
@@ -136,6 +208,27 @@ static const loom_low_lower_diagnostic_t kAmdgpuArithmeticDiagnostics[] = {
             .reason = IREE_SVL("the selected AMDGPU descriptor set does not "
                                "contain the required arithmetic packet"),
         },
+    [LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("index"),
+            .reason = IREE_SVL("AMDGPU index lowering requires index or offset "
+                               "scalar values"),
+        },
+    [LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS_VGPR] =
+        {
+            .subject_kind = IREE_SVL("materializer"),
+            .subject_name = IREE_SVL("address-vgpr"),
+            .reason = IREE_SVL("AMDGPU index lowering requires address values "
+                               "that can materialize as VGPR operands"),
+        },
+    [LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_RESULT_VGPR] =
+        {
+            .subject_kind = IREE_SVL("register-class"),
+            .subject_name = IREE_SVL("vgpr"),
+            .reason = IREE_SVL("AMDGPU index.madd lowering requires a VGPR "
+                               "result"),
+        },
 };
 
 #define LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(value_ref, type_pattern, \
@@ -152,6 +245,22 @@ static const loom_low_lower_diagnostic_t kAmdgpuArithmeticDiagnostics[] = {
       .kind = LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE,                \
       .diagnostic_index = LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_DESCRIPTOR, \
       .descriptor_id = descriptor,                                      \
+  }
+
+#define LOOM_AMDGPU_ARITHMETIC_GUARD_MATERIALIZABLE(value_ref, diagnostic) \
+  {                                                                        \
+      .kind = LOOM_LOW_LOWER_GUARD_VALUE_MATERIALIZABLE,                   \
+      .value_ref_index = value_ref,                                        \
+      .diagnostic_index = diagnostic,                                      \
+  }
+
+#define LOOM_AMDGPU_ARITHMETIC_GUARD_LOW_REG_CLASS(value_ref, reg_class, \
+                                                   diagnostic)           \
+  {                                                                      \
+      .kind = LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_CLASS,             \
+      .value_ref_index = value_ref,                                      \
+      .diagnostic_index = diagnostic,                                    \
+      .register_class_id = reg_class,                                    \
   }
 
 static const loom_low_lower_guard_t kAmdgpuArithmeticGuards[] = {
@@ -447,8 +556,39 @@ static const loom_low_lower_guard_t kAmdgpuArithmeticGuards[] = {
                                        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_SF32),
     LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
         LOOM_AMDGPU_DESCRIPTOR_ID_V_CVT_F32_U32),
+
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(
+        LOOM_AMDGPU_ARITHMETIC_OPERAND0, LOOM_AMDGPU_ARITHMETIC_TYPE_ADDRESS,
+        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(
+        LOOM_AMDGPU_ARITHMETIC_OPERAND1, LOOM_AMDGPU_ARITHMETIC_TYPE_ADDRESS,
+        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(
+        LOOM_AMDGPU_ARITHMETIC_OPERAND2, LOOM_AMDGPU_ARITHMETIC_TYPE_ADDRESS,
+        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(
+        LOOM_AMDGPU_ARITHMETIC_RESULT0, LOOM_AMDGPU_ARITHMETIC_TYPE_ADDRESS,
+        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_LOW_REG_CLASS(
+        LOOM_AMDGPU_ARITHMETIC_RESULT0, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_RESULT_VGPR),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_MATERIALIZABLE(
+        LOOM_AMDGPU_ARITHMETIC_ADDRESS_VGPR_OPERAND0,
+        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS_VGPR),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_MATERIALIZABLE(
+        LOOM_AMDGPU_ARITHMETIC_ADDRESS_VGPR_OPERAND1,
+        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS_VGPR),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_MATERIALIZABLE(
+        LOOM_AMDGPU_ARITHMETIC_ADDRESS_VGPR_OPERAND2,
+        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS_VGPR),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_LO_U32),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR(
+        LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32),
 };
 
+#undef LOOM_AMDGPU_ARITHMETIC_GUARD_LOW_REG_CLASS
+#undef LOOM_AMDGPU_ARITHMETIC_GUARD_MATERIALIZABLE
 #undef LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR
 #undef LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE
 
@@ -529,9 +669,13 @@ enum loom_amdgpu_arithmetic_guard_range_e {
   LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_UITOFP =
       LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_SITOFP +
       LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_UNARY,
-  LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_ =
+  LOOM_AMDGPU_ARITHMETIC_GUARDS_INDEX_MADD =
       LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_UITOFP +
       LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_UNARY,
+  LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_INDEX_MADD = 10,
+  LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_ =
+      LOOM_AMDGPU_ARITHMETIC_GUARDS_INDEX_MADD +
+      LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_INDEX_MADD,
 };
 
 static_assert(IREE_ARRAYSIZE(kAmdgpuArithmeticGuards) ==
@@ -564,6 +708,8 @@ enum loom_amdgpu_arithmetic_emit_e {
   LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_FMAF = 22,
   LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_SITOFP = 23,
   LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UITOFP = 24,
+  LOOM_AMDGPU_ARITHMETIC_EMIT_INDEX_MADD_PRODUCT = 25,
+  LOOM_AMDGPU_ARITHMETIC_EMIT_INDEX_MADD_ADDEND = 26,
 };
 
 #define LOOM_AMDGPU_ARITHMETIC_EMIT_BINARY(descriptor)      \
@@ -695,6 +841,26 @@ static const loom_low_lower_emit_t kAmdgpuArithmeticEmits[] = {
     [LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UITOFP] =
         LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UNARY(
             LOOM_AMDGPU_DESCRIPTOR_ID_V_CVT_F32_U32),
+    [LOOM_AMDGPU_ARITHMETIC_EMIT_INDEX_MADD_PRODUCT] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .flags = LOOM_LOW_LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_LO_U32,
+            .operand_ref_start = LOOM_AMDGPU_ARITHMETIC_ADDRESS_VGPR_OPERAND0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_AMDGPU_ARITHMETIC_RESULT0,
+            .result_ref_count = 1,
+            .result_bind_ref_start = LOOM_AMDGPU_ARITHMETIC_TEMPORARY0,
+        },
+    [LOOM_AMDGPU_ARITHMETIC_EMIT_INDEX_MADD_ADDEND] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32,
+            .operand_ref_start = LOOM_AMDGPU_ARITHMETIC_TEMPORARY0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_AMDGPU_ARITHMETIC_RESULT0,
+            .result_ref_count = 1,
+        },
 };
 
 #undef LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UNARY
@@ -729,7 +895,8 @@ enum loom_amdgpu_arithmetic_rule_e {
   LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_FMAF = 22,
   LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_SITOFP = 23,
   LOOM_AMDGPU_ARITHMETIC_RULE_SCALAR_UITOFP = 24,
-  LOOM_AMDGPU_ARITHMETIC_RULE_COUNT_ = 25,
+  LOOM_AMDGPU_ARITHMETIC_RULE_INDEX_MADD = 25,
+  LOOM_AMDGPU_ARITHMETIC_RULE_COUNT_ = 26,
 };
 
 static const loom_low_lower_rule_t kAmdgpuArithmeticRules[] = {
@@ -933,6 +1100,15 @@ static const loom_low_lower_rule_t kAmdgpuArithmeticRules[] = {
             .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_SCALAR_UITOFP,
             .emit_count = 1,
         },
+    [LOOM_AMDGPU_ARITHMETIC_RULE_INDEX_MADD] =
+        {
+            .source_op_kind = LOOM_OP_INDEX_MADD,
+            .temporary_count = 1,
+            .guard_start = LOOM_AMDGPU_ARITHMETIC_GUARDS_INDEX_MADD,
+            .guard_count = LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_INDEX_MADD,
+            .emit_start = LOOM_AMDGPU_ARITHMETIC_EMIT_INDEX_MADD_PRODUCT,
+            .emit_count = 2,
+        },
 };
 
 static_assert(IREE_ARRAYSIZE(kAmdgpuArithmeticRules) ==
@@ -1065,6 +1241,11 @@ static const loom_low_lower_rule_span_t kAmdgpuArithmeticRuleSpans[] = {
         .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_VECTOR_UITOFP,
         .rule_count = 1,
     },
+    {
+        .source_op_kind = LOOM_OP_INDEX_MADD,
+        .rule_start = LOOM_AMDGPU_ARITHMETIC_RULE_INDEX_MADD,
+        .rule_count = 1,
+    },
 };
 
 const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_rule_set = {
@@ -1076,6 +1257,8 @@ const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_rule_set = {
     .type_pattern_count = IREE_ARRAYSIZE(kAmdgpuArithmeticTypePatterns),
     .value_refs = kAmdgpuArithmeticValueRefs,
     .value_ref_count = IREE_ARRAYSIZE(kAmdgpuArithmeticValueRefs),
+    .materializers = kAmdgpuArithmeticMaterializers,
+    .materializer_count = IREE_ARRAYSIZE(kAmdgpuArithmeticMaterializers),
     .guards = kAmdgpuArithmeticGuards,
     .guard_count = IREE_ARRAYSIZE(kAmdgpuArithmeticGuards),
     .emits = kAmdgpuArithmeticEmits,

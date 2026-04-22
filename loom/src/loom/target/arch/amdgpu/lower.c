@@ -43,7 +43,6 @@ static iree_status_t loom_amdgpu_select_plan_id(
     case LOOM_OP_INDEX_ADD:
     case LOOM_OP_INDEX_SUB:
     case LOOM_OP_INDEX_MUL:
-    case LOOM_OP_INDEX_MADD:
     case LOOM_OP_SCALAR_ADDI:
     case LOOM_OP_SCALAR_SUBI:
     case LOOM_OP_SCALAR_MULI:
@@ -139,7 +138,6 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
     case LOOM_OP_INDEX_ADD:
     case LOOM_OP_INDEX_SUB:
     case LOOM_OP_INDEX_MUL:
-    case LOOM_OP_INDEX_MADD:
     case LOOM_OP_SCALAR_ADDI:
     case LOOM_OP_SCALAR_SUBI:
     case LOOM_OP_SCALAR_MULI:

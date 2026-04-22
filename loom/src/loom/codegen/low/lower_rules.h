@@ -68,11 +68,36 @@ typedef enum loom_low_lower_value_ref_kind_e {
   LOOM_LOW_LOWER_VALUE_REF_TEMPORARY = 3,
 } loom_low_lower_value_ref_kind_t;
 
+// Returns true when the materializer can produce a low value for the source
+// value without emitting IR. Selection uses this to keep diagnostics tied to
+// the same value-ref row consumed during emission.
+typedef bool (*loom_low_lower_can_materialize_value_fn_t)(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value_id);
+
+// Emits or returns the low value consumed by a descriptor operand for the
+// source value. The callback only runs when a value-ref row explicitly names
+// it.
+typedef iree_status_t (*loom_low_lower_materialize_value_fn_t)(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value_id, loom_value_id_t* out_low_value_id);
+
+typedef struct loom_low_lower_value_materializer_t {
+  // Selection-time predicate proving this materializer can handle the source
+  // value without emitting IR.
+  loom_low_lower_can_materialize_value_fn_t can_materialize;
+  // Emission-time callback that returns the low value used by descriptor ops.
+  loom_low_lower_materialize_value_fn_t materialize;
+} loom_low_lower_value_materializer_t;
+
 typedef struct loom_low_lower_value_ref_t {
   // Source value namespace being referenced.
   loom_low_lower_value_ref_kind_t kind;
   // Operand or result ordinal in the source op.
   uint16_t index;
+  // One-based materializer table row used when this source ref is consumed as a
+  // low operand. Zero means direct source-to-low value lookup.
+  uint16_t materializer_index;
 } loom_low_lower_value_ref_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -106,6 +131,10 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_ATTR_I64_RANGE = 4,
   // Selected descriptor set must contain descriptor_id.
   LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE = 5,
+  // Source value ref must be accepted by its configured materializer.
+  LOOM_LOW_LOWER_GUARD_VALUE_MATERIALIZABLE = 6,
+  // Source value ref must map to a low register with register_class_id.
+  LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_CLASS = 7,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -125,6 +154,8 @@ typedef struct loom_low_lower_guard_t {
   uint64_t u64;
   // Stable descriptor ID used by DESCRIPTOR_AVAILABLE guards.
   uint64_t descriptor_id;
+  // Descriptor-set register-class ID used by LOW_VALUE_REGISTER_CLASS guards.
+  uint16_t register_class_id;
   // Inclusive lower i64 bound for ATTR_I64_RANGE guards.
   int64_t minimum_i64;
   // Inclusive upper i64 bound for ATTR_I64_RANGE guards.
@@ -229,6 +260,10 @@ typedef struct loom_low_lower_rule_set_t {
   const loom_low_lower_value_ref_t* value_refs;
   // Number of rows in value_refs.
   uint16_t value_ref_count;
+  // Target-owned value materializers referenced by one-based value refs.
+  const loom_low_lower_value_materializer_t* materializers;
+  // Number of rows in materializers.
+  uint16_t materializer_count;
   // Guard rows referenced by rules.
   const loom_low_lower_guard_t* guards;
   // Number of rows in guards.

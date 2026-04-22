@@ -163,6 +163,45 @@ static iree_status_t TestMapArgument(
                      &out_argument->abi_type);
 }
 
+static bool TestCanMaterializeCopy(loom_low_lower_context_t* context,
+                                   const loom_op_t* source_op,
+                                   loom_value_id_t source_value_id) {
+  (void)context;
+  (void)source_op;
+  (void)source_value_id;
+  return true;
+}
+
+static iree_status_t TestMaterializeCopy(loom_low_lower_context_t* context,
+                                         const loom_op_t* source_op,
+                                         loom_value_id_t source_value_id,
+                                         loom_value_id_t* out_low_value_id) {
+  IREE_ASSERT_ARGUMENT(out_low_value_id);
+  *out_low_value_id = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t low_value_id = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_lookup_value(context, source_value_id, &low_value_id));
+  loom_type_t low_type = loom_module_value_type(
+      loom_low_lower_context_module(context), low_value_id);
+  loom_op_t* copy_op = nullptr;
+  IREE_RETURN_IF_ERROR(
+      loom_low_copy_build(loom_low_lower_context_builder(context), low_value_id,
+                          low_type, source_op->location, &copy_op));
+  *out_low_value_id = loom_low_copy_result(copy_op);
+  return iree_ok_status();
+}
+
+enum TestLowerMaterializer : uint16_t {
+  kTestLowerMaterializerCopy = 1,
+};
+
+static const loom_low_lower_value_materializer_t kTestLowerMaterializers[] = {
+    {
+        .can_materialize = TestCanMaterializeCopy,
+        .materialize = TestMaterializeCopy,
+    },
+};
+
 enum TestLowerTypePattern : uint16_t {
   kTestLowerTypeI32,
   kTestLowerTypeV4I32,
@@ -204,8 +243,7 @@ enum TestLowerValueRef : uint16_t {
   kTestLowerResult0,
   kTestLowerOperand2,
   kTestLowerTemporary0,
-  kTestLowerTemporary0ThenOperand2,
-  kTestLowerOperand2AfterTemporary0,
+  kTestLowerMaterializedOperand2,
 };
 
 static const loom_low_lower_value_ref_t kTestLowerValueRefs[] = {
@@ -230,12 +268,9 @@ static const loom_low_lower_value_ref_t kTestLowerValueRefs[] = {
         .index = 0,
     },
     {
-        .kind = LOOM_LOW_LOWER_VALUE_REF_TEMPORARY,
-        .index = 0,
-    },
-    {
         .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
         .index = 2,
+        .materializer_index = kTestLowerMaterializerCopy,
     },
 };
 
@@ -251,6 +286,7 @@ enum TestLowerDiagnostic : uint16_t {
   kTestLowerDiagnosticV4I32,
   kTestLowerDiagnosticI64Attr,
   kTestLowerDiagnosticIndex,
+  kTestLowerDiagnosticMaterialized,
 };
 
 static const loom_low_lower_diagnostic_t kTestLowerDiagnostics[] = {
@@ -275,6 +311,11 @@ static const loom_low_lower_diagnostic_t kTestLowerDiagnostics[] = {
         .subject_name = IREE_SVL("index"),
         .reason = IREE_SVL("test lowering requires index values"),
     },
+    {
+        .subject_kind = IREE_SVL("materializer"),
+        .subject_name = IREE_SVL("copy"),
+        .reason = IREE_SVL("test lowering requires copy-materializable values"),
+    },
 };
 
 enum TestLowerGuard : uint16_t {
@@ -289,6 +330,7 @@ enum TestLowerGuard : uint16_t {
   kTestLowerIndexLhsGuard,
   kTestLowerIndexRhsGuard,
   kTestLowerIndexAccGuard,
+  kTestLowerIndexAccMaterializeGuard,
   kTestLowerIndexResultGuard,
 };
 
@@ -358,6 +400,11 @@ static const loom_low_lower_guard_t kTestLowerGuards[] = {
         .value_ref_index = kTestLowerOperand2,
         .type_pattern_index = kTestLowerTypeIndex,
         .diagnostic_index = kTestLowerDiagnosticIndex,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_MATERIALIZABLE,
+        .value_ref_index = kTestLowerMaterializedOperand2,
+        .diagnostic_index = kTestLowerDiagnosticMaterialized,
     },
     {
         .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
@@ -443,7 +490,7 @@ static const loom_low_lower_emit_t kTestLowerEmits[] = {
     {
         .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
         .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
-        .operand_ref_start = kTestLowerTemporary0ThenOperand2,
+        .operand_ref_start = kTestLowerTemporary0,
         .operand_ref_count = 2,
         .result_ref_start = kTestLowerResult0,
         .result_ref_count = 1,
@@ -490,7 +537,7 @@ static const loom_low_lower_rule_t kTestLowerRules[] = {
         .source_op_kind = LOOM_OP_INDEX_MADD,
         .temporary_count = 1,
         .guard_start = kTestLowerIndexLhsGuard,
-        .guard_count = 4,
+        .guard_count = 5,
         .emit_start = kTestLowerEmitIndexProduct,
         .emit_count = 2,
     },
@@ -538,6 +585,8 @@ static const loom_low_lower_rule_set_t kTestLowerRuleSet = {
     .type_pattern_count = IREE_ARRAYSIZE(kTestLowerTypePatterns),
     .value_refs = kTestLowerValueRefs,
     .value_ref_count = IREE_ARRAYSIZE(kTestLowerValueRefs),
+    .materializers = kTestLowerMaterializers,
+    .materializer_count = IREE_ARRAYSIZE(kTestLowerMaterializers),
     .guards = kTestLowerGuards,
     .guard_count = IREE_ARRAYSIZE(kTestLowerGuards),
     .attr_copies = kTestLowerAttrCopies,
@@ -1189,7 +1238,11 @@ TEST_F(LowLowerTest, RuleEmissionCarriesTemporaryBetweenDescriptorOps) {
   loom_value_slice_t second_operands = loom_low_op_operands(second_add);
   ASSERT_EQ(second_operands.count, 2u);
   EXPECT_EQ(second_operands.values[0], temporary_result);
-  EXPECT_EQ(second_operands.values[1], entry_block->arg_ids[2]);
+  const loom_op_t* materialized_operand = loom_value_def_op(
+      loom_module_value(module.get(), second_operands.values[1]));
+  ASSERT_TRUE(loom_low_copy_isa(materialized_operand));
+  EXPECT_EQ(loom_low_copy_source(materialized_operand),
+            entry_block->arg_ids[2]);
 }
 
 TEST_F(LowLowerTest, LowersVectorCfgFunction) {

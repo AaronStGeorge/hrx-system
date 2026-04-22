@@ -100,7 +100,6 @@ typedef struct loom_amdgpu_buffer_alloca_plan_t {
 typedef enum loom_amdgpu_integer_emit_kind_e {
   LOOM_AMDGPU_INTEGER_EMIT_KIND_NONE = 0,
   LOOM_AMDGPU_INTEGER_EMIT_KIND_BINARY = 1,
-  LOOM_AMDGPU_INTEGER_EMIT_KIND_MADD = 2,
 } loom_amdgpu_integer_emit_kind_t;
 
 typedef enum loom_amdgpu_integer_operand_kind_e {
@@ -116,16 +115,12 @@ typedef struct loom_amdgpu_integer_plan_t {
   loom_amdgpu_integer_emit_kind_t emit_kind;
   // Operand lookup/materialization domain selected during planning.
   loom_amdgpu_integer_operand_kind_t operand_kind;
-  // Primary descriptor ID selected for binary ops or the multiply in madd.
+  // Descriptor ID selected for the integer operation.
   uint64_t descriptor_id;
-  // Secondary descriptor ID selected for the add in madd.
-  uint64_t secondary_descriptor_id;
   // First source operand in target descriptor order.
   loom_value_id_t source_lhs;
   // Second source operand in target descriptor order.
   loom_value_id_t source_rhs;
-  // Third source operand used by madd, or invalid for binary ops.
-  loom_value_id_t source_accumulator;
   // Source result value receiving the low op result.
   loom_value_id_t source_result;
 } loom_amdgpu_integer_plan_t;
