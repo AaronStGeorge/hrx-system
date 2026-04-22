@@ -53,6 +53,9 @@ extern "C" {
 // Stable low.live_in source spelling for workitem_id.z in v2.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE "amdgpu.workitem_id.z"
 
+// Stable low.live_in source spelling for the M0 special register.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_M0_SOURCE "amdgpu.m0"
+
 typedef struct loom_amdgpu_hal_kernarg_resource_t {
   // Defining low.resource op for diagnostics and cross-checks.
   const loom_op_t* resource_op;
@@ -128,6 +131,10 @@ bool loom_amdgpu_hal_kernel_abi_is_workitem_id_y_live_in(
 // Returns true if |value_id| is defined by the workitem_id.z live-in.
 bool loom_amdgpu_hal_kernel_abi_is_workitem_id_z_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
+
+// Returns true if |value_id| is defined by the M0 special-register live-in.
+bool loom_amdgpu_hal_kernel_abi_is_m0_live_in(const loom_module_t* module,
+                                              loom_value_id_t value_id);
 
 // Finds AMDGPU ABI live-ins that require fixed physical locations during
 // allocation.

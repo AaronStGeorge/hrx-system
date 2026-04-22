@@ -209,9 +209,9 @@ static const loom_target_coverage_row_t kLoomAmdgpuTargetCoverageRows[] = {
                            LOOM_AMDGPU_NATIVE_LOW_BINARY_PHASES,
                            "artifact-wrap-validation-missing"),
 
-    LOOM_AMDGPU_GFX11_ROW(
-        "memory.workgroup", "ds-addtid", LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
-        LOOM_AMDGPU_AUTHORED_LOW_GFX11_PHASES, "source-lower-addtid-missing"),
+    LOOM_AMDGPU_GFX11_ROW("memory.workgroup", "ds-addtid",
+                          LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
+                          LOOM_AMDGPU_NATIVE_LOW_GFX11_PHASES, ""),
     LOOM_AMDGPU_GFX12_ROW(
         "memory.workgroup", "ds-addtid", LOOM_AMDGPU_EXPECTED_NATIVE_LOW_PHASES,
         LOOM_AMDGPU_AUTHORED_LOW_BINARY_PHASES, "source-lower-addtid-missing"),

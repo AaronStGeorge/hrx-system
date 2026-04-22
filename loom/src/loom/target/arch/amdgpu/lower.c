@@ -1383,6 +1383,63 @@ static iree_status_t loom_amdgpu_emit_workgroup_id_live_in(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_emit_m0_live_in(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t descriptor_id, loom_value_id_t* out_low_value_id) {
+  IREE_ASSERT_ARGUMENT(out_low_value_id);
+  *out_low_value_id = LOOM_VALUE_ID_INVALID;
+  loom_type_t m0_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_descriptor_implicit_resource_type(
+      context, descriptor_id, &m0_type));
+  loom_string_id_t source_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_intern(
+      context, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_M0_SOURCE), &source_id));
+  loom_op_t* live_in_op = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_low_live_in_build(loom_low_lower_context_builder(context), source_id,
+                             loom_make_named_attr_slice(NULL, 0), m0_type,
+                             source_op->location, &live_in_op));
+  *out_low_value_id = loom_low_live_in_result(live_in_op);
+  loom_string_id_t value_name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_intern(context, IREE_SV("m0"), &value_name_id));
+  IREE_RETURN_IF_ERROR(
+      loom_module_set_value_name(loom_low_lower_context_module(context),
+                                 *out_low_value_id, value_name_id));
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_lookup_m0_live_in(loom_low_lower_context_t* context,
+                                            loom_value_id_t* out_value_id) {
+  IREE_ASSERT_ARGUMENT(out_value_id);
+  *out_value_id = LOOM_VALUE_ID_INVALID;
+  loom_op_t* low_function = loom_low_lower_context_low_function(context);
+  loom_region_t* body =
+      low_function ? loom_low_func_def_body(low_function) : NULL;
+  if (body == NULL || body->block_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU M0 lookup requires an emitted low function body");
+  }
+  loom_string_id_t source_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_intern(
+      context, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_M0_SOURCE), &source_id));
+  const loom_block_t* entry_block = loom_region_const_entry_block(body);
+  const loom_op_t* op = NULL;
+  loom_block_for_each_op(entry_block, op) {
+    if (!loom_low_live_in_isa(op)) {
+      break;
+    }
+    if (loom_low_live_in_source(op) == source_id) {
+      *out_value_id = loom_low_live_in_result(op);
+      return iree_ok_status();
+    }
+  }
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "AMDGPU lowering selected an M0-consuming packet without an M0 live-in");
+}
+
 static iree_status_t loom_amdgpu_emit_preamble(
     void* user_data, loom_low_lower_context_t* context) {
   (void)user_data;
@@ -1394,12 +1451,22 @@ static iree_status_t loom_amdgpu_emit_preamble(
   }
   const loom_op_t* first_workitem_id_ops[LOOM_KERNEL_DIMENSION_COUNT_] = {0};
   const loom_op_t* first_workgroup_id_ops[LOOM_KERNEL_DIMENSION_COUNT_] = {0};
+  const loom_op_t* first_m0_op = NULL;
+  uint64_t m0_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
   for (uint16_t block_index = 0; block_index < source_body->block_count;
        ++block_index) {
     const loom_block_t* source_block =
         loom_region_const_block(source_body, block_index);
     const loom_op_t* source_op = NULL;
     loom_block_for_each_op(source_block, source_op) {
+      if (first_m0_op == NULL) {
+        uint64_t descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
+        if (loom_amdgpu_source_op_selects_m0_descriptor(context, source_op,
+                                                        &descriptor_id)) {
+          first_m0_op = source_op;
+          m0_descriptor_id = descriptor_id;
+        }
+      }
       if (!loom_kernel_workitem_id_isa(source_op)) {
         if (!loom_kernel_workgroup_id_isa(source_op)) {
           continue;
@@ -1433,6 +1500,11 @@ static iree_status_t loom_amdgpu_emit_preamble(
       LOOM_VALUE_ID_INVALID,
       LOOM_VALUE_ID_INVALID,
   };
+  if (first_m0_op != NULL) {
+    loom_value_id_t unused_m0 = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_m0_live_in(
+        context, first_m0_op, m0_descriptor_id, &unused_m0));
+  }
   for (uint32_t i = 0; i < LOOM_KERNEL_DIMENSION_COUNT_; ++i) {
     if (first_workgroup_id_ops[i] != NULL) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_id_live_in(

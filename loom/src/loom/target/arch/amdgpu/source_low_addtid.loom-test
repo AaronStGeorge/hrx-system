@@ -1,0 +1,31 @@
+// RUN: emit source-low @lds_addtid_b32 output=low
+target.profile @gfx11_lds_addtid_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_lds_addtid_target) @lds_addtid_b32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %one = vector.constant 1 : vector<1xi32>
+  vector.store %one, %scratch_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  %loaded = vector.load %scratch_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %scratch_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@gfx11_lds_addtid_target) abi(hal_kernel) @lds_addtid_b32__low() {
+  %m0 = low.live_in<amdgpu.m0> : reg<amdgpu.m0>
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
+  %scratch_view = low.frame_index @lds_addtid_b32__low__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_write_addtid_b32>(%one, %m0) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
+  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_write_addtid_b32>(%loaded, %m0) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
+  low.return
+}
+
+low.slot @lds_addtid_b32__low__lds3 {align = 16, function = @lds_addtid_b32__low, size = 256, space = lds}

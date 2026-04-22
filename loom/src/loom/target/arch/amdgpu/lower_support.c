@@ -165,6 +165,65 @@ iree_status_t loom_amdgpu_make_vgpr_type(loom_low_lower_context_t* context,
                                         1, out_type);
 }
 
+iree_status_t loom_amdgpu_make_descriptor_implicit_resource_type(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    loom_type_t* out_type) {
+  IREE_ASSERT_ARGUMENT(out_type);
+  *out_type = loom_type_none();
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_lower_context_descriptor_set(context);
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_lookup_descriptor_by_id(descriptor_set,
+                                                      descriptor_id);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU descriptor set does not contain requested "
+                            "implicit-resource descriptor");
+  }
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
+  if (descriptor == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU implicit-resource descriptor ordinal is invalid");
+  }
+
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[descriptor->operand_start];
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    const loom_low_operand_t* operand = &operands[i];
+    if (operand->role != LOOM_LOW_OPERAND_ROLE_RESOURCE ||
+        !iree_any_bit_set(operand->flags, LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
+      continue;
+    }
+    for (uint16_t j = 0; j < operand->reg_class_alt_count; ++j) {
+      const uint32_t alt_index = operand->reg_class_alt_start + j;
+      if (alt_index >= descriptor_set->reg_class_alt_count) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "AMDGPU implicit-resource descriptor has an invalid register-class "
+            "alternative span");
+      }
+      const loom_low_reg_class_alt_t* alt =
+          &descriptor_set->reg_class_alts[alt_index];
+      if (iree_any_bit_set(alt->flags, LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE)) {
+        continue;
+      }
+      if (alt->reg_class_id >= descriptor_set->reg_class_count) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "AMDGPU implicit-resource descriptor references an invalid "
+            "register class");
+      }
+      return loom_amdgpu_make_register_type(context, alt->reg_class_id,
+                                            operand->unit_count, out_type);
+    }
+  }
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "AMDGPU descriptor has no explicit implicit resource operand");
+}
+
 iree_status_t loom_amdgpu_low_type_register_class_is(
     loom_low_lower_context_t* context, loom_type_t type, uint16_t reg_class_id,
     bool* out_match) {

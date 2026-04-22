@@ -103,6 +103,7 @@ typedef enum loom_amdgpu_memory_address_form_e {
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO = 1,
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR = 2,
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR = 3,
+  LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID = 4,
 } loom_amdgpu_memory_address_form_t;
 
 typedef enum loom_amdgpu_memory_dynamic_index_kind_e {
@@ -1243,6 +1244,84 @@ static bool loom_amdgpu_select_ds2_memory_descriptor(
   return false;
 }
 
+// The current slot builder may reorder multiple LDS slots around the low
+// function anchor, so a single source LDS root is the only source-local proof
+// that the selected slot will receive byte offset zero.
+static bool loom_amdgpu_source_function_proves_zero_lds_slot_base(
+    loom_func_like_t source_function, loom_value_id_t root_value_id) {
+  if (!loom_func_like_isa(source_function)) {
+    return false;
+  }
+  loom_region_t* body = loom_func_like_body(source_function);
+  if (body == NULL) {
+    return false;
+  }
+  bool found_root = false;
+  uint32_t workgroup_alloca_count = 0;
+  for (uint16_t block_index = 0; block_index < body->block_count;
+       ++block_index) {
+    const loom_block_t* block = loom_region_const_block(body, block_index);
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (!loom_buffer_alloca_isa(op) ||
+          loom_buffer_alloca_memory_space(op) !=
+              LOOM_BUFFER_MEMORY_SPACE_WORKGROUP) {
+        continue;
+      }
+      ++workgroup_alloca_count;
+      found_root = found_root || loom_buffer_alloca_result(op) == root_value_id;
+      if (workgroup_alloca_count > 1) {
+        return false;
+      }
+    }
+  }
+  return found_root && workgroup_alloca_count == 1;
+}
+
+static bool loom_amdgpu_try_select_ds_addtid_memory_descriptor(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_func_like_t source_function, loom_amdgpu_memory_access_t* access,
+    loom_amdgpu_memory_operation_kind_t kind) {
+  if (access->vgpr_count != 1 ||
+      access->dynamic_index == LOOM_VALUE_ID_INVALID ||
+      access->dynamic_index_kind != LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR ||
+      access->dynamic_index_byte_stride != access->element_byte_count ||
+      access->vector_lane_byte_stride != access->element_byte_count ||
+      !loom_amdgpu_source_function_proves_zero_lds_slot_base(
+          source_function, access->root_value_id)) {
+    return false;
+  }
+
+  const uint64_t descriptor_id =
+      kind == LOOM_AMDGPU_MEMORY_OPERATION_LOAD
+          ? LOOM_AMDGPU_DESCRIPTOR_ID_DS_READ_ADDTID_B32
+          : LOOM_AMDGPU_DESCRIPTOR_ID_DS_WRITE_ADDTID_B32;
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_lookup_descriptor_by_id(descriptor_set,
+                                                      descriptor_id);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return false;
+  }
+  loom_amdgpu_descriptor_offset_immediate_info_t offset_info;
+  if (!loom_amdgpu_descriptor_offset_immediate_info(
+          descriptor_set, descriptor_ordinal, 1,
+          LOOM_LOW_IMMEDIATE_KIND_UNSIGNED, &offset_info)) {
+    return false;
+  }
+
+  loom_amdgpu_memory_access_t candidate = *access;
+  candidate.address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID;
+  candidate.descriptor_id = descriptor_id;
+  loom_amdgpu_memory_access_diagnostic_t ignored_diagnostic = {0};
+  if (!loom_amdgpu_memory_access_split_static_offset(
+          &candidate, offset_info.unit_byte_count, offset_info.unsigned_max,
+          &ignored_diagnostic)) {
+    return false;
+  }
+  *access = candidate;
+  return true;
+}
+
 static bool loom_amdgpu_descriptor_has_implicit_operand(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_ordinal) {
@@ -1361,9 +1440,10 @@ static bool loom_amdgpu_memory_access_try_select_global_saddr(
 static bool loom_amdgpu_memory_access_select(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_low_descriptor_set_t* descriptor_set,
-    loom_value_id_t view_value_id, loom_value_slice_t dynamic_indices,
-    loom_attribute_t static_indices, loom_type_t view_type,
-    loom_type_t vector_type, loom_amdgpu_memory_operation_kind_t kind,
+    loom_func_like_t source_function, loom_value_id_t view_value_id,
+    loom_value_slice_t dynamic_indices, loom_attribute_t static_indices,
+    loom_type_t view_type, loom_type_t vector_type,
+    loom_amdgpu_memory_operation_kind_t kind,
     loom_amdgpu_memory_access_t* out_access,
     loom_amdgpu_memory_access_diagnostic_t* out_diagnostic) {
   IREE_ASSERT_ARGUMENT(out_access);
@@ -1562,6 +1642,10 @@ static bool loom_amdgpu_memory_access_select(
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_ROOT;
       return false;
     }
+    if (loom_amdgpu_try_select_ds_addtid_memory_descriptor(
+            descriptor_set, source_function, out_access, kind)) {
+      return true;
+    }
     if (out_access->vector_lane_byte_stride != out_access->element_byte_count) {
       if (out_access->vgpr_count != 2) {
         out_diagnostic->rejection_bits |=
@@ -1617,14 +1701,14 @@ static bool loom_amdgpu_memory_access_select(
       descriptor_set, kind, out_access, out_diagnostic, out_access);
 }
 
-static bool loom_amdgpu_load_memory_access_select(
+static bool loom_amdgpu_load_memory_access_select_with_source_function(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_memory_access_t* out_access) {
+    loom_func_like_t source_function, loom_amdgpu_memory_access_t* out_access) {
   const loom_module_t* module = loom_low_lower_context_module(context);
   loom_amdgpu_memory_access_diagnostic_t diagnostic = {0};
   return loom_amdgpu_memory_access_select(
       module, loom_low_lower_context_fact_table(context),
-      loom_low_lower_context_descriptor_set(context),
+      loom_low_lower_context_descriptor_set(context), source_function,
       loom_vector_load_view(source_op), loom_vector_load_indices(source_op),
       loom_vector_load_static_indices(source_op),
       loom_module_value_type(module, loom_vector_load_view(source_op)),
@@ -1632,14 +1716,22 @@ static bool loom_amdgpu_load_memory_access_select(
       LOOM_AMDGPU_MEMORY_OPERATION_LOAD, out_access, &diagnostic);
 }
 
-static bool loom_amdgpu_store_memory_access_select(
+static bool loom_amdgpu_load_memory_access_select(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_memory_access_t* out_access) {
+  return loom_amdgpu_load_memory_access_select_with_source_function(
+      context, source_op, loom_low_lower_context_source_function(context),
+      out_access);
+}
+
+static bool loom_amdgpu_store_memory_access_select_with_source_function(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_func_like_t source_function, loom_amdgpu_memory_access_t* out_access) {
   const loom_module_t* module = loom_low_lower_context_module(context);
   loom_amdgpu_memory_access_diagnostic_t diagnostic = {0};
   return loom_amdgpu_memory_access_select(
       module, loom_low_lower_context_fact_table(context),
-      loom_low_lower_context_descriptor_set(context),
+      loom_low_lower_context_descriptor_set(context), source_function,
       loom_vector_store_view(source_op), loom_vector_store_indices(source_op),
       loom_vector_store_static_indices(source_op),
       loom_module_value_type(module, loom_vector_store_view(source_op)),
@@ -1647,24 +1739,63 @@ static bool loom_amdgpu_store_memory_access_select(
       LOOM_AMDGPU_MEMORY_OPERATION_STORE, out_access, &diagnostic);
 }
 
+static bool loom_amdgpu_store_memory_access_select(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_memory_access_t* out_access) {
+  return loom_amdgpu_store_memory_access_select_with_source_function(
+      context, source_op, loom_low_lower_context_source_function(context),
+      out_access);
+}
+
 bool loom_amdgpu_can_lower_vector_load(loom_low_lower_context_t* context,
                                        const loom_op_t* source_op) {
   loom_amdgpu_memory_access_t access;
+  const loom_func_like_t no_source_function = {0};
   return loom_amdgpu_value_is_32bit_view(context,
                                          loom_vector_load_view(source_op)) &&
          loom_amdgpu_value_is_vector_32bit_lane_range(
              context, loom_vector_load_result(source_op)) &&
-         loom_amdgpu_load_memory_access_select(context, source_op, &access);
+         loom_amdgpu_load_memory_access_select_with_source_function(
+             context, source_op, no_source_function, &access);
 }
 
 bool loom_amdgpu_can_lower_vector_store(loom_low_lower_context_t* context,
                                         const loom_op_t* source_op) {
   loom_amdgpu_memory_access_t access;
+  const loom_func_like_t no_source_function = {0};
   return loom_amdgpu_value_is_vector_32bit_lane_range(
              context, loom_vector_store_value(source_op)) &&
          loom_amdgpu_value_is_32bit_view(context,
                                          loom_vector_store_view(source_op)) &&
-         loom_amdgpu_store_memory_access_select(context, source_op, &access);
+         loom_amdgpu_store_memory_access_select_with_source_function(
+             context, source_op, no_source_function, &access);
+}
+
+bool loom_amdgpu_source_op_selects_m0_descriptor(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t* out_descriptor_id) {
+  IREE_ASSERT_ARGUMENT(out_descriptor_id);
+  *out_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
+  loom_amdgpu_memory_access_t access;
+  bool selected = false;
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_LOAD:
+      selected =
+          loom_amdgpu_load_memory_access_select(context, source_op, &access);
+      break;
+    case LOOM_OP_VECTOR_STORE:
+      selected =
+          loom_amdgpu_store_memory_access_select(context, source_op, &access);
+      break;
+    default:
+      return false;
+  }
+  if (!selected ||
+      access.address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
+    return false;
+  }
+  *out_descriptor_id = access.descriptor_id;
+  return true;
 }
 
 static iree_status_t loom_amdgpu_emit_memory_vaddr(
@@ -1873,7 +2004,8 @@ iree_status_t loom_amdgpu_lower_vector_load(loom_low_lower_context_t* context,
                             "memory access");
   }
   loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;
-  if (access.address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO) {
+  if (access.address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO &&
+      access.address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
     const loom_value_id_t low_base_addr =
         access.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP
             ? low_resource
@@ -1891,6 +2023,20 @@ iree_status_t loom_amdgpu_lower_vector_load(loom_low_lower_context_t* context,
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_memory_offset_attrs(
       context, &access, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
   if (access.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    if (access.address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
+      loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_m0_live_in(context, &low_m0));
+      loom_value_id_t operands[] = {low_m0};
+      loom_op_t* low_op = NULL;
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_emit_low_op(context, source_op, access.descriptor_id,
+                                  operands, IREE_ARRAYSIZE(operands),
+                                  loom_make_named_attr_slice(attrs, attr_count),
+                                  &result_type, 1, &low_op));
+      return loom_low_lower_bind_value(
+          context, loom_vector_load_result(source_op),
+          loom_value_slice_get(loom_low_op_results(low_op), 0));
+    }
     loom_value_id_t operands[] = {low_vaddr};
     loom_op_t* low_op = NULL;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
@@ -1966,7 +2112,8 @@ iree_status_t loom_amdgpu_lower_vector_store(loom_low_lower_context_t* context,
                             "vector.store memory access");
   }
   loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;
-  if (access.address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO) {
+  if (access.address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO &&
+      access.address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
     const loom_value_id_t low_base_addr =
         access.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP
             ? low_resource
@@ -1980,6 +2127,20 @@ iree_status_t loom_amdgpu_lower_vector_store(loom_low_lower_context_t* context,
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_memory_offset_attrs(
       context, &access, attrs, IREE_ARRAYSIZE(attrs), &attr_count));
   if (access.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    if (access.address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID) {
+      loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_m0_live_in(context, &low_m0));
+      loom_value_id_t operands[] = {
+          low_value,
+          low_m0,
+      };
+      loom_op_t* low_op = NULL;
+      return loom_amdgpu_emit_low_op(
+          context, source_op, access.descriptor_id, operands,
+          IREE_ARRAYSIZE(operands),
+          loom_make_named_attr_slice(attrs, attr_count),
+          /*result_types=*/NULL, /*result_count=*/0, &low_op);
+    }
     if (access.address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR) {
       loom_type_t lane_type = loom_type_none();
       IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
@@ -2099,10 +2260,15 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_memory(
 
   loom_amdgpu_memory_access_t access = {0};
   loom_amdgpu_memory_access_diagnostic_t diagnostic = {0};
+  const loom_func_like_t source_function =
+      iree_any_bit_set(loom_target_low_legality_diagnostic_flags(context),
+                       LOOM_TARGET_LOW_LEGALITY_DIAGNOSTIC_MEMORY_ACCESS)
+          ? loom_target_low_legality_function(context)
+          : (loom_func_like_t){0};
   if (!loom_amdgpu_memory_access_select(
           module, loom_target_low_legality_fact_table(context), descriptor_set,
-          view_value_id, dynamic_indices, static_indices, view_type,
-          vector_type, kind, &access, &diagnostic)) {
+          source_function, view_value_id, dynamic_indices, static_indices,
+          view_type, vector_type, kind, &access, &diagnostic)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("memory"), loom_op_name(module, op),
         loom_amdgpu_memory_access_rejection_detail(diagnostic.rejection_bits));

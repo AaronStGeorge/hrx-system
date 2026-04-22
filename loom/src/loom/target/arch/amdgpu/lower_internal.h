@@ -95,6 +95,11 @@ iree_status_t loom_amdgpu_make_sgpr_range_type(
 iree_status_t loom_amdgpu_make_vgpr_type(loom_low_lower_context_t* context,
                                          loom_type_t* out_type);
 
+// Builds the register type for a descriptor's implicit resource operand.
+iree_status_t loom_amdgpu_make_descriptor_implicit_resource_type(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    loom_type_t* out_type);
+
 // Returns whether a low register type belongs to the requested AMDGPU register
 // class.
 iree_status_t loom_amdgpu_low_type_register_class_is(
@@ -194,6 +199,15 @@ iree_status_t loom_amdgpu_emit_low_slice(loom_low_lower_context_t* context,
                                          uint32_t lane_offset,
                                          loom_type_t result_type,
                                          loom_value_id_t* out_value);
+
+// Finds the M0 live-in value emitted for special-register memory packets.
+iree_status_t loom_amdgpu_lookup_m0_live_in(loom_low_lower_context_t* context,
+                                            loom_value_id_t* out_value_id);
+
+// Returns true when lowering |source_op| selects a descriptor that consumes M0.
+bool loom_amdgpu_source_op_selects_m0_descriptor(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    uint64_t* out_descriptor_id);
 
 // Returns true when the target bundle belongs to an AMDGPU contract set.
 bool loom_amdgpu_low_legality_bundle_is_amdgpu(

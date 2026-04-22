@@ -16,7 +16,7 @@
 
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT 3u
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_MAX_FIXED_VALUE_COUNT \
-  (1u + 2u * LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT)
+  (2u + 2u * LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT)
 
 static const loom_symbol_t* loom_amdgpu_hal_kernel_abi_lookup_defined_symbol(
     const loom_module_t* module, loom_symbol_ref_t symbol_ref) {
@@ -139,6 +139,12 @@ bool loom_amdgpu_hal_kernel_abi_is_workitem_id_z_live_in(
       IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE));
 }
 
+bool loom_amdgpu_hal_kernel_abi_is_m0_live_in(const loom_module_t* module,
+                                              loom_value_id_t value_id) {
+  return loom_amdgpu_hal_kernel_abi_is_live_in_source(
+      module, value_id, IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_M0_SOURCE));
+}
+
 typedef enum loom_amdgpu_hal_kernel_abi_reg_class_e {
   LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR = 0,
   LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_VGPR = 1,
@@ -228,6 +234,38 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_register_value(
         "AMDGPU HAL kernel ABI %.*s must have type reg<%.*s x%" PRIu32 ">",
         (int)label.size, label.data, (int)expected_class_name.size,
         expected_class_name.data, unit_count);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t
+loom_amdgpu_hal_kernel_abi_verify_single_physical_register_value(
+    const loom_module_t* module, const loom_low_register_class_map_t* map,
+    loom_value_id_t value_id, iree_string_view_t label) {
+  if (value_id >= module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU HAL kernel ABI %.*s value id %" PRIu32
+                            " is invalid",
+                            (int)label.size, label.data, value_id);
+  }
+  loom_type_t type = loom_module_value_type(module, value_id);
+  uint16_t actual_class_id = LOOM_LOW_REG_CLASS_NONE;
+  const loom_low_reg_class_t* actual_class = NULL;
+  bool found_actual_class = false;
+  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
+      map, type, &actual_class_id, &actual_class, &found_actual_class));
+  if (!found_actual_class || actual_class == NULL ||
+      loom_type_register_unit_count(type) != 1 ||
+      actual_class->physical_count != 1 ||
+      !iree_any_bit_set(actual_class->flags,
+                        LOOM_LOW_REG_CLASS_FLAG_PHYSICAL) ||
+      !iree_any_bit_set(actual_class->flags,
+                        LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL kernel ABI %.*s must be a single unspillable physical "
+        "register",
+        (int)label.size, label.data);
   }
   return iree_ok_status();
 }
@@ -591,6 +629,7 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
           LOOM_VALUE_ID_INVALID,
           LOOM_VALUE_ID_INVALID,
       };
+  loom_value_id_t m0 = LOOM_VALUE_ID_INVALID;
 
   loom_low_register_class_map_t register_class_map = {0};
   IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
@@ -685,6 +724,20 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
           LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_VGPR, 1, workitem_id_label));
       continue;
     }
+    if (iree_string_view_equal(source,
+                               IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_M0_SOURCE))) {
+      if (m0 != LOOM_VALUE_ID_INVALID) {
+        return iree_make_status(
+            IREE_STATUS_ALREADY_EXISTS,
+            "AMDGPU HAL kernel ABI fixed-value collection found duplicate "
+            "M0 live-ins");
+      }
+      m0 = loom_low_live_in_result(op);
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_hal_kernel_abi_verify_single_physical_register_value(
+              module, &register_class_map, m0, IREE_SV("M0 live-in")));
+      continue;
+    }
   }
 
   if (kernarg_ptr != LOOM_VALUE_ID_INVALID) {
@@ -721,6 +774,15 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
             .value_id = workitem_ids[i],
             .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
             .location_base = i,
+            .location_count = 1,
+        };
+  }
+  if (m0 != LOOM_VALUE_ID_INVALID) {
+    local_fixed_values[local_fixed_value_count++] =
+        (loom_low_allocation_fixed_value_t){
+            .value_id = m0,
+            .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+            .location_base = 0,
             .location_count = 1,
         };
   }

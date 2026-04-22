@@ -9,9 +9,9 @@ func.def target(@gfx11_lds_b32_diagnostics_target) @lds_b32_diagnostics(%output:
   %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
   %one = vector.constant 1 : vector<1xi32>
-  // REMARK@+1: BACKEND/017 "selected store memory packet 'amdgpu.ds_write_b32'" "dynamic stride 4 byte(s)" "conflict degree 1" "bank-conflict-free"
+  // REMARK@+1: BACKEND/017 "selected store memory packet 'amdgpu.ds_write_addtid_b32'" "dynamic stride 4 byte(s)" "conflict degree 1" "bank-conflict-free"
   vector.store %one, %scratch_view[%tid] : vector<1xi32>, view<64xi32, #dense>
-  // REMARK@+1: BACKEND/017 "selected load memory packet 'amdgpu.ds_read_b32'" "dynamic stride 4 byte(s)" "conflict degree 1" "bank-conflict-free"
+  // REMARK@+1: BACKEND/017 "selected load memory packet 'amdgpu.ds_read_addtid_b32'" "dynamic stride 4 byte(s)" "conflict degree 1" "bank-conflict-free"
   %loaded = vector.load %scratch_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
   vector.store %loaded, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
   func.return
