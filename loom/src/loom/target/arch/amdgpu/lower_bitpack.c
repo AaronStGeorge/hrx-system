@@ -32,6 +32,93 @@ typedef enum loom_amdgpu_bitunpack_rejection_e {
   LOOM_AMDGPU_BITUNPACK_REJECTION_RESULT_TYPE = 7,
 } loom_amdgpu_bitunpack_rejection_t;
 
+typedef struct loom_amdgpu_bitpack_rejection_detail_t {
+  // Rejection kind matched by this row.
+  loom_amdgpu_bitpack_rejection_t rejection;
+  // Stable diagnostic detail returned for the rejection kind.
+  iree_string_view_t detail;
+} loom_amdgpu_bitpack_rejection_detail_t;
+
+static const loom_amdgpu_bitpack_rejection_detail_t
+    kAmdgpuBitpackRejectionDetails[] = {
+        {
+            .rejection = LOOM_AMDGPU_BITPACK_REJECTION_WIDTH,
+            .detail = IREE_SVL(
+                "AMDGPU vector.bitpack currently lowers byte packing width 8"),
+        },
+        {
+            .rejection = LOOM_AMDGPU_BITPACK_REJECTION_SOURCE_TYPE,
+            .detail =
+                IREE_SVL("AMDGPU vector.bitpack requires a static rank-1 i32 "
+                         "source vector with at most eight lanes"),
+        },
+        {
+            .rejection = LOOM_AMDGPU_BITPACK_REJECTION_RESULT_TYPE,
+            .detail =
+                IREE_SVL("AMDGPU vector.bitpack requires a static rank-1 i8 "
+                         "result vector that fits packed 32-bit registers"),
+        },
+        {
+            .rejection = LOOM_AMDGPU_BITPACK_REJECTION_LANE_COUNT,
+            .detail =
+                IREE_SVL("AMDGPU vector.bitpack source and result lane counts "
+                         "must match"),
+        },
+        {
+            .rejection = LOOM_AMDGPU_BITPACK_REJECTION_LANE_GROUP,
+            .detail =
+                IREE_SVL("AMDGPU vector.bitpack requires result lanes grouped "
+                         "into complete 32-bit packed registers"),
+        },
+};
+
+typedef struct loom_amdgpu_bitunpack_rejection_detail_t {
+  // Rejection kind matched by this row.
+  loom_amdgpu_bitunpack_rejection_t rejection;
+  // Stable diagnostic detail returned for the rejection kind.
+  iree_string_view_t detail;
+} loom_amdgpu_bitunpack_rejection_detail_t;
+
+static const loom_amdgpu_bitunpack_rejection_detail_t
+    kAmdgpuBitunpackRejectionDetails[] = {
+        {
+            .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_WIDTH_RANGE,
+            .detail = IREE_SVL(
+                "AMDGPU vector.bitunpack width must be in the range [1, 32]"),
+        },
+        {
+            .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_WIDTH_DWORD_DIVISOR,
+            .detail = IREE_SVL(
+                "AMDGPU vector.bitunpack width must evenly partition a "
+                "32-bit backing register"),
+        },
+        {
+            .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_SOURCE_STORAGE,
+            .detail = IREE_SVL(
+                "AMDGPU vector.bitunpack requires static integer source "
+                "payload storage fitting one to four packed 32-bit "
+                "registers"),
+        },
+        {
+            .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_PAYLOAD_DIVISIBILITY,
+            .detail = IREE_SVL(
+                "AMDGPU vector.bitunpack source payload bit count must "
+                "be divisible by the unpack width"),
+        },
+        {
+            .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_LANE_COUNT,
+            .detail = IREE_SVL(
+                "AMDGPU vector.bitunpack requires one to eight unpacked "
+                "result lanes"),
+        },
+        {
+            .rejection = LOOM_AMDGPU_BITUNPACK_REJECTION_RESULT_TYPE,
+            .detail =
+                IREE_SVL("AMDGPU vector.bitunpack requires a static rank-1 i32 "
+                         "result vector matching the unpacked lane count"),
+        },
+};
+
 static bool loom_amdgpu_bitpack_reject(
     loom_amdgpu_bitpack_rejection_t rejection,
     loom_amdgpu_bitpack_rejection_t* out_rejection) {
@@ -358,63 +445,26 @@ iree_status_t loom_amdgpu_lower_vector_bitunpack(
 
 static iree_string_view_t loom_amdgpu_bitpack_rejection_detail(
     loom_amdgpu_bitpack_rejection_t rejection) {
-  switch (rejection) {
-    case LOOM_AMDGPU_BITPACK_REJECTION_WIDTH:
-      return IREE_SV(
-          "AMDGPU vector.bitpack currently lowers byte packing width 8");
-    case LOOM_AMDGPU_BITPACK_REJECTION_SOURCE_TYPE:
-      return IREE_SV(
-          "AMDGPU vector.bitpack requires a static rank-1 i32 "
-          "source vector with at most eight lanes");
-    case LOOM_AMDGPU_BITPACK_REJECTION_RESULT_TYPE:
-      return IREE_SV(
-          "AMDGPU vector.bitpack requires a static rank-1 i8 "
-          "result vector that fits packed 32-bit registers");
-    case LOOM_AMDGPU_BITPACK_REJECTION_LANE_COUNT:
-      return IREE_SV(
-          "AMDGPU vector.bitpack source and result lane counts "
-          "must match");
-    case LOOM_AMDGPU_BITPACK_REJECTION_LANE_GROUP:
-      return IREE_SV(
-          "AMDGPU vector.bitpack requires result lanes grouped "
-          "into complete 32-bit packed registers");
-    case LOOM_AMDGPU_BITPACK_REJECTION_OP:
-    case LOOM_AMDGPU_BITPACK_REJECTION_NONE:
-      return IREE_SV("AMDGPU vector.bitpack unsupported bitstream shape");
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kAmdgpuBitpackRejectionDetails); ++i) {
+    const loom_amdgpu_bitpack_rejection_detail_t* row =
+        &kAmdgpuBitpackRejectionDetails[i];
+    if (row->rejection == rejection) {
+      return row->detail;
+    }
   }
   return IREE_SV("AMDGPU vector.bitpack unsupported bitstream shape");
 }
 
 static iree_string_view_t loom_amdgpu_bitunpack_rejection_detail(
     loom_amdgpu_bitunpack_rejection_t rejection) {
-  switch (rejection) {
-    case LOOM_AMDGPU_BITUNPACK_REJECTION_WIDTH_RANGE:
-      return IREE_SV(
-          "AMDGPU vector.bitunpack width must be in the range [1, 32]");
-    case LOOM_AMDGPU_BITUNPACK_REJECTION_WIDTH_DWORD_DIVISOR:
-      return IREE_SV(
-          "AMDGPU vector.bitunpack width must evenly partition a "
-          "32-bit backing register");
-    case LOOM_AMDGPU_BITUNPACK_REJECTION_SOURCE_STORAGE:
-      return IREE_SV(
-          "AMDGPU vector.bitunpack requires static integer source "
-          "payload storage fitting one to four packed 32-bit "
-          "registers");
-    case LOOM_AMDGPU_BITUNPACK_REJECTION_PAYLOAD_DIVISIBILITY:
-      return IREE_SV(
-          "AMDGPU vector.bitunpack source payload bit count must "
-          "be divisible by the unpack width");
-    case LOOM_AMDGPU_BITUNPACK_REJECTION_LANE_COUNT:
-      return IREE_SV(
-          "AMDGPU vector.bitunpack requires one to eight unpacked "
-          "result lanes");
-    case LOOM_AMDGPU_BITUNPACK_REJECTION_RESULT_TYPE:
-      return IREE_SV(
-          "AMDGPU vector.bitunpack requires a static rank-1 i32 "
-          "result vector matching the unpacked lane count");
-    case LOOM_AMDGPU_BITUNPACK_REJECTION_OP:
-    case LOOM_AMDGPU_BITUNPACK_REJECTION_NONE:
-      return IREE_SV("AMDGPU vector.bitunpack unsupported bitstream shape");
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(kAmdgpuBitunpackRejectionDetails); ++i) {
+    const loom_amdgpu_bitunpack_rejection_detail_t* row =
+        &kAmdgpuBitunpackRejectionDetails[i];
+    if (row->rejection == rejection) {
+      return row->detail;
+    }
   }
   return IREE_SV("AMDGPU vector.bitunpack unsupported bitstream shape");
 }
