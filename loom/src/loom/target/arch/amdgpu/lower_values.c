@@ -12,6 +12,17 @@
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
 
+typedef struct loom_amdgpu_constant_plan_t {
+  // Source result value receiving the emitted low constant.
+  loom_value_id_t result;
+  // Stable descriptor ID selected for the constant move packet.
+  uint64_t descriptor_id;
+  // Number of result lanes receiving the same 32-bit bit pattern.
+  uint32_t lane_count;
+  // Immediate bit pattern emitted into each selected result lane.
+  uint32_t bit_pattern;
+} loom_amdgpu_constant_plan_t;
+
 typedef struct loom_amdgpu_vector_iota_plan_t {
   // Result vector receiving the generated i32 lane constants.
   loom_value_id_t result;
@@ -49,38 +60,95 @@ static bool loom_amdgpu_iota_i32_lane_value(int64_t base, int64_t step,
   return true;
 }
 
-static bool loom_amdgpu_can_lower_scalar_constant(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+static bool loom_amdgpu_select_i32_constant_plan(
+    loom_attribute_t value, loom_value_id_t result, uint64_t descriptor_id,
+    loom_amdgpu_constant_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  if (!loom_amdgpu_attr_is_i32_immediate(value)) {
+    return false;
+  }
+  *out_plan = (loom_amdgpu_constant_plan_t){
+      .result = result,
+      .descriptor_id = descriptor_id,
+      .lane_count = 1,
+      .bit_pattern = (uint32_t)(int32_t)value.i64,
+  };
+  return true;
+}
+
+static bool loom_amdgpu_select_f32_constant_plan(
+    loom_attribute_t value, loom_value_id_t result, uint32_t lane_count,
+    loom_amdgpu_constant_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  if (!loom_amdgpu_attr_is_f32_immediate(value)) {
+    return false;
+  }
+  *out_plan = (loom_amdgpu_constant_plan_t){
+      .result = result,
+      .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+      .lane_count = lane_count,
+      .bit_pattern = loom_amdgpu_attr_f32_bit_pattern(value),
+  };
+  return true;
+}
+
+static bool loom_amdgpu_select_index_constant_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_constant_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_amdgpu_constant_plan_t){0};
+  const loom_value_id_t result = loom_index_constant_result(source_op);
+  return loom_amdgpu_value_is_address_scalar(context, result) &&
+         loom_amdgpu_select_i32_constant_plan(
+             loom_index_constant_value(source_op), result,
+             LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32, out_plan);
+}
+
+static bool loom_amdgpu_select_scalar_constant_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_constant_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_amdgpu_constant_plan_t){0};
   const loom_value_id_t result = loom_scalar_constant_result(source_op);
   const loom_attribute_t value = loom_scalar_constant_value(source_op);
-  if (loom_amdgpu_value_is_i32(context, result)) {
-    return loom_amdgpu_attr_is_i32_immediate(value);
-  }
   if (loom_amdgpu_value_is_f32(context, result)) {
-    return loom_amdgpu_attr_is_f32_immediate(value);
+    return loom_amdgpu_select_f32_constant_plan(value, result,
+                                                /*lane_count=*/1, out_plan);
   }
-  return false;
+  if (!loom_amdgpu_value_is_i32(context, result)) {
+    return false;
+  }
+  const uint64_t descriptor_id = loom_amdgpu_value_prefers_vgpr(context, result)
+                                     ? LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32
+                                     : LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32;
+  return loom_amdgpu_select_i32_constant_plan(value, result, descriptor_id,
+                                              out_plan);
 }
 
-static bool loom_amdgpu_can_lower_index_constant(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  return loom_amdgpu_value_is_address_scalar(
-             context, loom_index_constant_result(source_op)) &&
-         loom_amdgpu_attr_is_i32_immediate(
-             loom_index_constant_value(source_op));
-}
-
-static bool loom_amdgpu_can_lower_vector_constant(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+static bool loom_amdgpu_select_vector_constant_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_constant_plan_t* out_plan) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  *out_plan = (loom_amdgpu_constant_plan_t){0};
   const loom_module_t* module = loom_low_lower_context_module(context);
-  const loom_type_t result_type =
-      loom_module_value_type(module, loom_vector_constant_result(source_op));
+  const loom_value_id_t result = loom_vector_constant_result(source_op);
+  const loom_type_t result_type = loom_module_value_type(module, result);
   const loom_attribute_t value = loom_vector_constant_value(source_op);
-  if (loom_amdgpu_vector_i32_lane_count(result_type) != 0) {
-    return loom_amdgpu_attr_is_i32_immediate(value);
+  const uint32_t i32_lane_count =
+      loom_amdgpu_vector_i32_lane_count(result_type);
+  if (i32_lane_count != 0) {
+    if (!loom_amdgpu_select_i32_constant_plan(
+            value, result, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32, out_plan)) {
+      return false;
+    }
+    out_plan->lane_count = i32_lane_count;
+    return true;
   }
-  if (loom_amdgpu_vector_f32_lane_count(result_type) != 0) {
-    return loom_amdgpu_attr_is_f32_immediate(value);
+  const uint32_t f32_lane_count =
+      loom_amdgpu_vector_f32_lane_count(result_type);
+  if (f32_lane_count != 0) {
+    return loom_amdgpu_select_f32_constant_plan(value, result, f32_lane_count,
+                                                out_plan);
   }
   return false;
 }
@@ -209,23 +277,29 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             loom_low_lower_plan_t* out_plan) {
   IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = loom_low_lower_plan_empty();
-#define LOOM_AMDGPU_SELECT_IF(condition)                              \
-  do {                                                                \
-    if (condition) {                                                  \
-      *out_plan = loom_low_lower_plan_make(source_op->kind, 0, NULL); \
-    }                                                                 \
-    return iree_ok_status();                                          \
-  } while (false)
   switch (source_op->kind) {
     case LOOM_OP_INDEX_CONSTANT:
-      LOOM_AMDGPU_SELECT_IF(
-          loom_amdgpu_can_lower_index_constant(context, source_op));
     case LOOM_OP_SCALAR_CONSTANT:
-      LOOM_AMDGPU_SELECT_IF(
-          loom_amdgpu_can_lower_scalar_constant(context, source_op));
-    case LOOM_OP_VECTOR_CONSTANT:
-      LOOM_AMDGPU_SELECT_IF(
-          loom_amdgpu_can_lower_vector_constant(context, source_op));
+    case LOOM_OP_VECTOR_CONSTANT: {
+      loom_amdgpu_constant_plan_t* plan_data = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+          context, sizeof(*plan_data), (void**)&plan_data));
+      bool selected = false;
+      if (source_op->kind == LOOM_OP_INDEX_CONSTANT) {
+        selected = loom_amdgpu_select_index_constant_plan(context, source_op,
+                                                          plan_data);
+      } else if (source_op->kind == LOOM_OP_SCALAR_CONSTANT) {
+        selected = loom_amdgpu_select_scalar_constant_plan(context, source_op,
+                                                           plan_data);
+      } else {
+        selected = loom_amdgpu_select_vector_constant_plan(context, source_op,
+                                                           plan_data);
+      }
+      if (selected) {
+        *out_plan = loom_low_lower_plan_make(source_op->kind, 0, plan_data);
+      }
+      return iree_ok_status();
+    }
     case LOOM_OP_VECTOR_IOTA: {
       loom_amdgpu_vector_iota_plan_t* plan_data = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
@@ -258,13 +332,12 @@ iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
     default:
       return iree_ok_status();
   }
-#undef LOOM_AMDGPU_SELECT_IF
 }
 
 static iree_status_t loom_amdgpu_bind_vgpr_u32_lane_constants(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_result, const uint32_t* lane_bit_patterns,
-    uint32_t lane_count) {
+    loom_value_id_t source_result, uint64_t descriptor_id,
+    const uint32_t* lane_bit_patterns, uint32_t lane_count) {
   IREE_ASSERT_ARGUMENT(lane_bit_patterns);
   IREE_ASSERT_GT(lane_count, 0);
   IREE_ASSERT_LE(lane_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
@@ -274,8 +347,8 @@ static iree_status_t loom_amdgpu_bind_vgpr_u32_lane_constants(
   loom_value_id_t low_lane_values[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
-        lane_bit_patterns[i], lane_type, &low_lane_values[i]));
+        context, source_op, descriptor_id, lane_bit_patterns[i], lane_type,
+        &low_lane_values[i]));
   }
 
   if (lane_count == 1) {
@@ -294,36 +367,6 @@ static iree_status_t loom_amdgpu_bind_vgpr_u32_lane_constants(
                                    loom_low_concat_result(concat_op));
 }
 
-static iree_status_t loom_amdgpu_bind_vgpr_i32_lane_constants(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_result, const int64_t* lane_values,
-    uint32_t lane_count) {
-  IREE_ASSERT_ARGUMENT(lane_values);
-  IREE_ASSERT_GT(lane_count, 0);
-  IREE_ASSERT_LE(lane_count, LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES);
-
-  uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-  for (uint32_t i = 0; i < lane_count; ++i) {
-    IREE_ASSERT_GE(lane_values[i], INT32_MIN);
-    IREE_ASSERT_LE(lane_values[i], INT32_MAX);
-    lane_bit_patterns[i] = (uint32_t)(int32_t)lane_values[i];
-  }
-  return loom_amdgpu_bind_vgpr_u32_lane_constants(
-      context, source_op, source_result, lane_bit_patterns, lane_count);
-}
-
-static iree_status_t loom_amdgpu_bind_vgpr_f32_lane_constant(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t source_result, uint32_t lane_bit_pattern,
-    uint32_t lane_count) {
-  uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-  for (uint32_t i = 0; i < lane_count; ++i) {
-    lane_bit_patterns[i] = lane_bit_pattern;
-  }
-  return loom_amdgpu_bind_vgpr_u32_lane_constants(
-      context, source_op, source_result, lane_bit_patterns, lane_count);
-}
-
 static iree_status_t loom_amdgpu_lower_u32_constant(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     uint64_t descriptor_id, uint32_t bit_pattern,
@@ -339,78 +382,22 @@ static iree_status_t loom_amdgpu_lower_u32_constant(
   return loom_low_lower_bind_value(context, source_result, low_result);
 }
 
-static iree_status_t loom_amdgpu_lower_i32_constant(
+static iree_status_t loom_amdgpu_lower_constant_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t descriptor_id, loom_attribute_t source_attr,
-    loom_value_id_t source_result) {
-  const int64_t source_value = source_attr.i64;
-  return loom_amdgpu_lower_u32_constant(context, source_op, descriptor_id,
-                                        (uint32_t)(int32_t)source_value,
-                                        source_result);
-}
-
-static iree_status_t loom_amdgpu_lower_index_constant(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  return loom_amdgpu_lower_i32_constant(context, source_op,
-                                        LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32,
-                                        loom_index_constant_value(source_op),
-                                        loom_index_constant_result(source_op));
-}
-
-static iree_status_t loom_amdgpu_lower_scalar_constant(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  const loom_value_id_t source_result = loom_scalar_constant_result(source_op);
-  const loom_type_t source_type = loom_module_value_type(module, source_result);
-  if (loom_amdgpu_type_is_f32(source_type)) {
-    return loom_amdgpu_lower_u32_constant(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
-        loom_amdgpu_attr_f32_bit_pattern(loom_scalar_constant_value(source_op)),
-        source_result);
+    const loom_amdgpu_constant_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+  if (plan->lane_count == 1) {
+    return loom_amdgpu_lower_u32_constant(context, source_op,
+                                          plan->descriptor_id,
+                                          plan->bit_pattern, plan->result);
   }
-
-  const uint64_t descriptor_id =
-      loom_amdgpu_value_prefers_vgpr(context, source_result)
-          ? LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32
-          : LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32;
-  return loom_amdgpu_lower_i32_constant(context, source_op, descriptor_id,
-                                        loom_scalar_constant_value(source_op),
-                                        source_result);
-}
-
-static iree_status_t loom_amdgpu_lower_vector_constant(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  const loom_value_id_t source_result = loom_vector_constant_result(source_op);
-  const loom_type_t source_type = loom_module_value_type(module, source_result);
-  const uint32_t i32_lane_count =
-      loom_amdgpu_vector_i32_lane_count(source_type);
-  if (i32_lane_count == 1) {
-    return loom_amdgpu_lower_i32_constant(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
-        loom_vector_constant_value(source_op), source_result);
+  uint32_t lane_bit_patterns[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
+  for (uint32_t i = 0; i < plan->lane_count; ++i) {
+    lane_bit_patterns[i] = plan->bit_pattern;
   }
-  if (i32_lane_count > 1) {
-    const int64_t source_value = loom_vector_constant_value(source_op).i64;
-    int64_t lane_values[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-    for (uint32_t i = 0; i < i32_lane_count; ++i) {
-      lane_values[i] = source_value;
-    }
-    return loom_amdgpu_bind_vgpr_i32_lane_constants(
-        context, source_op, source_result, lane_values, i32_lane_count);
-  }
-
-  const uint32_t f32_lane_count =
-      loom_amdgpu_vector_f32_lane_count(source_type);
-  if (f32_lane_count != 0) {
-    return loom_amdgpu_bind_vgpr_f32_lane_constant(
-        context, source_op, source_result,
-        loom_amdgpu_attr_f32_bit_pattern(loom_vector_constant_value(source_op)),
-        f32_lane_count);
-  }
-
-  IREE_ASSERT_UNREACHABLE();
-  return iree_ok_status();
+  return loom_amdgpu_bind_vgpr_u32_lane_constants(
+      context, source_op, plan->result, plan->descriptor_id, lane_bit_patterns,
+      plan->lane_count);
 }
 
 static iree_status_t loom_amdgpu_lower_vector_iota(
@@ -418,8 +405,8 @@ static iree_status_t loom_amdgpu_lower_vector_iota(
     const loom_amdgpu_vector_iota_plan_t* plan) {
   IREE_ASSERT_ARGUMENT(plan);
   return loom_amdgpu_bind_vgpr_u32_lane_constants(
-      context, source_op, plan->result, plan->lane_bit_patterns,
-      plan->lane_count);
+      context, source_op, plan->result, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+      plan->lane_bit_patterns, plan->lane_count);
 }
 
 static iree_status_t loom_amdgpu_lower_vector_extract(
@@ -485,11 +472,11 @@ iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
                                          loom_low_lower_plan_t plan) {
   switch (source_op->kind) {
     case LOOM_OP_INDEX_CONSTANT:
-      return loom_amdgpu_lower_index_constant(context, source_op);
     case LOOM_OP_SCALAR_CONSTANT:
-      return loom_amdgpu_lower_scalar_constant(context, source_op);
     case LOOM_OP_VECTOR_CONSTANT:
-      return loom_amdgpu_lower_vector_constant(context, source_op);
+      return loom_amdgpu_lower_constant_plan(
+          context, source_op,
+          (const loom_amdgpu_constant_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_IOTA:
       return loom_amdgpu_lower_vector_iota(
           context, source_op,
