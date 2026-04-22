@@ -150,7 +150,7 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
     case LOOM_OP_BUFFER_ALLOCA:
     case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
     case LOOM_OP_BUFFER_VIEW:
-      return loom_amdgpu_lower_buffer_op(context, source_op);
+      return loom_amdgpu_lower_buffer_op(context, source_op, plan);
     case LOOM_OP_KERNEL_WORKITEM_ID:
     case LOOM_OP_KERNEL_WORKGROUP_ID:
       return loom_amdgpu_lower_preamble_op(context, source_op);

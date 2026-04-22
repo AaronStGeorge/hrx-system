@@ -90,6 +90,13 @@ typedef struct loom_amdgpu_vector_extract_plan_t {
   uint32_t lane_count;
 } loom_amdgpu_vector_extract_plan_t;
 
+typedef struct loom_amdgpu_buffer_alloca_plan_t {
+  // Exact LDS allocation byte length proven during planning.
+  int64_t byte_length;
+  // Power-of-two LDS allocation byte alignment proven during planning.
+  int64_t base_alignment;
+} loom_amdgpu_buffer_alloca_plan_t;
+
 typedef enum loom_amdgpu_table_index_kind_e {
   LOOM_AMDGPU_TABLE_INDEX_KIND_NONE = 0,
   LOOM_AMDGPU_TABLE_INDEX_KIND_I32 = 1,
