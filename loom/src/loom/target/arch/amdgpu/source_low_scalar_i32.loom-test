@@ -1,0 +1,27 @@
+// RUN: emit source-low @scalar_i32_uniform_sgpr output=low
+target.profile @gfx11_scalar_i32_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_scalar_i32_target) @scalar_i32_uniform_sgpr(%lhs: i32, %rhs: i32, %shift: i32) -> (i32) {
+  %add = scalar.addi %lhs, %rhs : i32
+  %sub = scalar.subi %add, %rhs : i32
+  %and = scalar.andi %sub, %lhs : i32
+  %or = scalar.ori %and, %rhs : i32
+  %xor = scalar.xori %or, %lhs : i32
+  %shl = scalar.shli %xor, %shift : i32
+  %ashr = scalar.shrsi %shl, %shift : i32
+  %lshr = scalar.shrui %ashr, %shift : i32
+  func.return %lshr : i32
+}
+
+// ----
+low.func.def target(@gfx11_scalar_i32_target) abi(hal_kernel) @scalar_i32_uniform_sgpr__low(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %shift: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
+  %add = low.op<amdgpu.s_add_u32>(%lhs, %rhs) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %sub = low.op<amdgpu.s_sub_u32>(%add, %rhs) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %and = low.op<amdgpu.s_and_b32>(%sub, %lhs) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %or = low.op<amdgpu.s_or_b32>(%and, %rhs) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %xor = low.op<amdgpu.s_xor_b32>(%or, %lhs) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %shl = low.op<amdgpu.s_lshl_b32>(%xor, %shift) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %ashr = low.op<amdgpu.s_ashr_i32>(%shl, %shift) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  %lshr = low.op<amdgpu.s_lshr_b32>(%ashr, %shift) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %lshr : reg<amdgpu.sgpr>
+}

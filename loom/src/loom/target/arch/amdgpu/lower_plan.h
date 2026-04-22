@@ -97,34 +97,6 @@ typedef struct loom_amdgpu_buffer_alloca_plan_t {
   int64_t base_alignment;
 } loom_amdgpu_buffer_alloca_plan_t;
 
-typedef enum loom_amdgpu_integer_emit_kind_e {
-  LOOM_AMDGPU_INTEGER_EMIT_KIND_NONE = 0,
-  LOOM_AMDGPU_INTEGER_EMIT_KIND_BINARY = 1,
-} loom_amdgpu_integer_emit_kind_t;
-
-typedef enum loom_amdgpu_integer_operand_kind_e {
-  LOOM_AMDGPU_INTEGER_OPERAND_KIND_NONE = 0,
-  LOOM_AMDGPU_INTEGER_OPERAND_KIND_I32_DIRECT = 1,
-  LOOM_AMDGPU_INTEGER_OPERAND_KIND_I32_VGPR = 2,
-  LOOM_AMDGPU_INTEGER_OPERAND_KIND_ADDRESS_DIRECT = 3,
-  LOOM_AMDGPU_INTEGER_OPERAND_KIND_ADDRESS_VGPR = 4,
-} loom_amdgpu_integer_operand_kind_t;
-
-typedef struct loom_amdgpu_integer_plan_t {
-  // Emission shape selected for this integer source op.
-  loom_amdgpu_integer_emit_kind_t emit_kind;
-  // Operand lookup/materialization domain selected during planning.
-  loom_amdgpu_integer_operand_kind_t operand_kind;
-  // Descriptor ID selected for the integer operation.
-  uint64_t descriptor_id;
-  // First source operand in target descriptor order.
-  loom_value_id_t source_lhs;
-  // Second source operand in target descriptor order.
-  loom_value_id_t source_rhs;
-  // Source result value receiving the low op result.
-  loom_value_id_t source_result;
-} loom_amdgpu_integer_plan_t;
-
 typedef enum loom_amdgpu_table_index_kind_e {
   LOOM_AMDGPU_TABLE_INDEX_KIND_NONE = 0,
   LOOM_AMDGPU_TABLE_INDEX_KIND_I32 = 1,
