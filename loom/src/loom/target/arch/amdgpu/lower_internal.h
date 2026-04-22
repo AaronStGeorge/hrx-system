@@ -110,6 +110,11 @@ iree_status_t loom_amdgpu_low_type_register_class_is(
     loom_low_lower_context_t* context, loom_type_t type, uint16_t reg_class_id,
     bool* out_match);
 
+// Returns true when the module source value should prefer a VGPR mapping even
+// if its scalar type could otherwise map to an SGPR.
+bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,
+                                           loom_value_id_t source_value_id);
+
 // Returns true when the source value should prefer a VGPR mapping even if its
 // scalar type could otherwise map to an SGPR.
 bool loom_amdgpu_value_prefers_vgpr(loom_low_lower_context_t* context,
@@ -166,9 +171,20 @@ bool loom_amdgpu_value_as_i32_constant(loom_low_lower_context_t* context,
 bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
     loom_low_lower_context_t* context, loom_value_id_t value_id);
 
+// Returns true when a source address scalar can be materialized as a VGPR
+// operand for vector-style address arithmetic.
+bool loom_amdgpu_value_can_materialize_as_vgpr_address(
+    loom_low_lower_context_t* context, loom_value_id_t value_id);
+
 // Looks up a lowered i32 value and materializes exact source constants into
 // VGPRs when a vector-style packet cannot consume the existing lowering.
 iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value, loom_value_id_t* out_low_value);
+
+// Looks up a lowered address scalar and materializes exact source constants
+// into VGPRs when a vector-style packet cannot consume the existing lowering.
+iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_address(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_value, loom_value_id_t* out_low_value);
 

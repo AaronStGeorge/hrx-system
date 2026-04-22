@@ -17,6 +17,36 @@ func.def target(@gfx11_i32_row_mix_target) @amdgpu_i32_row_mix(%lhs_buffer: buff
 }
 
 // ====
+// RUN: emit source-low @amdgpu_i32_gemm2_shape output=none
+target.profile @gfx11_i32_gemm2_shape_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_i32_gemm2_shape_target) @amdgpu_i32_gemm2_shape(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %x = kernel.workitem.id<x> : index
+  %y = kernel.workitem.id<y> : index
+  %zero_offset = index.constant 0 : offset
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  %k = index.constant 2 : index
+  %lhs_base = index.madd %y, %k, %zero : index
+  %lhs_next = index.add %lhs_base, %one : index
+  %rhs_base = index.add %x, %zero : index
+  %rhs_next = index.add %x, %k : index
+  %output_index = index.madd %y, %k, %x : index
+  %lhs_view = buffer.view %lhs_buffer[%zero_offset] : buffer -> view<4xi32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero_offset] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%zero_offset] : buffer -> view<4xi32, #dense>
+  %lhs0 = vector.load %lhs_view[%lhs_base] : view<4xi32, #dense> -> vector<1xi32>
+  %rhs0 = vector.load %rhs_view[%rhs_base] : view<4xi32, #dense> -> vector<1xi32>
+  %prod0 = vector.muli %lhs0, %rhs0 : vector<1xi32>
+  %lhs1 = vector.load %lhs_view[%lhs_next] : view<4xi32, #dense> -> vector<1xi32>
+  %rhs1 = vector.load %rhs_view[%rhs_next] : view<4xi32, #dense> -> vector<1xi32>
+  %prod1 = vector.muli %lhs1, %rhs1 : vector<1xi32>
+  %sum = vector.addi %prod0, %prod1 : vector<1xi32>
+  vector.store %sum, %output_view[%output_index] : vector<1xi32>, view<4xi32, #dense>
+  func.return
+}
+
+// ====
 // RUN: emit source-low @amdgpu_i32_b64 output=none
 target.profile @gfx11_i32_b64_target preset("amdgpu-gfx11")
 

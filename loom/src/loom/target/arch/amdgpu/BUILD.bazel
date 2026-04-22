@@ -828,6 +828,7 @@ loom_check_test_suite(
         "source_low_bitunpack.loom-test",
         "source_low_cache_policy.loom-test",
         "source_low_diagnostics.loom-test",
+        "source_low_index.loom-test",
         "source_low_reduce.loom-test",
         "vector_corpus.loom-test",
     ],

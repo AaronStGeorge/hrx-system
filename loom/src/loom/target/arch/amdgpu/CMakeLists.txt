@@ -796,6 +796,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_index"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_index.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_reduce"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_reduce.loom-test"

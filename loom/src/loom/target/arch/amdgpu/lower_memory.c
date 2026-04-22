@@ -19,8 +19,11 @@
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/util/fact_table.h"
 
-static bool loom_amdgpu_module_value_is_workitem_id_x(
-    const loom_module_t* module, loom_value_id_t value_id) {
+static bool loom_amdgpu_module_value_as_workitem_id(
+    const loom_module_t* module, loom_value_id_t value_id,
+    loom_kernel_dimension_t* out_dimension) {
+  IREE_ASSERT_ARGUMENT(out_dimension);
+  *out_dimension = LOOM_KERNEL_DIMENSION_COUNT_;
   if (value_id >= module->values.count) {
     return false;
   }
@@ -29,13 +32,23 @@ static bool loom_amdgpu_module_value_is_workitem_id_x(
     return false;
   }
   const loom_op_t* defining_op = loom_value_def_op(value);
-  return defining_op && loom_kernel_workitem_id_isa(defining_op) &&
-         loom_kernel_workitem_id_dimension(defining_op) ==
-             LOOM_KERNEL_DIMENSION_X;
+  if (!defining_op || !loom_kernel_workitem_id_isa(defining_op)) {
+    return false;
+  }
+  const loom_kernel_dimension_t dimension =
+      loom_kernel_workitem_id_dimension(defining_op);
+  if (dimension >= LOOM_KERNEL_DIMENSION_COUNT_) {
+    return false;
+  }
+  *out_dimension = dimension;
+  return true;
 }
 
-static bool loom_amdgpu_module_value_is_workgroup_id(
-    const loom_module_t* module, loom_value_id_t value_id) {
+static bool loom_amdgpu_module_value_as_workgroup_id(
+    const loom_module_t* module, loom_value_id_t value_id,
+    loom_kernel_dimension_t* out_dimension) {
+  IREE_ASSERT_ARGUMENT(out_dimension);
+  *out_dimension = LOOM_KERNEL_DIMENSION_COUNT_;
   if (value_id >= module->values.count) {
     return false;
   }
@@ -44,9 +57,16 @@ static bool loom_amdgpu_module_value_is_workgroup_id(
     return false;
   }
   const loom_op_t* defining_op = loom_value_def_op(value);
-  return defining_op && loom_kernel_workgroup_id_isa(defining_op) &&
-         loom_kernel_workgroup_id_dimension(defining_op) <
-             LOOM_KERNEL_DIMENSION_COUNT_;
+  if (!defining_op || !loom_kernel_workgroup_id_isa(defining_op)) {
+    return false;
+  }
+  const loom_kernel_dimension_t dimension =
+      loom_kernel_workgroup_id_dimension(defining_op);
+  if (dimension >= LOOM_KERNEL_DIMENSION_COUNT_) {
+    return false;
+  }
+  *out_dimension = dimension;
+  return true;
 }
 
 typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
@@ -115,6 +135,13 @@ typedef enum loom_amdgpu_memory_dynamic_index_kind_e {
   LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET = 2,
 } loom_amdgpu_memory_dynamic_index_kind_t;
 
+typedef enum loom_amdgpu_memory_dynamic_index_source_e {
+  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_NONE = 0,
+  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID = 1,
+  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID = 2,
+  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_COMPUTED_VADDR = 3,
+} loom_amdgpu_memory_dynamic_index_source_t;
+
 typedef enum loom_amdgpu_memory_operation_kind_e {
   LOOM_AMDGPU_MEMORY_OPERATION_LOAD = 0,
   LOOM_AMDGPU_MEMORY_OPERATION_STORE = 1,
@@ -134,6 +161,10 @@ typedef struct loom_amdgpu_memory_access_t {
   loom_value_id_t dynamic_index;
   // Target operand path used for the dynamic index.
   loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
+  // Source provenance for dimension-sensitive address-form selection.
+  loom_amdgpu_memory_dynamic_index_source_t dynamic_index_source;
+  // Workitem/workgroup dimension when |dynamic_index_source| is a coordinate.
+  loom_kernel_dimension_t dynamic_index_dimension;
   // Byte stride multiplied by dynamic_index before adding it to VADDR/SOFFSET.
   uint32_t dynamic_index_byte_stride;
   // Power-of-two shift used to compute the dynamic byte offset, or
@@ -393,7 +424,8 @@ static iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE)) {
     return IREE_SV(
         "AMDGPU buffer memory lowering currently requires dynamic "
-        "indices to come from kernel.workitem.id<x> or kernel.workgroup.id");
+        "indices to come from kernel.workitem.id, kernel.workgroup.id, or "
+        "VGPR address arithmetic");
   }
   if (iree_any_bit_set(rejection_bits,
                        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_STRIDE)) {
@@ -413,7 +445,7 @@ static iree_string_view_t loom_amdgpu_memory_access_rejection_detail(
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_WORKGROUP_DYNAMIC_INDEX_SOURCE)) {
     return IREE_SV(
         "AMDGPU workgroup memory lowering currently requires dynamic "
-        "indices to come from kernel.workitem.id<x>");
+        "indices to come from kernel.workitem.id");
   }
   if (iree_any_bit_set(
           rejection_bits,
@@ -1333,6 +1365,9 @@ static bool loom_amdgpu_try_select_ds_addtid_memory_descriptor(
   if (access->vgpr_count != 1 ||
       access->dynamic_index == LOOM_VALUE_ID_INVALID ||
       access->dynamic_index_kind != LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR ||
+      access->dynamic_index_source !=
+          LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID ||
+      access->dynamic_index_dimension != LOOM_KERNEL_DIMENSION_X ||
       access->dynamic_index_byte_stride != access->element_byte_count ||
       access->vector_lane_byte_stride != access->element_byte_count ||
       !loom_amdgpu_source_function_proves_zero_lds_slot_base(
@@ -1502,6 +1537,8 @@ static bool loom_amdgpu_memory_access_select(
       .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
       .dynamic_index = LOOM_VALUE_ID_INVALID,
       .dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE,
+      .dynamic_index_source = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_NONE,
+      .dynamic_index_dimension = LOOM_KERNEL_DIMENSION_COUNT_,
       .dynamic_index_byte_shift = LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE,
       .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
   };
@@ -1596,13 +1633,21 @@ static bool loom_amdgpu_memory_access_select(
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_AXIS;
       return false;
     }
-    const bool dynamic_index_is_workitem_x =
-        loom_amdgpu_module_value_is_workitem_id_x(module,
-                                                  dynamic_indices.values[0]);
+    loom_kernel_dimension_t dynamic_index_dimension =
+        LOOM_KERNEL_DIMENSION_COUNT_;
+    const bool dynamic_index_is_workitem_id =
+        loom_amdgpu_module_value_as_workitem_id(
+            module, dynamic_indices.values[0], &dynamic_index_dimension);
     const bool dynamic_index_is_workgroup_id =
-        loom_amdgpu_module_value_is_workgroup_id(module,
-                                                 dynamic_indices.values[0]);
-    if (!dynamic_index_is_workitem_x && !dynamic_index_is_workgroup_id) {
+        !dynamic_index_is_workitem_id &&
+        loom_amdgpu_module_value_as_workgroup_id(
+            module, dynamic_indices.values[0], &dynamic_index_dimension);
+    const bool dynamic_index_is_computed_vaddr =
+        !dynamic_index_is_workitem_id && !dynamic_index_is_workgroup_id &&
+        loom_amdgpu_module_value_prefers_vgpr(module,
+                                              dynamic_indices.values[0]);
+    if (!dynamic_index_is_workitem_id && !dynamic_index_is_workgroup_id &&
+        !dynamic_index_is_computed_vaddr) {
       out_diagnostic->rejection_bits |=
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE;
       return false;
@@ -1652,6 +1697,17 @@ static bool loom_amdgpu_memory_access_select(
     out_access->dynamic_index_kind =
         dynamic_index_is_workgroup_id ? LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET
                                       : LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR;
+    if (dynamic_index_is_workgroup_id) {
+      out_access->dynamic_index_source =
+          LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID;
+    } else if (dynamic_index_is_workitem_id) {
+      out_access->dynamic_index_source =
+          LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID;
+    } else {
+      out_access->dynamic_index_source =
+          LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_COMPUTED_VADDR;
+    }
+    out_access->dynamic_index_dimension = dynamic_index_dimension;
     out_access->dynamic_index_byte_stride = (uint32_t)dynamic_index_byte_stride;
     if (loom_amdgpu_u32_is_power_of_two((uint32_t)dynamic_index_byte_stride)) {
       uint32_t dynamic_index_byte_shift = 0;

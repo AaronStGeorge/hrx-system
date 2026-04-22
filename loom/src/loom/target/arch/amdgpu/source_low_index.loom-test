@@ -1,0 +1,80 @@
+// RUN: emit source-low @index_madd_global_b32 output=low
+target.profile @gfx11_index_madd_global_b32_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_index_madd_global_b32_target) @index_madd_global_b32(%input: buffer, %output: buffer) {
+  %x = kernel.workitem.id<x> : index
+  %y = kernel.workitem.id<y> : index
+  %zero = index.constant 0 : offset
+  %row_stride = index.constant 4 : index
+  %linear = index.madd %y, %row_stride, %x : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<16xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<16xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<16xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<16xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@gfx11_index_madd_global_b32_target) abi(hal_kernel) @index_madd_global_b32__low() {
+  %x = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %y = low.live_in<amdgpu.workitem_id.y> : reg<amdgpu.vgpr>
+  %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x4>
+  %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %row_stride = low.const<amdgpu.s_mov_b32> {imm32 = 4} : reg<amdgpu.sgpr>
+  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_mul_lo_u32>(%y, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %linear = low.op<amdgpu.v_add_u32>(%17, %x) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %19 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %20 = low.op<amdgpu.v_lshlrev_b32>(%19, %linear) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %21 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %loaded = low.op<amdgpu.buffer_load_dword>(%input_view, %20, %21) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %23 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %24 = low.op<amdgpu.v_lshlrev_b32>(%23, %linear) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %25 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  low.op<amdgpu.buffer_store_dword>(%loaded, %output_view, %24, %25) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ====
+// RUN: emit source-low @workitem_y_lds_uses_explicit_vaddr output=low
+target.profile @gfx11_workitem_y_lds_uses_explicit_vaddr_target preset("amdgpu-gfx11")
+
+func.def target(@gfx11_workitem_y_lds_uses_explicit_vaddr_target) @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
+  %y = kernel.workitem.id<y> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %value = vector.constant 7 : vector<1xi32>
+  vector.store %value, %scratch_view[%y] : vector<1xi32>, view<64xi32, #dense>
+  %loaded = vector.load %scratch_view[%y] : view<64xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%y] : vector<1xi32>, view<64xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@gfx11_workitem_y_lds_uses_explicit_vaddr_target) abi(hal_kernel) @workitem_y_lds_uses_explicit_vaddr__low() {
+  %y = low.live_in<amdgpu.workitem_id.y> : reg<amdgpu.vgpr>
+  %output_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
+  %scratch_view = low.frame_index @workitem_y_lds_uses_explicit_vaddr__low__lds4 {offset = 0} : reg<amdgpu.vgpr>
+  %value = low.const<amdgpu.v_mov_b32> {imm32 = 7} : reg<amdgpu.vgpr>
+  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %16 = low.op<amdgpu.v_lshlrev_b32>(%15, %y) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_add_u32>(%scratch_view, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_write_b32>(%17, %value) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
+  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %19 = low.op<amdgpu.v_lshlrev_b32>(%18, %y) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %20 = low.op<amdgpu.v_add_u32>(%scratch_view, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %loaded = low.op<amdgpu.ds_read_b32>(%20) {offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %22 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %23 = low.op<amdgpu.v_lshlrev_b32>(%22, %y) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %24 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  low.op<amdgpu.buffer_store_dword>(%loaded, %output_view, %23, %24) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+low.slot @workitem_y_lds_uses_explicit_vaddr__low__lds4 {align = 16, function = @workitem_y_lds_uses_explicit_vaddr__low, size = 256, space = lds}
