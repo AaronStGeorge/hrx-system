@@ -337,6 +337,29 @@ static iree_status_t loom_x86_append_tied_ternary_packet(
   return loom_x86_append_operand(state, context, 2);
 }
 
+static iree_status_t loom_x86_append_lea_add_packet(
+    const loom_x86_assembly_state_t* state,
+    const loom_native_assembly_packet_context_t* context) {
+  const loom_op_t* op = context->packet->node->op;
+  if (op->result_count != 1 || op->operand_count != 2) {
+    iree_string_view_t key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_x86_descriptor_key(context, &key));
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "x86 assembly LEA descriptor '%.*s' has an "
+                            "unsupported operand shape",
+                            (int)key.size, key.data);
+  }
+  IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  IREE_RETURN_IF_ERROR(loom_x86_append_result(state, context, 0));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, ", "));
+  return loom_x86_append_memory_operand(state, context,
+                                        loom_op_const_operands(op)[0],
+                                        loom_op_const_operands(op)[1], 1, 0);
+}
+
 static iree_status_t loom_x86_descriptor_has_constraint(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, loom_low_constraint_kind_t kind,
@@ -647,6 +670,10 @@ static iree_status_t loom_x86_append_descriptor_packet(
       context, &uses_tied_ternary_form));
   if (uses_tied_ternary_form) {
     return loom_x86_append_tied_ternary_packet(state, context);
+  }
+  if (descriptor->stable_id ==
+      X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_LEA_ADD_GPR64) {
+    return loom_x86_append_lea_add_packet(state, context);
   }
   const loom_op_t* op = context->packet->node->op;
   if (descriptor->result_count == 1 && descriptor->operand_count == 3 &&

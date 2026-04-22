@@ -363,6 +363,9 @@ enum loom_x86_avx512_guard_e {
   LOOM_X86_AVX512_ADDRESS_CONST_VALUE_GUARD = 7,
   LOOM_X86_AVX512_ADDRESS_CONST_RESULT_GUARD = 8,
   LOOM_X86_AVX512_ADDRESS_CONST_RANGE_GUARD = 9,
+  LOOM_X86_AVX512_ADDRESS_LHS_GUARD = 10,
+  LOOM_X86_AVX512_ADDRESS_RHS_GUARD = 11,
+  LOOM_X86_AVX512_ADDRESS_RESULT_GUARD = 12,
 };
 
 static const loom_low_lower_guard_t loom_x86_avx512_guards[] = {
@@ -437,6 +440,27 @@ static const loom_low_lower_guard_t loom_x86_avx512_guards[] = {
             .minimum_i64 = INT64_MIN + 1,
             .maximum_i64 = INT64_MAX,
         },
+    [LOOM_X86_AVX512_ADDRESS_LHS_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_X86_AVX512_OPERAND0,
+            .type_pattern_index = LOOM_X86_AVX512_TYPE_ADDRESS_GPR64,
+            .diagnostic_index = LOOM_X86_AVX512_DIAGNOSTIC_ADDRESS_GPR64,
+        },
+    [LOOM_X86_AVX512_ADDRESS_RHS_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_X86_AVX512_OPERAND1,
+            .type_pattern_index = LOOM_X86_AVX512_TYPE_ADDRESS_GPR64,
+            .diagnostic_index = LOOM_X86_AVX512_DIAGNOSTIC_ADDRESS_GPR64,
+        },
+    [LOOM_X86_AVX512_ADDRESS_RESULT_GUARD] =
+        {
+            .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+            .value_ref_index = LOOM_X86_AVX512_RESULT0,
+            .type_pattern_index = LOOM_X86_AVX512_TYPE_ADDRESS_GPR64,
+            .diagnostic_index = LOOM_X86_AVX512_DIAGNOSTIC_ADDRESS_GPR64,
+        },
 };
 
 static const loom_tied_result_t loom_x86_avx512_tied_results[] = {
@@ -456,6 +480,7 @@ enum loom_x86_avx512_emit_e {
   LOOM_X86_AVX512_EMIT_VPSUBD = 5,
   LOOM_X86_AVX512_EMIT_VPMULLD = 6,
   LOOM_X86_AVX512_EMIT_MOVIMM_GPR64 = 7,
+  LOOM_X86_AVX512_EMIT_LEA_ADD_GPR64 = 8,
 };
 
 static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
@@ -542,6 +567,16 @@ static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
             .attr_copy_start = 0,
             .attr_copy_count = 1,
         },
+    [LOOM_X86_AVX512_EMIT_LEA_ADD_GPR64] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id =
+                X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_LEA_ADD_GPR64,
+            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_X86_AVX512_RESULT0,
+            .result_ref_count = 1,
+        },
 };
 
 static const loom_low_lower_rule_t loom_x86_avx512_rules[] = {
@@ -601,6 +636,13 @@ static const loom_low_lower_rule_t loom_x86_avx512_rules[] = {
         .emit_start = LOOM_X86_AVX512_EMIT_MOVIMM_GPR64,
         .emit_count = 1,
     },
+    {
+        .source_op_kind = LOOM_OP_INDEX_ADD,
+        .guard_start = LOOM_X86_AVX512_ADDRESS_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_LEA_ADD_GPR64,
+        .emit_count = 1,
+    },
 };
 
 static const loom_low_lower_rule_span_t loom_x86_avx512_rule_spans[] = {
@@ -642,6 +684,11 @@ static const loom_low_lower_rule_span_t loom_x86_avx512_rule_spans[] = {
     {
         .source_op_kind = LOOM_OP_INDEX_CONSTANT,
         .rule_start = 7,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_INDEX_ADD,
+        .rule_start = 8,
         .rule_count = 1,
     },
 };

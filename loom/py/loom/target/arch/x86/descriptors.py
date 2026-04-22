@@ -609,6 +609,19 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
+            key="x86.avx512.lea.add.gpr64",
+            mnemonic="lea",
+            semantic_tag="integer.add.i64",
+            operands=(
+                _gpr64_result(),
+                _gpr64_operand("lhs"),
+                _gpr64_operand("rhs"),
+            ),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SCALAR,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
             key="x86.avx512.jmp",
             mnemonic="jmp",
             semantic_tag="control.branch",

@@ -147,6 +147,13 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(indexed_store_descriptor->result_count, 0u);
   EXPECT_EQ(indexed_store_descriptor->immediate_count, 2u);
 
+  const loom_low_descriptor_t* lea_add_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.lea.add.gpr64"));
+  ASSERT_NE(lea_add_descriptor, nullptr);
+  EXPECT_EQ(lea_add_descriptor->operand_count, 3u);
+  EXPECT_EQ(lea_add_descriptor->result_count, 1u);
+  EXPECT_EQ(lea_add_descriptor->immediate_count, 0u);
+
   const loom_low_descriptor_t* mask_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.kandq"));
   ASSERT_NE(mask_descriptor, nullptr);

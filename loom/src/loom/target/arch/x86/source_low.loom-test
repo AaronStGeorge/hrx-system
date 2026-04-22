@@ -80,3 +80,26 @@ low.func.def target(@x86_dynamic_memory_target) abi(object_function) @x86_dynami
   low.op<x86.avx512.vmovdqu32.store.indexed.zmm>(%loaded, %output_view, %i) {disp32 = 32, scale = 4} : (reg<x86.zmm>, reg<x86.gpr64>, reg<x86.gpr64>)
   low.return
 }
+
+// ====
+// RUN: emit source-low @x86_index_add_memory output=low
+target.profile @x86_index_add_memory_target preset("x86-avx512")
+
+func.def target(@x86_index_add_memory_target) @x86_index_add_memory(%input: buffer, %output: buffer, %i: index, %j: index) {
+  %zero = index.constant 0 : offset
+  %sum = index.add %i, %j : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<32xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<32xf32, #dense>
+  %loaded = vector.load %input_view[%sum] : view<32xf32, #dense> -> vector<16xf32>
+  vector.store %loaded, %output_view[%sum] : vector<16xf32>, view<32xf32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@x86_index_add_memory_target) abi(object_function) @x86_index_add_memory__low(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %i: reg<x86.gpr64>, %j: reg<x86.gpr64>) {
+  %zero = low.const<x86.avx512.movimm.gpr64> {imm64 = 0} : reg<x86.gpr64>
+  %sum = low.op<x86.avx512.lea.add.gpr64>(%i, %j) : (reg<x86.gpr64>, reg<x86.gpr64>) -> reg<x86.gpr64>
+  %loaded = low.op<x86.avx512.vmovdqu32.load.indexed.zmm>(%input_view, %sum) {disp32 = 0, scale = 4} : (reg<x86.gpr64>, reg<x86.gpr64>) -> reg<x86.zmm>
+  low.op<x86.avx512.vmovdqu32.store.indexed.zmm>(%loaded, %output_view, %sum) {disp32 = 0, scale = 4} : (reg<x86.zmm>, reg<x86.gpr64>, reg<x86.gpr64>)
+  low.return
+}
