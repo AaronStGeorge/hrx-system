@@ -174,7 +174,6 @@ static bool loom_amdgpu_dotf_select(
 
   *out_plan = (loom_amdgpu_dot_plan_t){
       .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_V_FMA_F32,
-      .iteration_count = lane_count,
   };
   return true;
 }
@@ -374,47 +373,6 @@ static iree_string_view_t loom_amdgpu_dot_rejection_detail(
   return IREE_SV("AMDGPU vector dot op is not target-legal");
 }
 
-static iree_status_t loom_amdgpu_lower_vector_dotf(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_dot_plan_t* plan) {
-  loom_value_id_t low_lhs = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_vector_dotf_lhs(source_op), &low_lhs));
-  loom_value_id_t low_rhs = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_vector_dotf_rhs(source_op), &low_rhs));
-  loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_vector_dotf_init(source_op), &accumulator));
-
-  loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
-      context, source_op, loom_vector_dotf_result(source_op), &result_type));
-  for (uint32_t i = 0; i < plan->iteration_count; ++i) {
-    loom_value_id_t lane_lhs = low_lhs;
-    loom_value_id_t lane_rhs = low_rhs;
-    if (plan->iteration_count != 1) {
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
-          context, source_op, low_lhs, i, result_type, &lane_lhs));
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
-          context, source_op, low_rhs, i, result_type, &lane_rhs));
-    }
-    loom_value_id_t operands[] = {
-        lane_lhs,
-        lane_rhs,
-        accumulator,
-    };
-    loom_op_t* lane_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-        context, source_op, plan->descriptor_id, operands,
-        IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0),
-        &result_type, 1, &lane_op));
-    accumulator = loom_value_slice_get(loom_low_op_results(lane_op), 0);
-  }
-  return loom_low_lower_bind_value(context, loom_vector_dotf_result(source_op),
-                                   accumulator);
-}
-
 static iree_status_t loom_amdgpu_lower_packed_dot_groups(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     uint64_t descriptor_id, uint32_t group_count, loom_value_id_t source_lhs,
@@ -478,8 +436,6 @@ iree_status_t loom_amdgpu_lower_vector_dot(loom_low_lower_context_t* context,
                                            const loom_amdgpu_dot_plan_t* plan) {
   IREE_ASSERT_ARGUMENT(plan);
   switch (source_op->kind) {
-    case LOOM_OP_VECTOR_DOTF:
-      return loom_amdgpu_lower_vector_dotf(context, source_op, plan);
     case LOOM_OP_VECTOR_DOT4I:
       return loom_amdgpu_lower_packed_dot_groups(
           context, source_op, plan->descriptor_id, plan->iteration_count,

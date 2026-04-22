@@ -123,7 +123,7 @@ typedef struct loom_amdgpu_table_lookup_plan_t {
 typedef struct loom_amdgpu_dot_plan_t {
   // Stable descriptor ID selected for the active descriptor set.
   uint64_t descriptor_id;
-  // Number of scalar FMA lanes or packed dot register groups emitted.
+  // Number of packed dot register groups emitted.
   uint32_t iteration_count;
 } loom_amdgpu_dot_plan_t;
 

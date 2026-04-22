@@ -206,6 +206,9 @@ extern const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_rule_set;
 // Target-local rule table for scalar integer and index arithmetic source ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_integer_rule_set;
 
+// Target-local rule table for vector dot source ops.
+extern const loom_low_lower_rule_set_t loom_amdgpu_dot_rule_set;
+
 // Target-local rule table for vector reduce source ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_reduce_rule_set;
 

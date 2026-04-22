@@ -460,6 +460,7 @@ loom_cc_library(
     "lower_bitpack.c"
     "lower_buffer.c"
     "lower_dot.c"
+    "lower_dot_rules.c"
     "lower_emit_support.c"
     "lower_integer_rules.c"
     "lower_mask.c"
