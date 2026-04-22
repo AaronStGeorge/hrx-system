@@ -163,6 +163,9 @@ typedef uint32_t loom_amdgpu_matrix_contract_flags_t;
 // Contract consumes scale-format selector operands.
 #define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS ((uint32_t)1u << 10)
 
+// Matrix contract does not have a target-low descriptor mapping yet.
+#define LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_ID_NONE UINT64_C(0)
+
 typedef struct loom_amdgpu_matrix_tile_shape_t {
   // Contracted result rows in the target-native tile.
   uint16_t result_row_count;
@@ -187,7 +190,9 @@ typedef struct loom_amdgpu_matrix_payload_shape_t {
 typedef struct loom_amdgpu_matrix_contract_descriptor_t {
   // Stable Loom descriptor name used by tests, diagnostics, and target logs.
   iree_string_view_t name;
-  // LLVM AMDGPU intrinsic name selected by this descriptor.
+  // Stable target-low descriptor ID selected by this descriptor, or zero.
+  uint64_t low_descriptor_id;
+  // LLVM AMDGPU intrinsic name selected by this descriptor for LLVM lowering.
   iree_string_view_t llvm_intrinsic_name;
   // AMDGPU instruction family used by this descriptor.
   loom_amdgpu_matrix_family_t family;

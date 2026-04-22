@@ -10,6 +10,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/arch/amdgpu/descriptor_ids.h"
 
 namespace {
 
@@ -404,6 +405,42 @@ TEST(MatrixContractTest, WmmaFp8CrossProductDescriptors) {
             LOOM_AMDGPU_MATRIX_NUMERIC_FP8);
 }
 
+TEST(MatrixContractTest, WmmaDescriptorsExposeTargetLowIds) {
+  const loom_amdgpu_matrix_contract_descriptor_t* f32_f16 =
+      FindDescriptor("wmma.f32.16x16x16.f16");
+  ASSERT_NE(f32_f16, nullptr);
+  EXPECT_EQ(f32_f16->low_descriptor_id,
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_F32_16X16X16_F16);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* i32_iu8 =
+      FindDescriptor("wmma.i32.16x16x16.iu8");
+  ASSERT_NE(i32_iu8, nullptr);
+  EXPECT_EQ(i32_iu8->low_descriptor_id,
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU8);
+  EXPECT_EQ(i32_iu8->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT);
+  EXPECT_EQ(i32_iu8->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* i32_iu4 =
+      FindDescriptor("wmma.i32.16x16x16.iu4");
+  ASSERT_NE(i32_iu4, nullptr);
+  EXPECT_EQ(i32_iu4->low_descriptor_id,
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU4);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* f32_f16_gfx1250 =
+      FindDescriptor("wmma.f32.16x16x32.f16");
+  ASSERT_NE(f32_f16_gfx1250, nullptr);
+  EXPECT_EQ(f32_f16_gfx1250->low_descriptor_id,
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_F32_16X16X32_F16);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* scaled =
+      FindDescriptor("wmma.scale.f32.16x16x128.f8f6f4");
+  ASSERT_NE(scaled, nullptr);
+  EXPECT_EQ(scaled->low_descriptor_id,
+            LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_ID_NONE);
+}
+
 TEST(MatrixContractTest, MatcherSelectsMatchingDescriptor) {
   loom_amdgpu_matrix_contract_match_request_t request = MatchRequest(
       LOOM_AMDGPU_MATRIX_FAMILY_MFMA, 16, 16, 32,
@@ -419,6 +456,49 @@ TEST(MatrixContractTest, MatcherSelectsMatchingDescriptor) {
   EXPECT_EQ(diagnostic.rejection_bits,
             LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE);
   EXPECT_EQ(diagnostic.wave_candidate_count, 1u);
+}
+
+TEST(MatrixContractTest, MatcherSelectsRdnaIntegerWmmaLowDescriptors) {
+  const loom_amdgpu_matrix_contract_flags_t integer_wmma_flags =
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT |
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP;
+  const loom_amdgpu_matrix_feature_bits_t gfx12_features =
+      LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11 |
+      LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX12 |
+      LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX12;
+  struct Case {
+    // Matrix input numeric type requested by the source contract.
+    loom_amdgpu_matrix_numeric_type_t numeric_type;
+    // Expected matrix contract descriptor name.
+    const char* expected_name;
+    // Expected target-low descriptor ID for native lowering.
+    uint64_t expected_low_descriptor_id;
+  };
+  const Case cases[] = {
+      {LOOM_AMDGPU_MATRIX_NUMERIC_IU8, "wmma.i32.16x16x16.iu8",
+       LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU8},
+      {LOOM_AMDGPU_MATRIX_NUMERIC_IU4, "wmma.i32.16x16x16.iu4",
+       LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU4},
+  };
+  for (loom_amdgpu_matrix_feature_bits_t feature_bits :
+       {LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11, gfx12_features}) {
+    for (const Case& test_case : cases) {
+      loom_amdgpu_matrix_contract_match_request_t request = MatchRequest(
+          LOOM_AMDGPU_MATRIX_FAMILY_WMMA, 16, 16, 16, test_case.numeric_type,
+          test_case.numeric_type, LOOM_AMDGPU_MATRIX_NUMERIC_I32,
+          LOOM_AMDGPU_MATRIX_NUMERIC_I32, LOOM_AMDGPU_MATRIX_SCALE_NONE,
+          feature_bits, 32, integer_wmma_flags, 0);
+      loom_amdgpu_matrix_contract_match_diagnostic_t diagnostic = {};
+      const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+          loom_amdgpu_matrix_contract_select(&request, &diagnostic);
+      ASSERT_NE(descriptor, nullptr);
+      EXPECT_EQ(ToString(descriptor->name), test_case.expected_name);
+      EXPECT_EQ(descriptor->low_descriptor_id,
+                test_case.expected_low_descriptor_id);
+      EXPECT_EQ(diagnostic.rejection_bits,
+                LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE);
+    }
+  }
 }
 
 TEST(MatrixContractTest, MatcherRejectsMissingFeatureAfterSemanticMatch) {

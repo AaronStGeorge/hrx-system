@@ -6,6 +6,7 @@
 
 #include "loom/target/arch/amdgpu/matrix_contract.h"
 
+#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 #define MATRIX_PAYLOAD(numeric_type_value, register_count_value, \
@@ -24,16 +25,18 @@
     .reduction_count = (reduction_count_value),                \
   }
 
-#define MATRIX_DESCRIPTOR(                                                    \
-    name_value, intrinsic_name_value, family_value, feature_bits_value,       \
-    wave_bits_value, flags_value, row_count_value, column_count_value,        \
-    reduction_count_value, lhs_type_value, lhs_registers_value,               \
-    lhs_elements_value, rhs_type_value, rhs_registers_value,                  \
-    rhs_elements_value, accumulator_type_value, accumulator_registers_value,  \
-    accumulator_elements_value, result_type_value, result_registers_value,    \
-    result_elements_value, scale_kind_value)                                  \
+#define MATRIX_DESCRIPTOR_WITH_LOW_ID(                                        \
+    name_value, low_descriptor_id_value, intrinsic_name_value, family_value,  \
+    feature_bits_value, wave_bits_value, flags_value, row_count_value,        \
+    column_count_value, reduction_count_value, lhs_type_value,                \
+    lhs_registers_value, lhs_elements_value, rhs_type_value,                  \
+    rhs_registers_value, rhs_elements_value, accumulator_type_value,          \
+    accumulator_registers_value, accumulator_elements_value,                  \
+    result_type_value, result_registers_value, result_elements_value,         \
+    scale_kind_value)                                                         \
   {                                                                           \
       .name = IREE_SVL(name_value),                                           \
+      .low_descriptor_id = (low_descriptor_id_value),                         \
       .llvm_intrinsic_name = IREE_SVL(intrinsic_name_value),                  \
       .family = (family_value),                                               \
       .required_feature_bits = (feature_bits_value),                          \
@@ -52,6 +55,24 @@
           result_type_value, result_registers_value, result_elements_value),  \
       .scale_kind = (scale_kind_value),                                       \
   }
+
+#define MATRIX_DESCRIPTOR(                                                     \
+    name_value, intrinsic_name_value, family_value, feature_bits_value,        \
+    wave_bits_value, flags_value, row_count_value, column_count_value,         \
+    reduction_count_value, lhs_type_value, lhs_registers_value,                \
+    lhs_elements_value, rhs_type_value, rhs_registers_value,                   \
+    rhs_elements_value, accumulator_type_value, accumulator_registers_value,   \
+    accumulator_elements_value, result_type_value, result_registers_value,     \
+    result_elements_value, scale_kind_value)                                   \
+  MATRIX_DESCRIPTOR_WITH_LOW_ID(                                               \
+      name_value, LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_ID_NONE,                   \
+      intrinsic_name_value, family_value, feature_bits_value, wave_bits_value, \
+      flags_value, row_count_value, column_count_value, reduction_count_value, \
+      lhs_type_value, lhs_registers_value, lhs_elements_value, rhs_type_value, \
+      rhs_registers_value, rhs_elements_value, accumulator_type_value,         \
+      accumulator_registers_value, accumulator_elements_value,                 \
+      result_type_value, result_registers_value, result_elements_value,        \
+      scale_kind_value)
 
 #define MFMA_GFX940_FP8_FEATURES (LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX940_FP8)
 
@@ -1418,21 +1439,50 @@ static const loom_amdgpu_matrix_contract_descriptor_t
                           LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0,
                           LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0,
                           LOOM_AMDGPU_MATRIX_SCALE_NONE),
-        MATRIX_DESCRIPTOR("wmma.f32.16x16x16.f16",
-                          "llvm.amdgcn.wmma.f32.16x16x16.f16",
-                          LOOM_AMDGPU_MATRIX_FAMILY_WMMA,
-                          LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11,
-                          LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 16, 16, 16,
-                          LOOM_AMDGPU_MATRIX_NUMERIC_F16, 0, 0,
-                          LOOM_AMDGPU_MATRIX_NUMERIC_F16, 0, 0,
-                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0,
-                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0,
-                          LOOM_AMDGPU_MATRIX_SCALE_NONE),
-        MATRIX_DESCRIPTOR(
-            "wmma.f32.16x16x32.f16", "llvm.amdgcn.wmma.f32.16x16x32.f16",
-            LOOM_AMDGPU_MATRIX_FAMILY_WMMA, WMMA_GFX1250_FEATURES,
-            LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, WMMA_GFX1250_MODS_ALL_FLAGS, 16,
-            16, 32, LOOM_AMDGPU_MATRIX_NUMERIC_F16, 8, 16,
+        MATRIX_DESCRIPTOR_WITH_LOW_ID(
+            "wmma.f32.16x16x16.f16",
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_F32_16X16X16_F16,
+            "llvm.amdgcn.wmma.f32.16x16x16.f16", LOOM_AMDGPU_MATRIX_FAMILY_WMMA,
+            LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11,
+            LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 16, 16, 16,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F16, 0, 0,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F16, 0, 0,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32, 0, 0,
+            LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR_WITH_LOW_ID(
+            "wmma.i32.16x16x16.iu8",
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU8,
+            "llvm.amdgcn.wmma.i32.16x16x16.iu8", LOOM_AMDGPU_MATRIX_FAMILY_WMMA,
+            LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11,
+            LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT |
+                LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP,
+            16, 16, 16, LOOM_AMDGPU_MATRIX_NUMERIC_IU8, 0, 0,
+            LOOM_AMDGPU_MATRIX_NUMERIC_IU8, 0, 0,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I32, 0, 0,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I32, 0, 0,
+            LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR_WITH_LOW_ID(
+            "wmma.i32.16x16x16.iu4",
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU4,
+            "llvm.amdgcn.wmma.i32.16x16x16.iu4", LOOM_AMDGPU_MATRIX_FAMILY_WMMA,
+            LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11,
+            LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT |
+                LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP,
+            16, 16, 16, LOOM_AMDGPU_MATRIX_NUMERIC_IU4, 0, 0,
+            LOOM_AMDGPU_MATRIX_NUMERIC_IU4, 0, 0,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I32, 0, 0,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I32, 0, 0,
+            LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR_WITH_LOW_ID(
+            "wmma.f32.16x16x32.f16",
+            LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_F32_16X16X32_F16,
+            "llvm.amdgcn.wmma.f32.16x16x32.f16", LOOM_AMDGPU_MATRIX_FAMILY_WMMA,
+            WMMA_GFX1250_FEATURES, LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY,
+            WMMA_GFX1250_MODS_ALL_FLAGS, 16, 16, 32,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F16, 8, 16,
             LOOM_AMDGPU_MATRIX_NUMERIC_F16, 8, 16,
             LOOM_AMDGPU_MATRIX_NUMERIC_F32, 8, 8,
             LOOM_AMDGPU_MATRIX_NUMERIC_F32, 8, 8,
@@ -1630,7 +1680,9 @@ iree_host_size_t loom_amdgpu_matrix_contract_descriptor_count(void) {
 
 const loom_amdgpu_matrix_contract_descriptor_t*
 loom_amdgpu_matrix_contract_descriptor_at(iree_host_size_t index) {
-  if (index >= IREE_ARRAYSIZE(kMatrixContractDescriptors)) return NULL;
+  if (index >= IREE_ARRAYSIZE(kMatrixContractDescriptors)) {
+    return NULL;
+  }
   return &kMatrixContractDescriptors[index];
 }
 

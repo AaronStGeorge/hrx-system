@@ -1053,6 +1053,7 @@ loom_cc_library(
   SRCS
     "matrix_contract.c"
   DEPS
+    ::descriptor_ids
     ::target_info
     iree::base
   PUBLIC
@@ -1077,6 +1078,7 @@ loom_cc_test(
   SRCS
     "matrix_contract_test.cc"
   DEPS
+    ::descriptor_ids
     ::matrix_contract
     iree::testing::gtest
     iree::testing::gtest_main
