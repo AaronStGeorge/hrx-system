@@ -34,6 +34,8 @@ from loom.target.low_descriptors import (
     Effect,
     EffectFlag,
     EffectKind,
+    EnumDomain,
+    EnumValue,
     Immediate,
     ImmediateFlag,
     ImmediateKind,
@@ -184,6 +186,15 @@ _IMM64_IMMEDIATE = Immediate(
     bit_width=64,
     signed_min=-(2**63) + 1,
     unsigned_max=(2**63) - 1,
+)
+
+_ADDRESS_SCALE_ENUM = "x86.address.scale"
+
+_ADDRESS_SCALE_IMMEDIATE = Immediate(
+    "scale",
+    ImmediateKind.ENUM,
+    enum_domain=_ADDRESS_SCALE_ENUM,
+    bit_width=8,
 )
 
 _TARGET_BLOCK_IMMEDIATE = Immediate(
@@ -411,6 +422,17 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             model_quality=ModelQuality.EXACT,
         ),
     ),
+    enum_domains=(
+        EnumDomain(
+            _ADDRESS_SCALE_ENUM,
+            (
+                EnumValue("1", 1),
+                EnumValue("2", 2),
+                EnumValue("4", 4),
+                EnumValue("8", 8),
+            ),
+        ),
+    ),
     descriptors=(
         Descriptor(
             key="x86.avx512.vpaddd.zmm",
@@ -492,11 +514,39 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.SIDE_EFFECTING,),
         ),
         Descriptor(
+            key="x86.avx512.vmovdqu32.load.indexed.zmm",
+            mnemonic="vmovdqu32",
+            semantic_tag="memory.load.indexed.i32x16",
+            operands=(
+                _zmm_result(),
+                _gpr64_resource("base"),
+                _gpr64_resource("index"),
+            ),
+            immediates=(_DISP32_IMMEDIATE, _ADDRESS_SCALE_IMMEDIATE),
+            effects=(_LOAD_EFFECT,),
+            schedule_class=_SCHEDULE_MEMORY_LOAD,
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        Descriptor(
             key="x86.avx512.vmovdqu32.store.zmm",
             mnemonic="vmovdqu32",
             semantic_tag="memory.store.i32x16",
             operands=(_zmm_operand("value"), _gpr64_resource("base")),
             immediates=(_DISP32_IMMEDIATE,),
+            effects=(_STORE_EFFECT,),
+            schedule_class=_SCHEDULE_MEMORY_STORE,
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        Descriptor(
+            key="x86.avx512.vmovdqu32.store.indexed.zmm",
+            mnemonic="vmovdqu32",
+            semantic_tag="memory.store.indexed.i32x16",
+            operands=(
+                _zmm_operand("value"),
+                _gpr64_resource("base"),
+                _gpr64_resource("index"),
+            ),
+            immediates=(_DISP32_IMMEDIATE, _ADDRESS_SCALE_IMMEDIATE),
             effects=(_STORE_EFFECT,),
             schedule_class=_SCHEDULE_MEMORY_STORE,
             flags=(DescriptorFlag.SIDE_EFFECTING,),

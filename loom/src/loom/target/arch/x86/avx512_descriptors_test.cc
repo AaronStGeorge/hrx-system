@@ -129,6 +129,24 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(f32_fma_descriptor->result_count, 1u);
   EXPECT_EQ(f32_fma_descriptor->constraint_count, 2u);
 
+  const loom_low_descriptor_t* indexed_load_descriptor = LookupDescriptor(
+      descriptor_set, IREE_SV("x86.avx512.vmovdqu32.load.indexed.zmm"));
+  ASSERT_NE(indexed_load_descriptor, nullptr);
+  EXPECT_EQ(indexed_load_descriptor->operand_count, 3u);
+  EXPECT_EQ(indexed_load_descriptor->result_count, 1u);
+  EXPECT_EQ(indexed_load_descriptor->immediate_count, 2u);
+  const loom_low_immediate_t* indexed_load_immediates =
+      &descriptor_set->immediates[indexed_load_descriptor->immediate_start];
+  EXPECT_EQ(indexed_load_immediates[0].kind, LOOM_LOW_IMMEDIATE_KIND_SIGNED);
+  EXPECT_EQ(indexed_load_immediates[1].kind, LOOM_LOW_IMMEDIATE_KIND_ENUM);
+
+  const loom_low_descriptor_t* indexed_store_descriptor = LookupDescriptor(
+      descriptor_set, IREE_SV("x86.avx512.vmovdqu32.store.indexed.zmm"));
+  ASSERT_NE(indexed_store_descriptor, nullptr);
+  EXPECT_EQ(indexed_store_descriptor->operand_count, 3u);
+  EXPECT_EQ(indexed_store_descriptor->result_count, 0u);
+  EXPECT_EQ(indexed_store_descriptor->immediate_count, 2u);
+
   const loom_low_descriptor_t* mask_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.kandq"));
   ASSERT_NE(mask_descriptor, nullptr);

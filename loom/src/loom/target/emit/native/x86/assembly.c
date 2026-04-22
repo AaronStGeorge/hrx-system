@@ -249,13 +249,41 @@ static iree_status_t loom_x86_read_packet_i64_attr(
                                             name, out_value);
 }
 
+static iree_status_t loom_x86_read_packet_address_scale_attr(
+    const loom_native_assembly_packet_context_t* context, int64_t* out_scale) {
+  IREE_ASSERT_ARGUMENT(out_scale);
+  IREE_RETURN_IF_ERROR(
+      loom_x86_read_packet_i64_attr(context, IREE_SV("scale"), out_scale));
+  switch (*out_scale) {
+    case 1:
+    case 2:
+    case 4:
+    case 8:
+      return iree_ok_status();
+    default:
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "x86 indexed memory scale %" PRId64 " is unsupported", *out_scale);
+  }
+}
+
 static iree_status_t loom_x86_append_memory_operand(
     const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context,
-    loom_value_id_t base_value_id, int64_t displacement) {
+    loom_value_id_t base_value_id, loom_value_id_t index_value_id,
+    int64_t scale, int64_t displacement) {
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, "["));
   IREE_RETURN_IF_ERROR(loom_x86_append_value(state, context, base_value_id));
+  if (index_value_id != LOOM_VALUE_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, " + "));
+    IREE_RETURN_IF_ERROR(loom_x86_append_value(state, context, index_value_id));
+    if (scale != 1) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          context->builder, " * %" PRId64, scale));
+    }
+  }
   if (displacement > 0) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         context->builder, " + %" PRId64, displacement));
@@ -406,14 +434,29 @@ static iree_status_t loom_x86_append_load_packet(
   IREE_RETURN_IF_ERROR(
       loom_x86_read_packet_i64_attr(context, IREE_SV("disp32"), &displacement));
   const loom_op_t* op = context->packet->node->op;
+  loom_value_id_t index_value_id = LOOM_VALUE_ID_INVALID;
+  int64_t scale = 1;
+  if (op->operand_count == 2) {
+    index_value_id = loom_op_const_operands(op)[1];
+    IREE_RETURN_IF_ERROR(
+        loom_x86_read_packet_address_scale_attr(context, &scale));
+  } else if (op->operand_count != 1) {
+    iree_string_view_t key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_x86_descriptor_key(context, &key));
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "x86 assembly load descriptor '%.*s' has an "
+                            "unsupported operand shape",
+                            (int)key.size, key.data);
+  }
   IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_x86_append_result(state, context, 0));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
-  return loom_x86_append_memory_operand(
-      state, context, loom_op_const_operands(op)[0], displacement);
+  return loom_x86_append_memory_operand(state, context,
+                                        loom_op_const_operands(op)[0],
+                                        index_value_id, scale, displacement);
 }
 
 static iree_status_t loom_x86_append_store_packet(
@@ -423,11 +466,29 @@ static iree_status_t loom_x86_append_store_packet(
   IREE_RETURN_IF_ERROR(
       loom_x86_read_packet_i64_attr(context, IREE_SV("disp32"), &displacement));
   const loom_op_t* op = context->packet->node->op;
+  loom_value_id_t base_value_id = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t index_value_id = LOOM_VALUE_ID_INVALID;
+  int64_t scale = 1;
+  if (op->operand_count == 2) {
+    base_value_id = loom_op_const_operands(op)[1];
+  } else if (op->operand_count == 3) {
+    base_value_id = loom_op_const_operands(op)[1];
+    index_value_id = loom_op_const_operands(op)[2];
+    IREE_RETURN_IF_ERROR(
+        loom_x86_read_packet_address_scale_attr(context, &scale));
+  } else {
+    iree_string_view_t key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_x86_descriptor_key(context, &key));
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "x86 assembly store descriptor '%.*s' has an "
+                            "unsupported operand shape",
+                            (int)key.size, key.data);
+  }
   IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_x86_append_memory_operand(
-      state, context, loom_op_const_operands(op)[1], displacement));
+      state, context, base_value_id, index_value_id, scale, displacement));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, ", "));
   return loom_x86_append_operand(state, context, 0);
