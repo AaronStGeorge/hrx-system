@@ -71,14 +71,14 @@ static iree_status_t loom_amdgpu_select_plan_id(
     case LOOM_OP_SCALAR_SHRUI:
       return loom_amdgpu_select_integer_plan(context, source_op, out_plan);
     case LOOM_OP_VECTOR_CMPI:
-      LOOM_AMDGPU_SELECT_DESCRIPTOR(
-          loom_amdgpu_select_vector_cmpi_descriptor_id);
+      LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_vector_compare_plan_t,
+                              loom_amdgpu_select_vector_cmpi_plan);
     case LOOM_OP_VECTOR_CMPF:
-      LOOM_AMDGPU_SELECT_DESCRIPTOR(
-          loom_amdgpu_select_vector_cmpf_descriptor_id);
+      LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_vector_compare_plan_t,
+                              loom_amdgpu_select_vector_cmpf_plan);
     case LOOM_OP_VECTOR_SELECT:
-      LOOM_AMDGPU_SELECT_IF(
-          loom_amdgpu_can_lower_vector_select(context, source_op));
+      LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_vector_select_plan_t,
+                              loom_amdgpu_select_vector_select_plan);
     case LOOM_OP_VECTOR_TABLE_LOOKUP:
       LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_table_lookup_plan_t,
                               loom_amdgpu_select_vector_table_lookup_plan);
@@ -169,11 +169,17 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
     case LOOM_OP_SCALAR_SHRUI:
       return loom_amdgpu_lower_integer_op(context, source_op);
     case LOOM_OP_VECTOR_CMPI:
-      return loom_amdgpu_lower_vector_cmpi(context, source_op, plan.payload);
+      return loom_amdgpu_lower_vector_cmpi(
+          context, source_op,
+          (const loom_amdgpu_vector_compare_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_CMPF:
-      return loom_amdgpu_lower_vector_cmpf(context, source_op, plan.payload);
+      return loom_amdgpu_lower_vector_cmpf(
+          context, source_op,
+          (const loom_amdgpu_vector_compare_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_SELECT:
-      return loom_amdgpu_lower_vector_select(context, source_op);
+      return loom_amdgpu_lower_vector_select(
+          context, source_op,
+          (const loom_amdgpu_vector_select_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_TABLE_LOOKUP:
       return loom_amdgpu_lower_vector_table_lookup(
           context, source_op,

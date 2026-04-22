@@ -353,34 +353,36 @@ iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
                                               const loom_op_t* source_op,
                                               uint64_t descriptor_id);
 
-// Selects the AMDGPU descriptor used by a source vector.cmpi op.
-bool loom_amdgpu_select_vector_cmpi_descriptor_id(
+// Selects the AMDGPU mask compare plan for a source vector.cmpi op.
+bool loom_amdgpu_select_vector_cmpi_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t* out_descriptor_id);
+    loom_amdgpu_vector_compare_plan_t* out_plan);
 
-// Lowers a source vector.cmpi op to AMDGPU descriptor-backed low packets.
-iree_status_t loom_amdgpu_lower_vector_cmpi(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op,
-                                            uint64_t descriptor_id);
-
-// Selects the AMDGPU descriptor used by a source vector.cmpf op.
-bool loom_amdgpu_select_vector_cmpf_descriptor_id(
+// Lowers a source vector.cmpi op from its selected AMDGPU mask compare plan.
+iree_status_t loom_amdgpu_lower_vector_cmpi(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t* out_descriptor_id);
+    const loom_amdgpu_vector_compare_plan_t* plan);
 
-// Lowers a source vector.cmpf op to AMDGPU descriptor-backed low packets.
-iree_status_t loom_amdgpu_lower_vector_cmpf(loom_low_lower_context_t* context,
-                                            const loom_op_t* source_op,
-                                            uint64_t descriptor_id);
+// Selects the AMDGPU mask compare plan for a source vector.cmpf op.
+bool loom_amdgpu_select_vector_cmpf_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_compare_plan_t* out_plan);
 
-// Returns true when a source vector.select op can lower through explicit
-// SGPR-pair masks and b32 cndmask packets.
-bool loom_amdgpu_can_lower_vector_select(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op);
+// Lowers a source vector.cmpf op from its selected AMDGPU mask compare plan.
+iree_status_t loom_amdgpu_lower_vector_cmpf(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_compare_plan_t* plan);
 
-// Lowers a source vector.select op to AMDGPU descriptor-backed low packets.
-iree_status_t loom_amdgpu_lower_vector_select(loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op);
+// Selects the AMDGPU vector.select plan using explicit SGPR-pair masks and b32
+// cndmask packets.
+bool loom_amdgpu_select_vector_select_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_vector_select_plan_t* out_plan);
+
+// Lowers a source vector.select op from its selected AMDGPU mask plan.
+iree_status_t loom_amdgpu_lower_vector_select(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_select_plan_t* plan);
 
 // Selects an AMDGPU register-table lookup plan.
 bool loom_amdgpu_select_vector_table_lookup_plan(
