@@ -469,6 +469,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
+    loom::src::loom::codegen::low::source_memory_plan
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::buffer

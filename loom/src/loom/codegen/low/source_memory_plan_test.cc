@@ -1,0 +1,262 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/codegen/low/source_memory_plan.h"
+
+#include <cstdint>
+
+#include "iree/base/internal/arena.h"
+#include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+#include "loom/ir/context.h"
+#include "loom/ir/module.h"
+#include "loom/ops/buffer/ops.h"
+#include "loom/ops/encoding/ops.h"
+#include "loom/ops/index/ops.h"
+#include "loom/ops/kernel/ops.h"
+#include "loom/ops/test/ops.h"
+#include "loom/ops/vector/ops.h"
+#include "loom/testing/context.h"
+#include "loom/util/fact_table.h"
+
+namespace loom {
+namespace {
+
+class SourceMemoryPlanTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    iree_arena_initialize(&block_pool_, &analysis_arena_);
+    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
+                                                       &context_));
+    IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
+                                        &block_pool_, nullptr,
+                                        iree_allocator_system(), &module_));
+    BuildFunction();
+  }
+
+  void TearDown() override {
+    loom_module_free(module_);
+    loom_context_deinitialize(&context_);
+    iree_arena_deinitialize(&analysis_arena_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  void BuildFunction() {
+    loom_builder_t module_builder;
+    loom_builder_initialize(module_, &module_->arena,
+                            loom_module_block(module_), &module_builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_ASSERT_OK(loom_builder_intern_string(
+        &module_builder, IREE_SV("source_memory"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
+    const loom_symbol_ref_t symbol = {
+        .module_id = 0,
+        .symbol_id = symbol_id,
+    };
+    loom_op_t* func_op = nullptr;
+    IREE_ASSERT_OK(loom_test_func_build(
+        &module_builder, 0, 0, 0, symbol, nullptr, 0, nullptr, 0, nullptr, 0,
+        nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+    function_ = loom_func_like_cast(module_, func_op);
+    loom_builder_initialize(
+        module_, &module_->arena,
+        loom_region_entry_block(loom_func_like_body(function_)), &builder_);
+  }
+
+  loom_value_id_t DefineBufferArg() {
+    loom_value_id_t buffer = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_define_block_arg(
+        &builder_, loom_region_entry_block(loom_func_like_body(function_)),
+        loom_type_buffer(), &buffer));
+    return buffer;
+  }
+
+  loom_value_id_t DefineIndexArg() {
+    loom_value_id_t index = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_define_block_arg(
+        &builder_, loom_region_entry_block(loom_func_like_body(function_)),
+        loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &index));
+    return index;
+  }
+
+  loom_op_t* BuildOffsetConstant(int64_t value) {
+    loom_op_t* op = nullptr;
+    IREE_CHECK_OK(loom_index_constant_build(
+        &builder_, loom_attr_i64(value),
+        loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET), LOOM_LOCATION_UNKNOWN, &op));
+    return op;
+  }
+
+  loom_value_id_t BuildDenseLayout() {
+    loom_op_t* op = nullptr;
+    IREE_CHECK_OK(loom_encoding_layout_dense_build(
+        &builder_,
+        loom_type_encoding_with_role(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT),
+        LOOM_LOCATION_UNKNOWN, &op));
+    return loom_encoding_layout_dense_result(op);
+  }
+
+  loom_type_t ViewType1D(int64_t extent, loom_value_id_t layout) {
+    loom_type_t type = loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                                           loom_dim_pack_static(extent), 0);
+    type.encoding_id = (uint16_t)layout;
+    type.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+    return type;
+  }
+
+  loom_type_t ViewType2D(int64_t rows, int64_t columns,
+                         loom_value_id_t layout) {
+    loom_type_t type = loom_type_shaped_2d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                                           loom_dim_pack_static(rows),
+                                           loom_dim_pack_static(columns), 0);
+    type.encoding_id = (uint16_t)layout;
+    type.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+    return type;
+  }
+
+  loom_type_t VectorType1D(int64_t extent) {
+    return loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                               loom_dim_pack_static(extent), 0);
+  }
+
+  void ComputeFacts(loom_value_fact_table_t* out_facts) {
+    IREE_ASSERT_OK(loom_value_fact_table_initialize(out_facts, &analysis_arena_,
+                                                    module_->values.count));
+    IREE_ASSERT_OK(
+        loom_value_fact_table_compute(out_facts, module_, function_));
+  }
+
+  bool BuildPlan(const loom_value_fact_table_t* facts, const loom_op_t* op,
+                 loom_low_source_memory_access_plan_t* out_plan,
+                 loom_low_source_memory_access_diagnostic_t* out_diagnostic) {
+    return loom_low_source_memory_access_plan_build(module_, facts, op,
+                                                    out_plan, out_diagnostic);
+  }
+
+  iree_arena_block_pool_t block_pool_;
+  iree_arena_allocator_t analysis_arena_;
+  loom_context_t context_;
+  loom_module_t* module_ = nullptr;
+  loom_func_like_t function_;
+  loom_builder_t builder_;
+};
+
+TEST_F(SourceMemoryPlanTest, StaticDenseLoadIncludesViewBase) {
+  loom_value_id_t buffer = DefineBufferArg();
+  loom_value_id_t layout = BuildDenseLayout();
+  loom_value_id_t base_offset =
+      loom_index_constant_result(BuildOffsetConstant(16));
+
+  loom_op_t* view_op = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(&builder_, buffer, base_offset,
+                                        ViewType1D(32, layout),
+                                        LOOM_LOCATION_UNKNOWN, &view_op));
+  int64_t static_indices[] = {3};
+  loom_op_t* load_op = nullptr;
+  IREE_ASSERT_OK(loom_vector_load_build(
+      &builder_, 0, loom_buffer_view_result(view_op), nullptr, 0,
+      static_indices, IREE_ARRAYSIZE(static_indices), 0, 0, VectorType1D(4),
+      LOOM_LOCATION_UNKNOWN, &load_op));
+
+  loom_value_fact_table_t facts = {0};
+  ComputeFacts(&facts);
+  loom_low_source_memory_access_plan_t plan = {};
+  loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+  ASSERT_TRUE(BuildPlan(&facts, load_op, &plan, &diagnostic));
+  EXPECT_EQ(plan.operation_kind, LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD);
+  EXPECT_EQ(plan.view_value_id, loom_buffer_view_result(view_op));
+  EXPECT_EQ(plan.root_value_id, buffer);
+  EXPECT_EQ(plan.memory_space, LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN);
+  EXPECT_EQ(plan.element_byte_count, 4u);
+  EXPECT_EQ(plan.vector_lane_count, 4u);
+  EXPECT_EQ(plan.vector_lane_byte_stride, 4);
+  EXPECT_EQ(plan.static_byte_offset, 28);
+  EXPECT_EQ(plan.dynamic_index, LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(plan.dynamic_index_source,
+            LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_NONE);
+}
+
+TEST_F(SourceMemoryPlanTest, DynamicDenseLoadClassifiesWorkitemIndex) {
+  loom_value_id_t buffer = DefineBufferArg();
+  loom_value_id_t layout = BuildDenseLayout();
+  loom_value_id_t base_offset =
+      loom_index_constant_result(BuildOffsetConstant(8));
+
+  loom_op_t* view_op = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(&builder_, buffer, base_offset,
+                                        ViewType1D(32, layout),
+                                        LOOM_LOCATION_UNKNOWN, &view_op));
+  loom_op_t* workitem_op = nullptr;
+  IREE_ASSERT_OK(
+      loom_kernel_workitem_id_build(&builder_, LOOM_KERNEL_DIMENSION_X,
+                                    loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                    LOOM_LOCATION_UNKNOWN, &workitem_op));
+  const loom_value_id_t dynamic_indices[] = {
+      loom_kernel_workitem_id_result(workitem_op),
+  };
+  int64_t static_indices[] = {INT64_MIN};
+  loom_op_t* load_op = nullptr;
+  IREE_ASSERT_OK(loom_vector_load_build(
+      &builder_, 0, loom_buffer_view_result(view_op), dynamic_indices,
+      IREE_ARRAYSIZE(dynamic_indices), static_indices,
+      IREE_ARRAYSIZE(static_indices), 0, 0, VectorType1D(4),
+      LOOM_LOCATION_UNKNOWN, &load_op));
+
+  loom_value_fact_table_t facts = {0};
+  ComputeFacts(&facts);
+  loom_low_source_memory_access_plan_t plan = {};
+  loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+  ASSERT_TRUE(BuildPlan(&facts, load_op, &plan, &diagnostic));
+  EXPECT_EQ(plan.static_byte_offset, 8);
+  EXPECT_EQ(plan.dynamic_index, loom_kernel_workitem_id_result(workitem_op));
+  EXPECT_EQ(plan.dynamic_index_source,
+            LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID);
+  EXPECT_EQ(plan.dynamic_index_dimension, LOOM_KERNEL_DIMENSION_X);
+  EXPECT_EQ(plan.dynamic_axis, 0u);
+  EXPECT_EQ(plan.dynamic_index_byte_stride, 4);
+  EXPECT_EQ(plan.dynamic_index_byte_shift, 2u);
+  EXPECT_EQ(plan.vector_lane_byte_stride, 4);
+}
+
+TEST_F(SourceMemoryPlanTest, RejectsMultipleDynamicIndices) {
+  loom_value_id_t buffer = DefineBufferArg();
+  loom_value_id_t first_index = DefineIndexArg();
+  loom_value_id_t second_index = DefineIndexArg();
+  loom_value_id_t layout = BuildDenseLayout();
+  loom_value_id_t base_offset =
+      loom_index_constant_result(BuildOffsetConstant(0));
+
+  loom_op_t* view_op = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(&builder_, buffer, base_offset,
+                                        ViewType2D(8, 8, layout),
+                                        LOOM_LOCATION_UNKNOWN, &view_op));
+  const loom_value_id_t dynamic_indices[] = {
+      first_index,
+      second_index,
+  };
+  int64_t static_indices[] = {INT64_MIN, INT64_MIN};
+  loom_op_t* load_op = nullptr;
+  IREE_ASSERT_OK(loom_vector_load_build(
+      &builder_, 0, loom_buffer_view_result(view_op), dynamic_indices,
+      IREE_ARRAYSIZE(dynamic_indices), static_indices,
+      IREE_ARRAYSIZE(static_indices), 0, 0, VectorType1D(4),
+      LOOM_LOCATION_UNKNOWN, &load_op));
+
+  loom_value_fact_table_t facts = {0};
+  ComputeFacts(&facts);
+  loom_low_source_memory_access_plan_t plan = {};
+  loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+  EXPECT_FALSE(BuildPlan(&facts, load_op, &plan, &diagnostic));
+  EXPECT_TRUE(iree_any_bit_set(
+      diagnostic.rejection_bits,
+      LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_COUNT));
+}
+
+}  // namespace
+}  // namespace loom

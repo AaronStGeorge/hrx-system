@@ -15,9 +15,8 @@
 
 #include <stdint.h>
 
-#include "loom/ir/facts.h"
+#include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/ir.h"
-#include "loom/ops/kernel/ops.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -139,7 +138,8 @@ typedef struct loom_amdgpu_vector_slice_plan_t {
   uint32_t element_bit_count;
 } loom_amdgpu_vector_slice_plan_t;
 
-#define LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE UINT32_MAX
+#define LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE \
+  LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE
 
 typedef enum loom_amdgpu_memory_address_form_e {
   LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT = 0,
@@ -155,52 +155,24 @@ typedef enum loom_amdgpu_memory_dynamic_index_kind_e {
   LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET = 2,
 } loom_amdgpu_memory_dynamic_index_kind_t;
 
-typedef enum loom_amdgpu_memory_dynamic_index_source_e {
-  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_NONE = 0,
-  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID = 1,
-  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID = 2,
-  LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOURCE_COMPUTED_VADDR = 3,
-} loom_amdgpu_memory_dynamic_index_source_t;
-
 typedef enum loom_amdgpu_memory_operation_kind_e {
   LOOM_AMDGPU_MEMORY_OPERATION_LOAD = 0,
   LOOM_AMDGPU_MEMORY_OPERATION_STORE = 1,
 } loom_amdgpu_memory_operation_kind_t;
 
 typedef struct loom_amdgpu_memory_access_plan_t {
-  // Target-independent storage space selected from source view facts.
-  loom_value_fact_memory_space_t memory_space;
-  // Source SSA value that represents the storage root.
-  loom_value_id_t root_value_id;
+  // Target-independent source memory access plan being wrapped.
+  loom_low_source_memory_access_plan_t source;
   // Selected target addressing form for the memory packet.
   loom_amdgpu_memory_address_form_t address_form;
-  // Byte count of one addressed vector lane.
-  uint32_t element_byte_count;
-  // Dynamic view-axis index used to compute a target address operand, or
-  // invalid for a purely static access.
-  loom_value_id_t dynamic_index;
   // Target operand path used for the dynamic index.
   loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
-  // Source provenance for dimension-sensitive address-form selection.
-  loom_amdgpu_memory_dynamic_index_source_t dynamic_index_source;
-  // Workitem/workgroup dimension when |dynamic_index_source| is a coordinate.
-  loom_kernel_dimension_t dynamic_index_dimension;
-  // Byte stride multiplied by dynamic_index before adding it to VADDR/SOFFSET.
-  uint32_t dynamic_index_byte_stride;
-  // Power-of-two shift used to compute the dynamic byte offset, or
-  // LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE when multiplication or a
-  // static-zero VADDR is required.
-  uint32_t dynamic_index_byte_shift;
-  // Total static byte offset selected from the source view access.
-  int64_t static_byte_offset;
   // Static offset value encoded in the descriptor's first offset immediate.
   int64_t immediate_offset;
   // Static offset value encoded in the descriptor's second offset immediate.
   int64_t secondary_immediate_offset;
   // Static byte offset materialized through the scalar SOFFSET operand.
   uint32_t scalar_byte_offset;
-  // Byte stride between adjacent vector lanes along the vector axis.
-  uint32_t vector_lane_byte_stride;
   // Number of 32-bit VGPR lanes moved by the selected memory packet.
   uint32_t vgpr_count;
   // Number of bytes moved by the selected memory packet.

@@ -470,6 +470,45 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    source_memory_plan
+  HDRS
+    "source_memory_plan.h"
+  SRCS
+    "source_memory_plan.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ir::facts
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::vector
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    source_memory_plan_test
+  SRCS
+    "source_memory_plan_test.cc"
+  DEPS
+    ::source_memory_plan
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::encoding
+    loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::test
+    loom::src::loom::ops::vector
+    loom::src::loom::testing::context
+    loom::src::loom::util::fact_table
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     source_selection
   HDRS
     "source_selection.h"
