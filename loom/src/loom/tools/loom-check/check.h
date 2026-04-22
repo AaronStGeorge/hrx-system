@@ -28,9 +28,8 @@
 //   // RUN: format <target> Parse -> convert format -> print -> compare.
 //   // RUN: emit <target>   Parse -> lower to target output -> compare. Core
 //                           targets include low-descriptor-manifest,
-//                           target-low-registry-manifest, and
-//                           target-coverage-manifest. Analysis targets
-//                           include liveness-json @function,
+//                           target-low-registry-manifest, and source-low.
+//                           Analysis targets include liveness-json @function,
 //                           low-schedule-json @function
 //                           [strategy=...] [diagnostics=...]
 //                           [output=json|none], and

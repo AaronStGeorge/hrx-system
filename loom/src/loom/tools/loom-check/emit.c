@@ -37,7 +37,6 @@ typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON = 4,
   LOOM_CHECK_EMIT_LOW_PACKET_JSON = 5,
   LOOM_CHECK_EMIT_SOURCE_LOW_TEXT = 6,
-  LOOM_CHECK_EMIT_TARGET_COVERAGE_MANIFEST = 7,
 } loom_check_emit_format_t;
 
 typedef enum loom_check_emit_source_low_output_e {
@@ -61,8 +60,6 @@ static const iree_string_view_t kLoomCheckEmitCoreTargetNames[] = {
     IREE_SVL("low-descriptor-json"),
     IREE_SVL("target-low-registry-manifest"),
     IREE_SVL("target-low-registry-json"),
-    IREE_SVL("target-coverage-manifest"),
-    IREE_SVL("target-coverage-json"),
     IREE_SVL("source-low"),
     IREE_SVL("source-to-low"),
 };
@@ -655,17 +652,6 @@ static iree_status_t loom_check_emit_parse_request(
     }
     out_request->format = LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST;
     return iree_ok_status();
-  } else if (iree_string_view_equal(target_name,
-                                    IREE_SV("target-coverage-manifest")) ||
-             iree_string_view_equal(target_name,
-                                    IREE_SV("target-coverage-json"))) {
-    if (!iree_string_view_is_empty(profile_name)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "target coverage manifest does not accept a profile");
-    }
-    out_request->format = LOOM_CHECK_EMIT_TARGET_COVERAGE_MANIFEST;
-    return iree_ok_status();
   } else if (iree_string_view_equal(target_name, IREE_SV("source-low")) ||
              iree_string_view_equal(target_name, IREE_SV("source-to-low"))) {
     iree_string_view_t symbol_name = iree_string_view_empty();
@@ -1183,29 +1169,6 @@ iree_status_t loom_check_execute_emit(
         .emit_target_name = provider_target_name,
     };
   }
-  if (request.format == LOOM_CHECK_EMIT_TARGET_COVERAGE_MANIFEST) {
-    status = loom_target_coverage_provider_set_format_manifest_json(
-        &environment->coverage_providers, &result->actual_output);
-    if (!iree_status_is_ok(status)) {
-      status = loom_check_emit_finish_status_failure(
-          status, &diagnostic_collector, test_case, case_index, report,
-          filename, request.emit_target_name, allocator, result);
-      iree_arena_deinitialize(&diagnostic_arena);
-      return status;
-    }
-    result->has_actual_output = true;
-    if (test_case->annotation_count > 0) {
-      status = loom_check_emit_finish_diagnostics_and_compare_output(
-          &diagnostic_collector, test_case, case_index, report, allocator,
-          result);
-      iree_arena_deinitialize(&diagnostic_arena);
-      return status;
-    }
-    status = loom_check_emit_compare_output(test_case, allocator, result);
-    iree_arena_deinitialize(&diagnostic_arena);
-    return status;
-  }
-
   if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST ||
       request.format == LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST) {
     loom_target_low_descriptor_registry_t registry = {0};

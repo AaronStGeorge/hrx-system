@@ -27,17 +27,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "coverage",
-    srcs = ["coverage.c"],
-    hdrs = ["coverage.h"],
-    deps = [
-        "//loom/src/loom/util:json",
-        "//loom/src/loom/util:stream",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "artifact_plan",
     srcs = ["artifact_plan.c"],
     hdrs = ["artifact_plan.h"],
@@ -201,16 +190,6 @@ loom_cc_test(
         "//loom/src/loom/ops/target",
         "//loom/src/loom/util:call_graph",
         "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "coverage_test",
-    srcs = ["coverage_test.cc"],
-    deps = [
-        ":coverage",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

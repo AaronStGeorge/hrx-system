@@ -66,19 +66,6 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_library(
-  NAME
-    coverage
-  HDRS
-    "coverage.h"
-  SRCS
-    "coverage.c"
-  DEPS
-    iree::base
-    loom::src::loom::target::coverage
-  PUBLIC
-)
-
 loom_cc_test(
   NAME
     descriptors_test
@@ -89,18 +76,6 @@ loom_cc_test(
     ::descriptors
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::text_asm_roundtrip_test_util
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    coverage_test
-  SRCS
-    "coverage_test.cc"
-  DEPS
-    ::coverage
-    loom::src::loom::target::coverage
     iree::testing::gtest
     iree::testing::gtest_main
 )

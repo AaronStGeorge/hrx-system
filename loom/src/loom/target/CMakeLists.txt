@@ -22,20 +22,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    coverage
-  HDRS
-    "coverage.h"
-  SRCS
-    "coverage.c"
-  DEPS
-    iree::base
-    loom::src::loom::util::json
-    loom::src::loom::util::stream
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     artifact_plan
   HDRS
     "artifact_plan.h"
@@ -230,17 +216,6 @@ loom_cc_test(
     loom::src::loom::ops::op_registry
     loom::src::loom::ops::target
     loom::src::loom::util::call_graph
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    coverage_test
-  SRCS
-    "coverage_test.cc"
-  DEPS
-    ::coverage
     iree::testing::gtest
     iree::testing::gtest_main
 )

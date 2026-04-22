@@ -6,7 +6,6 @@
 
 #include "loom/target/arch/wasm/check_provider.h"
 
-#include "loom/target/arch/wasm/coverage.h"
 #include "loom/target/arch/wasm/low_registry.h"
 #include "loom/target/emit/wasm/loom_check.h"
 #include "loom/target/emit/wasm/lower.h"
@@ -20,11 +19,6 @@ static const loom_check_requirement_provider_t* const
         &loom_wasm_loom_check_requirement_provider,
 };
 
-static const loom_target_coverage_provider_t* const
-    kLoomWasmCoverageProviders[] = {
-        &loom_wasm_target_coverage_provider,
-};
-
 const loom_check_provider_t loom_wasm_check_provider = {
     .name = IREE_SVL("wasm"),
     .initialize_low_descriptor_registry =
@@ -36,6 +30,4 @@ const loom_check_provider_t loom_wasm_check_provider = {
     .requirement_providers = kLoomWasmCheckRequirementProviders,
     .requirement_provider_count =
         IREE_ARRAYSIZE(kLoomWasmCheckRequirementProviders),
-    .coverage_providers = kLoomWasmCoverageProviders,
-    .coverage_provider_count = IREE_ARRAYSIZE(kLoomWasmCoverageProviders),
 };

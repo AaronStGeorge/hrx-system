@@ -104,7 +104,6 @@ loom_assert_no_dependencies(
         ":packet_diagnostics",
     ],
     targets = [
-        "//loom/src/loom/target:coverage",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:low_packet_diagnostics",
@@ -553,16 +552,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "coverage",
-    srcs = ["coverage.c"],
-    hdrs = ["coverage.h"],
-    deps = [
-        "//loom/src/loom/target:coverage",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "packet_diagnostics",
     srcs = ["packet_diagnostics.c"],
     hdrs = ["packet_diagnostics.h"],
@@ -652,7 +641,6 @@ loom_cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        ":coverage",
         ":low_registry",
         ":lower",
         ":packet_diagnostics",
@@ -667,17 +655,6 @@ loom_cc_library(
         ],
         "//conditions:default": [],
     }),
-)
-
-loom_cc_test(
-    name = "coverage_test",
-    srcs = ["coverage_test.cc"],
-    deps = [
-        ":coverage",
-        "//loom/src/loom/target:coverage",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
 )
 
 iree_cmake_extra_content(

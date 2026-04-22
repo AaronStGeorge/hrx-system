@@ -53,7 +53,6 @@ loom_assert_no_dependencies(
         ":packed_dot_descriptors",
     ],
     targets = [
-        "//loom/src/loom/target:coverage",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:preset_registry",
@@ -164,16 +163,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "coverage",
-    srcs = ["coverage.c"],
-    hdrs = ["coverage.h"],
-    deps = [
-        "//loom/src/loom/target:coverage",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "lower",
     srcs = ["lower.c"],
     hdrs = ["lower.h"],
@@ -197,23 +186,11 @@ loom_cc_library(
     srcs = ["check_provider.c"],
     hdrs = ["check_provider.h"],
     deps = [
-        ":coverage",
         ":low_registry",
         ":lower",
         "//loom/src/loom/target/emit/native/x86:loom_check",
         "//loom/src/loom/tools/loom-check:main",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "coverage_test",
-    srcs = ["coverage_test.cc"],
-    deps = [
-        ":coverage",
-        "//loom/src/loom/target:coverage",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

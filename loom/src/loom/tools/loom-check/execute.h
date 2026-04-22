@@ -29,7 +29,6 @@
 #include "iree/base/internal/arena.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/context.h"
-#include "loom/target/coverage.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
@@ -390,8 +389,6 @@ struct loom_check_environment_t {
   loom_check_run_provider_registry_t run_providers;
   // Optional requirement providers linked into this runner.
   loom_check_requirement_provider_registry_t requirement_providers;
-  // Optional target execution coverage providers linked into this runner.
-  loom_target_coverage_provider_set_t coverage_providers;
 };
 
 // Returns the linked emit provider for |target_name|, or NULL when none owns
