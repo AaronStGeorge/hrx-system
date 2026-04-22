@@ -4,7 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""AMDGPU processor and descriptor-set facts for native target emission."""
+"""AMDGPU processor and descriptor-set row data for native target emission.
+
+The public C representation of these facts lives in
+`loom/src/loom/target/arch/amdgpu/target_info_defs.h`. This module owns the
+Python input rows consumed by the table generator, not emitted C ABI shapes.
+"""
 
 from __future__ import annotations
 
