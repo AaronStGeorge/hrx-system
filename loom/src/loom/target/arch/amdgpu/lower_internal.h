@@ -327,16 +327,6 @@ bool loom_amdgpu_low_legality_bundle_is_amdgpu(
 // Returns true for source vector-dot ops handled by the AMDGPU dot lowerer.
 bool loom_amdgpu_op_is_vector_dot(loom_op_kind_t kind);
 
-// Selects an AMDGPU vector-dot packet plan.
-bool loom_amdgpu_select_vector_dot_plan(loom_low_lower_context_t* context,
-                                        const loom_op_t* source_op,
-                                        loom_amdgpu_dot_plan_t* out_plan);
-
-// Lowers a source vector dot op from its selected AMDGPU plan.
-iree_status_t loom_amdgpu_lower_vector_dot(loom_low_lower_context_t* context,
-                                           const loom_op_t* source_op,
-                                           const loom_amdgpu_dot_plan_t* plan);
-
 // Selects the AMDGPU mask compare plan for a source vector.cmpi op.
 bool loom_amdgpu_select_vector_cmpi_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

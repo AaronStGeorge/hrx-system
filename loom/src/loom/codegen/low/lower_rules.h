@@ -135,6 +135,10 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_MATERIALIZABLE = 6,
   // Source value ref must map to a low register with register_class_id.
   LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_CLASS = 7,
+  // Source value ref must have a static dim0 divisible by u64.
+  LOOM_LOW_LOWER_GUARD_VALUE_STATIC_DIM0_MULTIPLE = 8,
+  // Source value refs must map to low registers with equal unit counts.
+  LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT_EQ = 9,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -142,6 +146,8 @@ typedef struct loom_low_lower_guard_t {
   loom_low_lower_guard_kind_t kind;
   // Source value-ref table index used by VALUE_TYPE guards.
   uint16_t value_ref_index;
+  // Second source value-ref table index used by pairwise value guards.
+  uint16_t other_value_ref_index;
   // Source attribute ordinal used by attribute guards.
   uint16_t attr_index;
   // Type-pattern table index used by VALUE_TYPE guards.
@@ -150,7 +156,7 @@ typedef struct loom_low_lower_guard_t {
   uint16_t diagnostic_index;
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
-  // Required enum value for ATTR_ENUM_EQ guards.
+  // Required enum value or unsigned payload for guard kinds that need one.
   uint64_t u64;
   // Stable descriptor ID used by DESCRIPTOR_AVAILABLE guards.
   uint64_t descriptor_id;

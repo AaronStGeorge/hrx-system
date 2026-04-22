@@ -210,6 +210,19 @@ static bool loom_low_lower_rule_type_matches(
   return true;
 }
 
+static iree_status_t loom_low_lower_rule_mapped_low_type(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, loom_type_t* out_type) {
+  IREE_ASSERT_ARGUMENT(out_type);
+  *out_type = loom_type_none();
+  loom_value_id_t source_value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_map_value(context, source_op, source_value_id, out_type));
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_lower_rule_guard_matches(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -265,11 +278,9 @@ static iree_status_t loom_low_lower_rule_guard_matches(
           context, rule_set, source_op, guard->value_ref_index);
       return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_CLASS: {
-      loom_value_id_t source_value_id = loom_low_lower_rule_source_value(
-          rule_set, source_op, guard->value_ref_index);
       loom_type_t low_type = loom_type_none();
-      IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
-          context, source_op, source_value_id, &low_type));
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_mapped_low_type(
+          context, rule_set, source_op, guard->value_ref_index, &low_type));
       if (!loom_type_is_register(low_type)) {
         return iree_ok_status();
       }
@@ -277,6 +288,38 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       IREE_RETURN_IF_ERROR(loom_low_lower_register_class_string_id(
           context, guard->register_class_id, &expected_class_id));
       *out_matches = loom_type_register_class_id(low_type) == expected_class_id;
+      return iree_ok_status();
+    }
+    case LOOM_LOW_LOWER_GUARD_VALUE_STATIC_DIM0_MULTIPLE: {
+      IREE_ASSERT_GT(guard->u64, 0);
+      loom_value_id_t value_id = loom_low_lower_rule_source_value(
+          rule_set, source_op, guard->value_ref_index);
+      loom_type_t type = loom_module_value_type(
+          loom_low_lower_context_module(context), value_id);
+      if (loom_type_rank(type) == 0 || loom_type_dim_is_dynamic_at(type, 0)) {
+        return iree_ok_status();
+      }
+      const int64_t static_dim0 = loom_type_dim_static_size_at(type, 0);
+      *out_matches =
+          static_dim0 >= 0 && ((uint64_t)static_dim0 % guard->u64) == 0;
+      return iree_ok_status();
+    }
+    case LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT_EQ: {
+      loom_type_t lhs_type = loom_type_none();
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_mapped_low_type(
+          context, rule_set, source_op, guard->value_ref_index, &lhs_type));
+      if (!loom_type_is_register(lhs_type)) {
+        return iree_ok_status();
+      }
+      loom_type_t rhs_type = loom_type_none();
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_mapped_low_type(
+          context, rule_set, source_op, guard->other_value_ref_index,
+          &rhs_type));
+      if (!loom_type_is_register(rhs_type)) {
+        return iree_ok_status();
+      }
+      *out_matches = loom_type_register_unit_count(lhs_type) ==
+                     loom_type_register_unit_count(rhs_type);
       return iree_ok_status();
     }
     default:
