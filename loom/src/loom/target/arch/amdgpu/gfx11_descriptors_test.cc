@@ -27,6 +27,7 @@ using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
 using ::loom::testing::ExpectAmdgpuGlobalMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuInstructionPrefetchDistanceDescriptor;
+using ::loom::testing::ExpectAmdgpuWmmaDescriptorForTest;
 using ::loom::testing::LowFuncAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
@@ -368,39 +369,18 @@ TEST(AmdgpuDescriptorsTest, Gfx11WmmaPacketMatchesRdnaRegisterShape) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_amdgpu_gfx11_core_descriptor_set();
 
-  const loom_low_descriptor_t* wmma_descriptor = LookupDescriptor(
-      descriptor_set, IREE_SV("amdgpu.v_wmma_f32_16x16x16_f16"));
-  ASSERT_NE(wmma_descriptor, nullptr);
-  EXPECT_EQ(wmma_descriptor->operand_count, 4u);
-  EXPECT_EQ(wmma_descriptor->result_count, 1u);
-  EXPECT_EQ(wmma_descriptor->encoding_id, 64u);
-
-  const loom_low_operand_t* wmma_operands =
-      &descriptor_set->operands[wmma_descriptor->operand_start];
-  EXPECT_EQ(wmma_operands[0].unit_count, 8u);
-  EXPECT_EQ(wmma_operands[1].unit_count, 4u);
-  EXPECT_EQ(wmma_operands[2].unit_count, 4u);
-  EXPECT_EQ(wmma_operands[3].unit_count, 8u);
-  EXPECT_EQ(wmma_operands[0].reg_class_alt_count, 1u);
-  EXPECT_EQ(wmma_operands[1].reg_class_alt_count, 1u);
-  EXPECT_EQ(wmma_operands[2].reg_class_alt_count, 1u);
-  EXPECT_EQ(wmma_operands[3].reg_class_alt_count, 2u);
-  const uint16_t vgpr_class_id =
-      descriptor_set->reg_class_alts[wmma_operands[0].reg_class_alt_start]
-          .reg_class_id;
-  EXPECT_NE(vgpr_class_id, LOOM_LOW_REG_CLASS_NONE);
-  EXPECT_EQ(descriptor_set->reg_class_alts[wmma_operands[1].reg_class_alt_start]
-                .reg_class_id,
-            vgpr_class_id);
-  EXPECT_EQ(descriptor_set->reg_class_alts[wmma_operands[2].reg_class_alt_start]
-                .reg_class_id,
-            vgpr_class_id);
-  const loom_low_reg_class_alt_t* accumulator_alts =
-      &descriptor_set->reg_class_alts[wmma_operands[3].reg_class_alt_start];
-  EXPECT_EQ(accumulator_alts[0].reg_class_id, vgpr_class_id);
-  EXPECT_EQ(accumulator_alts[1].reg_class_id, LOOM_LOW_REG_CLASS_NONE);
-  EXPECT_NE(accumulator_alts[1].flags & LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE,
-            0u);
+  ExpectAmdgpuWmmaDescriptorForTest(
+      descriptor_set, IREE_SV("amdgpu.v_wmma_f32_16x16x16_f16"),
+      /*expected_encoding_id=*/64u, /*expected_lhs_units=*/4u,
+      /*expected_rhs_units=*/4u, /*expected_accumulator_units=*/8u);
+  ExpectAmdgpuWmmaDescriptorForTest(
+      descriptor_set, IREE_SV("amdgpu.v_wmma_i32_16x16x16_iu8"),
+      /*expected_encoding_id=*/68u, /*expected_lhs_units=*/2u,
+      /*expected_rhs_units=*/2u, /*expected_accumulator_units=*/8u);
+  ExpectAmdgpuWmmaDescriptorForTest(
+      descriptor_set, IREE_SV("amdgpu.v_wmma_i32_16x16x16_iu4"),
+      /*expected_encoding_id=*/69u, /*expected_lhs_units=*/1u,
+      /*expected_rhs_units=*/1u, /*expected_accumulator_units=*/8u);
 }
 
 TEST(AmdgpuDescriptorsTest, Gfx11AsmFormsExposeNamedWaitcntImmediates) {

@@ -2518,6 +2518,51 @@ def _v_wmma_f32_16x16x16_f16_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_wmma_i32_16x16x16_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    operand_units: int,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_VOP3P",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_WMMA,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=8)),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("a", units=operand_units)),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("b", units=operand_units)),
+            AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc", units=8)),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_wmma_i32_16x16x16_iu8_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_wmma_i32_16x16x16_overlay(
+        descriptor_key="amdgpu.v_wmma_i32_16x16x16_iu8",
+        instruction_name="V_WMMA_I32_16X16X16_IU8",
+        mnemonic="v_wmma_i32_16x16x16_iu8",
+        semantic_tag="matrix.wmma.i32.16x16x16.iu8",
+        operand_units=2,
+    )
+
+
+def _v_wmma_i32_16x16x16_iu4_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_wmma_i32_16x16x16_overlay(
+        descriptor_key="amdgpu.v_wmma_i32_16x16x16_iu4",
+        instruction_name="V_WMMA_I32_16X16X16_IU4",
+        mnemonic="v_wmma_i32_16x16x16_iu4",
+        semantic_tag="matrix.wmma.i32.16x16x16.iu4",
+        operand_units=1,
+    )
+
+
 def _v_mfma_f32_16x16x16_f16_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_mfma_f32_16x16x16_f16",
@@ -3241,6 +3286,8 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_dot4_i32_i8_overlay(),
         _v_dot4_u32_u8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
+        _v_wmma_i32_16x16x16_iu8_overlay(),
+        _v_wmma_i32_16x16x16_iu4_overlay(),
         _s_barrier_overlay(),
         *_gfx11_cache_control_overlays(),
         _s_waitcnt_overlay(
@@ -3365,6 +3412,8 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_dot4_i32_i8_overlay(),
         _v_dot4_u32_u8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
+        _v_wmma_i32_16x16x16_iu8_overlay(),
+        _v_wmma_i32_16x16x16_iu4_overlay(),
         *_gfx12_cache_control_overlays(),
         *_gfx12_prefetch_overlays(),
         _s_wait_loadcnt_overlay(),
@@ -3485,6 +3534,8 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_dot4_i32_i8_overlay(),
         _v_dot4_u32_u8_overlay(),
         _v_wmma_f32_16x16x16_f16_overlay(),
+        _v_wmma_i32_16x16x16_iu8_overlay(),
+        _v_wmma_i32_16x16x16_iu4_overlay(),
         *_gfx12_cache_control_overlays(),
         *_gfx12_prefetch_overlays(),
         _s_wait_loadcnt_overlay(),

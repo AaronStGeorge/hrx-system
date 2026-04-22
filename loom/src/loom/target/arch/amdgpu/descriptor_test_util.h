@@ -43,6 +43,48 @@ inline void ExpectAmdgpuOperandRegisterClassForTest(
   EXPECT_TRUE(iree_string_view_equal(actual_name, expected_name));
 }
 
+inline void ExpectAmdgpuWmmaDescriptorForTest(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
+    uint16_t expected_encoding_id, uint16_t expected_lhs_units,
+    uint16_t expected_rhs_units, uint16_t expected_accumulator_units) {
+  const loom_low_descriptor_t* descriptor =
+      LookupAmdgpuDescriptorForTest(descriptor_set, key);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->operand_count, 4u);
+  EXPECT_EQ(descriptor->result_count, 1u);
+  EXPECT_EQ(descriptor->immediate_count, 0u);
+  EXPECT_EQ(descriptor->encoding_format_id, LOOM_AMDGPU_ENCODING_FORMAT_VOP3P);
+  EXPECT_EQ(descriptor->encoding_id, expected_encoding_id);
+
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[descriptor->operand_start];
+  EXPECT_EQ(operands[0].unit_count, expected_accumulator_units);
+  EXPECT_EQ(operands[1].unit_count, expected_lhs_units);
+  EXPECT_EQ(operands[2].unit_count, expected_rhs_units);
+  EXPECT_EQ(operands[3].unit_count, expected_accumulator_units);
+  EXPECT_EQ(operands[0].reg_class_alt_count, 1u);
+  EXPECT_EQ(operands[1].reg_class_alt_count, 1u);
+  EXPECT_EQ(operands[2].reg_class_alt_count, 1u);
+  EXPECT_EQ(operands[3].reg_class_alt_count, 2u);
+
+  const uint16_t vgpr_class_id =
+      descriptor_set->reg_class_alts[operands[0].reg_class_alt_start]
+          .reg_class_id;
+  EXPECT_NE(vgpr_class_id, LOOM_LOW_REG_CLASS_NONE);
+  EXPECT_EQ(descriptor_set->reg_class_alts[operands[1].reg_class_alt_start]
+                .reg_class_id,
+            vgpr_class_id);
+  EXPECT_EQ(descriptor_set->reg_class_alts[operands[2].reg_class_alt_start]
+                .reg_class_id,
+            vgpr_class_id);
+  const loom_low_reg_class_alt_t* accumulator_alts =
+      &descriptor_set->reg_class_alts[operands[3].reg_class_alt_start];
+  EXPECT_EQ(accumulator_alts[0].reg_class_id, vgpr_class_id);
+  EXPECT_EQ(accumulator_alts[1].reg_class_id, LOOM_LOW_REG_CLASS_NONE);
+  EXPECT_NE(accumulator_alts[1].flags & LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE,
+            0u);
+}
+
 inline void ExpectAmdgpuDsMemoryDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
     loom_low_effect_kind_t expected_effect_kind, uint16_t expected_data_units,
