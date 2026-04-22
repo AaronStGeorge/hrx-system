@@ -17,6 +17,7 @@
 
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/lower.h"
+#include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/low/ops.h"
@@ -28,19 +29,138 @@ extern "C" {
 
 #define LOOM_AMDGPU_MAX_VECTOR_32BIT_LANES 4u
 
+// Returns true when the source type is a scalar i32.
+bool loom_amdgpu_type_is_i32(loom_type_t type);
+
+// Returns true when the source type is an address-sized scalar lowered through
+// the current 32-bit AMDGPU scalar path.
+bool loom_amdgpu_type_is_address_scalar(loom_type_t type);
+
+// Returns true when the source type is a scalar f32.
+bool loom_amdgpu_type_is_f32(loom_type_t type);
+
 // Returns a static rank-1 vector lane count for the requested element type, or
 // zero when the type is not a supported static rank-1 vector.
 uint32_t loom_amdgpu_static_vector_lane_count(loom_type_t type,
                                               loom_scalar_type_t element_type,
                                               uint32_t max_lane_count);
 
+// Returns the lane count for a supported AMDGPU 32-bit vector payload, or zero
+// when the source type is not representable as that payload.
+uint32_t loom_amdgpu_vector_32bit_lane_count(loom_type_t type);
+
 // Returns the i32 lane count for a supported AMDGPU 32-bit vector payload, or
 // zero when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_i32_lane_count(loom_type_t type);
 
+// Returns the f32 lane count for a supported AMDGPU 32-bit vector payload, or
+// zero when the source type is not representable as that payload.
+uint32_t loom_amdgpu_vector_f32_lane_count(loom_type_t type);
+
+// Returns true when the source type is a 32-bit-element view that can map to an
+// AMDGPU HAL/global buffer resource or LDS root.
+bool loom_amdgpu_type_is_32bit_view(loom_type_t type);
+
+// Returns true when a source value has scalar i32 type.
+bool loom_amdgpu_value_is_i32(loom_low_lower_context_t* context,
+                              loom_value_id_t value_id);
+
+// Returns true when a source value has an address scalar type.
+bool loom_amdgpu_value_is_address_scalar(loom_low_lower_context_t* context,
+                                         loom_value_id_t value_id);
+
+// Returns true when a source value has scalar f32 type.
+bool loom_amdgpu_value_is_f32(loom_low_lower_context_t* context,
+                              loom_value_id_t value_id);
+
+// Returns true when a source value is a supported rank-1 i32/f32 vector
+// payload.
+bool loom_amdgpu_value_is_vector_32bit_lane_range(
+    loom_low_lower_context_t* context, loom_value_id_t value_id);
+
+// Returns true when a source value has a 32-bit-element view type.
+bool loom_amdgpu_value_is_32bit_view(loom_low_lower_context_t* context,
+                                     loom_value_id_t value_id);
+
+// Builds a one-unit SGPR register type in the current lowering context.
+iree_status_t loom_amdgpu_make_sgpr_type(loom_low_lower_context_t* context,
+                                         loom_type_t* out_type);
+
+// Builds a multi-unit SGPR register type in the current lowering context.
+iree_status_t loom_amdgpu_make_sgpr_range_type(
+    loom_low_lower_context_t* context, uint32_t unit_count,
+    loom_type_t* out_type);
+
 // Builds a one-unit VGPR register type in the current lowering context.
 iree_status_t loom_amdgpu_make_vgpr_type(loom_low_lower_context_t* context,
                                          loom_type_t* out_type);
+
+// Returns whether a low register type belongs to the requested AMDGPU register
+// class.
+iree_status_t loom_amdgpu_low_type_register_class_is(
+    loom_low_lower_context_t* context, loom_type_t type, uint16_t reg_class_id,
+    bool* out_match);
+
+// Returns true when the source value should prefer a VGPR mapping even if its
+// scalar type could otherwise map to an SGPR.
+bool loom_amdgpu_value_prefers_vgpr(loom_low_lower_context_t* context,
+                                    loom_value_id_t source_value_id);
+
+// Maps a source type to the default AMDGPU low register type.
+iree_status_t loom_amdgpu_map_type(void* user_data,
+                                   loom_low_lower_context_t* context,
+                                   const loom_op_t* source_op,
+                                   loom_type_t source_type,
+                                   loom_type_t* out_low_type);
+
+// Maps a source value to the AMDGPU low register type selected for its
+// placement-sensitive use.
+iree_status_t loom_amdgpu_map_value(void* user_data,
+                                    loom_low_lower_context_t* context,
+                                    const loom_op_t* source_op,
+                                    loom_value_id_t source_value_id,
+                                    loom_type_t source_type,
+                                    loom_type_t* out_low_type);
+
+// Maps one source function argument to the low ABI representation selected for
+// the active AMDGPU bundle.
+iree_status_t loom_amdgpu_map_argument(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_function_op, uint16_t source_argument_index,
+    loom_value_id_t source_argument_id,
+    loom_low_lower_abi_argument_t* out_argument);
+
+// Extracts an exact index constant from a module value.
+bool loom_amdgpu_module_value_as_exact_index_constant(
+    const loom_module_t* module, loom_value_id_t value_id, int64_t* out_value);
+
+// Extracts an exact non-negative signed 64-bit integer from value facts.
+bool loom_amdgpu_value_facts_as_exact_non_negative_i64(loom_value_facts_t facts,
+                                                       int64_t* out_value);
+
+// Returns true when an attribute can encode as a signed 32-bit immediate.
+bool loom_amdgpu_attr_is_i32_immediate(loom_attribute_t value);
+
+// Returns true when an attribute can encode as an f32 immediate payload.
+bool loom_amdgpu_attr_is_f32_immediate(loom_attribute_t value);
+
+// Returns the f32 bit pattern produced by narrowing an attribute.
+uint32_t loom_amdgpu_attr_f32_bit_pattern(loom_attribute_t value);
+
+// Extracts a source scalar i32 constant.
+bool loom_amdgpu_value_as_i32_constant(loom_low_lower_context_t* context,
+                                       loom_value_id_t value_id,
+                                       int64_t* out_value);
+
+// Returns true when a source scalar i32 value can be materialized as a VGPR
+// operand for vector-style packets.
+bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
+    loom_low_lower_context_t* context, loom_value_id_t value_id);
+
+// Interns a low lowering helper string in the active module.
+iree_status_t loom_amdgpu_intern(loom_low_lower_context_t* context,
+                                 iree_string_view_t string,
+                                 loom_string_id_t* out_string_id);
 
 // Maps a source result to the low register type already selected by the active
 // lowering policy and verifies that it is a register payload.
@@ -56,6 +176,13 @@ iree_status_t loom_amdgpu_emit_low_op(
     iree_host_size_t operand_count, loom_named_attr_slice_t attrs,
     const loom_type_t* result_types, iree_host_size_t result_count,
     loom_op_t** out_low_op);
+
+// Emits one descriptor-backed low.const with an imm32 attribute.
+iree_status_t loom_amdgpu_emit_const_u32(loom_low_lower_context_t* context,
+                                         const loom_op_t* source_op,
+                                         uint64_t descriptor_id, uint32_t value,
+                                         loom_type_t result_type,
+                                         loom_value_id_t* out_value_id);
 
 // Emits a low.slice from a register range.
 iree_status_t loom_amdgpu_emit_low_slice(loom_low_lower_context_t* context,

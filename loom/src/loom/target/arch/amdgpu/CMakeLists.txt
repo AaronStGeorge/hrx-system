@@ -438,6 +438,7 @@ loom_cc_library(
   SRCS
     "lower.c"
     "lower_dot.c"
+    "lower_support.c"
   DEPS
     ::descriptor_ids
     ::hal_kernel_abi
@@ -445,6 +446,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir
+    loom::src::loom::ir::facts
     loom::src::loom::ops::buffer
     loom::src::loom::ops::encoding
     loom::src::loom::ops::index
