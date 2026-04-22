@@ -184,6 +184,8 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("vop1");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL:
       return IREE_SV("vop1_literal");
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_MFMA:
+      return IREE_SV("vop3p_mfma");
     default:
       return IREE_SV("unknown");
   }
