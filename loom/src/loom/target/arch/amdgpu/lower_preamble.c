@@ -195,10 +195,10 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
   const iree_host_size_t plan_count =
       loom_low_lower_context_selected_plan_count(context);
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
-    const loom_op_t* source_op =
-        loom_low_lower_context_selected_plan_source_op(context, i);
-    const loom_low_lower_plan_t plan =
-        loom_low_lower_context_selected_plan(context, i);
+    const loom_low_lower_selected_plan_view_t selected_plan =
+        loom_low_lower_context_selected_plan_view(context, i);
+    const loom_op_t* source_op = selected_plan.source_op;
+    const loom_low_lower_plan_t plan = selected_plan.plan;
     switch (plan.id) {
       case LOOM_OP_VECTOR_LOAD:
       case LOOM_OP_VECTOR_STORE: {
@@ -268,10 +268,10 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
   }
 
   for (iree_host_size_t i = 0; i < plan_count; ++i) {
-    const loom_op_t* source_op =
-        loom_low_lower_context_selected_plan_source_op(context, i);
-    const loom_low_lower_plan_t plan =
-        loom_low_lower_context_selected_plan(context, i);
+    const loom_low_lower_selected_plan_view_t selected_plan =
+        loom_low_lower_context_selected_plan_view(context, i);
+    const loom_op_t* source_op = selected_plan.source_op;
+    const loom_low_lower_plan_t plan = selected_plan.plan;
     switch (plan.id) {
       case LOOM_OP_KERNEL_WORKITEM_ID: {
         const loom_kernel_dimension_t dimension =

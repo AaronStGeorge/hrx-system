@@ -143,6 +143,14 @@ static inline bool loom_low_lower_plan_is_empty(loom_low_lower_plan_t plan) {
   return plan.id == LOOM_LOW_LOWER_PLAN_ID_NONE;
 }
 
+typedef struct loom_low_lower_selected_plan_view_t {
+  // Source op this selected plan lowers.
+  const loom_op_t* source_op;
+  // Target-owned plan selected during planning. Table-driven rule rows return
+  // an empty plan because their rule data is owned by core lowering.
+  loom_low_lower_plan_t plan;
+} loom_low_lower_selected_plan_view_t;
+
 typedef iree_status_t (*loom_low_lower_select_op_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_low_lower_plan_t* out_plan);
@@ -323,13 +331,8 @@ const loom_value_fact_table_t* loom_low_lower_context_fact_table(
 iree_host_size_t loom_low_lower_context_selected_plan_count(
     const loom_low_lower_context_t* context);
 
-// Returns the source op associated with one selected lowering plan.
-const loom_op_t* loom_low_lower_context_selected_plan_source_op(
-    const loom_low_lower_context_t* context, iree_host_size_t index);
-
-// Returns one selected lowering plan. Table-driven rule rows return an empty
-// plan because their rule data is owned by core lowering.
-loom_low_lower_plan_t loom_low_lower_context_selected_plan(
+// Returns one selected lowering plan view.
+loom_low_lower_selected_plan_view_t loom_low_lower_context_selected_plan_view(
     const loom_low_lower_context_t* context, iree_host_size_t index);
 
 // Allocates transient storage from the current lowering arena. The allocation

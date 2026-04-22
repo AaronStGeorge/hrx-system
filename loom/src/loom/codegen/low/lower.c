@@ -245,18 +245,14 @@ iree_host_size_t loom_low_lower_context_selected_plan_count(
   return context->selected_plan_count;
 }
 
-const loom_op_t* loom_low_lower_context_selected_plan_source_op(
+loom_low_lower_selected_plan_view_t loom_low_lower_context_selected_plan_view(
     const loom_low_lower_context_t* context, iree_host_size_t index) {
   IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_LT(index, context->selected_plan_count);
-  return context->selected_plans[index].source_op;
-}
-
-loom_low_lower_plan_t loom_low_lower_context_selected_plan(
-    const loom_low_lower_context_t* context, iree_host_size_t index) {
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_LT(index, context->selected_plan_count);
-  return context->selected_plans[index].plan;
+  return (loom_low_lower_selected_plan_view_t){
+      .source_op = context->selected_plans[index].source_op,
+      .plan = context->selected_plans[index].plan,
+  };
 }
 
 iree_status_t loom_low_lower_allocate_scratch_array(
