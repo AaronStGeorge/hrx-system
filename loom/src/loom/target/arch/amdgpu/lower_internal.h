@@ -343,15 +343,15 @@ iree_status_t loom_amdgpu_lower_vector_dot(loom_low_lower_context_t* context,
                                            const loom_op_t* source_op,
                                            const loom_amdgpu_dot_plan_t* plan);
 
-// Selects the AMDGPU descriptor used by a source vector.reduce op.
-bool loom_amdgpu_select_vector_reduce_descriptor_id(
+// Selects the AMDGPU reduction packet plan for a source vector.reduce op.
+bool loom_amdgpu_select_vector_reduce_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    uint64_t* out_descriptor_id);
+    loom_amdgpu_vector_reduce_plan_t* out_plan);
 
-// Lowers a source vector.reduce op to AMDGPU descriptor-backed low packets.
-iree_status_t loom_amdgpu_lower_vector_reduce(loom_low_lower_context_t* context,
-                                              const loom_op_t* source_op,
-                                              uint64_t descriptor_id);
+// Lowers a source vector.reduce op from its selected AMDGPU reduction plan.
+iree_status_t loom_amdgpu_lower_vector_reduce(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_reduce_plan_t* plan);
 
 // Selects the AMDGPU mask compare plan for a source vector.cmpi op.
 bool loom_amdgpu_select_vector_cmpi_plan(

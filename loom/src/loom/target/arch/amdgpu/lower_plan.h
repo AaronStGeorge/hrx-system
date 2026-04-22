@@ -127,6 +127,21 @@ typedef struct loom_amdgpu_dot_plan_t {
   uint32_t iteration_count;
 } loom_amdgpu_dot_plan_t;
 
+typedef struct loom_amdgpu_vector_reduce_plan_t {
+  // Stable descriptor ID selected for the reduction lane operation.
+  uint64_t descriptor_id;
+  // Source vector value being reduced.
+  loom_value_id_t input;
+  // Initial accumulator scalar value.
+  loom_value_id_t init;
+  // Result scalar value.
+  loom_value_id_t result;
+  // Scalar payload element type.
+  loom_scalar_type_t element_type;
+  // Static number of input lanes reduced.
+  uint32_t lane_count;
+} loom_amdgpu_vector_reduce_plan_t;
+
 typedef struct loom_amdgpu_vector_compare_plan_t {
   // Stable descriptor ID selected for the compare predicate.
   uint64_t descriptor_id;
