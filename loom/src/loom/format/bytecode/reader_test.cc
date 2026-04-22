@@ -133,33 +133,48 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
-  loom_module_t* CreateTargetSnapshotWithFutureEnumOrdinals() {
+  loom_module_t* CreateTargetArtifactWithFutureEnumOrdinals() {
     loom_module_t* module = CreateModule("reader_future_target_enum");
     loom_builder_t builder;
     loom_builder_initialize(module, &module->arena, loom_module_block(module),
                             &builder);
-    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    loom_string_id_t target_name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("future_target"),
+                                             &target_name_id));
+    uint16_t target_symbol_id = LOOM_SYMBOL_ID_INVALID;
     IREE_CHECK_OK(
-        loom_builder_intern_string(&builder, IREE_SV("future"), &name_id));
-    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
-    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
-    loom_symbol_ref_t symbol = {.module_id = 0, .symbol_id = symbol_id};
-    loom_string_id_t target_triple = LOOM_STRING_ID_INVALID;
+        loom_module_add_symbol(module, target_name_id, &target_symbol_id));
+    loom_symbol_ref_t target_symbol = {.module_id = 0,
+                                       .symbol_id = target_symbol_id};
+    loom_string_id_t preset_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("test-object"),
+                                             &preset_id));
+    loom_op_t* profile_op = nullptr;
+    IREE_CHECK_OK(loom_target_profile_build(
+        &builder, target_symbol, preset_id, loom_named_attr_slice_empty(),
+        LOOM_LOCATION_UNKNOWN, &profile_op));
+
+    loom_string_id_t artifact_name_id = LOOM_STRING_ID_INVALID;
     IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("future"),
-                                             &target_triple));
-    loom_string_id_t empty = LOOM_STRING_ID_INVALID;
+                                             &artifact_name_id));
+    uint16_t artifact_symbol_id = LOOM_SYMBOL_ID_INVALID;
     IREE_CHECK_OK(
-        loom_builder_intern_string(&builder, iree_string_view_empty(), &empty));
-    loom_op_t* snapshot_op = nullptr;
-    IREE_CHECK_OK(loom_target_snapshot_build(
-        &builder, symbol, LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_LLVMIR,
-        target_triple, empty, LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_ELF, empty,
-        empty, 64, 64, 64, 0, 0, 0, 0, 0, 0, 0, LOOM_LOCATION_UNKNOWN,
-        &snapshot_op));
-    loom_op_attrs(snapshot_op)[loom_target_snapshot_codegen_format_ATTR_INDEX] =
-        loom_attr_enum(250);
+        loom_module_add_symbol(module, artifact_name_id, &artifact_symbol_id));
+    loom_symbol_ref_t artifact_symbol = {.module_id = 0,
+                                         .symbol_id = artifact_symbol_id};
+    loom_op_t* artifact_op = nullptr;
+    IREE_CHECK_OK(loom_target_artifact_build(
+        &builder,
+        LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ARTIFACT_FORMAT |
+            LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ABI,
+        artifact_symbol, target_symbol,
+        LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_ELF,
+        LOOM_TARGET_ARTIFACT_ABI_OBJECT_FILE, LOOM_LOCATION_UNKNOWN,
+        &artifact_op));
     loom_op_attrs(
-        snapshot_op)[loom_target_snapshot_artifact_format_ATTR_INDEX] =
+        artifact_op)[loom_target_artifact_artifact_format_ATTR_INDEX] =
+        loom_attr_enum(250);
+    loom_op_attrs(artifact_op)[loom_target_artifact_abi_ATTR_INDEX] =
         loom_attr_enum(251);
     return module;
   }
@@ -1375,7 +1390,7 @@ TEST_F(ReaderTest, ReadsFunctionBodyModule) {
 }
 
 TEST_F(ReaderTest, EnumAttributesPreserveFutureOrdinals) {
-  loom_module_t* module = CreateTargetSnapshotWithFutureEnumOrdinals();
+  loom_module_t* module = CreateTargetArtifactWithFutureEnumOrdinals();
   auto bytes = WriteModule(module);
 
   loom_module_t* read_module = nullptr;
@@ -1389,13 +1404,13 @@ TEST_F(ReaderTest, EnumAttributesPreserveFutureOrdinals) {
     loom_module_free(module);
     FAIL() << ::testing::PrintToString(error_ids);
   }
-  ASSERT_EQ(read_module->symbols.count, 1u);
+  ASSERT_EQ(read_module->symbols.count, 2u);
 
-  loom_op_t* read_snapshot = read_module->symbols.entries[0].defining_op;
-  ASSERT_NE(read_snapshot, nullptr);
-  ASSERT_TRUE(loom_target_snapshot_isa(read_snapshot));
-  EXPECT_EQ(loom_target_snapshot_codegen_format(read_snapshot), 250u);
-  EXPECT_EQ(loom_target_snapshot_artifact_format(read_snapshot), 251u);
+  loom_op_t* read_artifact = read_module->symbols.entries[1].defining_op;
+  ASSERT_NE(read_artifact, nullptr);
+  ASSERT_TRUE(loom_target_artifact_isa(read_artifact));
+  EXPECT_EQ(loom_target_artifact_artifact_format(read_artifact), 250u);
+  EXPECT_EQ(loom_target_artifact_abi(read_artifact), 251u);
 
   loom_module_free(read_module);
   loom_module_free(module);

@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -21,8 +22,6 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/x86/low_registry.h"
 #include "loom/target/arch/x86/lower.h"
-#include "loom/target/ir_records.h"
-#include "loom/target/presets.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -75,44 +74,13 @@ class X86AssemblyTest : public ::testing::Test {
     return nullptr;
   }
 
-  loom_func_like_t FindFirstSemanticFunction(loom_module_t* module) {
-    loom_block_t* block = loom_module_block(module);
-    loom_op_t* op = nullptr;
-    loom_block_for_each_op(block, op) {
-      loom_func_like_t function = loom_func_like_cast(module, op);
-      if (loom_func_like_isa(function) && !loom_low_func_def_isa(op)) {
-        return function;
-      }
-    }
-    return (loom_func_like_t){0};
-  }
-
-  loom_symbol_ref_t SymbolRef(loom_module_t* module,
-                              iree_string_view_t symbol_name) {
-    loom_string_id_t symbol_name_id = LOOM_STRING_ID_INVALID;
-    IREE_CHECK_OK(
-        loom_module_intern_string(module, symbol_name, &symbol_name_id));
-    uint16_t symbol_id = loom_module_find_symbol(module, symbol_name_id);
-    IREE_ASSERT(symbol_id != LOOM_SYMBOL_ID_INVALID);
-    return loom_symbol_ref_t{.module_id = 0, .symbol_id = symbol_id};
-  }
-
   void BuildSidecars(const char* body, iree_arena_allocator_t* arena,
                      loom_low_packetization_t* out_packetization) {
-    std::string source =
-        "target.preset @x86_target {key = \"x86-avx512\", source = "
-        "@x86_fragment}\n";
+    std::string source = "target.profile @x86_target preset(\"x86-avx512\")\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
-
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
-                                              &expanded_preset_count));
-    EXPECT_EQ(expanded_preset_count, 1u);
 
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -139,29 +107,27 @@ class X86AssemblyTest : public ::testing::Test {
   void LowerSourceAndBuildSidecars(
       const char* preset_key, const char* body, iree_arena_allocator_t* arena,
       loom_low_packetization_t* out_packetization) {
-    std::string source = "target.preset @x86_target {key = \"";
+    std::string source = "target.profile @x86_target preset(\"";
     source += preset_key;
-    source += "\", source = @x86_source}\n";
+    source += "\")\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
 
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
-                                              &expanded_preset_count));
-    EXPECT_EQ(expanded_preset_count, 1u);
-
-    loom_target_ir_bundle_storage_t bundle_storage = {};
-    IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
-        module_, IREE_SV("x86_target"), &bundle_storage));
     loom_low_lower_policy_registry_t policy_registry = {};
     loom_x86_low_lower_policy_registry_initialize(&policy_registry);
-    const loom_low_lower_policy_t* policy = nullptr;
-    IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup_for_bundle(
-        &policy_registry, &bundle_storage.bundle, &policy));
+    iree_arena_allocator_t selection_arena;
+    iree_arena_initialize(&block_pool_, &selection_arena);
+    const loom_low_source_selection_options_t selection_options = {
+        .func_symbol_name = IREE_SV("x86_source"),
+        .descriptor_registry = &target_registry_.registry,
+        .policy_registry = &policy_registry,
+        .lowering_kind = IREE_SV("x86 source-to-low"),
+    };
+    loom_low_source_selection_t selection = {};
+    IREE_ASSERT_OK(loom_low_select_source_func(module_, &selection_options,
+                                               &selection_arena, &selection));
     const loom_target_low_legality_provider_t* legality_providers[] = {
         loom_x86_low_legality_provider(),
     };
@@ -169,19 +135,19 @@ class X86AssemblyTest : public ::testing::Test {
         loom_target_low_legality_provider_list_make(
             legality_providers, IREE_ARRAYSIZE(legality_providers));
     const loom_low_lower_options_t lower_options = {
-        .target_ref = SymbolRef(module_, IREE_SV("x86_target")),
-        .bundle = &bundle_storage.bundle,
+        .target_ref = selection.target_ref,
+        .bundle = selection.target_bundle,
         .descriptor_registry = &target_registry_.registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .legality_provider_list = legality_provider_list,
-        .policy = policy,
+        .policy = selection.policy,
         .max_errors = 20,
     };
     loom_low_lower_result_t lower_result = {};
-    IREE_ASSERT_OK(loom_low_lower_function(module_,
-                                           FindFirstSemanticFunction(module_),
+    IREE_ASSERT_OK(loom_low_lower_function(module_, selection.func,
                                            &lower_options, &lower_result));
+    iree_arena_deinitialize(&selection_arena);
     EXPECT_EQ(lower_result.error_count, 0u);
     ASSERT_NE(lower_result.low_func_op, nullptr);
 
@@ -287,7 +253,7 @@ TEST_F(X86AssemblyTest, DropsDeadAvx512FragmentFromSourceLowering) {
   loom_low_packetization_t packetization = {};
   LowerSourceAndBuildSidecars(
       "x86-avx512",
-      "func.def @x86_source(%lhs: vector<16xi32>, %rhs: "
+      "func.def target(@x86_target) @x86_source(%lhs: vector<16xi32>, %rhs: "
       "vector<16xi32>, %flhs: vector<16xf32>, %frhs: vector<16xf32>) {\n"
       "  %sum = vector.addi %lhs, %rhs : vector<16xi32>\n"
       "  %diff = vector.subi %sum, %rhs : vector<16xi32>\n"
@@ -325,7 +291,8 @@ TEST_F(X86AssemblyTest, DropsDeadPackedDotFragmentFromSourceLowering) {
   loom_low_packetization_t packetization = {};
   LowerSourceAndBuildSidecars(
       "x86-packed-dot",
-      "func.def @x86_source(%lhs: vector<32xi8>, %rhs: vector<32xi8>, "
+      "func.def target(@x86_target) @x86_source(%lhs: vector<32xi8>, %rhs: "
+      "vector<32xi8>, "
       "%acc: vector<8xi32>) {\n"
       "  %dot = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<32xi8>, "
       "vector<32xi8>, vector<8xi32>\n"

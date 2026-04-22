@@ -335,7 +335,8 @@ target.profile @bad preset("test.profile") {source = "must_not_exist"}
 
 TEST_F(TargetProfileFactsTest, ArtifactTargetMustResolveToProfileFacts) {
   ModulePtr module = ParseModule(R"(
-target.config @not_profile {contract_set_key = "test", contract_feature_bits = 0}
+target.profile @profile preset("test.profile")
+target.artifact @not_profile target(@profile)
 target.artifact @bad target(@not_profile)
 )");
 

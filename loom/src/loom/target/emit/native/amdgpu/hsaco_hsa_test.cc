@@ -22,6 +22,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -34,9 +35,7 @@
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
-#include "loom/target/ir_records.h"
 #include "loom/target/low_descriptor_registry.h"
-#include "loom/target/presets.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -642,23 +641,11 @@ class LowKernelCompiler {
     IREE_ASSERT_ARGUMENT(out_hsaco);
     IREE_ASSERT_ARGUMENT(arena);
     *out_hsaco = {};
-    std::string source = "target.preset @gfx_target {key = \"";
+    std::string source = "target.profile @gfx_target preset(\"";
     source.append(preset_key.data, preset_key.size);
-    source += "\", source = @loom_kernel}\n";
+    source += "\")\n";
     source += kernel_source;
     IREE_RETURN_IF_ERROR(ParseSource(source));
-
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_RETURN_IF_ERROR(loom_target_expand_presets(module_, &preset_registry,
-                                                    &expanded_preset_count));
-    if (expanded_preset_count != 1) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "AMDGPU HSA low no-op kernel expanded %" PRIhsz
-                              " target presets instead of one",
-                              expanded_preset_count);
-    }
 
     loom_op_t* low_function = FindFirstLowFunction(module_);
     if (low_function == nullptr) {
@@ -666,9 +653,13 @@ class LowKernelCompiler {
                               "AMDGPU HSA low kernel has no low func");
     }
 
-    loom_target_ir_bundle_storage_t bundle_storage = {};
-    IREE_RETURN_IF_ERROR(loom_target_ir_bundle_from_symbol_name(
-        module_, IREE_SV("gfx_target"), &bundle_storage));
+    loom_target_bundle_storage_t bundle_storage = {};
+    loom_low_resolved_target_t target = {};
+    IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
+        module_, low_function, &target_registry_.registry,
+        iree_diagnostic_emitter_t{}, &target));
+    bundle_storage = target.bundle_storage;
+    loom_target_bundle_storage_rebind(&bundle_storage);
     const loom_low_descriptor_set_t* descriptor_set = nullptr;
     IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
         &target_registry_.registry, &bundle_storage.bundle,

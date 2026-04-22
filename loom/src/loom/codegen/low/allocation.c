@@ -1889,7 +1889,7 @@ iree_status_t loom_low_allocate_function(
       .coalesced_copy_count = state.coalesced_copy_count,
       .materialized_copy_count = state.materialized_copy_count,
   };
-  loom_target_ir_bundle_storage_rebind(&sidecar.target.bundle_storage);
+  loom_target_bundle_storage_rebind(&sidecar.target.bundle_storage);
   IREE_RETURN_IF_ERROR(loom_low_allocation_verify_sidecar(&sidecar));
   if (iree_any_bit_set(options->diagnostic_flags,
                        LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS)) {

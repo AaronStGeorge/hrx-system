@@ -1,9 +1,6 @@
 // RUN: pass low-materialize-allocation{budgets=test.i32=2}
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "spill", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 
 low.func.def target(@test_target) @spill(%a : reg<test.i32>, %b : reg<test.i32>, %c : reg<test.i32>) -> (reg<test.i32>) {
   %ab = low.op<test.add.i32>(%a, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -14,13 +11,7 @@ low.func.def target(@test_target) @spill(%a : reg<test.i32>, %b : reg<test.i32>,
 }
 
 // ----
-target.snapshot @vm_snapshot {artifact_format = vm_bytecode, codegen_format = vm, data_layout = "", default_pointer_bitwidth = 64, index_bitwidth = 64, memory_space_constant = 0, memory_space_descriptor = 0, memory_space_generic = 0, memory_space_global = 0, memory_space_host = 0, memory_space_private = 0, memory_space_workgroup = 0, offset_bitwidth = 64, target_cpu = "", target_features = "", target_triple = "iree-vm"}
-
-target.export @vm_export {abi = vm_module_function, export_symbol = "spill", hal_binding_alignment = 0, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 0, hal_flat_workgroup_size_min = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, linkage = default}
-
-target.config @vm_config {contract_feature_bits = 0, contract_set_key = "test.low.core"}
-
-target.bundle @test_target {config = @vm_config, export_plan = @vm_export, snapshot = @vm_snapshot}
+target.profile @test_target preset("test-low")
 
 low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
   low.spill %a, @spill_spill_0 {offset = 0} : reg<test.i32>
@@ -43,10 +34,7 @@ low.slot @spill_spill_1 {align = 4, function = @spill, size = 4, space = private
 
 // RUN: pass low-materialize-allocation{budgets=test.i32=2,diagnostics=spills}
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "spill", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 
 // WARNING@+1: BACKEND/009 "test_target" "value 'a'" "test.i32" "spill_spill_0"
 low.func.def target(@test_target) @spill(%a : reg<test.i32>, %b : reg<test.i32>, %c : reg<test.i32>) -> (reg<test.i32>) {
@@ -64,7 +52,7 @@ low.func.def target(@test_target) @spill(%a : reg<test.i32>, %b : reg<test.i32>,
 
 // RUN: pass low-materialize-allocation{budgets=test.phys=1}
 
-target.preset @test_target {key = "test-low", source = @phys}
+target.profile @test_target preset("test-low")
 
 low.func.def target(@test_target) @phys(%lhs : reg<test.phys>, %rhs : reg<test.phys>) -> (reg<test.phys>) {
   %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys>
@@ -72,13 +60,7 @@ low.func.def target(@test_target) @phys(%lhs : reg<test.phys>, %rhs : reg<test.p
 }
 
 // ----
-target.snapshot @test_target__snapshot {artifact_format = elf, codegen_format = low_native, data_layout = "", default_pointer_bitwidth = 64, index_bitwidth = 64, memory_space_constant = 0, memory_space_descriptor = 4294967295, memory_space_generic = 0, memory_space_global = 0, memory_space_host = 4294967295, memory_space_private = 0, memory_space_workgroup = 4294967295, offset_bitwidth = 64, target_cpu = "test-low", target_features = "", target_triple = "test-low"}
-
-target.export @test_target__export {abi = object_function, export_symbol = "phys", hal_binding_alignment = 0, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 0, hal_flat_workgroup_size_min = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, linkage = dso_local, source = @phys}
-
-target.config @test_target__config {contract_feature_bits = 0, contract_set_key = "test.low.core"}
-
-target.bundle @test_target {config = @test_target__config, export_plan = @test_target__export, snapshot = @test_target__snapshot}
+target.profile @test_target preset("test-low")
 
 low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {
   low.spill %rhs, @phys_spill_0 {offset = 0} : reg<test.phys>
@@ -93,7 +75,7 @@ low.slot @phys_spill_0 {align = 64, function = @phys, size = 64, space = stack}
 
 // RUN: pass low-materialize-allocation{budgets=test.phys=1,diagnostics=spills}
 
-target.preset @test_target {key = "test-low", source = @phys}
+target.profile @test_target preset("test-low")
 
 // WARNING@+1: BACKEND/009 "test_target" "value 'rhs'" "test.phys" "phys_spill_0"
 low.func.def target(@test_target) @phys(%lhs : reg<test.phys>, %rhs : reg<test.phys>) -> (reg<test.phys>) {

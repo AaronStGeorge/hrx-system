@@ -1816,6 +1816,6 @@ iree_status_t loom_low_schedule_function(
       .resource_summaries = state.resource_summaries,
       .resource_summary_count = state.resource_summary_count,
   };
-  loom_target_ir_bundle_storage_rebind(&out_sidecar->target.bundle_storage);
+  loom_target_bundle_storage_rebind(&out_sidecar->target.bundle_storage);
   return iree_ok_status();
 }

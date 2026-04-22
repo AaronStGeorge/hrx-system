@@ -29,7 +29,6 @@
 #include "loom/pass/report.h"
 #include "loom/pass/tooling.h"
 #include "loom/target/all/low_registry.h"
-#include "loom/target/presets.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
@@ -292,16 +291,6 @@ static iree_status_t loom_opt_verify_module(
                             low_verify_result.error_count == 1 ? "" : "s");
   }
   return iree_ok_status();
-}
-
-static iree_status_t loom_opt_expand_target_presets(
-    const loom_target_low_descriptor_registry_t* low_registry,
-    loom_module_t* module) {
-  const loom_target_preset_registry_t preset_registry =
-      loom_target_low_descriptor_registry_presets(low_registry);
-  iree_host_size_t expanded_preset_count = 0;
-  return loom_target_expand_presets(module, &preset_registry,
-                                    &expanded_preset_count);
 }
 
 static iree_status_t loom_opt_configure_pass_instruction(
@@ -1046,9 +1035,6 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status) && !metadata_only) {
     status = loom_opt_parse_module(filename, source, &low_registry, &context,
                                    &block_pool, &module);
-  }
-  if (iree_status_is_ok(status) && !metadata_only) {
-    status = loom_opt_expand_target_presets(&low_registry, module);
   }
   if (iree_status_is_ok(status) && !metadata_only && FLAG_verify) {
     status = loom_opt_verify_module(filename, source, &low_registry, module);

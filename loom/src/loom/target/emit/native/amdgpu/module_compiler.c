@@ -118,7 +118,7 @@ static iree_status_t loom_amdgpu_module_compile_apply_target_cpu(
   }
 
   entry->bundle_storage.snapshot.target_cpu = processor->target_cpu;
-  loom_target_ir_bundle_storage_rebind(&entry->bundle_storage);
+  loom_target_bundle_storage_rebind(&entry->bundle_storage);
   return iree_ok_status();
 }
 

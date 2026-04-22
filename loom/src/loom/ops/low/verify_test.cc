@@ -159,84 +159,16 @@ class LowVerifyTest : public ::testing::Test {
 };
 
 static constexpr const char* kVmTargetBundle =
-    "target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "
-    "\"iree-vm\", data_layout = \"\", artifact_format = vm_bytecode, "
-    "target_cpu = \"\", target_features = \"\", "
-    "default_pointer_bitwidth = 64, index_bitwidth = 64, "
-    "offset_bitwidth = 64, memory_space_generic = 0, "
-    "memory_space_global = 0, memory_space_workgroup = 0, "
-    "memory_space_constant = 0, memory_space_private = 0, "
-    "memory_space_host = 0, memory_space_descriptor = 0}\n"
-    "target.export @vm_export {source = @vm_resource, export_symbol = "
-    "\"vm_resource\", abi = vm_module_function, linkage = default, "
-    "hal_binding_alignment = 0, hal_workgroup_size_x = 0, "
-    "hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, "
-    "hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, "
-    "hal_buffer_resource_flags = 0}\n"
-    "target.config @vm_config {contract_set_key = \"test.low.core\", "
-    "contract_feature_bits = 0}\n"
-    "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-    "@vm_export, config = @vm_config}\n";
+    "target.profile @vm_target preset(\"test-low\")\n";
 
 static constexpr const char* kSemanticVmTargetBundle =
-    "target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "
-    "\"iree-vm\", data_layout = \"\", artifact_format = vm_bytecode, "
-    "target_cpu = \"\", target_features = \"\", "
-    "default_pointer_bitwidth = 64, index_bitwidth = 64, "
-    "offset_bitwidth = 64, memory_space_generic = 0, "
-    "memory_space_global = 0, memory_space_workgroup = 0, "
-    "memory_space_constant = 0, memory_space_private = 0, "
-    "memory_space_host = 0, memory_space_descriptor = 0}\n"
-    "target.export @vm_export {source = @semantic, export_symbol = "
-    "\"semantic\", abi = vm_module_function, linkage = default, "
-    "hal_binding_alignment = 0, hal_workgroup_size_x = 0, "
-    "hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, "
-    "hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, "
-    "hal_buffer_resource_flags = 0}\n"
-    "target.config @vm_config {contract_set_key = \"test.low.core\", "
-    "contract_feature_bits = 0}\n"
-    "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-    "@vm_export, config = @vm_config}\n";
+    "target.profile @vm_target preset(\"test-low\")\n";
 
 static constexpr const char* kNativeTargetBundle =
-    "target.snapshot @native_snapshot {codegen_format = low_native, "
-    "target_triple = \"x86_64-unknown-linux-gnu\", data_layout = \"\", "
-    "artifact_format = elf, target_cpu = \"\", target_features = \"\", "
-    "default_pointer_bitwidth = 64, index_bitwidth = 64, "
-    "offset_bitwidth = 64, memory_space_generic = 0, "
-    "memory_space_global = 0, memory_space_workgroup = 4294967295, "
-    "memory_space_constant = 0, memory_space_private = 0, "
-    "memory_space_host = 0, memory_space_descriptor = 4294967295}\n"
-    "target.export @native_export {source = @native_resource, "
-    "export_symbol = \"native_resource\", abi = object_function, linkage = "
-    "dso_local, hal_binding_alignment = 0, hal_workgroup_size_x = 0, "
-    "hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, "
-    "hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, "
-    "hal_buffer_resource_flags = 0}\n"
-    "target.config @native_config {contract_set_key = \"test.low.core\", "
-    "contract_feature_bits = 0}\n"
-    "target.bundle @native_target {snapshot = @native_snapshot, "
-    "export_plan = @native_export, config = @native_config}\n";
+    "target.profile @native_target preset(\"test-low\")\n";
 
 static constexpr const char* kHalTargetBundle =
-    "target.snapshot @hal_snapshot {codegen_format = low_native, "
-    "target_triple = \"amdgcn-amd-amdhsa\", data_layout = \"\", "
-    "artifact_format = elf, target_cpu = \"gfx1100\", target_features = "
-    "\"\", default_pointer_bitwidth = 64, index_bitwidth = 64, "
-    "offset_bitwidth = 64, memory_space_generic = 0, "
-    "memory_space_global = 1, memory_space_workgroup = 3, "
-    "memory_space_constant = 4, memory_space_private = 5, "
-    "memory_space_host = 4294967295, memory_space_descriptor = 4294967295}\n"
-    "target.export @hal_export {source = @hal_kernel, export_symbol = "
-    "\"hal_kernel\", abi = hal_kernel, linkage = default, "
-    "hal_binding_alignment = 16, hal_workgroup_size_x = 1, "
-    "hal_workgroup_size_y = 1, hal_workgroup_size_z = 1, "
-    "hal_flat_workgroup_size_min = 1, hal_flat_workgroup_size_max = 1, "
-    "hal_buffer_resource_flags = 0}\n"
-    "target.config @hal_config {contract_set_key = \"test.low.core\", "
-    "contract_feature_bits = 0}\n"
-    "target.bundle @hal_target {snapshot = @hal_snapshot, export_plan = "
-    "@hal_export, config = @hal_config}\n";
+    "target.profile @hal_target preset(\"test-low\")\n";
 
 TEST_F(LowVerifyTest, DescriptorKeysPassWithQualifiedSegments) {
   DiagnosticCapture capture;
@@ -772,14 +704,16 @@ TEST_F(LowVerifyTest, ResourceImportsPassForVmNativeAndHalAbiShapes) {
   DiagnosticCapture capture;
   std::string source = kVmTargetBundle;
   source +=
-      "low.func.def target(@vm_target) @vm_resource() -> (reg<vm.i32>) {\n"
+      "low.func.def target(@vm_target) abi(vm_module_function) @vm_resource() "
+      "-> (reg<vm.i32>) {\n"
       "  %state = low.resource<vm_state> {index = 0, semantic_type = "
       "vm.state} : reg<vm.i32>\n"
       "  low.return %state : reg<vm.i32>\n"
       "}\n";
   source += kNativeTargetBundle;
   source +=
-      "low.func.def target(@native_target) @native_resource() -> "
+      "low.func.def target(@native_target) abi(object_function) "
+      "@native_resource() -> "
       "(reg<native.ptr>) {\n"
       "  %ptr = low.resource<native_pointer> {index = 0, semantic_type = "
       "buffer} : reg<native.ptr>\n"
@@ -787,7 +721,7 @@ TEST_F(LowVerifyTest, ResourceImportsPassForVmNativeAndHalAbiShapes) {
       "}\n";
   source += kHalTargetBundle;
   source +=
-      "low.func.def target(@hal_target) @hal_kernel() -> "
+      "low.func.def target(@hal_target) abi(hal_kernel) @hal_kernel() -> "
       "(reg<amdgpu.sgpr x4>) {\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
@@ -828,25 +762,9 @@ TEST_F(LowVerifyTest, ResourceRejectsNegativeValidByteCount) {
 TEST_F(LowVerifyTest, ResourceRejectsWrongExportAbi) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "target.snapshot @native_snapshot {codegen_format = low_native, "
-      "target_triple = \"x86_64-unknown-linux-gnu\", data_layout = \"\", "
-      "artifact_format = elf, target_cpu = \"\", target_features = \"\", "
-      "default_pointer_bitwidth = 64, index_bitwidth = 64, "
-      "offset_bitwidth = 64, memory_space_generic = 0, "
-      "memory_space_global = 0, memory_space_workgroup = 4294967295, "
-      "memory_space_constant = 0, memory_space_private = 0, "
-      "memory_space_host = 0, memory_space_descriptor = 4294967295}\n"
-      "target.export @native_export {source = @vm_resource, export_symbol = "
-      "\"vm_resource\", abi = object_function, linkage = dso_local, "
-      "hal_binding_alignment = 0, hal_workgroup_size_x = 0, "
-      "hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, "
-      "hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, "
-      "hal_buffer_resource_flags = 0}\n"
-      "target.config @native_config {contract_set_key = \"test.low.core\", "
-      "contract_feature_bits = 0}\n"
-      "target.bundle @native_target {snapshot = @native_snapshot, "
-      "export_plan = @native_export, config = @native_config}\n"
-      "low.func.def target(@native_target) @vm_resource() -> (reg<vm.i32>) {\n"
+      "target.profile @native_target preset(\"test-low\")\n"
+      "low.func.def target(@native_target) abi(object_function) @vm_resource() "
+      "-> (reg<vm.i32>) {\n"
       "  %state = low.resource<vm_state> {index = 0, semantic_type = "
       "vm.state} : reg<vm.i32>\n"
       "  low.return %state : reg<vm.i32>\n"

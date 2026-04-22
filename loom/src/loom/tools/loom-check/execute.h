@@ -273,7 +273,7 @@ typedef struct loom_check_emit_provider_request_t {
   const loom_check_case_t* test_case;
   // Runner environment that selected this provider.
   const loom_check_environment_t* environment;
-  // Parsed module after comment stripping and target preset expansion.
+  // Parsed module after comment stripping.
   loom_module_t* module;
   // Linked target-low registry visible to this runner.
   const loom_target_low_descriptor_registry_t* low_registry;

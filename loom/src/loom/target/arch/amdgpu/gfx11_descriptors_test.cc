@@ -14,6 +14,7 @@
 #include "loom/codegen/low/text_asm_test_util.h"
 #include "loom/target/arch/amdgpu/descriptor_test_util.h"
 #include "loom/target/arch/amdgpu/encoding.h"
+#include "loom/target/arch/amdgpu/low_registry.h"
 
 namespace loom {
 namespace {
@@ -461,26 +462,11 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowAsmRegionRoundTrips) {
 
 TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorMemoryAndMatrix) {
   LowFuncAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx11_core_descriptor_set));
+  IREE_ASSERT_OK(harness.Initialize(loom_amdgpu_gfx11_core_descriptor_set,
+                                    &loom_amdgpu_low_target_bundle_gfx11_core));
 
   const char* source =
-      "target.snapshot @gfx1100 {codegen_format = low_native, target_triple = "
-      "\"amdgcn-amd-amdhsa\", data_layout = \"amdgpu-layout\", "
-      "artifact_format = elf, target_cpu = \"gfx1100\", target_features = "
-      "\"+wavefrontsize32\", default_pointer_bitwidth = 64, index_bitwidth = "
-      "32, offset_bitwidth = 64, memory_space_generic = 0, "
-      "memory_space_global = 1, memory_space_workgroup = 3, "
-      "memory_space_constant = 4, memory_space_private = 5, "
-      "memory_space_host = 4294967295, memory_space_descriptor = 7}\n"
-      "target.export @hal_export {export_symbol = \"kernel\", abi = "
-      "hal_kernel, linkage = default, hal_binding_alignment = 16, "
-      "hal_workgroup_size_x = 64, hal_workgroup_size_y = 1, "
-      "hal_workgroup_size_z = 1, hal_flat_workgroup_size_min = 64, "
-      "hal_flat_workgroup_size_max = 64, hal_buffer_resource_flags = 0}\n"
-      "target.config @gfx_config {contract_set_key = "
-      "\"amdgpu.gfx11.core\", contract_feature_bits = 0}\n"
-      "target.bundle @gfx_target {snapshot = @gfx1100, export_plan = "
-      "@hal_export, config = @gfx_config}\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
       "low.func.def target(@gfx_target) @vector_memory_matrix(%lhs : "
       "reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %a : reg<amdgpu.vgpr x4>, "
       "%b : reg<amdgpu.vgpr x4>, %acc : reg<amdgpu.vgpr x8>, "

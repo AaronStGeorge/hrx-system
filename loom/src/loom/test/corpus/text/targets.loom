@@ -1,19 +1,15 @@
-func.def @matmul() {
+target.profile @matmul_x86_target preset("test-object") {target_cpu = "x86-64-v3", target_features = "+avx2,+fma", target_triple = "x86_64-pc-linux-gnu"}
+
+target.artifact @matmul_x86_object target(@matmul_x86_target) {abi = object_file, artifact_format = elf}
+
+func.def target(@matmul_x86_target) abi(object_function) export("matmul", {artifact = @matmul_x86_object, linkage = "dso_local"}) @matmul_x86() {
   func.return
 }
 
-target.snapshot @x86_64 {artifact_format = elf, codegen_format = llvmir, data_layout = "e-m:e-p:64:64", default_pointer_bitwidth = 64, index_bitwidth = 64, memory_space_constant = 0, memory_space_descriptor = 4294967295, memory_space_generic = 0, memory_space_global = 0, memory_space_host = 0, memory_space_private = 0, memory_space_workgroup = 4294967295, offset_bitwidth = 64, target_cpu = "x86-64-v3", target_features = "+avx2,+fma", target_triple = "x86_64-pc-linux-gnu"}
+target.profile @matmul_gfx1100_target preset("amdgpu-gfx11") {contract_feature_bits = 1, contract_set_key = "amdgpu.gfx11", target_features = "+wavefrontsize32"}
 
-target.export @matmul_cpu {abi = object_function, export_symbol = "matmul", hal_binding_alignment = 0, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 0, hal_flat_workgroup_size_min = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, linkage = dso_local, source = @matmul}
+target.artifact @matmul_gfx1100_hsaco target(@matmul_gfx1100_target) {abi = hal_executable, artifact_format = elf}
 
-target.config @generic {contract_feature_bits = 0, contract_set_key = "default"}
-
-target.bundle @matmul_x86 {config = @generic, export_plan = @matmul_cpu, snapshot = @x86_64}
-
-target.snapshot @gfx1100 {artifact_format = elf, codegen_format = llvmir, data_layout = "e-p:64:64", default_pointer_bitwidth = 64, index_bitwidth = 64, memory_space_constant = 4, memory_space_descriptor = 4294967295, memory_space_generic = 0, memory_space_global = 1, memory_space_host = 4294967295, memory_space_private = 5, memory_space_workgroup = 3, offset_bitwidth = 64, target_cpu = "gfx1100", target_features = "+wavefrontsize32", target_triple = "amdgcn-amd-amdhsa"}
-
-target.export @matmul_hal {abi = hal_kernel, export_symbol = "matmul", hal_binding_alignment = 16, hal_buffer_resource_flags = 0, hal_flat_workgroup_size_max = 64, hal_flat_workgroup_size_min = 64, hal_workgroup_size_x = 16, hal_workgroup_size_y = 4, hal_workgroup_size_z = 1, linkage = default, source = @matmul}
-
-target.config @gfx11_config {contract_feature_bits = 1, contract_set_key = "amdgpu.gfx11"}
-
-target.bundle @matmul_gfx1100 {config = @gfx11_config, export_plan = @matmul_hal, snapshot = @gfx1100}
+func.def target(@matmul_gfx1100_target) abi(hal_kernel, {hal_binding_alignment = 16, hal_flat_workgroup_size_max = 64, hal_flat_workgroup_size_min = 64, hal_workgroup_size_x = 16, hal_workgroup_size_y = 4, hal_workgroup_size_z = 1}) export("matmul", {artifact = @matmul_gfx1100_hsaco}) @matmul_gfx1100() {
+  func.return
+}

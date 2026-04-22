@@ -321,8 +321,9 @@ int iree_run_loom_main(int argc, char** argv,
       "--expected_output=...\n"
       "  cat module.loom | iree-run-loom - --function=name --input=...\n"
       "\n"
-      "The 'vm' backend compiles target.preset key \"iree-vm\" into a real "
-      "IREE VM bytecode archive and runs it with IREE function I/O syntax for "
+      "The 'vm' backend compiles target.profile preset \"iree-vm\" into a "
+      "real IREE VM bytecode archive and runs it with IREE function I/O syntax "
+      "for "
       "--input, --output, and --expected_output. Native execution backends "
       "compile target-low kernels into runtime artifacts and dispatch them "
       "through their production runtime path.\n");

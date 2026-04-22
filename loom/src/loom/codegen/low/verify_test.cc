@@ -22,7 +22,8 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/emit/ireevm/descriptors.h"
+#include "loom/target/emit/ireevm/low_registry.h"
+#include "loom/target/types.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -189,13 +190,9 @@ class LowDescriptorVerifyTest : public ::testing::Test {
   }
 
   static loom_low_descriptor_registry_t IreeVmRegistry() {
-    static const loom_low_descriptor_set_t* descriptor_sets[] = {
-        loom_ireevm_core_descriptor_set(),
-    };
-    return loom_low_descriptor_registry_t{
-        .descriptor_sets = descriptor_sets,
-        .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-    };
+    loom_target_low_descriptor_registry_t target_registry;
+    loom_ireevm_low_descriptor_registry_initialize(&target_registry);
+    return target_registry.registry;
   }
 
   static loom_text_low_asm_environment_t LowAsmEnvironment(
@@ -210,22 +207,7 @@ class LowDescriptorVerifyTest : public ::testing::Test {
 };
 
 static const char kVmTargetRecords[] =
-    "target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "
-    "\"iree-vm\", data_layout = \"\", artifact_format = vm_bytecode, "
-    "target_cpu = \"\", target_features = \"\", default_pointer_bitwidth = "
-    "64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, "
-    "memory_space_global = 0, memory_space_workgroup = 0, "
-    "memory_space_constant = 0, memory_space_private = 0, memory_space_host = "
-    "0, memory_space_descriptor = 0}\n"
-    "target.export @vm_export {export_symbol = \"add\", abi = "
-    "vm_module_function, linkage = default, hal_binding_alignment = 0, "
-    "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-    "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-    "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
-    "target.config @vm_config {contract_set_key = \"iree.vm.core\", "
-    "contract_feature_bits = 0}\n"
-    "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-    "@vm_export, config = @vm_config}\n";
+    "target.profile @vm_target preset(\"iree-vm\")\n";
 
 TEST_F(LowDescriptorVerifyTest, LowFuncDefAsmBodyParsesAndPrintsByPolicy) {
   loom_low_descriptor_registry_t registry = IreeVmRegistry();
@@ -324,7 +306,7 @@ TEST_F(LowDescriptorVerifyTest, AsmAuthoredPacketErrorsKeepSourceLocation) {
   const loom_location_entry_t location =
       module->locations.entries[collector.emissions[0].op->location];
   ASSERT_EQ(location.kind, LOOM_LOCATION_FILE);
-  EXPECT_EQ(location.file.start_line, 6u);
+  EXPECT_EQ(location.file.start_line, 3u);
   EXPECT_EQ(location.file.start_col, 3u);
 
   bool found_immediate_span = false;
@@ -333,9 +315,9 @@ TEST_F(LowDescriptorVerifyTest, AsmAuthoredPacketErrorsKeepSourceLocation) {
     if (span.kind == LOOM_LOCATION_FIELD_ATTRIBUTE &&
         span.index == loom_low_const_attrs_ATTR_INDEX) {
       found_immediate_span = true;
-      EXPECT_EQ(span.start_line, 6u);
+      EXPECT_EQ(span.start_line, 3u);
       EXPECT_EQ(span.start_col, 22u);
-      EXPECT_EQ(span.end_line, 6u);
+      EXPECT_EQ(span.end_line, 3u);
       break;
     }
   }
@@ -1010,28 +992,59 @@ void MoveFeatureTestMaskToSecondTableRow(FeatureTestTables* tables) {
   tables->descriptors[0].feature_mask_word_start = 1;
 }
 
+static const loom_target_snapshot_t kFeatureTestSnapshot = {
+    .name = IREE_SVL("feature-test"),
+    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
+    .target_triple = IREE_SVL("test"),
+    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
+    .target_cpu = IREE_SVL("generic"),
+    .default_pointer_bitwidth = 64,
+    .index_bitwidth = 64,
+    .offset_bitwidth = 64,
+};
+
+static const loom_target_export_plan_t kFeatureTestExportPlan = {
+    .name = IREE_SVL("feature-test"),
+    .export_symbol = IREE_SVL("add"),
+    .abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION,
+    .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
+};
+
+static const loom_target_config_t kFeatureTestConfig = {
+    .name = IREE_SVL("feature-test"),
+    .contract_set_key = IREE_SVL("test.core"),
+};
+
+static const loom_target_bundle_t kFeatureTestBundle = {
+    .name = IREE_SVL("feature-test"),
+    .snapshot = &kFeatureTestSnapshot,
+    .export_plan = &kFeatureTestExportPlan,
+    .config = &kFeatureTestConfig,
+};
+
+struct FeatureTestRegistryStorage {
+  const loom_low_descriptor_set_t* descriptor_sets[1];
+  const loom_target_bundle_t* target_bundles[1];
+  loom_low_descriptor_registry_t registry;
+};
+
+void InitializeFeatureTestRegistry(const FeatureTestTables* tables,
+                                   FeatureTestRegistryStorage* out_storage) {
+  out_storage->descriptor_sets[0] = &tables->set;
+  out_storage->target_bundles[0] = &kFeatureTestBundle;
+  out_storage->registry = {
+      .descriptor_sets = out_storage->descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(out_storage->descriptor_sets),
+      .target_bundles = out_storage->target_bundles,
+      .target_bundle_count = IREE_ARRAYSIZE(out_storage->target_bundles),
+  };
+}
+
 std::string FeatureTargetRecords(const char* feature_bits) {
   return std::string(
-             "target.snapshot @test_snapshot {codegen_format = low_native, "
-             "target_triple = \"test\", data_layout = \"\", artifact_format = "
-             "elf, target_cpu = \"generic\", target_features = \"\", "
-             "default_pointer_bitwidth = 64, index_bitwidth = 64, "
-             "offset_bitwidth = 64, memory_space_generic = 0, "
-             "memory_space_global = 0, memory_space_workgroup = 0, "
-             "memory_space_constant = 0, memory_space_private = 0, "
-             "memory_space_host = 0, memory_space_descriptor = 0}\n"
-             "target.export @test_export {export_symbol = \"add\", abi = "
-             "object_function, linkage = default, hal_binding_alignment = 0, "
-             "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-             "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-             "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = "
-             "0}\n"
-             "target.config @test_config {contract_set_key = \"test.core\", "
-             "contract_feature_bits = ") +
-         feature_bits +
-         "}\n"
-         "target.bundle @test_target {snapshot = @test_snapshot, export_plan = "
-         "@test_export, config = @test_config}\n";
+             "target.profile @test_target preset(\"feature-test\") "
+             "{contract_feature_bits = ") +
+         feature_bits + "}\n";
 }
 
 std::string FeatureEnumImmediateSource(const char* mode_value) {
@@ -1051,11 +1064,9 @@ TEST_F(LowDescriptorVerifyTest,
   FeatureTestTables tables;
   InitializeFeatureTestTables(&tables);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   loom_module_t* module = ParseSource("func.def @unused() {\n}\n");
   ASSERT_NE(module, nullptr);
@@ -1081,11 +1092,9 @@ TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {
   FeatureTestTables tables;
   InitializeFeatureTestTables(&tables);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   std::string source =
       FeatureTargetRecords("1") +
@@ -1122,11 +1131,9 @@ TEST_F(LowDescriptorVerifyTest, FeatureMaskTableRowKeepsLogicalFeatureWord) {
   InitializeFeatureTestTables(&tables);
   MoveFeatureTestMaskToSecondTableRow(&tables);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   std::string source =
       FeatureTargetRecords("1") +
@@ -1157,11 +1164,9 @@ TEST_F(LowDescriptorVerifyTest, ValidEnumImmediateTokenPasses) {
   InitializeFeatureTestTables(&tables);
   EnableFeatureTestEnumImmediate(&tables);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   loom_module_t* module = ParseSource(FeatureEnumImmediateSource("fast"));
   ASSERT_NE(module, nullptr);
@@ -1180,11 +1185,9 @@ TEST_F(LowDescriptorVerifyTest, ValidEnumImmediateOrdinalPasses) {
   InitializeFeatureTestTables(&tables);
   EnableFeatureTestEnumImmediate(&tables);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   loom_module_t* module = ParseSource(FeatureEnumImmediateSource("1"));
   ASSERT_NE(module, nullptr);
@@ -1203,11 +1206,9 @@ TEST_F(LowDescriptorVerifyTest, RejectsUnknownEnumImmediateToken) {
   InitializeFeatureTestTables(&tables);
   EnableFeatureTestEnumImmediate(&tables);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   loom_module_t* module = ParseSource(FeatureEnumImmediateSource("missing"));
   ASSERT_NE(module, nullptr);
@@ -1234,11 +1235,9 @@ TEST_F(LowDescriptorVerifyTest, RejectsUnknownEnumImmediateOrdinal) {
   InitializeFeatureTestTables(&tables);
   EnableFeatureTestEnumImmediate(&tables);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   loom_module_t* module = ParseSource(FeatureEnumImmediateSource("7"));
   ASSERT_NE(module, nullptr);
@@ -1264,11 +1263,9 @@ TEST_F(LowDescriptorVerifyTest, IgnoresImplicitDescriptorOperandRows) {
   FeatureTestTables tables;
   InitializeFeatureTestTables(&tables);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   std::string source =
       FeatureTargetRecords("5") +
@@ -1295,11 +1292,9 @@ TEST_F(LowDescriptorVerifyTest, AcceptsMatchingTiedConstraintTypes) {
   InitializeFeatureTestTables(&tables);
   AddFeatureTestConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 0, 1);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   std::string source =
       FeatureTargetRecords("5") +
@@ -1326,11 +1321,9 @@ TEST_F(LowDescriptorVerifyTest, RejectsTiedConstraintTypeMismatch) {
   InitializeFeatureTestTables(&tables);
   AddFeatureTestConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 0, 1);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   std::string source =
       FeatureTargetRecords("5") +
@@ -1377,11 +1370,9 @@ TEST_F(LowDescriptorVerifyTest, RejectsDestructiveConstraintTypeMismatch) {
   InitializeFeatureTestTables(&tables);
   AddFeatureTestConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE, 0, 1);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   std::string source =
       FeatureTargetRecords("5") +
@@ -1412,11 +1403,9 @@ TEST_F(LowDescriptorVerifyTest, RejectsCommutableConstraintTypeMismatch) {
   InitializeFeatureTestTables(&tables);
   AddFeatureTestConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_COMMUTABLE, 1, 2);
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
-  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
-  loom_low_descriptor_registry_t registry = {
-      .descriptor_sets = descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-  };
+  FeatureTestRegistryStorage registry_storage;
+  InitializeFeatureTestRegistry(&tables, &registry_storage);
+  loom_low_descriptor_registry_t registry = registry_storage.registry;
 
   std::string source =
       FeatureTargetRecords("5") +

@@ -154,9 +154,10 @@ loom_cc_library(
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::low
     loom::src::loom::ops::target
-    loom::src::loom::target::ir_records
+    loom::src::loom::target::types
   PUBLIC
 )
 
@@ -531,6 +532,7 @@ loom_cc_test(
     "lower_test.cc"
   DEPS
     ::lower
+    ::source_selection
     ::text_asm
     ::verify
     iree::base::internal::arena
@@ -546,8 +548,6 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
-    loom::src::loom::target::ir_records
-    loom::src::loom::target::presets
     loom::src::loom::target::test::descriptors_ids
     loom::src::loom::target::test::low_registry
     loom::src::loom::testing::context
@@ -687,7 +687,8 @@ loom_cc_test(
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::target::emit::ireevm::descriptors
+    loom::src::loom::target::emit::ireevm::low_registry
+    loom::src::loom::target::types
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main

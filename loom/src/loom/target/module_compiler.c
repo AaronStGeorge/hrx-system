@@ -274,7 +274,7 @@ static void loom_target_module_compile_assign_entry(
     const loom_target_module_compile_entry_t* source,
     loom_target_module_compile_entry_t* out_entry) {
   *out_entry = *source;
-  loom_target_ir_bundle_storage_rebind(&out_entry->bundle_storage);
+  loom_target_bundle_storage_rebind(&out_entry->bundle_storage);
 }
 
 static iree_status_t loom_target_module_compile_try_entry(

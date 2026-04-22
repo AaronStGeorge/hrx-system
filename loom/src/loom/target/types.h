@@ -163,6 +163,28 @@ typedef struct loom_target_bundle_t {
   const loom_target_config_t* config;
 } loom_target_bundle_t;
 
+typedef struct loom_target_bundle_storage_t {
+  // Materialized snapshot record owned by this storage object.
+  loom_target_snapshot_t snapshot;
+  // Materialized export plan record owned by this storage object.
+  loom_target_export_plan_t export_plan;
+  // Materialized target config record owned by this storage object.
+  loom_target_config_t config;
+  // Bundle view pointing at snapshot, export_plan, and config above.
+  loom_target_bundle_t bundle;
+} loom_target_bundle_storage_t;
+
+// Rebinds |storage->bundle| to the records embedded in |storage|. Call this
+// after copying a storage object by value; the embedded bundle is a view and
+// its pointers must refer to the same enclosing storage object.
+static inline void loom_target_bundle_storage_rebind(
+    loom_target_bundle_storage_t* storage) {
+  IREE_ASSERT_ARGUMENT(storage);
+  storage->bundle.snapshot = &storage->snapshot;
+  storage->bundle.export_plan = &storage->export_plan;
+  storage->bundle.config = &storage->config;
+}
+
 #ifdef __cplusplus
 }
 #endif

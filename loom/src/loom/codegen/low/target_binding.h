@@ -19,7 +19,7 @@
 #include "loom/codegen/low/descriptors.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
-#include "loom/target/ir_records.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,23 +27,18 @@ extern "C" {
 
 // Resolved low target context for one low function.
 typedef struct loom_low_resolved_target_t {
-  // Symbol defining the low function target profile or legacy bundle record.
+  // Symbol defining the low function target profile.
   const loom_symbol_t* target_symbol;
   // Defining op for |target_symbol|.
   const loom_op_t* target_op;
-  // target.snapshot op selected by a legacy target bundle, or NULL.
-  const loom_op_t* snapshot_op;
-  // target.export op selected by a legacy target bundle, or NULL.
-  const loom_op_t* export_plan_op;
-  // target.config op selected by a legacy target bundle, or NULL.
-  const loom_op_t* config_op;
-  // Materialized target records selected by this low function.
-  loom_target_ir_bundle_storage_t bundle_storage;
+  // Materialized target records selected by this low function. Snapshot and
+  // config come from the target profile; export_plan is function-local.
+  loom_target_bundle_storage_t bundle_storage;
   // Borrowed target symbol name without the leading '@'.
   iree_string_view_t target_name;
-  // Borrowed descriptor-set key selected by |config_op|.
+  // Borrowed descriptor-set key selected by the resolved target profile.
   iree_string_view_t descriptor_set_key;
-  // Feature bitset selected by |config_op|.
+  // Feature bitset selected by the resolved target profile.
   uint64_t feature_bits;
   // Descriptor set found in the caller-provided registry.
   const loom_low_descriptor_set_t* descriptor_set;

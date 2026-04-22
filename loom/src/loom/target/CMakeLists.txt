@@ -67,21 +67,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    ir_records
-  HDRS
-    "ir_records.h"
-  SRCS
-    "ir_records.c"
-  DEPS
-    ::types
-    iree::base
-    loom::src::loom::ir
-    loom::src::loom::ops::target
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     preset_registry
   HDRS
     "preset_registry.h"
@@ -133,23 +118,6 @@ loom_cc_library(
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::packetization
     loom::src::loom::ir
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    presets
-  HDRS
-    "presets.h"
-  SRCS
-    "presets.c"
-  DEPS
-    ::preset_registry
-    ::types
-    iree::base
-    loom::src::loom::ir
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::target
   PUBLIC
 )
 
@@ -212,7 +180,6 @@ loom_cc_library(
   SRCS
     "module_compiler.c"
   DEPS
-    ::ir_records
     ::low_descriptor_registry
     ::types
     iree::base
@@ -308,45 +275,11 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    ir_records_test
-  SRCS
-    "ir_records_test.cc"
-  DEPS
-    ::ir_records
-    iree::base::internal::arena
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::op_registry
-    loom::src::loom::ops::target
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     preset_registry_test
   SRCS
     "preset_registry_test.cc"
   DEPS
     ::preset_registry
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    presets_test
-  SRCS
-    "presets_test.cc"
-  DEPS
-    ::ir_records
-    ::low_descriptor_registry_core_test
-    ::presets
-    iree::base::internal::arena
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::op_registry
-    loom::src::loom::ops::target
     iree::testing::gtest
     iree::testing::gtest_main
 )

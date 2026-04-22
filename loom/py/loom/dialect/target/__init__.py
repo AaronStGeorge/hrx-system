@@ -15,13 +15,8 @@ from loom.dialect.target.defs import (
     ExportLinkage,
     SnapshotCodegenFormat,
     target_artifact,
-    target_bundle,
-    target_config,
-    target_export,
     target_ops,
-    target_preset,
     target_profile,
-    target_snapshot,
 )
 
 __all__ = [
@@ -33,11 +28,6 @@ __all__ = [
     "ExportLinkage",
     "SnapshotCodegenFormat",
     "target_artifact",
-    "target_bundle",
-    "target_config",
-    "target_export",
     "target_ops",
-    "target_preset",
     "target_profile",
-    "target_snapshot",
 ]

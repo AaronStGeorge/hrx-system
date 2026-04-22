@@ -659,8 +659,7 @@ static iree_status_t loom_low_lower_validate_options(
   const loom_symbol_t* target_symbol =
       &module->symbols.entries[options->target_ref.symbol_id];
   if (!target_symbol->defining_op ||
-      (target_symbol->defining_op->kind != LOOM_OP_TARGET_PROFILE &&
-       target_symbol->defining_op->kind != LOOM_OP_TARGET_BUNDLE)) {
+      target_symbol->defining_op->kind != LOOM_OP_TARGET_PROFILE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target symbol must define a target.profile op");
   }

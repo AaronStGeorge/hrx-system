@@ -132,39 +132,25 @@ class LlvmIrLegalityTest : public ::testing::Test {
                                           LOOM_LOCATION_UNKNOWN, &return_op));
   }
 
-  void BuildTargetRecords() {
-    loom_symbol_ref_t snapshot_symbol = MakeSymbol(IREE_SV("snapshot"));
-    loom_symbol_ref_t export_symbol = MakeSymbol(IREE_SV("export"));
-    loom_symbol_ref_t config_symbol = MakeSymbol(IREE_SV("config"));
-    loom_symbol_ref_t bundle_symbol = MakeSymbol(IREE_SV("bundle"));
-    loom_op_t* snapshot_op = NULL;
-    IREE_ASSERT_OK(loom_target_snapshot_build(
-        &module_builder_, snapshot_symbol,
-        LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_LLVMIR,
-        InternString(IREE_SV("loom-test64-unknown-none")),
-        InternString(IREE_SV("e-p:64:64-i64:64-n8:16:32:64-S128")),
-        LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_ELF, InternString(IREE_SV("")),
-        InternString(IREE_SV("")), 64, 64, 64, 0, 0, 0, 0, 0, 0, UINT32_MAX,
-        LOOM_LOCATION_UNKNOWN, &snapshot_op));
-    ASSERT_NE(snapshot_op, nullptr);
-    loom_op_t* export_op = NULL;
-    IREE_ASSERT_OK(loom_target_export_build(
-        &module_builder_, 0, export_symbol, loom_symbol_ref_null(),
-        InternString(IREE_SV("add_i32")),
-        LOOM_TARGET_EXPORT_ABI_OBJECT_FUNCTION,
-        LOOM_TARGET_EXPORT_LINKAGE_DEFAULT, 0, 0, 0, 0, 0, 0, 0,
-        LOOM_LOCATION_UNKNOWN, &export_op));
-    ASSERT_NE(export_op, nullptr);
-    loom_op_t* config_op = NULL;
-    IREE_ASSERT_OK(loom_target_config_build(
-        &module_builder_, config_symbol, InternString(IREE_SV("")),
-        /*contract_feature_bits=*/0, LOOM_LOCATION_UNKNOWN, &config_op));
-    ASSERT_NE(config_op, nullptr);
-    loom_op_t* bundle_op = NULL;
-    IREE_ASSERT_OK(loom_target_bundle_build(
-        &module_builder_, bundle_symbol, snapshot_symbol, export_symbol,
-        config_symbol, LOOM_LOCATION_UNKNOWN, &bundle_op));
-    ASSERT_NE(bundle_op, nullptr);
+  void BuildTargetProfileRecords() {
+    loom_symbol_ref_t profile_symbol = MakeSymbol(IREE_SV("test_target"));
+    loom_op_t* profile_op = NULL;
+    IREE_ASSERT_OK(loom_target_profile_build(
+        &module_builder_, profile_symbol, InternString(IREE_SV("test-object")),
+        loom_named_attr_slice_empty(), LOOM_LOCATION_UNKNOWN, &profile_op));
+    ASSERT_NE(profile_op, nullptr);
+
+    loom_symbol_ref_t artifact_symbol = MakeSymbol(IREE_SV("test_artifact"));
+    loom_op_t* artifact_op = NULL;
+    IREE_ASSERT_OK(loom_target_artifact_build(
+        &module_builder_,
+        LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ARTIFACT_FORMAT |
+            LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ABI,
+        artifact_symbol, profile_symbol,
+        LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_ELF,
+        LOOM_TARGET_ARTIFACT_ABI_OBJECT_FILE, LOOM_LOCATION_UNKNOWN,
+        &artifact_op));
+    ASSERT_NE(artifact_op, nullptr);
   }
 
   void BuildStructuredIfFunction() {
@@ -289,7 +275,7 @@ TEST_F(LlvmIrLegalityTest, AcceptsObjectArithmetic) {
 }
 
 TEST_F(LlvmIrLegalityTest, AcceptsModuleTargetRecordsAsMetadata) {
-  BuildTargetRecords();
+  BuildTargetProfileRecords();
   BuildAddI32Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;

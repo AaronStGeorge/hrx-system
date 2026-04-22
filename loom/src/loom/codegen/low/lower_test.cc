@@ -14,6 +14,7 @@
 #include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/error_defs.h"
@@ -27,8 +28,6 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/target/ir_records.h"
-#include "loom/target/presets.h"
 #include "loom/target/test/descriptors.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/testing/context.h"
@@ -522,63 +521,39 @@ class LowLowerTest : public ::testing::Test {
     return loom_symbol_ref_t{.module_id = 0, .symbol_id = symbol_id};
   }
 
-  ModulePtr ParseExpandAndLower(const char* source,
-                                EmissionCollector* collector,
-                                loom_low_lower_result_t* out_result) {
+  ModulePtr ParseAndLowerTargetedSource(const char* source,
+                                        EmissionCollector* collector,
+                                        loom_low_lower_result_t* out_result) {
     ModulePtr module = ParseSource(source);
-
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&registry_);
-    iree_host_size_t expanded_count = 0;
-    IREE_CHECK_OK(loom_target_expand_presets(module.get(), &preset_registry,
-                                             &expanded_count));
-    IREE_ASSERT(expanded_count == 1u);
-
-    loom_target_ir_bundle_storage_t bundle_storage = {};
-    IREE_CHECK_OK(loom_target_ir_bundle_from_symbol_name(
-        module.get(), IREE_SV("test_target"), &bundle_storage));
-
-    const loom_low_lower_policy_t* policy = nullptr;
-    IREE_CHECK_OK(loom_low_lower_policy_registry_lookup_for_bundle(
-        &policy_registry_, &bundle_storage.bundle, &policy));
+    iree_arena_allocator_t selection_arena;
+    iree_arena_initialize(module->arena.block_pool, &selection_arena);
+    const loom_low_source_selection_options_t selection_options = {
+        .descriptor_registry = &registry_.registry,
+        .policy_registry = &policy_registry_,
+    };
+    loom_low_source_selection_t selection = {};
+    IREE_CHECK_OK(loom_low_select_source_func(module.get(), &selection_options,
+                                              &selection_arena, &selection));
     const loom_low_lower_options_t options = {
-        .target_ref = SymbolRef(module.get(), IREE_SV("test_target")),
-        .bundle = &bundle_storage.bundle,
+        .target_ref = selection.target_ref,
+        .bundle = selection.target_bundle,
         .descriptor_registry = &registry_.registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        .policy = policy,
+        .policy = selection.policy,
         .emitter = collector->emitter(),
         .max_errors = 20,
     };
-    IREE_CHECK_OK(loom_low_lower_function(
-        module.get(), FirstFunction(module.get()), &options, out_result));
+    IREE_CHECK_OK(loom_low_lower_function(module.get(), selection.func,
+                                          &options, out_result));
+    iree_arena_deinitialize(&selection_arena);
     return module;
   }
 
   ModulePtr ParseAndLowerProfileTarget(const char* source,
                                        EmissionCollector* collector,
                                        loom_low_lower_result_t* out_result) {
-    ModulePtr module = ParseSource(source);
-    IREE_ASSERT(registry_.target_bundle_count > 0);
-    const loom_target_bundle_t* bundle = registry_.target_bundles[0];
-
-    const loom_low_lower_policy_t* policy = nullptr;
-    IREE_CHECK_OK(loom_low_lower_policy_registry_lookup_for_bundle(
-        &policy_registry_, bundle, &policy));
-    const loom_low_lower_options_t options = {
-        .target_ref = SymbolRef(module.get(), IREE_SV("test_target")),
-        .bundle = bundle,
-        .descriptor_registry = &registry_.registry,
-        .descriptor_requirements =
-            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        .policy = policy,
-        .emitter = collector->emitter(),
-        .max_errors = 20,
-    };
-    IREE_CHECK_OK(loom_low_lower_function(
-        module.get(), FirstFunction(module.get()), &options, out_result));
-    return module;
+    return ParseAndLowerTargetedSource(source, collector, out_result);
   }
 
   iree_status_t VerifyLowModule(loom_module_t* module,
@@ -666,9 +641,9 @@ class LowLowerTest : public ::testing::Test {
 TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseExpandAndLower(
-      "target.preset @test_target {key = \"test-low\", source = @add_const}\n"
-      "func.def @add_const(%lhs: i32) -> (i32) {\n"
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @add_const(%lhs: i32) -> (i32) {\n"
       "  %c7 = scalar.constant 7 : i32\n"
       "  %sum = scalar.addi %lhs, %c7 : i32\n"
       "  func.return %sum : i32\n"
@@ -796,10 +771,10 @@ TEST_F(LowLowerTest, LowersScalarFunctionTargetingProfile) {
 TEST_F(LowLowerTest, LowersVectorCfgFunction) {
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseExpandAndLower(
-      "target.preset @test_target {key = \"test-low\", source = "
-      "@select_vector}\n"
-      "func.def @select_vector(%cond: i1, %a: vector<4xi32>, "
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @select_vector(%cond: i1, %a: "
+      "vector<4xi32>, "
       "%b: vector<4xi32>) -> (vector<4xi32>) {\n"
       "  cfg.cond_br %cond, ^then, ^else : i1\n"
       "^then:\n"
@@ -841,10 +816,9 @@ TEST_F(LowLowerTest, LowersVectorCfgFunction) {
 TEST_F(LowLowerTest, LowersResourceArgumentsWithoutDirectAbiOperands) {
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseExpandAndLower(
-      "target.preset @test_target {key = \"test-low\", source = "
-      "@resource_entry}\n"
-      "func.def @resource_entry(%buffer: buffer) {\n"
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @resource_entry(%buffer: buffer) {\n"
       "  func.return\n"
       "}\n",
       &lower_collector, &lower_result);
@@ -883,10 +857,9 @@ TEST_F(LowLowerTest, EmitsPreambleBeforeResourceImports) {
 
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseExpandAndLower(
-      "target.preset @test_target {key = \"test-low\", source = "
-      "@resource_entry}\n"
-      "func.def @resource_entry(%buffer: buffer) {\n"
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @resource_entry(%buffer: buffer) {\n"
       "  func.return\n"
       "}\n",
       &lower_collector, &lower_result);
@@ -917,9 +890,9 @@ TEST_F(LowLowerTest, EmitsPreambleBeforeResourceImports) {
 TEST_F(LowLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseExpandAndLower(
-      "target.preset @test_target {key = \"test-low\", source = @mul}\n"
-      "func.def @mul(%lhs: i32, %rhs: i32) -> (i32) {\n"
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @mul(%lhs: i32, %rhs: i32) -> (i32) {\n"
       "  %product = scalar.muli %lhs, %rhs : i32\n"
       "  func.return %product : i32\n"
       "}\n",

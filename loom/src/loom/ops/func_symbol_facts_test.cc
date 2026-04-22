@@ -284,7 +284,8 @@ func.def abi(wasm_function) @semantic() {
 
 TEST_F(FuncSymbolFactsTest, TargetMustResolveToTargetProfileFacts) {
   ModulePtr module = ParseModule(R"(
-target.config @not_profile {contract_set_key = "test", contract_feature_bits = 0}
+target.profile @profile preset("test.profile")
+target.artifact @not_profile target(@profile)
 
 low.func.def target(@not_profile) @kernel() {
   low.return

@@ -16,6 +16,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
@@ -25,8 +26,6 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/wasm/low_registry.h"
 #include "loom/target/emit/wasm/module_binary.h"
-#include "loom/target/ir_records.h"
-#include "loom/target/presets.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -210,61 +209,36 @@ class WasmLowerTest : public ::testing::Test {
     return ModulePtr(module);
   }
 
-  loom_func_like_t FirstFunction(loom_module_t* module) {
-    loom_op_t* op = nullptr;
-    loom_block_for_each_op(loom_module_block(module), op) {
-      loom_func_like_t function = loom_func_like_cast(module, op);
-      if (loom_func_like_isa(function)) {
-        return function;
-      }
-    }
-    ADD_FAILURE() << "expected module to contain a function";
-    return (loom_func_like_t){0};
-  }
-
-  loom_symbol_ref_t SymbolRef(loom_module_t* module,
-                              iree_string_view_t symbol_name) {
-    loom_string_id_t symbol_name_id = LOOM_STRING_ID_INVALID;
-    IREE_CHECK_OK(
-        loom_module_intern_string(module, symbol_name, &symbol_name_id));
-    uint16_t symbol_id = loom_module_find_symbol(module, symbol_name_id);
-    IREE_ASSERT(symbol_id != LOOM_SYMBOL_ID_INVALID);
-    return loom_symbol_ref_t{.module_id = 0, .symbol_id = symbol_id};
-  }
-
-  ModulePtr ParseExpandAndLower(const char* source,
-                                EmissionCollector* collector,
-                                loom_low_lower_result_t* out_result) {
+  ModulePtr ParseAndLowerTargetedSource(const char* source,
+                                        EmissionCollector* collector,
+                                        loom_low_lower_result_t* out_result) {
     ModulePtr module = ParseSource(source);
-
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_count = 0;
-    IREE_CHECK_OK(loom_target_expand_presets(module.get(), &preset_registry,
-                                             &expanded_count));
-    IREE_ASSERT(expanded_count == 1u);
-
-    loom_target_ir_bundle_storage_t bundle_storage = {};
-    IREE_CHECK_OK(loom_target_ir_bundle_from_symbol_name(
-        module.get(), IREE_SV("wasm_target"), &bundle_storage));
 
     loom_low_lower_policy_registry_t policy_registry = {};
     loom_wasm_low_lower_policy_registry_initialize(&policy_registry);
-    const loom_low_lower_policy_t* policy = nullptr;
-    IREE_CHECK_OK(loom_low_lower_policy_registry_lookup_for_bundle(
-        &policy_registry, &bundle_storage.bundle, &policy));
+    iree_arena_allocator_t selection_arena;
+    iree_arena_initialize(module->arena.block_pool, &selection_arena);
+    const loom_low_source_selection_options_t selection_options = {
+        .descriptor_registry = &target_registry_.registry,
+        .policy_registry = &policy_registry,
+        .lowering_kind = IREE_SVL("WASM source-to-low"),
+    };
+    loom_low_source_selection_t selection = {};
+    IREE_CHECK_OK(loom_low_select_source_func(module.get(), &selection_options,
+                                              &selection_arena, &selection));
     const loom_low_lower_options_t options = {
-        .target_ref = SymbolRef(module.get(), IREE_SV("wasm_target")),
-        .bundle = &bundle_storage.bundle,
+        .target_ref = selection.target_ref,
+        .bundle = selection.target_bundle,
         .descriptor_registry = &target_registry_.registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        .policy = policy,
+        .policy = selection.policy,
         .emitter = collector->emitter(),
         .max_errors = 20,
     };
-    IREE_CHECK_OK(loom_low_lower_function(
-        module.get(), FirstFunction(module.get()), &options, out_result));
+    IREE_CHECK_OK(loom_low_lower_function(module.get(), selection.func,
+                                          &options, out_result));
+    iree_arena_deinitialize(&selection_arena);
     return module;
   }
 
@@ -325,9 +299,9 @@ class WasmLowerTest : public ::testing::Test {
 TEST_F(WasmLowerTest, LowersSemanticFunctionAndEmitsWasmModule) {
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseExpandAndLower(
-      "target.preset @wasm_target {key = \"wasm-simd128\", source = @arith}\n"
-      "func.def @arith(%lhs: i32, %rhs: i32) -> (i32) {\n"
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @wasm_target preset(\"wasm-simd128\")\n"
+      "func.def target(@wasm_target) @arith(%lhs: i32, %rhs: i32) -> (i32) {\n"
       "  %seven = scalar.constant 7 : i32\n"
       "  %sum = scalar.addi %lhs, %seven : i32\n"
       "  %diff = scalar.subi %sum, %rhs : i32\n"
@@ -397,9 +371,10 @@ TEST_F(WasmLowerTest, LowersSemanticFunctionAndEmitsWasmModule) {
 TEST_F(WasmLowerTest, LowersSemanticSimdFunctionAndEmitsWasmModule) {
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseExpandAndLower(
-      "target.preset @wasm_target {key = \"wasm-simd128\", source = @simd}\n"
-      "func.def @simd(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> "
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @wasm_target preset(\"wasm-simd128\")\n"
+      "func.def target(@wasm_target) @simd(%lhs: vector<4xi32>, %rhs: "
+      "vector<4xi32>) -> "
       "(vector<4xi32>) {\n"
       "  %sum = vector.addi %lhs, %rhs : vector<4xi32>\n"
       "  %product = vector.muli %sum, %rhs : vector<4xi32>\n"
@@ -472,9 +447,10 @@ TEST_F(WasmLowerTest, LowersSemanticSimdFunctionAndEmitsWasmModule) {
 TEST_F(WasmLowerTest, UnsupportedVectorShapeEmitsDiagnosticAndNoLowFunction) {
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseExpandAndLower(
-      "target.preset @wasm_target {key = \"wasm-simd128\", source = @wide}\n"
-      "func.def @wide(%lhs: vector<8xi32>, %rhs: vector<8xi32>) -> "
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @wasm_target preset(\"wasm-simd128\")\n"
+      "func.def target(@wasm_target) @wide(%lhs: vector<8xi32>, %rhs: "
+      "vector<8xi32>) -> "
       "(vector<8xi32>) {\n"
       "  %sum = vector.addi %lhs, %rhs : vector<8xi32>\n"
       "  func.return %sum : vector<8xi32>\n"
@@ -510,9 +486,9 @@ TEST_F(WasmLowerTest, UnsupportedVectorShapeEmitsDiagnosticAndNoLowFunction) {
 TEST_F(WasmLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseExpandAndLower(
-      "target.preset @wasm_target {key = \"wasm-simd128\", source = @mul}\n"
-      "func.def @mul(%lhs: i32, %rhs: i32) -> (i32) {\n"
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @wasm_target preset(\"wasm-simd128\")\n"
+      "func.def target(@wasm_target) @mul(%lhs: i32, %rhs: i32) -> (i32) {\n"
       "  %product = scalar.muli %lhs, %rhs : i32\n"
       "  func.return %product : i32\n"
       "}\n",

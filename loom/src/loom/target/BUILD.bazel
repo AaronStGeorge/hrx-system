@@ -63,18 +63,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "ir_records",
-    srcs = ["ir_records.c"],
-    hdrs = ["ir_records.h"],
-    deps = [
-        ":types",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/target",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "preset_registry",
     srcs = ["preset_registry.c"],
     hdrs = ["preset_registry.h"],
@@ -114,20 +102,6 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:packetization",
         "//loom/src/loom/ir",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "presets",
-    srcs = ["presets.c"],
-    hdrs = ["presets.h"],
-    deps = [
-        ":preset_registry",
-        ":types",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/target",
         "//runtime/src/iree/base",
     ],
 )
@@ -182,7 +156,6 @@ loom_cc_library(
     srcs = ["module_compiler.c"],
     hdrs = ["module_compiler.h"],
     deps = [
-        ":ir_records",
         ":low_descriptor_registry",
         ":types",
         "//loom/src/loom/analysis:symbol_facts",
@@ -269,42 +242,10 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "ir_records_test",
-    srcs = ["ir_records_test.cc"],
-    deps = [
-        ":ir_records",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/ops/target",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
     name = "preset_registry_test",
     srcs = ["preset_registry_test.cc"],
     deps = [
         ":preset_registry",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "presets_test",
-    srcs = ["presets_test.cc"],
-    deps = [
-        ":ir_records",
-        ":low_descriptor_registry_core_test",
-        ":presets",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/ops/target",
-        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

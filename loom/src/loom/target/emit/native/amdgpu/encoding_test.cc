@@ -19,7 +19,6 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
-#include "loom/target/presets.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -115,19 +114,11 @@ class AmdgpuEncodingTest : public ::testing::Test {
         "  low.return\n"
         "}\n";
     std::string source =
-        "target.preset @gfx_target {key = \"amdgpu-gfx11\", source = "
-        "@gfx_kernel}\n";
+        "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
-
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
-                                              &expanded_preset_count));
-    EXPECT_EQ(expanded_preset_count, 1u);
 
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -174,20 +165,13 @@ class AmdgpuEncodingTest : public ::testing::Test {
   void BuildSidecarsForPreset(const char* preset_key, const char* body,
                               iree_arena_allocator_t* arena,
                               loom_low_packetization_t* out_packetization) {
-    std::string source = "target.preset @gfx_target {key = \"";
+    std::string source = "target.profile @gfx_target preset(\"";
     source += preset_key;
-    source += "\", source = @gfx_kernel}\n";
+    source += "\")\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
-
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
-                                              &expanded_preset_count));
-    EXPECT_EQ(expanded_preset_count, 1u);
 
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,

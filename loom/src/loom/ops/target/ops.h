@@ -19,13 +19,8 @@ extern "C" {
 
 enum {
   LOOM_OP_TARGET_ARTIFACT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 0),
-  LOOM_OP_TARGET_SNAPSHOT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 1),
-  LOOM_OP_TARGET_EXPORT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 2),
-  LOOM_OP_TARGET_CONFIG = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 3),
-  LOOM_OP_TARGET_BUNDLE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 4),
-  LOOM_OP_TARGET_PRESET = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 5),
-  LOOM_OP_TARGET_PROFILE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 6),
-  LOOM_OP_TARGET_COUNT_ = 7,
+  LOOM_OP_TARGET_PROFILE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 1),
+  LOOM_OP_TARGET_COUNT_ = 2,
 };
 
 // Linkable or loadable artifact format produced for an artifact.
@@ -51,47 +46,6 @@ typedef enum loom_target_artifact_abi_e {
   LOOM_TARGET_ARTIFACT_ABI_COUNT_ = 6,
 } loom_target_artifact_abi_t;
 
-// Primary codegen representation emitted for a target snapshot.
-typedef enum loom_target_snapshot_codegen_format_e {
-  LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_UNKNOWN = 0,
-  LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_LLVMIR = 1,
-  LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_SPIRV = 2,
-  LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_VM = 3,
-  LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_LOW_NATIVE = 4,
-  LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_WASM = 5,
-  LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_COUNT_ = 6,
-} loom_target_snapshot_codegen_format_t;
-
-// Linkable or loadable artifact format produced for a snapshot.
-typedef enum loom_target_snapshot_artifact_format_e {
-  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_UNKNOWN = 0,
-  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_ELF = 1,
-  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_COFF = 2,
-  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_MACHO = 3,
-  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_SPIRV_BINARY = 4,
-  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_VM_BYTECODE = 5,
-  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_WASM_BINARY = 6,
-  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_COUNT_ = 7,
-} loom_target_snapshot_artifact_format_t;
-
-// Callable or package ABI used by an export plan.
-typedef enum loom_target_export_abi_e {
-  LOOM_TARGET_EXPORT_ABI_UNKNOWN = 0,
-  LOOM_TARGET_EXPORT_ABI_OBJECT_FUNCTION = 1,
-  LOOM_TARGET_EXPORT_ABI_HAL_KERNEL = 2,
-  LOOM_TARGET_EXPORT_ABI_VM_MODULE_FUNCTION = 3,
-  LOOM_TARGET_EXPORT_ABI_SHADER_ENTRY_POINT = 4,
-  LOOM_TARGET_EXPORT_ABI_WASM_FUNCTION = 5,
-  LOOM_TARGET_EXPORT_ABI_COUNT_ = 6,
-} loom_target_export_abi_t;
-
-// ABI-required linkage for exported object functions or entry points.
-typedef enum loom_target_export_linkage_e {
-  LOOM_TARGET_EXPORT_LINKAGE_DEFAULT = 0,
-  LOOM_TARGET_EXPORT_LINKAGE_DSO_LOCAL = 1,
-  LOOM_TARGET_EXPORT_LINKAGE_COUNT_ = 2,
-} loom_target_export_linkage_t;
-
 // LOOM_OP_TARGET_ARTIFACT: Packaging or compile-unit record. Entry functions are derived from function export facts that reference this artifact; the artifact itself never lists functions.
 // target.artifact @gfx11_kernels target(@gfx11) {artifact_format = elf, abi = hal_executable}
 LOOM_DEFINE_ISA(loom_target_artifact_isa, LOOM_OP_TARGET_ARTIFACT)
@@ -114,144 +68,6 @@ iree_status_t loom_target_artifact_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_target_artifact_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
-
-// LOOM_OP_TARGET_SNAPSHOT: Frozen codegen target facts consumed by legality, lowering, and emission. The snapshot is target-neutral: target-family descriptor tables and feature catalogs remain opt-in packages.
-// target.snapshot @x86_64 {codegen_format = llvmir, target_triple = "x86_64-pc-linux-gnu", data_layout = "e-m:e-p:64:64-i64:64-n8:16:32:64-S128", artifact_format = elf, target_cpu = "x86-64-v3", target_features = "+avx2,+fma", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 4294967295, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 4294967295}
-LOOM_DEFINE_ISA(loom_target_snapshot_isa, LOOM_OP_TARGET_SNAPSHOT)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_snapshot_symbol, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_target_snapshot_codegen_format, 1)
-LOOM_DEFINE_ATTR_STRING(loom_target_snapshot_target_triple, 2)
-LOOM_DEFINE_ATTR_STRING(loom_target_snapshot_data_layout, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_target_snapshot_artifact_format, 4)
-LOOM_DEFINE_ATTR_STRING(loom_target_snapshot_target_cpu, 5)
-LOOM_DEFINE_ATTR_STRING(loom_target_snapshot_target_features, 6)
-LOOM_DEFINE_ATTR_I64(loom_target_snapshot_default_pointer_bitwidth, 7)
-LOOM_DEFINE_ATTR_I64(loom_target_snapshot_index_bitwidth, 8)
-LOOM_DEFINE_ATTR_I64(loom_target_snapshot_offset_bitwidth, 9)
-LOOM_DEFINE_ATTR_I64(loom_target_snapshot_memory_space_generic, 10)
-LOOM_DEFINE_ATTR_I64(loom_target_snapshot_memory_space_global, 11)
-LOOM_DEFINE_ATTR_I64(loom_target_snapshot_memory_space_workgroup, 12)
-LOOM_DEFINE_ATTR_I64(loom_target_snapshot_memory_space_constant, 13)
-LOOM_DEFINE_ATTR_I64(loom_target_snapshot_memory_space_private, 14)
-LOOM_DEFINE_ATTR_I64(loom_target_snapshot_memory_space_host, 15)
-LOOM_DEFINE_ATTR_I64(loom_target_snapshot_memory_space_descriptor, 16)
-iree_status_t loom_target_snapshot_build(
-    loom_builder_t* builder,
-    loom_symbol_ref_t symbol,
-    uint8_t codegen_format,
-    loom_string_id_t target_triple,
-    loom_string_id_t data_layout,
-    uint8_t artifact_format,
-    loom_string_id_t target_cpu,
-    loom_string_id_t target_features,
-    int64_t default_pointer_bitwidth,
-    int64_t index_bitwidth,
-    int64_t offset_bitwidth,
-    int64_t memory_space_generic,
-    int64_t memory_space_global,
-    int64_t memory_space_workgroup,
-    int64_t memory_space_constant,
-    int64_t memory_space_private,
-    int64_t memory_space_host,
-    int64_t memory_space_descriptor,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-iree_status_t loom_target_snapshot_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
-
-// LOOM_OP_TARGET_EXPORT: Callable/package boundary plan. It names the source function when one is already materialized and records the ABI facts needed by launch or link planning without hiding them in backend flags.
-// target.export @matmul_cpu {source = @matmul, export_symbol = "matmul", abi = object_function, linkage = dso_local, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-LOOM_DEFINE_ISA(loom_target_export_isa, LOOM_OP_TARGET_EXPORT)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_export_symbol, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_export_source, 1)
-LOOM_DEFINE_ATTR_STRING(loom_target_export_export_symbol, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_target_export_abi, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_target_export_linkage, 4)
-LOOM_DEFINE_ATTR_I64(loom_target_export_hal_binding_alignment, 5)
-LOOM_DEFINE_ATTR_I64(loom_target_export_hal_workgroup_size_x, 6)
-LOOM_DEFINE_ATTR_I64(loom_target_export_hal_workgroup_size_y, 7)
-LOOM_DEFINE_ATTR_I64(loom_target_export_hal_workgroup_size_z, 8)
-LOOM_DEFINE_ATTR_I64(loom_target_export_hal_flat_workgroup_size_min, 9)
-LOOM_DEFINE_ATTR_I64(loom_target_export_hal_flat_workgroup_size_max, 10)
-LOOM_DEFINE_ATTR_I64(loom_target_export_hal_buffer_resource_flags, 11)
-enum loom_target_export_build_flag_bits_e {
-  LOOM_TARGET_EXPORT_BUILD_FLAG_HAS_SOURCE = 1u << 0,
-};
-typedef uint32_t loom_target_export_build_flags_t;
-iree_status_t loom_target_export_build(
-    loom_builder_t* builder,
-    loom_target_export_build_flags_t build_flags,
-    loom_symbol_ref_t symbol,
-    loom_optional loom_symbol_ref_t source,
-    loom_string_id_t export_symbol,
-    uint8_t abi,
-    uint8_t linkage,
-    int64_t hal_binding_alignment,
-    int64_t hal_workgroup_size_x,
-    int64_t hal_workgroup_size_y,
-    int64_t hal_workgroup_size_z,
-    int64_t hal_flat_workgroup_size_min,
-    int64_t hal_flat_workgroup_size_max,
-    int64_t hal_buffer_resource_flags,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-iree_status_t loom_target_export_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
-
-// LOOM_OP_TARGET_CONFIG: Legalization and schedule selection record. Target-family packages interpret the contract key and feature bits; core Loom treats them as cache-key and diagnostic inputs.
-// target.config @generic {contract_set_key = "default", contract_feature_bits = 0}
-LOOM_DEFINE_ISA(loom_target_config_isa, LOOM_OP_TARGET_CONFIG)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_config_symbol, 0)
-LOOM_DEFINE_ATTR_STRING(loom_target_config_contract_set_key, 1)
-LOOM_DEFINE_ATTR_I64(loom_target_config_contract_feature_bits, 2)
-iree_status_t loom_target_config_build(
-    loom_builder_t* builder,
-    loom_symbol_ref_t symbol,
-    loom_string_id_t contract_set_key,
-    int64_t contract_feature_bits,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-iree_status_t loom_target_config_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
-
-// LOOM_OP_TARGET_BUNDLE: Named frozen target profile binding one snapshot, export plan, and config. Backends consume bundles so hidden target state does not leak into scalar/vector lowering callbacks.
-// target.bundle @matmul_x86 {snapshot = @x86_64, export_plan = @matmul_cpu, config = @generic}
-LOOM_DEFINE_ISA(loom_target_bundle_isa, LOOM_OP_TARGET_BUNDLE)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_bundle_symbol, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_bundle_snapshot, 1)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_bundle_export_plan, 2)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_bundle_config, 3)
-iree_status_t loom_target_bundle_build(
-    loom_builder_t* builder,
-    loom_symbol_ref_t symbol,
-    loom_symbol_ref_t snapshot,
-    loom_symbol_ref_t export_plan,
-    loom_symbol_ref_t config,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-iree_status_t loom_target_bundle_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
-
-// LOOM_OP_TARGET_PRESET: Compact production authoring record for command-line-style target selection. Presets are expanded early into concrete target records; late target consumers should see target.bundle, not target.preset.
-// target.preset @vm_target {key = "iree-vm", source = @sched}
-LOOM_DEFINE_ISA(loom_target_preset_isa, LOOM_OP_TARGET_PRESET)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_preset_symbol, 0)
-LOOM_DEFINE_ATTR_STRING(loom_target_preset_key, 1)
-LOOM_DEFINE_ATTR_SYMBOL(loom_target_preset_source, 2)
-iree_status_t loom_target_preset_build(
-    loom_builder_t* builder,
-    loom_symbol_ref_t symbol,
-    loom_string_id_t key,
-    loom_symbol_ref_t source,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-iree_status_t loom_target_preset_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

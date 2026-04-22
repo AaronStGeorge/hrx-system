@@ -48,6 +48,7 @@ loom_cc_test(
     "avx512_descriptors_test.cc"
   DEPS
     ::avx512_descriptors
+    ::low_registry
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::text_asm_roundtrip_test_util
     loom::src::loom::codegen::low::text_asm_test_util

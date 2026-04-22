@@ -251,6 +251,7 @@ loom_cc_test(
     ::descriptor_test_util
     ::encoding_defs
     ::gfx11_descriptors
+    ::low_registry
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::text_asm_roundtrip_test_util
     loom::src::loom::codegen::low::text_asm_test_util
@@ -598,12 +599,13 @@ loom_cc_test(
   DEPS
     ::gfx11_descriptors
     ::hal_kernel_abi
+    ::low_registry
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::target_binding
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::target::ir_records
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
@@ -623,12 +625,12 @@ loom_cc_test(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::target_binding
     loom::src::loom::codegen::low::verify
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::emit::native::amdgpu::encoding
-    loom::src::loom::target::ir_records
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::testing::context
     iree::testing::gtest
@@ -791,7 +793,6 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_registry
     loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::target::presets
     loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
@@ -814,7 +815,6 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_registry
     loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::target::presets
     loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
@@ -838,7 +838,6 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_registry
     loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::target::presets
     loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main

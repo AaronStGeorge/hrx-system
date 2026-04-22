@@ -12,6 +12,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -22,9 +23,7 @@
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
-#include "loom/target/ir_records.h"
 #include "loom/target/low_descriptor_registry.h"
-#include "loom/target/presets.h"
 #include "loom/target/tool/llvm.h"
 #include "loom/testing/context.h"
 
@@ -129,62 +128,42 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
   }
 
   void BuildSidecarsForPreset(const char* preset_key, const char* target_symbol,
-                              const char* function_symbol, const char* body,
-                              iree_arena_allocator_t* arena,
+                              const char* body, iree_arena_allocator_t* arena,
                               loom_low_packetization_t* out_packetization) {
-    std::string source = "target.preset @";
+    std::string source = "target.profile @";
     source += target_symbol;
-    source += " {key = \"";
+    source += " preset(\"";
     source += preset_key;
-    source += "\", source = @";
-    source += function_symbol;
-    source += "}\n";
+    source += "\")\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
 
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
-                                              &expanded_preset_count));
-    ASSERT_EQ(expanded_preset_count, 1u);
     VerifyAndPacketizeCurrentModule(arena, out_packetization);
   }
 
   void BuildMaterializedHalResourceSidecarsForPreset(
-      const char* preset_key, const char* target_symbol,
-      const char* function_symbol, const char* body,
+      const char* preset_key, const char* target_symbol, const char* body,
       iree_host_size_t expected_materialized_resource_count,
       iree_host_size_t expected_fixed_value_count,
       loom_amdgpu_hal_kernel_abi_layout_t* out_abi_layout,
       iree_arena_allocator_t* arena,
       loom_low_packetization_t* out_packetization) {
-    std::string source = "target.preset @";
+    std::string source = "target.profile @";
     source += target_symbol;
-    source += " {key = \"";
+    source += " preset(\"";
     source += preset_key;
-    source += "\", source = @";
-    source += function_symbol;
-    source += "}\n";
+    source += "\")\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
 
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
-                                              &expanded_preset_count));
-    EXPECT_EQ(expanded_preset_count, 1u);
-
     loom_op_t* low_function = FindFirstLowFunction(module_);
     ASSERT_NE(low_function, nullptr);
-    loom_target_ir_bundle_storage_t bundle_storage = {};
-    IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
-        module_, iree_make_cstring_view(target_symbol), &bundle_storage));
+    loom_target_bundle_storage_t bundle_storage = {};
+    ResolveFunctionTarget(low_function, &bundle_storage);
     const loom_low_descriptor_set_t* descriptor_set = nullptr;
     IREE_ASSERT_OK(loom_target_low_descriptor_set_select_for_bundle(
         &target_registry_.registry, &bundle_storage.bundle,
@@ -231,6 +210,16 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
                                                out_packetization));
   }
 
+  void ResolveFunctionTarget(const loom_op_t* function_op,
+                             loom_target_bundle_storage_t* out_storage) {
+    loom_low_resolved_target_t target = {};
+    IREE_ASSERT_OK(loom_low_resolve_function_target(
+        module_, function_op, &target_registry_.registry,
+        iree_diagnostic_emitter_t{}, &target));
+    *out_storage = target.bundle_storage;
+    loom_target_bundle_storage_rebind(out_storage);
+  }
+
   void EmitKernelForPreset(const char* preset_key, const char* target_cpu,
                            std::string* out_output) {
     ASSERT_NE(out_output, nullptr);
@@ -238,7 +227,7 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     iree_arena_initialize(&block_pool_, &sidecar_arena);
     loom_low_packetization_t packetization = {};
     BuildSidecarsForPreset(
-        preset_key, "gfx_target", "loom_kernel",
+        preset_key, "gfx_target",
         "low.func.def target(@gfx_target) @loom_kernel() {\n"
         "  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : "
         "reg<amdgpu.sgpr x2>\n"
@@ -326,7 +315,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsFixedSegmentSizesFromLowSlots) {
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
   BuildSidecarsForPreset(
-      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "amdgpu-gfx11", "gfx_target",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  low.return\n"
       "}\n"
@@ -363,7 +352,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsHalBufferResourceMetadata) {
   loom_low_packetization_t packetization = {};
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
-      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "amdgpu-gfx11", "gfx_target",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
@@ -420,7 +409,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsWorkitemZDescriptorMode) {
   loom_low_packetization_t packetization = {};
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
-      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "amdgpu-gfx11", "gfx_target",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid_z = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE
       "> : reg<amdgpu.vgpr>\n"
@@ -463,7 +452,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsWorkgroupZDescriptorFlags) {
   loom_low_packetization_t packetization = {};
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
-      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "amdgpu-gfx11", "gfx_target",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  %bid_z = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Z_SOURCE
       "> : reg<amdgpu.sgpr>\n"
@@ -509,7 +498,7 @@ TEST_F(AmdgpuKernelAssemblyTest,
   loom_low_packetization_t packetization = {};
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
-      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "amdgpu-gfx11", "gfx_target",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
@@ -577,7 +566,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsB128CopyKernelForGfx11) {
   loom_low_packetization_t packetization = {};
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
-      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "amdgpu-gfx11", "gfx_target",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
@@ -654,7 +643,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsMemoryAluStressKernelForGfx11) {
   loom_low_packetization_t packetization = {};
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
-      "amdgpu-gfx11", "gfx_target", "loom_kernel",
+      "amdgpu-gfx11", "gfx_target",
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
@@ -870,7 +859,7 @@ TEST_F(AmdgpuKernelAssemblyTest, RejectsFunctionArgumentsBeforeAbiLowering) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
-  BuildSidecarsForPreset("amdgpu-gfx11", "gfx_target", "loom_kernel",
+  BuildSidecarsForPreset("amdgpu-gfx11", "gfx_target",
                          "low.func.def target(@gfx_target) @loom_kernel(%arg : "
                          "reg<amdgpu.sgpr>) {\n"
                          "  low.return\n"
@@ -892,24 +881,8 @@ TEST_F(AmdgpuKernelAssemblyTest, RejectsNonDefaultLinkage) {
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
   BuildSidecarsFromSource(
-      "target.snapshot @gfx1100 {artifact_format = elf, codegen_format = "
-      "low_native, data_layout = \"\", default_pointer_bitwidth = 64, "
-      "index_bitwidth = 32, memory_space_constant = 4, "
-      "memory_space_descriptor = 7, memory_space_generic = 0, "
-      "memory_space_global = 1, memory_space_host = 4294967295, "
-      "memory_space_private = 5, memory_space_workgroup = 3, "
-      "offset_bitwidth = 64, target_cpu = \"gfx1100\", target_features = \"\", "
-      "target_triple = \"amdgcn-amd-amdhsa\"}\n"
-      "target.export @gfx_export {abi = hal_kernel, export_symbol = "
-      "\"loom_kernel\", hal_binding_alignment = 16, "
-      "hal_buffer_resource_flags = 159744, hal_flat_workgroup_size_max = 64, "
-      "hal_flat_workgroup_size_min = 64, hal_workgroup_size_x = 64, "
-      "hal_workgroup_size_y = 1, hal_workgroup_size_z = 1, linkage = "
-      "dso_local, source = @loom_kernel}\n"
-      "target.config @gfx_config {contract_feature_bits = 0, contract_set_key "
-      "= \"amdgpu.gfx11.core\"}\n"
-      "target.bundle @gfx_target {config = @gfx_config, export_plan = "
-      "@gfx_export, snapshot = @gfx1100}\n"
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\") {linkage = "
+      "\"dso_local\"}\n"
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
       "  low.return\n"
       "}\n",

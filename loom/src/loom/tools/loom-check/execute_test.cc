@@ -375,7 +375,7 @@ TEST_F(ExecuteTest, VerifyCleanIR) {
 }
 
 static const char kVerifyTestLowPreset[] =
-    "target.preset @test_target {key = \"test-low\", source = @constant}\n";
+    "target.profile @test_target preset(\"test-low\")\n";
 
 TEST_F(ExecuteTest, VerifyRunsLowDescriptorVerifier) {
   loom_check_result_t result;
@@ -1117,8 +1117,7 @@ TEST_F(ExecuteTest, EmitLowScheduleJsonAnchorsLiveInPreamble) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: emit low-schedule-json @livein\n"
-                   "target.preset @test_target {key = \"test-low\", source = "
-                   "@livein}\n"
+                   "target.profile @test_target preset(\"test-low\")\n"
                    "low.func.def target(@test_target) @livein() -> "
                    "(reg<test.i32>) {\n"
                    "  %arg0 = low.live_in<test.arg0> : reg<test.i32>\n"

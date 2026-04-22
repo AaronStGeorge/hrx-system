@@ -104,9 +104,7 @@ loom_cc_library(
     loom::src::loom::ops::target
     loom::src::loom::target::compile_report
     loom::src::loom::target::compile_report_low
-    loom::src::loom::target::ir_records
     loom::src::loom::target::module_compiler
-    loom::src::loom::target::presets
     loom::src::loom::verify
   PUBLIC
 )
@@ -246,6 +244,7 @@ loom_cc_test(
   DEPS
     ::descriptors
     ::function_bytecode
+    ::low_registry
     ::module_archive
     iree::base
     iree::base::internal::arena
@@ -274,14 +273,13 @@ loom_cc_test(
     ::module_archive
     iree::base::internal::arena
     loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::source_selection
     loom::src::loom::codegen::low::verify
     loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::low
-    loom::src::loom::target::ir_records
-    loom::src::loom::target::presets
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main

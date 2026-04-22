@@ -1,6 +1,6 @@
 // RUN: emit wasm-module-validate @wasm_memory export=wasm_memory
 // REQUIRES: wasm-validate
-target.preset @wasm_target {key = "wasm-simd128", source = @wasm_memory}
+target.profile @wasm_target preset("wasm-simd128")
 
 low.func.def target(@wasm_target) @wasm_memory(%addr: reg<wasm.i32>, %lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
   %loaded = low.op<wasm.v128.load>(%addr) : (reg<wasm.i32>) -> reg<wasm.v128>
@@ -16,7 +16,7 @@ wasm module validated: wasm_memory
 // ====
 // RUN: emit wasm-module-validate @wasm_i32_arithmetic export=wasm_i32_arithmetic
 // REQUIRES: wasm-validate
-target.preset @wasm_i32_target {key = "wasm-simd128", source = @wasm_i32_arithmetic}
+target.profile @wasm_i32_target preset("wasm-simd128")
 
 low.func.def target(@wasm_i32_target) @wasm_i32_arithmetic(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
   %sum = low.op<wasm.i32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
@@ -31,7 +31,7 @@ wasm module validated: wasm_i32_arithmetic
 // ====
 // RUN: emit wasm-module-validate @wasm_f32_arithmetic export=wasm_f32_arithmetic
 // REQUIRES: wasm-validate
-target.preset @wasm_f32_target {key = "wasm-simd128", source = @wasm_f32_arithmetic}
+target.profile @wasm_f32_target preset("wasm-simd128")
 
 low.func.def target(@wasm_f32_target) @wasm_f32_arithmetic(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
   %sum = low.op<wasm.f32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
@@ -45,7 +45,7 @@ wasm module validated: wasm_f32_arithmetic
 // ====
 // RUN: emit wasm-module-validate @wasm_splat export=wasm_splat
 // REQUIRES: wasm-validate
-target.preset @wasm_splat_target {key = "wasm-simd128", source = @wasm_splat}
+target.profile @wasm_splat_target preset("wasm-simd128")
 
 low.func.def target(@wasm_splat_target) @wasm_splat(%value: reg<wasm.i32>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
   %splat = low.op<wasm.i32x4.splat>(%value) : (reg<wasm.i32>) -> reg<wasm.v128>

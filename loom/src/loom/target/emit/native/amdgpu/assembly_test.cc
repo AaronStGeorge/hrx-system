@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -22,8 +23,6 @@
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
-#include "loom/target/ir_records.h"
-#include "loom/target/presets.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -76,28 +75,6 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     return nullptr;
   }
 
-  loom_func_like_t FindFirstSemanticFunction(loom_module_t* module) {
-    loom_block_t* block = loom_module_block(module);
-    loom_op_t* op = nullptr;
-    loom_block_for_each_op(block, op) {
-      loom_func_like_t function = loom_func_like_cast(module, op);
-      if (loom_func_like_isa(function) && !loom_low_func_def_isa(op)) {
-        return function;
-      }
-    }
-    return (loom_func_like_t){0};
-  }
-
-  loom_symbol_ref_t SymbolRef(loom_module_t* module,
-                              iree_string_view_t symbol_name) {
-    loom_string_id_t symbol_name_id = LOOM_STRING_ID_INVALID;
-    IREE_CHECK_OK(
-        loom_module_intern_string(module, symbol_name, &symbol_name_id));
-    uint16_t symbol_id = loom_module_find_symbol(module, symbol_name_id);
-    IREE_ASSERT(symbol_id != LOOM_SYMBOL_ID_INVALID);
-    return loom_symbol_ref_t{.module_id = 0, .symbol_id = symbol_id};
-  }
-
   bool StringIdEquals(loom_string_id_t string_id, iree_string_view_t expected) {
     if (string_id == LOOM_STRING_ID_INVALID ||
         string_id >= module_->strings.count) {
@@ -141,19 +118,11 @@ class AmdgpuAssemblyTest : public ::testing::Test {
         "  low.return\n"
         "}\n";
     std::string source =
-        "target.preset @gfx11_target {key = \"amdgpu-gfx11\", source = "
-        "@gfx11_fragment}\n";
+        "target.profile @gfx11_target preset(\"amdgpu-gfx11\")\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
-
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
-                                              &expanded_preset_count));
-    EXPECT_EQ(expanded_preset_count, 1u);
 
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -198,27 +167,17 @@ class AmdgpuAssemblyTest : public ::testing::Test {
   }
 
   void BuildSidecarsForPreset(const char* preset_key, const char* target_symbol,
-                              const char* function_symbol, const char* body,
-                              iree_arena_allocator_t* arena,
+                              const char* body, iree_arena_allocator_t* arena,
                               loom_low_packetization_t* out_packetization) {
-    std::string source = "target.preset @";
+    std::string source = "target.profile @";
     source += target_symbol;
-    source += " {key = \"";
+    source += " preset(\"";
     source += preset_key;
-    source += "\", source = @";
-    source += function_symbol;
-    source += "}\n";
+    source += "\")\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
-
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
-                                              &expanded_preset_count));
-    EXPECT_EQ(expanded_preset_count, 1u);
 
     loom_low_verify_options_t verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
@@ -244,47 +203,46 @@ class AmdgpuAssemblyTest : public ::testing::Test {
 
   void BuildSidecars(const char* body, iree_arena_allocator_t* arena,
                      loom_low_packetization_t* out_packetization) {
-    BuildSidecarsForPreset("amdgpu-gfx11", "gfx11_target", "gfx11_fragment",
-                           body, arena, out_packetization);
+    BuildSidecarsForPreset("amdgpu-gfx11", "gfx11_target", body, arena,
+                           out_packetization);
   }
 
   void LowerSource(const char* preset_key, const char* body,
                    loom_low_lower_result_t* out_lower_result) {
-    std::string source = "target.preset @gfx_target {key = \"";
+    std::string source = "target.profile @gfx_target preset(\"";
     source += preset_key;
-    source += "\", source = @gfx_source}\n";
+    source += "\")\n";
     source += body;
     ResetModule();
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);
 
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&target_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_ASSERT_OK(loom_target_expand_presets(module_, &preset_registry,
-                                              &expanded_preset_count));
-    EXPECT_EQ(expanded_preset_count, 1u);
-
-    loom_target_ir_bundle_storage_t bundle_storage = {};
-    IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
-        module_, IREE_SV("gfx_target"), &bundle_storage));
     loom_low_lower_policy_registry_t policy_registry = {};
     loom_amdgpu_low_lower_policy_registry_initialize(&policy_registry);
-    const loom_low_lower_policy_t* policy = nullptr;
-    IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup_for_bundle(
-        &policy_registry, &bundle_storage.bundle, &policy));
+
+    iree_arena_allocator_t selection_arena;
+    iree_arena_initialize(&block_pool_, &selection_arena);
+    const loom_low_source_selection_options_t selection_options = {
+        .func_symbol_name = IREE_SV("gfx_source"),
+        .descriptor_registry = &target_registry_.registry,
+        .policy_registry = &policy_registry,
+        .lowering_kind = IREE_SV("AMDGPU source-to-low"),
+    };
+    loom_low_source_selection_t selection = {};
+    IREE_ASSERT_OK(loom_low_select_source_func(module_, &selection_options,
+                                               &selection_arena, &selection));
     const loom_low_lower_options_t lower_options = {
-        .target_ref = SymbolRef(module_, IREE_SV("gfx_target")),
-        .bundle = &bundle_storage.bundle,
+        .target_ref = selection.target_ref,
+        .bundle = selection.target_bundle,
         .descriptor_registry = &target_registry_.registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        .policy = policy,
+        .policy = selection.policy,
         .max_errors = 20,
     };
-    IREE_ASSERT_OK(loom_low_lower_function(module_,
-                                           FindFirstSemanticFunction(module_),
+    IREE_ASSERT_OK(loom_low_lower_function(module_, selection.func,
                                            &lower_options, out_lower_result));
+    iree_arena_deinitialize(&selection_arena);
   }
 
   void LowerSourceAndBuildSidecars(
@@ -321,7 +279,7 @@ class AmdgpuAssemblyTest : public ::testing::Test {
     loom_low_packetization_t packetization = {};
     LowerSourceAndBuildSidecars(
         preset_key,
-        "func.def @gfx_source(%lhs: i32, %rhs: i32, "
+        "func.def target(@gfx_target) @gfx_source(%lhs: i32, %rhs: i32, "
         "%vlhs: vector<1xi32>, %vrhs: vector<1xi32>, "
         "%flhs: vector<1xf32>, %frhs: vector<1xf32>) {\n"
         "  %seven = scalar.constant 7 : i32\n"
@@ -473,7 +431,7 @@ TEST_F(AmdgpuAssemblyTest, EmitsGfx11Fragment) {
 TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferStoreToVmemPacket) {
   loom_low_lower_result_t lower_result = {};
   LowerSource("amdgpu-gfx11",
-              "func.def @gfx_source(%output: buffer) {\n"
+              "func.def target(@gfx_target) @gfx_source(%output: buffer) {\n"
               "  %zero = index.constant 0 : offset\n"
               "  %view = buffer.view %output[%zero] : buffer -> "
               "view<1xi32, #dense>\n"
@@ -540,7 +498,8 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferStoreToVmemPacket) {
 TEST_F(AmdgpuAssemblyTest, LowersSemanticBufferLoadAddStoreToVmemPackets) {
   loom_low_lower_result_t lower_result = {};
   LowerSource("amdgpu-gfx11",
-              "func.def @gfx_source(%input: buffer, %output: buffer) {\n"
+              "func.def target(@gfx_target) @gfx_source(%input: buffer, "
+              "%output: buffer) {\n"
               "  %zero = index.constant 0 : offset\n"
               "  %input_view = buffer.view %input[%zero] : buffer -> "
               "view<1xi32, #dense>\n"
@@ -620,7 +579,8 @@ TEST_F(AmdgpuAssemblyTest,
        LowersSemanticWorkitemIndexedLoadAddStoreToVmemPackets) {
   loom_low_lower_result_t lower_result = {};
   LowerSource("amdgpu-gfx11",
-              "func.def @gfx_source(%input: buffer, %output: buffer) {\n"
+              "func.def target(@gfx_target) @gfx_source(%input: buffer, "
+              "%output: buffer) {\n"
               "  %tid = kernel.workitem.id<x> : index\n"
               "  %zero = index.constant 0 : offset\n"
               "  %input_view = buffer.view %input[%zero] : buffer -> "
@@ -706,7 +666,7 @@ TEST_F(AmdgpuAssemblyTest,
 TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemYZToAbiLiveIns) {
   loom_low_lower_result_t lower_result = {};
   LowerSource("amdgpu-gfx11",
-              "func.def @gfx_source() {\n"
+              "func.def target(@gfx_target) @gfx_source() {\n"
               "  %tid_y0 = kernel.workitem.id<y> : index\n"
               "  %tid_z = kernel.workitem.id<z> : index\n"
               "  %tid_y1 = kernel.workitem.id<y> : index\n"
@@ -740,7 +700,7 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemYZToAbiLiveIns) {
 TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkgroupYZToAbiLiveIns) {
   loom_low_lower_result_t lower_result = {};
   LowerSource("amdgpu-gfx11",
-              "func.def @gfx_source() {\n"
+              "func.def target(@gfx_target) @gfx_source() {\n"
               "  %bid_y0 = kernel.workgroup.id<y> : index\n"
               "  %bid_z = kernel.workgroup.id<z> : index\n"
               "  %bid_y1 = kernel.workgroup.id<y> : index\n"
@@ -774,7 +734,7 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkgroupYZToAbiLiveIns) {
 TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkgroupIndexedStoreToScalarOffset) {
   loom_low_lower_result_t lower_result = {};
   LowerSource("amdgpu-gfx11",
-              "func.def @gfx_source(%output: buffer) {\n"
+              "func.def target(@gfx_target) @gfx_source(%output: buffer) {\n"
               "  %bid = kernel.workgroup.id<x> : index\n"
               "  %zero = index.constant 0 : offset\n"
               "  %view = buffer.view %output[%zero] : buffer -> "
@@ -834,7 +794,8 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkgroupIndexedStoreToScalarOffset) {
 TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideCopyToB128Packets) {
   loom_low_lower_result_t lower_result = {};
   LowerSource("amdgpu-gfx11",
-              "func.def @gfx_source(%input: buffer, %output: buffer) {\n"
+              "func.def target(@gfx_target) @gfx_source(%input: buffer, "
+              "%output: buffer) {\n"
               "  %tid = kernel.workitem.id<x> : index\n"
               "  %zero = index.constant 0 : offset\n"
               "  %input_view = buffer.view %input[%zero] : buffer -> "
@@ -921,7 +882,8 @@ TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideCopyToB128Packets) {
 TEST_F(AmdgpuAssemblyTest, LowersSemanticWorkitemIndexedWideAddToLanePackets) {
   loom_low_lower_result_t lower_result = {};
   LowerSource("amdgpu-gfx11",
-              "func.def @gfx_source(%lhs: buffer, %rhs: buffer, %output: "
+              "func.def target(@gfx_target) @gfx_source(%lhs: buffer, %rhs: "
+              "buffer, %output: "
               "buffer) {\n"
               "  %tid = kernel.workitem.id<x> : index\n"
               "  %zero = index.constant 0 : offset\n"
@@ -1033,7 +995,7 @@ TEST_F(AmdgpuAssemblyTest, EmitsPlannedWaitPackets) {
     iree_arena_initialize(&block_pool_, &sidecar_arena);
     loom_low_packetization_t packetization = {};
     BuildSidecarsForPreset(
-        test_case.preset_key, "gfx_target", "wait_fragment",
+        test_case.preset_key, "gfx_target",
         "low.func.def target(@gfx_target) @wait_fragment(%value : "
         "reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, "
         "%soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) {\n"
@@ -1214,7 +1176,8 @@ TEST_F(AmdgpuAssemblyTest, DropsDeadPureFragmentsFromSourceLowering) {
 TEST_F(AmdgpuAssemblyTest, RejectsUnsupportedVectorSourceLowering) {
   ExpectSourceLoweringRejects(
       "amdgpu-gfx11",
-      "func.def @gfx_source(%lhs: vector<5xi32>, %rhs: vector<5xi32>) {\n"
+      "func.def target(@gfx_target) @gfx_source(%lhs: vector<5xi32>, %rhs: "
+      "vector<5xi32>) {\n"
       "  %sum = vector.addi %lhs, %rhs : vector<5xi32>\n"
       "  func.return\n"
       "}\n");

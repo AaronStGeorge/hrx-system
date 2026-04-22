@@ -16,18 +16,12 @@ from loom.dialect.target import (
     ExportLinkage,
     SnapshotCodegenFormat,
     target_artifact,
-    target_bundle,
-    target_config,
-    target_export,
     target_ops,
-    target_preset,
     target_profile,
-    target_snapshot,
 )
 from loom.dsl import (
     ATTR_TYPE_DICT,
     ATTR_TYPE_ENUM,
-    ATTR_TYPE_I64,
     ATTR_TYPE_STRING,
     SYMBOL_DEFINE,
 )
@@ -40,22 +34,12 @@ class TestTargetDialect:
     def test_inventory(self) -> None:
         assert [op.name for op in ALL_TARGET_OPS] == [
             "target.artifact",
-            "target.snapshot",
-            "target.export",
-            "target.config",
-            "target.bundle",
-            "target.preset",
             "target.profile",
         ]
 
     def test_public_exports_match_registry(self) -> None:
         assert target_artifact in ALL_TARGET_OPS
         assert target_profile in ALL_TARGET_OPS
-        assert target_snapshot in ALL_TARGET_OPS
-        assert target_export in ALL_TARGET_OPS
-        assert target_config in ALL_TARGET_OPS
-        assert target_bundle in ALL_TARGET_OPS
-        assert target_preset in ALL_TARGET_OPS
 
     def test_enums_match_runtime_values(self) -> None:
         assert [(case.keyword, case.value) for case in SnapshotCodegenFormat.cases] == [
@@ -143,46 +127,3 @@ class TestTargetDialect:
         assert op.symbol_def.fact_domain == "loom_target_artifact_symbol_fact_domain"
         assert any(isinstance(element, Keyword) and element.text == "target" for element in op.format)
         assert op.verify == "loom_target_artifact_verify"
-
-    def test_snapshot_shape(self) -> None:
-        op = target_snapshot
-        attrs = {attr.name: attr for attr in op.attrs}
-        assert attrs["codegen_format"].attr_type == ATTR_TYPE_ENUM
-        assert attrs["codegen_format"].enum_def is SnapshotCodegenFormat
-        assert attrs["artifact_format"].attr_type == ATTR_TYPE_ENUM
-        assert attrs["artifact_format"].enum_def is ArtifactFormatAttr
-        assert attrs["target_triple"].attr_type == ATTR_TYPE_STRING
-        assert attrs["target_cpu"].attr_type == ATTR_TYPE_STRING
-        assert attrs["default_pointer_bitwidth"].attr_type == ATTR_TYPE_I64
-        assert attrs["memory_space_descriptor"].attr_type == ATTR_TYPE_I64
-        assert op.verify == "loom_target_snapshot_verify"
-
-    def test_export_shape(self) -> None:
-        op = target_export
-        attrs = {attr.name: attr for attr in op.attrs}
-        assert attrs["source"].optional
-        source_ref = attrs["source"].symbol_ref
-        assert source_ref is not None
-        assert source_ref.interfaces == ("func_like",)
-        assert attrs["abi"].enum_def is ExportAbiKind
-        assert attrs["linkage"].enum_def is ExportLinkage
-        assert attrs["hal_binding_alignment"].attr_type == ATTR_TYPE_I64
-        assert op.verify == "loom_target_export_verify"
-
-    def test_bundle_refs_are_record_symbols(self) -> None:
-        op = target_bundle
-        attrs = {attr.name: attr for attr in op.attrs}
-        for name in ("snapshot", "export_plan", "config"):
-            symbol_ref = attrs[name].symbol_ref
-            assert symbol_ref is not None
-            assert symbol_ref.interfaces == ("record",)
-        assert op.verify == "loom_target_bundle_verify"
-
-    def test_preset_is_legacy_source_bearing_record(self) -> None:
-        op = target_preset
-        attrs = {attr.name: attr for attr in op.attrs}
-        assert attrs["key"].attr_type == ATTR_TYPE_STRING
-        source_ref = attrs["source"].symbol_ref
-        assert source_ref is not None
-        assert source_ref.interfaces == ("func_like",)
-        assert op.verify == "loom_target_preset_verify"

@@ -66,7 +66,7 @@ TEST_F(PassVerifyTest, RejectsNullPipelineOp) {
 }
 
 TEST_F(PassVerifyTest, VerifiesSatisfiedDescriptorRequirement) {
-  iree_string_view_t allowed_requirement = IREE_SV("target.bundle");
+  iree_string_view_t allowed_requirement = IREE_SV("target.profile");
   loom_pass_requirement_provider_t provider = {
       .callback = allow_one_requirement,
       .user_data = &allowed_requirement,
@@ -127,7 +127,7 @@ TEST_F(PassVerifyTest, RejectsMissingDescriptorRequirementProvider) {
 }
 
 TEST_F(PassVerifyTest, RejectsUnsatisfiedDescriptorRequirement) {
-  iree_string_view_t allowed_requirement = IREE_SV("not-target.bundle");
+  iree_string_view_t allowed_requirement = IREE_SV("not-target.profile");
   loom_pass_requirement_provider_t provider = {
       .callback = allow_one_requirement,
       .user_data = &allowed_requirement,

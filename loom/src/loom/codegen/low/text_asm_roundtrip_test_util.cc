@@ -134,7 +134,8 @@ iree_status_t LowTextAsmRoundTripHarness::RoundTrip(
 LowFuncAsmRoundTripHarness::~LowFuncAsmRoundTripHarness() { Deinitialize(); }
 
 iree_status_t LowFuncAsmRoundTripHarness::Initialize(
-    loom_low_descriptor_set_provider_t descriptor_set_provider) {
+    loom_low_descriptor_set_provider_t descriptor_set_provider,
+    const loom_target_bundle_t* target_bundle) {
   if (context_initialized_ || block_pool_initialized_) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low func asm round-trip harness is already "
@@ -144,11 +145,18 @@ iree_status_t LowFuncAsmRoundTripHarness::Initialize(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "descriptor set provider must not be NULL");
   }
+  if (!target_bundle) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target bundle must not be NULL");
+  }
 
   descriptor_set_provider_ = descriptor_set_provider;
+  target_bundle_ = target_bundle;
   descriptor_registry_ = {};
   descriptor_registry_.descriptor_set_providers = &descriptor_set_provider_;
   descriptor_registry_.descriptor_set_provider_count = 1;
+  descriptor_registry_.target_bundles = &target_bundle_;
+  descriptor_registry_.target_bundle_count = 1;
 
   iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool_);
   block_pool_initialized_ = true;
@@ -168,6 +176,7 @@ void LowFuncAsmRoundTripHarness::Deinitialize() {
   environment_ = {};
   descriptor_registry_ = {};
   descriptor_set_provider_ = nullptr;
+  target_bundle_ = nullptr;
   if (context_initialized_) {
     loom_context_deinitialize(&context_);
     context_ = {};

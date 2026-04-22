@@ -17,8 +17,8 @@
 #include "iree/base/internal/arena.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/ir.h"
-#include "loom/target/ir_records.h"
 #include "loom/target/low_descriptor_registry.h"
+#include "loom/target/types.h"
 #include "loom/verify/verify.h"
 
 #ifdef __cplusplus
@@ -51,7 +51,7 @@ typedef struct loom_target_module_compile_entry_t {
   loom_symbol_ref_t target_ref;
   // Materialized target bundle selected by |func|. The export plan is the
   // func-owned effective export plan, not a profile-global backreference.
-  loom_target_ir_bundle_storage_t bundle_storage;
+  loom_target_bundle_storage_t bundle_storage;
 } loom_target_module_compile_entry_t;
 
 typedef struct loom_target_module_compile_diagnostic_emitter_t {

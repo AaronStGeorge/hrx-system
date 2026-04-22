@@ -70,24 +70,7 @@ class LowAllocationTest : public ::testing::Test {
   }
 
   void ParseAndVerify(const char* body) {
-    std::string source =
-        "target.snapshot @test_snapshot {codegen_format = low_native, "
-        "target_triple = \"test-low\", data_layout = \"\", artifact_format = "
-        "elf, target_cpu = \"test-low\", target_features = \"\", "
-        "default_pointer_bitwidth = 64, index_bitwidth = 64, "
-        "offset_bitwidth = 64, memory_space_generic = 0, "
-        "memory_space_global = 0, memory_space_workgroup = 0, "
-        "memory_space_constant = 0, memory_space_private = 0, "
-        "memory_space_host = 0, memory_space_descriptor = 0}\n"
-        "target.export @test_export {export_symbol = \"allocated\", abi = "
-        "object_function, linkage = default, hal_binding_alignment = 0, "
-        "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-        "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-        "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
-        "target.config @test_config {contract_set_key = \"test.low.core\", "
-        "contract_feature_bits = 0}\n"
-        "target.bundle @test_target {snapshot = @test_snapshot, export_plan = "
-        "@test_export, config = @test_config}\n";
+    std::string source = "target.profile @test_target preset(\"test-low\")\n";
     source += body;
     module_ = ParseSource(source);
     ASSERT_NE(module_, nullptr);

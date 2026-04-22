@@ -23,7 +23,6 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/module_compiler.h"
-#include "loom/target/presets.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/util/stream.h"
@@ -1249,21 +1248,6 @@ iree_status_t loom_check_execute_emit(
                                                     report, allocator, result);
     loom_module_free(module);
     iree_string_builder_deinitialize(&stripped_input);
-    iree_arena_deinitialize(&diagnostic_arena);
-    return status;
-  }
-
-  const loom_target_preset_registry_t preset_registry =
-      loom_target_low_descriptor_registry_presets(&low_registry);
-  iree_host_size_t expanded_preset_count = 0;
-  status = loom_target_expand_presets(module, &preset_registry,
-                                      &expanded_preset_count);
-  if (!iree_status_is_ok(status)) {
-    loom_module_free(module);
-    iree_string_builder_deinitialize(&stripped_input);
-    status = loom_check_emit_finish_status_failure(
-        status, &diagnostic_collector, test_case, case_index, report, filename,
-        request.emit_target_name, allocator, result);
     iree_arena_deinitialize(&diagnostic_arena);
     return status;
   }

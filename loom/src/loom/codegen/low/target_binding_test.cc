@@ -124,16 +124,6 @@ class LowTargetBindingTest : public ::testing::Test {
     return nullptr;
   }
 
-  static loom_low_descriptor_registry_t IreeVmRegistry() {
-    static const loom_low_descriptor_set_t* descriptor_sets[] = {
-        loom_ireevm_core_descriptor_set(),
-    };
-    return loom_low_descriptor_registry_t{
-        .descriptor_sets = descriptor_sets,
-        .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
-    };
-  }
-
   static loom_low_descriptor_registry_t IreeVmRegistryWithPreset() {
     static const loom_target_snapshot_t kVmSnapshot = {
         .name = IREE_SVL("test.iree-vm"),
@@ -188,37 +178,9 @@ class LowTargetBindingTest : public ::testing::Test {
   loom_context_t context_;
 };
 
-static const char kValidVmSnapshotAndExportRecords[] =
-    "target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "
-    "\"iree-vm\", data_layout = \"\", artifact_format = vm_bytecode, "
-    "target_cpu = \"\", target_features = \"\", default_pointer_bitwidth = "
-    "64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, "
-    "memory_space_global = 0, memory_space_workgroup = 0, "
-    "memory_space_constant = 0, memory_space_private = 0, memory_space_host = "
-    "0, memory_space_descriptor = 0}\n"
-    "target.export @vm_export {export_symbol = \"add\", abi = "
-    "vm_module_function, linkage = default, hal_binding_alignment = 0, "
-    "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-    "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-    "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n";
-
-static const char kValidVmConfigRecord[] =
-    "target.config @vm_config {contract_set_key = \"iree.vm.core\", "
-    "contract_feature_bits = 0}\n";
-
-static std::string WithValidVmTargetRecords(const char* suffix) {
-  return std::string(kValidVmSnapshotAndExportRecords) + kValidVmConfigRecord +
-         suffix;
-}
-
-static std::string WithValidVmSnapshotAndExportRecords(const char* suffix) {
-  return std::string(kValidVmSnapshotAndExportRecords) + suffix;
-}
-
 static std::string ValidVmLowFunction() {
-  return WithValidVmTargetRecords(
-      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-      "@vm_export, config = @vm_config}\n"
+  return std::string(
+      "target.profile @vm_target preset(\"test.iree-vm\")\n"
       "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, "
@@ -228,7 +190,7 @@ static std::string ValidVmLowFunction() {
 }
 
 TEST_F(LowTargetBindingTest, RegistryVerifiesAndFindsDescriptorSet) {
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  loom_low_descriptor_registry_t registry = IreeVmRegistryWithPreset();
   IREE_ASSERT_OK(loom_low_descriptor_registry_verify(&registry));
 
   const loom_low_descriptor_set_t* descriptor_set = nullptr;
@@ -273,48 +235,8 @@ TEST_F(LowTargetBindingTest, RegistryRejectsNullEntries) {
   EXPECT_EQ(descriptor_set, nullptr);
 }
 
-TEST_F(LowTargetBindingTest, ResolvesBundleConfigAndDescriptorSet) {
-  loom_module_t* module = ParseSource(ValidVmLowFunction());
-  ASSERT_NE(module, nullptr);
-  const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
-  ASSERT_NE(low_func, nullptr);
-
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
-  EmissionCollector collector;
-  loom_low_resolved_target_t target = {};
-  IREE_ASSERT_OK(loom_low_resolve_function_target(
-      module, low_func, &registry, collector.emitter(), &target));
-
-  EXPECT_TRUE(collector.emissions.empty());
-  EXPECT_EQ(target.target_op->kind, LOOM_OP_TARGET_BUNDLE);
-  EXPECT_EQ(target.snapshot_op->kind, LOOM_OP_TARGET_SNAPSHOT);
-  EXPECT_EQ(target.export_plan_op->kind, LOOM_OP_TARGET_EXPORT);
-  EXPECT_EQ(target.config_op->kind, LOOM_OP_TARGET_CONFIG);
-  EXPECT_EQ(target.descriptor_set, loom_ireevm_core_descriptor_set());
-  EXPECT_EQ(target.bundle_storage.bundle.snapshot->codegen_format,
-            LOOM_TARGET_CODEGEN_FORMAT_VM);
-  EXPECT_EQ(target.bundle_storage.bundle.export_plan->abi_kind,
-            LOOM_TARGET_ABI_VM_MODULE_FUNCTION);
-  EXPECT_EQ(ToString(target.bundle_storage.bundle.config->contract_set_key),
-            "iree.vm.core");
-  EXPECT_TRUE(iree_string_view_equal(target.target_name, IREE_SV("vm_target")));
-  EXPECT_TRUE(iree_string_view_equal(target.descriptor_set_key,
-                                     IREE_SV("iree.vm.core")));
-  EXPECT_EQ(target.feature_bits, 0u);
-
-  loom_module_free(module);
-}
-
 TEST_F(LowTargetBindingTest, ResolvesProfilePresetAndDescriptorSet) {
-  const char source[] =
-      "target.profile @vm_target preset(\"test.iree-vm\")\n"
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
-      "reg<vm.i32>) -> (reg<vm.i32>) {\n"
-      "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, "
-      "reg<vm.i32>) -> reg<vm.i32>\n"
-      "  low.return %sum : reg<vm.i32>\n"
-      "}\n";
-  loom_module_t* module = ParseSource(source);
+  loom_module_t* module = ParseSource(ValidVmLowFunction());
   ASSERT_NE(module, nullptr);
   const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
   ASSERT_NE(low_func, nullptr);
@@ -327,9 +249,6 @@ TEST_F(LowTargetBindingTest, ResolvesProfilePresetAndDescriptorSet) {
 
   EXPECT_TRUE(collector.emissions.empty());
   EXPECT_EQ(target.target_op->kind, LOOM_OP_TARGET_PROFILE);
-  EXPECT_EQ(target.snapshot_op, nullptr);
-  EXPECT_EQ(target.export_plan_op, nullptr);
-  EXPECT_EQ(target.config_op, nullptr);
   EXPECT_EQ(target.descriptor_set, loom_ireevm_core_descriptor_set());
   EXPECT_EQ(target.bundle_storage.bundle.snapshot,
             &target.bundle_storage.snapshot);
@@ -350,6 +269,35 @@ TEST_F(LowTargetBindingTest, ResolvesProfilePresetAndDescriptorSet) {
   loom_module_free(module);
 }
 
+TEST_F(LowTargetBindingTest, FunctionContractOverridesPresetExportPlan) {
+  const char source[] =
+      "target.profile @vm_target preset(\"test.iree-vm\")\n"
+      "low.func.def target(@vm_target) abi(object_function) "
+      "export(\"add_export\", {linkage = dso_local}) @add() {\n"
+      "  low.return\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+  const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
+  ASSERT_NE(low_func, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistryWithPreset();
+  EmissionCollector collector;
+  loom_low_resolved_target_t target = {};
+  IREE_ASSERT_OK(loom_low_resolve_function_target(
+      module, low_func, &registry, collector.emitter(), &target));
+
+  EXPECT_TRUE(collector.emissions.empty());
+  EXPECT_EQ(target.bundle_storage.export_plan.abi_kind,
+            LOOM_TARGET_ABI_OBJECT_FUNCTION);
+  EXPECT_EQ(target.bundle_storage.export_plan.linkage,
+            LOOM_TARGET_LINKAGE_DSO_LOCAL);
+  EXPECT_EQ(ToString(target.bundle_storage.export_plan.export_symbol),
+            "add_export");
+
+  loom_module_free(module);
+}
+
 TEST_F(LowTargetBindingTest, ResolvesDescriptorPacketToDenseOrdinal) {
   loom_module_t* module = ParseSource(ValidVmLowFunction());
   ASSERT_NE(module, nullptr);
@@ -360,7 +308,7 @@ TEST_F(LowTargetBindingTest, ResolvesDescriptorPacketToDenseOrdinal) {
   const loom_op_t* low_return = FindFirstBodyOp(low_func, LOOM_OP_LOW_RETURN);
   ASSERT_NE(low_return, nullptr);
 
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  loom_low_descriptor_registry_t registry = IreeVmRegistryWithPreset();
   EmissionCollector collector;
   loom_low_resolved_target_t target = {};
   IREE_ASSERT_OK(loom_low_resolve_function_target(
@@ -391,15 +339,14 @@ TEST_F(LowTargetBindingTest, ResolvesDescriptorPacketToDenseOrdinal) {
 }
 
 TEST_F(LowTargetBindingTest, ResolvesMissingDescriptorPacketAsUnresolved) {
-  std::string source = WithValidVmTargetRecords(
-      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-      "@vm_export, config = @vm_config}\n"
+  std::string source =
+      "target.profile @vm_target preset(\"test.iree-vm\")\n"
       "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.missing.i32>(%lhs, %rhs) : (reg<vm.i32>, "
       "reg<vm.i32>) -> reg<vm.i32>\n"
       "  low.return %sum : reg<vm.i32>\n"
-      "}\n");
+      "}\n";
   loom_module_t* module = ParseSource(source);
   ASSERT_NE(module, nullptr);
   const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
@@ -407,7 +354,7 @@ TEST_F(LowTargetBindingTest, ResolvesMissingDescriptorPacketAsUnresolved) {
   const loom_op_t* low_op = FindFirstBodyOp(low_func, LOOM_OP_LOW_OP);
   ASSERT_NE(low_op, nullptr);
 
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  loom_low_descriptor_registry_t registry = IreeVmRegistryWithPreset();
   EmissionCollector collector;
   loom_low_resolved_target_t target = {};
   IREE_ASSERT_OK(loom_low_resolve_function_target(
@@ -425,11 +372,10 @@ TEST_F(LowTargetBindingTest, ResolvesMissingDescriptorPacketAsUnresolved) {
   loom_module_free(module);
 }
 
-TEST_F(LowTargetBindingTest, RejectsTargetRecordThatIsNotProfileOrBundle) {
+TEST_F(LowTargetBindingTest, RejectsTargetRecordThatIsNotProfile) {
   const char source[] =
-      "target.config @vm_config {contract_set_key = \"iree.vm.core\", "
-      "contract_feature_bits = 0}\n"
-      "low.func.def target(@vm_config) @add() {\n"
+      "test.record @not_target {}\n"
+      "low.func.def target(@not_target) @add() {\n"
       "  low.return\n"
       "}\n";
   loom_module_t* module = ParseSource(source);
@@ -437,7 +383,7 @@ TEST_F(LowTargetBindingTest, RejectsTargetRecordThatIsNotProfileOrBundle) {
   const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
   ASSERT_NE(low_func, nullptr);
 
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  loom_low_descriptor_registry_t registry = IreeVmRegistryWithPreset();
   EmissionCollector collector;
   loom_low_resolved_target_t target = {};
   IREE_ASSERT_OK(loom_low_resolve_function_target(
@@ -447,153 +393,26 @@ TEST_F(LowTargetBindingTest, RejectsTargetRecordThatIsNotProfileOrBundle) {
   EXPECT_EQ(collector.emissions[0].error,
             loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3));
   ASSERT_GE(collector.emissions[0].string_params.size(), 3u);
-  EXPECT_EQ(collector.emissions[0].string_params[0], "vm_config");
+  EXPECT_EQ(collector.emissions[0].string_params[0], "not_target");
   EXPECT_EQ(collector.emissions[0].string_params[2], "target profile");
   EXPECT_EQ(target.descriptor_set, nullptr);
 
   loom_module_free(module);
 }
 
-TEST_F(LowTargetBindingTest, RejectsBundleSnapshotThatIsNotTargetSnapshot) {
-  std::string source = WithValidVmSnapshotAndExportRecords(
-      "test.record @not_snapshot {}\n"
-      "target.config @vm_config {contract_set_key = \"iree.vm.core\", "
-      "contract_feature_bits = 0}\n"
-      "target.bundle @vm_target {snapshot = @not_snapshot, export_plan = "
-      "@vm_export, config = @vm_config}\n"
-      "low.func.def target(@vm_target) @add() {\n"
-      "  low.return\n"
-      "}\n");
-  loom_module_t* module = ParseSource(source);
-  ASSERT_NE(module, nullptr);
-  const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
-  ASSERT_NE(low_func, nullptr);
-
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
-  EmissionCollector collector;
-  loom_low_resolved_target_t target = {};
-  IREE_ASSERT_OK(loom_low_resolve_function_target(
-      module, low_func, &registry, collector.emitter(), &target));
-
-  ASSERT_EQ(collector.emissions.size(), 1u);
-  EXPECT_EQ(collector.emissions[0].error,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3));
-  ASSERT_GE(collector.emissions[0].string_params.size(), 3u);
-  EXPECT_EQ(collector.emissions[0].string_params[0], "not_snapshot");
-  EXPECT_EQ(collector.emissions[0].string_params[2], "target snapshot");
-  EXPECT_EQ(target.descriptor_set, nullptr);
-
-  loom_module_free(module);
-}
-
-TEST_F(LowTargetBindingTest, RejectsBundleConfigThatIsNotTargetConfig) {
-  std::string source = WithValidVmSnapshotAndExportRecords(
-      "test.record @not_config {}\n"
-      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-      "@vm_export, config = @not_config}\n"
-      "low.func.def target(@vm_target) @add() {\n"
-      "  low.return\n"
-      "}\n");
-  loom_module_t* module = ParseSource(source);
-  ASSERT_NE(module, nullptr);
-  const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
-  ASSERT_NE(low_func, nullptr);
-
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
-  EmissionCollector collector;
-  loom_low_resolved_target_t target = {};
-  IREE_ASSERT_OK(loom_low_resolve_function_target(
-      module, low_func, &registry, collector.emitter(), &target));
-
-  ASSERT_EQ(collector.emissions.size(), 1u);
-  EXPECT_EQ(collector.emissions[0].error,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3));
-  ASSERT_GE(collector.emissions[0].string_params.size(), 3u);
-  EXPECT_EQ(collector.emissions[0].string_params[0], "not_config");
-  EXPECT_EQ(collector.emissions[0].string_params[2], "target config");
-  EXPECT_EQ(target.descriptor_set, nullptr);
-
-  loom_module_free(module);
-}
-
-TEST_F(LowTargetBindingTest, RejectsBundleExportThatIsNotTargetExport) {
-  std::string source = WithValidVmTargetRecords(
-      "test.record @not_export {}\n"
-      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-      "@not_export, config = @vm_config}\n"
-      "low.func.def target(@vm_target) @add() {\n"
-      "  low.return\n"
-      "}\n");
-  loom_module_t* module = ParseSource(source);
-  ASSERT_NE(module, nullptr);
-  const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
-  ASSERT_NE(low_func, nullptr);
-
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
-  EmissionCollector collector;
-  loom_low_resolved_target_t target = {};
-  IREE_ASSERT_OK(loom_low_resolve_function_target(
-      module, low_func, &registry, collector.emitter(), &target));
-
-  ASSERT_EQ(collector.emissions.size(), 1u);
-  EXPECT_EQ(collector.emissions[0].error,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3));
-  ASSERT_GE(collector.emissions[0].string_params.size(), 3u);
-  EXPECT_EQ(collector.emissions[0].string_params[0], "not_export");
-  EXPECT_EQ(collector.emissions[0].string_params[2], "target export plan");
-  EXPECT_EQ(target.descriptor_set, nullptr);
-
-  loom_module_free(module);
-}
-
-TEST_F(LowTargetBindingTest, RejectsMissingBundleConfig) {
-  std::string source = WithValidVmSnapshotAndExportRecords(
-      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-      "@vm_export, config = @missing_config}\n"
-      "low.func.def target(@vm_target) @add() {\n"
-      "  low.return\n"
-      "}\n");
-  loom_module_t* module = ParseSource(source);
-  ASSERT_NE(module, nullptr);
-  const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
-  ASSERT_NE(low_func, nullptr);
-
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
-  EmissionCollector collector;
-  loom_low_resolved_target_t target = {};
-  IREE_ASSERT_OK(loom_low_resolve_function_target(
-      module, low_func, &registry, collector.emitter(), &target));
-
-  ASSERT_EQ(collector.emissions.size(), 1u);
-  EXPECT_EQ(collector.emissions[0].error,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 2));
-  ASSERT_GE(collector.emissions[0].string_params.size(), 1u);
-  EXPECT_EQ(collector.emissions[0].string_params[0], "missing_config");
-  ASSERT_FALSE(collector.emissions[0].field_refs.empty());
-  EXPECT_EQ(collector.emissions[0].field_refs[0].kind,
-            LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE);
-  EXPECT_EQ(collector.emissions[0].field_refs[0].index,
-            loom_target_bundle_config_ATTR_INDEX);
-  EXPECT_EQ(target.descriptor_set, nullptr);
-
-  loom_module_free(module);
-}
-
 TEST_F(LowTargetBindingTest, RejectsMissingDescriptorSet) {
-  std::string source = WithValidVmSnapshotAndExportRecords(
-      "target.config @vm_config {contract_set_key = \"missing.vm\", "
-      "contract_feature_bits = 0}\n"
-      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-      "@vm_export, config = @vm_config}\n"
+  const char source[] =
+      "target.profile @vm_target preset(\"test.iree-vm\") "
+      "{contract_set_key = \"missing.vm\"}\n"
       "low.func.def target(@vm_target) @add() {\n"
       "  low.return\n"
-      "}\n");
+      "}\n";
   loom_module_t* module = ParseSource(source);
   ASSERT_NE(module, nullptr);
   const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
   ASSERT_NE(low_func, nullptr);
 
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  loom_low_descriptor_registry_t registry = IreeVmRegistryWithPreset();
   EmissionCollector collector;
   loom_low_resolved_target_t target = {};
   IREE_ASSERT_OK(loom_low_resolve_function_target(
@@ -607,44 +426,6 @@ TEST_F(LowTargetBindingTest, RejectsMissingDescriptorSet) {
   EXPECT_EQ(collector.emissions[0].string_params[1], "vm_target");
   EXPECT_EQ(collector.emissions[0].string_params[2], "missing.vm");
   EXPECT_EQ(collector.emissions[0].related_count, 1u);
-  EXPECT_EQ(target.descriptor_set, nullptr);
-
-  loom_module_free(module);
-}
-
-TEST_F(LowTargetBindingTest, RejectsNegativeFeatureBits) {
-  std::string source = WithValidVmSnapshotAndExportRecords(
-      "target.config @vm_config {contract_set_key = \"iree.vm.core\", "
-      "contract_feature_bits = -1}\n"
-      "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-      "@vm_export, config = @vm_config}\n"
-      "low.func.def target(@vm_target) @add() {\n"
-      "  low.return\n"
-      "}\n");
-  loom_module_t* module = ParseSource(source);
-  ASSERT_NE(module, nullptr);
-  const loom_op_t* low_func = FindFirstOp(module, LOOM_OP_LOW_FUNC_DEF);
-  ASSERT_NE(low_func, nullptr);
-
-  loom_low_descriptor_registry_t registry = IreeVmRegistry();
-  EmissionCollector collector;
-  loom_low_resolved_target_t target = {};
-  IREE_ASSERT_OK(loom_low_resolve_function_target(
-      module, low_func, &registry, collector.emitter(), &target));
-
-  ASSERT_EQ(collector.emissions.size(), 1u);
-  EXPECT_EQ(collector.emissions[0].error,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14));
-  EXPECT_EQ(collector.emissions[0].op->kind, LOOM_OP_TARGET_CONFIG);
-  ASSERT_GE(collector.emissions[0].string_params.size(), 2u);
-  EXPECT_EQ(collector.emissions[0].string_params[0], "contract_feature_bits");
-  EXPECT_EQ(collector.emissions[0].string_params[1],
-            "a non-negative feature bitset");
-  ASSERT_FALSE(collector.emissions[0].field_refs.empty());
-  EXPECT_EQ(collector.emissions[0].field_refs[0].kind,
-            LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE);
-  EXPECT_EQ(collector.emissions[0].field_refs[0].index,
-            loom_target_config_contract_feature_bits_ATTR_INDEX);
   EXPECT_EQ(target.descriptor_set, nullptr);
 
   loom_module_free(module);

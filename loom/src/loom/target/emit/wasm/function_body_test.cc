@@ -20,6 +20,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/arch/wasm/low_registry.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -177,23 +178,7 @@ class WasmFunctionBodyTest : public ::testing::Test {
                      loom_low_schedule_sidecar_t* out_schedule,
                      loom_low_allocation_sidecar_t* out_allocation) {
     std::string source =
-        "target.snapshot @wasm32 {codegen_format = wasm, target_triple = "
-        "\"wasm32-unknown-unknown\", data_layout = \"\", artifact_format = "
-        "wasm_binary, target_cpu = \"generic\", target_features = "
-        "\"+simd128\", default_pointer_bitwidth = 32, index_bitwidth = 32, "
-        "offset_bitwidth = 32, memory_space_generic = 0, memory_space_global = "
-        "0, memory_space_workgroup = 4294967295, memory_space_constant = 0, "
-        "memory_space_private = 4294967295, memory_space_host = 4294967295, "
-        "memory_space_descriptor = 4294967295}\n"
-        "target.export @wasm_export {export_symbol = \"wasm_test\", abi = "
-        "wasm_function, linkage = default, hal_binding_alignment = 0, "
-        "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-        "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-        "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
-        "target.config @wasm_config {contract_set_key = "
-        "\"wasm.core.simd128\", contract_feature_bits = 7}\n"
-        "target.bundle @wasm_target {snapshot = @wasm32, export_plan = "
-        "@wasm_export, config = @wasm_config}\n";
+        "target.profile @wasm_target preset(\"wasm-simd128\")\n";
     source += body;
     module_ = ParseSource(source.c_str());
     ASSERT_NE(module_, nullptr);
@@ -203,9 +188,14 @@ class WasmFunctionBodyTest : public ::testing::Test {
     static const loom_low_descriptor_set_t* descriptor_sets[] = {
         loom_wasm_core_simd128_descriptor_set(),
     };
+    static const loom_target_bundle_t* target_bundles[] = {
+        &loom_wasm_low_target_bundle_core_simd128,
+    };
     registry_ = loom_low_descriptor_registry_t{
         .descriptor_sets = descriptor_sets,
         .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+        .target_bundles = target_bundles,
+        .target_bundle_count = IREE_ARRAYSIZE(target_bundles),
     };
 
     loom_low_verify_options_t verify_options = {

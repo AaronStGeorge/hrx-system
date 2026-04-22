@@ -140,21 +140,9 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
-    name = "target_ir_records_no_matrix_contract_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target:ir_records",
-)
-
-iree_assert_no_dependency(
     name = "target_preset_registry_no_matrix_contract_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
     target = "//loom/src/loom/target:preset_registry",
-)
-
-iree_assert_no_dependency(
-    name = "target_presets_no_matrix_contract_dep",
-    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/target:presets",
 )
 
 iree_assert_no_dependency(
@@ -845,6 +833,7 @@ loom_cc_test(
         ":descriptor_test_util",
         ":encoding_defs",
         ":gfx11_descriptors",
+        ":low_registry",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:text_asm_roundtrip_test_util",
         "//loom/src/loom/codegen/low:text_asm_test_util",
@@ -1145,10 +1134,11 @@ loom_cc_test(
     deps = [
         ":gfx11_descriptors",
         ":hal_kernel_abi",
+        ":low_registry",
+        "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:ir_records",
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -1167,11 +1157,11 @@ loom_cc_test(
         ":wait_packets",
         ":wait_plan",
         "//loom/src/loom/codegen/low:packetization",
+        "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:ir_records",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target/emit/native/amdgpu:encoding",
         "//loom/src/loom/testing:context",
@@ -1296,7 +1286,6 @@ loom_cc_test(
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:presets",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -1318,7 +1307,6 @@ loom_cc_test(
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:presets",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -1341,7 +1329,6 @@ loom_cc_test(
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:presets",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

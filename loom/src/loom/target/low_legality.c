@@ -593,11 +593,8 @@ static iree_status_t loom_target_low_legality_verify_op(
     case LOOM_OP_FUNC_DEF:
     case LOOM_OP_FUNC_DECL:
       return iree_ok_status();
-    case LOOM_OP_TARGET_BUNDLE:
-    case LOOM_OP_TARGET_CONFIG:
-    case LOOM_OP_TARGET_EXPORT:
-    case LOOM_OP_TARGET_PRESET:
-    case LOOM_OP_TARGET_SNAPSHOT:
+    case LOOM_OP_TARGET_ARTIFACT:
+    case LOOM_OP_TARGET_PROFILE:
       return loom_target_low_legality_reject(
           context, NULL, op, IREE_SV("op"), loom_op_name(context->module, op),
           IREE_SV("target record ops are module metadata and cannot appear "

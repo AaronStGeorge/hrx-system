@@ -57,21 +57,9 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
-    name = "target_ir_records_no_packed_dot_contract_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target:ir_records",
-)
-
-iree_assert_no_dependency(
     name = "target_preset_registry_no_packed_dot_contract_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/target:preset_registry",
-)
-
-iree_assert_no_dependency(
-    name = "target_presets_no_packed_dot_contract_dep",
-    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/target:presets",
 )
 
 iree_assert_no_dependency(
@@ -238,6 +226,7 @@ loom_cc_test(
     srcs = ["avx512_descriptors_test.cc"],
     deps = [
         ":avx512_descriptors",
+        ":low_registry",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:text_asm_roundtrip_test_util",
         "//loom/src/loom/codegen/low:text_asm_test_util",

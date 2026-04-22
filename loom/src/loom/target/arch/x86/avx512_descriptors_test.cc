@@ -12,6 +12,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/text_asm_test_util.h"
+#include "loom/target/arch/x86/low_registry.h"
 
 namespace loom {
 namespace {
@@ -383,26 +384,11 @@ TEST(X86DescriptorsTest, Avx512LowAsmRegionRoundTrips) {
 
 TEST(X86DescriptorsTest, Avx512LowFuncAsmRoundTripsTiedDotArguments) {
   LowFuncAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_x86_avx512_core_descriptor_set));
+  IREE_ASSERT_OK(harness.Initialize(loom_x86_avx512_core_descriptor_set,
+                                    &loom_x86_low_target_bundle_avx512_core));
 
   const char* source =
-      "target.snapshot @x86_64 {codegen_format = low_native, target_triple = "
-      "\"x86_64-pc-linux-gnu\", data_layout = \"\", artifact_format = elf, "
-      "target_cpu = \"x86-64-v4\", target_features = \"+avx512vnni\", "
-      "default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = "
-      "64, memory_space_generic = 0, memory_space_global = 0, "
-      "memory_space_workgroup = 4294967295, memory_space_constant = 0, "
-      "memory_space_private = 4294967295, memory_space_host = 0, "
-      "memory_space_descriptor = 4294967295}\n"
-      "target.export @x86_export {export_symbol = \"dot\", abi = "
-      "object_function, linkage = default, hal_binding_alignment = 0, "
-      "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-      "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-      "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
-      "target.config @x86_config {contract_set_key = \"x86.avx512.core\", "
-      "contract_feature_bits = 9223372036854775807}\n"
-      "target.bundle @x86_target {snapshot = @x86_64, export_plan = "
-      "@x86_export, config = @x86_config}\n"
+      "target.profile @x86_target preset(\"x86-avx512\")\n"
       "low.func.def target(@x86_target) @dot(%acc : reg<x86.zmm>, %lhs : "
       "reg<x86.zmm>, %rhs : reg<x86.zmm>) -> (reg<x86.zmm>) "
       "asm<x86.avx512.core> {\n"

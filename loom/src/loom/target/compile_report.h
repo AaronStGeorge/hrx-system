@@ -129,13 +129,13 @@ typedef struct loom_target_compile_report_t {
   iree_string_view_t target_family_name;
   // Target preset key selected by the backend, if any.
   iree_string_view_t target_preset_key;
-  // Materialized target.bundle name selected for compilation, if any.
+  // Resolved target profile name selected for compilation, if any.
   iree_string_view_t target_bundle_name;
-  // Materialized target.snapshot name selected for compilation, if any.
+  // Resolved target snapshot name selected for compilation, if any.
   iree_string_view_t target_snapshot_name;
-  // Materialized target.export name selected for compilation, if any.
+  // Resolved target export-plan name selected for compilation, if any.
   iree_string_view_t target_export_name;
-  // Materialized target.config name selected for compilation, if any.
+  // Resolved target config name selected for compilation, if any.
   iree_string_view_t target_config_name;
   // Low function symbol produced or selected after lowering, if any.
   iree_string_view_t lowered_symbol;

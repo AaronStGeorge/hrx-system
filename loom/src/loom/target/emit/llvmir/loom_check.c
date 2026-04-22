@@ -7,13 +7,15 @@
 #include "loom/target/emit/llvmir/loom_check.h"
 
 #include "iree/io/vec_stream.h"
+#include "loom/analysis/symbol_facts.h"
+#include "loom/ops/target/facts.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
 #include "loom/target/emit/llvmir/legality.h"
 #include "loom/target/emit/llvmir/lower.h"
 #include "loom/target/emit/llvmir/target_registry.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/verify.h"
-#include "loom/target/ir_records.h"
+#include "loom/target/module_compiler.h"
 #include "loom/target/tool/llvm.h"
 #include "loom/util/stream.h"
 
@@ -498,26 +500,66 @@ static iree_status_t loom_llvmir_loom_check_write_assembly_mnemonics_output(
   return status;
 }
 
+static iree_status_t loom_llvmir_loom_check_resolve_profile_bundle(
+    const loom_check_emit_provider_request_t* request,
+    const loom_llvmir_target_registry_t* target_registry,
+    iree_string_view_t symbol_name,
+    loom_target_bundle_storage_t* out_symbol_storage,
+    const loom_target_bundle_t** out_bundle) {
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_find_symbol_by_name(
+      request->module, symbol_name, &symbol_id));
+
+  const loom_target_preset_registry_t preset_registry = {
+      .target_bundles = target_registry->bundles,
+      .target_bundle_count = target_registry->bundle_count,
+  };
+  const loom_symbol_fact_resource_t resource =
+      loom_target_profile_preset_registry_resource(&preset_registry);
+  const loom_symbol_fact_table_options_t fact_options = {
+      .resources = loom_make_symbol_fact_resource_list(&resource, 1),
+  };
+  loom_symbol_fact_table_t fact_table = {0};
+  loom_symbol_fact_table_initialize_with_options(&fact_table, &fact_options,
+                                                 request->case_arena);
+
+  const loom_symbol_facts_base_t* base_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_symbol_fact_table_lookup(
+      &fact_table, request->module, symbol_id, &base_facts));
+  const loom_target_profile_symbol_facts_t* profile_facts =
+      loom_target_profile_symbol_facts_cast(base_facts);
+  if (!profile_facts) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "symbol @%.*s is not a target.profile",
+                            (int)symbol_name.size, symbol_name.data);
+  }
+  out_symbol_storage->snapshot = profile_facts->snapshot;
+  out_symbol_storage->export_plan = profile_facts->export_plan;
+  out_symbol_storage->config = profile_facts->config;
+  out_symbol_storage->bundle = profile_facts->bundle;
+  loom_target_bundle_storage_rebind(out_symbol_storage);
+  *out_bundle = &out_symbol_storage->bundle;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_loom_check_resolve_bundle(
     const loom_check_emit_provider_request_t* request,
-    loom_target_ir_bundle_storage_t* out_symbol_storage,
+    loom_target_bundle_storage_t* out_symbol_storage,
     const loom_target_bundle_t** out_bundle) {
-  *out_symbol_storage = (loom_target_ir_bundle_storage_t){0};
+  *out_symbol_storage = (loom_target_bundle_storage_t){0};
   *out_bundle = NULL;
+  loom_llvmir_target_registry_t target_registry;
+  loom_llvmir_target_registry_initialize(&target_registry);
   if (iree_string_view_starts_with(request->target_options, IREE_SV("@"))) {
     iree_string_view_t symbol_name =
         iree_string_view_substr(request->target_options, 1, IREE_HOST_SIZE_MAX);
     if (iree_string_view_is_empty(symbol_name)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "target bundle symbol name is required");
+                              "target profile symbol name is required");
     }
-    IREE_RETURN_IF_ERROR(loom_target_ir_bundle_from_symbol_name(
-        request->module, symbol_name, out_symbol_storage));
-    *out_bundle = &out_symbol_storage->bundle;
-    return iree_ok_status();
+    return loom_llvmir_loom_check_resolve_profile_bundle(
+        request, &target_registry, symbol_name, out_symbol_storage, out_bundle);
   }
-  loom_llvmir_target_registry_t target_registry;
-  loom_llvmir_target_registry_initialize(&target_registry);
   return loom_llvmir_target_registry_lookup_bundle(
       &target_registry, request->target_options, out_bundle);
 }
@@ -530,7 +572,7 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
   IREE_RETURN_IF_ERROR(
       loom_llvmir_loom_check_parse_emit_format(request->target_name, &format));
 
-  loom_target_ir_bundle_storage_t symbol_bundle_storage = {0};
+  loom_target_bundle_storage_t symbol_bundle_storage = {0};
   const loom_target_bundle_t* target_bundle = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_loom_check_resolve_bundle(
       request, &symbol_bundle_storage, &target_bundle));

@@ -11,7 +11,6 @@
 #include "loom/ops/function_contract_verify.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/successor_verify.h"
-#include "loom/ops/target/ops.h"
 #include "loom/util/stable_id.h"
 
 typedef struct loom_low_callee_signature_t {
@@ -638,79 +637,15 @@ static iree_string_view_t loom_low_resource_export_abi_reason(uint8_t kind) {
 static bool loom_low_resource_matches_export_abi(uint8_t kind, uint8_t abi) {
   switch (kind) {
     case LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER:
-      return abi == LOOM_TARGET_EXPORT_ABI_OBJECT_FUNCTION;
+      return abi == LOOM_LOW_ABI_OBJECT_FUNCTION;
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
-      return abi == LOOM_TARGET_EXPORT_ABI_VM_MODULE_FUNCTION;
+      return abi == LOOM_LOW_ABI_VM_MODULE_FUNCTION;
     case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
-      return abi == LOOM_TARGET_EXPORT_ABI_HAL_KERNEL;
+      return abi == LOOM_LOW_ABI_HAL_KERNEL;
     default:
       return false;
   }
-}
-
-static iree_status_t loom_low_load_resource_export_plan(
-    const loom_module_t* module, const loom_op_t* op,
-    const loom_op_t* function_op, iree_diagnostic_emitter_t emitter,
-    const loom_op_t** out_export_op) {
-  *out_export_op = NULL;
-  loom_symbol_ref_t target_ref = loom_low_func_def_target(function_op);
-  const loom_symbol_t* target_symbol =
-      loom_low_lookup_defined_symbol(module, target_ref);
-  if (!target_symbol) {
-    return iree_ok_status();
-  }
-  if (!loom_target_bundle_isa(target_symbol->defining_op)) {
-    loom_diagnostic_related_op_t related[] = {{
-        .label = IREE_SV("function defined here"),
-        .op = function_op,
-        .field_ref =
-            loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                      loom_low_func_def_target_ATTR_INDEX),
-    }};
-    return loom_low_emit_structural_storage_error(
-        module, op,
-        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                  loom_low_resource_import_kind_ATTR_INDEX),
-        IREE_SV("import_kind"),
-        IREE_SV("resource owner target must resolve to a target bundle"),
-        related, IREE_ARRAYSIZE(related), emitter);
-  }
-
-  const loom_op_t* bundle_op = target_symbol->defining_op;
-  loom_symbol_ref_t export_ref = loom_target_bundle_export_plan(bundle_op);
-  const loom_symbol_t* export_symbol =
-      loom_low_lookup_defined_symbol(module, export_ref);
-  if (!export_symbol) {
-    return iree_ok_status();
-  }
-  if (!loom_target_export_isa(export_symbol->defining_op)) {
-    return iree_ok_status();
-  }
-  *out_export_op = export_symbol->defining_op;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_verify_resource_export_abi(
-    const loom_module_t* module, const loom_op_t* resource_op,
-    const loom_op_t* export_op, uint8_t kind,
-    iree_diagnostic_emitter_t emitter) {
-  uint8_t abi = loom_target_export_abi(export_op);
-  if (loom_low_resource_matches_export_abi(kind, abi)) {
-    return iree_ok_status();
-  }
-  loom_diagnostic_related_op_t related[] = {{
-      .label = IREE_SV("export plan defined here"),
-      .op = export_op,
-      .field_ref = loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                             loom_target_export_abi_ATTR_INDEX),
-  }};
-  return loom_low_emit_structural_storage_error(
-      module, resource_op,
-      loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
-                                loom_low_resource_import_kind_ATTR_INDEX),
-      IREE_SV("import_kind"), loom_low_resource_export_abi_reason(kind),
-      related, IREE_ARRAYSIZE(related), emitter);
 }
 
 static iree_status_t loom_low_verify_resource_function_abi(
@@ -798,14 +733,7 @@ static iree_status_t loom_low_verify_resource_op(
         import_kind, emitter);
   }
 
-  const loom_op_t* export_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_load_resource_export_plan(
-      module, op, enclosing_func, emitter, &export_op));
-  if (!export_op) {
-    return iree_ok_status();
-  }
-  return loom_low_verify_resource_export_abi(module, op, export_op, import_kind,
-                                             emitter);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_verify_function_preamble(

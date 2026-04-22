@@ -20,7 +20,6 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_registry.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
-#include "loom/target/presets.h"
 #include "loom/verify/verify.h"
 
 namespace {
@@ -43,15 +42,12 @@ std::string ToString(const iree_string_builder_t& builder) {
                      iree_string_builder_size(&builder));
 }
 
-std::string TargetPreamble(const char* target_symbol, const char* preset_key,
-                           const char* function_symbol) {
-  std::string source = "target.preset @";
+std::string TargetPreamble(const char* target_symbol, const char* preset_key) {
+  std::string source = "target.profile @";
   source += target_symbol;
-  source += " {key = \"";
+  source += " preset(\"";
   source += preset_key;
-  source += "\", source = @";
-  source += function_symbol;
-  source += "}\n\n";
+  source += "\")\n\n";
   return source;
 }
 
@@ -105,18 +101,6 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
                               "test source failed generic verification");
     }
 
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&low_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_RETURN_IF_ERROR(loom_target_expand_presets(
-        module.get(), &preset_registry, &expanded_preset_count));
-    if (expanded_preset_count != 1) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "test source expanded %zu target presets, "
-                              "expected exactly one",
-                              expanded_preset_count);
-    }
-
     loom_low_verify_options_t low_verify_options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &low_registry_.registry,
@@ -167,8 +151,7 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
 };
 
 TEST_F(AmdgpuWaitPlanTest, PlansLoadUseAndRecordsExplicitWaits) {
-  std::string source =
-      TargetPreamble("gfx11_target", "amdgpu-gfx11", "gfx11_func");
+  std::string source = TargetPreamble("gfx11_target", "amdgpu-gfx11");
   source += R"(
 low.func.def target(@gfx11_target) @gfx11_func(%s0 : reg<amdgpu.sgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>, %v0 : reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.vgpr>) {
   %smem = low.op<amdgpu.s_buffer_load_dword>(%resource, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
@@ -252,8 +235,7 @@ low.func.def target(@gfx11_target) @gfx11_func(%s0 : reg<amdgpu.sgpr>, %resource
 }
 
 TEST_F(AmdgpuWaitPlanTest, PlansCombinedWaitcntForGfx950) {
-  std::string source =
-      TargetPreamble("gfx950_target", "amdgpu-gfx950", "gfx950_func");
+  std::string source = TargetPreamble("gfx950_target", "amdgpu-gfx950");
   source += R"(
 low.func.def target(@gfx950_target) @gfx950_func(%s0 : reg<amdgpu.sgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>, %v0 : reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.vgpr>) {
   %smem = low.op<amdgpu.s_buffer_load_dword>(%resource, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
@@ -315,7 +297,7 @@ TEST_F(AmdgpuWaitPlanTest, PlansSplitWaitcntForGfx12AndGfx1250) {
       "amdgpu-gfx1250",
   };
   for (const char* preset_key : preset_keys) {
-    std::string source = TargetPreamble("target", preset_key, "func");
+    std::string source = TargetPreamble("target", preset_key);
     source += R"(
 low.func.def target(@target) @func(%resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>, %v0 : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %vmem = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
@@ -381,8 +363,7 @@ low.func.def target(@target) @func(%resource : reg<amdgpu.sgpr x4>, %soffset : r
 }
 
 TEST_F(AmdgpuWaitPlanTest, PlansStoreDrainAtBlockExit) {
-  std::string source =
-      TargetPreamble("gfx11_target", "amdgpu-gfx11", "gfx11_func");
+  std::string source = TargetPreamble("gfx11_target", "amdgpu-gfx11");
   source += R"(
 low.func.def target(@gfx11_target) @gfx11_func(%value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
@@ -419,8 +400,7 @@ low.func.def target(@gfx11_target) @gfx11_func(%value : reg<amdgpu.vgpr>, %resou
 }
 
 TEST_F(AmdgpuWaitPlanTest, PlansWorkgroupBarrierDrain) {
-  std::string source =
-      TargetPreamble("gfx11_target", "amdgpu-gfx11", "gfx11_func");
+  std::string source = TargetPreamble("gfx11_target", "amdgpu-gfx11");
   source += R"(
 low.func.def target(@gfx11_target) @gfx11_func(%addr : reg<amdgpu.vgpr>, %value : reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x4>) {
   low.op<amdgpu.ds_write_b128>(%addr, %value) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>)

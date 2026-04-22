@@ -15,7 +15,7 @@ func.def @sched() {
   func.return
 }
 
-target.preset @vm_target {key = "iree-vm", source = @sched}
+target.profile @vm_target preset("iree-vm")
 
 // ====
 

@@ -58,7 +58,7 @@ TEST(PassRegistryCoreTest, FormatsRegistryMetadataJson) {
   EXPECT_NE(text.find("\"available\":false"), std::string::npos);
   EXPECT_NE(text.find("\"unavailable_reason\":\"disabled for test\""),
             std::string::npos);
-  EXPECT_NE(text.find("\"requirements\":[{\"key\":\"target.bundle\""),
+  EXPECT_NE(text.find("\"requirements\":[{\"key\":\"target.profile\""),
             std::string::npos);
 
   iree_string_builder_deinitialize(&builder);

@@ -224,8 +224,8 @@ static const loom_pass_option_schema_t kTestRequiredSchema[] = {
 
 static const loom_pass_requirement_def_t kTestRequiresTargetRequirements[] = {
     {
-        .key = IREE_SVL("target.bundle"),
-        .description = IREE_SVL("Synthetic target bundle availability."),
+        .key = IREE_SVL("target.profile"),
+        .description = IREE_SVL("Synthetic target profile availability."),
     },
 };
 

@@ -752,10 +752,8 @@ static iree_status_t loom_llvmir_target_legality_verify_op(
     case LOOM_OP_FUNC_DEF:
     case LOOM_OP_FUNC_DECL:
       return iree_ok_status();
-    case LOOM_OP_TARGET_SNAPSHOT:
-    case LOOM_OP_TARGET_EXPORT:
-    case LOOM_OP_TARGET_CONFIG:
-    case LOOM_OP_TARGET_BUNDLE:
+    case LOOM_OP_TARGET_ARTIFACT:
+    case LOOM_OP_TARGET_PROFILE:
       if (op->parent_op != NULL) {
         return loom_llvmir_target_legality_fail(
             context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_OP, op,

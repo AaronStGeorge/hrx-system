@@ -35,7 +35,6 @@ loom_cc_binary(
     loom::src::loom::pass::report
     loom::src::loom::pass::tooling
     loom::src::loom::target::all::low_registry
-    loom::src::loom::target::presets
     loom::src::loom::util::json
     loom::src::loom::util::stream
     loom::src::loom::verify

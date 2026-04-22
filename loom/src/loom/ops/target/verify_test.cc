@@ -114,63 +114,18 @@ class TargetVerifyTest : public ::testing::Test {
 };
 
 static const char* kValidTargetRecords =
-    "func.def @matmul() {\n"
-    "  func.return\n"
-    "}\n"
-    "target.profile @wasm_profile preset(\"iree-vm\")\n"
-    "target.snapshot @x86_64 {codegen_format = llvmir, target_triple = "
-    "\"x86_64-pc-linux-gnu\", data_layout = \"e-m:e-p:64:64\", "
-    "artifact_format = elf, target_cpu = \"x86-64-v3\", target_features = "
-    "\"+avx2,+fma\", default_pointer_bitwidth = 64, index_bitwidth = 64, "
-    "offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, "
-    "memory_space_workgroup = 4294967295, memory_space_constant = 0, "
-    "memory_space_private = 0, memory_space_host = 0, "
-    "memory_space_descriptor = 4294967295}\n"
-    "target.export @matmul_cpu {source = @matmul, export_symbol = \"matmul\", "
-    "abi = object_function, linkage = dso_local, hal_binding_alignment = 0, "
-    "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-    "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-    "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
-    "target.config @generic {contract_set_key = \"default\", "
-    "contract_feature_bits = 0}\n"
-    "target.bundle @matmul_x86 {snapshot = @x86_64, export_plan = "
-    "@matmul_cpu, config = @generic}\n"
-    "target.snapshot @gfx1100 {codegen_format = llvmir, target_triple = "
-    "\"amdgcn-amd-amdhsa\", data_layout = \"e-p:64:64\", artifact_format = "
-    "elf, target_cpu = \"gfx1100\", target_features = \"+wavefrontsize32\", "
-    "default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, "
-    "memory_space_generic = 0, memory_space_global = 1, "
-    "memory_space_workgroup = 3, memory_space_constant = 4, "
-    "memory_space_private = 5, memory_space_host = 4294967295, "
-    "memory_space_descriptor = 4294967295}\n"
-    "target.export @matmul_hal {source = @matmul, export_symbol = \"matmul\", "
-    "abi = hal_kernel, linkage = default, hal_binding_alignment = 16, "
-    "hal_workgroup_size_x = 16, hal_workgroup_size_y = 4, "
-    "hal_workgroup_size_z = 1, hal_flat_workgroup_size_min = 64, "
-    "hal_flat_workgroup_size_max = 64, hal_buffer_resource_flags = 0}\n"
-    "target.config @gfx11_config {contract_set_key = \"amdgpu.gfx11\", "
-    "contract_feature_bits = 1}\n"
-    "target.bundle @matmul_gfx1100 {snapshot = @gfx1100, export_plan = "
-    "@matmul_hal, config = @gfx11_config}\n"
-    "target.snapshot @wasm32 {codegen_format = wasm, target_triple = "
-    "\"wasm32-unknown-unknown\", data_layout = \"\", artifact_format = "
-    "wasm_binary, target_cpu = \"\", target_features = \"+simd128\", "
-    "default_pointer_bitwidth = 32, index_bitwidth = 32, offset_bitwidth = 32, "
-    "memory_space_generic = 0, memory_space_global = 0, "
-    "memory_space_workgroup = 4294967295, memory_space_constant = 0, "
-    "memory_space_private = 4294967295, memory_space_host = 4294967295, "
-    "memory_space_descriptor = 4294967295}\n"
-    "target.export @wasm_export {source = @matmul, export_symbol = \"matmul\", "
-    "abi = wasm_function, linkage = default, hal_binding_alignment = 0, "
-    "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-    "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-    "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
-    "target.config @wasm_config {contract_set_key = \"wasm.core.simd128\", "
-    "contract_feature_bits = 0}\n"
-    "target.bundle @matmul_wasm32 {snapshot = @wasm32, export_plan = "
-    "@wasm_export, config = @wasm_config}\n";
+    "target.profile @vm preset(\"iree-vm\")\n"
+    "target.profile @gfx11 preset(\"amdgpu-gfx11\") {target_cpu = "
+    "\"gfx1100\", contract_feature_bits = 1}\n"
+    "target.profile @wasm preset(\"wasm-simd128\")\n"
+    "target.artifact @vm_module target(@vm) {artifact_format = vm_bytecode, "
+    "abi = vm_module}\n"
+    "target.artifact @gfx_hal target(@gfx11) {artifact_format = elf, "
+    "abi = hal_executable}\n"
+    "target.artifact @wasm_module target(@wasm) {artifact_format = "
+    "wasm_binary, abi = wasm_module}\n";
 
-TEST_F(TargetVerifyTest, CpuAmdgpuAndWasmRecordsVerify) {
+TEST_F(TargetVerifyTest, ProfilesAndArtifactsVerify) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(kValidTargetRecords, &capture);
   EXPECT_EQ(result.error_count, 0u);
@@ -181,18 +136,12 @@ TEST_F(TargetVerifyTest, FutureTargetEnumOrdinalsVerifyAsOpenEnums) {
   loom_module_t* module =
       ParseSource(kValidTargetRecords, "target_verify_test.loom");
   ASSERT_NE(module, nullptr);
-  loom_op_t* snapshot = FindFirstMutableOp(module, LOOM_OP_TARGET_SNAPSHOT);
-  ASSERT_NE(snapshot, nullptr);
-  loom_op_attrs(snapshot)[loom_target_snapshot_codegen_format_ATTR_INDEX] =
+  loom_op_t* artifact = FindFirstMutableOp(module, LOOM_OP_TARGET_ARTIFACT);
+  ASSERT_NE(artifact, nullptr);
+  loom_op_attrs(artifact)[loom_target_artifact_artifact_format_ATTR_INDEX] =
       loom_attr_enum(250);
-  loom_op_attrs(snapshot)[loom_target_snapshot_artifact_format_ATTR_INDEX] =
+  loom_op_attrs(artifact)[loom_target_artifact_abi_ATTR_INDEX] =
       loom_attr_enum(251);
-  loom_op_t* export_op = FindFirstMutableOp(module, LOOM_OP_TARGET_EXPORT);
-  ASSERT_NE(export_op, nullptr);
-  loom_op_attrs(export_op)[loom_target_export_abi_ATTR_INDEX] =
-      loom_attr_enum(252);
-  loom_op_attrs(export_op)[loom_target_export_linkage_ATTR_INDEX] =
-      loom_attr_enum(253);
 
   DiagnosticCapture capture;
   loom_verify_options_t verify_options = {};
@@ -206,28 +155,6 @@ TEST_F(TargetVerifyTest, FutureTargetEnumOrdinalsVerifyAsOpenEnums) {
   loom_module_free(module);
 }
 
-TEST_F(TargetVerifyTest, SnapshotRejectsInvalidBitwidth) {
-  DiagnosticCapture capture;
-  VerifySource(
-      "target.snapshot @bad {codegen_format = llvmir, target_triple = \"\", "
-      "data_layout = \"\", artifact_format = elf, target_cpu = \"\", "
-      "target_features = \"\", default_pointer_bitwidth = 0, "
-      "index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, "
-      "memory_space_global = 0, memory_space_workgroup = 0, "
-      "memory_space_constant = 0, memory_space_private = 0, "
-      "memory_space_host = 0, memory_space_descriptor = 0}\n",
-      &capture);
-
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14));
-  ASSERT_NE(diagnostic, nullptr);
-  ExpectError(*diagnostic,
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
-              LOOM_EMITTER_VERIFIER);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "default_pointer_bitwidth");
-  ExpectI64Param(*diagnostic, 1, 0);
-}
-
 TEST_F(TargetVerifyTest, ProfileRejectsEmptyPresetKey) {
   DiagnosticCapture capture;
   VerifySource("target.profile @bad preset(\"\")\n", &capture);
@@ -239,62 +166,53 @@ TEST_F(TargetVerifyTest, ProfileRejectsEmptyPresetKey) {
   ExpectI64Param(*diagnostic, 1, 0);
 }
 
-TEST_F(TargetVerifyTest, ObjectExportRejectsIgnoredHalFields) {
-  DiagnosticCapture capture;
-  VerifySource(
-      "func.def @matmul() {\n"
-      "  func.return\n"
-      "}\n"
-      "target.export @bad {source = @matmul, export_symbol = \"matmul\", "
-      "abi = object_function, linkage = default, hal_binding_alignment = 16, "
-      "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-      "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-      "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n",
-      &capture);
+TEST_F(TargetVerifyTest, ArtifactRejectsWrongRecordClass) {
+  loom_module_t* module = ParseSource(
+      "target.profile @ok preset(\"test-low\")\n"
+      "target.artifact @not_profile target(@ok)\n"
+      "target.artifact @bad target(@ok)\n",
+      "target_verify_test.loom");
+  ASSERT_NE(module, nullptr);
 
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14));
-  ASSERT_NE(diagnostic, nullptr);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "hal_binding_alignment");
-  ExpectI64Param(*diagnostic, 1, 16);
-}
+  const loom_string_id_t not_profile_name =
+      loom_module_lookup_string(module, IREE_SV("not_profile"));
+  ASSERT_NE(not_profile_name, LOOM_STRING_ID_INVALID);
+  const uint16_t not_profile_symbol =
+      loom_module_find_symbol(module, not_profile_name);
+  ASSERT_NE(not_profile_symbol, LOOM_SYMBOL_ID_INVALID);
+  loom_op_t* artifact = FindFirstMutableOp(module, LOOM_OP_TARGET_ARTIFACT);
+  ASSERT_NE(artifact, nullptr);
+  loom_op_attrs(artifact)[loom_target_artifact_target_ATTR_INDEX] =
+      loom_attr_symbol((loom_symbol_ref_t){
+          .module_id = 0,
+          .symbol_id = not_profile_symbol,
+      });
 
-TEST_F(TargetVerifyTest, BundleRejectsWrongRecordClass) {
   DiagnosticCapture capture;
-  VerifySource(
-      "target.config @not_snapshot {contract_set_key = \"default\", "
-      "contract_feature_bits = 0}\n"
-      "target.config @config {contract_set_key = \"default\", "
-      "contract_feature_bits = 0}\n"
-      "target.export @export {export_symbol = \"\", abi = object_function, "
-      "linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, "
-      "hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, "
-      "hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, "
-      "hal_buffer_resource_flags = 0}\n"
-      "target.bundle @bundle {snapshot = @not_snapshot, export_plan = @export, "
-      "config = @config}\n",
-      &capture);
+  loom_verify_options_t verify_options = {};
+  verify_options.sink = capture.sink();
+  verify_options.max_errors = 20;
+  loom_verify_result_t result = {};
+  IREE_ASSERT_OK(loom_verify_module(module, &verify_options, &result));
+  EXPECT_EQ(result.error_count, 1u);
 
   const CapturedDiagnostic* diagnostic = FindDiagnostic(
       capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3));
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3),
               LOOM_EMITTER_VERIFIER);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "not_snapshot");
-  EXPECT_EQ(GetStringParam(*diagnostic, 1), "target config");
-  EXPECT_EQ(GetStringParam(*diagnostic, 2), "target snapshot");
-  ASSERT_EQ(diagnostic->related_locations.size(), 1u);
-  EXPECT_EQ(diagnostic->related_locations[0].label, "defined here");
-  EXPECT_TRUE(diagnostic->related_locations[0].has_source_range);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "not_profile");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "target artifact");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "target profile");
+
+  loom_module_free(module);
 }
 
 TEST_F(TargetVerifyTest, RejectsDuplicateTargetRecordDefinition) {
   DiagnosticCapture capture;
   VerifySource(
-      "target.config @duplicate {contract_set_key = \"default\", "
-      "contract_feature_bits = 0}\n"
-      "target.config @duplicate {contract_set_key = \"other\", "
-      "contract_feature_bits = 1}\n",
+      "target.profile @duplicate preset(\"first\")\n"
+      "target.profile @duplicate preset(\"second\")\n",
       &capture);
 
   const CapturedDiagnostic* diagnostic = FindDiagnostic(

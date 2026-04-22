@@ -12,6 +12,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/text_asm_roundtrip_test_util.h"
 #include "loom/codegen/low/text_asm_test_util.h"
+#include "loom/target/arch/wasm/low_registry.h"
 
 namespace loom {
 namespace {
@@ -168,26 +169,11 @@ TEST(WasmDescriptorsTest, LowAsmRegionRoundTrips) {
 
 TEST(WasmDescriptorsTest, LowFuncAsmRoundTripsMemoryPacketsWithArguments) {
   LowFuncAsmRoundTripHarness harness;
-  IREE_ASSERT_OK(harness.Initialize(loom_wasm_core_simd128_descriptor_set));
+  IREE_ASSERT_OK(harness.Initialize(loom_wasm_core_simd128_descriptor_set,
+                                    &loom_wasm_low_target_bundle_core_simd128));
 
   const char* source =
-      "target.snapshot @wasm32 {codegen_format = wasm, target_triple = "
-      "\"wasm32-unknown-unknown\", data_layout = \"\", artifact_format = "
-      "wasm_binary, target_cpu = \"generic\", target_features = "
-      "\"+simd128\", default_pointer_bitwidth = 32, index_bitwidth = 32, "
-      "offset_bitwidth = 32, memory_space_generic = 0, memory_space_global = "
-      "0, memory_space_workgroup = 4294967295, memory_space_constant = 0, "
-      "memory_space_private = 4294967295, memory_space_host = 4294967295, "
-      "memory_space_descriptor = 4294967295}\n"
-      "target.export @wasm_export {export_symbol = \"memory\", abi = "
-      "wasm_function, linkage = default, hal_binding_alignment = 0, "
-      "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-      "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-      "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
-      "target.config @wasm_config {contract_set_key = "
-      "\"wasm.core.simd128\", contract_feature_bits = 7}\n"
-      "target.bundle @wasm_target {snapshot = @wasm32, export_plan = "
-      "@wasm_export, config = @wasm_config}\n"
+      "target.profile @wasm_target preset(\"wasm-simd128\")\n"
       "low.func.def target(@wasm_target) @memory(%addr : reg<wasm.i32>, "
       "%lhs : reg<wasm.v128>, %rhs : reg<wasm.v128>) -> (reg<wasm.v128>) "
       "asm<wasm.core.simd128> {\n"

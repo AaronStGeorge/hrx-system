@@ -2,10 +2,7 @@
 
 // ====
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "add", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @add(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) {
   %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %sum : reg<test.i32>
@@ -13,7 +10,7 @@ low.func.def target(@test_target) @add(%lhs : reg<test.i32>, %rhs : reg<test.i32
 
 // ====
 
-target.preset @test_target {key = "test-low", source = @concat}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @concat(%lo : reg<test.i32>, %hi : reg<test.i32>) -> (reg<test.i32 x2>) {
   %pair = low.concat(%lo, %hi) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
   %lane = low.slice %pair[1] : reg<test.i32 x2> -> reg<test.i32>
@@ -22,7 +19,7 @@ low.func.def target(@test_target) @concat(%lo : reg<test.i32>, %hi : reg<test.i3
 
 // ====
 
-target.preset @test_target {key = "test-low", source = @copy_bad_units}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @copy_bad_units(%pair : reg<test.i32 x2>) {
   // ERROR@+1: LOWERING/024
   %copy = low.copy %pair : reg<test.i32 x2> -> reg<test.i32>
@@ -31,7 +28,7 @@ low.func.def target(@test_target) @copy_bad_units(%pair : reg<test.i32 x2>) {
 
 // ====
 
-target.preset @test_target {key = "test-low", source = @slice_bad_class}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @slice_bad_class(%pair : reg<test.i32 x2>) {
   // ERROR@+1: TYPE/001
   %lane = low.slice %pair[0] : reg<test.i32 x2> -> reg<test.i64>
@@ -40,7 +37,7 @@ low.func.def target(@test_target) @slice_bad_class(%pair : reg<test.i32 x2>) {
 
 // ====
 
-target.preset @test_target {key = "test-low", source = @slice_negative_offset}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @slice_negative_offset(%pair : reg<test.i32 x2>) {
   // ERROR@+1: LOWERING/024
   %lane = low.slice %pair[-1] : reg<test.i32 x2> -> reg<test.i32>
@@ -49,7 +46,7 @@ low.func.def target(@test_target) @slice_negative_offset(%pair : reg<test.i32 x2
 
 // ====
 
-target.preset @test_target {key = "test-low", source = @slice_out_of_range}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @slice_out_of_range(%pair : reg<test.i32 x2>) {
   // ERROR@+1: LOWERING/024
   %lane = low.slice %pair[2] : reg<test.i32 x2> -> reg<test.i32>
@@ -58,7 +55,7 @@ low.func.def target(@test_target) @slice_out_of_range(%pair : reg<test.i32 x2>) 
 
 // ====
 
-target.preset @test_target {key = "test-low", source = @concat_bad_class}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @concat_bad_class(%lo : reg<test.i32>, %hi : reg<test.i64>) {
   // ERROR@+1: TYPE/001
   %pair = low.concat(%lo, %hi) : (reg<test.i32>, reg<test.i64>) -> reg<test.i32 x2>
@@ -67,7 +64,7 @@ low.func.def target(@test_target) @concat_bad_class(%lo : reg<test.i32>, %hi : r
 
 // ====
 
-target.preset @test_target {key = "test-low", source = @concat_bad_units}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @concat_bad_units(%lo : reg<test.i32>) {
   // ERROR@+1: TYPE/004
   %pair = low.concat(%lo) : (reg<test.i32>) -> reg<test.i32 x2>
@@ -76,10 +73,7 @@ low.func.def target(@test_target) @concat_bad_units(%lo : reg<test.i32>) {
 
 // ====
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "constant", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "missing.low", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low") {contract_set_key = "missing.low"}
 // ERROR@+1: LOWERING/003 "missing.low"
 low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
   %c0 = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>
@@ -88,10 +82,7 @@ low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
 
 // ====
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "add", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @add(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/004 "test.missing.i32"
   %sum = low.op<test.missing.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -100,10 +91,7 @@ low.func.def target(@test_target) @add(%lhs : reg<test.i32>, %rhs : reg<test.i32
 
 // ====
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "constant", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/007 "i32_value"
   %c0 = low.const<test.const.i32> : reg<test.i32>
@@ -112,10 +100,7 @@ low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
 
 // ====
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "add", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @add(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/008 "junk"
   %sum = low.op<test.add.i32>(%lhs, %rhs) {junk = 1} : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -124,10 +109,7 @@ low.func.def target(@test_target) @add(%lhs : reg<test.i32>, %rhs : reg<test.i32
 
 // ====
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "constant", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/009 "i64 signed integer"
   %c0 = low.const<test.const.i32> {i32_value = "wrong"} : reg<test.i32>
@@ -136,10 +118,7 @@ low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
 
 // ====
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "constant", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
   // ERROR@+1: LOWERING/010 "2147483648"
   %c0 = low.const<test.const.i32> {i32_value = 2147483648} : reg<test.i32>
@@ -148,10 +127,7 @@ low.func.def target(@test_target) @constant() -> (reg<test.i32>) {
 
 // ====
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "branch", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @branch(%arg : reg<test.i32>) -> (reg<test.i32>) {
   // ERROR@+1: STRUCTURE/025 "low.br" "successor 0" "expected 1"
   low.br ^exit
@@ -161,10 +137,7 @@ low.func.def target(@test_target) @branch(%arg : reg<test.i32>) -> (reg<test.i32
 
 // ====
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "branch", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @branch(%arg : reg<test.i32>) {
   // ERROR@+1: STRUCTURE/026 "low.br" "successor 0" "expected reg<test.i64>"
   low.br ^exit(%arg : reg<test.i32>)
@@ -174,10 +147,7 @@ low.func.def target(@test_target) @branch(%arg : reg<test.i32>) {
 
 // ====
 
-target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
-target.export @vm_export {export_symbol = "branch", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
-target.config @vm_config {contract_set_key = "test.low.core", contract_feature_bits = 0}
-target.bundle @test_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @branch(%cond : reg<test.i32>) {
   // ERROR@+1: STRUCTURE/025 "low.cond_br" "successor 0" "expected 1"
   low.cond_br %cond, ^then, ^else : reg<test.i32>

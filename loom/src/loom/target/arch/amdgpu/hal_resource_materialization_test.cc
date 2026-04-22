@@ -11,6 +11,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -21,7 +22,6 @@
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/emit/native/amdgpu/encoding.h"
-#include "loom/target/ir_records.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/testing/context.h"
 
@@ -199,24 +199,7 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
 
   void BuildModule(const char* function_body, const char* resource_records) {
     std::string source =
-        "target.snapshot @gfx1100 {artifact_format = elf, codegen_format = "
-        "low_native, data_layout = \"\", default_pointer_bitwidth = 64, "
-        "index_bitwidth = 32, memory_space_constant = 4, "
-        "memory_space_descriptor = 7, memory_space_generic = 0, "
-        "memory_space_global = 1, memory_space_host = 4294967295, "
-        "memory_space_private = 5, memory_space_workgroup = 3, "
-        "offset_bitwidth = 64, target_cpu = \"gfx1100\", "
-        "target_features = \"\", target_triple = \"amdgcn-amd-amdhsa\"}\n"
-        "target.export @gfx_export {abi = hal_kernel, export_symbol = "
-        "\"loom_kernel\", hal_binding_alignment = 16, "
-        "hal_buffer_resource_flags = 159744, hal_flat_workgroup_size_max = "
-        "64, hal_flat_workgroup_size_min = 64, hal_workgroup_size_x = 64, "
-        "hal_workgroup_size_y = 1, hal_workgroup_size_z = 1, linkage = "
-        "default, source = @loom_kernel}\n"
-        "target.config @gfx_config {contract_feature_bits = 0, "
-        "contract_set_key = \"amdgpu.gfx11.core\"}\n"
-        "target.bundle @gfx_target {config = @gfx_config, export_plan = "
-        "@gfx_export, snapshot = @gfx1100}\n";
+        "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n";
     source += function_body;
     source += resource_records;
 
@@ -225,9 +208,15 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
     ASSERT_NE(module_, nullptr);
   }
 
-  void BuildBundle(loom_target_ir_bundle_storage_t* out_storage) {
-    IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
-        module_, IREE_SV("gfx_target"), out_storage));
+  void BuildBundle(loom_target_bundle_storage_t* out_storage) {
+    loom_op_t* function_op = FindFirstLowFunction();
+    ASSERT_NE(function_op, nullptr);
+    loom_low_resolved_target_t target = {};
+    IREE_ASSERT_OK(loom_low_resolve_function_target(
+        module_, function_op, &target_registry_.registry,
+        iree_diagnostic_emitter_t{}, &target));
+    *out_storage = target.bundle_storage;
+    loom_target_bundle_storage_rebind(out_storage);
   }
 
   const loom_low_descriptor_set_t* SelectDescriptorSet(
@@ -282,7 +271,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
-  loom_target_ir_bundle_storage_t bundle_storage = {};
+  loom_target_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
   const loom_low_descriptor_set_t* descriptor_set =
       SelectDescriptorSet(&bundle_storage.bundle);
@@ -356,7 +345,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
-  loom_target_ir_bundle_storage_t bundle_storage = {};
+  loom_target_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
   const loom_low_descriptor_set_t* descriptor_set =
       SelectDescriptorSet(&bundle_storage.bundle);
@@ -399,7 +388,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
   ASSERT_NE(function_op, nullptr);
   VerifyModule();
   EXPECT_EQ(CountLowDescriptorOpsWithOpcode("amdgpu.s_mov_b32"), 2);
-  loom_target_ir_bundle_storage_t bundle_storage = {};
+  loom_target_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
   const loom_low_descriptor_set_t* descriptor_set =
       SelectDescriptorSet(&bundle_storage.bundle);
@@ -433,7 +422,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
-  loom_target_ir_bundle_storage_t bundle_storage = {};
+  loom_target_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
   const loom_low_descriptor_set_t* descriptor_set =
       SelectDescriptorSet(&bundle_storage.bundle);
@@ -470,7 +459,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest, FixesWorkitemIdXLiveInToVgprZero) {
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
-  loom_target_ir_bundle_storage_t bundle_storage = {};
+  loom_target_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
   const loom_low_descriptor_set_t* descriptor_set =
       SelectDescriptorSet(&bundle_storage.bundle);
@@ -503,7 +492,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
-  loom_target_ir_bundle_storage_t bundle_storage = {};
+  loom_target_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
   const loom_low_descriptor_set_t* descriptor_set =
       SelectDescriptorSet(&bundle_storage.bundle);
@@ -543,7 +532,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
-  loom_target_ir_bundle_storage_t bundle_storage = {};
+  loom_target_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
   const loom_low_descriptor_set_t* descriptor_set =
       SelectDescriptorSet(&bundle_storage.bundle);
@@ -575,7 +564,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest, RejectsUnsupportedResourceShape) {
 
   loom_op_t* function_op = FindFirstLowFunction();
   ASSERT_NE(function_op, nullptr);
-  loom_target_ir_bundle_storage_t bundle_storage = {};
+  loom_target_bundle_storage_t bundle_storage = {};
   BuildBundle(&bundle_storage);
   const loom_low_descriptor_set_t* descriptor_set =
       SelectDescriptorSet(&bundle_storage.bundle);

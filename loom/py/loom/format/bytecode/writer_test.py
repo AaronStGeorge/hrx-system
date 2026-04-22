@@ -1477,35 +1477,29 @@ class TestCrossFormatRoundTrip:
 
     def test_enum_future_ordinal_survives_bytecode(self) -> None:
         text = (
-            "target.snapshot @future {codegen_format = llvmir, "
-            'target_triple = "future", data_layout = "", '
-            'artifact_format = elf, target_cpu = "", '
-            'target_features = "", default_pointer_bitwidth = 64, '
-            "index_bitwidth = 64, offset_bitwidth = 64, "
-            "memory_space_generic = 0, memory_space_global = 0, "
-            "memory_space_workgroup = 0, memory_space_constant = 0, "
-            "memory_space_private = 0, memory_space_host = 0, "
-            "memory_space_descriptor = 0}\n"
+            'target.profile @future_target preset("test-object")\n\n'
+            "target.artifact @future target(@future_target) "
+            "{artifact_format = elf, abi = object_file}\n"
         )
         parser = Parser()
         parser.register_ops(ALL_TARGET_OPS)
         module = parser.parse(text)
-        snapshot_op = module.symbols[0].op
-        assert snapshot_op is not None
-        module.symbols[0].op = replace(
-            snapshot_op,
+        artifact_op = module.symbols[1].op
+        assert artifact_op is not None
+        module.symbols[1].op = replace(
+            artifact_op,
             attributes={
-                **snapshot_op.attributes,
-                "codegen_format": 250,
-                "artifact_format": 251,
+                **artifact_op.attributes,
+                "artifact_format": 250,
+                "abi": 251,
             },
         )
 
         loaded = read_module(write_module(module))
-        loaded_snapshot = loaded.symbols[0].op
-        assert loaded_snapshot is not None
-        assert loaded_snapshot.attributes["codegen_format"] == 250
-        assert loaded_snapshot.attributes["artifact_format"] == 251
+        loaded_artifact = loaded.symbols[1].op
+        assert loaded_artifact is not None
+        assert loaded_artifact.attributes["artifact_format"] == 250
+        assert loaded_artifact.attributes["abi"] == 251
 
     def test_closed_enum_future_ordinal_fails_loudly(self) -> None:
         module = Module(name="closed_enum")

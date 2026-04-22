@@ -22,7 +22,6 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_registry.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
-#include "loom/target/presets.h"
 #include "loom/verify/verify.h"
 
 namespace {
@@ -45,15 +44,12 @@ std::string ToString(const iree_string_builder_t& builder) {
                      iree_string_builder_size(&builder));
 }
 
-std::string TargetPreamble(const char* target_symbol, const char* preset_key,
-                           const char* function_symbol) {
-  std::string source = "target.preset @";
+std::string TargetPreamble(const char* target_symbol, const char* preset_key) {
+  std::string source = "target.profile @";
   source += target_symbol;
-  source += " {key = \"";
+  source += " preset(\"";
   source += preset_key;
-  source += "\", source = @";
-  source += function_symbol;
-  source += "}\n\n";
+  source += "\")\n\n";
   return source;
 }
 
@@ -63,7 +59,7 @@ std::string RegisterPressureFunction(const char* target_symbol,
                                      const char* register_class,
                                      int value_count) {
   std::ostringstream source;
-  source << TargetPreamble(target_symbol, preset_key, function_symbol);
+  source << TargetPreamble(target_symbol, preset_key);
   source << "low.func.def target(@" << target_symbol << ") @" << function_symbol
          << "(";
   for (int i = 0; i < value_count; ++i) {
@@ -173,18 +169,6 @@ class AmdgpuOccupancyTest : public ::testing::Test {
     if (verify_result.error_count != 0) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "test source failed generic verification");
-    }
-
-    const loom_target_preset_registry_t preset_registry =
-        loom_target_low_descriptor_registry_presets(&low_registry_);
-    iree_host_size_t expanded_preset_count = 0;
-    IREE_RETURN_IF_ERROR(loom_target_expand_presets(
-        module.get(), &preset_registry, &expanded_preset_count));
-    if (expanded_preset_count != 1) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "test source expanded %zu target presets, "
-                              "expected exactly one",
-                              expanded_preset_count);
     }
 
     loom_low_verify_options_t low_verify_options = {

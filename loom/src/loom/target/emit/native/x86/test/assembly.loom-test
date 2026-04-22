@@ -1,5 +1,5 @@
 // RUN: emit x86-asm-mnemonics @x86_fragment
-target.preset @x86_target {key = "x86-avx512", source = @x86_fragment}
+target.profile @x86_target preset("x86-avx512")
 
 low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>) {
   %loaded = low.op<x86.avx512.vmovdqu32.load.zmm>(%base) {disp32 = 0} : (reg<x86.gpr64>) -> reg<x86.zmm>

@@ -22,6 +22,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/emit/ireevm/descriptors.h"
+#include "loom/target/emit/ireevm/low_registry.h"
 #include "loom/target/emit/ireevm/module_archive.h"
 #include "loom/testing/context.h"
 
@@ -167,24 +168,7 @@ class IreeVmFunctionBytecodeTest : public ::testing::Test {
   void BuildSidecars(const char* body,
                      loom_low_schedule_sidecar_t* out_schedule,
                      loom_low_allocation_sidecar_t* out_allocation) {
-    std::string source =
-        "target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "
-        "\"iree-vm\", data_layout = \"\", artifact_format = vm_bytecode, "
-        "target_cpu = \"\", target_features = \"\", "
-        "default_pointer_bitwidth = 64, index_bitwidth = 64, "
-        "offset_bitwidth = 64, memory_space_generic = 0, "
-        "memory_space_global = 0, memory_space_workgroup = 0, "
-        "memory_space_constant = 0, memory_space_private = 0, "
-        "memory_space_host = 0, memory_space_descriptor = 0}\n"
-        "target.export @vm_export {export_symbol = \"add\", abi = "
-        "vm_module_function, linkage = default, hal_binding_alignment = 0, "
-        "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-        "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-        "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
-        "target.config @vm_config {contract_set_key = \"iree.vm.core\", "
-        "contract_feature_bits = 0}\n"
-        "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-        "@vm_export, config = @vm_config}\n";
+    std::string source = "target.profile @vm_target preset(\"iree-vm\")\n";
     source += body;
     module_ = ParseSource(source.c_str());
     ASSERT_NE(module_, nullptr);
@@ -194,9 +178,14 @@ class IreeVmFunctionBytecodeTest : public ::testing::Test {
     static const loom_low_descriptor_set_t* descriptor_sets[] = {
         loom_ireevm_core_descriptor_set(),
     };
+    static const loom_target_bundle_t* target_bundles[] = {
+        &loom_ireevm_low_target_bundle_core,
+    };
     registry_ = loom_low_descriptor_registry_t{
         .descriptor_sets = descriptor_sets,
         .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+        .target_bundles = target_bundles,
+        .target_bundle_count = IREE_ARRAYSIZE(target_bundles),
     };
 
     loom_low_verify_options_t verify_options = {

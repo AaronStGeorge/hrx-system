@@ -50,12 +50,6 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
-    name = "target_ir_records_no_llvmir_dep",
-    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/target:ir_records",
-)
-
-iree_assert_no_dependency(
     name = "target_low_descriptor_registry_no_llvmir_dep",
     dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
     target = "//loom/src/loom/target:low_descriptor_registry",
@@ -408,7 +402,9 @@ loom_cc_library(
         ":legality",
         ":lower",
         ":target_registry",
-        "//loom/src/loom/target:ir_records",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target:module_compiler",
         "//loom/src/loom/target/tool:llvm",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/util:stream",
