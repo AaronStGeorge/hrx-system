@@ -195,6 +195,9 @@ bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
 bool loom_amdgpu_value_can_materialize_as_vgpr_address(
     loom_low_lower_context_t* context, loom_value_id_t value_id);
 
+// Target-local rule table for regular arithmetic source ops.
+extern const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_rule_set;
+
 // Looks up a lowered i32 value and materializes exact source constants into
 // VGPRs when a vector-style packet cannot consume the existing lowering.
 iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(

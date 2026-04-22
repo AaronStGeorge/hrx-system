@@ -453,6 +453,7 @@ loom_cc_library(
     "lower_plan.h"
   SRCS
     "lower.c"
+    "lower_arithmetic_rules.c"
     "lower_bitfield.c"
     "lower_bitpack.c"
     "lower_dot.c"

@@ -567,6 +567,7 @@ loom_cc_library(
     name = "lower",
     srcs = [
         "lower.c",
+        "lower_arithmetic_rules.c",
         "lower_bitfield.c",
         "lower_bitpack.c",
         "lower_dot.c",

@@ -104,11 +104,6 @@ static iree_status_t loom_low_lower_policy_verify(
                             "select_op and emit_op callbacks or neither");
   }
   const bool has_callback_lowering = has_select_op && has_emit_op;
-  if (has_rule_set && (has_select_op || has_emit_op)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low lowering policy must provide either "
-                            "rule_set or select/emit callbacks");
-  }
   if (policy->map_type.fn == NULL ||
       (!has_rule_set && !has_callback_lowering)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -903,32 +898,45 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     return iree_ok_status();
   }
 
+  loom_low_lower_rule_selection_t rule_selection = {0};
   if (context->policy->rule_set != NULL) {
-    const loom_low_lower_rule_t* selected_rule = NULL;
-    IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select_op(
-        context, context->policy->rule_set, source_op, &selected_rule));
-    return loom_low_lower_record_selected_plan(
-        context, (loom_low_lower_selected_plan_t){
-                     .rule = selected_rule,
-                     .plan = loom_low_lower_plan_empty(),
-                 });
+    IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select(
+        context, context->policy->rule_set, source_op, &rule_selection));
+    if (rule_selection.rule != NULL) {
+      return loom_low_lower_record_selected_plan(
+          context, (loom_low_lower_selected_plan_t){
+                       .rule = rule_selection.rule,
+                       .plan = loom_low_lower_plan_empty(),
+                   });
+    }
+  }
+
+  if (context->policy->select_op.fn == NULL) {
+    IREE_ASSERT(context->policy->rule_set != NULL);
+    return loom_low_lower_rule_set_emit_selection_failure(
+        context, context->policy->rule_set, source_op, rule_selection);
   }
 
   loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
   IREE_RETURN_IF_ERROR(context->policy->select_op.fn(
       context->policy->select_op.user_data, context, source_op, &plan));
-  if (loom_low_lower_plan_is_empty(plan)) {
-    return loom_low_lower_emit_reject(
-        context, source_op, IREE_SV("op"),
-        loom_op_name(context->module, source_op),
-        IREE_SV("the selected target-low lowering policy has no descriptor "
-                "mapping for this op"));
+  if (!loom_low_lower_plan_is_empty(plan)) {
+    return loom_low_lower_record_selected_plan(context,
+                                               (loom_low_lower_selected_plan_t){
+                                                   .rule = NULL,
+                                                   .plan = plan,
+                                               });
   }
-  return loom_low_lower_record_selected_plan(context,
-                                             (loom_low_lower_selected_plan_t){
-                                                 .rule = NULL,
-                                                 .plan = plan,
-                                             });
+
+  if (context->policy->rule_set != NULL && rule_selection.has_source_op_span) {
+    return loom_low_lower_rule_set_emit_selection_failure(
+        context, context->policy->rule_set, source_op, rule_selection);
+  }
+  return loom_low_lower_emit_reject(
+      context, source_op, IREE_SV("op"),
+      loom_op_name(context->module, source_op),
+      IREE_SV("the selected target-low lowering policy has no descriptor "
+              "mapping for this op"));
 }
 
 static iree_status_t loom_low_lower_plan_body(loom_low_lower_context_t* context,
@@ -1312,12 +1320,13 @@ static iree_status_t loom_low_lower_emit_selected_plan(
                  context->selected_plan_count);
   const loom_low_lower_selected_plan_t selected_plan =
       context->selected_plans[context->selected_plan_emit_index++];
-  if (context->policy->rule_set != NULL) {
-    IREE_ASSERT(selected_plan.rule != NULL);
+  if (selected_plan.rule != NULL) {
+    IREE_ASSERT(context->policy->rule_set != NULL);
     return loom_low_lower_rule_set_emit_rule(context, context->policy->rule_set,
                                              source_op, selected_plan.rule);
   }
   IREE_ASSERT_FALSE(loom_low_lower_plan_is_empty(selected_plan.plan));
+  IREE_ASSERT(context->policy->emit_op.fn != NULL);
   return context->policy->emit_op.fn(context->policy->emit_op.user_data,
                                      context, source_op, selected_plan.plan);
 }

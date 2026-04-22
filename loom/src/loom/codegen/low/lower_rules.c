@@ -189,21 +189,26 @@ static void loom_low_lower_rule_matches(
   *out_matched_guard_count = rule->guard_count;
 }
 
-iree_status_t loom_low_lower_rule_set_select_op(
+iree_status_t loom_low_lower_rule_set_select(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
-    const loom_low_lower_rule_t** out_rule) {
+    loom_low_lower_rule_selection_t* out_selection) {
   IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_ARGUMENT(rule_set);
   IREE_ASSERT_ARGUMENT(source_op);
-  IREE_ASSERT_ARGUMENT(out_rule);
-  *out_rule = NULL;
+  IREE_ASSERT_ARGUMENT(out_selection);
+  *out_selection = (loom_low_lower_rule_selection_t){
+      .rule = NULL,
+      .has_source_op_span = false,
+      .diagnostic_index = LOOM_LOW_LOWER_DIAGNOSTIC_NONE,
+  };
 
   const loom_low_lower_rule_span_t* span =
       loom_low_lower_rule_set_find_span(rule_set, source_op->kind);
   if (span == NULL) {
-    return loom_low_lower_rule_emit_no_mapping(context, source_op);
+    return iree_ok_status();
   }
+  out_selection->has_source_op_span = true;
 
   uint16_t best_diagnostic_index = LOOM_LOW_LOWER_DIAGNOSTIC_NONE;
   uint16_t best_matched_guard_count = 0;
@@ -218,7 +223,7 @@ iree_status_t loom_low_lower_rule_set_select_op(
                                 &rule_matches, &diagnostic_index,
                                 &matched_guard_count);
     if (rule_matches) {
-      *out_rule = rule;
+      out_selection->rule = rule;
       return iree_ok_status();
     }
     if (best_diagnostic_index == LOOM_LOW_LOWER_DIAGNOSTIC_NONE ||
@@ -228,8 +233,40 @@ iree_status_t loom_low_lower_rule_set_select_op(
     }
   }
 
+  out_selection->diagnostic_index = best_diagnostic_index;
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_lower_rule_set_emit_selection_failure(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t selection) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(rule_set);
+  IREE_ASSERT_ARGUMENT(source_op);
+  IREE_ASSERT(selection.rule == NULL);
+  if (!selection.has_source_op_span) {
+    return loom_low_lower_rule_emit_no_mapping(context, source_op);
+  }
   return loom_low_lower_rule_emit_diagnostic(context, rule_set, source_op,
-                                             best_diagnostic_index);
+                                             selection.diagnostic_index);
+}
+
+iree_status_t loom_low_lower_rule_set_select_op(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    const loom_low_lower_rule_t** out_rule) {
+  IREE_ASSERT_ARGUMENT(out_rule);
+  *out_rule = NULL;
+  loom_low_lower_rule_selection_t selection = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_rule_set_select(context, rule_set, source_op, &selection));
+  if (selection.rule == NULL) {
+    return loom_low_lower_rule_set_emit_selection_failure(context, rule_set,
+                                                          source_op, selection);
+  }
+  *out_rule = selection.rule;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_lower_rule_build_attrs(

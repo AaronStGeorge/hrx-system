@@ -466,6 +466,56 @@ static iree_status_t TestEmitPreamble(void* user_data,
       loom_low_lower_context_low_function(context)->location, &live_in_op);
 }
 
+static iree_status_t TestSelectCallbackOp(void* user_data,
+                                          loom_low_lower_context_t* context,
+                                          const loom_op_t* source_op,
+                                          loom_low_lower_plan_t* out_plan) {
+  (void)user_data;
+  *out_plan = loom_low_lower_plan_empty();
+  if (source_op->kind != LOOM_OP_SCALAR_MULI) {
+    return iree_ok_status();
+  }
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  if (!IsI32(loom_module_value_type(module, loom_scalar_muli_lhs(source_op))) ||
+      !IsI32(loom_module_value_type(module, loom_scalar_muli_rhs(source_op))) ||
+      !IsI32(
+          loom_module_value_type(module, loom_scalar_muli_result(source_op)))) {
+    return iree_ok_status();
+  }
+  *out_plan = (loom_low_lower_plan_t){
+      .id = source_op->kind,
+      .payload = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t TestEmitCallbackOp(void* user_data,
+                                        loom_low_lower_context_t* context,
+                                        const loom_op_t* source_op,
+                                        loom_low_lower_plan_t plan) {
+  (void)user_data;
+  IREE_ASSERT_EQ(plan.id, LOOM_OP_SCALAR_MULI);
+  loom_value_id_t operands[2] = {
+      LOOM_VALUE_ID_INVALID,
+      LOOM_VALUE_ID_INVALID,
+  };
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_scalar_muli_lhs(source_op), &operands[0]));
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_scalar_muli_rhs(source_op), &operands[1]));
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
+      context, source_op, loom_scalar_muli_result(source_op), &result_type));
+  loom_op_t* low_op = nullptr;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
+      context, plan.payload, operands, IREE_ARRAYSIZE(operands),
+      loom_make_named_attr_slice(NULL, 0), &result_type, 1, nullptr, 0,
+      source_op->location, &low_op));
+  return loom_low_lower_bind_value(
+      context, loom_scalar_muli_result(source_op),
+      loom_value_slice_get(loom_low_op_results(low_op), 0));
+}
+
 static const loom_low_lower_policy_t kTestLowerPolicy = {
     .name = IREE_SVL("test-lower-policy"),
     .map_type = {.fn = TestMapType, .user_data = nullptr},
@@ -479,6 +529,15 @@ static const loom_low_lower_policy_t kTestPreambleLowerPolicy = {
     .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
     .emit_preamble = {.fn = TestEmitPreamble, .user_data = nullptr},
     .rule_set = &kTestLowerRuleSet,
+};
+
+static const loom_low_lower_policy_t kTestHybridLowerPolicy = {
+    .name = IREE_SVL("test-hybrid-lower-policy"),
+    .map_type = {.fn = TestMapType, .user_data = nullptr},
+    .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
+    .rule_set = &kTestLowerRuleSet,
+    .select_op = {.fn = TestSelectCallbackOp, .user_data = nullptr},
+    .emit_op = {.fn = TestEmitCallbackOp, .user_data = nullptr},
 };
 
 static loom_low_lower_policy_registry_t MakeTestPolicyRegistry() {
@@ -499,6 +558,19 @@ static loom_low_lower_policy_registry_t MakeTestPreamblePolicyRegistry() {
       {
           .contract_set_key = IREE_SVL("test.low.core"),
           .policy = &kTestPreambleLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_t registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &registry, kEntries, IREE_ARRAYSIZE(kEntries));
+  return registry;
+}
+
+static loom_low_lower_policy_registry_t MakeTestHybridPolicyRegistry() {
+  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &kTestHybridLowerPolicy,
       },
   };
   loom_low_lower_policy_registry_t registry = {};
@@ -1128,6 +1200,67 @@ TEST_F(LowLowerTest, EmitsPreambleBeforeResourceImports) {
   ASSERT_NE(live_in_position, std::string::npos);
   ASSERT_NE(resource_position, std::string::npos);
   EXPECT_LT(live_in_position, resource_position);
+}
+
+TEST_F(LowLowerTest, HybridPolicyUsesCallbackForOpsNotCoveredByRuleTable) {
+  policy_registry_ = MakeTestHybridPolicyRegistry();
+  IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
+
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @mul(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %product = scalar.muli %lhs, %rhs : i32\n"
+      "  func.return %product : i32\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+
+  EmissionCollector verify_collector;
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      VerifyLowModule(module.get(), &verify_collector, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+  EXPECT_TRUE(verify_collector.emissions.empty());
+
+  const loom_text_print_options_t print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+  };
+  std::string text;
+  IREE_ASSERT_OK(PrintModule(module.get(), &print_options, &text));
+  EXPECT_NE(text.find("@mul__low"), std::string::npos);
+  EXPECT_NE(text.find("low.op<test.add.i32>"), std::string::npos);
+}
+
+TEST_F(LowLowerTest, HybridPolicyKeepsRuleDiagnosticsForCoveredOps) {
+  policy_registry_ = MakeTestHybridPolicyRegistry();
+  IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
+
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  (void)ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @bad_const() -> (i32) {\n"
+      "  %c = scalar.constant 1.0 : i32\n"
+      "  func.return %c : i32\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 1u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_EQ(lower_result.low_func_op, nullptr);
+  ASSERT_EQ(lower_collector.emissions.size(), 1u);
+  const CollectedEmission& emission = lower_collector.emissions[0];
+  ASSERT_EQ(emission.string_params.size(), 7u);
+  EXPECT_EQ(emission.string_params[4], "attr");
+  EXPECT_EQ(emission.string_params[5], "value");
+  EXPECT_EQ(emission.string_params[6],
+            "test constant lowering requires an i64 value");
 }
 
 TEST_F(LowLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {

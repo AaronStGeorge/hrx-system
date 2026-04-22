@@ -236,6 +236,30 @@ typedef struct loom_low_lower_rule_set_t {
   uint16_t diagnostic_count;
 } loom_low_lower_rule_set_t;
 
+typedef struct loom_low_lower_rule_selection_t {
+  // Selected rule row, or NULL when no rule accepted the source op.
+  const loom_low_lower_rule_t* rule;
+  // True when the rule set had at least one rule span for the source op kind.
+  bool has_source_op_span;
+  // Diagnostic row describing the best failed guard when |rule| is NULL.
+  uint16_t diagnostic_index;
+} loom_low_lower_rule_selection_t;
+
+// Selects the exact lowering rule for |source_op| without emitting user
+// diagnostics. Callers that compose rule tables with custom target callbacks
+// can use the recorded failure detail if every lowering path rejects the op.
+iree_status_t loom_low_lower_rule_set_select(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t* out_selection);
+
+// Emits the diagnostic described by a failed selection. If the rule set did not
+// cover the source op kind, emits the generic no-mapping diagnostic.
+iree_status_t loom_low_lower_rule_set_emit_selection_failure(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    loom_low_lower_rule_selection_t selection);
+
 // Selects the exact lowering rule for |source_op| and emits a user diagnostic
 // when no rule accepts it. The selected rule is trusted generated data and must
 // be executed unchanged by loom_low_lower_rule_set_emit_rule.
