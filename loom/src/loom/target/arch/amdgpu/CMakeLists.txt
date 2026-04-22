@@ -450,6 +450,7 @@ loom_cc_library(
   HDRS
     "lower.h"
     "lower_internal.h"
+    "lower_memory_internal.h"
     "lower_plan.h"
   SRCS
     "lower.c"
@@ -461,6 +462,10 @@ loom_cc_library(
     "lower_integer.c"
     "lower_mask.c"
     "lower_memory.c"
+    "lower_memory_cache.c"
+    "lower_memory_diagnostics.c"
+    "lower_memory_emit.c"
+    "lower_memory_legality.c"
     "lower_preamble.c"
     "lower_reduce.c"
     "lower_structural.c"
