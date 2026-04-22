@@ -438,6 +438,7 @@ loom_cc_library(
   SRCS
     "lower.c"
     "lower_dot.c"
+    "lower_memory.c"
     "lower_support.c"
   DEPS
     ::descriptor_ids

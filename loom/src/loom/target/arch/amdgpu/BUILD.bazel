@@ -971,6 +971,7 @@ loom_cc_library(
     srcs = [
         "lower.c",
         "lower_dot.c",
+        "lower_memory.c",
         "lower_support.c",
     ],
     hdrs = [

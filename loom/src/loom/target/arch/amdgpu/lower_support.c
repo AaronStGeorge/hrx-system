@@ -530,6 +530,10 @@ iree_status_t loom_amdgpu_map_argument(
                                &out_argument->abi_type);
 }
 
+bool loom_amdgpu_u32_is_power_of_two(uint32_t value) {
+  return value != 0 && (value & (value - 1)) == 0;
+}
+
 bool loom_amdgpu_attr_is_i32_immediate(loom_attribute_t value) {
   return value.kind == LOOM_ATTR_I64 && value.i64 >= INT32_MIN &&
          value.i64 <= INT32_MAX;
