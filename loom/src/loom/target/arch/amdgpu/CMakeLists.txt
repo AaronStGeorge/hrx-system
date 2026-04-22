@@ -910,9 +910,53 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
-    "vector_corpus"
+    "vector_corpus_basic"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus_basic.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "vector_corpus_packed_dot"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus_packed_dot.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "vector_corpus_quant_decode"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus_quant_decode.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "vector_corpus_quant_dot"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus_quant_dot.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "vector_corpus_quant_gemm"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus_quant_gemm.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

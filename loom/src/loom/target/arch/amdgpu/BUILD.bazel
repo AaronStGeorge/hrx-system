@@ -835,7 +835,11 @@ loom_check_test_suite(
         "source_low_scalar_i32.loom-test",
         "source_low_slice.loom-test",
         "source_low_table.loom-test",
-        "vector_corpus.loom-test",
+        "vector_corpus_basic.loom-test",
+        "vector_corpus_packed_dot.loom-test",
+        "vector_corpus_quant_decode.loom-test",
+        "vector_corpus_quant_dot.loom-test",
+        "vector_corpus_quant_gemm.loom-test",
     ],
 )
 
