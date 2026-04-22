@@ -562,6 +562,72 @@ func.def target(@gfx_target) @loom_kernel(%low_buffer: buffer, %high_buffer: buf
 
 // ====
 // REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&1xi32=1009 --binding=&1xi32=756 --binding=&1xi32=7 --binding=&1xi32=0 --expected_binding=1xi32=1009 --expected_binding=1xi32=756 --expected_binding=1xi32=7 --expected_binding=1xi32=18
+
+target.profile @gfx_target preset("amdgpu-current")
+
+func.def target(@gfx_target) @loom_kernel(%lhs_buffer: buffer, %rhs_buffer: buffer, %acc_buffer: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %acc_view = buffer.view %acc_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %lhs = vector.load %lhs_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %rhs = vector.load %rhs_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %acc = vector.load %acc_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %dot = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<1xi32>
+  vector.store %dot, %output_view[0] : vector<1xi32>, view<1xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&1xi32=1009 --binding=&1xi32=756 --binding=&1xi32=7 --binding=&1xi32=0 --expected_binding=1xi32=1009 --expected_binding=1xi32=756 --expected_binding=1xi32=7 --expected_binding=1xi32=2
+
+target.profile @gfx_target preset("amdgpu-current")
+
+func.def target(@gfx_target) @loom_kernel(%lhs_buffer: buffer, %rhs_buffer: buffer, %acc_buffer: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %acc_view = buffer.view %acc_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %lhs = vector.load %lhs_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %rhs = vector.load %rhs_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %acc = vector.load %acc_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %dot = vector.dot8i4<s4u4> %lhs, %rhs, %acc : vector<1xi32>
+  vector.store %dot, %output_view[0] : vector<1xi32>, view<1xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
+// RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&1xi32=1522 --binding=&1xi32=756 --binding=&1xi32=7 --binding=&1xi32=0 --expected_binding=1xi32=1522 --expected_binding=1xi32=756 --expected_binding=1xi32=7 --expected_binding=1xi32=10
+
+target.profile @gfx_target preset("amdgpu-current")
+
+func.def target(@gfx_target) @loom_kernel(%lhs_buffer: buffer, %rhs_buffer: buffer, %acc_buffer: buffer, %output: buffer) {
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %acc_view = buffer.view %acc_buffer[%zero] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %lhs = vector.load %lhs_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %rhs = vector.load %rhs_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %acc = vector.load %acc_view[0] : view<1xi32, #dense> -> vector<1xi32>
+  %dot = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<1xi32>
+  vector.store %dot, %output_view[0] : vector<1xi32>, view<1xi32, #dense>
+  func.return
+}
+// ----
+[SUCCESS] all HAL bindings matched their expected values.
+
+// ====
+// REQUIRES: amdgpu-hal-b128
 // RUN: run --loom_backend=amdgpu-hal --workgroup_count=1,1,1 --binding=&2xi32=1985229328,1985229328 --binding=&2xi32=286331153,572662306 --binding=&2xi32=5,10 --binding=&2xi32=0 --expected_binding=2xi32=1985229328,1985229328 --expected_binding=2xi32=286331153,572662306 --expected_binding=2xi32=5,10 --expected_binding=2xi32=33,66
 
 target.profile @gfx_target preset("amdgpu-current")
