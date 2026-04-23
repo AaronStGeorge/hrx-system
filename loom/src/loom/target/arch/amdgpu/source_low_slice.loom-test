@@ -7,11 +7,11 @@ func.def target(@gfx11_slice_target) @i32x4_slice_middle(%values: vector<4xi32>)
 }
 
 // ----
-low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i32x4_slice_middle__low(%values: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>) {
-  %5 = low.slice %values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %6 = low.slice %values[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %middle = low.concat(%5, %6) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  low.return %middle : reg<amdgpu.vgpr x2>
+low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i32x4_slice_middle__low(%values: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+  %5 = slice %values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %6 = slice %values[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %middle = concat(%5, %6) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %middle
 }
 
 // ====
@@ -24,8 +24,8 @@ func.def target(@gfx11_slice_target) @i8x4_slice_low_half(%bytes: vector<4xi8>) 
 }
 
 // ----
-low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i8x4_slice_low_half__low(%low: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
-  low.return %low : reg<amdgpu.vgpr>
+low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i8x4_slice_low_half__low(%low: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+  return %low
 }
 
 // ====
@@ -38,10 +38,10 @@ func.def target(@gfx11_slice_target) @i8x4_slice_high_half(%bytes: vector<4xi8>)
 }
 
 // ----
-low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i8x4_slice_high_half__low(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
-  %5 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
-  %high = low.op<amdgpu.v_lshrrev_b32>(%5, %bytes) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.return %high : reg<amdgpu.vgpr>
+low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i8x4_slice_high_half__low(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+  %5 = v_mov_b32 16
+  %high = v_lshrrev_b32 %5, %bytes
+  return %high
 }
 
 // ====

@@ -1874,7 +1874,7 @@ def _global_load_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_read_effect(width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=None if saddr_off is None else (),
     )
 
 
@@ -1928,7 +1928,7 @@ def _global_store_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_write_effect(width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=None if saddr_off is None else (),
     )
 
 

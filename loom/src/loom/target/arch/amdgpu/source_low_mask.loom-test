@@ -8,24 +8,24 @@ func.def target(@gfx11_mask_target) @i32_cmpi_select(%lhs: vector<2xi32>, %rhs: 
 }
 
 // ----
-low.func.def target(@gfx11_mask_target) abi(hal_kernel) @i32_cmpi_select__low(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>, %true_value: reg<amdgpu.vgpr x2>, %false_value: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) {
-  %12 = low.slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %13 = low.slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %14 = low.op<amdgpu.v_cmp_slt_i32>(%12, %13) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
-  %15 = low.slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %16 = low.slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %17 = low.op<amdgpu.v_cmp_slt_i32>(%15, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
-  %mask = low.concat(%14, %17) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
-  %19 = low.slice %mask[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %20 = low.slice %true_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %21 = low.slice %false_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %22 = low.op<amdgpu.v_cndmask_b32>(%21, %20, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  %23 = low.slice %mask[2] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %24 = low.slice %true_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %25 = low.slice %false_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %26 = low.op<amdgpu.v_cndmask_b32>(%25, %24, %23) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  %selected = low.concat(%22, %26) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  low.return %selected : reg<amdgpu.vgpr x2>
+low.func.def target(@gfx11_mask_target) abi(hal_kernel) @i32_cmpi_select__low(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>, %true_value: reg<amdgpu.vgpr x2>, %false_value: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+  %12 = slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %13 = slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = v_cmp_lt_i32 %12, %13
+  %15 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %16 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %17 = v_cmp_lt_i32 %15, %16
+  %mask = concat(%14, %17) : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %19 = slice %mask[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %20 = slice %true_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %21 = slice %false_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %22 = v_cndmask_b32 %21, %20, %19
+  %23 = slice %mask[2] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %24 = slice %true_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %25 = slice %false_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %26 = v_cndmask_b32 %25, %24, %23
+  %selected = concat(%22, %26) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %selected
 }
 
 // ====
@@ -39,8 +39,8 @@ func.def target(@gfx11_mask_target) @f32_cmpf_select(%lhs: vector<1xf32>, %rhs: 
 }
 
 // ----
-low.func.def target(@gfx11_mask_target) abi(hal_kernel) @f32_cmpf_select__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
-  %mask = low.op<amdgpu.v_cmp_olt_f32>(%lhs, %rhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
-  %selected = low.op<amdgpu.v_cndmask_b32>(%false_value, %true_value, %mask) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.return %selected : reg<amdgpu.vgpr>
+low.func.def target(@gfx11_mask_target) abi(hal_kernel) @f32_cmpf_select__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %true_value: reg<amdgpu.vgpr>, %false_value: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+  %mask = v_cmp_lt_f32 %lhs, %rhs
+  %selected = v_cndmask_b32 %false_value, %true_value, %mask
+  return %selected
 }

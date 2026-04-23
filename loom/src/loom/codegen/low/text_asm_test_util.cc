@@ -74,11 +74,11 @@ void LowTextAsmTypeInferenceHarness::Deinitialize() {
 iree_status_t LowTextAsmTypeInferenceHarness::LookupPacket(
     iree_string_view_t descriptor_set_key, iree_string_view_t mnemonic,
     loom_text_low_asm_packet_descriptor_t* out_packet) const {
-  const void* descriptor_set = nullptr;
+  const loom_text_low_asm_descriptor_set_t* descriptor_set = nullptr;
   IREE_RETURN_IF_ERROR(environment_.vtable->lookup_descriptor_set(
-      environment_.user_data, descriptor_set_key, &descriptor_set));
-  return environment_.vtable->lookup_packet(
-      environment_.user_data, descriptor_set, mnemonic, out_packet);
+      environment_.state, descriptor_set_key, &descriptor_set));
+  return environment_.vtable->lookup_packet(environment_.state, descriptor_set,
+                                            mnemonic, out_packet);
 }
 
 iree_status_t LowTextAsmTypeInferenceHarness::MakeRegisterType(
@@ -105,7 +105,7 @@ iree_status_t LowTextAsmTypeInferenceHarness::InferResultType(
     uint16_t result_index, loom_type_t* out_type,
     iree_string_view_t* out_diagnostic_detail) const {
   return environment_.vtable->infer_result_type(
-      environment_.user_data, packet, operands, operand_count, result_index,
+      environment_.state, packet, operands, operand_count, result_index,
       module_, out_type, out_diagnostic_detail);
 }
 
@@ -115,7 +115,7 @@ iree_status_t LowTextAsmTypeInferenceHarness::ValidateResultType(
     uint16_t result_index, loom_type_t type,
     iree_string_view_t* out_diagnostic_detail) const {
   return environment_.vtable->validate_result_type(
-      environment_.user_data, packet, operands, operand_count, result_index,
+      environment_.state, packet, operands, operand_count, result_index,
       module_, type, out_diagnostic_detail);
 }
 

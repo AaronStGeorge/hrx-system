@@ -164,7 +164,6 @@ loom_assert_no_dependencies(
     name = "core_tools_no_amdgpu_check_deps",
     dependencies = [
         ":check_provider",
-        ":loom_check_requirements",
         ":low_registry",
         ":packet_diagnostics",
     ],
@@ -619,18 +618,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "loom_check_requirements",
-    srcs = ["loom_check_requirements.c"],
-    hdrs = ["loom_check_requirements.h"],
-    deps = [
-        ":amdgpu_hal_backend",
-        "//loom/src/loom/tooling/execution:hal_runtime",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "amdgpu_hal_backend",
     srcs = ["amdgpu_hal_backend.c"],
     hdrs = ["amdgpu_hal_backend.h"],
@@ -649,12 +636,6 @@ loom_cc_library(
     name = "check_provider",
     srcs = ["check_provider.c"],
     hdrs = ["check_provider.h"],
-    copts = iree_select({
-        ":hal_driver_enabled": [
-            "-DLOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER=1",
-        ],
-        "//conditions:default": [],
-    }),
     deps = [
         ":low_registry",
         ":lower",
@@ -662,36 +643,7 @@ loom_cc_library(
         "//loom/src/loom/target/emit/native/amdgpu:loom_check",
         "//loom/src/loom/tools/loom-check:main",
         "//runtime/src/iree/base",
-    ] + iree_select({
-        ":hal_driver_enabled": [
-            ":loom_check_requirements",
-            ":amdgpu_hal_backend",
-            "//loom/src/loom/tools/loom-check:hal_run_provider",
-        ],
-        "//conditions:default": [],
-    }),
-)
-
-iree_cmake_extra_content(
-    content = """
-iree_package_name(_LOOM_AMDGPU_PACKAGE_NAME)
-set(_LOOM_AMDGPU_CHECK_PROVIDER_TARGET "${_LOOM_AMDGPU_PACKAGE_NAME}_check_provider")
-
-if(IREE_HAL_DRIVER_AMDGPU)
-  target_compile_definitions(${_LOOM_AMDGPU_CHECK_PROVIDER_TARGET} PRIVATE
-    LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER=1
-  )
-  target_link_libraries(${_LOOM_AMDGPU_CHECK_PROVIDER_TARGET} PRIVATE
-    ${_LOOM_AMDGPU_PACKAGE_NAME}_loom_check_requirements
-    ${_LOOM_AMDGPU_PACKAGE_NAME}_amdgpu_hal_backend
-    loom_src_loom_tools_loom-check_hal_run_provider
-  )
-endif()
-
-unset(_LOOM_AMDGPU_CHECK_PROVIDER_TARGET)
-unset(_LOOM_AMDGPU_PACKAGE_NAME)
-""",
-    inline = True,
+    ],
 )
 
 loom_cc_library(
@@ -835,29 +787,6 @@ loom_check_test_suite(
         "source_low_scalar_i32.loom-test",
         "source_low_slice.loom-test",
         "source_low_table.loom-test",
-        "vector_corpus_basic.loom-test",
-        "vector_corpus_packed_dot.loom-test",
-        "vector_corpus_quant_decode.loom-test",
-        "vector_corpus_quant_dot.loom-test",
-        "vector_corpus_quant_gemm.loom-test",
-    ],
-)
-
-loom_check_test_suite(
-    name = "hal_run",
-    srcs = [
-        "hal_run_basic.loom-test",
-        "hal_run_dot.loom-test",
-        "hal_run_low.loom-test",
-        "hal_run_memory.loom-test",
-        "hal_run_quant_decode.loom-test",
-        "hal_run_quant_gemm.loom-test",
-        "hal_run_vector.loom-test",
-    ],
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-        "requires-gpu-amd",
     ],
 )
 

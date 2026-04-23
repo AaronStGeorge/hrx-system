@@ -52,10 +52,6 @@ typedef struct loom_check_provider_t {
   const loom_check_emit_provider_t* const* emit_providers;
   // Number of entries in |emit_providers|.
   iree_host_size_t emit_provider_count;
-  // Optional in-process RUN: run provider table contributed by this provider.
-  const loom_check_run_provider_t* const* run_providers;
-  // Number of entries in |run_providers|.
-  iree_host_size_t run_provider_count;
   // Optional requirement provider table contributed by this provider.
   const loom_check_requirement_provider_t* const* requirement_providers;
   // Number of entries in |requirement_providers|.

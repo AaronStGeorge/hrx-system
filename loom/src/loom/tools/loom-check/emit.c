@@ -755,12 +755,28 @@ static iree_status_t loom_check_emit_collect_status_diagnostic(
                             "LOWERING/001 diagnostic is not registered");
   }
 
-  iree_string_view_t status_name = iree_make_cstring_view(
+  iree_string_builder_t reason_builder;
+  iree_string_builder_initialize(collector->host_allocator, &reason_builder);
+  iree_status_t status = iree_string_builder_append_cstring(
+      &reason_builder,
       iree_status_code_string(iree_status_code(failure_status)));
+  const iree_string_view_t status_message = iree_status_message(failure_status);
+  if (iree_status_is_ok(status) && !iree_string_view_is_empty(status_message)) {
+    status = iree_string_builder_append_cstring(&reason_builder, ": ");
+  }
+  if (iree_status_is_ok(status) && !iree_string_view_is_empty(status_message)) {
+    status = iree_string_builder_append_string(&reason_builder, status_message);
+  }
+  if (!iree_status_is_ok(status)) {
+    iree_string_builder_deinitialize(&reason_builder);
+    iree_status_free(failure_status);
+    return status;
+  }
+  iree_string_view_t reason = iree_string_builder_view(&reason_builder);
   loom_diagnostic_param_t params[3] = {
       loom_param_string(IREE_SV("module")),
       loom_param_string(emit_target_name),
-      loom_param_string(status_name),
+      loom_param_string(reason),
   };
   loom_source_range_t source_range =
       loom_check_emit_first_ir_source_range(test_case, filename);
@@ -773,8 +789,8 @@ static iree_status_t loom_check_emit_collect_status_diagnostic(
       .origin = source_range,
       .source_location = source_range,
   };
-  iree_status_t status =
-      loom_check_diagnostic_collector_sink(collector, &diagnostic);
+  status = loom_check_diagnostic_collector_sink(collector, &diagnostic);
+  iree_string_builder_deinitialize(&reason_builder);
   iree_status_free(failure_status);
   return status;
 }
@@ -998,7 +1014,22 @@ static iree_status_t loom_check_emit_write_low_packet_json(
 }
 
 static iree_status_t loom_check_emit_write_source_low_artifacts(
-    const loom_module_t* module, iree_string_builder_t* output) {
+    const loom_module_t* module,
+    const loom_low_descriptor_registry_t* descriptor_registry,
+    iree_string_view_t descriptor_set_key, iree_string_builder_t* output) {
+  if (iree_string_view_is_empty(descriptor_set_key)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "source-low low output requires a selected descriptor-set key");
+  }
+  loom_text_low_asm_environment_t low_asm_environment = {0};
+  loom_low_descriptor_text_asm_environment_initialize(descriptor_registry,
+                                                      &low_asm_environment);
+  const loom_text_print_options_t print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+      .low_asm_environment = low_asm_environment,
+      .low_asm_descriptor_set_key = descriptor_set_key,
+  };
   bool has_artifact = false;
   const loom_block_t* block = loom_region_const_entry_block(module->body);
   const loom_op_t* op = NULL;
@@ -1009,8 +1040,8 @@ static iree_status_t loom_check_emit_write_source_low_artifacts(
     if (has_artifact) {
       IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
     }
-    IREE_RETURN_IF_ERROR(loom_text_print_operation_to_builder(
-        module, op, output, LOOM_TEXT_PRINT_DEFAULT));
+    IREE_RETURN_IF_ERROR(loom_text_print_operation_to_builder_with_options(
+        module, op, output, &print_options));
     has_artifact = true;
   }
   if (!has_artifact) {
@@ -1053,9 +1084,12 @@ static iree_status_t loom_check_emit_write_source_low_text(
       .lowering_kind = IREE_SV("source-to-low"),
   };
   loom_low_lower_result_t lower_result = {0};
+  iree_string_view_t selected_descriptor_set_key = iree_string_view_empty();
   iree_status_t status = loom_low_select_source_func(
       module, &selection_options, &selection_arena, &selection);
   if (iree_status_is_ok(status)) {
+    selected_descriptor_set_key =
+        selection.target_bundle->config->contract_set_key;
     const loom_low_lower_options_t lower_options = {
         .target_ref = selection.target_ref,
         .bundle = selection.target_bundle,
@@ -1093,8 +1127,9 @@ static iree_status_t loom_check_emit_write_source_low_text(
     return iree_ok_status();
   }
   if (request->source_low_output == LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW) {
-    return loom_check_emit_write_source_low_artifacts(module,
-                                                      &result->actual_output);
+    return loom_check_emit_write_source_low_artifacts(
+        module, &low_registry->registry, selected_descriptor_set_key,
+        &result->actual_output);
   }
   return loom_text_print_module_to_builder(module, &result->actual_output,
                                            LOOM_TEXT_PRINT_DEFAULT);

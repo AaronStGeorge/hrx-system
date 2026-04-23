@@ -56,7 +56,6 @@ loom_cc_library(
   DEPS
     ::low_registry
     iree::base
-    loom::src::loom::target::emit::wasm::loom_check
     loom::src::loom::target::emit::wasm::lower
     loom::src::loom::tools::loom-check::main
   PUBLIC
@@ -124,17 +123,6 @@ iree_executable_test(
     "source_low"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "vector_corpus"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

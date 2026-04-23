@@ -39,7 +39,6 @@ loom_cc_library(
     "low_emit.c"
     "requirements.c"
     "roundtrip.c"
-    "run.c"
     "verify.c"
   DEPS
     ::check
@@ -87,26 +86,6 @@ loom_cc_library(
     loom::src::loom::util::json
     loom::src::loom::util::stream
     loom::src::loom::verify
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    hal_run_provider
-  HDRS
-    "hal_run_provider.h"
-  SRCS
-    "hal_run_provider.c"
-  DEPS
-    ::execute
-    iree::base
-    iree::base::core_headers
-    loom::src::loom::tooling::execution::compile_report_capture
-    loom::src::loom::tooling::execution::hal_backend
-    loom::src::loom::tooling::execution::hal_candidate
-    loom::src::loom::tooling::execution::hal_invocation
-    loom::src::loom::tooling::execution::hal_runtime
-    loom::src::loom::tooling::execution::session
   PUBLIC
 )
 

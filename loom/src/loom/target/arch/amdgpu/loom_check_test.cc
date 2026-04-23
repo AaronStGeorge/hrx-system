@@ -153,9 +153,10 @@ static std::string AmdgpuB128CopySource(iree_string_view_t target_symbol,
 
 static std::string AmdgpuSourceLowCase(iree_string_view_t target_symbol,
                                        iree_string_view_t target_key,
-                                       const char* output, const char* body) {
-  std::string source = "// RUN: emit source-low @case output=";
-  source += output;
+                                       const char* emit_options,
+                                       const char* body) {
+  std::string source = "// RUN: emit source-low @case ";
+  source += emit_options;
   source += "\n";
   source += "target.profile @";
   source.append(target_symbol.data, target_symbol.size);
@@ -175,14 +176,14 @@ static std::string AmdgpuSourceLowCase(iree_string_view_t target_symbol,
   return source;
 }
 
-static std::string AmdgpuGfx11SourceLowCase(const char* output,
+static std::string AmdgpuGfx11SourceLowCase(const char* emit_options,
                                             const char* body) {
   return AmdgpuSourceLowCase(IREE_SV("gfx11_target"), IREE_SV("amdgpu-gfx11"),
-                             output, body);
+                             emit_options, body);
 }
 
 static std::string AmdgpuGfx11SourceLowCase(const char* body) {
-  return AmdgpuGfx11SourceLowCase("none", body);
+  return AmdgpuGfx11SourceLowCase("diagnostics=all output=none", body);
 }
 
 static void ExpectAmdgpuSourceLowRejects(
@@ -315,34 +316,34 @@ TEST_F(AmdgpuLoomCheckTest,
       {
           .target_symbol = IREE_SV("gfx11_copy_b128_target"),
           .target_key = IREE_SV("amdgpu-gfx11"),
-          .expected_load = "low.op<amdgpu.buffer_load_b128>",
-          .expected_store = "low.op<amdgpu.buffer_store_b128>",
-          .forbidden_load = "low.op<amdgpu.buffer_load_dwordx4>",
-          .forbidden_store = "low.op<amdgpu.buffer_store_dwordx4>",
+          .expected_load = "buffer_load_b128",
+          .expected_store = "buffer_store_b128",
+          .forbidden_load = "buffer_load_dwordx4",
+          .forbidden_store = "buffer_store_dwordx4",
       },
       {
           .target_symbol = IREE_SV("gfx12_copy_b128_target"),
           .target_key = IREE_SV("amdgpu-gfx12"),
-          .expected_load = "low.op<amdgpu.buffer_load_b128>",
-          .expected_store = "low.op<amdgpu.buffer_store_b128>",
-          .forbidden_load = "low.op<amdgpu.buffer_load_dwordx4>",
-          .forbidden_store = "low.op<amdgpu.buffer_store_dwordx4>",
+          .expected_load = "buffer_load_b128",
+          .expected_store = "buffer_store_b128",
+          .forbidden_load = "buffer_load_dwordx4",
+          .forbidden_store = "buffer_store_dwordx4",
       },
       {
           .target_symbol = IREE_SV("gfx1250_copy_b128_target"),
           .target_key = IREE_SV("amdgpu-gfx1250"),
-          .expected_load = "low.op<amdgpu.buffer_load_b128>",
-          .expected_store = "low.op<amdgpu.buffer_store_b128>",
-          .forbidden_load = "low.op<amdgpu.buffer_load_dwordx4>",
-          .forbidden_store = "low.op<amdgpu.buffer_store_dwordx4>",
+          .expected_load = "buffer_load_b128",
+          .expected_store = "buffer_store_b128",
+          .forbidden_load = "buffer_load_dwordx4",
+          .forbidden_store = "buffer_store_dwordx4",
       },
       {
           .target_symbol = IREE_SV("gfx950_copy_b128_target"),
           .target_key = IREE_SV("amdgpu-gfx950"),
-          .expected_load = "low.op<amdgpu.buffer_load_dwordx4>",
-          .expected_store = "low.op<amdgpu.buffer_store_dwordx4>",
-          .forbidden_load = "low.op<amdgpu.buffer_load_b128>",
-          .forbidden_store = "low.op<amdgpu.buffer_store_b128>",
+          .expected_load = "buffer_load_dwordx4",
+          .expected_store = "buffer_store_dwordx4",
+          .forbidden_load = "buffer_load_b128",
+          .forbidden_store = "buffer_store_b128",
       },
   };
   for (const B128Case& test_case : cases) {
@@ -379,14 +380,11 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerScalesPowerOfTwoBufferStrideWithShift) {
   EXPECT_TRUE(result.has_actual_output);
   EXPECT_EQ(result.diagnostic_count, 0u);
   const std::string actual_output = harness_.ActualOutputString(result);
-  EXPECT_NE(actual_output.find("low.const<amdgpu.v_mov_b32> {imm32 = 4}"),
-            std::string::npos)
+  EXPECT_NE(actual_output.find("v_mov_b32 4"), std::string::npos)
       << actual_output;
-  EXPECT_NE(actual_output.find("low.op<amdgpu.v_lshlrev_b32>"),
-            std::string::npos)
+  EXPECT_NE(actual_output.find("v_lshlrev_b32"), std::string::npos)
       << actual_output;
-  EXPECT_EQ(actual_output.find("low.op<amdgpu.v_mul_lo_u32>"),
-            std::string::npos)
+  EXPECT_EQ(actual_output.find("v_mul_lo_u32"), std::string::npos)
       << actual_output;
   loom_check_result_deinitialize(&result);
 }
@@ -394,7 +392,7 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerScalesPowerOfTwoBufferStrideWithShift) {
 TEST_F(AmdgpuLoomCheckTest,
        SourceLowerScalesNonPowerOfTwoBufferStrideWithMultiply) {
   const std::string source = AmdgpuGfx11SourceLowCase(
-      "low",
+      "output=low",
       "  %tid = kernel.workitem.id<x> : index\n"
       "  %zero = index.constant 0 : offset\n"
       "  %input_view = buffer.view %input[%zero] : buffer -> "
@@ -412,14 +410,11 @@ TEST_F(AmdgpuLoomCheckTest,
   EXPECT_TRUE(result.has_actual_output);
   EXPECT_EQ(result.diagnostic_count, 0u);
   const std::string actual_output = harness_.ActualOutputString(result);
-  EXPECT_NE(actual_output.find("low.const<amdgpu.v_mov_b32> {imm32 = 12}"),
-            std::string::npos)
+  EXPECT_NE(actual_output.find("v_mov_b32 12"), std::string::npos)
       << actual_output;
-  EXPECT_NE(actual_output.find("low.op<amdgpu.v_mul_lo_u32>"),
-            std::string::npos)
+  EXPECT_NE(actual_output.find("v_mul_lo_u32"), std::string::npos)
       << actual_output;
-  EXPECT_EQ(actual_output.find("low.op<amdgpu.v_lshlrev_b32>"),
-            std::string::npos)
+  EXPECT_EQ(actual_output.find("v_lshlrev_b32"), std::string::npos)
       << actual_output;
   loom_check_result_deinitialize(&result);
 }
@@ -448,7 +443,7 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsNegativeBufferViewByteOffset) {
 
 TEST_F(AmdgpuLoomCheckTest, SourceLowerFoldsStaticBufferViewByteOffset) {
   const std::string source = AmdgpuGfx11SourceLowCase(
-      "low",
+      "output=low",
       "  %base = index.constant 16 : offset\n"
       "  %zero = index.constant 0 : offset\n"
       "  %input_view = buffer.view %input[%base] : buffer -> "
@@ -489,7 +484,7 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerFoldsStaticBufferViewByteOffset) {
 
 TEST_F(AmdgpuLoomCheckTest, SourceLowerOmitsResourceExtentForUnknownBufferUse) {
   const std::string source = AmdgpuGfx11SourceLowCase(
-      "low",
+      "output=low",
       "  %base = index.constant 16 : offset\n"
       "  %zero = index.constant 0 : offset\n"
       "  %unused = buffer.assume.memory_space %input {memory_space = global} : "
@@ -529,7 +524,7 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerOmitsResourceExtentForUnknownBufferUse) {
 
 TEST_F(AmdgpuLoomCheckTest, SourceLowerFallsBackForMisalignedB128Load) {
   const std::string source = AmdgpuGfx11SourceLowCase(
-      "low",
+      "output=low",
       "  %zero = index.constant 0 : offset\n"
       "  %view = buffer.view %input[%zero] : buffer -> view<8xi32, #dense>\n"
       "  %loaded = vector.load %view[1] : view<8xi32, #dense> -> "
@@ -543,11 +538,9 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerFallsBackForMisalignedB128Load) {
   EXPECT_TRUE(result.has_actual_output);
   EXPECT_EQ(result.diagnostic_count, 0u);
   const std::string actual_output = harness_.ActualOutputString(result);
-  EXPECT_NE(actual_output.find("low.op<amdgpu.global_load_b128_saddr>"),
-            std::string::npos)
+  EXPECT_NE(actual_output.find("global_load_b128"), std::string::npos)
       << actual_output;
-  EXPECT_NE(actual_output.find("low.op<amdgpu.buffer_store_b128>"),
-            std::string::npos)
+  EXPECT_NE(actual_output.find("buffer_store_b128"), std::string::npos)
       << actual_output;
   EXPECT_NE(actual_output.find("{offset = 4}"), std::string::npos)
       << actual_output;
@@ -556,7 +549,7 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerFallsBackForMisalignedB128Load) {
 
 TEST_F(AmdgpuLoomCheckTest, SourceLowerSplitsStaticOffsetIntoSoffset) {
   const std::string source = AmdgpuGfx11SourceLowCase(
-      "low",
+      "output=low",
       "  %zero = index.constant 0 : offset\n"
       "  %view = buffer.view %input[%zero] : buffer -> view<2048xi32, #dense>\n"
       "  %loaded = vector.load %view[1200] : view<2048xi32, #dense> -> "
@@ -599,7 +592,7 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerRejectsOutOfRangeStaticBufferOffset) {
 TEST_F(AmdgpuLoomCheckTest, SourceLowerUsesDsRead2Write2ForStridedWorkgroup) {
   for (const AmdgpuTargetCase& test_case : kAmdgpuCurrentTargets) {
     const std::string source = AmdgpuSourceLowCase(
-        test_case.target_symbol, test_case.target_key, "low",
+        test_case.target_symbol, test_case.target_key, "output=low",
         "  %bytes = index.constant 64 : offset\n"
         "  %zero = index.constant 0 : offset\n"
         "  %scratch = buffer.alloca %bytes {base_alignment = 16, "
@@ -619,20 +612,17 @@ TEST_F(AmdgpuLoomCheckTest, SourceLowerUsesDsRead2Write2ForStridedWorkgroup) {
     const std::string actual_output = harness_.ActualOutputString(result);
     const std::string target_key(test_case.target_key.data,
                                  test_case.target_key.size);
-    EXPECT_NE(actual_output.find("low.op<amdgpu.ds_read2_b32>"),
-              std::string::npos)
+    EXPECT_NE(actual_output.find("ds_read2_b32"), std::string::npos)
         << target_key << "\n"
         << actual_output;
-    EXPECT_NE(actual_output.find("low.op<amdgpu.ds_write2_b32>"),
-              std::string::npos)
+    EXPECT_NE(actual_output.find("ds_write2_b32"), std::string::npos)
         << target_key << "\n"
         << actual_output;
     EXPECT_NE(actual_output.find("{offset0 = 0, offset1 = 2}"),
               std::string::npos)
         << target_key << "\n"
         << actual_output;
-    EXPECT_EQ(actual_output.find("low.op<amdgpu.ds_read_b64>"),
-              std::string::npos)
+    EXPECT_EQ(actual_output.find("ds_read_b64"), std::string::npos)
         << target_key << "\n"
         << actual_output;
     loom_check_result_deinitialize(&result);
@@ -643,7 +633,7 @@ TEST_F(AmdgpuLoomCheckTest,
        SourceLowerUsesDsRead2Write2Stride64ForLargeWorkgroupStride) {
   for (const AmdgpuTargetCase& test_case : kAmdgpuCurrentTargets) {
     const std::string source = AmdgpuSourceLowCase(
-        test_case.target_symbol, test_case.target_key, "low",
+        test_case.target_symbol, test_case.target_key, "output=low",
         "  %bytes = index.constant 4096 : offset\n"
         "  %zero = index.constant 0 : offset\n"
         "  %scratch = buffer.alloca %bytes {base_alignment = 16, "
@@ -663,20 +653,17 @@ TEST_F(AmdgpuLoomCheckTest,
     const std::string actual_output = harness_.ActualOutputString(result);
     const std::string target_key(test_case.target_key.data,
                                  test_case.target_key.size);
-    EXPECT_NE(actual_output.find("low.op<amdgpu.ds_read2st64_b32>"),
-              std::string::npos)
+    EXPECT_NE(actual_output.find("ds_read2st64_b32"), std::string::npos)
         << target_key << "\n"
         << actual_output;
-    EXPECT_NE(actual_output.find("low.op<amdgpu.ds_write2st64_b32>"),
-              std::string::npos)
+    EXPECT_NE(actual_output.find("ds_write2st64_b32"), std::string::npos)
         << target_key << "\n"
         << actual_output;
     EXPECT_NE(actual_output.find("{offset0 = 0, offset1 = 8}"),
               std::string::npos)
         << target_key << "\n"
         << actual_output;
-    EXPECT_EQ(actual_output.find("low.op<amdgpu.ds_read2_b32>"),
-              std::string::npos)
+    EXPECT_EQ(actual_output.find("ds_read2_b32"), std::string::npos)
         << target_key << "\n"
         << actual_output;
     loom_check_result_deinitialize(&result);

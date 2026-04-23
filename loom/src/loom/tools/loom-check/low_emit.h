@@ -48,10 +48,6 @@ iree_status_t loom_check_low_emit_packetize_function(
     iree_host_size_t allocation_budget_count,
     loom_low_packetization_t* out_packetization);
 
-// Appends one mnemonic per non-empty, non-label assembly line.
-iree_status_t loom_check_low_emit_write_assembly_mnemonics(
-    iree_string_view_t assembly, iree_string_builder_t* builder);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif

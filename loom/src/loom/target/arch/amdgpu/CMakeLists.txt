@@ -500,21 +500,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    loom_check_requirements
-  HDRS
-    "loom_check_requirements.h"
-  SRCS
-    "loom_check_requirements.c"
-  DEPS
-    ::amdgpu_hal_backend
-    iree::base
-    loom::src::loom::tooling::execution::hal_runtime
-    loom::src::loom::tools::loom-check::execute
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     amdgpu_hal_backend
   HDRS
     "amdgpu_hal_backend.h"
@@ -534,8 +519,6 @@ loom_cc_library(
 loom_cc_library(
   NAME
     check_provider
-  COPTS
-
   HDRS
     "check_provider.h"
   SRCS
@@ -549,23 +532,6 @@ loom_cc_library(
     loom::src::loom::tools::loom-check::main
   PUBLIC
 )
-
-iree_package_name(_LOOM_AMDGPU_PACKAGE_NAME)
-set(_LOOM_AMDGPU_CHECK_PROVIDER_TARGET "${_LOOM_AMDGPU_PACKAGE_NAME}_check_provider")
-
-if(IREE_HAL_DRIVER_AMDGPU)
-  target_compile_definitions(${_LOOM_AMDGPU_CHECK_PROVIDER_TARGET} PRIVATE
-    LOOM_AMDGPU_CHECK_HAVE_HAL_RUN_PROVIDER=1
-  )
-  target_link_libraries(${_LOOM_AMDGPU_CHECK_PROVIDER_TARGET} PRIVATE
-    ${_LOOM_AMDGPU_PACKAGE_NAME}_loom_check_requirements
-    ${_LOOM_AMDGPU_PACKAGE_NAME}_amdgpu_hal_backend
-    loom_src_loom_tools_loom-check_hal_run_provider
-  )
-endif()
-
-unset(_LOOM_AMDGPU_CHECK_PROVIDER_TARGET)
-unset(_LOOM_AMDGPU_PACKAGE_NAME)
 
 loom_cc_library(
   NAME
@@ -905,159 +871,6 @@ iree_executable_test(
   SRC
     loom::src::loom::tools::loom-check
   LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "vector_corpus_basic"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus_basic.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "vector_corpus_packed_dot"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus_packed_dot.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "vector_corpus_quant_decode"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus_quant_decode.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "vector_corpus_quant_dot"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus_quant_dot.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "vector_corpus_quant_gemm"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus_quant_gemm.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "hal_run_basic"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_basic.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "driver=amdgpu"
-    "nodocker"
-    "requires-gpu-amd"
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "hal_run_dot"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_dot.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "driver=amdgpu"
-    "nodocker"
-    "requires-gpu-amd"
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "hal_run_low"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_low.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "driver=amdgpu"
-    "nodocker"
-    "requires-gpu-amd"
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "hal_run_memory"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_memory.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "driver=amdgpu"
-    "nodocker"
-    "requires-gpu-amd"
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "hal_run_quant_decode"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_quant_decode.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "driver=amdgpu"
-    "nodocker"
-    "requires-gpu-amd"
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "hal_run_quant_gemm"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_quant_gemm.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "driver=amdgpu"
-    "nodocker"
-    "requires-gpu-amd"
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "hal_run_vector"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/hal_run_vector.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "driver=amdgpu"
-    "nodocker"
-    "requires-gpu-amd"
     "loom-check"
 )
 

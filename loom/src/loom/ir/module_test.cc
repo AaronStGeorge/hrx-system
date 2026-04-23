@@ -131,12 +131,12 @@ TEST_F(ModuleTest, CompactSymbolsDropsUnreferencedTombstonesAndRenumbersRefs) {
                           &builder);
   loom_op_t* keep_a_op = NULL;
   IREE_ASSERT_OK(loom_test_record_build(
-      &builder, (loom_symbol_ref_t){0, keep_a_symbol_id},
+      &builder, 0, 0, (loom_symbol_ref_t){0, keep_a_symbol_id},
       loom_make_named_attr_slice(keep_a_dict, IREE_ARRAYSIZE(keep_a_dict)),
       LOOM_LOCATION_UNKNOWN, &keep_a_op));
   loom_op_t* keep_b_op = NULL;
   IREE_ASSERT_OK(loom_test_record_build(
-      &builder, (loom_symbol_ref_t){0, keep_b_symbol_id},
+      &builder, 0, 0, (loom_symbol_ref_t){0, keep_b_symbol_id},
       loom_make_named_attr_slice(NULL, 0), LOOM_LOCATION_UNKNOWN, &keep_b_op));
 
   iree_arena_allocator_t scratch_arena;

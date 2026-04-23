@@ -14,19 +14,12 @@
 #include "loom/target/emit/native/amdgpu/assembly.h"
 #include "loom/tools/loom-check/low_emit.h"
 
-typedef enum loom_amdgpu_loom_check_emit_format_e {
-  LOOM_AMDGPU_LOOM_CHECK_EMIT_ASSEMBLY = 0,
-  LOOM_AMDGPU_LOOM_CHECK_EMIT_ASSEMBLY_MNEMONICS = 1,
-} loom_amdgpu_loom_check_emit_format_t;
-
 typedef enum loom_amdgpu_loom_check_wait_mode_e {
   LOOM_AMDGPU_LOOM_CHECK_WAIT_MODE_AUTO = 0,
   LOOM_AMDGPU_LOOM_CHECK_WAIT_MODE_NONE = 1,
 } loom_amdgpu_loom_check_wait_mode_t;
 
 typedef struct loom_amdgpu_loom_check_emit_options_t {
-  // Output format selected by the emit target name.
-  loom_amdgpu_loom_check_emit_format_t format;
   // Module-local low.func.def symbol selected by the RUN line.
   iree_string_view_t function_symbol_name;
   // Candidate selection strategy used by low packetization.
@@ -49,30 +42,7 @@ static bool loom_amdgpu_loom_check_emit_provider_matches(
     iree_string_view_t target_name) {
   (void)provider;
   return iree_string_view_equal(target_name, IREE_SV("amdgpu-assembly")) ||
-         iree_string_view_equal(target_name, IREE_SV("amdgpu-asm")) ||
-         iree_string_view_equal(target_name,
-                                IREE_SV("amdgpu-assembly-mnemonics")) ||
-         iree_string_view_equal(target_name, IREE_SV("amdgpu-asm-mnemonics"));
-}
-
-static iree_status_t loom_amdgpu_loom_check_parse_emit_format(
-    iree_string_view_t target_name,
-    loom_amdgpu_loom_check_emit_format_t* out_format) {
-  IREE_ASSERT_ARGUMENT(out_format);
-  if (iree_string_view_equal(target_name, IREE_SV("amdgpu-assembly")) ||
-      iree_string_view_equal(target_name, IREE_SV("amdgpu-asm"))) {
-    *out_format = LOOM_AMDGPU_LOOM_CHECK_EMIT_ASSEMBLY;
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(target_name,
-                             IREE_SV("amdgpu-assembly-mnemonics")) ||
-      iree_string_view_equal(target_name, IREE_SV("amdgpu-asm-mnemonics"))) {
-    *out_format = LOOM_AMDGPU_LOOM_CHECK_EMIT_ASSEMBLY_MNEMONICS;
-    return iree_ok_status();
-  }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "unknown AMDGPU native emit target '%.*s'",
-                          (int)target_name.size, target_name.data);
+         iree_string_view_equal(target_name, IREE_SV("amdgpu-asm"));
 }
 
 static iree_status_t loom_amdgpu_loom_check_parse_key_value_option(
@@ -141,8 +111,6 @@ static iree_status_t loom_amdgpu_loom_check_parse_emit_options(
       .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .wait_mode = LOOM_AMDGPU_LOOM_CHECK_WAIT_MODE_AUTO,
   };
-  IREE_RETURN_IF_ERROR(loom_amdgpu_loom_check_parse_emit_format(
-      request->target_name, &out_options->format));
 
   iree_string_view_t symbol_name = iree_string_view_empty();
   iree_string_view_t option_text = iree_string_view_empty();
@@ -209,34 +177,17 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       &packetization));
-
-  if (options.format == LOOM_AMDGPU_LOOM_CHECK_EMIT_ASSEMBLY) {
-    return loom_amdgpu_loom_check_emit_assembly(&packetization, &options,
-                                                &request->result->actual_output,
-                                                request->case_arena);
-  }
-
-  iree_string_builder_t assembly_builder;
-  iree_string_builder_initialize(request->host_allocator, &assembly_builder);
-  iree_status_t status = loom_amdgpu_loom_check_emit_assembly(
-      &packetization, &options, &assembly_builder, request->case_arena);
-  if (iree_status_is_ok(status)) {
-    status = loom_check_low_emit_write_assembly_mnemonics(
-        iree_string_builder_view(&assembly_builder),
-        &request->result->actual_output);
-  }
-  iree_string_builder_deinitialize(&assembly_builder);
-  return status;
+  return loom_amdgpu_loom_check_emit_assembly(&packetization, &options,
+                                              &request->result->actual_output,
+                                              request->case_arena);
 }
 
 static iree_status_t loom_amdgpu_loom_check_emit_provider_append_names(
     const loom_check_emit_provider_t* provider,
     iree_string_builder_t* builder) {
   (void)provider;
-  return iree_string_builder_append_cstring(
-      builder,
-      "amdgpu-assembly, amdgpu-asm, amdgpu-assembly-mnemonics, "
-      "amdgpu-asm-mnemonics");
+  return iree_string_builder_append_cstring(builder,
+                                            "amdgpu-assembly, amdgpu-asm");
 }
 
 const loom_check_emit_provider_t loom_amdgpu_native_loom_check_emit_provider = {

@@ -7,8 +7,8 @@ func.def target(@gfx11_bitcast_target) @i32_to_i8x4_bitcast(%word: vector<1xi32>
 }
 
 // ----
-low.func.def target(@gfx11_bitcast_target) abi(hal_kernel) @i32_to_i8x4_bitcast__low(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
-  low.return %bytes : reg<amdgpu.vgpr>
+low.func.def target(@gfx11_bitcast_target) abi(hal_kernel) @i32_to_i8x4_bitcast__low(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+  return %bytes
 }
 
 // ====
@@ -21,8 +21,8 @@ func.def target(@gfx11_bitcast_target) @i32x2_to_i8x8_bitcast(%words: vector<2xi
 }
 
 // ----
-low.func.def target(@gfx11_bitcast_target) abi(hal_kernel) @i32x2_to_i8x8_bitcast__low(%bytes: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) {
-  low.return %bytes : reg<amdgpu.vgpr x2>
+low.func.def target(@gfx11_bitcast_target) abi(hal_kernel) @i32x2_to_i8x8_bitcast__low(%bytes: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+  return %bytes
 }
 
 // ====
@@ -35,6 +35,6 @@ func.def target(@gfx11_bitcast_target) @f32x2_to_i32x2_bitcast(%floats: vector<2
 }
 
 // ----
-low.func.def target(@gfx11_bitcast_target) abi(hal_kernel) @f32x2_to_i32x2_bitcast__low(%bits: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) {
-  low.return %bits : reg<amdgpu.vgpr x2>
+low.func.def target(@gfx11_bitcast_target) abi(hal_kernel) @f32x2_to_i32x2_bitcast__low(%bits: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+  return %bits
 }

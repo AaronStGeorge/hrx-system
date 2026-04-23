@@ -346,11 +346,6 @@ iree_status_t loom_check_execute_case(
           block_pool, allocator, result));
       break;
     }
-    case LOOM_CHECK_MODE_RUN: {
-      IREE_RETURN_IF_ERROR(loom_check_execute_run(
-          test_case, filename, environment, allocator, result));
-      break;
-    }
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown check mode: %d", (int)test_case->mode);
@@ -370,7 +365,7 @@ iree_status_t loom_check_execute_case(
 }
 
 // Runs a comma-separated pass pipeline on a module.
-static iree_status_t loom_check_run_pipeline(
+static iree_status_t loom_check_execute_pass_pipeline(
     iree_string_view_t pipeline, iree_arena_block_pool_t* block_pool,
     iree_diagnostic_emitter_t diagnostic_emitter,
     const loom_target_low_descriptor_registry_t* low_registry,
@@ -566,7 +561,7 @@ iree_status_t loom_check_execute_pass(
     }
   }
   if (iree_status_is_ok(status)) {
-    status = loom_check_run_pipeline(
+    status = loom_check_execute_pass_pipeline(
         test_case->pipeline, block_pool, pass_diagnostic_emitter, &low_registry,
         low_lower_policy_registry_ref, environment->low_legality_provider_list,
         module);

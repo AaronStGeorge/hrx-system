@@ -122,12 +122,10 @@ static bool loom_check_is_requires_directive(iree_string_view_t line) {
 static iree_status_t loom_check_parse_run_directive(
     iree_string_view_t value, loom_check_mode_t* out_mode,
     iree_string_view_t* out_pipeline, iree_string_view_t* out_format_target,
-    iree_string_view_t* out_emit_target,
-    iree_string_view_t* out_run_arguments) {
+    iree_string_view_t* out_emit_target) {
   *out_pipeline = iree_string_view_empty();
   *out_format_target = iree_string_view_empty();
   *out_emit_target = iree_string_view_empty();
-  *out_run_arguments = iree_string_view_empty();
   value = iree_string_view_trim(value);
 
   if (iree_string_view_equal(value, iree_make_cstring_view("roundtrip")) ||
@@ -174,22 +172,60 @@ static iree_status_t loom_check_parse_run_directive(
     return iree_ok_status();
   }
 
-  if (iree_string_view_consume_prefix(&value, IREE_SV("run "))) {
-    *out_mode = LOOM_CHECK_MODE_RUN;
-    *out_run_arguments = iree_string_view_trim(value);
-    if (iree_string_view_is_empty(*out_run_arguments)) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "RUN: run requires runner arguments");
-    }
-    return iree_ok_status();
-  }
-
   iree_string_view_t keyword;
   iree_string_view_t rest;
   iree_string_view_split(value, ' ', &keyword, &rest);
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                           "unknown RUN mode: '%.*s'", (int)keyword.size,
                           keyword.data);
+}
+
+static void loom_check_parse_option_token(iree_string_view_t token,
+                                          iree_string_view_t* out_name,
+                                          iree_string_view_t* out_value) {
+  iree_string_view_split(token, '=', out_name, out_value);
+  *out_name = iree_string_view_trim(*out_name);
+  *out_value = iree_string_view_trim(*out_value);
+}
+
+static iree_status_t loom_check_validate_no_output_contract(
+    const loom_check_case_t* test_case) {
+  if (test_case->mode != LOOM_CHECK_MODE_EMIT) {
+    return iree_ok_status();
+  }
+
+  bool suppresses_output = false;
+  bool has_diagnostic_evidence = false;
+  iree_string_view_t remaining = iree_string_view_trim(test_case->emit_target);
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t next_remaining = iree_string_view_empty();
+    iree_string_view_split(remaining, ' ', &token, &next_remaining);
+    token = iree_string_view_trim(token);
+    if (!iree_string_view_is_empty(token)) {
+      iree_string_view_t name = iree_string_view_empty();
+      iree_string_view_t value = iree_string_view_empty();
+      loom_check_parse_option_token(token, &name, &value);
+      if (iree_string_view_equal(name, IREE_SV("output")) &&
+          iree_string_view_equal(value, IREE_SV("none"))) {
+        suppresses_output = true;
+      } else if (iree_string_view_equal(name, IREE_SV("diagnostics")) &&
+                 !iree_string_view_is_empty(value) &&
+                 !iree_string_view_equal(value, IREE_SV("none"))) {
+        has_diagnostic_evidence = true;
+      }
+    }
+    remaining = iree_string_view_trim(next_remaining);
+  }
+
+  if (suppresses_output && !has_diagnostic_evidence &&
+      test_case->annotation_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "RUN: emit output=none requires diagnostic annotations or diagnostics "
+        "other than none");
+  }
+  return iree_ok_status();
 }
 
 static bool loom_check_is_requirement_separator(char c) {
@@ -777,8 +813,7 @@ static iree_status_t loom_check_parse_case_sections(
                                       iree_make_cstring_view("// RUN: "));
       IREE_RETURN_IF_ERROR(loom_check_parse_run_directive(
           run_value, &out_case->mode, &out_case->pipeline,
-          &out_case->format_target, &out_case->emit_target,
-          &out_case->run_arguments));
+          &out_case->format_target, &out_case->emit_target));
       body_start = loom_check_scanner_end(scanner, case_end);
       continue;
     }
@@ -1023,7 +1058,6 @@ iree_status_t loom_check_parse(iree_string_view_t source,
   out_file->default_pipeline = iree_string_view_empty();
   out_file->default_format_target = iree_string_view_empty();
   out_file->default_emit_target = iree_string_view_empty();
-  out_file->default_run_arguments = iree_string_view_empty();
   out_file->default_requirements = NULL;
   out_file->default_requirement_count = 0;
 
@@ -1050,7 +1084,6 @@ iree_status_t loom_check_parse(iree_string_view_t source,
         out_file->default_pipeline = preamble_case.pipeline;
         out_file->default_format_target = preamble_case.format_target;
         out_file->default_emit_target = preamble_case.emit_target;
-        out_file->default_run_arguments = preamble_case.run_arguments;
       }
       if (preamble_case.has_requires_directive) {
         out_file->default_requirements = preamble_case.requirements;
@@ -1084,7 +1117,6 @@ iree_status_t loom_check_parse(iree_string_view_t source,
     out_file->default_pipeline = out_file->cases[0].pipeline;
     out_file->default_format_target = out_file->cases[0].format_target;
     out_file->default_emit_target = out_file->cases[0].emit_target;
-    out_file->default_run_arguments = out_file->cases[0].run_arguments;
   }
   if (first_case == 0 && case_count > 0 &&
       out_file->cases[0].has_requires_directive) {
@@ -1100,8 +1132,9 @@ iree_status_t loom_check_parse(iree_string_view_t source,
       out_file->cases[i].pipeline = out_file->default_pipeline;
       out_file->cases[i].format_target = out_file->default_format_target;
       out_file->cases[i].emit_target = out_file->default_emit_target;
-      out_file->cases[i].run_arguments = out_file->default_run_arguments;
     }
+    IREE_RETURN_IF_ERROR(
+        loom_check_validate_no_output_contract(&out_file->cases[i]));
   }
 
   // Apply REQUIRES inheritance: every case receives the file-level default

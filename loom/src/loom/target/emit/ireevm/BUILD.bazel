@@ -90,7 +90,6 @@ loom_assert_no_dependencies(
     targets = [
         "//loom/src/loom/tooling/execution:hal_candidate",
         "//loom/src/loom/tooling/execution:hal_execution_backend",
-        "//loom/src/loom/tools/loom-check:hal_run_provider",
     ],
 )
 
@@ -196,20 +195,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "loom_check_run",
-    srcs = ["loom_check_run.c"],
-    hdrs = ["loom_check_run.h"],
-    deps = [
-        ":candidate",
-        "//loom/src/loom/tooling/execution:compile_report_capture",
-        "//loom/src/loom/tooling/execution:session",
-        "//loom/src/loom/tooling/execution:vm_invocation",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "lower",
     srcs = ["lower.c"],
     hdrs = ["lower.h"],
@@ -228,7 +213,6 @@ loom_cc_library(
     srcs = ["check_provider.c"],
     hdrs = ["check_provider.h"],
     deps = [
-        ":loom_check_run",
         ":low_registry",
         ":lower",
         "//loom/src/loom/tools/loom-check:main",
@@ -367,7 +351,6 @@ loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
         "pass_source_low.loom-test",
-        "run.loom-test",
         "source_low.loom-test",
     ],
 )

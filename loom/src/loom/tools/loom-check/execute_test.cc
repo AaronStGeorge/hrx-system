@@ -1149,22 +1149,6 @@ TEST_F(ExecuteTest, EmitLivenessJsonReportsUnknownFunction) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, RunModeReportsMissingLinkedProvider) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: run --function=main\n"
-                   "func.def @main() {\n"
-                   "  func.return\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  EXPECT_NE(DetailString(result).find("no linked in-process provider"),
-            std::string::npos)
-      << "detail: " << DetailString(result);
-  loom_check_result_deinitialize(&result);
-}
-
 TEST_F(ExecuteTest, FormatModeUnimplemented) {
   loom_check_result_t result;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,

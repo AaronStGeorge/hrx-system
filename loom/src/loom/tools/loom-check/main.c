@@ -157,9 +157,6 @@ static void loom_check_print_case_header(iree_string_view_t filename,
   } else if (test_case->mode == LOOM_CHECK_MODE_EMIT) {
     fprintf(stderr, " %.*s", (int)test_case->emit_target.size,
             test_case->emit_target.data);
-  } else if (test_case->mode == LOOM_CHECK_MODE_RUN) {
-    fprintf(stderr, " %.*s", (int)test_case->run_arguments.size,
-            test_case->run_arguments.data);
   }
   fprintf(stderr, "]\n");
 }
@@ -440,10 +437,8 @@ int loom_check_main(int argc, char** argv,
       "              diagnostics=none|memory|all. low-packet-json accepts\n"
       "              output=json|none, strategy=source|pressure, and\n"
       "              diagnostics=none|packets|all. Linked providers may add\n"
-      "              more.\n"
-      "  run <args>  Execute input with a linked run provider and compare "
-      "output.\n"
-      "\n"
+      "              more. output=none requires diagnostic annotations or\n"
+      "              diagnostics other than none.\n"
       "File format:\n"
       "  A .loom-test file contains one or more cases separated by // ====.\n"
       "  Each case has directives at the top, then input IR, and\n"
@@ -559,7 +554,6 @@ enum {
   LOOM_CHECK_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_LOW_PACKET_DIAGNOSTIC_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_EMIT_PROVIDER_CAPACITY = 64,
-  LOOM_CHECK_PROVIDER_RUN_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_REQUIREMENT_PROVIDER_CAPACITY = 64,
   LOOM_CHECK_PROVIDER_COVERAGE_PROVIDER_CAPACITY = 64,
 };
@@ -600,11 +594,6 @@ typedef struct loom_check_provider_environment_state_t {
       emit_providers[LOOM_CHECK_PROVIDER_EMIT_PROVIDER_CAPACITY];
   // Number of entries in |emit_providers|.
   iree_host_size_t emit_provider_count;
-  // RUN: run provider table assembled once for the environment.
-  const loom_check_run_provider_t*
-      run_providers[LOOM_CHECK_PROVIDER_RUN_PROVIDER_CAPACITY];
-  // Number of entries in |run_providers|.
-  iree_host_size_t run_provider_count;
   // Requirement provider table assembled once for the environment.
   const loom_check_requirement_provider_t*
       requirement_providers[LOOM_CHECK_PROVIDER_REQUIREMENT_PROVIDER_CAPACITY];
@@ -627,12 +616,6 @@ static iree_status_t loom_check_provider_validate(
   if (provider->emit_provider_count != 0 && provider->emit_providers == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "loom-check provider '%.*s' has no emit provider "
-                            "table",
-                            (int)provider->name.size, provider->name.data);
-  }
-  if (provider->run_provider_count != 0 && provider->run_providers == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "loom-check provider '%.*s' has no run provider "
                             "table",
                             (int)provider->name.size, provider->name.data);
   }
@@ -703,21 +686,6 @@ static iree_status_t loom_check_provider_append_emit_providers(
   return iree_ok_status();
 }
 
-static iree_status_t loom_check_provider_append_run_providers(
-    loom_check_provider_environment_state_t* state,
-    const loom_check_provider_t* provider) {
-  if (state->run_provider_count + provider->run_provider_count >
-      IREE_ARRAYSIZE(state->run_providers)) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "loom-check run provider capacity exceeded");
-  }
-  for (iree_host_size_t i = 0; i < provider->run_provider_count; ++i) {
-    state->run_providers[state->run_provider_count++] =
-        provider->run_providers[i];
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_check_provider_append_requirement_providers(
     loom_check_provider_environment_state_t* state,
     const loom_check_provider_t* provider) {
@@ -760,8 +728,6 @@ static iree_status_t loom_check_provider_environment_state_initialize(
                                                                    provider));
     IREE_RETURN_IF_ERROR(
         loom_check_provider_append_emit_providers(out_state, provider));
-    IREE_RETURN_IF_ERROR(
-        loom_check_provider_append_run_providers(out_state, provider));
     IREE_RETURN_IF_ERROR(
         loom_check_provider_append_requirement_providers(out_state, provider));
   }
@@ -877,11 +843,6 @@ int loom_check_provider_main(int argc, char** argv,
           {
               .providers = state.emit_providers,
               .provider_count = state.emit_provider_count,
-          },
-      .run_providers =
-          {
-              .providers = state.run_providers,
-              .provider_count = state.run_provider_count,
           },
       .requirement_providers =
           {

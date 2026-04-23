@@ -261,12 +261,6 @@ static iree_status_t loom_check_json_write_case(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
 
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, "      \"run_arguments\": "));
-  IREE_RETURN_IF_ERROR(
-      loom_check_json_write_optional_string(test_case->run_arguments, stream));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
-
-  IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, "      \"source_range\": "));
   IREE_RETURN_IF_ERROR(
       loom_check_json_write_source_range(test_case->source_range, stream));
@@ -441,12 +435,6 @@ iree_status_t loom_check_json_write_file_result(
       loom_output_stream_write_cstring(stream, "  \"default_emit_target\": "));
   IREE_RETURN_IF_ERROR(
       loom_check_json_write_optional_string(file->default_emit_target, stream));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
-
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-      stream, "  \"default_run_arguments\": "));
-  IREE_RETURN_IF_ERROR(loom_check_json_write_optional_string(
-      file->default_run_arguments, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
 
   IREE_RETURN_IF_ERROR(

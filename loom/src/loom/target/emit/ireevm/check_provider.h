@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// loom-check provider for IREE VM target-low tests and execution.
+// loom-check provider for IREE VM target-low tests.
 
 #ifndef LOOM_TARGET_EMIT_IREEVM_CHECK_PROVIDER_H_
 #define LOOM_TARGET_EMIT_IREEVM_CHECK_PROVIDER_H_
@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-// IREE VM target-low descriptor, lowering, and RUN: run provider package.
+// IREE VM target-low descriptor and lowering package.
 extern const loom_check_provider_t loom_ireevm_check_provider;
 
 #ifdef __cplusplus

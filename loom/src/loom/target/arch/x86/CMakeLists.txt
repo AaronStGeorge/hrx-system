@@ -192,17 +192,6 @@ iree_executable_test(
     "loom-check"
 )
 
-iree_executable_test(
-  NAME
-    "vector_corpus"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/vector_corpus.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
 loom_cc_library(
   NAME
     packed_dot_contract

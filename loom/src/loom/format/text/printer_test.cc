@@ -612,6 +612,24 @@ TEST_F(LowAsmPrinterTest, PrintsExplicitAmbiguousResultType) {
   loom_module_free(module);
 }
 
+TEST_F(LowAsmPrinterTest, PrintsStructuralIntrinsics) {
+  const char* source =
+      "test.low_asm_region asm<test.low.core> {\n"
+      "  %state = resource<vm_state> {index = 0, semantic_type = i64} : "
+      "reg<vm.i64>\n"
+      "  %arg0 = live_in<test.arg0> : reg<test.i32>\n"
+      "  %pair = concat(%arg0, %arg0) : (reg<test.i32>, reg<test.i32>) -> "
+      "reg<test.i32 x2>\n"
+      "  %lane = slice %pair[1] : reg<test.i32 x2> -> reg<test.i32>\n"
+      "  %addr = frame_index @spill0 {offset = 0} : reg<test.i32>\n"
+      "  return %lane\n"
+      "}\n";
+  loom_module_t* module = ParseOk(source);
+  ASSERT_NE(module, nullptr);
+  EXPECT_EQ(PrintModule(module, IREE_SV("test.low.core")), source);
+  loom_module_free(module);
+}
+
 TEST_F(LowAsmPrinterTest, RejectsMissingPrintEnvironment) {
   loom_module_t* module = ParseOk(
       "test.low_asm_region asm<test.low.core> {\n"

@@ -1,12 +1,12 @@
 // RUN: emit amdgpu-assembly @gfx11_constants waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
-low.func.def target(@gfx11_target) @gfx11_constants(%resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>) {
-  %s_c0 = low.const<amdgpu.s_mov_b32> {imm32 = 7} : reg<amdgpu.sgpr>
-  %v_c0 = low.const<amdgpu.v_mov_b32> {imm32 = 9} : reg<amdgpu.vgpr>
-  %v_sum = low.op<amdgpu.v_add_u32>(%v_c0, %v_c0) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword>(%v_sum, %resource, %vaddr, %s_c0) {offset = 12} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
-  low.return
+low.func.def target(@gfx11_target) @gfx11_constants(%resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+  %s_c0 = s_mov_b32 7
+  %v_c0 = v_mov_b32 9
+  %v_sum = v_add_u32 %v_c0, %v_c0
+  buffer_store_dword %v_sum, %resource, %vaddr, %s_c0 {offset = 12}
+  return
 }
 
 // ----
@@ -34,75 +34,14 @@ low.func.def target(@gfx11_target) @gfx11_buffer_off_zero(%resource : reg<amdgpu
   s_endpgm
 
 // ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_memory
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_memory(%s0 : reg<amdgpu.sgpr>, %s1 : reg<amdgpu.sgpr>, %v0 : reg<amdgpu.vgpr>, %v1 : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) {
-  %s_sum = low.op<amdgpu.s_add_u32>(%s0, %s1) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
-  %v_sum = low.op<amdgpu.v_add_u32>(%v0, %v1) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %loaded = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
-  %v_mix = low.op<amdgpu.v_add_u32>(%v_sum, %loaded) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword>(%v_mix, %resource, %vaddr, %s_sum) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
-  low.return
-}
-
-// ----
-s_add_u32
-v_add_u32
-buffer_load_dword
-s_waitcnt
-v_add_u32
-buffer_store_dword
-s_waitcnt_vscnt
-s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_conversions waits=none
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_conversions(%s0 : reg<amdgpu.sgpr>, %v0 : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {
-  %from_s = low.op<amdgpu.v_cvt_f32_i32>(%s0) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
-  %from_v = low.op<amdgpu.v_cvt_f32_u32>(%v0) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %mixed = low.op<amdgpu.v_add_u32>(%from_s, %from_v) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword>(%mixed, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
-  low.return
-}
-
-// ----
-v_cvt_f32_i32
-v_cvt_f32_u32
-v_add_u32
-buffer_store_dword
-s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_f32_minmax waits=none
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_f32_minmax(%lhs : reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {
-  %min = low.op<amdgpu.v_min_f32>(%lhs, %rhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %max = low.op<amdgpu.v_max_f32>(%lhs, %rhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %sum = low.op<amdgpu.v_add_f32>(%min, %max) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword>(%sum, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
-  low.return
-}
-
-// ----
-v_min_f32
-v_max_f32
-v_add_f32
-buffer_store_dword
-s_endpgm
-
-// ====
 // RUN: emit amdgpu-assembly @gfx11_mask_select waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
-low.func.def target(@gfx11_target) @gfx11_mask_select(%lhs : reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %true_value : reg<amdgpu.vgpr>, %false_value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {
-  %mask = low.op<amdgpu.v_cmp_slt_i32>(%lhs, %rhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
-  %selected = low.op<amdgpu.v_cndmask_b32>(%false_value, %true_value, %mask) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword>(%selected, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
-  low.return
+low.func.def target(@gfx11_target) @gfx11_mask_select(%lhs : reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %true_value : reg<amdgpu.vgpr>, %false_value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
+  %mask = v_cmp_lt_i32 %lhs, %rhs
+  %selected = v_cndmask_b32 %false_value, %true_value, %mask
+  buffer_store_dword %selected, %resource, %vaddr, %soffset {offset = 0}
+  return
 }
 
 // ----
@@ -111,60 +50,6 @@ low.func.def target(@gfx11_target) @gfx11_mask_select(%lhs : reg<amdgpu.vgpr>, %
   v_cndmask_b32 v0, v3, v2, s[6:7]
   buffer_store_dword v0, v4, s[0:3], s4 offen offset:0
   s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_dot4i waits=none
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_dot4i(%lhs : reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %acc : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {
-  %dot_s = low.op<amdgpu.v_dot4_i32_i8>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %dot_u = low.op<amdgpu.v_dot4_u32_u8>(%lhs, %rhs, %dot_s) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword>(%dot_u, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
-  low.return
-}
-
-// ----
-v_dot4_i32_i8
-v_dot4_u32_u8
-buffer_store_dword
-s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_wmma_i32 waits=none
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_wmma_i32(%a8 : reg<amdgpu.vgpr x4>, %b8 : reg<amdgpu.vgpr x4>, %a4 : reg<amdgpu.vgpr x2>, %b4 : reg<amdgpu.vgpr x2>, %acc : reg<amdgpu.vgpr x8>, %resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {
-  %i8 = low.op<amdgpu.v_wmma_i32_16x16x16_iu8>(%a8, %b8, %acc) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x8>) -> %acc as reg<amdgpu.vgpr x8>
-  %i4 = low.op<amdgpu.v_wmma_i32_16x16x16_iu4>(%a4, %b4, %i8) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x8>) -> %i8 as reg<amdgpu.vgpr x8>
-  %stored = low.slice %i4[0] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr x4>
-  low.op<amdgpu.buffer_store_b128>(%stored, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
-  low.return
-}
-
-// ----
-v_wmma_i32_16x16x16_iu8
-v_wmma_i32_16x16x16_iu4
-v_mov_b32
-v_mov_b32
-v_mov_b32
-v_mov_b32
-buffer_store_b128
-s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_global_b64 waits=none
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_global_b64(%resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) {
-  %loaded = low.op<amdgpu.buffer_load_b64>(%resource, %vaddr, %soffset) {offset = 8} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr x2>
-  low.op<amdgpu.buffer_store_b64>(%loaded, %resource, %vaddr, %soffset) {offset = 16} : (reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
-  low.return
-}
-
-// ----
-buffer_load_b64
-buffer_store_b64
-s_endpgm
 
 // ====
 // RUN: emit amdgpu-assembly @gfx11_global_pointer waits=none
@@ -199,146 +84,6 @@ low.func.def target(@gfx11_target) @gfx11_global_saddr(%addr : reg<amdgpu.vgpr>,
   s_endpgm
 
 // ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_barrier
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_lds_barrier(%addr : reg<amdgpu.vgpr>, %value : reg<amdgpu.vgpr x4>) {
-  low.op<amdgpu.ds_write_b128>(%addr, %value) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>)
-  low.op<amdgpu.s_barrier>() : ()
-  %loaded = low.op<amdgpu.ds_read_b128>(%addr) {offset = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  low.return
-}
-
-// ----
-ds_write_b128
-s_waitcnt
-s_barrier
-ds_read_b128
-s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_widths waits=none
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_lds_widths(%addr : reg<amdgpu.vgpr>, %value64 : reg<amdgpu.vgpr x2>, %value96 : reg<amdgpu.vgpr x3>) {
-  low.op<amdgpu.ds_write_b64>(%addr, %value64) {offset = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>)
-  low.op<amdgpu.ds_write_b96>(%addr, %value96) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x3>)
-  %loaded64 = low.op<amdgpu.ds_read_b64>(%addr) {offset = 8} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %loaded96 = low.op<amdgpu.ds_read_b96>(%addr) {offset = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
-  low.return
-}
-
-// ----
-ds_write_b64
-ds_write_b96
-ds_read_b64
-ds_read_b96
-s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_2addr waits=none
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_lds_2addr(%addr : reg<amdgpu.vgpr>, %value32a : reg<amdgpu.vgpr>, %value32b : reg<amdgpu.vgpr>, %value64a : reg<amdgpu.vgpr x2>, %value64b : reg<amdgpu.vgpr x2>) {
-  %loaded32 = low.op<amdgpu.ds_read2_b32>(%addr) {offset0 = 1, offset1 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  low.op<amdgpu.ds_write2_b32>(%addr, %value32a, %value32b) {offset0 = 1, offset1 = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
-  %loaded64 = low.op<amdgpu.ds_read2_b64>(%addr) {offset0 = 3, offset1 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  low.op<amdgpu.ds_write2_b64>(%addr, %value64a, %value64b) {offset0 = 3, offset1 = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>)
-  %loaded32st64 = low.op<amdgpu.ds_read2st64_b32>(%addr) {offset0 = 5, offset1 = 6} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  low.op<amdgpu.ds_write2st64_b32>(%addr, %value32a, %value32b) {offset0 = 5, offset1 = 6} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
-  %loaded64st64 = low.op<amdgpu.ds_read2st64_b64>(%addr) {offset0 = 7, offset1 = 8} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  low.op<amdgpu.ds_write2st64_b64>(%addr, %value64a, %value64b) {offset0 = 7, offset1 = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>)
-  low.return
-}
-
-// ----
-ds_read2_b32
-ds_write2_b32
-ds_read2_b64
-ds_write2_b64
-ds_read2st64_b32
-ds_write2st64_b32
-ds_read2st64_b64
-ds_write2st64_b64
-s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_addtid waits=none
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_lds_addtid(%m0 : reg<amdgpu.m0>, %value : reg<amdgpu.vgpr>) {
-  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 16} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.ds_write_addtid_b32>(%value, %m0) {offset = 20} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
-  low.return
-}
-
-// ----
-ds_read_addtid_b32
-ds_write_addtid_b32
-s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx11_lds_crosslane waits=none
-target.profile @gfx11_target preset("amdgpu-gfx11")
-
-low.func.def target(@gfx11_target) @gfx11_lds_crosslane(%addr : reg<amdgpu.vgpr>) {
-  %swizzled = low.op<amdgpu.ds_swizzle_b32>(%addr) {offset = 32} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %permuted = low.op<amdgpu.ds_permute_b32>(%addr, %swizzled) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %bpermuted = low.op<amdgpu.ds_bpermute_b32>(%addr, %permuted) {offset = 8} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.ds_write_b32>(%addr, %bpermuted) {offset = 12} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
-  low.return
-}
-
-// ----
-ds_swizzle_b32
-ds_permute_b32
-ds_bpermute_b32
-ds_write_b32
-s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx12_lds_crosslane_fi waits=none
-target.profile @gfx12_target preset("amdgpu-gfx12")
-
-low.func.def target(@gfx12_target) @gfx12_lds_crosslane_fi(%addr : reg<amdgpu.vgpr>, %value : reg<amdgpu.vgpr>) {
-  %bpermuted = low.op<amdgpu.ds_bpermute_fi_b32>(%addr, %value) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.ds_write_b32>(%addr, %bpermuted) {offset = 20} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
-  low.return
-}
-
-// ----
-ds_bpermute_fi_b32
-ds_write_b32
-s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx950_lds_transpose waits=none
-target.profile @gfx950_target preset("amdgpu-gfx950")
-
-low.func.def target(@gfx950_target) @gfx950_lds_transpose(%addr : reg<amdgpu.vgpr>) {
-  %loaded_b4 = low.op<amdgpu.ds_read_b64_tr_b4>(%addr) {offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %loaded_b6 = low.op<amdgpu.ds_read_b96_tr_b6>(%addr) {offset = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
-  %loaded_b8 = low.op<amdgpu.ds_read_b64_tr_b8>(%addr) {offset = 32} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %loaded_b16 = low.op<amdgpu.ds_read_b64_tr_b16>(%addr) {offset = 48} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  low.op<amdgpu.ds_write_b64>(%addr, %loaded_b4) {offset = 64} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>)
-  low.op<amdgpu.ds_write_b96>(%addr, %loaded_b6) {offset = 80} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x3>)
-  low.op<amdgpu.ds_write_b64>(%addr, %loaded_b8) {offset = 96} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>)
-  low.op<amdgpu.ds_write_b64>(%addr, %loaded_b16) {offset = 112} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>)
-  low.return
-}
-
-// ----
-ds_read_b64_tr_b4
-ds_read_b96_tr_b6
-ds_read_b64_tr_b8
-ds_read_b64_tr_b16
-ds_write_b64
-ds_write_b96
-ds_write_b64
-ds_write_b64
-s_endpgm
-
-// ====
 // RUN: emit amdgpu-assembly @gfx950_global_load_lds waits=none
 target.profile @gfx950_target preset("amdgpu-gfx950")
 
@@ -353,21 +98,3 @@ low.func.def target(@gfx950_target) @gfx950_global_load_lds(%addr64 : reg<amdgpu
   global_load_lds_dword v[0:1], off offset:4
   global_load_lds_dwordx4 v2, s[0:1] offset:16
   s_endpgm
-
-// ====
-// RUN: emit amdgpu-assembly-mnemonics @gfx950_global_load_lds_barrier
-target.profile @gfx950_target preset("amdgpu-gfx950")
-
-low.func.def target(@gfx950_target) @gfx950_global_load_lds_barrier(%global_addr : reg<amdgpu.vgpr x2>, %lds_addr : reg<amdgpu.vgpr>, %m0 : reg<amdgpu.m0>) {
-  low.op<amdgpu.global_load_lds_dwordx4>(%global_addr, %m0) {offset = 0} : (reg<amdgpu.vgpr x2>, reg<amdgpu.m0>)
-  low.op<amdgpu.s_barrier>() : ()
-  %loaded = low.op<amdgpu.ds_read_b128>(%lds_addr) {offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  low.return
-}
-
-// ----
-global_load_lds_dwordx4
-s_waitcnt
-s_barrier
-ds_read_b128
-s_endpgm

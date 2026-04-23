@@ -7,26 +7,26 @@ func.def target(@gfx11_bitpack_target) @i32x4_to_i8x4_bitpack(%codes: vector<4xi
 }
 
 // ----
-low.func.def target(@gfx11_bitpack_target) abi(hal_kernel) @i32x4_to_i8x4_bitpack__low(%codes: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr>) {
-  %5 = low.const<amdgpu.v_mov_b32> {imm32 = 255} : reg<amdgpu.vgpr>
-  %6 = low.slice %codes[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %7 = low.op<amdgpu.v_and_b32>(%6, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %8 = low.slice %codes[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %9 = low.op<amdgpu.v_and_b32>(%8, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %10 = low.const<amdgpu.v_mov_b32> {imm32 = 8} : reg<amdgpu.vgpr>
-  %11 = low.op<amdgpu.v_lshlrev_b32>(%10, %9) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %12 = low.op<amdgpu.v_or_b32>(%7, %11) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %13 = low.slice %codes[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %14 = low.op<amdgpu.v_and_b32>(%13, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 16} : reg<amdgpu.vgpr>
-  %16 = low.op<amdgpu.v_lshlrev_b32>(%15, %14) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %17 = low.op<amdgpu.v_or_b32>(%12, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %18 = low.slice %codes[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %19 = low.op<amdgpu.v_and_b32>(%18, %5) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %20 = low.const<amdgpu.v_mov_b32> {imm32 = 24} : reg<amdgpu.vgpr>
-  %21 = low.op<amdgpu.v_lshlrev_b32>(%20, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %packed = low.op<amdgpu.v_or_b32>(%17, %21) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.return %packed : reg<amdgpu.vgpr>
+low.func.def target(@gfx11_bitpack_target) abi(hal_kernel) @i32x4_to_i8x4_bitpack__low(%codes: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+  %5 = v_mov_b32 255
+  %6 = slice %codes[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %7 = v_and_b32 %6, %5
+  %8 = slice %codes[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %9 = v_and_b32 %8, %5
+  %10 = v_mov_b32 8
+  %11 = v_lshlrev_b32 %10, %9
+  %12 = v_or_b32 %7, %11
+  %13 = slice %codes[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %14 = v_and_b32 %13, %5
+  %15 = v_mov_b32 16
+  %16 = v_lshlrev_b32 %15, %14
+  %17 = v_or_b32 %12, %16
+  %18 = slice %codes[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %19 = v_and_b32 %18, %5
+  %20 = v_mov_b32 24
+  %21 = v_lshlrev_b32 %20, %19
+  %packed = v_or_b32 %17, %21
+  return %packed
 }
 
 // ====

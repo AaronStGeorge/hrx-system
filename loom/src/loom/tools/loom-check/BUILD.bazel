@@ -163,7 +163,6 @@ loom_cc_library(
         "low_emit.c",
         "requirements.c",
         "roundtrip.c",
-        "run.c",
         "verify.c",
     ],
     hdrs = [
@@ -218,23 +217,6 @@ loom_cc_library(
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:file_handle",
         "//runtime/src/iree/io:stream",
-    ],
-)
-
-loom_cc_library(
-    name = "hal_run_provider",
-    srcs = ["hal_run_provider.c"],
-    hdrs = ["hal_run_provider.h"],
-    deps = [
-        ":execute",
-        "//loom/src/loom/tooling/execution:compile_report_capture",
-        "//loom/src/loom/tooling/execution:hal_backend",
-        "//loom/src/loom/tooling/execution:hal_candidate",
-        "//loom/src/loom/tooling/execution:hal_invocation",
-        "//loom/src/loom/tooling/execution:hal_runtime",
-        "//loom/src/loom/tooling/execution:session",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base:core_headers",
     ],
 )
 
