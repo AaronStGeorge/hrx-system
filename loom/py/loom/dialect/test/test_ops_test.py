@@ -54,6 +54,7 @@ from loom.dialect.test import (
     test_neg,
     test_operand_dict,
     test_ops,
+    test_record,
     test_region_table,
     test_slice,
     test_update,
@@ -273,6 +274,11 @@ class TestSpecificOps:
         assert test_cmp.attrs[0].enum_def is cmp_predicates
         assert len(cmp_predicates.cases) == 6
         assert cmp_predicates.keywords[2] == "lt"
+
+    def test_record_kind_is_open_enum(self) -> None:
+        kind = test_record.attr("kind")
+        assert kind is not None
+        assert kind.open_enum
 
     def test_map(self) -> None:
         assert test_map.has_trait("Elementwise")

@@ -109,6 +109,13 @@ typedef enum loom_test_cmp_predicate_e {
   LOOM_TEST_CMP_PREDICATE_COUNT_ = 6,
 } loom_test_cmp_predicate_t;
 
+// Synthetic record kind. Open for bytecode future-ordinal tests.
+typedef enum loom_test_record_kind_e {
+  LOOM_TEST_RECORD_KIND_TARGET = 1,
+  LOOM_TEST_RECORD_KIND_ARTIFACT = 2,
+  LOOM_TEST_RECORD_KIND_COUNT_ = 3,
+} loom_test_record_kind_t;
+
 // LOOM_OP_TEST_ADDI: Test binary integer op.
 // %result = test.addi %lhs, %rhs : i32
 LOOM_DEFINE_ISA(loom_test_addi_isa, LOOM_OP_TEST_ADDI)
@@ -420,12 +427,19 @@ iree_status_t loom_test_decl_build(
     loom_op_t** out_op);
 
 // LOOM_OP_TEST_RECORD: Test named module record with generic symbol payload metadata.
-// test.record @target {arch = "gfx1100", lanes = 64}
+// test.record target @target {arch = "gfx1100", lanes = 64}
 LOOM_DEFINE_ISA(loom_test_record_isa, LOOM_OP_TEST_RECORD)
 LOOM_DEFINE_ATTR_SYMBOL(loom_test_record_symbol, 0)
-LOOM_DEFINE_ATTR_DICT(loom_test_record_dict, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_test_record_kind, 1)
+LOOM_DEFINE_ATTR_DICT(loom_test_record_dict, 2)
+enum loom_test_record_build_flag_bits_e {
+  LOOM_TEST_RECORD_BUILD_FLAG_HAS_KIND = 1u << 0,
+};
+typedef uint32_t loom_test_record_build_flags_t;
 iree_status_t loom_test_record_build(
     loom_builder_t* builder,
+    loom_test_record_build_flags_t build_flags,
+    loom_optional uint8_t kind,
     loom_symbol_ref_t symbol,
     loom_optional loom_named_attr_slice_t dict,
     loom_location_id_t location,

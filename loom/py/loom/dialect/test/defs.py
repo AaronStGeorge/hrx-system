@@ -130,6 +130,15 @@ _CallingConv = EnumDef(
     doc="Function calling convention. Absent (0) means host.",
 )
 
+_RecordKind = EnumDef(
+    "RecordKind",
+    [
+        EnumCase("target", 1, doc="Target-like record."),
+        EnumCase("artifact", 2, doc="Artifact-like record."),
+    ],
+    doc="Synthetic record kind. Open for bytecode future-ordinal tests.",
+)
+
 cmp_predicates = EnumDef(
     "TestCmpPredicate",
     [
@@ -1061,14 +1070,16 @@ test_record = Op(
     ),
     attrs=[
         AttrDef("symbol", "symbol"),
+        AttrDef("kind", "enum", enum_def=_RecordKind, optional=True, open_enum=True),
         AttrDef("dict", "dict", optional=True),
     ],
     format=[
+        OptionalGroup([Attr("kind")], anchor="kind"),
         SymbolRef("symbol"),
         AttrDict("dict"),
     ],
     examples=[
-        'test.record @target {arch = "gfx1100", lanes = 64}',
+        'test.record target @target {arch = "gfx1100", lanes = 64}',
     ],
 )
 

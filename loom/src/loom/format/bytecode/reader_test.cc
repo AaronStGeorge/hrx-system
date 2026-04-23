@@ -18,11 +18,10 @@
 #include "loom/format/bytecode/format.h"
 #include "loom/format/bytecode/varint.h"
 #include "loom/format/bytecode/writer.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/global/ops.h"
-#include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
-#include "loom/testing/context.h"
 
 namespace loom {
 namespace {
@@ -66,13 +65,30 @@ class ReaderTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                       &context_));
+    InitializeBytecodeTestContext(&context_);
   }
 
   void TearDown() override {
     loom_context_deinitialize(&context_);
     iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t *
+                                                              out_count);
+
+  void InitializeBytecodeTestContext(loom_context_t* context) {
+    loom_context_initialize(iree_allocator_system(), context);
+    RegisterDialect(context, LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables);
+    RegisterDialect(context, LOOM_DIALECT_TEST, loom_test_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(context));
+  }
+
+  void RegisterDialect(loom_context_t* context, loom_dialect_id_t dialect_id,
+                       DialectVtablesFn fn) {
+    iree_host_size_t vtable_count = 0;
+    const loom_op_vtable_t* const* vtables = fn(&vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(context, dialect_id, vtables,
+                                                 (uint16_t)vtable_count));
   }
 
   loom_module_t* CreateModule(const char* name) {
@@ -133,49 +149,24 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
-  loom_module_t* CreateTargetArtifactWithFutureEnumOrdinals() {
-    loom_module_t* module = CreateModule("reader_future_target_enum");
+  loom_module_t* CreateTestRecordWithFutureEnumOrdinal() {
+    loom_module_t* module = CreateModule("reader_future_test_enum");
     loom_builder_t builder;
     loom_builder_initialize(module, &module->arena, loom_module_block(module),
                             &builder);
-    loom_string_id_t target_name_id = LOOM_STRING_ID_INVALID;
-    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("future_target"),
-                                             &target_name_id));
-    uint16_t target_symbol_id = LOOM_SYMBOL_ID_INVALID;
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
     IREE_CHECK_OK(
-        loom_module_add_symbol(module, target_name_id, &target_symbol_id));
-    loom_symbol_ref_t target_symbol = {.module_id = 0,
-                                       .symbol_id = target_symbol_id};
-    loom_string_id_t preset_id = LOOM_STRING_ID_INVALID;
-    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("test-object"),
-                                             &preset_id));
-    loom_op_t* profile_op = nullptr;
-    IREE_CHECK_OK(loom_target_profile_build(
-        &builder, target_symbol, preset_id, loom_named_attr_slice_empty(),
-        LOOM_LOCATION_UNKNOWN, &profile_op));
-
-    loom_string_id_t artifact_name_id = LOOM_STRING_ID_INVALID;
-    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("future"),
-                                             &artifact_name_id));
-    uint16_t artifact_symbol_id = LOOM_SYMBOL_ID_INVALID;
-    IREE_CHECK_OK(
-        loom_module_add_symbol(module, artifact_name_id, &artifact_symbol_id));
-    loom_symbol_ref_t artifact_symbol = {.module_id = 0,
-                                         .symbol_id = artifact_symbol_id};
-    loom_op_t* artifact_op = nullptr;
-    IREE_CHECK_OK(loom_target_artifact_build(
-        &builder,
-        LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ARTIFACT_FORMAT |
-            LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ABI,
-        artifact_symbol, target_symbol,
-        LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_ELF,
-        LOOM_TARGET_ARTIFACT_ABI_OBJECT_FILE, LOOM_LOCATION_UNKNOWN,
-        &artifact_op));
-    loom_op_attrs(
-        artifact_op)[loom_target_artifact_artifact_format_ATTR_INDEX] =
+        loom_builder_intern_string(&builder, IREE_SV("future"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t symbol = {.module_id = 0, .symbol_id = symbol_id};
+    loom_op_t* record_op = nullptr;
+    IREE_CHECK_OK(loom_test_record_build(
+        &builder, LOOM_TEST_RECORD_BUILD_FLAG_HAS_KIND,
+        LOOM_TEST_RECORD_KIND_ARTIFACT, symbol, loom_named_attr_slice_empty(),
+        LOOM_LOCATION_UNKNOWN, &record_op));
+    loom_op_attrs(record_op)[loom_test_record_kind_ATTR_INDEX] =
         loom_attr_enum(250);
-    loom_op_attrs(artifact_op)[loom_target_artifact_abi_ATTR_INDEX] =
-        loom_attr_enum(251);
     return module;
   }
 
@@ -1390,7 +1381,7 @@ TEST_F(ReaderTest, ReadsFunctionBodyModule) {
 }
 
 TEST_F(ReaderTest, EnumAttributesPreserveFutureOrdinals) {
-  loom_module_t* module = CreateTargetArtifactWithFutureEnumOrdinals();
+  loom_module_t* module = CreateTestRecordWithFutureEnumOrdinal();
   auto bytes = WriteModule(module);
 
   loom_module_t* read_module = nullptr;
@@ -1404,13 +1395,12 @@ TEST_F(ReaderTest, EnumAttributesPreserveFutureOrdinals) {
     loom_module_free(module);
     FAIL() << ::testing::PrintToString(error_ids);
   }
-  ASSERT_EQ(read_module->symbols.count, 2u);
+  ASSERT_EQ(read_module->symbols.count, 1u);
 
-  loom_op_t* read_artifact = read_module->symbols.entries[1].defining_op;
-  ASSERT_NE(read_artifact, nullptr);
-  ASSERT_TRUE(loom_target_artifact_isa(read_artifact));
-  EXPECT_EQ(loom_target_artifact_artifact_format(read_artifact), 250u);
-  EXPECT_EQ(loom_target_artifact_abi(read_artifact), 251u);
+  loom_op_t* read_record = read_module->symbols.entries[0].defining_op;
+  ASSERT_NE(read_record, nullptr);
+  ASSERT_TRUE(loom_test_record_isa(read_record));
+  EXPECT_EQ(loom_test_record_kind(read_record), 250u);
 
   loom_module_free(read_module);
   loom_module_free(module);
@@ -1498,8 +1488,7 @@ TEST_F(ReaderTest, ReadsLocationTablesWithRemappedSources) {
   auto bytes = WriteModule(module);
 
   loom_context_t read_context;
-  IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                     &read_context));
+  InitializeBytecodeTestContext(&read_context);
   loom_source_id_t preexisting_source_id = LOOM_SOURCE_ID_INVALID;
   IREE_ASSERT_OK(loom_context_register_source(
       &read_context, IREE_SV("preexisting.loom"), &preexisting_source_id));
