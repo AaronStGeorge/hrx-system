@@ -1,0 +1,216 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/tooling/testbench/testbench.h"
+
+#include "iree/base/internal/arena.h"
+#include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+#include "loom/format/text/parser.h"
+#include "loom/ir/context.h"
+#include "loom/ir/module.h"
+#include "loom/ops/check/ops.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/test/ops.h"
+
+namespace loom {
+namespace {
+
+class TestbenchTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    iree_arena_initialize(&block_pool_, &plan_arena_);
+
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_CHECK, loom_check_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
+  }
+
+  void TearDown() override {
+    iree_arena_deinitialize(&plan_arena_);
+    loom_context_deinitialize(&context_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t *
+                                                              out_count);
+
+  void RegisterDialect(loom_dialect_id_t dialect_id, DialectVtablesFn fn) {
+    iree_host_size_t vtable_count = 0;
+    const loom_op_vtable_t* const* vtables = fn(&vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)vtable_count));
+  }
+
+  loom_module_t* ParseModule(const char* source) {
+    loom_text_parse_options_t options = {};
+    options.max_errors = 20;
+    loom_module_t* module = nullptr;
+    IREE_EXPECT_OK(loom_text_parse(iree_make_cstring_view(source),
+                                   IREE_SV("testbench_test.loom"), &context_,
+                                   &block_pool_, &options, &module));
+    EXPECT_NE(module, nullptr);
+    return module;
+  }
+
+  iree_arena_block_pool_t block_pool_;
+  iree_arena_allocator_t plan_arena_;
+  loom_context_t context_;
+};
+
+TEST_F(TestbenchTest, DiscoversCasesAndBenchmarks) {
+  loom_module_t* module = ParseModule(R"(
+func.decl @scale(%input: i32) -> (i32)
+
+check.case public @scale_case {
+  %input = check.literal value(2) : i32
+  %actual = func.call @scale(%input) : (i32) -> (i32)
+  check.expect.equal actual(%actual) expected(%input) : i32
+  check.return
+}
+
+check.case @private_case {
+  check.return
+}
+
+check.benchmark @scale_latency case(@scale_case) attrs({iterations = 100})
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_module_plan_t plan = {};
+  IREE_ASSERT_OK(
+      loom_testbench_plan_module(module, nullptr, &plan_arena_, &plan));
+
+  ASSERT_EQ(plan.case_count, 2u);
+  EXPECT_TRUE(
+      iree_string_view_equal(plan.cases[0].name, IREE_SV("scale_case")));
+  EXPECT_TRUE(plan.cases[0].is_public);
+  EXPECT_EQ(plan.cases[0].parameter_count, 0u);
+  EXPECT_EQ(plan.cases[0].sample_count, 1u);
+  EXPECT_TRUE(
+      iree_string_view_equal(plan.cases[1].name, IREE_SV("private_case")));
+  EXPECT_FALSE(plan.cases[1].is_public);
+
+  ASSERT_EQ(plan.benchmark_count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(plan.benchmarks[0].name,
+                                     IREE_SV("scale_latency")));
+  EXPECT_EQ(plan.benchmarks[0].case_index, 0u);
+  EXPECT_EQ(plan.benchmarks[0].attrs.count, 1u);
+  EXPECT_EQ(plan.issue_count, 0u);
+
+  loom_module_free(module);
+}
+
+TEST_F(TestbenchTest, PlansDeterministicParameterSamples) {
+  loom_module_t* module = ParseModule(R"(
+check.case @sweep {
+  %m = check.param.range po2 bounds(1 to 16) : index
+  %n = check.param.choice values([3, 5]) : i32
+  %seed = check.param.seed base(10) count(4) : i64
+  check.return
+}
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_plan_options_t options = {};
+  loom_testbench_plan_options_initialize(&options);
+  options.max_samples_per_case = 6;
+  loom_testbench_module_plan_t plan = {};
+  IREE_ASSERT_OK(
+      loom_testbench_plan_module(module, &options, &plan_arena_, &plan));
+
+  ASSERT_EQ(plan.case_count, 1u);
+  const loom_testbench_case_plan_t& case_plan = plan.cases[0];
+  ASSERT_EQ(case_plan.parameter_count, 3u);
+  EXPECT_EQ(case_plan.cartesian_sample_count, 40u);
+  EXPECT_EQ(case_plan.sample_count, 6u);
+  EXPECT_TRUE(case_plan.sample_count_truncated);
+  EXPECT_EQ(case_plan.issue_count, 0u);
+
+  EXPECT_EQ(case_plan.parameters[0].kind, LOOM_TESTBENCH_PARAMETER_RANGE);
+  EXPECT_EQ(case_plan.parameters[0].sample_count, 5u);
+  EXPECT_EQ(case_plan.parameters[1].kind, LOOM_TESTBENCH_PARAMETER_CHOICE);
+  EXPECT_EQ(case_plan.parameters[1].sample_count, 2u);
+  EXPECT_EQ(case_plan.parameters[2].kind, LOOM_TESTBENCH_PARAMETER_SEED);
+  EXPECT_EQ(case_plan.parameters[2].sample_count, 4u);
+
+  EXPECT_EQ(loom_testbench_case_sample_parameter_ordinal(&case_plan, 5, 0), 0u);
+  EXPECT_EQ(loom_testbench_case_sample_parameter_ordinal(&case_plan, 5, 1), 1u);
+  EXPECT_EQ(loom_testbench_case_sample_parameter_ordinal(&case_plan, 5, 2), 0u);
+
+  loom_attribute_t value = {};
+  IREE_ASSERT_OK(loom_testbench_parameter_sample_value(&case_plan.parameters[0],
+                                                       3, &value));
+  EXPECT_EQ(value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(loom_attr_as_i64(value), 8);
+  IREE_ASSERT_OK(loom_testbench_parameter_sample_value(&case_plan.parameters[1],
+                                                       1, &value));
+  EXPECT_EQ(value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(loom_attr_as_i64(value), 5);
+  IREE_ASSERT_OK(loom_testbench_parameter_sample_value(&case_plan.parameters[2],
+                                                       2, &value));
+  EXPECT_EQ(value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(loom_attr_as_i64(value), 12);
+
+  loom_module_free(module);
+}
+
+TEST_F(TestbenchTest, ReportsUnsupportedCaseBodyOps) {
+  loom_module_t* module = ParseModule(R"(
+check.case @bad {
+  %x = check.literal value(1) : i32
+  test.use %x : i32
+  check.return
+}
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_module_plan_t plan = {};
+  IREE_ASSERT_OK(
+      loom_testbench_plan_module(module, nullptr, &plan_arena_, &plan));
+
+  ASSERT_EQ(plan.case_count, 1u);
+  ASSERT_EQ(plan.issue_count, 1u);
+  EXPECT_EQ(plan.cases[0].issue_count, 1u);
+  EXPECT_EQ(plan.cases[0].sample_count, 0u);
+  EXPECT_EQ(plan.issues[0].kind, LOOM_TESTBENCH_ISSUE_UNSUPPORTED_CASE_BODY_OP);
+  EXPECT_EQ(plan.issues[0].case_index, 0u);
+  EXPECT_EQ(plan.issues[0].op->kind, LOOM_OP_TEST_USE);
+
+  loom_module_free(module);
+}
+
+TEST_F(TestbenchTest, ReportsInvalidParameters) {
+  loom_module_t* module = ParseModule(R"(
+check.case @bad {
+  %m = check.param.range po2 bounds(0 to 8) : index
+  check.return
+}
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_module_plan_t plan = {};
+  IREE_ASSERT_OK(
+      loom_testbench_plan_module(module, nullptr, &plan_arena_, &plan));
+
+  ASSERT_EQ(plan.case_count, 1u);
+  ASSERT_EQ(plan.issue_count, 1u);
+  EXPECT_EQ(plan.cases[0].parameter_count, 1u);
+  EXPECT_EQ(plan.cases[0].parameters[0].sample_count, 0u);
+  EXPECT_EQ(plan.cases[0].sample_count, 0u);
+  EXPECT_EQ(plan.issues[0].kind, LOOM_TESTBENCH_ISSUE_INVALID_PARAMETER);
+  EXPECT_EQ(plan.issues[0].case_index, 0u);
+  EXPECT_EQ(plan.issues[0].op->kind, LOOM_OP_CHECK_PARAM_RANGE);
+
+  loom_module_free(module);
+}
+
+}  // namespace
+}  // namespace loom

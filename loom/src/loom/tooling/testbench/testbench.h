@@ -1,0 +1,212 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Production testbench case discovery and deterministic sample planning.
+//
+// This library is target-free: it interprets check.* harness structure and
+// leaves actual compilation, oracle dispatch, and value materialization to
+// later execution layers.
+
+#ifndef LOOM_TOOLING_TESTBENCH_TESTBENCH_H_
+#define LOOM_TOOLING_TESTBENCH_TESTBENCH_H_
+
+#include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
+#include "loom/ir/ir.h"
+#include "loom/ops/check/ops.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define LOOM_TESTBENCH_CASE_INDEX_INVALID IREE_HOST_SIZE_MAX
+#define LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID IREE_HOST_SIZE_MAX
+
+enum {
+  // Default cap for the number of concrete samples executed per check.case.
+  LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE = 4096,
+};
+
+typedef enum loom_testbench_parameter_kind_e {
+  // Invalid or uninitialized parameter slot.
+  LOOM_TESTBENCH_PARAMETER_NONE = 0,
+  // Parameter produced by check.param.range.
+  LOOM_TESTBENCH_PARAMETER_RANGE = 1,
+  // Parameter produced by check.param.choice.
+  LOOM_TESTBENCH_PARAMETER_CHOICE = 2,
+  // Parameter produced by check.param.seed.
+  LOOM_TESTBENCH_PARAMETER_SEED = 3,
+} loom_testbench_parameter_kind_t;
+
+typedef enum loom_testbench_issue_kind_e {
+  // Invalid or uninitialized issue slot.
+  LOOM_TESTBENCH_ISSUE_NONE = 0,
+  // A check.case body op is outside the V0 executable testbench subset.
+  LOOM_TESTBENCH_ISSUE_UNSUPPORTED_CASE_BODY_OP = 1,
+  // A parameter op has no valid deterministic sample set.
+  LOOM_TESTBENCH_ISSUE_INVALID_PARAMETER = 2,
+  // A check.benchmark does not reference a discovered check.case.
+  LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_CASE = 3,
+} loom_testbench_issue_kind_t;
+
+typedef struct loom_testbench_plan_options_t {
+  // Maximum samples retained per case after cartesian expansion.
+  iree_host_size_t max_samples_per_case;
+} loom_testbench_plan_options_t;
+
+// Initializes planning options with a bounded default sample budget.
+void loom_testbench_plan_options_initialize(
+    loom_testbench_plan_options_t* out_options);
+
+typedef struct loom_testbench_range_plan_t {
+  // Static sampling policy declared by check.param.range.
+  loom_check_param_range_policy_t policy;
+  // Scalar element type of the produced parameter value.
+  loom_scalar_type_t scalar_type;
+  // Inclusive lower bound attribute.
+  loom_attribute_t lower;
+  // Inclusive upper bound attribute.
+  loom_attribute_t upper;
+  // Positive step attribute, or ABSENT when the policy supplies the step.
+  loom_attribute_t step;
+} loom_testbench_range_plan_t;
+
+typedef struct loom_testbench_choice_plan_t {
+  // Borrowed immutable choice values from the module-owned attribute payload.
+  const int64_t* values;
+  // Number of entries in |values|.
+  iree_host_size_t count;
+} loom_testbench_choice_plan_t;
+
+typedef struct loom_testbench_seed_plan_t {
+  // First seed value.
+  int64_t base;
+  // Number of sequential seeds.
+  iree_host_size_t count;
+} loom_testbench_seed_plan_t;
+
+typedef struct loom_testbench_parameter_plan_t {
+  // Parameter kind and payload discriminator.
+  loom_testbench_parameter_kind_t kind;
+  // Operation that produced the parameter.
+  const loom_op_t* op;
+  // SSA value produced by the parameter op.
+  loom_value_id_t value_id;
+  // Type of |value_id| at planning time.
+  loom_type_t type;
+  // Number of valid samples for this parameter.
+  iree_host_size_t sample_count;
+  union {
+    // Payload for check.param.range.
+    loom_testbench_range_plan_t range;
+    // Payload for check.param.choice.
+    loom_testbench_choice_plan_t choice;
+    // Payload for check.param.seed.
+    loom_testbench_seed_plan_t seed;
+  };
+} loom_testbench_parameter_plan_t;
+
+typedef struct loom_testbench_issue_t {
+  // Structured issue classification.
+  loom_testbench_issue_kind_t kind;
+  // Case ordinal in the module plan, or INVALID for module-level issues.
+  iree_host_size_t case_index;
+  // Benchmark ordinal in the module plan, or INVALID for non-benchmark issues.
+  iree_host_size_t benchmark_index;
+  // Operation related to the issue.
+  const loom_op_t* op;
+  // Referenced case symbol when the issue involves one.
+  loom_symbol_ref_t case_ref;
+} loom_testbench_issue_t;
+
+typedef struct loom_testbench_case_plan_t {
+  // Module-local symbol reference naming this case.
+  loom_symbol_ref_t ref;
+  // Symbol table entry for |ref|.
+  const loom_symbol_t* symbol;
+  // Defining check.case operation.
+  const loom_op_t* op;
+  // Borrowed case name from the module string table.
+  iree_string_view_t name;
+  // True when the check.case is public testbench API.
+  bool is_public;
+  // Parameter plans in source order.
+  const loom_testbench_parameter_plan_t* parameters;
+  // Number of entries in |parameters|.
+  iree_host_size_t parameter_count;
+  // Full cartesian sample count before applying |max_samples_per_case|.
+  iree_host_size_t cartesian_sample_count;
+  // Number of samples retained for execution after budget capping.
+  iree_host_size_t sample_count;
+  // True when |sample_count| is smaller than |cartesian_sample_count|.
+  bool sample_count_truncated;
+  // Issues discovered while planning this case.
+  const loom_testbench_issue_t* issues;
+  // Number of entries in |issues|.
+  iree_host_size_t issue_count;
+} loom_testbench_case_plan_t;
+
+typedef struct loom_testbench_benchmark_plan_t {
+  // Module-local symbol reference naming this benchmark policy.
+  loom_symbol_ref_t ref;
+  // Symbol table entry for |ref|.
+  const loom_symbol_t* symbol;
+  // Defining check.benchmark operation.
+  const loom_op_t* op;
+  // Borrowed benchmark name from the module string table.
+  iree_string_view_t name;
+  // Referenced check.case symbol.
+  loom_symbol_ref_t case_ref;
+  // Ordinal of the referenced case in the module plan.
+  iree_host_size_t case_index;
+  // Borrowed benchmark attribute dictionary.
+  loom_named_attr_slice_t attrs;
+} loom_testbench_benchmark_plan_t;
+
+typedef struct loom_testbench_module_plan_t {
+  // Module this plan was derived from.
+  const loom_module_t* module;
+  // Discovered check.case records.
+  const loom_testbench_case_plan_t* cases;
+  // Number of entries in |cases|.
+  iree_host_size_t case_count;
+  // Discovered check.benchmark records.
+  const loom_testbench_benchmark_plan_t* benchmarks;
+  // Number of entries in |benchmarks|.
+  iree_host_size_t benchmark_count;
+  // Flat issue list across cases and benchmark records.
+  const loom_testbench_issue_t* issues;
+  // Number of entries in |issues|.
+  iree_host_size_t issue_count;
+} loom_testbench_module_plan_t;
+
+// Plans check.case/check.benchmark records in |module|.
+//
+// IR validity problems are reported as structured issues in |out_plan|. The
+// status channel is reserved for infrastructure failures such as allocation.
+iree_status_t loom_testbench_plan_module(
+    const loom_module_t* module, const loom_testbench_plan_options_t* options,
+    iree_arena_allocator_t* arena, loom_testbench_module_plan_t* out_plan);
+
+// Maps a case sample ordinal to a parameter-local sample ordinal.
+//
+// Parameters use mixed-radix expansion in source order. Parameter 0 varies
+// fastest, then parameter 1, and so on. |sample_ordinal| must be less than the
+// case plan's |cartesian_sample_count|.
+iree_host_size_t loom_testbench_case_sample_parameter_ordinal(
+    const loom_testbench_case_plan_t* case_plan,
+    iree_host_size_t sample_ordinal, iree_host_size_t parameter_index);
+
+// Materializes one static scalar parameter sample as an attribute payload.
+iree_status_t loom_testbench_parameter_sample_value(
+    const loom_testbench_parameter_plan_t* parameter,
+    iree_host_size_t parameter_sample_ordinal, loom_attribute_t* out_value);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // LOOM_TOOLING_TESTBENCH_TESTBENCH_H_
