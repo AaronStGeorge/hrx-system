@@ -8,8 +8,8 @@
 //
 // This layer binds planning, value materialization, invocation dispatch, and
 // expectation reporting into the production case-execution primitive shared by
-// loom-check, benchmark tooling, tuning workflows, and custom harnesses. It
-// stays target-free: callers inject actual/oracle/expectation/file providers.
+// run, test, benchmark, tuning, and custom harnesses. It stays target-free:
+// callers inject actual/oracle/expectation/file providers.
 
 #ifndef LOOM_TOOLING_TESTBENCH_EXECUTOR_H_
 #define LOOM_TOOLING_TESTBENCH_EXECUTOR_H_

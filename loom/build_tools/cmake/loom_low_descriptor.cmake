@@ -125,7 +125,7 @@ endfunction()
 function(loom_low_descriptor_cc_library)
   cmake_parse_arguments(
     _RULE
-    ""
+    "EXCLUDE_FROM_ALL"
     "NAME;HEADER"
     "DEPS"
     ${ARGN}
