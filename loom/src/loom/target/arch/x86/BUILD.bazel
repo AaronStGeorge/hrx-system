@@ -166,6 +166,7 @@ loom_cc_library(
     name = "lower",
     srcs = [
         "lower.c",
+        "lower_avx512_memory.c",
         "lower_avx512_rules.c",
         "lower_packed_dot.c",
     ],

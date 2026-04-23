@@ -22,6 +22,22 @@ extern "C" {
 // Target-local rule table for regular AVX512 source ops.
 extern const loom_low_lower_rule_set_t loom_x86_avx512_rule_set;
 
+// Builds a one-unit AVX512 ZMM register type in the current lowering context.
+iree_status_t loom_x86_make_zmm_register_type(loom_low_lower_context_t* context,
+                                              loom_type_t* out_type);
+
+// Selects a target-owned plan for x86 AVX512 source ops.
+iree_status_t loom_x86_select_avx512_op(void* user_data,
+                                        loom_low_lower_context_t* context,
+                                        const loom_op_t* source_op,
+                                        loom_low_lower_plan_t* out_plan);
+
+// Emits a previously selected x86 AVX512 source op plan.
+iree_status_t loom_x86_emit_avx512_op(void* user_data,
+                                      loom_low_lower_context_t* context,
+                                      const loom_op_t* source_op,
+                                      loom_low_lower_plan_t plan);
+
 // Maps a packed-dot source value type to the selected x86 register class.
 iree_status_t loom_x86_map_packed_dot_type(void* user_data,
                                            loom_low_lower_context_t* context,

@@ -116,6 +116,7 @@ loom_cc_library(
     "lower_internal.h"
   SRCS
     "lower.c"
+    "lower_avx512_memory.c"
     "lower_avx512_rules.c"
     "lower_packed_dot.c"
   DEPS
