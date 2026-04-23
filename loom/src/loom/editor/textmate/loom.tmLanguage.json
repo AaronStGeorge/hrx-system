@@ -89,6 +89,18 @@
         },
         {
           "name": "meta.operation-name.loom",
+          "match": "\\b(check)\\.(generate\\.random\\.uniform|expect\\.bitwise|file\\.write\\.npy|file\\.read\\.npy|generate\\.fill|generate\\.iota|expect\\.close|expect\\.equal|expect\\.shape|param\\.choice|oracle\\.call|param\\.range|param\\.seed|benchmark|requires|literal|skip_if|expect|return|case)\\b",
+          "captures": {
+            "1": {
+              "name": "support.namespace.dialect.loom"
+            },
+            "2": {
+              "name": "entity.name.function.operation.loom"
+            }
+          }
+        },
+        {
+          "name": "meta.operation-name.loom",
           "match": "\\b(encoding)\\.(layout\\.assume\\.strided|layout\\.assume\\.dense|layout\\.strided|layout\\.dense|assume\\.spec|define|isa)\\b",
           "captures": {
             "1": {
@@ -305,7 +317,7 @@
       "patterns": [
         {
           "name": "keyword.other.loom",
-          "match": "\\b(?:allocation|iter_args|expected|priority|schedule|default|dgroups|actual|device|export|import|layout|preset|public|source|target|range|using|value|where|case|else|host|into|path|seed|step|abi|for|as|do|to|x)\\b"
+          "match": "\\b(?:allocation|iter_args|expected|priority|schedule|default|dgroups|actual|bounds|callee|device|export|import|inputs|layout|offset|preset|public|reason|source|target|values|attrs|count|range|shape|using|value|where|atol|base|case|else|host|into|mode|path|rtol|seed|step|abi|for|nan|as|do|to|x)\\b"
         },
         {
           "name": "constant.language.boolean.loom",

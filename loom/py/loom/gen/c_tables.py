@@ -132,6 +132,20 @@ KEYWORD_MAP: dict[str, str] = {
     "path": "LOOM_KW_PATH",
     "actual": "LOOM_KW_ACTUAL",
     "expected": "LOOM_KW_EXPECTED",
+    "atol": "LOOM_KW_ATOL",
+    "attrs": "LOOM_KW_ATTRS",
+    "base": "LOOM_KW_BASE",
+    "bounds": "LOOM_KW_BOUNDS",
+    "callee": "LOOM_KW_CALLEE",
+    "count": "LOOM_KW_COUNT",
+    "inputs": "LOOM_KW_INPUTS",
+    "mode": "LOOM_KW_MODE",
+    "nan": "LOOM_KW_NAN",
+    "offset": "LOOM_KW_OFFSET",
+    "reason": "LOOM_KW_REASON",
+    "rtol": "LOOM_KW_RTOL",
+    "shape": "LOOM_KW_SHAPE",
+    "values": "LOOM_KW_VALUES",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The
@@ -3772,6 +3786,7 @@ def main() -> None:
     from loom.builtin_types import ALL_BUILTIN_TYPES
     from loom.dialect.buffer import ALL_BUFFER_OPS, buffer_ops
     from loom.dialect.cfg import ALL_CFG_OPS, cfg_ops
+    from loom.dialect.check import ALL_CHECK_OPS, check_ops
     from loom.dialect.encoding import ALL_ENCODING_OPS, encoding_ops
     from loom.dialect.func import ALL_FUNC_OPS, func_ops
     from loom.dialect.globals import ALL_GLOBAL_OPS, global_ops
@@ -3798,6 +3813,7 @@ def main() -> None:
         (global_ops, list(ALL_GLOBAL_OPS)),
         (scf_ops, list(ALL_SCF_OPS)),
         (cfg_ops, list(ALL_CFG_OPS)),
+        (check_ops, list(ALL_CHECK_OPS)),
         (buffer_ops, list(ALL_BUFFER_OPS)),
         (view_ops, list(ALL_VIEW_OPS)),
         (vector_ops, list(ALL_VECTOR_OPS)),

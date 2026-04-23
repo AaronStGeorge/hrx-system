@@ -13,6 +13,7 @@ that defines its operations and exports them for use in IR construction.
 from loom.dialect import (
     buffer,
     cfg,
+    check,
     encoding,
     func,
     hal,
@@ -30,6 +31,7 @@ from loom.dialect import (
 __all__ = [
     "buffer",
     "cfg",
+    "check",
     "encoding",
     "func",
     "hal",
