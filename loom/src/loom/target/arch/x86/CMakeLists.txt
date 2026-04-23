@@ -115,6 +115,7 @@ loom_cc_library(
     "lower.h"
   SRCS
     "lower.c"
+    "lower_avx512_rules.c"
   DEPS
     ::avx512_descriptors_ids
     ::packed_dot_contract
