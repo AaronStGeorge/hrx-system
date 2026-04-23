@@ -55,3 +55,19 @@ low.func.def target(@wasm_splat_target) @wasm_splat(%value: reg<wasm.i32>, %rhs:
 
 // ----
 wasm module validated: wasm_splat
+
+// ====
+// RUN: emit wasm-module-validate @wasm_select export=wasm_select
+// REQUIRES: wasm-validate
+target.profile @wasm_select_target preset("wasm-simd128")
+
+low.func.def target(@wasm_select_target) @wasm_select(%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>, %flhs: reg<wasm.v128>, %frhs: reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %imask = low.op<wasm.i32x4.lt_s>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  %iselect = low.op<wasm.v128.bitselect>(%lhs, %rhs, %imask) : (reg<wasm.v128>, reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  %fmask = low.op<wasm.f32x4.lt>(%flhs, %frhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  %selected = low.op<wasm.v128.bitselect>(%iselect, %flhs, %fmask) : (reg<wasm.v128>, reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  low.return %selected : reg<wasm.v128>
+}
+
+// ----
+wasm module validated: wasm_select

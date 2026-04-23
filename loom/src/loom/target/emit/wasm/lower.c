@@ -38,6 +38,13 @@ static bool loom_wasm_type_is_vector_4xi32(loom_type_t type) {
          loom_type_dim_static_size_at(type, 0) == 4;
 }
 
+static bool loom_wasm_type_is_vector_4xi1(loom_type_t type) {
+  return loom_type_is_vector(type) && loom_type_rank(type) == 1 &&
+         loom_type_is_all_static(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1 &&
+         loom_type_dim_static_size_at(type, 0) == 4;
+}
+
 static bool loom_wasm_type_is_vector_4xf32(loom_type_t type) {
   return loom_type_is_vector(type) && loom_type_rank(type) == 1 &&
          loom_type_is_all_static(type) &&
@@ -69,13 +76,17 @@ static iree_status_t loom_wasm_map_type(void* user_data,
   if (loom_wasm_type_is_vector_4xi32(source_type)) {
     return loom_wasm_make_v128_register_type(context, out_low_type);
   }
+  if (loom_wasm_type_is_vector_4xi1(source_type)) {
+    return loom_wasm_make_v128_register_type(context, out_low_type);
+  }
   if (loom_wasm_type_is_vector_4xf32(source_type)) {
     return loom_wasm_make_v128_register_type(context, out_low_type);
   }
   return loom_low_lower_emit_reject(
       context, source_op, IREE_SV("type"), IREE_SV("source"),
       IREE_SV("Wasm lowering currently supports only i32/index/offset scalar "
-              "values and vector<4xi32>/vector<4xf32> SIMD values"));
+              "values and vector<4xi1>/vector<4xi32>/vector<4xf32> SIMD "
+              "values"));
 }
 
 static iree_status_t loom_wasm_map_argument(
@@ -112,7 +123,8 @@ enum loom_wasm_type_pattern_e {
   LOOM_WASM_TYPE_I32 = 0,
   LOOM_WASM_TYPE_V4I32 = 1,
   LOOM_WASM_TYPE_V4F32 = 2,
-  LOOM_WASM_TYPE_ADDRESS_I32 = 3,
+  LOOM_WASM_TYPE_V4I1 = 3,
+  LOOM_WASM_TYPE_ADDRESS_I32 = 4,
 };
 
 static const loom_low_lower_type_pattern_t loom_wasm_type_patterns[] = {
@@ -148,6 +160,18 @@ static const loom_low_lower_type_pattern_t loom_wasm_type_patterns[] = {
             .rank = 1,
             .static_dim0 = 4,
         },
+    [LOOM_WASM_TYPE_V4I1] =
+        {
+            .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0,
+            .type_kind = LOOM_TYPE_VECTOR,
+            .element_type_mask =
+                LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I1),
+            .rank = 1,
+            .static_dim0 = 4,
+        },
     [LOOM_WASM_TYPE_ADDRESS_I32] =
         {
             .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
@@ -162,7 +186,11 @@ static const loom_low_lower_type_pattern_t loom_wasm_type_patterns[] = {
 enum loom_wasm_value_ref_e {
   LOOM_WASM_OPERAND0 = 0,
   LOOM_WASM_OPERAND1 = 1,
-  LOOM_WASM_RESULT0 = 2,
+  LOOM_WASM_OPERAND2 = 2,
+  LOOM_WASM_RESULT0 = 3,
+  LOOM_WASM_SELECT_TRUE_VALUE = 4,
+  LOOM_WASM_SELECT_FALSE_VALUE = 5,
+  LOOM_WASM_SELECT_CONDITION = 6,
 };
 
 static const loom_low_lower_value_ref_t loom_wasm_value_refs[] = {
@@ -176,9 +204,29 @@ static const loom_low_lower_value_ref_t loom_wasm_value_refs[] = {
             .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
             .index = 1,
         },
+    [LOOM_WASM_OPERAND2] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+            .index = 2,
+        },
     [LOOM_WASM_RESULT0] =
         {
             .kind = LOOM_LOW_LOWER_VALUE_REF_RESULT,
+            .index = 0,
+        },
+    [LOOM_WASM_SELECT_TRUE_VALUE] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+            .index = 1,
+        },
+    [LOOM_WASM_SELECT_FALSE_VALUE] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+            .index = 2,
+        },
+    [LOOM_WASM_SELECT_CONDITION] =
+        {
+            .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
             .index = 0,
         },
 };
@@ -197,6 +245,7 @@ enum loom_wasm_diagnostic_e {
   LOOM_WASM_DIAGNOSTIC_I64_ATTR = 3,
   LOOM_WASM_DIAGNOSTIC_I32_CONSTANT_RANGE = 4,
   LOOM_WASM_DIAGNOSTIC_ADDRESS_I32 = 5,
+  LOOM_WASM_DIAGNOSTIC_V4I1 = 6,
 };
 
 static const loom_low_lower_diagnostic_t loom_wasm_diagnostics[] = {
@@ -239,6 +288,13 @@ static const loom_low_lower_diagnostic_t loom_wasm_diagnostics[] = {
             .reason = IREE_SVL(
                 "Wasm address lowering requires index or offset scalar values"),
         },
+    [LOOM_WASM_DIAGNOSTIC_V4I1] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("vector<4xi1>"),
+            .reason = IREE_SVL(
+                "Wasm SIMD mask lowering requires vector<4xi1> values"),
+        },
 };
 
 enum loom_wasm_guard_e {
@@ -262,7 +318,68 @@ enum loom_wasm_guard_e {
   LOOM_WASM_V4I32_LHS_GUARD = 17,
   LOOM_WASM_V4I32_RHS_GUARD = 18,
   LOOM_WASM_V4I32_RESULT_GUARD = 19,
+  LOOM_WASM_SELECT_V4I32_GUARD = 20,
+  LOOM_WASM_SELECT_V4F32_GUARD = LOOM_WASM_SELECT_V4I32_GUARD + 4,
+  LOOM_WASM_CMPI_EQ_GUARD = LOOM_WASM_SELECT_V4F32_GUARD + 4,
+  LOOM_WASM_CMPI_NE_GUARD = LOOM_WASM_CMPI_EQ_GUARD + 4,
+  LOOM_WASM_CMPI_SLT_GUARD = LOOM_WASM_CMPI_NE_GUARD + 4,
+  LOOM_WASM_CMPI_SLE_GUARD = LOOM_WASM_CMPI_SLT_GUARD + 4,
+  LOOM_WASM_CMPI_SGT_GUARD = LOOM_WASM_CMPI_SLE_GUARD + 4,
+  LOOM_WASM_CMPI_SGE_GUARD = LOOM_WASM_CMPI_SGT_GUARD + 4,
+  LOOM_WASM_CMPI_ULT_GUARD = LOOM_WASM_CMPI_SGE_GUARD + 4,
+  LOOM_WASM_CMPI_ULE_GUARD = LOOM_WASM_CMPI_ULT_GUARD + 4,
+  LOOM_WASM_CMPI_UGT_GUARD = LOOM_WASM_CMPI_ULE_GUARD + 4,
+  LOOM_WASM_CMPI_UGE_GUARD = LOOM_WASM_CMPI_UGT_GUARD + 4,
+  LOOM_WASM_CMPF_OEQ_GUARD = LOOM_WASM_CMPI_UGE_GUARD + 4,
+  LOOM_WASM_CMPF_OGT_GUARD = LOOM_WASM_CMPF_OEQ_GUARD + 4,
+  LOOM_WASM_CMPF_OGE_GUARD = LOOM_WASM_CMPF_OGT_GUARD + 4,
+  LOOM_WASM_CMPF_OLT_GUARD = LOOM_WASM_CMPF_OGE_GUARD + 4,
+  LOOM_WASM_CMPF_OLE_GUARD = LOOM_WASM_CMPF_OLT_GUARD + 4,
 };
+
+#define LOOM_WASM_VALUE_TYPE_GUARD(value_ref, type_pattern, diagnostic) \
+  {                                                                     \
+      .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,                          \
+      .value_ref_index = value_ref,                                     \
+      .type_pattern_index = type_pattern,                               \
+      .diagnostic_index = diagnostic,                                   \
+  }
+
+#define LOOM_WASM_ATTR_ENUM_GUARD(enum_value)             \
+  {                                                       \
+      .kind = LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ,          \
+      .attr_index = 0,                                    \
+      .diagnostic_index = LOOM_LOW_LOWER_DIAGNOSTIC_NONE, \
+      .u64 = enum_value,                                  \
+  }
+
+#define LOOM_WASM_SELECT_GUARDS(base, value_type, diagnostic)                  \
+  [base] = LOOM_WASM_VALUE_TYPE_GUARD(LOOM_WASM_OPERAND0, LOOM_WASM_TYPE_V4I1, \
+                                      LOOM_WASM_DIAGNOSTIC_V4I1),              \
+  [(base) + 1] =                                                               \
+      LOOM_WASM_VALUE_TYPE_GUARD(LOOM_WASM_OPERAND1, value_type, diagnostic),  \
+  [(base) + 2] =                                                               \
+      LOOM_WASM_VALUE_TYPE_GUARD(LOOM_WASM_OPERAND2, value_type, diagnostic),  \
+  [(base) + 3] =                                                               \
+      LOOM_WASM_VALUE_TYPE_GUARD(LOOM_WASM_RESULT0, value_type, diagnostic)
+
+#define LOOM_WASM_CMPI_GUARDS(base, predicate)                               \
+  [base] = LOOM_WASM_ATTR_ENUM_GUARD(predicate),                             \
+  [(base) + 1] = LOOM_WASM_VALUE_TYPE_GUARD(                                 \
+      LOOM_WASM_OPERAND0, LOOM_WASM_TYPE_V4I32, LOOM_WASM_DIAGNOSTIC_V4I32), \
+  [(base) + 2] = LOOM_WASM_VALUE_TYPE_GUARD(                                 \
+      LOOM_WASM_OPERAND1, LOOM_WASM_TYPE_V4I32, LOOM_WASM_DIAGNOSTIC_V4I32), \
+  [(base) + 3] = LOOM_WASM_VALUE_TYPE_GUARD(                                 \
+      LOOM_WASM_RESULT0, LOOM_WASM_TYPE_V4I1, LOOM_WASM_DIAGNOSTIC_V4I1)
+
+#define LOOM_WASM_CMPF_GUARDS(base, predicate)                               \
+  [base] = LOOM_WASM_ATTR_ENUM_GUARD(predicate),                             \
+  [(base) + 1] = LOOM_WASM_VALUE_TYPE_GUARD(                                 \
+      LOOM_WASM_OPERAND0, LOOM_WASM_TYPE_V4F32, LOOM_WASM_DIAGNOSTIC_V4F32), \
+  [(base) + 2] = LOOM_WASM_VALUE_TYPE_GUARD(                                 \
+      LOOM_WASM_OPERAND1, LOOM_WASM_TYPE_V4F32, LOOM_WASM_DIAGNOSTIC_V4F32), \
+  [(base) + 3] = LOOM_WASM_VALUE_TYPE_GUARD(                                 \
+      LOOM_WASM_RESULT0, LOOM_WASM_TYPE_V4I1, LOOM_WASM_DIAGNOSTIC_V4I1)
 
 static const loom_low_lower_guard_t loom_wasm_guards[] = {
     [LOOM_WASM_CONST_VALUE_GUARD] =
@@ -407,7 +524,47 @@ static const loom_low_lower_guard_t loom_wasm_guards[] = {
             .type_pattern_index = LOOM_WASM_TYPE_V4I32,
             .diagnostic_index = LOOM_WASM_DIAGNOSTIC_V4I32,
         },
+    LOOM_WASM_SELECT_GUARDS(LOOM_WASM_SELECT_V4I32_GUARD, LOOM_WASM_TYPE_V4I32,
+                            LOOM_WASM_DIAGNOSTIC_V4I32),
+    LOOM_WASM_SELECT_GUARDS(LOOM_WASM_SELECT_V4F32_GUARD, LOOM_WASM_TYPE_V4F32,
+                            LOOM_WASM_DIAGNOSTIC_V4F32),
+    LOOM_WASM_CMPI_GUARDS(LOOM_WASM_CMPI_EQ_GUARD,
+                          LOOM_VECTOR_CMPI_PREDICATE_EQ),
+    LOOM_WASM_CMPI_GUARDS(LOOM_WASM_CMPI_NE_GUARD,
+                          LOOM_VECTOR_CMPI_PREDICATE_NE),
+    LOOM_WASM_CMPI_GUARDS(LOOM_WASM_CMPI_SLT_GUARD,
+                          LOOM_VECTOR_CMPI_PREDICATE_SLT),
+    LOOM_WASM_CMPI_GUARDS(LOOM_WASM_CMPI_SLE_GUARD,
+                          LOOM_VECTOR_CMPI_PREDICATE_SLE),
+    LOOM_WASM_CMPI_GUARDS(LOOM_WASM_CMPI_SGT_GUARD,
+                          LOOM_VECTOR_CMPI_PREDICATE_SGT),
+    LOOM_WASM_CMPI_GUARDS(LOOM_WASM_CMPI_SGE_GUARD,
+                          LOOM_VECTOR_CMPI_PREDICATE_SGE),
+    LOOM_WASM_CMPI_GUARDS(LOOM_WASM_CMPI_ULT_GUARD,
+                          LOOM_VECTOR_CMPI_PREDICATE_ULT),
+    LOOM_WASM_CMPI_GUARDS(LOOM_WASM_CMPI_ULE_GUARD,
+                          LOOM_VECTOR_CMPI_PREDICATE_ULE),
+    LOOM_WASM_CMPI_GUARDS(LOOM_WASM_CMPI_UGT_GUARD,
+                          LOOM_VECTOR_CMPI_PREDICATE_UGT),
+    LOOM_WASM_CMPI_GUARDS(LOOM_WASM_CMPI_UGE_GUARD,
+                          LOOM_VECTOR_CMPI_PREDICATE_UGE),
+    LOOM_WASM_CMPF_GUARDS(LOOM_WASM_CMPF_OEQ_GUARD,
+                          LOOM_VECTOR_CMPF_PREDICATE_OEQ),
+    LOOM_WASM_CMPF_GUARDS(LOOM_WASM_CMPF_OGT_GUARD,
+                          LOOM_VECTOR_CMPF_PREDICATE_OGT),
+    LOOM_WASM_CMPF_GUARDS(LOOM_WASM_CMPF_OGE_GUARD,
+                          LOOM_VECTOR_CMPF_PREDICATE_OGE),
+    LOOM_WASM_CMPF_GUARDS(LOOM_WASM_CMPF_OLT_GUARD,
+                          LOOM_VECTOR_CMPF_PREDICATE_OLT),
+    LOOM_WASM_CMPF_GUARDS(LOOM_WASM_CMPF_OLE_GUARD,
+                          LOOM_VECTOR_CMPF_PREDICATE_OLE),
 };
+
+#undef LOOM_WASM_CMPF_GUARDS
+#undef LOOM_WASM_CMPI_GUARDS
+#undef LOOM_WASM_SELECT_GUARDS
+#undef LOOM_WASM_ATTR_ENUM_GUARD
+#undef LOOM_WASM_VALUE_TYPE_GUARD
 
 enum loom_wasm_emit_e {
   LOOM_WASM_EMIT_I32_CONST = 0,
@@ -420,7 +577,53 @@ enum loom_wasm_emit_e {
   LOOM_WASM_EMIT_I32X4_ADD = 7,
   LOOM_WASM_EMIT_I32X4_SUB = 8,
   LOOM_WASM_EMIT_I32X4_MUL = 9,
+  LOOM_WASM_EMIT_I32X4_EQ = 10,
+  LOOM_WASM_EMIT_I32X4_NE = 11,
+  LOOM_WASM_EMIT_I32X4_LT_S = 12,
+  LOOM_WASM_EMIT_I32X4_LE_S = 13,
+  LOOM_WASM_EMIT_I32X4_GT_S = 14,
+  LOOM_WASM_EMIT_I32X4_GE_S = 15,
+  LOOM_WASM_EMIT_I32X4_LT_U = 16,
+  LOOM_WASM_EMIT_I32X4_LE_U = 17,
+  LOOM_WASM_EMIT_I32X4_GT_U = 18,
+  LOOM_WASM_EMIT_I32X4_GE_U = 19,
+  LOOM_WASM_EMIT_F32X4_EQ = 20,
+  LOOM_WASM_EMIT_F32X4_GT = 21,
+  LOOM_WASM_EMIT_F32X4_GE = 22,
+  LOOM_WASM_EMIT_F32X4_LT = 23,
+  LOOM_WASM_EMIT_F32X4_LE = 24,
+  LOOM_WASM_EMIT_V128_BITSELECT = 25,
 };
+
+#define LOOM_WASM_UNARY_EMIT(descriptor_name)    \
+  {                                              \
+      .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP, \
+      .descriptor_id = descriptor_name,          \
+      .operand_ref_start = LOOM_WASM_OPERAND0,   \
+      .operand_ref_count = 1,                    \
+      .result_ref_start = LOOM_WASM_RESULT0,     \
+      .result_ref_count = 1,                     \
+  }
+
+#define LOOM_WASM_BINARY_EMIT(descriptor_name)   \
+  {                                              \
+      .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP, \
+      .descriptor_id = descriptor_name,          \
+      .operand_ref_start = LOOM_WASM_OPERAND0,   \
+      .operand_ref_count = 2,                    \
+      .result_ref_start = LOOM_WASM_RESULT0,     \
+      .result_ref_count = 1,                     \
+  }
+
+#define LOOM_WASM_SELECT_EMIT(descriptor_name)          \
+  {                                                     \
+      .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,        \
+      .descriptor_id = descriptor_name,                 \
+      .operand_ref_start = LOOM_WASM_SELECT_TRUE_VALUE, \
+      .operand_ref_count = 3,                           \
+      .result_ref_start = LOOM_WASM_RESULT0,            \
+      .result_ref_count = 1,                            \
+  }
 
 static const loom_low_lower_emit_t loom_wasm_emits[] = {
     [LOOM_WASM_EMIT_I32_CONST] =
@@ -433,249 +636,228 @@ static const loom_low_lower_emit_t loom_wasm_emits[] = {
             .attr_copy_count = 1,
         },
     [LOOM_WASM_EMIT_I32_ADD] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD,
-            .operand_ref_start = LOOM_WASM_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_WASM_RESULT0,
-            .result_ref_count = 1,
-        },
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD),
     [LOOM_WASM_EMIT_I32_SUB] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_SUB,
-            .operand_ref_start = LOOM_WASM_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_WASM_RESULT0,
-            .result_ref_count = 1,
-        },
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_SUB),
     [LOOM_WASM_EMIT_I32_MUL] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_MUL,
-            .operand_ref_start = LOOM_WASM_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_WASM_RESULT0,
-            .result_ref_count = 1,
-        },
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_MUL),
     [LOOM_WASM_EMIT_I32X4_SPLAT] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SPLAT,
-            .operand_ref_start = LOOM_WASM_OPERAND0,
-            .operand_ref_count = 1,
-            .result_ref_start = LOOM_WASM_RESULT0,
-            .result_ref_count = 1,
-        },
+        LOOM_WASM_UNARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SPLAT),
     [LOOM_WASM_EMIT_F32X4_ADD] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_ADD,
-            .operand_ref_start = LOOM_WASM_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_WASM_RESULT0,
-            .result_ref_count = 1,
-        },
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_ADD),
     [LOOM_WASM_EMIT_F32X4_MUL] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_MUL,
-            .operand_ref_start = LOOM_WASM_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_WASM_RESULT0,
-            .result_ref_count = 1,
-        },
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_MUL),
     [LOOM_WASM_EMIT_I32X4_ADD] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_ADD,
-            .operand_ref_start = LOOM_WASM_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_WASM_RESULT0,
-            .result_ref_count = 1,
-        },
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_ADD),
     [LOOM_WASM_EMIT_I32X4_SUB] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SUB,
-            .operand_ref_start = LOOM_WASM_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_WASM_RESULT0,
-            .result_ref_count = 1,
-        },
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_SUB),
     [LOOM_WASM_EMIT_I32X4_MUL] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_MUL,
-            .operand_ref_start = LOOM_WASM_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_WASM_RESULT0,
-            .result_ref_count = 1,
-        },
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_MUL),
+    [LOOM_WASM_EMIT_I32X4_EQ] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_EQ),
+    [LOOM_WASM_EMIT_I32X4_NE] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_NE),
+    [LOOM_WASM_EMIT_I32X4_LT_S] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_LT_S),
+    [LOOM_WASM_EMIT_I32X4_LE_S] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_LE_S),
+    [LOOM_WASM_EMIT_I32X4_GT_S] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_GT_S),
+    [LOOM_WASM_EMIT_I32X4_GE_S] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_GE_S),
+    [LOOM_WASM_EMIT_I32X4_LT_U] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_LT_U),
+    [LOOM_WASM_EMIT_I32X4_LE_U] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_LE_U),
+    [LOOM_WASM_EMIT_I32X4_GT_U] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_GT_U),
+    [LOOM_WASM_EMIT_I32X4_GE_U] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_GE_U),
+    [LOOM_WASM_EMIT_F32X4_EQ] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_EQ),
+    [LOOM_WASM_EMIT_F32X4_GT] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_GT),
+    [LOOM_WASM_EMIT_F32X4_GE] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_GE),
+    [LOOM_WASM_EMIT_F32X4_LT] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_LT),
+    [LOOM_WASM_EMIT_F32X4_LE] =
+        LOOM_WASM_BINARY_EMIT(WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_LE),
+    [LOOM_WASM_EMIT_V128_BITSELECT] = LOOM_WASM_SELECT_EMIT(
+        WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_V128_BITSELECT),
 };
+
+#undef LOOM_WASM_SELECT_EMIT
+#undef LOOM_WASM_BINARY_EMIT
+#undef LOOM_WASM_UNARY_EMIT
+
+enum loom_wasm_rule_e {
+  LOOM_WASM_RULE_SCALAR_ADDI = 0,
+  LOOM_WASM_RULE_SCALAR_SUBI,
+  LOOM_WASM_RULE_SCALAR_CONSTANT,
+  LOOM_WASM_RULE_VECTOR_SPLAT,
+  LOOM_WASM_RULE_VECTOR_SELECT_V4I32,
+  LOOM_WASM_RULE_VECTOR_SELECT_V4F32,
+  LOOM_WASM_RULE_VECTOR_CMPI_EQ,
+  LOOM_WASM_RULE_VECTOR_CMPI_NE,
+  LOOM_WASM_RULE_VECTOR_CMPI_SLT,
+  LOOM_WASM_RULE_VECTOR_CMPI_SLE,
+  LOOM_WASM_RULE_VECTOR_CMPI_SGT,
+  LOOM_WASM_RULE_VECTOR_CMPI_SGE,
+  LOOM_WASM_RULE_VECTOR_CMPI_ULT,
+  LOOM_WASM_RULE_VECTOR_CMPI_ULE,
+  LOOM_WASM_RULE_VECTOR_CMPI_UGT,
+  LOOM_WASM_RULE_VECTOR_CMPI_UGE,
+  LOOM_WASM_RULE_VECTOR_CMPF_OEQ,
+  LOOM_WASM_RULE_VECTOR_CMPF_OGT,
+  LOOM_WASM_RULE_VECTOR_CMPF_OGE,
+  LOOM_WASM_RULE_VECTOR_CMPF_OLT,
+  LOOM_WASM_RULE_VECTOR_CMPF_OLE,
+  LOOM_WASM_RULE_VECTOR_ADDF,
+  LOOM_WASM_RULE_VECTOR_MULF,
+  LOOM_WASM_RULE_VECTOR_ADDI,
+  LOOM_WASM_RULE_VECTOR_SUBI,
+  LOOM_WASM_RULE_VECTOR_MULI,
+  LOOM_WASM_RULE_INDEX_CONSTANT,
+  LOOM_WASM_RULE_INDEX_ADD,
+  LOOM_WASM_RULE_INDEX_SUB,
+  LOOM_WASM_RULE_INDEX_MUL,
+};
+
+#define LOOM_WASM_RULE(source_op, guard, guard_count_value, emit) \
+  {                                                               \
+      .source_op_kind = source_op,                                \
+      .guard_start = guard,                                       \
+      .guard_count = guard_count_value,                           \
+      .emit_start = emit,                                         \
+      .emit_count = 1,                                            \
+  }
 
 static const loom_low_lower_rule_t loom_wasm_rules[] = {
-    {
-        .source_op_kind = LOOM_OP_SCALAR_ADDI,
-        .guard_start = LOOM_WASM_SCALAR_LHS_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_I32_ADD,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_SCALAR_SUBI,
-        .guard_start = LOOM_WASM_SCALAR_LHS_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_I32_SUB,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
-        .guard_start = LOOM_WASM_CONST_VALUE_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_I32_CONST,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_SPLAT,
-        .guard_start = LOOM_WASM_SPLAT_SCALAR_GUARD,
-        .guard_count = 2,
-        .emit_start = LOOM_WASM_EMIT_I32X4_SPLAT,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_ADDF,
-        .guard_start = LOOM_WASM_V4F32_LHS_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_F32X4_ADD,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_MULF,
-        .guard_start = LOOM_WASM_V4F32_LHS_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_F32X4_MUL,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_ADDI,
-        .guard_start = LOOM_WASM_V4I32_LHS_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_I32X4_ADD,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_SUBI,
-        .guard_start = LOOM_WASM_V4I32_LHS_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_I32X4_SUB,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_MULI,
-        .guard_start = LOOM_WASM_V4I32_LHS_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_I32X4_MUL,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_INDEX_CONSTANT,
-        .guard_start = LOOM_WASM_ADDRESS_CONST_VALUE_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_I32_CONST,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_INDEX_ADD,
-        .guard_start = LOOM_WASM_ADDRESS_LHS_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_I32_ADD,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_INDEX_SUB,
-        .guard_start = LOOM_WASM_ADDRESS_LHS_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_I32_SUB,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_INDEX_MUL,
-        .guard_start = LOOM_WASM_ADDRESS_LHS_GUARD,
-        .guard_count = 3,
-        .emit_start = LOOM_WASM_EMIT_I32_MUL,
-        .emit_count = 1,
-    },
+    [LOOM_WASM_RULE_SCALAR_ADDI] =
+        LOOM_WASM_RULE(LOOM_OP_SCALAR_ADDI, LOOM_WASM_SCALAR_LHS_GUARD, 3,
+                       LOOM_WASM_EMIT_I32_ADD),
+    [LOOM_WASM_RULE_SCALAR_SUBI] =
+        LOOM_WASM_RULE(LOOM_OP_SCALAR_SUBI, LOOM_WASM_SCALAR_LHS_GUARD, 3,
+                       LOOM_WASM_EMIT_I32_SUB),
+    [LOOM_WASM_RULE_SCALAR_CONSTANT] =
+        LOOM_WASM_RULE(LOOM_OP_SCALAR_CONSTANT, LOOM_WASM_CONST_VALUE_GUARD, 3,
+                       LOOM_WASM_EMIT_I32_CONST),
+    [LOOM_WASM_RULE_VECTOR_SPLAT] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_SPLAT, LOOM_WASM_SPLAT_SCALAR_GUARD, 2,
+                       LOOM_WASM_EMIT_I32X4_SPLAT),
+    [LOOM_WASM_RULE_VECTOR_SELECT_V4I32] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_SELECT, LOOM_WASM_SELECT_V4I32_GUARD, 4,
+                       LOOM_WASM_EMIT_V128_BITSELECT),
+    [LOOM_WASM_RULE_VECTOR_SELECT_V4F32] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_SELECT, LOOM_WASM_SELECT_V4F32_GUARD, 4,
+                       LOOM_WASM_EMIT_V128_BITSELECT),
+    [LOOM_WASM_RULE_VECTOR_CMPI_EQ] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPI, LOOM_WASM_CMPI_EQ_GUARD, 4,
+                       LOOM_WASM_EMIT_I32X4_EQ),
+    [LOOM_WASM_RULE_VECTOR_CMPI_NE] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPI, LOOM_WASM_CMPI_NE_GUARD, 4,
+                       LOOM_WASM_EMIT_I32X4_NE),
+    [LOOM_WASM_RULE_VECTOR_CMPI_SLT] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPI, LOOM_WASM_CMPI_SLT_GUARD, 4,
+                       LOOM_WASM_EMIT_I32X4_LT_S),
+    [LOOM_WASM_RULE_VECTOR_CMPI_SLE] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPI, LOOM_WASM_CMPI_SLE_GUARD, 4,
+                       LOOM_WASM_EMIT_I32X4_LE_S),
+    [LOOM_WASM_RULE_VECTOR_CMPI_SGT] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPI, LOOM_WASM_CMPI_SGT_GUARD, 4,
+                       LOOM_WASM_EMIT_I32X4_GT_S),
+    [LOOM_WASM_RULE_VECTOR_CMPI_SGE] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPI, LOOM_WASM_CMPI_SGE_GUARD, 4,
+                       LOOM_WASM_EMIT_I32X4_GE_S),
+    [LOOM_WASM_RULE_VECTOR_CMPI_ULT] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPI, LOOM_WASM_CMPI_ULT_GUARD, 4,
+                       LOOM_WASM_EMIT_I32X4_LT_U),
+    [LOOM_WASM_RULE_VECTOR_CMPI_ULE] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPI, LOOM_WASM_CMPI_ULE_GUARD, 4,
+                       LOOM_WASM_EMIT_I32X4_LE_U),
+    [LOOM_WASM_RULE_VECTOR_CMPI_UGT] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPI, LOOM_WASM_CMPI_UGT_GUARD, 4,
+                       LOOM_WASM_EMIT_I32X4_GT_U),
+    [LOOM_WASM_RULE_VECTOR_CMPI_UGE] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPI, LOOM_WASM_CMPI_UGE_GUARD, 4,
+                       LOOM_WASM_EMIT_I32X4_GE_U),
+    [LOOM_WASM_RULE_VECTOR_CMPF_OEQ] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPF, LOOM_WASM_CMPF_OEQ_GUARD, 4,
+                       LOOM_WASM_EMIT_F32X4_EQ),
+    [LOOM_WASM_RULE_VECTOR_CMPF_OGT] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPF, LOOM_WASM_CMPF_OGT_GUARD, 4,
+                       LOOM_WASM_EMIT_F32X4_GT),
+    [LOOM_WASM_RULE_VECTOR_CMPF_OGE] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPF, LOOM_WASM_CMPF_OGE_GUARD, 4,
+                       LOOM_WASM_EMIT_F32X4_GE),
+    [LOOM_WASM_RULE_VECTOR_CMPF_OLT] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPF, LOOM_WASM_CMPF_OLT_GUARD, 4,
+                       LOOM_WASM_EMIT_F32X4_LT),
+    [LOOM_WASM_RULE_VECTOR_CMPF_OLE] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_CMPF, LOOM_WASM_CMPF_OLE_GUARD, 4,
+                       LOOM_WASM_EMIT_F32X4_LE),
+    [LOOM_WASM_RULE_VECTOR_ADDF] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_ADDF, LOOM_WASM_V4F32_LHS_GUARD, 3,
+                       LOOM_WASM_EMIT_F32X4_ADD),
+    [LOOM_WASM_RULE_VECTOR_MULF] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_MULF, LOOM_WASM_V4F32_LHS_GUARD, 3,
+                       LOOM_WASM_EMIT_F32X4_MUL),
+    [LOOM_WASM_RULE_VECTOR_ADDI] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_ADDI, LOOM_WASM_V4I32_LHS_GUARD, 3,
+                       LOOM_WASM_EMIT_I32X4_ADD),
+    [LOOM_WASM_RULE_VECTOR_SUBI] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_SUBI, LOOM_WASM_V4I32_LHS_GUARD, 3,
+                       LOOM_WASM_EMIT_I32X4_SUB),
+    [LOOM_WASM_RULE_VECTOR_MULI] =
+        LOOM_WASM_RULE(LOOM_OP_VECTOR_MULI, LOOM_WASM_V4I32_LHS_GUARD, 3,
+                       LOOM_WASM_EMIT_I32X4_MUL),
+    [LOOM_WASM_RULE_INDEX_CONSTANT] = LOOM_WASM_RULE(
+        LOOM_OP_INDEX_CONSTANT, LOOM_WASM_ADDRESS_CONST_VALUE_GUARD, 3,
+        LOOM_WASM_EMIT_I32_CONST),
+    [LOOM_WASM_RULE_INDEX_ADD] =
+        LOOM_WASM_RULE(LOOM_OP_INDEX_ADD, LOOM_WASM_ADDRESS_LHS_GUARD, 3,
+                       LOOM_WASM_EMIT_I32_ADD),
+    [LOOM_WASM_RULE_INDEX_SUB] =
+        LOOM_WASM_RULE(LOOM_OP_INDEX_SUB, LOOM_WASM_ADDRESS_LHS_GUARD, 3,
+                       LOOM_WASM_EMIT_I32_SUB),
+    [LOOM_WASM_RULE_INDEX_MUL] =
+        LOOM_WASM_RULE(LOOM_OP_INDEX_MUL, LOOM_WASM_ADDRESS_LHS_GUARD, 3,
+                       LOOM_WASM_EMIT_I32_MUL),
 };
 
+#undef LOOM_WASM_RULE
+
+#define LOOM_WASM_RULE_SPAN(source_op, first_rule, count_value) \
+  {                                                             \
+      .source_op_kind = source_op,                              \
+      .rule_start = first_rule,                                 \
+      .rule_count = count_value,                                \
+  }
+
 static const loom_low_lower_rule_span_t loom_wasm_rule_spans[] = {
-    {
-        .source_op_kind = LOOM_OP_SCALAR_ADDI,
-        .rule_start = 0,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_SCALAR_SUBI,
-        .rule_start = 1,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
-        .rule_start = 2,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_SPLAT,
-        .rule_start = 3,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_ADDF,
-        .rule_start = 4,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_MULF,
-        .rule_start = 5,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_ADDI,
-        .rule_start = 6,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_SUBI,
-        .rule_start = 7,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_MULI,
-        .rule_start = 8,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_INDEX_CONSTANT,
-        .rule_start = 9,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_INDEX_ADD,
-        .rule_start = 10,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_INDEX_SUB,
-        .rule_start = 11,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_INDEX_MUL,
-        .rule_start = 12,
-        .rule_count = 1,
-    },
+    LOOM_WASM_RULE_SPAN(LOOM_OP_SCALAR_ADDI, LOOM_WASM_RULE_SCALAR_ADDI, 1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_SCALAR_SUBI, LOOM_WASM_RULE_SCALAR_SUBI, 1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_SCALAR_CONSTANT, LOOM_WASM_RULE_SCALAR_CONSTANT,
+                        1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_VECTOR_SPLAT, LOOM_WASM_RULE_VECTOR_SPLAT, 1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_VECTOR_SELECT,
+                        LOOM_WASM_RULE_VECTOR_SELECT_V4I32, 2),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_VECTOR_CMPI, LOOM_WASM_RULE_VECTOR_CMPI_EQ, 10),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_VECTOR_CMPF, LOOM_WASM_RULE_VECTOR_CMPF_OEQ, 5),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_VECTOR_ADDF, LOOM_WASM_RULE_VECTOR_ADDF, 1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_VECTOR_MULF, LOOM_WASM_RULE_VECTOR_MULF, 1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_VECTOR_ADDI, LOOM_WASM_RULE_VECTOR_ADDI, 1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_VECTOR_SUBI, LOOM_WASM_RULE_VECTOR_SUBI, 1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_VECTOR_MULI, LOOM_WASM_RULE_VECTOR_MULI, 1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_INDEX_CONSTANT, LOOM_WASM_RULE_INDEX_CONSTANT,
+                        1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_INDEX_ADD, LOOM_WASM_RULE_INDEX_ADD, 1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_INDEX_SUB, LOOM_WASM_RULE_INDEX_SUB, 1),
+    LOOM_WASM_RULE_SPAN(LOOM_OP_INDEX_MUL, LOOM_WASM_RULE_INDEX_MUL, 1),
 };
+
+#undef LOOM_WASM_RULE_SPAN
 
 static const loom_low_lower_rule_set_t loom_wasm_rule_set = {
     .spans = loom_wasm_rule_spans,

@@ -34,6 +34,22 @@ enum {
   LOOM_WASM_SIMD_SUBOPCODE_V128_STORE = 0x0B,
   LOOM_WASM_SIMD_SUBOPCODE_V128_CONST = 0x0C,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_SPLAT = 0x11,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_EQ = 0x37,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_NE = 0x38,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_LT_S = 0x39,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_LT_U = 0x3A,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_GT_S = 0x3B,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_GT_U = 0x3C,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_LE_S = 0x3D,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_LE_U = 0x3E,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_GE_S = 0x3F,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_GE_U = 0x40,
+  LOOM_WASM_SIMD_SUBOPCODE_F32X4_EQ = 0x41,
+  LOOM_WASM_SIMD_SUBOPCODE_F32X4_LT = 0x43,
+  LOOM_WASM_SIMD_SUBOPCODE_F32X4_GT = 0x44,
+  LOOM_WASM_SIMD_SUBOPCODE_F32X4_LE = 0x45,
+  LOOM_WASM_SIMD_SUBOPCODE_F32X4_GE = 0x46,
+  LOOM_WASM_SIMD_SUBOPCODE_V128_BITSELECT = 0x52,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_ADD = 0xAE,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_SUB = 0xB1,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_MUL = 0xB5,
@@ -50,6 +66,38 @@ enum {
       (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_V128_CONST,
   LOOM_WASM_ENCODING_I32X4_SPLAT = (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) |
                                    LOOM_WASM_SIMD_SUBOPCODE_I32X4_SPLAT,
+  LOOM_WASM_ENCODING_I32X4_EQ =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_EQ,
+  LOOM_WASM_ENCODING_I32X4_NE =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_NE,
+  LOOM_WASM_ENCODING_I32X4_LT_S =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_LT_S,
+  LOOM_WASM_ENCODING_I32X4_LT_U =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_LT_U,
+  LOOM_WASM_ENCODING_I32X4_GT_S =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_GT_S,
+  LOOM_WASM_ENCODING_I32X4_GT_U =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_GT_U,
+  LOOM_WASM_ENCODING_I32X4_LE_S =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_LE_S,
+  LOOM_WASM_ENCODING_I32X4_LE_U =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_LE_U,
+  LOOM_WASM_ENCODING_I32X4_GE_S =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_GE_S,
+  LOOM_WASM_ENCODING_I32X4_GE_U =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_GE_U,
+  LOOM_WASM_ENCODING_F32X4_EQ =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_F32X4_EQ,
+  LOOM_WASM_ENCODING_F32X4_LT =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_F32X4_LT,
+  LOOM_WASM_ENCODING_F32X4_GT =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_F32X4_GT,
+  LOOM_WASM_ENCODING_F32X4_LE =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_F32X4_LE,
+  LOOM_WASM_ENCODING_F32X4_GE =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_F32X4_GE,
+  LOOM_WASM_ENCODING_V128_BITSELECT = (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) |
+                                      LOOM_WASM_SIMD_SUBOPCODE_V128_BITSELECT,
   LOOM_WASM_ENCODING_I32X4_ADD =
       (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_ADD,
   LOOM_WASM_ENCODING_I32X4_SUB =
@@ -516,6 +564,23 @@ static iree_status_t loom_wasm_emit_binary_stack_op(
   return loom_wasm_emit_local_set(state, results.values[0]);
 }
 
+static iree_status_t loom_wasm_emit_ternary_stack_op(
+    loom_wasm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  if (!loom_low_op_isa(op) || op->operand_count != 3 || op->result_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm ternary packet shape is invalid");
+  }
+  loom_value_slice_t operands = loom_low_op_operands(op);
+  loom_value_slice_t results = loom_low_op_results(op);
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[0]));
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[1]));
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[2]));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
+  return loom_wasm_emit_local_set(state, results.values[0]);
+}
+
 static iree_status_t loom_wasm_emit_v128_load(
     loom_wasm_emit_state_t* state, const loom_op_t* op,
     const loom_low_descriptor_t* descriptor) {
@@ -561,13 +626,31 @@ static iree_status_t loom_wasm_emit_descriptor_packet(
     case LOOM_WASM_OPCODE_I32_SUB:
     case LOOM_WASM_OPCODE_I32_MUL:
     case LOOM_WASM_OPCODE_I32_LT_U:
+    case LOOM_WASM_ENCODING_I32X4_EQ:
+    case LOOM_WASM_ENCODING_I32X4_NE:
+    case LOOM_WASM_ENCODING_I32X4_LT_S:
+    case LOOM_WASM_ENCODING_I32X4_LT_U:
+    case LOOM_WASM_ENCODING_I32X4_GT_S:
+    case LOOM_WASM_ENCODING_I32X4_GT_U:
+    case LOOM_WASM_ENCODING_I32X4_LE_S:
+    case LOOM_WASM_ENCODING_I32X4_LE_U:
+    case LOOM_WASM_ENCODING_I32X4_GE_S:
+    case LOOM_WASM_ENCODING_I32X4_GE_U:
     case LOOM_WASM_ENCODING_I32X4_ADD:
     case LOOM_WASM_ENCODING_I32X4_SUB:
     case LOOM_WASM_ENCODING_I32X4_MUL:
+    case LOOM_WASM_ENCODING_F32X4_EQ:
+    case LOOM_WASM_ENCODING_F32X4_LT:
+    case LOOM_WASM_ENCODING_F32X4_GT:
+    case LOOM_WASM_ENCODING_F32X4_LE:
+    case LOOM_WASM_ENCODING_F32X4_GE:
     case LOOM_WASM_ENCODING_F32X4_ADD:
     case LOOM_WASM_ENCODING_F32X4_MUL:
       return loom_wasm_emit_binary_stack_op(state, packet->node->op,
                                             packet->descriptor);
+    case LOOM_WASM_ENCODING_V128_BITSELECT:
+      return loom_wasm_emit_ternary_stack_op(state, packet->node->op,
+                                             packet->descriptor);
     case LOOM_WASM_ENCODING_I32X4_SPLAT:
       return loom_wasm_emit_unary_stack_op(state, packet->node->op,
                                            packet->descriptor);

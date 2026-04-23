@@ -101,6 +101,10 @@ def _v128_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _V128_ALT)
 
 
+def _v128_predicate(field_name: str) -> Operand:
+    return Operand(field_name, OperandRole.PREDICATE, _V128_ALT)
+
+
 _I32_VALUE_IMMEDIATE = Immediate(
     "i32_value",
     ImmediateKind.SIGNED,
@@ -142,6 +146,22 @@ _OP_V128_LOAD = _simd_encoding_id(0x00)
 _OP_V128_STORE = _simd_encoding_id(0x0B)
 _OP_V128_CONST = _simd_encoding_id(0x0C)
 _OP_I32X4_SPLAT = _simd_encoding_id(0x11)
+_OP_I32X4_EQ = _simd_encoding_id(0x37)
+_OP_I32X4_NE = _simd_encoding_id(0x38)
+_OP_I32X4_LT_S = _simd_encoding_id(0x39)
+_OP_I32X4_LT_U = _simd_encoding_id(0x3A)
+_OP_I32X4_GT_S = _simd_encoding_id(0x3B)
+_OP_I32X4_GT_U = _simd_encoding_id(0x3C)
+_OP_I32X4_LE_S = _simd_encoding_id(0x3D)
+_OP_I32X4_LE_U = _simd_encoding_id(0x3E)
+_OP_I32X4_GE_S = _simd_encoding_id(0x3F)
+_OP_I32X4_GE_U = _simd_encoding_id(0x40)
+_OP_F32X4_EQ = _simd_encoding_id(0x41)
+_OP_F32X4_LT = _simd_encoding_id(0x43)
+_OP_F32X4_GT = _simd_encoding_id(0x44)
+_OP_F32X4_LE = _simd_encoding_id(0x45)
+_OP_F32X4_GE = _simd_encoding_id(0x46)
+_OP_V128_BITSELECT = _simd_encoding_id(0x52)
 _OP_I32X4_ADD = _simd_encoding_id(0xAE)
 _OP_I32X4_SUB = _simd_encoding_id(0xB1)
 _OP_I32X4_MUL = _simd_encoding_id(0xB5)
@@ -337,6 +357,106 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
+            key="wasm.i32x4.eq",
+            mnemonic="i32x4.eq",
+            semantic_tag="vector.cmp.eq.i32x4",
+            encoding_id=_OP_I32X4_EQ,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.ne",
+            mnemonic="i32x4.ne",
+            semantic_tag="vector.cmp.ne.i32x4",
+            encoding_id=_OP_I32X4_NE,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.lt_s",
+            mnemonic="i32x4.lt_s",
+            semantic_tag="vector.cmp.slt.i32x4",
+            encoding_id=_OP_I32X4_LT_S,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.lt_u",
+            mnemonic="i32x4.lt_u",
+            semantic_tag="vector.cmp.ult.i32x4",
+            encoding_id=_OP_I32X4_LT_U,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.gt_s",
+            mnemonic="i32x4.gt_s",
+            semantic_tag="vector.cmp.sgt.i32x4",
+            encoding_id=_OP_I32X4_GT_S,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.gt_u",
+            mnemonic="i32x4.gt_u",
+            semantic_tag="vector.cmp.ugt.i32x4",
+            encoding_id=_OP_I32X4_GT_U,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.le_s",
+            mnemonic="i32x4.le_s",
+            semantic_tag="vector.cmp.sle.i32x4",
+            encoding_id=_OP_I32X4_LE_S,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.le_u",
+            mnemonic="i32x4.le_u",
+            semantic_tag="vector.cmp.ule.i32x4",
+            encoding_id=_OP_I32X4_LE_U,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.ge_s",
+            mnemonic="i32x4.ge_s",
+            semantic_tag="vector.cmp.sge.i32x4",
+            encoding_id=_OP_I32X4_GE_S,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.ge_u",
+            mnemonic="i32x4.ge_u",
+            semantic_tag="vector.cmp.uge.i32x4",
+            encoding_id=_OP_I32X4_GE_U,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
             key="wasm.i32x4.add",
             mnemonic="i32x4.add",
             semantic_tag="vector.add.i32x4",
@@ -384,6 +504,74 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SIMD_F32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.f32x4.eq",
+            mnemonic="f32x4.eq",
+            semantic_tag="vector.cmp.oeq.f32x4",
+            encoding_id=_OP_F32X4_EQ,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_F32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.f32x4.lt",
+            mnemonic="f32x4.lt",
+            semantic_tag="vector.cmp.olt.f32x4",
+            encoding_id=_OP_F32X4_LT,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_F32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.f32x4.gt",
+            mnemonic="f32x4.gt",
+            semantic_tag="vector.cmp.ogt.f32x4",
+            encoding_id=_OP_F32X4_GT,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_F32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.f32x4.le",
+            mnemonic="f32x4.le",
+            semantic_tag="vector.cmp.ole.f32x4",
+            encoding_id=_OP_F32X4_LE,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_F32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.f32x4.ge",
+            mnemonic="f32x4.ge",
+            semantic_tag="vector.cmp.oge.f32x4",
+            encoding_id=_OP_F32X4_GE,
+            operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SIMD_F32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.v128.bitselect",
+            mnemonic="v128.bitselect",
+            semantic_tag="vector.select.v128",
+            encoding_id=_OP_V128_BITSELECT,
+            operands=(
+                _v128_result(),
+                _v128_operand("true_value"),
+                _v128_operand("false_value"),
+                _v128_predicate("condition"),
+            ),
+            asm_forms=_asm(
+                results=("dst",),
+                operands=("true_value", "false_value", "condition"),
+            ),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
