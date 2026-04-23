@@ -553,6 +553,28 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_fuzz(
+  NAME
+    source_lowering_fuzz
+  SRCS
+    "source_lowering_fuzz.cc"
+  DEPS
+    ::lower
+    ::packet
+    ::packetization
+    ::source_selection
+    ::source_workload
+    ::verify
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::error::diagnostic
+    loom::src::loom::ir
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::target::test::lower
+    loom::src::loom::testing::context
+    loom::src::loom::verify
+)
+
 loom_cc_library(
   NAME
     source_selection
