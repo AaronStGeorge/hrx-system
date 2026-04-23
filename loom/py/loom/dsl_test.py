@@ -14,6 +14,7 @@ from loom.assembly import (
     EQUALS,
     Attr,
     BlockRef,
+    Clause,
     IndexList,
     Keyword,
     Ref,
@@ -93,6 +94,7 @@ from loom.dsl import (
     HasRegister,
     ImplicitTerminator,
     LastAxisGroupedBy,
+    LiteralMatchesElementType,
     NoAncestor,
     OffsetCountMatchesRank,
     Op,
@@ -727,6 +729,27 @@ class TestConstraints:
         assert constraint.check({"value": 4, "result": FakeValue(ir.OFFSET)})[0]
         assert not constraint.check({"value": True, "result": FakeValue(ir.INDEX)})[0]
 
+    def test_literal_matches_element_type(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        constraint = LiteralMatchesElementType("value", "result")
+        assert constraint.name == "LiteralMatchesElementType"
+        assert constraint.args == ("value", "result")
+        assert constraint.check(
+            {
+                "value": 1.0,
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, F32, (StaticDim(4),))),
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "value": 1,
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, F32, (StaticDim(4),))),
+            }
+        )[0]
+
     def test_total_bit_count_equal(self) -> None:
         class FakeValue:
             def __init__(self, value_type: object):
@@ -1263,6 +1286,15 @@ class TestOp:
             format=[BlockRef("dest")],
         )
         assert op.successor("dest") is not None
+
+    def test_format_field_validation_descends_into_clause(self) -> None:
+        """Clause payload fields are validated like top-level format fields."""
+        with pytest.raises(ValueError, match="undeclared fields"):
+            Op(
+                "test.bad",
+                operands=[Operand("input", ANY)],
+                format=[Clause("value", Ref("missing"))],
+            )
 
     def test_format_field_validation_allows_implicit(self) -> None:
         """Implicit fields (iv, args, predicates) are allowed."""

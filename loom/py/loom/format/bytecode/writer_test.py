@@ -92,6 +92,7 @@ from loom.ir import (
     StaticDim,
     Symbol,
     SymbolKind,
+    SymbolName,
     TiedResult,
     Type,
     TypeKind,
@@ -1808,6 +1809,30 @@ class TestCrossFormatRoundTrip:
             ("axis", 0),
             ("meta", CanonicalAttrDict([("opt", 3), ("phase", "link")])),
         ]
+
+    def test_attr_dict_symbol_ref_survives_bytecode(self) -> None:
+        from loom.builtin_types import ALL_BUILTIN_TYPES
+        from loom.dialect.func import ALL_FUNC_OPS
+        from loom.dialect.test import ALL_TEST_OPS
+        from loom.format.bytecode.reader import read_module as read
+        from loom.format.text.parser import Parser
+
+        text = (
+            "func.def @f(%x: f32) -> (f32) {\n"
+            "  %r = test.attrs %x {target = @target} : f32\n"
+            "  test.yield %r : f32\n"
+            "}\n"
+        )
+
+        parser = Parser()
+        parser.register_ops(list(ALL_FUNC_OPS) + list(ALL_TEST_OPS))
+        parser.register_types(ALL_BUILTIN_TYPES)
+        parsed_module = parser.parse(text)
+        loaded_module = read(write_module(parsed_module))
+        loaded_attrs = _first_attrs_dict(loaded_module)
+
+        assert loaded_attrs["target"] == SymbolName("target")
+        assert isinstance(loaded_attrs["target"], SymbolName)
 
 
 class TestPredicateBytecodeRoundTrip:

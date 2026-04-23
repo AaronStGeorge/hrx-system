@@ -54,6 +54,7 @@ from loom.ir import (
     ShapedType,
     StaticDim,
     SymbolKind,
+    SymbolName,
     Type,
     TypeKind,
     Value,
@@ -1082,6 +1083,10 @@ class BytecodeWriter:
                 raise TypeError(f"type attribute value must be a Type, got {value!r}")
             buf.write_u8(ATTR_KIND_TYPE)
             buf.write_varint(self._ctx.intern_type(cast(Type, value)))
+            return
+        if isinstance(value, SymbolName):
+            buf.write_u8(ATTR_KIND_SYMBOL)
+            buf.write_varint(self._ctx.strings[str(value)])
             return
         if isinstance(value, bool):
             buf.write_u8(ATTR_KIND_BOOL)

@@ -107,6 +107,7 @@ __all__ = [
     "Symbol",
     "symbol_from_operation",
     "SymbolRef",
+    "SymbolName",
     "SYMBOL_FLAG_IMPORT",
     "SYMBOL_FLAG_PUBLIC",
     # Tables.
@@ -1259,6 +1260,12 @@ class SymbolRef:
 
     module_id: int
     symbol_id: int
+
+
+class SymbolName(str):
+    """Module-local symbol-name attribute payload."""
+
+    __slots__ = ()
 
 
 @dataclass(slots=True)

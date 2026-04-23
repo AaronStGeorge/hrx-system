@@ -21,7 +21,7 @@ low.func.def target(@test_target) @concat(%lo : reg<test.i32>, %hi : reg<test.i3
 
 target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @copy_bad_units(%pair : reg<test.i32 x2>) {
-  // ERROR@+1: LOWERING/024
+  // ERROR@+1: LOWERING/017
   %copy = low.copy %pair : reg<test.i32 x2> -> reg<test.i32>
   low.return
 }
@@ -39,7 +39,7 @@ low.func.def target(@test_target) @slice_bad_class(%pair : reg<test.i32 x2>) {
 
 target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @slice_negative_offset(%pair : reg<test.i32 x2>) {
-  // ERROR@+1: LOWERING/024
+  // ERROR@+1: LOWERING/017
   %lane = low.slice %pair[-1] : reg<test.i32 x2> -> reg<test.i32>
   low.return
 }
@@ -48,7 +48,7 @@ low.func.def target(@test_target) @slice_negative_offset(%pair : reg<test.i32 x2
 
 target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @slice_out_of_range(%pair : reg<test.i32 x2>) {
-  // ERROR@+1: LOWERING/024
+  // ERROR@+1: LOWERING/017
   %lane = low.slice %pair[2] : reg<test.i32 x2> -> reg<test.i32>
   low.return
 }

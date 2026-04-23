@@ -11,17 +11,20 @@ from loom.assembly import (
     COLON,
     COMMA,
     EQUALS,
+    FOR,
     LBRACE,
     LBRACKET,
     LPAREN,
     RBRACE,
     RBRACKET,
     RPAREN,
+    TO,
     Attr,
     AttrDict,
     AttrTable,
     BindingList,
     BlockArgs,
+    Clause,
     FuncArgs,
     IndexList,
     Keyword,
@@ -118,6 +121,8 @@ class TestKeyword:
         assert LBRACE.text == "{"
         assert RBRACE.text == "}"
         assert EQUALS.text == "="
+        assert TO.text == "to"
+        assert FOR.text == "for"
 
     def test_equality(self) -> None:
         assert kw("->") == ARROW
@@ -131,6 +136,13 @@ class TestAttrDict:
 
     def test_singleton_equality(self) -> None:
         assert AttrDict() == AttrDict()
+
+
+class TestClause:
+    def test_construct(self) -> None:
+        clause = Clause("range", Attr("minimum"), TO, Attr("maximum"))
+        assert clause.name == "range"
+        assert clause.elements == (Attr("minimum"), TO, Attr("maximum"))
 
 
 class TestOperandDict:

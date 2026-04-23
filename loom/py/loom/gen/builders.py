@@ -29,6 +29,7 @@ from loom.assembly import (
     BindingList,
     BlockArgs,
     BlockRef,
+    Clause,
     DescriptorRef,
     Flags,
     FormatElement,
@@ -271,6 +272,9 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                     walk(inner)
 
                 case Scope(elements=inner):
+                    walk(inner)
+
+                case Clause(elements=inner):
                     walk(inner)
 
                 case FuncArgs(field=name):

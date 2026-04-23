@@ -868,3 +868,28 @@ class TestBuilders:
         if body is not None:
             _regions.append(body)
         self._b.build("test.low_asm_region", _operands, attributes=_attributes, regions=_regions)
+
+    def clause_constant(self, *, value: Any, result_types: list[Type]) -> ValueRef:
+        """Test constant materialization using a named value clause.
+
+        Example::
+            %c42 = test.clause_constant value(42) : i32
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["value"] = value
+        return cast(ValueRef, self._b.build("test.clause_constant", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def clause_copy(self, *, source: ValueRef, target: ValueRef) -> None:
+        """Test dynamic operand clauses that model source/target-style syntax.
+
+        Example::
+            test.clause_copy source(%src) target(%dst) : i32
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(source)
+        _operands.append(target)
+        self._b.build("test.clause_copy", _operands, attributes=_attributes, regions=_regions)

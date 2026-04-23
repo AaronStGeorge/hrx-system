@@ -33,6 +33,7 @@ from loom.assembly import (
     BindingList,
     BlockArgs,
     BlockRef,
+    Clause,
     FuncArgs,
     IndexList,
     OperandDict,
@@ -82,6 +83,7 @@ from loom.dsl import (
     EnumDef,
     FuncLikeInterface,
     ImplicitTerminator,
+    LiteralMatchesElementType,
     OffsetCountMatchesRank,
     Op,
     Operand,
@@ -199,6 +201,41 @@ test_constant = Op(
         "%c42 = test.constant 42 : i32",
         "%pi = test.constant 3.14 : f32",
     ],
+)
+
+# ============================================================================
+# test.clause_* — named clause format helpers
+# ============================================================================
+
+test_clause_constant = Op(
+    "test.clause_constant",
+    group=test_ops,
+    doc="Test constant materialization using a named value clause.",
+    results=[Result("result", INTEGER)],
+    attrs=[AttrDef("value", "any", doc="The constant payload.")],
+    constraints=[LiteralMatchesElementType("value", "result")],
+    traits=[PURE, CONSTANT_LIKE],
+    format=[Clause("value", Attr("value")), COLON, TypeOf("result")],
+    examples=["%c42 = test.clause_constant value(42) : i32"],
+)
+
+test_clause_copy = Op(
+    "test.clause_copy",
+    group=test_ops,
+    doc="Test dynamic operand clauses that model source/target-style syntax.",
+    operands=[
+        Operand("source", ANY),
+        Operand("target", ANY),
+    ],
+    constraints=[SameType("source", "target")],
+    traits=[UNKNOWN_EFFECTS],
+    format=[
+        Clause("source", Ref("source")),
+        Clause("target", Ref("target")),
+        COLON,
+        TypeOf("source"),
+    ],
+    examples=["test.clause_copy source(%src) target(%dst) : i32"],
 )
 
 # ============================================================================
@@ -1551,4 +1588,6 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_view_element_bytes,
     test_region_syntax,
     test_low_asm_region,
+    test_clause_constant,
+    test_clause_copy,
 )

@@ -3954,10 +3954,10 @@
     "fix_hint_template": "Match the low function call {field_kind} type to the callee low-function signature"
   },
   {
-    "error_id": "ERR_LOWERING_022",
+    "error_id": "ERR_LOWERING_015",
     "domain": 10,
     "domain_name": "LOWERING",
-    "code": 22,
+    "code": 15,
     "severity": 0,
     "severity_name": "error",
     "summary": "Low call purity conflicts with callee effects.",
@@ -3992,10 +3992,10 @@
     "fix_hint_template": "Remove the pure marker, mark the direct callee pure after proving its body, or remove the adapter effect/clobber records after proving the low boundary has no observable effects"
   },
   {
-    "error_id": "ERR_LOWERING_023",
+    "error_id": "ERR_LOWERING_016",
     "domain": 10,
     "domain_name": "LOWERING",
-    "code": 23,
+    "code": 16,
     "severity": 0,
     "severity_name": "error",
     "summary": "Low function contract is invalid.",
@@ -4020,10 +4020,10 @@
     "fix_hint_template": "Keep low function exactness and imported-code attrs complete and on the operation kind that owns them"
   },
   {
-    "error_id": "ERR_LOWERING_024",
+    "error_id": "ERR_LOWERING_017",
     "domain": 10,
     "domain_name": "LOWERING",
-    "code": 24,
+    "code": 17,
     "severity": 0,
     "severity_name": "error",
     "summary": "Low structural storage op is invalid.",
@@ -4048,10 +4048,10 @@
     "fix_hint_template": "Keep low structural records owned by low functions and reference them with matching function, type, and target ABI contracts"
   },
   {
-    "error_id": "ERR_LOWERING_025",
+    "error_id": "ERR_LOWERING_018",
     "domain": 10,
     "domain_name": "LOWERING",
-    "code": 25,
+    "code": 18,
     "severity": 0,
     "severity_name": "error",
     "summary": "Low ABI resource register type is not accepted.",

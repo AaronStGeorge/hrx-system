@@ -2903,16 +2903,16 @@ static const loom_error_def_t loom_err_lowering_014 = {
     .param_count = 6,
 };
 
-static const loom_error_param_def_t loom_err_lowering_022_params[] = {
+static const loom_error_param_def_t loom_err_lowering_015_params[] = {
     {"callee_name", LOOM_PARAM_STRING}, {"boundary_name", LOOM_PARAM_STRING},
     {"reason", LOOM_PARAM_STRING},      {"effect_count", LOOM_PARAM_U32},
     {"clobber_count", LOOM_PARAM_U32},
 };
-static const loom_error_def_t loom_err_lowering_022 = {
-    .error_id = "ERR_LOWERING_022",
+static const loom_error_def_t loom_err_lowering_015 = {
+    .error_id = "ERR_LOWERING_015",
     .domain = LOOM_ERROR_DOMAIN_LOWERING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 22,
+    .code = 15,
     .summary = "Low call purity conflicts with callee effects.",
     .message_template =
         "low pure call callee '@{callee_name}' through '{boundary_name}' is "
@@ -2922,20 +2922,20 @@ static const loom_error_def_t loom_err_lowering_022 = {
         "Remove the pure marker, mark the direct callee pure after proving its "
         "body, or remove the adapter effect/clobber records after proving the "
         "low boundary has no observable effects",
-    .param_defs = loom_err_lowering_022_params,
+    .param_defs = loom_err_lowering_015_params,
     .param_count = 5,
 };
 
-static const loom_error_param_def_t loom_err_lowering_023_params[] = {
+static const loom_error_param_def_t loom_err_lowering_016_params[] = {
     {"function_name", LOOM_PARAM_STRING},
     {"contract_name", LOOM_PARAM_STRING},
     {"reason", LOOM_PARAM_STRING},
 };
-static const loom_error_def_t loom_err_lowering_023 = {
-    .error_id = "ERR_LOWERING_023",
+static const loom_error_def_t loom_err_lowering_016 = {
+    .error_id = "ERR_LOWERING_016",
     .domain = LOOM_ERROR_DOMAIN_LOWERING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 23,
+    .code = 16,
     .summary = "Low function contract is invalid.",
     .message_template =
         "low function '@{function_name}' {contract_name} contract is invalid: "
@@ -2943,20 +2943,20 @@ static const loom_error_def_t loom_err_lowering_023 = {
     .fix_hint_template =
         "Keep low function exactness and imported-code attrs complete and on "
         "the operation kind that owns them",
-    .param_defs = loom_err_lowering_023_params,
+    .param_defs = loom_err_lowering_016_params,
     .param_count = 3,
 };
 
-static const loom_error_param_def_t loom_err_lowering_024_params[] = {
+static const loom_error_param_def_t loom_err_lowering_017_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"field_name", LOOM_PARAM_STRING},
     {"reason", LOOM_PARAM_STRING},
 };
-static const loom_error_def_t loom_err_lowering_024 = {
-    .error_id = "ERR_LOWERING_024",
+static const loom_error_def_t loom_err_lowering_017 = {
+    .error_id = "ERR_LOWERING_017",
     .domain = LOOM_ERROR_DOMAIN_LOWERING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 24,
+    .code = 17,
     .summary = "Low structural storage op is invalid.",
     .message_template =
         "low structural op '{op_name}' field '{field_name}' is invalid: "
@@ -2964,20 +2964,20 @@ static const loom_error_def_t loom_err_lowering_024 = {
     .fix_hint_template =
         "Keep low structural records owned by low functions and reference them "
         "with matching function, type, and target ABI contracts",
-    .param_defs = loom_err_lowering_024_params,
+    .param_defs = loom_err_lowering_017_params,
     .param_count = 3,
 };
 
-static const loom_error_param_def_t loom_err_lowering_025_params[] = {
+static const loom_error_param_def_t loom_err_lowering_018_params[] = {
     {"function_name", LOOM_PARAM_STRING}, {"resource_name", LOOM_PARAM_STRING},
     {"actual_type", LOOM_PARAM_TYPE},     {"descriptor_set", LOOM_PARAM_STRING},
     {"reason", LOOM_PARAM_STRING},
 };
-static const loom_error_def_t loom_err_lowering_025 = {
-    .error_id = "ERR_LOWERING_025",
+static const loom_error_def_t loom_err_lowering_018 = {
+    .error_id = "ERR_LOWERING_018",
     .domain = LOOM_ERROR_DOMAIN_LOWERING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
-    .code = 25,
+    .code = 18,
     .summary = "Low ABI resource register type is not accepted.",
     .message_template =
         "low function '{function_name}' resource '{resource_name}' has ABI "
@@ -2986,7 +2986,7 @@ static const loom_error_def_t loom_err_lowering_025 = {
     .fix_hint_template =
         "Use a register class and allocation-unit count accepted by the "
         "selected low descriptor set",
-    .param_defs = loom_err_lowering_025_params,
+    .param_defs = loom_err_lowering_018_params,
     .param_count = 5,
 };
 
@@ -3522,8 +3522,8 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_006,  &loom_err_lowering_007,  &loom_err_lowering_008,
     &loom_err_lowering_009,  &loom_err_lowering_010,  &loom_err_lowering_011,
     &loom_err_lowering_012,  &loom_err_lowering_013,  &loom_err_lowering_014,
-    &loom_err_lowering_022,  &loom_err_lowering_023,  &loom_err_lowering_024,
-    &loom_err_lowering_025,  &loom_err_backend_001,   &loom_err_backend_002,
+    &loom_err_lowering_015,  &loom_err_lowering_016,  &loom_err_lowering_017,
+    &loom_err_lowering_018,  &loom_err_backend_001,   &loom_err_backend_002,
     &loom_err_backend_003,   &loom_err_backend_004,   &loom_err_backend_005,
     &loom_err_backend_006,   &loom_err_backend_007,   &loom_err_backend_008,
     &loom_err_backend_009,   &loom_err_backend_010,   &loom_err_backend_011,

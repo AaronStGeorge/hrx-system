@@ -10,6 +10,7 @@ from loom.assembly import (
     AttrDict,
     AttrTable,
     BlockRef,
+    Clause,
     IndexList,
     OperandDict,
     Ref,
@@ -87,6 +88,29 @@ def test_builder_params_include_attrs_from_inline_attr_dict() -> None:
     assert "def atomic(self, *, value: ValueRef, ordering: str, scope: str) -> None:" in generated
     assert '_attributes["ordering"] = ordering' in generated
     assert '_attributes["scope"] = scope' in generated
+
+
+def test_builder_params_descend_into_clauses() -> None:
+    generated = generate_builders(
+        [
+            Op(
+                "test.copy",
+                operands=[
+                    Operand("source", ANY),
+                    Operand("target", ANY),
+                ],
+                format=[
+                    Clause("source", Ref("source")),
+                    Clause("target", Ref("target")),
+                ],
+            ),
+        ],
+        "TestBuilders",
+    )
+
+    assert "def copy(self, *, source: ValueRef, target: ValueRef) -> None:" in generated
+    assert "_operands.append(source)" in generated
+    assert "_operands.append(target)" in generated
 
 
 def test_builder_params_include_operand_dict_as_keyed_values() -> None:

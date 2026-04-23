@@ -75,6 +75,7 @@ from loom.ir import (
     StaticDim,
     Symbol,
     SymbolKind,
+    SymbolName,
     TiedResult,
     Type,
     TypeKind,
@@ -1333,7 +1334,7 @@ class BytecodeReader:
                 return values, offset
             case 6:  # SYMBOL
                 string_id, offset = decode_varint(data, offset)
-                return self._strings[string_id], offset
+                return SymbolName(self._strings[string_id]), offset
             case 7:  # TYPE
                 type_idx, offset = decode_varint(data, offset)
                 return self._types[type_idx], offset

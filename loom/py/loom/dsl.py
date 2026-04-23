@@ -184,6 +184,7 @@ __all__ = [
     "YieldElementTypesMatchResults",
     "IterArgsMatchResults",
     "AttrMatchesElementType",
+    "LiteralMatchesElementType",
     "RegisterUnitsSumTo",
     # Op group.
     "Dialect",
@@ -1617,6 +1618,34 @@ def AttrMatchesElementType(attr: str, field: str) -> Constraint:
     )
 
 
+def LiteralMatchesElementType(literal: str, field: str) -> Constraint:
+    """A literal payload kind must match a field's scalar element type."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        value = values.get(literal)
+        if value is None:
+            return (True, "")
+        element_type = _field_element_type(values.get(field))
+        if element_type is None:
+            return (True, "")
+        if _attr_matches_scalar_type(value, element_type):
+            return (True, "")
+        return (
+            False,
+            f"'{literal}' literal {value!r} does not match "
+            f"'{field}' element type {element_type}",
+        )
+
+    from loom.error.type import ERR_TYPE_005
+
+    return Constraint(
+        "LiteralMatchesElementType",
+        (literal, field),
+        error=ERR_TYPE_005,
+        validate=_validate,
+    )
+
+
 def _static_element_count(item: Any) -> int | None:
     """Returns the static scalar/shaped element count, or None for dynamic."""
     from loom.ir import ScalarType, StaticDim
@@ -2274,6 +2303,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
         BindingList,
         BlockArgs,
         BlockRef,
+        Clause,
         DescriptorRef,
         EncodingOf,
         Flags,
@@ -2334,6 +2364,8 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
             case AttrTable(keys=keys, values=values):
                 fields.add(keys)
                 fields.add(values)
+            case Clause(elements=inner):
+                fields |= _collect_format_fields(inner)
             case OptionalGroup(elements=inner):
                 fields |= _collect_format_fields(inner)
             case Scope(elements=inner):
@@ -2351,7 +2383,7 @@ def _validate_no_nested_scope(
     depth: int = 0,
 ) -> None:
     """Validate that Scope elements are not nested."""
-    from loom.assembly import OptionalGroup, Scope
+    from loom.assembly import Clause, OptionalGroup, Scope
 
     for elem in elements:
         if isinstance(elem, Scope):
@@ -2361,7 +2393,7 @@ def _validate_no_nested_scope(
                     f"Each op may have at most one Scope level."
                 )
             _validate_no_nested_scope(op_name, elem.elements, depth + 1)
-        elif isinstance(elem, OptionalGroup):
+        elif isinstance(elem, Clause | OptionalGroup):
             _validate_no_nested_scope(op_name, elem.elements, depth)
 
 

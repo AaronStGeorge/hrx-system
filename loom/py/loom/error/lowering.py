@@ -309,10 +309,10 @@ ERR_LOWERING_014 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_022: Low call purity conflicts with callee effects.
-ERR_LOWERING_022 = ErrorDef(
+# ERR_LOWERING_015: Low call purity conflicts with callee effects.
+ERR_LOWERING_015 = ErrorDef(
     domain=ErrorDomain.LOWERING,
-    code=22,
+    code=15,
     severity=Severity.ERROR,
     summary="Low call purity conflicts with callee effects.",
     message=(
@@ -334,10 +334,10 @@ ERR_LOWERING_022 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_023: Low function contract is invalid.
-ERR_LOWERING_023 = ErrorDef(
+# ERR_LOWERING_016: Low function contract is invalid.
+ERR_LOWERING_016 = ErrorDef(
     domain=ErrorDomain.LOWERING,
-    code=23,
+    code=16,
     severity=Severity.ERROR,
     summary="Low function contract is invalid.",
     message=(
@@ -354,10 +354,10 @@ ERR_LOWERING_023 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_024: Low structural storage op is invalid.
-ERR_LOWERING_024 = ErrorDef(
+# ERR_LOWERING_017: Low structural storage op is invalid.
+ERR_LOWERING_017 = ErrorDef(
     domain=ErrorDomain.LOWERING,
-    code=24,
+    code=17,
     severity=Severity.ERROR,
     summary="Low structural storage op is invalid.",
     message=("low structural op '{op_name}' field '{field_name}' is invalid: {reason}"),
@@ -372,10 +372,10 @@ ERR_LOWERING_024 = ErrorDef(
     ),
 )
 
-# ERR_LOWERING_025: Low ABI resource register type is not accepted.
-ERR_LOWERING_025 = ErrorDef(
+# ERR_LOWERING_018: Low ABI resource register type is not accepted.
+ERR_LOWERING_018 = ErrorDef(
     domain=ErrorDomain.LOWERING,
-    code=25,
+    code=18,
     severity=Severity.ERROR,
     summary="Low ABI resource register type is not accepted.",
     message=(
@@ -411,8 +411,8 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_012,
     ERR_LOWERING_013,
     ERR_LOWERING_014,
-    ERR_LOWERING_022,
-    ERR_LOWERING_023,
-    ERR_LOWERING_024,
-    ERR_LOWERING_025,
+    ERR_LOWERING_015,
+    ERR_LOWERING_016,
+    ERR_LOWERING_017,
+    ERR_LOWERING_018,
 )

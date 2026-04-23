@@ -7,6 +7,8 @@
 %b = test.constant 2 : i32
 %c = test.addi %a, %b : i32
 %d = test.addi %c, %a : i32
+%e = test.clause_constant value(3) : i32
+test.clause_copy source(%e) target(%d) : i32
 
 // ====
 

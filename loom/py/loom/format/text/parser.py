@@ -29,6 +29,7 @@ from loom.assembly import (
     AttrTable,
     BindingList,
     BlockArgs,
+    Clause,
     DescriptorRef,
     Flags,
     FormatElement,
@@ -108,6 +109,7 @@ from loom.ir import (
     ScalarTypeKind,
     ShapedType,
     StaticDim,
+    SymbolName,
     Type,
     TypeKind,
     Value,
@@ -203,6 +205,8 @@ def _parse_generic_attr_value_from_tokens(
         if text == "false":
             return False
         return text
+    if tokenizer.at(TokenKind.SYMBOL):
+        return SymbolName(tokenizer.next().text)
     if tokenizer.at(TokenKind.HASH_ATTR):
         return _parse_static_encoding_from_tokens(
             tokenizer,
@@ -813,6 +817,8 @@ def _type_optional_present(
         case Keyword(text=text):
             result = tokenizer.at(TokenKind.BARE_IDENT, text)
             return result
+        case Clause(name=name):
+            return tokenizer.at(TokenKind.BARE_IDENT, name)
         case TypeOf() | TypesOf():
             return _is_type_start(tokenizer.peek(), type_registry)
         case _:
@@ -868,6 +874,11 @@ def _parse_type_interior(
                     parsed_attrs[name] = tok.text
                 case Keyword(text=text):
                     _expect_keyword(interior_tokenizer, text)
+                case Clause(name=name, elements=inner):
+                    _expect_keyword(interior_tokenizer, name)
+                    interior_tokenizer.expect(TokenKind.LPAREN)
+                    walk_type_format(inner)
+                    interior_tokenizer.expect(TokenKind.RPAREN)
                 case OptionalGroup(elements=inner, anchor=_anchor):
                     if _type_optional_present(interior_tokenizer, inner, type_registry):
                         walk_type_format(inner)
@@ -1800,6 +1811,12 @@ class Parser:
                 case Keyword(text=text):
                     _expect_keyword(tok, text)
 
+                case Clause(name=name, elements=inner):
+                    _expect_keyword(tok, name)
+                    tok.expect(TokenKind.LPAREN)
+                    self._walk_format(inner, op_decl, parsed)
+                    tok.expect(TokenKind.RPAREN)
+
                 case AttrDict(field=dict_field):
                     if tok.at(TokenKind.LBRACE):
                         self._parse_attr_dict(parsed, dict_field, op_decl)
@@ -1980,6 +1997,8 @@ class Parser:
             case Keyword(text=text):
                 result = tok.at(TokenKind.BARE_IDENT, text)
                 return result
+            case Clause(name=name):
+                return tok.at(TokenKind.BARE_IDENT, name)
             case RegionFmt():
                 result = tok.at(TokenKind.LBRACE)
                 return result

@@ -225,7 +225,7 @@ static iree_status_t loom_low_emit_function_contract_error(
       loom_param_string(reason),
   };
   return loom_low_emit(emitter, op,
-                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 16),
                        params, IREE_ARRAYSIZE(params));
 }
 
@@ -406,7 +406,7 @@ static iree_status_t loom_low_emit_structural_storage_error(
       loom_param_string(reason),
   };
   return loom_low_emit_related(
-      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24),
+      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17),
       params, IREE_ARRAYSIZE(params), related, related_count);
 }
 
@@ -883,7 +883,7 @@ static iree_status_t loom_low_emit_call_purity_effect_error(
       .op = related_op,
   }};
   return loom_low_emit_related(
-      emitter, call_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 22),
+      emitter, call_op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 15),
       params, IREE_ARRAYSIZE(params), related,
       related_op ? IREE_ARRAYSIZE(related) : 0);
 }

@@ -79,7 +79,9 @@ enum {
   LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 58),
   LOOM_OP_TEST_REGION_SYNTAX = LOOM_OP_KIND(LOOM_DIALECT_TEST, 59),
   LOOM_OP_TEST_LOW_ASM_REGION = LOOM_OP_KIND(LOOM_DIALECT_TEST, 60),
-  LOOM_OP_TEST_COUNT_ = 61,
+  LOOM_OP_TEST_CLAUSE_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 61),
+  LOOM_OP_TEST_CLAUSE_COPY = LOOM_OP_KIND(LOOM_DIALECT_TEST, 62),
+  LOOM_OP_TEST_COUNT_ = 63,
 };
 
 // Function visibility. Absent (0) means private.
@@ -1100,6 +1102,30 @@ LOOM_DEFINE_ISA(loom_test_low_asm_region_isa, LOOM_OP_TEST_LOW_ASM_REGION)
 LOOM_DEFINE_REGION(loom_test_low_asm_region_body, 0)
 iree_status_t loom_test_low_asm_region_build(
     loom_builder_t* builder,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_CLAUSE_CONSTANT: Test constant materialization using a named value clause.
+// %c42 = test.clause_constant value(42) : i32
+LOOM_DEFINE_ISA(loom_test_clause_constant_isa, LOOM_OP_TEST_CLAUSE_CONSTANT)
+LOOM_DEFINE_RESULT(loom_test_clause_constant_result, 0)
+LOOM_DEFINE_ATTR_ANY(loom_test_clause_constant_value, 0)
+iree_status_t loom_test_clause_constant_build(
+    loom_builder_t* builder,
+    loom_attribute_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_CLAUSE_COPY: Test dynamic operand clauses that model source/target-style syntax.
+// test.clause_copy source(%src) target(%dst) : i32
+LOOM_DEFINE_ISA(loom_test_clause_copy_isa, LOOM_OP_TEST_CLAUSE_COPY)
+LOOM_DEFINE_OPERAND(loom_test_clause_copy_source, 0)
+LOOM_DEFINE_OPERAND(loom_test_clause_copy_target, 1)
+iree_status_t loom_test_clause_copy_build(
+    loom_builder_t* builder,
+    loom_value_id_t source,
+    loom_value_id_t target,
     loom_location_id_t location,
     loom_op_t** out_op);
 

@@ -12,6 +12,7 @@ from loom.assembly import (
     AttrDict,
     AttrTable,
     BlockRef,
+    Clause,
     Flags,
     OperandDict,
     OptionalGroup,
@@ -36,6 +37,7 @@ from loom.dsl import (
     ElementWidthGreaterThan,
     EnumCase,
     EnumDef,
+    LiteralMatchesElementType,
     Op,
     Operand,
     PackedPayloadBitCountMatchesStorage,
@@ -120,6 +122,44 @@ def test_generate_tables_emits_element_width_constraint() -> None:
     assert "LOOM_RELATION_ELEMENT_WIDTH_ORDER" in tables_c
     assert "LOOM_PROPERTY_ELEMENT_WIDTH_GREATER_THAN" in tables_c
     assert "LOOM_FIELD_REF(1, 0), LOOM_FIELD_REF(0, 0)" in tables_c
+
+
+def test_generate_tables_expands_clause_format() -> None:
+    op = Op(
+        "test.copy",
+        group=Dialect("test"),
+        operands=[
+            Operand("source", INTEGER),
+            Operand("target", INTEGER),
+        ],
+        format=[
+            Clause("source", Ref("source")),
+            Clause("target", Ref("target")),
+        ],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_KW_SOURCE" in tables_c
+    assert "LOOM_KW_TARGET" in tables_c
+    assert "LOOM_FORMAT_KIND_GLUE" in tables_c
+    assert "LOOM_FORMAT_KIND_OPERAND_REF" in tables_c
+
+
+def test_generate_tables_emits_literal_matches_element_type_constraint() -> None:
+    op = Op(
+        "test.literal",
+        group=Dialect("test"),
+        results=[Result("result", INTEGER)],
+        attrs=[AttrDef("value", "any")],
+        constraints=[LiteralMatchesElementType("value", "result")],
+        format=[Clause("value", Attr("value")), COLON, ResultType("result")],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE" in tables_c
+    assert "LOOM_PROPERTY_ELEMENT_TYPE" in tables_c
 
 
 def test_generate_tables_emits_bit_width_attr_constraints() -> None:

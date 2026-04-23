@@ -634,7 +634,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsResourceRegisterClassMismatch) {
   EXPECT_EQ(result.error_count, 1u);
   ASSERT_EQ(collector.emissions.size(), 1u);
   EXPECT_EQ(collector.emissions[0].error,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 25));
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 18));
   ASSERT_GE(collector.emissions[0].string_params.size(), 4u);
   EXPECT_EQ(collector.emissions[0].string_params[0], "resource_user");
   EXPECT_EQ(collector.emissions[0].string_params[1], "low.resource");

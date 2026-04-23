@@ -34,6 +34,7 @@ from loom.assembly import (
     BindingList,
     BlockArgs,
     BlockRef,
+    Clause,
     DescriptorRef,
     Flags,
     FormatElement,
@@ -124,6 +125,13 @@ KEYWORD_MAP: dict[str, str] = {
     "preset": "LOOM_KW_PRESET",
     "abi": "LOOM_KW_ABI",
     "export": "LOOM_KW_EXPORT",
+    "for": "LOOM_KW_FOR",
+    "value": "LOOM_KW_VALUE",
+    "seed": "LOOM_KW_SEED",
+    "range": "LOOM_KW_RANGE",
+    "path": "LOOM_KW_PATH",
+    "actual": "LOOM_KW_ACTUAL",
+    "expected": "LOOM_KW_EXPECTED",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The
@@ -301,6 +309,10 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
         "LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE",
         "LOOM_PROPERTY_ELEMENT_TYPE",
     ),
+    "LiteralMatchesElementType": (
+        "LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE",
+        "LOOM_PROPERTY_ELEMENT_TYPE",
+    ),
     "RegisterUnitsSumTo": (
         "LOOM_RELATION_REGISTER_UNIT_COUNT_SUM",
         "LOOM_PROPERTY_REGISTER_UNIT_COUNT",
@@ -462,7 +474,7 @@ def _func_args_field_name(op: Op) -> str:
             match element:
                 case FuncArgs(field=name):
                     return name
-                case OptionalGroup(elements=inner) | Scope(elements=inner):
+                case OptionalGroup(elements=inner) | Scope(elements=inner) | Clause(elements=inner):
                     nested = _walk(inner)
                     if nested is not None:
                         return nested
@@ -1019,6 +1031,16 @@ def _translate_format_elements(
                     payload = "LOOM_RESULT_TYPE_LIST_PARENS" if parens else "0"
                     elements.append(("LOOM_FORMAT_KIND_RESULT_TYPE_LIST", index, payload))
 
+                case Clause(name=name, elements=inner):
+                    kw_enum = KEYWORD_MAP.get(name)
+                    if kw_enum is None:
+                        raise ValueError(f"Op '{op.name}': unknown clause name '{name}'. Add it to KEYWORD_MAP and the C keyword enum.")
+                    elements.append(("LOOM_FORMAT_KIND_KEYWORD", 0, kw_enum))
+                    elements.append(("LOOM_FORMAT_KIND_GLUE", 0, "0"))
+                    elements.append(("LOOM_FORMAT_KIND_KEYWORD", 0, KEYWORD_MAP["("]))
+                    _walk(inner)
+                    elements.append(("LOOM_FORMAT_KIND_KEYWORD", 0, KEYWORD_MAP[")"]))
+
                 case Keyword(text=text):
                     kw_enum = KEYWORD_MAP.get(text)
                     if kw_enum is None:
@@ -1446,7 +1468,7 @@ def _flatten_format(
     result: list[FormatElement] = []
     for element in elements:
         result.append(element)
-        if isinstance(element, OptionalGroup | Scope):
+        if isinstance(element, OptionalGroup | Scope | Clause):
             result.extend(_flatten_format(element.elements))
     return result
 
@@ -1503,7 +1525,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
             if isinstance(element, OptionalGroup):
                 optional_anchors.add(element.anchor)
                 _collect_optional_anchors(element.elements)
-            elif isinstance(element, Scope):
+            elif isinstance(element, Scope | Clause):
                 _collect_optional_anchors(element.elements)
 
     _collect_optional_anchors(op.format)
@@ -1743,6 +1765,9 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                     walk(inner)
 
                 case Scope(elements=inner):
+                    walk(inner)
+
+                case Clause(elements=inner):
                     walk(inner)
 
                 case FuncArgs():
@@ -3386,6 +3411,7 @@ def _translate_type_format_elements(
     """Translate a TypeDef's format elements to C initializer strings."""
     from loom.assembly import (
         Attr,
+        Clause,
         EncodingOf,
         Glue,
         Keyword,
@@ -3419,6 +3445,19 @@ def _translate_type_format_elements(
                 if kw_name is None:
                     raise ValueError(f"unknown keyword in type format: {text!r}")
                 return [f"{{LOOM_TYPE_FMT_KEYWORD, 0, {kw_name}}}"]
+            case Clause(name=name, elements=elements):
+                kw_name = KEYWORD_MAP.get(name)
+                if kw_name is None:
+                    raise ValueError(f"unknown clause name in type format: {name!r}")
+                result = [
+                    f"{{LOOM_TYPE_FMT_KEYWORD, 0, {kw_name}}}",
+                    "{LOOM_TYPE_FMT_GLUE, 0, 0}",
+                    f"{{LOOM_TYPE_FMT_KEYWORD, 0, {KEYWORD_MAP['(']}}}",
+                ]
+                for e in elements:
+                    result.extend(translate(e))
+                result.append(f"{{LOOM_TYPE_FMT_KEYWORD, 0, {KEYWORD_MAP[')']}}}")
+                return result
             case OptionalGroup(elements=elements, anchor=anchor):
                 anchor_idx = param_index(anchor)
                 inner = []

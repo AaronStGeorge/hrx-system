@@ -61,6 +61,7 @@ __all__ = [
     "ResultType",
     "ResultTypeList",
     "Keyword",
+    "Clause",
     "AttrDict",
     "AttrTable",
     "RegionTable",
@@ -102,6 +103,8 @@ __all__ = [
     "LBRACE",
     "RBRACE",
     "EQUALS",
+    "TO",
+    "FOR",
 ]
 
 
@@ -295,6 +298,30 @@ class Keyword:
 
     def __repr__(self) -> str:
         return f"kw({self.text!r})"
+
+
+@dataclass(frozen=True, slots=True)
+class Clause:
+    """A named parenthesized clause.
+
+    Prints/parses: name(payload...)
+
+    Clauses are structural syntax for fixed semantic slots such as
+    ``source(%src)``, ``target(%dst)``, ``range(0 to 16)``, or
+    ``path("input.npy")``. The clause name is syntax, not data; the
+    payload is still described by ordinary format elements and backed by
+    ordinary op fields.
+
+    For builders: no parameter for the clause wrapper itself; builder
+    parameters come from the payload elements.
+    """
+
+    name: str
+    elements: tuple[FormatElement, ...]
+
+    def __init__(self, name: str, *elements: FormatElement) -> None:
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "elements", tuple(elements))
 
 
 @dataclass(frozen=True, slots=True)
@@ -743,6 +770,7 @@ type FormatElement = (
     | ResultType
     | ResultTypeList
     | Keyword
+    | Clause
     | AttrDict
     | AttrTable
     | RegionTable
@@ -787,3 +815,5 @@ RBRACKET = Keyword("]")
 LBRACE = Keyword("{")
 RBRACE = Keyword("}")
 EQUALS = Keyword("=")
+TO = Keyword("to")
+FOR = Keyword("for")

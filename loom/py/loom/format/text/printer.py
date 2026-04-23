@@ -39,6 +39,7 @@ from loom.assembly import (
     AttrTable,
     BindingList,
     BlockArgs,
+    Clause,
     DescriptorRef,
     Flags,
     FormatElement,
@@ -94,6 +95,7 @@ from loom.ir import (
     ScalarType,
     ShapedType,
     StaticDim,
+    SymbolName,
     Type,
     TypeKind,
     Value,
@@ -234,6 +236,9 @@ def _print_dialect_type(
         Attr as AsmAttr,
     )
     from loom.assembly import (
+        Clause as AsmClause,
+    )
+    from loom.assembly import (
         Glue as AsmGlue,
     )
     from loom.assembly import (
@@ -264,7 +269,7 @@ def _print_dialect_type(
     param_index = 0
 
     def walk_type_format(elements: tuple[Any, ...]) -> None:
-        nonlocal param_index
+        nonlocal param_index, parts
         for element in elements:
             match element:
                 case AsmTypeOf():
@@ -283,6 +288,13 @@ def _print_dialect_type(
                         param_index += 1
                 case AsmKeyword(text=text):
                     parts.append(text)
+                case AsmClause(name=name, elements=inner):
+                    outer_parts = parts
+                    parts = []
+                    walk_type_format(inner)
+                    inner_text = " ".join(parts)
+                    parts = outer_parts
+                    parts.append(f"{name}({inner_text})")
                 case AsmOptionalGroup(elements=inner):
                     if param_index < len(params):
                         walk_type_format(inner)
@@ -497,6 +509,8 @@ def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
         return str(value)
     if isinstance(value, float):
         return _format_float(value)
+    if isinstance(value, SymbolName):
+        return "@" + str(value)
     if isinstance(value, str):
         return _format_string_literal(value)
     if isinstance(value, list | tuple):
@@ -1266,6 +1280,20 @@ class Printer:
 
                 case Keyword(text=text):
                     stream.emit(text)
+
+                case Clause(name=name, elements=inner):
+                    stream.emit(name)
+                    stream.emit("(", glue=True)
+                    stream = self._walk_format_inline(
+                        inner,
+                        op_decl,
+                        fields,
+                        module,
+                        stream,
+                        covered_attrs,
+                        print_regions,
+                    )
+                    stream.emit(")")
 
                 case AttrDict(field=dict_field):
                     if dict_field and hasattr(fields, "_op"):

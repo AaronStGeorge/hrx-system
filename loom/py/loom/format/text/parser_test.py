@@ -59,6 +59,7 @@ from loom.ir import (
     ScalarTypeKind,
     ShapedType,
     StaticDim,
+    SymbolName,
     Type,
     TypeKind,
     Use,
@@ -717,6 +718,24 @@ class TestParseConstantOp:
         negative_inf_op = _parse_op("%ninf = test.constant -inf : f32")
         assert negative_inf_op.attributes["value"] == -math.inf
 
+    def test_clause_constant_roundtrip(self) -> None:
+        source = "%c42 = test.clause_constant value(42) : i32"
+        module = Module()
+        op = _parse_op(source, module=module)
+        assert op.name == "test.clause_constant"
+        assert op.attributes["value"] == 42
+        assert _op_printer().print_operation(op, module) == source
+
+
+class TestParseClauseCopyOp:
+    def test_dynamic_operand_clauses_roundtrip(self) -> None:
+        source = "test.clause_copy source(%src) target(%dst) : i32"
+        module, scope = _setup_scope(("src", I32), ("dst", I32))
+        op = _parse_op(source, module=module, scope=scope)
+        assert op.name == "test.clause_copy"
+        assert len(op.operands) == 2
+        assert _op_printer().print_operation(op, module) == source
+
 
 class TestParseComparisonOp:
     def test_cmp(self) -> None:
@@ -796,6 +815,24 @@ class TestParseAttrDictOp:
         )
         d = op.attributes["dict"]
         assert d["msg"] == 'quote=" slash=\\ \b \f \n \r \t \x01 λ 🔥'
+
+    def test_symbol_ref_value_roundtrip(self) -> None:
+        source = "%r = test.attrs %x {target = @target} : f32"
+        module, scope = _setup_scope(("x", F32))
+        op = _parse_op(source, module=module, scope=scope)
+        d = op.attributes["dict"]
+        assert d["target"] == SymbolName("target")
+        assert isinstance(d["target"], SymbolName)
+        assert _op_printer().print_operation(op, module) == source
+
+    def test_string_that_looks_like_symbol_stays_string(self) -> None:
+        source = '%r = test.attrs %x {target = "@target"} : f32'
+        module, scope = _setup_scope(("x", F32))
+        op = _parse_op(source, module=module, scope=scope)
+        d = op.attributes["dict"]
+        assert d["target"] == "@target"
+        assert not isinstance(d["target"], SymbolName)
+        assert _op_printer().print_operation(op, module) == source
 
     def test_round_trip(self) -> None:
         """Parse → print → parse produces the same dict entries."""

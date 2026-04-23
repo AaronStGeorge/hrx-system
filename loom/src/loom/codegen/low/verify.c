@@ -966,7 +966,7 @@ static iree_status_t loom_low_verify_emit_resource_register_rejected(
   };
   return loom_low_verify_emit(
       function_state->state, op,
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 25), params,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 18), params,
       IREE_ARRAYSIZE(params), NULL, 0);
 }
 

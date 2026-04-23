@@ -211,7 +211,7 @@ TEST_F(LowVerifyTest, DescriptorIdMustMatchDescriptorKey) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -253,7 +253,7 @@ TEST_F(LowVerifyTest, LiveInRejectsAfterEntryPreamble) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -279,7 +279,7 @@ TEST_F(LowVerifyTest, ResourceRejectsAfterEntryPreamble) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -302,7 +302,7 @@ TEST_F(LowVerifyTest, LiveInRejectsNonEntryBlock) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -342,7 +342,7 @@ TEST_F(LowVerifyTest, ImportedDeclRejectsMissingCodeSymbol) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 16);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -375,7 +375,7 @@ TEST_F(LowVerifyTest, ImportedDeclRejectsMissingImportKind) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 16);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -410,7 +410,7 @@ TEST_F(LowVerifyTest, ImportedDeclRejectsNamelessImportKind) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 23);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 16);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -593,7 +593,7 @@ TEST_F(LowVerifyTest, FuncCallRejectsCrossTargetCallee) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -672,7 +672,7 @@ TEST_F(LowVerifyTest, InvokeRejectsPureImpureCallee) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 22);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 15);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -747,7 +747,7 @@ TEST_F(LowVerifyTest, ResourceRejectsNegativeValidByteCount) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -774,7 +774,7 @@ TEST_F(LowVerifyTest, ResourceRejectsInvalidCacheSwizzleStride) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
@@ -800,7 +800,7 @@ TEST_F(LowVerifyTest, ResourceRejectsWrongExportAbi) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
