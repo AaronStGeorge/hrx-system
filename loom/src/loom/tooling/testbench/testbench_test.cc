@@ -13,7 +13,6 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/check/ops.h"
-#include "loom/ops/func/ops.h"
 #include "loom/ops/test/ops.h"
 
 namespace loom {
@@ -28,7 +27,6 @@ class TestbenchTest : public ::testing::Test {
 
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_CHECK, loom_check_dialect_vtables);
-    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
@@ -67,11 +65,13 @@ class TestbenchTest : public ::testing::Test {
 
 TEST_F(TestbenchTest, DiscoversCasesAndBenchmarks) {
   loom_module_t* module = ParseModule(R"(
-func.decl @scale(%input: i32) -> (i32)
+test.func @scale(%input: i32) -> (i32) {
+  test.yield %input : i32
+}
 
 check.case public @scale_case {
   %input = check.literal value(2) : i32
-  %actual = func.call @scale(%input) : (i32) -> (i32)
+  %actual = test.invoke @scale(%input) : (i32) -> (i32)
   check.expect.equal actual(%actual) expected(%input) : i32
   check.return
 }
@@ -93,6 +93,11 @@ check.benchmark @scale_latency case(@scale_case) attrs({iterations = 100})
       iree_string_view_equal(plan.cases[0].name, IREE_SV("scale_case")));
   EXPECT_TRUE(plan.cases[0].is_public);
   EXPECT_EQ(plan.cases[0].parameter_count, 0u);
+  EXPECT_EQ(plan.cases[0].value_source_count, 1u);
+  ASSERT_EQ(plan.cases[0].value_sources[0].kind,
+            LOOM_TESTBENCH_VALUE_SOURCE_LITERAL);
+  EXPECT_EQ(loom_attr_as_i64(plan.cases[0].value_sources[0].literal.value), 2);
+  EXPECT_EQ(plan.cases[0].file_write_count, 0u);
   EXPECT_EQ(plan.cases[0].sample_count, 1u);
   EXPECT_TRUE(
       iree_string_view_equal(plan.cases[1].name, IREE_SV("private_case")));
@@ -103,6 +108,58 @@ check.benchmark @scale_latency case(@scale_case) attrs({iterations = 100})
                                      IREE_SV("scale_latency")));
   EXPECT_EQ(plan.benchmarks[0].case_index, 0u);
   EXPECT_EQ(plan.benchmarks[0].attrs.count, 1u);
+  EXPECT_EQ(plan.issue_count, 0u);
+
+  loom_module_free(module);
+}
+
+TEST_F(TestbenchTest, PlansValueSourcesAndFileWrites) {
+  loom_module_t* module = ParseModule(R"(
+check.case @sources {
+  %seed = check.param.seed base(7) count(2) : i64
+  %scalar = check.literal value(42) : i32
+  %iota = check.generate.iota offset(0) step(1) : tensor<4xi32>
+  %fill = check.generate.fill value(17) : tensor<4xi32>
+  %uniform = check.generate.random.uniform seed(%seed) range(-1.0 to 1.0) : tensor<4xf32>
+  %file = check.file.read.npy path("fixtures/input.npy") : tensor<4xf32>
+  check.file.write.npy value(%uniform) path("outputs/actual.npy") mode(always) : tensor<4xf32>
+  check.expect.equal actual(%scalar) expected(%scalar) : i32
+  check.expect.bitwise actual(%uniform) expected(%file) : tensor<4xf32>
+  check.return
+}
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_module_plan_t plan = {};
+  IREE_ASSERT_OK(
+      loom_testbench_plan_module(module, nullptr, &plan_arena_, &plan));
+
+  ASSERT_EQ(plan.case_count, 1u);
+  const loom_testbench_case_plan_t& case_plan = plan.cases[0];
+  ASSERT_EQ(case_plan.parameter_count, 1u);
+  ASSERT_EQ(case_plan.value_source_count, 5u);
+  EXPECT_EQ(case_plan.value_sources[0].kind,
+            LOOM_TESTBENCH_VALUE_SOURCE_LITERAL);
+  EXPECT_EQ(loom_attr_as_i64(case_plan.value_sources[0].literal.value), 42);
+  EXPECT_EQ(case_plan.value_sources[1].kind, LOOM_TESTBENCH_VALUE_SOURCE_IOTA);
+  EXPECT_EQ(loom_attr_as_i64(case_plan.value_sources[1].iota.step), 1);
+  EXPECT_EQ(case_plan.value_sources[2].kind, LOOM_TESTBENCH_VALUE_SOURCE_FILL);
+  EXPECT_EQ(loom_attr_as_i64(case_plan.value_sources[2].fill.value), 17);
+  EXPECT_EQ(case_plan.value_sources[3].kind,
+            LOOM_TESTBENCH_VALUE_SOURCE_RANDOM_UNIFORM);
+  EXPECT_EQ(case_plan.value_sources[3].random_uniform.seed_value_id,
+            case_plan.parameters[0].value_id);
+  EXPECT_EQ(case_plan.value_sources[4].kind,
+            LOOM_TESTBENCH_VALUE_SOURCE_FILE_READ_NPY);
+  EXPECT_TRUE(iree_string_view_equal(case_plan.value_sources[4].file.path,
+                                     IREE_SV("fixtures/input.npy")));
+
+  ASSERT_EQ(case_plan.file_write_count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(case_plan.file_writes[0].path,
+                                     IREE_SV("outputs/actual.npy")));
+  EXPECT_EQ(case_plan.file_writes[0].mode,
+            LOOM_CHECK_FILE_WRITE_NPY_MODE_ALWAYS);
+  EXPECT_EQ(case_plan.issue_count, 0u);
   EXPECT_EQ(plan.issue_count, 0u);
 
   loom_module_free(module);

@@ -50,7 +50,26 @@ typedef enum loom_testbench_issue_kind_e {
   LOOM_TESTBENCH_ISSUE_INVALID_PARAMETER = 2,
   // A check.benchmark does not reference a discovered check.case.
   LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_CASE = 3,
+  // A value source op cannot be planned as a deterministic input.
+  LOOM_TESTBENCH_ISSUE_INVALID_VALUE_SOURCE = 4,
+  // A file output op cannot be planned as a deterministic sink.
+  LOOM_TESTBENCH_ISSUE_INVALID_FILE_WRITE = 5,
 } loom_testbench_issue_kind_t;
+
+typedef enum loom_testbench_value_source_kind_e {
+  // Invalid or uninitialized value source slot.
+  LOOM_TESTBENCH_VALUE_SOURCE_NONE = 0,
+  // Static scalar literal from check.literal.
+  LOOM_TESTBENCH_VALUE_SOURCE_LITERAL = 1,
+  // Deterministic shaped iota from check.generate.iota.
+  LOOM_TESTBENCH_VALUE_SOURCE_IOTA = 2,
+  // Deterministic shaped fill from check.generate.fill.
+  LOOM_TESTBENCH_VALUE_SOURCE_FILL = 3,
+  // Deterministic random-uniform value from check.generate.random.uniform.
+  LOOM_TESTBENCH_VALUE_SOURCE_RANDOM_UNIFORM = 4,
+  // Fixture file input from check.file.read.npy.
+  LOOM_TESTBENCH_VALUE_SOURCE_FILE_READ_NPY = 5,
+} loom_testbench_value_source_kind_t;
 
 typedef struct loom_testbench_plan_options_t {
   // Maximum samples retained per case after cartesian expansion.
@@ -88,6 +107,39 @@ typedef struct loom_testbench_seed_plan_t {
   iree_host_size_t count;
 } loom_testbench_seed_plan_t;
 
+typedef struct loom_testbench_literal_source_plan_t {
+  // Static scalar payload.
+  loom_attribute_t value;
+} loom_testbench_literal_source_plan_t;
+
+typedef struct loom_testbench_iota_source_plan_t {
+  // First generated element value.
+  loom_attribute_t offset;
+  // Additive step between generated elements.
+  loom_attribute_t step;
+} loom_testbench_iota_source_plan_t;
+
+typedef struct loom_testbench_fill_source_plan_t {
+  // Static scalar payload used for every element.
+  loom_attribute_t value;
+} loom_testbench_fill_source_plan_t;
+
+typedef struct loom_testbench_random_uniform_source_plan_t {
+  // SSA value providing the sampled seed.
+  loom_value_id_t seed_value_id;
+  // Inclusive lower generated value bound.
+  loom_attribute_t lower;
+  // Inclusive upper generated value bound.
+  loom_attribute_t upper;
+} loom_testbench_random_uniform_source_plan_t;
+
+typedef struct loom_testbench_file_source_plan_t {
+  // Interned module string ID for the fixture path.
+  loom_string_id_t path_id;
+  // Borrowed fixture path text.
+  iree_string_view_t path;
+} loom_testbench_file_source_plan_t;
+
 typedef struct loom_testbench_parameter_plan_t {
   // Parameter kind and payload discriminator.
   loom_testbench_parameter_kind_t kind;
@@ -108,6 +160,44 @@ typedef struct loom_testbench_parameter_plan_t {
     loom_testbench_seed_plan_t seed;
   };
 } loom_testbench_parameter_plan_t;
+
+typedef struct loom_testbench_value_source_plan_t {
+  // Source kind and payload discriminator.
+  loom_testbench_value_source_kind_t kind;
+  // Operation that produced the source value.
+  const loom_op_t* op;
+  // SSA value produced by the source op.
+  loom_value_id_t value_id;
+  // Type of |value_id| at planning time.
+  loom_type_t type;
+  union {
+    // Payload for check.literal.
+    loom_testbench_literal_source_plan_t literal;
+    // Payload for check.generate.iota.
+    loom_testbench_iota_source_plan_t iota;
+    // Payload for check.generate.fill.
+    loom_testbench_fill_source_plan_t fill;
+    // Payload for check.generate.random.uniform.
+    loom_testbench_random_uniform_source_plan_t random_uniform;
+    // Payload for check.file.read.npy.
+    loom_testbench_file_source_plan_t file;
+  };
+} loom_testbench_value_source_plan_t;
+
+typedef struct loom_testbench_file_write_plan_t {
+  // Operation that declared the file output.
+  const loom_op_t* op;
+  // SSA value written to the fixture path.
+  loom_value_id_t value_id;
+  // Type of |value_id| at planning time.
+  loom_type_t type;
+  // Interned module string ID for the output path.
+  loom_string_id_t path_id;
+  // Borrowed output path text.
+  iree_string_view_t path;
+  // Static write policy. Absent IR spelling defaults to ON_FAILURE.
+  loom_check_file_write_npy_mode_t mode;
+} loom_testbench_file_write_plan_t;
 
 typedef struct loom_testbench_issue_t {
   // Structured issue classification.
@@ -137,6 +227,14 @@ typedef struct loom_testbench_case_plan_t {
   const loom_testbench_parameter_plan_t* parameters;
   // Number of entries in |parameters|.
   iree_host_size_t parameter_count;
+  // Value source plans in source order.
+  const loom_testbench_value_source_plan_t* value_sources;
+  // Number of entries in |value_sources|.
+  iree_host_size_t value_source_count;
+  // File output plans in source order.
+  const loom_testbench_file_write_plan_t* file_writes;
+  // Number of entries in |file_writes|.
+  iree_host_size_t file_write_count;
   // Full cartesian sample count before applying |max_samples_per_case|.
   iree_host_size_t cartesian_sample_count;
   // Number of samples retained for execution after budget capping.

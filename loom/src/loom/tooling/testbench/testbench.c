@@ -24,6 +24,10 @@ typedef struct loom_testbench_plan_counts_t {
   iree_host_size_t benchmark_count;
   // Number of parameter ops in all case bodies.
   iree_host_size_t parameter_count;
+  // Number of value source ops in all case bodies.
+  iree_host_size_t value_source_count;
+  // Number of file output ops in all case bodies.
+  iree_host_size_t file_write_count;
   // Maximum number of structured issues this planning pass can emit.
   iree_host_size_t issue_capacity;
 } loom_testbench_plan_counts_t;
@@ -44,12 +48,24 @@ static iree_string_view_t loom_testbench_symbol_name(
   return module->strings.entries[symbol->name_id];
 }
 
+static iree_string_view_t loom_testbench_string_from_id(
+    const loom_module_t* module, loom_string_id_t string_id) {
+  if (string_id >= module->strings.count) return iree_string_view_empty();
+  return module->strings.entries[string_id];
+}
+
 static loom_scalar_type_t loom_testbench_value_scalar_type(
     const loom_module_t* module, loom_value_id_t value_id) {
   if (value_id >= module->values.count) return LOOM_SCALAR_TYPE_COUNT_;
   loom_type_t type = module->values.entries[value_id].type;
   if (!loom_type_is_scalar(type)) return LOOM_SCALAR_TYPE_COUNT_;
   return loom_type_element_type(type);
+}
+
+static loom_type_t loom_testbench_value_type(const loom_module_t* module,
+                                             loom_value_id_t value_id) {
+  if (value_id >= module->values.count) return (loom_type_t){0};
+  return module->values.entries[value_id].type;
 }
 
 static bool loom_testbench_scalar_type_is_integral_sample(
@@ -268,9 +284,92 @@ static bool loom_testbench_plan_parameter(
   return false;
 }
 
+static bool loom_testbench_plan_value_source(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_testbench_value_source_plan_t* out_source) {
+  memset(out_source, 0, sizeof(*out_source));
+  out_source->op = op;
+  if (loom_check_literal_isa(op)) {
+    out_source->kind = LOOM_TESTBENCH_VALUE_SOURCE_LITERAL;
+    out_source->value_id = loom_check_literal_result(op);
+    out_source->type = loom_testbench_value_type(module, out_source->value_id);
+    out_source->literal.value = loom_check_literal_value(op);
+    return out_source->value_id < module->values.count;
+  }
+  if (loom_check_generate_iota_isa(op)) {
+    out_source->kind = LOOM_TESTBENCH_VALUE_SOURCE_IOTA;
+    out_source->value_id = loom_check_generate_iota_result(op);
+    out_source->type = loom_testbench_value_type(module, out_source->value_id);
+    out_source->iota.offset = loom_check_generate_iota_offset(op);
+    out_source->iota.step = loom_check_generate_iota_step(op);
+    return out_source->value_id < module->values.count;
+  }
+  if (loom_check_generate_fill_isa(op)) {
+    out_source->kind = LOOM_TESTBENCH_VALUE_SOURCE_FILL;
+    out_source->value_id = loom_check_generate_fill_result(op);
+    out_source->type = loom_testbench_value_type(module, out_source->value_id);
+    out_source->fill.value = loom_check_generate_fill_value(op);
+    return out_source->value_id < module->values.count;
+  }
+  if (loom_check_generate_random_uniform_isa(op)) {
+    out_source->kind = LOOM_TESTBENCH_VALUE_SOURCE_RANDOM_UNIFORM;
+    out_source->value_id = loom_check_generate_random_uniform_result(op);
+    out_source->type = loom_testbench_value_type(module, out_source->value_id);
+    out_source->random_uniform.seed_value_id =
+        loom_check_generate_random_uniform_seed(op);
+    out_source->random_uniform.lower =
+        loom_check_generate_random_uniform_lower(op);
+    out_source->random_uniform.upper =
+        loom_check_generate_random_uniform_upper(op);
+    return out_source->value_id < module->values.count &&
+           out_source->random_uniform.seed_value_id < module->values.count;
+  }
+  if (loom_check_file_read_npy_isa(op)) {
+    out_source->kind = LOOM_TESTBENCH_VALUE_SOURCE_FILE_READ_NPY;
+    out_source->value_id = loom_check_file_read_npy_result(op);
+    out_source->type = loom_testbench_value_type(module, out_source->value_id);
+    out_source->file.path_id = loom_check_file_read_npy_path(op);
+    out_source->file.path =
+        loom_testbench_string_from_id(module, out_source->file.path_id);
+    return out_source->value_id < module->values.count &&
+           out_source->file.path_id < module->strings.count;
+  }
+  return false;
+}
+
+static bool loom_testbench_plan_file_write(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_testbench_file_write_plan_t* out_file_write) {
+  memset(out_file_write, 0, sizeof(*out_file_write));
+  if (!loom_check_file_write_npy_isa(op)) return false;
+  out_file_write->op = op;
+  out_file_write->value_id = loom_check_file_write_npy_value(op);
+  out_file_write->type =
+      loom_testbench_value_type(module, out_file_write->value_id);
+  out_file_write->path_id = loom_check_file_write_npy_path(op);
+  out_file_write->path =
+      loom_testbench_string_from_id(module, out_file_write->path_id);
+  loom_attribute_t mode_attr = loom_op_const_attrs(op)[1];
+  out_file_write->mode =
+      loom_attr_is_absent(mode_attr)
+          ? LOOM_CHECK_FILE_WRITE_NPY_MODE_ON_FAILURE
+          : (loom_check_file_write_npy_mode_t)loom_attr_as_enum(mode_attr);
+  return out_file_write->value_id < module->values.count &&
+         out_file_write->path_id < module->strings.count &&
+         out_file_write->mode > 0 &&
+         out_file_write->mode < LOOM_CHECK_FILE_WRITE_NPY_MODE_COUNT_;
+}
+
 static bool loom_testbench_is_parameter_op(const loom_op_t* op) {
   return loom_check_param_range_isa(op) || loom_check_param_choice_isa(op) ||
          loom_check_param_seed_isa(op);
+}
+
+static bool loom_testbench_is_value_source_op(const loom_op_t* op) {
+  return loom_check_literal_isa(op) || loom_check_generate_iota_isa(op) ||
+         loom_check_generate_fill_isa(op) ||
+         loom_check_generate_random_uniform_isa(op) ||
+         loom_check_file_read_npy_isa(op);
 }
 
 static bool loom_testbench_is_supported_check_body_op(
@@ -312,6 +411,8 @@ static void loom_testbench_count_case_body(
     loom_block_for_each_op(block, op) {
       ++counts->issue_capacity;
       if (loom_testbench_is_parameter_op(op)) ++counts->parameter_count;
+      if (loom_testbench_is_value_source_op(op)) ++counts->value_source_count;
+      if (loom_check_file_write_npy_isa(op)) ++counts->file_write_count;
     }
   }
 }
@@ -396,10 +497,18 @@ static void loom_testbench_plan_case_body(
     iree_host_size_t max_samples_per_case,
     loom_testbench_case_plan_t* case_plan,
     loom_testbench_parameter_plan_t* parameters,
-    iree_host_size_t* inout_parameter_count, loom_testbench_issue_t* issues,
+    iree_host_size_t* inout_parameter_count,
+    loom_testbench_value_source_plan_t* value_sources,
+    iree_host_size_t* inout_value_source_count,
+    loom_testbench_file_write_plan_t* file_writes,
+    iree_host_size_t* inout_file_write_count, loom_testbench_issue_t* issues,
     iree_host_size_t issue_capacity, iree_host_size_t* inout_issue_count) {
   case_plan->parameters =
       parameters ? parameters + *inout_parameter_count : NULL;
+  case_plan->value_sources =
+      value_sources ? value_sources + *inout_value_source_count : NULL;
+  case_plan->file_writes =
+      file_writes ? file_writes + *inout_file_write_count : NULL;
   case_plan->issues = issues ? issues + *inout_issue_count : NULL;
   case_plan->cartesian_sample_count = 1;
   case_plan->sample_count = 1;
@@ -416,27 +525,60 @@ static void loom_testbench_plan_case_body(
             LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID, op, case_plan->ref);
         continue;
       }
-      if (!loom_testbench_is_parameter_op(op)) continue;
-
-      loom_testbench_parameter_plan_t* parameter =
-          &parameters[(*inout_parameter_count)++];
-      if (!loom_testbench_plan_parameter(module, op, parameter)) {
-        loom_testbench_append_issue(
-            issues, issue_capacity, inout_issue_count,
-            LOOM_TESTBENCH_ISSUE_INVALID_PARAMETER, case_index,
-            LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID, op, case_plan->ref);
+      if (loom_testbench_is_parameter_op(op)) {
+        loom_testbench_parameter_plan_t* parameter =
+            &parameters[(*inout_parameter_count)++];
+        if (!loom_testbench_plan_parameter(module, op, parameter)) {
+          loom_testbench_append_issue(
+              issues, issue_capacity, inout_issue_count,
+              LOOM_TESTBENCH_ISSUE_INVALID_PARAMETER, case_index,
+              LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID, op, case_plan->ref);
+          continue;
+        }
+        loom_testbench_multiply_sample_count(
+            parameter->sample_count, max_samples_per_case,
+            &case_plan->cartesian_sample_count, &case_plan->sample_count,
+            &case_plan->sample_count_truncated);
         continue;
       }
-      loom_testbench_multiply_sample_count(
-          parameter->sample_count, max_samples_per_case,
-          &case_plan->cartesian_sample_count, &case_plan->sample_count,
-          &case_plan->sample_count_truncated);
+
+      if (loom_testbench_is_value_source_op(op)) {
+        loom_testbench_value_source_plan_t* source =
+            &value_sources[(*inout_value_source_count)++];
+        if (!loom_testbench_plan_value_source(module, op, source)) {
+          loom_testbench_append_issue(
+              issues, issue_capacity, inout_issue_count,
+              LOOM_TESTBENCH_ISSUE_INVALID_VALUE_SOURCE, case_index,
+              LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID, op, case_plan->ref);
+        }
+        continue;
+      }
+
+      if (loom_check_file_write_npy_isa(op)) {
+        loom_testbench_file_write_plan_t* file_write =
+            &file_writes[(*inout_file_write_count)++];
+        if (!loom_testbench_plan_file_write(module, op, file_write)) {
+          loom_testbench_append_issue(
+              issues, issue_capacity, inout_issue_count,
+              LOOM_TESTBENCH_ISSUE_INVALID_FILE_WRITE, case_index,
+              LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID, op, case_plan->ref);
+        }
+        continue;
+      }
     }
   }
 
   case_plan->parameter_count =
       case_plan->parameters
           ? (parameters + *inout_parameter_count) - case_plan->parameters
+          : 0;
+  case_plan->value_source_count =
+      case_plan->value_sources ? (value_sources + *inout_value_source_count) -
+                                     case_plan->value_sources
+                               : 0;
+  case_plan->file_write_count =
+      case_plan->file_writes
+          ? (file_writes + *inout_file_write_count) - case_plan->file_writes
           : 0;
   case_plan->issue_count =
       case_plan->issues ? (issues + *inout_issue_count) - case_plan->issues : 0;
@@ -499,6 +641,16 @@ iree_status_t loom_testbench_plan_module(
   IREE_RETURN_IF_ERROR(loom_testbench_allocate_array(
       arena, counts.parameter_count, sizeof(*parameters), (void**)&parameters));
 
+  loom_testbench_value_source_plan_t* value_sources = NULL;
+  IREE_RETURN_IF_ERROR(loom_testbench_allocate_array(
+      arena, counts.value_source_count, sizeof(*value_sources),
+      (void**)&value_sources));
+
+  loom_testbench_file_write_plan_t* file_writes = NULL;
+  IREE_RETURN_IF_ERROR(loom_testbench_allocate_array(
+      arena, counts.file_write_count, sizeof(*file_writes),
+      (void**)&file_writes));
+
   loom_testbench_issue_t* issues = NULL;
   IREE_RETURN_IF_ERROR(loom_testbench_allocate_array(
       arena, counts.issue_capacity, sizeof(*issues), (void**)&issues));
@@ -542,11 +694,14 @@ iree_status_t loom_testbench_plan_module(
   loom_testbench_fill_case_index_map(cases, case_count, symbol_to_case_index);
 
   iree_host_size_t parameter_count = 0;
+  iree_host_size_t value_source_count = 0;
+  iree_host_size_t file_write_count = 0;
   iree_host_size_t issue_count = 0;
   for (iree_host_size_t i = 0; i < case_count; ++i) {
-    loom_testbench_plan_case_body(module, i, max_samples_per_case, &cases[i],
-                                  parameters, &parameter_count, issues,
-                                  counts.issue_capacity, &issue_count);
+    loom_testbench_plan_case_body(
+        module, i, max_samples_per_case, &cases[i], parameters,
+        &parameter_count, value_sources, &value_source_count, file_writes,
+        &file_write_count, issues, counts.issue_capacity, &issue_count);
   }
 
   for (iree_host_size_t i = 0; i < benchmark_count; ++i) {
