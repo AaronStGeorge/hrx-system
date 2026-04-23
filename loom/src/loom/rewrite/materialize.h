@@ -46,7 +46,8 @@ typedef struct loom_ir_move_block_options_t {
 // payloads, locations, strings, encodings, and symbols are remapped through
 // |remap|. Source result values are mapped to their cloned target result values
 // before result types are remapped, so co-result dynamic type references are
-// preserved.
+// preserved. Bodyless func-like signature operands are cloned as fresh value
+// definitions, not resolved as ordinary operand uses.
 iree_status_t loom_ir_clone_op(loom_builder_t* builder,
                                const loom_op_t* source_op,
                                loom_ir_remap_t* remap,

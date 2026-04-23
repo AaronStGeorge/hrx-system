@@ -88,7 +88,37 @@ static iree_status_t loom_ir_clone_op_results(loom_ir_remap_t* remap,
 static iree_status_t loom_ir_clone_op_operands(
     loom_ir_remap_t* remap, const loom_op_t* source_op,
     loom_value_id_t* target_operands) {
+  const loom_op_vtable_t* source_vtable =
+      loom_op_vtable(remap->source_module, source_op);
   const loom_value_id_t* source_operands = loom_op_const_operands(source_op);
+  if (source_vtable && source_vtable->func_like &&
+      source_vtable->func_like->args_as_operands) {
+    for (uint16_t i = 0; i < source_op->operand_count; ++i) {
+      target_operands[i] = LOOM_VALUE_ID_INVALID;
+      if (source_operands[i] == LOOM_VALUE_ID_INVALID) {
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(loom_module_define_value(
+          remap->target_module, loom_type_none(), &target_operands[i]));
+      IREE_RETURN_IF_ERROR(loom_ir_remap_map_value(remap, source_operands[i],
+                                                   target_operands[i]));
+      IREE_RETURN_IF_ERROR(loom_ir_clone_value_name(remap, source_operands[i],
+                                                    target_operands[i]));
+    }
+    for (uint16_t i = 0; i < source_op->operand_count; ++i) {
+      if (source_operands[i] == LOOM_VALUE_ID_INVALID) {
+        continue;
+      }
+      loom_type_t target_type = {0};
+      IREE_RETURN_IF_ERROR(loom_ir_remap_type(
+          remap,
+          loom_module_value_type(remap->source_module, source_operands[i]),
+          &target_type));
+      IREE_RETURN_IF_ERROR(loom_module_set_value_type(
+          remap->target_module, target_operands[i], target_type));
+    }
+    return iree_ok_status();
+  }
   for (uint16_t i = 0; i < source_op->operand_count; ++i) {
     if (source_operands[i] == LOOM_VALUE_ID_INVALID) {
       target_operands[i] = LOOM_VALUE_ID_INVALID;

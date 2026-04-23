@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "iree_lit_test_suite", "loom_cc_binary")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -12,32 +12,34 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-loom_cc_binary(
-    name = "loom-link",
-    srcs = ["loom-link.c"],
+loom_cc_library(
+    name = "linker",
+    srcs = ["linker.c"],
+    hdrs = ["linker.h"],
     deps = [
-        "//loom/src/loom/error:diagnostic",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
-        "//loom/src/loom/link:linker",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/util:stream",
-        "//loom/src/loom/verify",
+        "//loom/src/loom/ir:symbol_map",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/rewrite:materialize",
+        "//loom/src/loom/rewrite:remap",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/base/tooling:flags",
-        "//runtime/src/iree/io:file_handle",
     ],
 )
 
-iree_lit_test_suite(
-    name = "lit_test",
-    srcs = ["loom-link_test.txt"],
-    cfg = "//runtime:lit.cfg.py",
-    tags = ["hostonly"],
-    tools = [
-        ":loom-link",
-        "@llvm-project//llvm:FileCheck",
+loom_cc_test(
+    name = "linker_test",
+    srcs = ["linker_test.cc"],
+    deps = [
+        ":linker",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )

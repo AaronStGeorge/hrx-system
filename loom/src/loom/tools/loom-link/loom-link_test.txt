@@ -1,0 +1,37 @@
+// RUN: printf '%%s\n' \
+// RUN:   'func.decl @identity(%x: i32) -> (i32)' \
+// RUN:   '' \
+// RUN:   'func.def @caller(%x: i32) -> (i32) {' \
+// RUN:   '  %y = func.call @identity(%x) : (i32) -> (i32)' \
+// RUN:   '  func.return %y : i32' \
+// RUN:   '}' \
+// RUN:   > %t.harness.loom
+// RUN: printf '%%s\n' \
+// RUN:   'func.def @identity(%x: i32) -> (i32) {' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   > %t.corpus.loom
+// RUN: loom-link %t.harness.loom %t.corpus.loom | FileCheck --check-prefix=LINK %s
+
+// LINK-NOT: func.decl @identity
+// LINK: func.def @caller(%x: i32) -> (i32) {
+// LINK: %y = func.call @identity(%x) : (i32) -> (i32)
+// LINK: func.return %y : i32
+// LINK: func.def @identity(%x: i32) -> (i32) {
+// LINK-NOT: func.decl @identity
+
+// RUN: printf '%%s\n' \
+// RUN:   'func.def @duplicate(%x: i32) -> (i32) {' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   > %t.duplicate_a.loom
+// RUN: printf '%%s\n' \
+// RUN:   'func.def @duplicate(%x: i32) -> (i32) {' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   > %t.duplicate_b.loom
+// RUN: loom-link %t.duplicate_a.loom %t.duplicate_b.loom \
+// RUN:   > %t.duplicate.err 2>&1; test $? -ne 0
+// RUN: FileCheck --check-prefix=DUPLICATE %s < %t.duplicate.err
+
+// DUPLICATE: duplicate concrete symbol definition '@duplicate'
