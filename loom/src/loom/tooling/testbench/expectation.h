@@ -18,6 +18,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/vm/api.h"
 #include "loom/tooling/testbench/value_materializer.h"
+#include "loom/util/stream.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -76,6 +77,10 @@ typedef struct loom_testbench_expectation_options_t {
   // Named custom validators visible to check.expect<provider>.
   loom_testbench_expectation_provider_list_t providers;
 } loom_testbench_expectation_options_t;
+
+// Returns the stable lowercase name for |kind|.
+const char* loom_testbench_expectation_kind_name(
+    loom_testbench_expectation_kind_t kind);
 
 // Initializes expectation options with no custom providers.
 void loom_testbench_expectation_options_initialize(
@@ -162,6 +167,12 @@ iree_status_t loom_testbench_evaluate_case_expectations(
     const loom_testbench_expectation_schedule_t* schedule,
     const loom_testbench_value_table_t* table,
     loom_testbench_expectation_report_t* report);
+
+// Writes a deterministic JSON object for |report|. The schema is stable
+// production evidence for loom-check, reproducers, and tuning workflows.
+iree_status_t loom_testbench_expectation_report_write_json(
+    const loom_testbench_expectation_report_t* report,
+    loom_output_stream_t* stream);
 
 #ifdef __cplusplus
 }  // extern "C"

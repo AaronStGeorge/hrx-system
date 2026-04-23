@@ -12,6 +12,26 @@
 #include "iree/base/internal/math.h"
 #include "iree/modules/hal/types.h"
 #include "iree/tooling/buffer_view_matchers.h"
+#include "loom/util/json.h"
+
+const char* loom_testbench_expectation_kind_name(
+    loom_testbench_expectation_kind_t kind) {
+  switch (kind) {
+    case LOOM_TESTBENCH_EXPECTATION_NONE:
+      return "none";
+    case LOOM_TESTBENCH_EXPECTATION_EQUAL:
+      return "equal";
+    case LOOM_TESTBENCH_EXPECTATION_BITWISE:
+      return "bitwise";
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE:
+      return "close";
+    case LOOM_TESTBENCH_EXPECTATION_SHAPE:
+      return "shape";
+    case LOOM_TESTBENCH_EXPECTATION_CUSTOM:
+      return "custom";
+  }
+  return "unknown";
+}
 
 void loom_testbench_expectation_options_initialize(
     loom_testbench_expectation_options_t* out_options) {
@@ -862,4 +882,61 @@ iree_status_t loom_testbench_evaluate_case_expectations(
 
   iree_string_builder_deinitialize(&detail_builder);
   return status;
+}
+
+static iree_status_t loom_testbench_write_expectation_value_id_json(
+    loom_value_id_t value_id, loom_output_stream_t* stream) {
+  if (value_id == LOOM_VALUE_ID_INVALID) {
+    return loom_output_stream_write_cstring(stream, "null");
+  }
+  return loom_output_stream_write_format(stream, "%u", (unsigned)value_id);
+}
+
+static iree_status_t loom_testbench_write_expectation_failure_json(
+    const loom_testbench_expectation_report_t* report,
+    const loom_testbench_expectation_failure_t* failure,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "\"index\":%" PRIhsz, failure->expectation_index));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"kind\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+      stream, loom_testbench_expectation_kind_name(failure->kind)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"actual_value_id\":%u", (unsigned)failure->actual_value_id));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"expected_value_id\":"));
+  IREE_RETURN_IF_ERROR(loom_testbench_write_expectation_value_id_json(
+      failure->expected_value_id, stream));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"detail\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, loom_testbench_expectation_failure_detail(report, failure)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
+  return iree_ok_status();
+}
+
+iree_status_t loom_testbench_expectation_report_write_json(
+    const loom_testbench_expectation_report_t* report,
+    loom_output_stream_t* stream) {
+  IREE_ASSERT_ARGUMENT(report);
+  IREE_ASSERT_ARGUMENT(stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "\"expectation_count\":%" PRIhsz, report->expectation_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"passed_count\":%" PRIhsz, report->passed_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"failure_count\":%" PRIhsz, report->failure_count));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"failures\":["));
+  for (iree_host_size_t i = 0; i < report->failure_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+    }
+    IREE_RETURN_IF_ERROR(loom_testbench_write_expectation_failure_json(
+        report, &report->failures[i], stream));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]}"));
+  return iree_ok_status();
 }

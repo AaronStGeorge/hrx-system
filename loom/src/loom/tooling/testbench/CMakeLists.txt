@@ -79,6 +79,8 @@ loom_cc_library(
     iree::hal
     iree::modules::hal::types
     loom::src::loom::ir
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
     iree::tooling::buffer_view_matchers
     iree::vm
   PUBLIC
@@ -137,6 +139,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::check
+    loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm

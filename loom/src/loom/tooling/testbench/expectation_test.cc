@@ -18,6 +18,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/check/ops.h"
+#include "loom/util/stream.h"
 
 namespace loom {
 namespace {
@@ -150,6 +151,20 @@ check.case @scalar_mismatch {
               ::testing::HasSubstr("43"));
   EXPECT_THAT(FailureDetail(report, report.failures[0]),
               ::testing::HasSubstr("42"));
+  iree_string_builder_t json_builder;
+  iree_string_builder_initialize(host_allocator_, &json_builder);
+  loom_output_stream_t json_stream;
+  loom_output_stream_for_builder(&json_builder, &json_stream);
+  IREE_ASSERT_OK(
+      loom_testbench_expectation_report_write_json(&report, &json_stream));
+  std::string json(iree_string_builder_view(&json_builder).data,
+                   iree_string_builder_view(&json_builder).size);
+  EXPECT_THAT(json, ::testing::HasSubstr("\"expectation_count\":1"));
+  EXPECT_THAT(json, ::testing::HasSubstr("\"kind\":\"equal\""));
+  EXPECT_THAT(json, ::testing::HasSubstr("\"detail\":"));
+  EXPECT_THAT(json, ::testing::HasSubstr("43"));
+  EXPECT_THAT(json, ::testing::HasSubstr("42"));
+  iree_string_builder_deinitialize(&json_builder);
 
   loom_testbench_expectation_report_deinitialize(&report);
   loom_testbench_value_table_deinitialize(&table);
