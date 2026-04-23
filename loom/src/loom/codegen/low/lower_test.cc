@@ -32,6 +32,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/target/test/descriptors.h"
 #include "loom/target/test/low_registry.h"
+#include "loom/target/test/lower.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -86,23 +87,6 @@ static bool IsI32(loom_type_t type) {
          loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32;
 }
 
-static bool IsIndex(loom_type_t type) {
-  return loom_type_is_scalar(type) &&
-         loom_type_element_type(type) == LOOM_SCALAR_TYPE_INDEX;
-}
-
-static bool IsI1(loom_type_t type) {
-  return loom_type_is_scalar(type) &&
-         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
-}
-
-static bool IsVector4xi32(loom_type_t type) {
-  return loom_type_is_vector(type) && loom_type_rank(type) == 1 &&
-         loom_type_is_all_static(type) &&
-         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32 &&
-         loom_type_dim_static_size_at(type, 0) == 4;
-}
-
 static iree_status_t MakeRegisterType(loom_low_lower_context_t* context,
                                       iree_string_view_t register_class,
                                       uint32_t unit_count,
@@ -115,172 +99,13 @@ static iree_status_t MakeRegisterType(loom_low_lower_context_t* context,
   return iree_ok_status();
 }
 
-static iree_status_t TestMapType(void* user_data,
-                                 loom_low_lower_context_t* context,
-                                 const loom_op_t* source_op,
-                                 loom_type_t source_type,
-                                 loom_type_t* out_low_type) {
-  (void)user_data;
-  if (IsI32(source_type) || IsI1(source_type) || IsIndex(source_type)) {
-    return MakeRegisterType(context, IREE_SV("test.i32"), 1, out_low_type);
-  }
-  if (IsVector4xi32(source_type)) {
-    return MakeRegisterType(context, IREE_SV("test.i32"), 4, out_low_type);
-  }
-  return loom_low_lower_emit_reject(
-      context, source_op, IREE_SV("type"), IREE_SV("source"),
-      IREE_SV("test lowering only maps i1, i32, index, and vector<4xi32>"));
-}
-
-static iree_status_t TestMapArgument(
-    void* user_data, loom_low_lower_context_t* context,
-    const loom_op_t* source_function_op, uint16_t source_argument_index,
-    loom_value_id_t source_argument_id,
-    loom_low_lower_abi_argument_t* out_argument) {
-  (void)user_data;
-  loom_type_t source_type = loom_module_value_type(
-      loom_low_lower_context_module(context), source_argument_id);
-  if (loom_type_is_buffer(source_type)) {
-    loom_type_t resource_type = loom_type_none();
-    IREE_RETURN_IF_ERROR(
-        MakeRegisterType(context, IREE_SV("test.i32"), 1, &resource_type));
-    *out_argument = (loom_low_lower_abi_argument_t){
-        .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE,
-        .abi_type = resource_type,
-        .resource_import_kind = LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER,
-        .resource_index = source_argument_index,
-        .resource_semantic_type = source_type,
-    };
-    return iree_ok_status();
-  }
-
-  *out_argument = (loom_low_lower_abi_argument_t){
-      .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
-      .abi_type = loom_type_none(),
-      .resource_semantic_type = loom_type_none(),
-  };
-  return TestMapType(user_data, context, source_function_op, source_type,
-                     &out_argument->abi_type);
-}
-
-static iree_status_t TestRuleMatchMapValue(
-    void* user_data, const loom_low_lower_rule_match_context_t* context,
-    const loom_op_t* source_op, loom_value_id_t source_value_id,
-    loom_low_lower_rule_mapped_value_t* out_mapped_value) {
-  (void)user_data;
-  (void)source_op;
-  IREE_ASSERT_ARGUMENT(out_mapped_value);
-  IREE_ASSERT_LT(source_value_id, context->module->values.count);
-  *out_mapped_value = loom_low_lower_rule_mapped_value_none();
-  loom_type_t source_type =
-      loom_module_value_type(context->module, source_value_id);
-  if (IsI32(source_type) || IsI1(source_type) || IsIndex(source_type)) {
-    *out_mapped_value = loom_low_lower_rule_mapped_value_register(
-        TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 1);
-  } else if (IsVector4xi32(source_type)) {
-    *out_mapped_value = loom_low_lower_rule_mapped_value_register(
-        TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 4);
-  }
-  return iree_ok_status();
-}
-
-static bool TestRuleMatchCanMaterialize(
-    void* user_data, const loom_low_lower_rule_match_context_t* context,
-    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
-    uint16_t value_ref_index, loom_value_id_t source_value_id) {
-  (void)user_data;
-  (void)context;
-  (void)rule_set;
-  (void)source_op;
-  (void)value_ref_index;
-  (void)source_value_id;
-  return true;
-}
-
-static bool TestCanMaterializeCopy(loom_low_lower_context_t* context,
-                                   const loom_op_t* source_op,
-                                   loom_value_id_t source_value_id) {
-  (void)context;
-  (void)source_op;
-  (void)source_value_id;
-  return true;
-}
-
-static iree_status_t TestMaterializeCopy(loom_low_lower_context_t* context,
-                                         const loom_op_t* source_op,
-                                         loom_value_id_t source_value_id,
-                                         loom_value_id_t* out_low_value_id) {
-  IREE_ASSERT_ARGUMENT(out_low_value_id);
-  *out_low_value_id = LOOM_VALUE_ID_INVALID;
-  loom_value_id_t low_value_id = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, source_value_id, &low_value_id));
-  loom_type_t low_type = loom_module_value_type(
-      loom_low_lower_context_module(context), low_value_id);
-  loom_op_t* copy_op = nullptr;
-  IREE_RETURN_IF_ERROR(
-      loom_low_copy_build(loom_low_lower_context_builder(context), low_value_id,
-                          low_type, source_op->location, &copy_op));
-  *out_low_value_id = loom_low_copy_result(copy_op);
-  return iree_ok_status();
-}
-
-enum TestLowerMaterializer : uint16_t {
-  kTestLowerMaterializerCopy = 1,
+enum TestRejectedScalarAddValueRef : uint16_t {
+  kTestRejectedScalarAddOperand0,
+  kTestRejectedScalarAddOperand1,
+  kTestRejectedScalarAddResult0,
 };
 
-static const loom_low_lower_value_materializer_t kTestLowerMaterializers[] = {
-    {
-        .can_materialize = TestCanMaterializeCopy,
-        .materialize = TestMaterializeCopy,
-    },
-};
-
-enum TestLowerTypePattern : uint16_t {
-  kTestLowerTypeI32,
-  kTestLowerTypeV4I32,
-  kTestLowerTypeIndex,
-};
-
-static const loom_low_lower_type_pattern_t kTestLowerTypePatterns[] = {
-    {
-        .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
-                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT,
-        .type_kind = LOOM_TYPE_SCALAR,
-        .element_type_mask =
-            LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
-    },
-    {
-        .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
-                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT |
-                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
-                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE,
-        .type_kind = LOOM_TYPE_VECTOR,
-        .element_type_mask =
-            LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
-        .rank = 1,
-        .static_dim0_min = 4,
-        .static_dim0_max = 4,
-    },
-    {
-        .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
-                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT,
-        .type_kind = LOOM_TYPE_SCALAR,
-        .element_type_mask =
-            LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_INDEX),
-    },
-};
-
-enum TestLowerValueRef : uint16_t {
-  kTestLowerOperand0,
-  kTestLowerOperand1,
-  kTestLowerResult0,
-  kTestLowerOperand2,
-  kTestLowerTemporary0,
-  kTestLowerMaterializedOperand2,
-};
-
-static const loom_low_lower_value_ref_t kTestLowerValueRefs[] = {
+static const loom_low_lower_value_ref_t kTestRejectedScalarAddValueRefs[] = {
     {
         .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
         .index = 0,
@@ -293,373 +118,70 @@ static const loom_low_lower_value_ref_t kTestLowerValueRefs[] = {
         .kind = LOOM_LOW_LOWER_VALUE_REF_RESULT,
         .index = 0,
     },
+};
+
+static const loom_low_lower_type_pattern_t kTestRejectedScalarAddTypes[] = {
     {
-        .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
-        .index = 2,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_VALUE_REF_TEMPORARY,
-        .index = 0,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
-        .index = 2,
-        .materializer_index = kTestLowerMaterializerCopy,
+        .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE,
+        .type_kind = LOOM_TYPE_VECTOR,
+        .element_type_mask =
+            LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
+        .rank = 1,
+        .static_dim0_min = 4,
+        .static_dim0_max = 4,
     },
 };
 
-static const loom_low_lower_attr_copy_t kTestLowerAttrCopies[] = {
-    {
-        .target_name = IREE_SVL("i32_value"),
-        .source_attr_index = 0,
-    },
-};
-
-enum TestLowerDiagnostic : uint16_t {
-  kTestLowerDiagnosticI32,
-  kTestLowerDiagnosticV4I32,
-  kTestLowerDiagnosticI64Attr,
-  kTestLowerDiagnosticIndex,
-  kTestLowerDiagnosticMaterialized,
-};
-
-static const loom_low_lower_diagnostic_t kTestLowerDiagnostics[] = {
-    {
-        .subject_kind = IREE_SVL("type"),
-        .subject_name = IREE_SVL("i32"),
-        .reason = IREE_SVL("test lowering requires i32 scalar values"),
-    },
+static const loom_low_lower_diagnostic_t kTestRejectedScalarAddDiagnostics[] = {
     {
         .subject_kind = IREE_SVL("type"),
         .subject_name = IREE_SVL("vector<4xi32>"),
         .reason =
             IREE_SVL("test lowering requires vector<4xi32> vector values"),
     },
+};
+
+static const loom_low_lower_guard_t kTestRejectedScalarAddGuards[] = {
     {
-        .subject_kind = IREE_SVL("attr"),
-        .subject_name = IREE_SVL("value"),
-        .reason = IREE_SVL("test constant lowering requires an i64 value"),
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestRejectedScalarAddOperand0,
+        .type_pattern_index = 0,
+        .diagnostic_index = 0,
     },
     {
-        .subject_kind = IREE_SVL("type"),
-        .subject_name = IREE_SVL("index"),
-        .reason = IREE_SVL("test lowering requires index values"),
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestRejectedScalarAddOperand1,
+        .type_pattern_index = 0,
+        .diagnostic_index = 0,
     },
     {
-        .subject_kind = IREE_SVL("materializer"),
-        .subject_name = IREE_SVL("copy"),
-        .reason = IREE_SVL("test lowering requires copy-materializable values"),
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestRejectedScalarAddResult0,
+        .type_pattern_index = 0,
+        .diagnostic_index = 0,
     },
 };
 
-enum TestLowerGuard : uint16_t {
-  kTestLowerConstValueGuard,
-  kTestLowerConstResultGuard,
-  kTestLowerScalarLhsGuard,
-  kTestLowerScalarRhsGuard,
-  kTestLowerScalarResultGuard,
-  kTestLowerVectorLhsGuard,
-  kTestLowerVectorLhsDim0MultipleGuard,
-  kTestLowerVectorRhsGuard,
-  kTestLowerVectorRhsUnitCountGuard,
-  kTestLowerVectorResultGuard,
-  kTestLowerVectorResultUnitCountGuard,
-  kTestLowerIndexLhsGuard,
-  kTestLowerIndexRhsGuard,
-  kTestLowerIndexAccGuard,
-  kTestLowerIndexAccMaterializeGuard,
-  kTestLowerIndexResultGuard,
-};
-
-static const loom_low_lower_guard_t kTestLowerGuards[] = {
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_ATTR_KIND,
-        .attr_index = 0,
-        .diagnostic_index = kTestLowerDiagnosticI64Attr,
-        .attr_kind = LOOM_ATTR_I64,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerResult0,
-        .type_pattern_index = kTestLowerTypeI32,
-        .diagnostic_index = kTestLowerDiagnosticI32,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerOperand0,
-        .type_pattern_index = kTestLowerTypeI32,
-        .diagnostic_index = kTestLowerDiagnosticI32,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerOperand1,
-        .type_pattern_index = kTestLowerTypeI32,
-        .diagnostic_index = kTestLowerDiagnosticI32,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerResult0,
-        .type_pattern_index = kTestLowerTypeI32,
-        .diagnostic_index = kTestLowerDiagnosticI32,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerOperand0,
-        .type_pattern_index = kTestLowerTypeV4I32,
-        .diagnostic_index = kTestLowerDiagnosticV4I32,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_STATIC_DIM0_MULTIPLE,
-        .value_ref_index = kTestLowerOperand0,
-        .diagnostic_index = kTestLowerDiagnosticV4I32,
-        .u64 = 4,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerOperand1,
-        .type_pattern_index = kTestLowerTypeV4I32,
-        .diagnostic_index = kTestLowerDiagnosticV4I32,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
-        .value_ref_index = kTestLowerOperand0,
-        .other_value_ref_index = kTestLowerOperand1,
-        .diagnostic_index = kTestLowerDiagnosticV4I32,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerResult0,
-        .type_pattern_index = kTestLowerTypeV4I32,
-        .diagnostic_index = kTestLowerDiagnosticV4I32,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
-        .value_ref_index = kTestLowerOperand0,
-        .other_value_ref_index = kTestLowerResult0,
-        .diagnostic_index = kTestLowerDiagnosticV4I32,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerOperand0,
-        .type_pattern_index = kTestLowerTypeIndex,
-        .diagnostic_index = kTestLowerDiagnosticIndex,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerOperand1,
-        .type_pattern_index = kTestLowerTypeIndex,
-        .diagnostic_index = kTestLowerDiagnosticIndex,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerOperand2,
-        .type_pattern_index = kTestLowerTypeIndex,
-        .diagnostic_index = kTestLowerDiagnosticIndex,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_MATERIALIZABLE,
-        .value_ref_index = kTestLowerMaterializedOperand2,
-        .diagnostic_index = kTestLowerDiagnosticMaterialized,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
-        .value_ref_index = kTestLowerResult0,
-        .type_pattern_index = kTestLowerTypeIndex,
-        .diagnostic_index = kTestLowerDiagnosticIndex,
-    },
-};
-
-enum TestLowerEmit : uint16_t {
-  kTestLowerEmitConstI32,
-  kTestLowerEmitAddI32,
-  kTestLowerEmitTiedI32,
-  kTestLowerEmitAddV4I32,
-  kTestLowerEmitSwappedAddV4I32,
-  kTestLowerEmitIndexProduct,
-  kTestLowerEmitIndexAddend,
-};
-
-static const loom_tied_result_t kTestLowerTiedResults[] = {
-    {
-        .result_index = 0,
-        .operand_index = 0,
-        .has_type_change = false,
-    },
-};
-
-static const loom_low_lower_emit_t kTestLowerEmits[] = {
-    {
-        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST,
-        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_CONST_I32,
-        .result_ref_start = kTestLowerResult0,
-        .result_ref_count = 1,
-        .attr_copy_start = 0,
-        .attr_copy_count = 1,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
-        .operand_ref_start = kTestLowerOperand0,
-        .operand_ref_count = 2,
-        .result_ref_start = kTestLowerResult0,
-        .result_ref_count = 1,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_TIED_ANY,
-        .operand_ref_start = kTestLowerOperand0,
-        .operand_ref_count = 1,
-        .copy_operand_mask = 0x1,
-        .result_ref_start = kTestLowerResult0,
-        .result_ref_count = 1,
-        .tied_result_start = 0,
-        .tied_result_count = 1,
-    },
+static const loom_low_lower_emit_t kTestRejectedScalarAddEmits[] = {
     {
         .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
         .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
-        .operand_ref_start = kTestLowerOperand0,
+        .operand_ref_start = kTestRejectedScalarAddOperand0,
         .operand_ref_count = 2,
-        .result_ref_start = kTestLowerResult0,
+        .result_ref_start = kTestRejectedScalarAddResult0,
         .result_ref_count = 1,
     },
-    {
-        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
-        .flags = LOOM_LOW_LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1,
-        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
-        .operand_ref_start = kTestLowerOperand0,
-        .operand_ref_count = 2,
-        .result_ref_start = kTestLowerResult0,
-        .result_ref_count = 1,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-        .flags = LOOM_LOW_LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
-        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
-        .operand_ref_start = kTestLowerOperand0,
-        .operand_ref_count = 2,
-        .result_ref_start = kTestLowerResult0,
-        .result_ref_count = 1,
-        .result_bind_ref_start = kTestLowerTemporary0,
-    },
-    {
-        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
-        .operand_ref_start = kTestLowerTemporary0,
-        .operand_ref_count = 2,
-        .result_ref_start = kTestLowerResult0,
-        .result_ref_count = 1,
-    },
-};
-
-static const loom_low_lower_rule_t kTestLowerRules[] = {
-    {
-        .source_op_kind = LOOM_OP_SCALAR_ADDI,
-        .guard_start = kTestLowerScalarLhsGuard,
-        .guard_count = 3,
-        .emit_start = kTestLowerEmitAddI32,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_SCALAR_SUBI,
-        .guard_start = kTestLowerScalarLhsGuard,
-        .guard_count = 3,
-        .emit_start = kTestLowerEmitTiedI32,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
-        .guard_start = kTestLowerConstValueGuard,
-        .guard_count = 2,
-        .emit_start = kTestLowerEmitConstI32,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_ADDI,
-        .guard_start = kTestLowerVectorLhsGuard,
-        .guard_count = 6,
-        .emit_start = kTestLowerEmitAddV4I32,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_SUBI,
-        .guard_start = kTestLowerVectorLhsGuard,
-        .guard_count = 6,
-        .emit_start = kTestLowerEmitSwappedAddV4I32,
-        .emit_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_INDEX_MADD,
-        .temporary_count = 1,
-        .guard_start = kTestLowerIndexLhsGuard,
-        .guard_count = 5,
-        .emit_start = kTestLowerEmitIndexProduct,
-        .emit_count = 2,
-    },
-};
-
-static const loom_low_lower_rule_span_t kTestLowerSpans[] = {
-    {
-        .source_op_kind = LOOM_OP_SCALAR_ADDI,
-        .rule_start = 0,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_SCALAR_SUBI,
-        .rule_start = 1,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
-        .rule_start = 2,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_ADDI,
-        .rule_start = 3,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_VECTOR_SUBI,
-        .rule_start = 4,
-        .rule_count = 1,
-    },
-    {
-        .source_op_kind = LOOM_OP_INDEX_MADD,
-        .rule_start = 5,
-        .rule_count = 1,
-    },
-};
-
-static const loom_low_lower_rule_set_t kTestLowerRuleSet = {
-    .spans = kTestLowerSpans,
-    .span_count = IREE_ARRAYSIZE(kTestLowerSpans),
-    .rules = kTestLowerRules,
-    .rule_count = IREE_ARRAYSIZE(kTestLowerRules),
-    .type_patterns = kTestLowerTypePatterns,
-    .type_pattern_count = IREE_ARRAYSIZE(kTestLowerTypePatterns),
-    .value_refs = kTestLowerValueRefs,
-    .value_ref_count = IREE_ARRAYSIZE(kTestLowerValueRefs),
-    .materializers = kTestLowerMaterializers,
-    .materializer_count = IREE_ARRAYSIZE(kTestLowerMaterializers),
-    .guards = kTestLowerGuards,
-    .guard_count = IREE_ARRAYSIZE(kTestLowerGuards),
-    .attr_copies = kTestLowerAttrCopies,
-    .attr_copy_count = IREE_ARRAYSIZE(kTestLowerAttrCopies),
-    .tied_results = kTestLowerTiedResults,
-    .tied_result_count = IREE_ARRAYSIZE(kTestLowerTiedResults),
-    .emits = kTestLowerEmits,
-    .emit_count = IREE_ARRAYSIZE(kTestLowerEmits),
-    .diagnostics = kTestLowerDiagnostics,
-    .diagnostic_count = IREE_ARRAYSIZE(kTestLowerDiagnostics),
 };
 
 static const loom_low_lower_rule_t kTestRejectedScalarAddRules[] = {
     {
         .source_op_kind = LOOM_OP_SCALAR_ADDI,
-        .guard_start = kTestLowerVectorLhsGuard,
+        .guard_start = 0,
         .guard_count = 3,
-        .emit_start = kTestLowerEmitAddV4I32,
+        .emit_start = 0,
         .emit_count = 1,
     },
 };
@@ -677,25 +199,25 @@ static const loom_low_lower_rule_set_t kTestRejectedScalarAddRuleSet = {
     .span_count = IREE_ARRAYSIZE(kTestRejectedScalarAddSpans),
     .rules = kTestRejectedScalarAddRules,
     .rule_count = IREE_ARRAYSIZE(kTestRejectedScalarAddRules),
-    .type_patterns = kTestLowerTypePatterns,
-    .type_pattern_count = IREE_ARRAYSIZE(kTestLowerTypePatterns),
-    .value_refs = kTestLowerValueRefs,
-    .value_ref_count = IREE_ARRAYSIZE(kTestLowerValueRefs),
-    .guards = kTestLowerGuards,
-    .guard_count = IREE_ARRAYSIZE(kTestLowerGuards),
-    .emits = kTestLowerEmits,
-    .emit_count = IREE_ARRAYSIZE(kTestLowerEmits),
-    .diagnostics = kTestLowerDiagnostics,
-    .diagnostic_count = IREE_ARRAYSIZE(kTestLowerDiagnostics),
+    .type_patterns = kTestRejectedScalarAddTypes,
+    .type_pattern_count = IREE_ARRAYSIZE(kTestRejectedScalarAddTypes),
+    .value_refs = kTestRejectedScalarAddValueRefs,
+    .value_ref_count = IREE_ARRAYSIZE(kTestRejectedScalarAddValueRefs),
+    .guards = kTestRejectedScalarAddGuards,
+    .guard_count = IREE_ARRAYSIZE(kTestRejectedScalarAddGuards),
+    .emits = kTestRejectedScalarAddEmits,
+    .emit_count = IREE_ARRAYSIZE(kTestRejectedScalarAddEmits),
+    .diagnostics = kTestRejectedScalarAddDiagnostics,
+    .diagnostic_count = IREE_ARRAYSIZE(kTestRejectedScalarAddDiagnostics),
 };
 
 static const loom_low_lower_rule_set_t* const kTestLowerRuleSets[] = {
-    &kTestLowerRuleSet,
+    &loom_test_low_lower_rule_set,
 };
 
 static const loom_low_lower_rule_set_t* const kTestComposedRuleSets[] = {
     &kTestRejectedScalarAddRuleSet,
-    &kTestLowerRuleSet,
+    &loom_test_low_lower_rule_set,
 };
 
 static iree_status_t TestEmitPreamble(void* user_data,
@@ -774,21 +296,11 @@ static iree_status_t TestEmitCallbackOp(void* user_data,
       loom_value_slice_get(loom_low_op_results(low_op), 0));
 }
 
-static const loom_low_lower_policy_t kTestLowerPolicy = {
-    .name = IREE_SVL("test-lower-policy"),
-    .map_type = {.fn = TestMapType, .user_data = nullptr},
-    .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
-    .rule_sets =
-        {
-            .count = IREE_ARRAYSIZE(kTestLowerRuleSets),
-            .values = kTestLowerRuleSets,
-        },
-};
-
 static const loom_low_lower_policy_t kTestPreambleLowerPolicy = {
     .name = IREE_SVL("test-preamble-lower-policy"),
-    .map_type = {.fn = TestMapType, .user_data = nullptr},
-    .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
+    .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
+    .map_argument = {.fn = loom_test_low_lower_map_argument,
+                     .user_data = nullptr},
     .emit_preamble = {.fn = TestEmitPreamble, .user_data = nullptr},
     .rule_sets =
         {
@@ -799,8 +311,9 @@ static const loom_low_lower_policy_t kTestPreambleLowerPolicy = {
 
 static const loom_low_lower_policy_t kTestHybridLowerPolicy = {
     .name = IREE_SVL("test-hybrid-lower-policy"),
-    .map_type = {.fn = TestMapType, .user_data = nullptr},
-    .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
+    .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
+    .map_argument = {.fn = loom_test_low_lower_map_argument,
+                     .user_data = nullptr},
     .rule_sets =
         {
             .count = IREE_ARRAYSIZE(kTestLowerRuleSets),
@@ -812,8 +325,9 @@ static const loom_low_lower_policy_t kTestHybridLowerPolicy = {
 
 static const loom_low_lower_policy_t kTestComposedLowerPolicy = {
     .name = IREE_SVL("test-composed-lower-policy"),
-    .map_type = {.fn = TestMapType, .user_data = nullptr},
-    .map_argument = {.fn = TestMapArgument, .user_data = nullptr},
+    .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
+    .map_argument = {.fn = loom_test_low_lower_map_argument,
+                     .user_data = nullptr},
     .rule_sets =
         {
             .count = IREE_ARRAYSIZE(kTestComposedRuleSets),
@@ -822,15 +336,8 @@ static const loom_low_lower_policy_t kTestComposedLowerPolicy = {
 };
 
 static loom_low_lower_policy_registry_t MakeTestPolicyRegistry() {
-  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
-      {
-          .contract_set_key = IREE_SVL("test.low.core"),
-          .policy = &kTestLowerPolicy,
-      },
-  };
   loom_low_lower_policy_registry_t registry = {};
-  loom_low_lower_policy_registry_initialize_from_entries(
-      &registry, kEntries, IREE_ARRAYSIZE(kEntries));
+  loom_test_low_lower_policy_registry_initialize(&registry);
   return registry;
 }
 
@@ -880,7 +387,7 @@ TEST(LowLowerPolicyRegistryTest, LooksUpPolicyByContractKey) {
   const loom_low_lower_policy_t* policy = nullptr;
   IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup(
       &registry, IREE_SV("test.low.core"), &policy));
-  EXPECT_EQ(policy, &kTestLowerPolicy);
+  EXPECT_EQ(policy, loom_test_low_lower_policy());
 }
 
 TEST(LowLowerPolicyRegistryTest, LooksUpPolicyForTargetBundle) {
@@ -894,7 +401,7 @@ TEST(LowLowerPolicyRegistryTest, LooksUpPolicyForTargetBundle) {
   const loom_low_lower_policy_t* policy = nullptr;
   IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup_for_bundle(
       &registry, &bundle, &policy));
-  EXPECT_EQ(policy, &kTestLowerPolicy);
+  EXPECT_EQ(policy, loom_test_low_lower_policy());
 }
 
 TEST(LowLowerPolicyRegistryTest, RejectsMissingContractKey) {
@@ -917,7 +424,7 @@ TEST(LowLowerPolicyRegistryTest, RejectsMalformedRegistries) {
   const loom_low_lower_policy_registry_entry_t empty_key_entries[] = {
       {
           .contract_set_key = IREE_SVL(""),
-          .policy = &kTestLowerPolicy,
+          .policy = loom_test_low_lower_policy(),
       },
   };
   loom_low_lower_policy_registry_t empty_key_registry = {};
@@ -948,11 +455,11 @@ TEST(LowLowerPolicyRegistryTest, RejectsDuplicateContractKeys) {
   const loom_low_lower_policy_registry_entry_t entries[] = {
       {
           .contract_set_key = IREE_SVL("test.low.core"),
-          .policy = &kTestLowerPolicy,
+          .policy = loom_test_low_lower_policy(),
       },
       {
           .contract_set_key = IREE_SVL("test.low.core"),
-          .policy = &kTestLowerPolicy,
+          .policy = loom_test_low_lower_policy(),
       },
   };
   loom_low_lower_policy_registry_t registry = {};
@@ -1187,22 +694,22 @@ TEST_F(LowLowerTest, RuleSelectionWithMatchContextSelectsVectorRule) {
       .descriptor_set = loom_test_low_core_descriptor_set(),
       .map_value =
           {
-              .fn = TestRuleMatchMapValue,
+              .fn = loom_test_low_lower_rule_match_map_value,
               .user_data = nullptr,
           },
   };
   loom_low_lower_rule_selection_t selection = {};
   IREE_ASSERT_OK(loom_low_lower_rule_set_select_with_match_context(
-      &match_context, &kTestLowerRuleSet, source_op, &selection));
+      &match_context, &loom_test_low_lower_rule_set, source_op, &selection));
 
   EXPECT_TRUE(selection.has_source_op_span);
-  EXPECT_EQ(selection.rule, &kTestLowerRules[3]);
+  ASSERT_NE(selection.rule, nullptr);
   EXPECT_EQ(selection.diagnostic_index, LOOM_LOW_LOWER_DIAGNOSTIC_NONE);
-  EXPECT_EQ(loom_low_lower_rule_set_selection_diagnostic(&kTestLowerRuleSet,
-                                                         selection),
+  EXPECT_EQ(loom_low_lower_rule_set_selection_diagnostic(
+                &loom_test_low_lower_rule_set, selection),
             nullptr);
-  EXPECT_EQ(loom_low_lower_rule_first_descriptor_id(&kTestLowerRuleSet,
-                                                    selection.rule),
+  EXPECT_EQ(loom_low_lower_rule_first_descriptor_id(
+                &loom_test_low_lower_rule_set, selection.rule),
             TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32);
 }
 
@@ -1221,31 +728,37 @@ TEST_F(LowLowerTest, RuleSelectionWithMatchContextUsesMaterializerCallback) {
       .descriptor_set = loom_test_low_core_descriptor_set(),
       .map_value =
           {
-              .fn = TestRuleMatchMapValue,
+              .fn = loom_test_low_lower_rule_match_map_value,
               .user_data = nullptr,
           },
   };
   loom_low_lower_rule_selection_t selection = {};
   IREE_ASSERT_OK(loom_low_lower_rule_set_select_with_match_context(
-      &match_context, &kTestLowerRuleSet, source_op, &selection));
+      &match_context, &loom_test_low_lower_rule_set, source_op, &selection));
   EXPECT_EQ(selection.rule, nullptr);
   const loom_low_lower_diagnostic_t* diagnostic =
-      loom_low_lower_rule_set_selection_diagnostic(&kTestLowerRuleSet,
-                                                   selection);
+      loom_low_lower_rule_set_selection_diagnostic(
+          &loom_test_low_lower_rule_set, selection);
   ASSERT_NE(diagnostic, nullptr);
-  EXPECT_EQ(diagnostic,
-            &kTestLowerDiagnostics[kTestLowerDiagnosticMaterialized]);
+  EXPECT_TRUE(iree_string_view_equal(diagnostic->subject_kind,
+                                     IREE_SV("materializer")));
+  EXPECT_TRUE(
+      iree_string_view_equal(diagnostic->subject_name, IREE_SV("copy")));
+  EXPECT_TRUE(iree_string_view_equal(
+      diagnostic->reason,
+      IREE_SV("test lowering requires copy-materializable values")));
 
-  match_context.can_materialize.fn = TestRuleMatchCanMaterialize;
+  match_context.can_materialize.fn =
+      loom_test_low_lower_rule_match_can_materialize;
   match_context.can_materialize.user_data = nullptr;
   IREE_ASSERT_OK(loom_low_lower_rule_set_select_with_match_context(
-      &match_context, &kTestLowerRuleSet, source_op, &selection));
+      &match_context, &loom_test_low_lower_rule_set, source_op, &selection));
 
   EXPECT_TRUE(selection.has_source_op_span);
-  EXPECT_EQ(selection.rule, &kTestLowerRules[5]);
+  ASSERT_NE(selection.rule, nullptr);
   EXPECT_EQ(selection.diagnostic_index, LOOM_LOW_LOWER_DIAGNOSTIC_NONE);
-  EXPECT_EQ(loom_low_lower_rule_first_descriptor_id(&kTestLowerRuleSet,
-                                                    selection.rule),
+  EXPECT_EQ(loom_low_lower_rule_first_descriptor_id(
+                &loom_test_low_lower_rule_set, selection.rule),
             TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32);
 }
 

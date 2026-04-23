@@ -66,6 +66,25 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    lower
+  HDRS
+    "lower.h"
+  SRCS
+    "lower.c"
+  DEPS
+    ::descriptors
+    iree::base
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ir
+    loom::src::loom::ops::index
+    loom::src::loom::ops::low
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     descriptors_test

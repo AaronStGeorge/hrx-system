@@ -574,6 +574,7 @@ loom_cc_test(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target/test:descriptors_ids",
         "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/target/test:lower",
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",

@@ -34,6 +34,7 @@ loom_assert_no_dependencies(
     targets = [
         ":alt_descriptors",
         ":descriptors",
+        ":lower",
         ":low_registry",
     ],
 )
@@ -92,6 +93,22 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "lower",
+    srcs = ["lower.c"],
+    hdrs = ["lower.h"],
+    deps = [
+        ":descriptors",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/vector",
         "//runtime/src/iree/base",
     ],
 )
