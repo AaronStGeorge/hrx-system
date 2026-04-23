@@ -41,7 +41,6 @@ loom_cc_library(
     iree::base
     loom::src::loom::analysis::symbol_facts
     loom::src::loom::ir
-    loom::src::loom::ops::target
     loom::src::loom::target::types
   PUBLIC
 )
@@ -74,8 +73,8 @@ loom_cc_test(
     loom::src::loom::analysis::symbol_facts
     loom::src::loom::format::text::parser
     loom::src::loom::ir
-    loom::src::loom::ops::target
-    loom::src::loom::target::preset_registry
+    loom::src::loom::ops::func
+    loom::src::loom::ops::test
     loom::src::loom::target::types
     iree::testing::gtest
     iree::testing::gtest_main

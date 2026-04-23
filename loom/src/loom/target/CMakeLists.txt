@@ -53,6 +53,23 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    function_contract
+  HDRS
+    "function_contract.h"
+  SRCS
+    "function_contract.c"
+  DEPS
+    ::types
+    iree::base
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::ir
+    loom::src::loom::ops::func_symbol_facts
+    loom::src::loom::ops::target
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     compile_report
   HDRS
     "compile_report.h"
@@ -172,6 +189,7 @@ loom_cc_library(
   SRCS
     "module_compiler.c"
   DEPS
+    ::function_contract
     ::low_descriptor_registry
     ::types
     iree::base
@@ -198,6 +216,26 @@ loom_cc_library(
     ::low_descriptor_registry
     loom::src::loom::target::test::low_registry
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    function_contract_test
+  SRCS
+    "function_contract_test.cc"
+  DEPS
+    ::function_contract
+    ::preset_registry
+    ::types
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func_symbol_facts
+    loom::src::loom::ops::low
+    loom::src::loom::ops::target
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

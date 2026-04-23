@@ -12,6 +12,7 @@
 #include "loom/analysis/symbol_facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/target/facts.h"
+#include "loom/target/function_contract.h"
 #include "loom/target/preset_registry.h"
 
 static iree_string_view_t loom_low_source_selection_kind(
@@ -115,7 +116,7 @@ static iree_status_t loom_low_source_selection_try_func(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "symbol is not a func with a body");
   }
-  if (!func_facts->target_bundle) {
+  if (!loom_symbol_ref_is_valid(func_facts->target_symbol)) {
     if (!require_compatible) {
       return iree_ok_status();
     }
@@ -123,9 +124,12 @@ static iree_status_t loom_low_source_selection_try_func(
                             "source func @%.*s must declare a target profile",
                             (int)func_facts->name.size, func_facts->name.data);
   }
+  IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve(
+      module, fact_table, func_facts, &out_selection->target_bundle_storage));
+  out_selection->target_bundle = &out_selection->target_bundle_storage.bundle;
   const loom_low_lower_policy_t* policy = NULL;
   iree_status_t status = loom_low_lower_policy_registry_lookup_for_bundle(
-      options->policy_registry, func_facts->target_bundle, &policy);
+      options->policy_registry, out_selection->target_bundle, &policy);
   if (!iree_status_is_ok(status)) {
     if (!require_compatible &&
         iree_status_code(status) == IREE_STATUS_NOT_FOUND) {
@@ -138,10 +142,17 @@ static iree_status_t loom_low_source_selection_try_func(
   out_selection->func = loom_func_like_cast(module, func_facts->func_op);
   out_selection->func_facts = func_facts;
   out_selection->target_ref = func_facts->target_symbol;
-  out_selection->target_bundle = func_facts->target_bundle;
   out_selection->policy = policy;
   *out_compatible = true;
   return iree_ok_status();
+}
+
+static void loom_low_source_selection_assign(
+    const loom_low_source_selection_t* source,
+    loom_low_source_selection_t* out_selection) {
+  *out_selection = *source;
+  loom_target_bundle_storage_rebind(&out_selection->target_bundle_storage);
+  out_selection->target_bundle = &out_selection->target_bundle_storage.bundle;
 }
 
 static iree_status_t loom_low_source_selection_select_named(
@@ -180,7 +191,7 @@ static iree_status_t loom_low_source_selection_select_single(
     }
     ++compatible_count;
     if (compatible_count == 1) {
-      *out_selection = candidate;
+      loom_low_source_selection_assign(&candidate, out_selection);
     }
   }
 

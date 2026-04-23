@@ -24,8 +24,6 @@ extern "C" {
 #endif
 
 typedef struct loom_func_symbol_facts_t loom_func_symbol_facts_t;
-typedef struct loom_target_profile_symbol_facts_t
-    loom_target_profile_symbol_facts_t;
 
 // Resolved func symbol payload.
 typedef struct loom_func_symbol_facts_t {
@@ -77,20 +75,29 @@ typedef struct loom_func_symbol_facts_t {
   // Module-local target profile symbol, or null for target-independent funcs.
   loom_symbol_ref_t target_symbol;
 
-  // Resolved target profile facts, or NULL for target-independent funcs.
-  const loom_target_profile_symbol_facts_t* target_profile;
+  // True when the func declares a callable target ABI override.
+  bool has_abi;
 
-  // Effective target bundle, or NULL for target-independent funcs.
-  const loom_target_bundle_t* target_bundle;
+  // Callable ABI override, or UNKNOWN when has_abi is false.
+  loom_target_abi_kind_t abi_kind;
 
-  // Effective ABI/export plan. Valid when target_bundle is non-NULL.
-  loom_target_export_plan_t export_plan;
+  // Borrowed target ABI attribute overrides from the func op.
+  loom_named_attr_slice_t abi_attrs;
 
   // True when the func declares an artifact/package export.
   bool exports;
 
+  // Borrowed export symbol name, or empty to preserve the func symbol name.
+  iree_string_view_t export_symbol;
+
   // Artifact/package symbol from export attrs, or null when unassigned.
   loom_symbol_ref_t artifact_symbol;
+
+  // True when export_linkage was explicitly provided.
+  bool has_export_linkage;
+
+  // Export linkage override when has_export_linkage is true.
+  loom_target_linkage_t export_linkage;
 
   // True when export_ordinal was explicitly provided.
   bool has_export_ordinal;

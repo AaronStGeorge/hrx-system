@@ -10,7 +10,6 @@
 
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
-#include "loom/ops/target/facts.h"
 
 static iree_status_t loom_func_symbol_string_from_id(
     const loom_module_t* module, loom_string_id_t string_id,
@@ -85,54 +84,6 @@ static iree_status_t loom_func_symbol_linkage_attr(
   return iree_ok_status();
 }
 
-static iree_status_t loom_func_symbol_apply_abi_attr(
-    const loom_module_t* module, iree_string_view_t name,
-    const loom_attribute_t* value, loom_target_export_plan_t* export_plan) {
-  if (iree_string_view_equal(name, IREE_SV("hal_binding_alignment"))) {
-    return loom_func_symbol_u32_attr(
-        value, name, &export_plan->hal_kernel.binding_alignment);
-  } else if (iree_string_view_equal(name, IREE_SV("hal_workgroup_size_x"))) {
-    return loom_func_symbol_u32_attr(
-        value, name, &export_plan->hal_kernel.required_workgroup_size.x);
-  } else if (iree_string_view_equal(name, IREE_SV("hal_workgroup_size_y"))) {
-    return loom_func_symbol_u32_attr(
-        value, name, &export_plan->hal_kernel.required_workgroup_size.y);
-  } else if (iree_string_view_equal(name, IREE_SV("hal_workgroup_size_z"))) {
-    return loom_func_symbol_u32_attr(
-        value, name, &export_plan->hal_kernel.required_workgroup_size.z);
-  } else if (iree_string_view_equal(name,
-                                    IREE_SV("hal_flat_workgroup_size_min"))) {
-    return loom_func_symbol_u32_attr(
-        value, name, &export_plan->hal_kernel.flat_workgroup_size_min);
-  } else if (iree_string_view_equal(name,
-                                    IREE_SV("hal_flat_workgroup_size_max"))) {
-    return loom_func_symbol_u32_attr(
-        value, name, &export_plan->hal_kernel.flat_workgroup_size_max);
-  } else if (iree_string_view_equal(name,
-                                    IREE_SV("hal_buffer_resource_flags"))) {
-    return loom_func_symbol_u32_attr(
-        value, name, &export_plan->hal_kernel.buffer_resource_flags);
-  }
-  (void)module;
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "func ABI contract field '%.*s' is not supported",
-                          (int)name.size, name.data);
-}
-
-static iree_status_t loom_func_symbol_apply_abi_attrs(
-    const loom_module_t* module, loom_named_attr_slice_t attrs,
-    loom_target_export_plan_t* export_plan) {
-  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
-    const loom_named_attr_t* entry = &attrs.entries[i];
-    iree_string_view_t name = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_func_symbol_string_from_id(
-        module, entry->name_id, IREE_SV("ABI field"), &name));
-    IREE_RETURN_IF_ERROR(loom_func_symbol_apply_abi_attr(
-        module, name, &entry->value, export_plan));
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_func_symbol_apply_export_attr(
     const loom_module_t* module, iree_string_view_t name,
     const loom_attribute_t* value, loom_func_symbol_facts_t* facts) {
@@ -147,8 +98,9 @@ static iree_status_t loom_func_symbol_apply_export_attr(
         loom_func_symbol_u32_attr(value, name, &facts->export_ordinal));
     facts->has_export_ordinal = true;
   } else if (iree_string_view_equal(name, IREE_SV("linkage"))) {
-    return loom_func_symbol_linkage_attr(module, value,
-                                         &facts->export_plan.linkage);
+    IREE_RETURN_IF_ERROR(
+        loom_func_symbol_linkage_attr(module, value, &facts->export_linkage));
+    facts->has_export_linkage = true;
   } else {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -169,28 +121,6 @@ static iree_status_t loom_func_symbol_apply_export_attrs(
     IREE_RETURN_IF_ERROR(
         loom_func_symbol_apply_export_attr(module, name, &entry->value, facts));
   }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_func_symbol_resolve_target_profile(
-    loom_symbol_fact_context_t* context, loom_symbol_ref_t target_symbol,
-    const loom_target_profile_symbol_facts_t** out_target_profile) {
-  *out_target_profile = NULL;
-  if (!loom_symbol_ref_is_valid(target_symbol)) {
-    return iree_ok_status();
-  }
-
-  const loom_symbol_facts_base_t* target_base_facts = NULL;
-  IREE_RETURN_IF_ERROR(loom_symbol_fact_context_lookup_ref(
-      context, target_symbol, &target_base_facts));
-  const loom_target_profile_symbol_facts_t* target_profile =
-      loom_target_profile_symbol_facts_cast(target_base_facts);
-  if (!target_profile) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "func target must resolve to target.profile symbol facts");
-  }
-  *out_target_profile = target_profile;
   return iree_ok_status();
 }
 
@@ -258,52 +188,37 @@ static iree_status_t loom_func_symbol_fact_compute(
   facts->result_count = func.op->result_count;
   IREE_RETURN_IF_ERROR(loom_func_symbol_apply_imports(module, func, facts));
   facts->target_symbol = loom_func_like_target(func);
-  IREE_RETURN_IF_ERROR(loom_func_symbol_resolve_target_profile(
-      context, facts->target_symbol, &facts->target_profile));
 
   bool has_abi_attr =
       loom_func_symbol_attr_present(func, func.vtable->abi_attr_index);
-  loom_named_attr_slice_t abi_attrs = loom_func_like_abi_attrs(func);
+  facts->has_abi = has_abi_attr;
+  if (has_abi_attr) {
+    facts->abi_kind = (loom_target_abi_kind_t)loom_func_like_abi(func);
+  }
+  facts->abi_attrs = loom_func_like_abi_attrs(func);
   loom_string_id_t export_symbol_id = loom_func_like_export_symbol(func);
   bool has_export_symbol = export_symbol_id != LOOM_STRING_ID_INVALID;
   loom_named_attr_slice_t export_attrs = loom_func_like_export_attrs(func);
-  bool has_func_contract = has_abi_attr || abi_attrs.count > 0 ||
+  bool has_func_contract = has_abi_attr || facts->abi_attrs.count > 0 ||
                            has_export_symbol || export_attrs.count > 0;
-  if (has_func_contract && !facts->target_profile) {
+  if (has_func_contract && !loom_symbol_ref_is_valid(facts->target_symbol)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "func target ABI/export contracts require a target profile");
   }
-
-  if (facts->target_profile) {
-    facts->target_bundle = &facts->target_profile->bundle;
-    facts->export_plan = facts->target_profile->export_plan;
-    facts->export_plan.name = facts->name;
-    facts->export_plan.export_symbol = iree_string_view_empty();
-    if (has_abi_attr) {
-      facts->export_plan.abi_kind =
-          (loom_target_abi_kind_t)loom_func_like_abi(func);
-    }
-    if (facts->export_plan.abi_kind == LOOM_TARGET_ABI_UNKNOWN) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "func target contract must resolve a concrete ABI");
-    }
-    IREE_RETURN_IF_ERROR(loom_func_symbol_apply_abi_attrs(module, abi_attrs,
-                                                          &facts->export_plan));
-    if (has_export_symbol) {
-      IREE_RETURN_IF_ERROR(loom_func_symbol_string_from_id(
-          module, export_symbol_id, IREE_SV("export_symbol"),
-          &facts->export_plan.export_symbol));
-      facts->exports = true;
-    }
-    IREE_RETURN_IF_ERROR(
-        loom_func_symbol_apply_export_attrs(module, export_attrs, facts));
-    if (export_attrs.count > 0) {
-      facts->exports = true;
-    }
+  if (has_export_symbol) {
+    IREE_RETURN_IF_ERROR(loom_func_symbol_string_from_id(
+        module, export_symbol_id, IREE_SV("export_symbol"),
+        &facts->export_symbol));
+    facts->exports = true;
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_func_symbol_apply_export_attrs(module, export_attrs, facts));
+  if (export_attrs.count > 0) {
+    facts->exports = true;
   }
 
+  (void)context;
   *out_facts = &facts->base;
   return iree_ok_status();
 }

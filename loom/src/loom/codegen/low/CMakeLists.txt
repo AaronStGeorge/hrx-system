@@ -157,6 +157,7 @@ loom_cc_library(
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::low
     loom::src::loom::ops::target
+    loom::src::loom::target::function_contract
     loom::src::loom::target::types
   PUBLIC
 )
@@ -600,7 +601,9 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::target
+    loom::src::loom::target::function_contract
     loom::src::loom::target::preset_registry
+    loom::src::loom::target::types
   PUBLIC
 )
 

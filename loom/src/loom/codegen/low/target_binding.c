@@ -16,6 +16,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/facts.h"
 #include "loom/ops/target/ops.h"
+#include "loom/target/function_contract.h"
 
 static iree_status_t loom_low_emit(iree_diagnostic_emitter_t emitter,
                                    const loom_op_t* op,
@@ -212,22 +213,18 @@ static iree_status_t loom_low_resolve_func_target(
         IREE_STATUS_INVALID_ARGUMENT,
         "low function symbol must resolve to func symbol facts");
   }
-  if (iree_status_is_ok(status) && func_facts->target_bundle == NULL) {
+  if (iree_status_is_ok(status) &&
+      !loom_symbol_ref_is_valid(func_facts->target_symbol)) {
     status = loom_low_emit_symbol_kind_mismatch(
         emitter, module, low_func_op, func_facts->target_symbol,
         out_target->target_symbol, target_attr_index,
         IREE_SV("target profile"));
   }
   if (iree_status_is_ok(status)) {
-    out_target->bundle_storage.snapshot = *func_facts->target_bundle->snapshot;
-    out_target->bundle_storage.export_plan = func_facts->export_plan;
-    out_target->bundle_storage.config = *func_facts->target_bundle->config;
-    out_target->bundle_storage.bundle = (loom_target_bundle_t){
-        .name = func_facts->target_bundle->name,
-        .snapshot = &out_target->bundle_storage.snapshot,
-        .export_plan = &out_target->bundle_storage.export_plan,
-        .config = &out_target->bundle_storage.config,
-    };
+    status = loom_target_function_contract_resolve(
+        module, &fact_table, func_facts, &out_target->bundle_storage);
+  }
+  if (iree_status_is_ok(status)) {
     out_target->descriptor_set_key =
         out_target->bundle_storage.config.contract_set_key;
     out_target->feature_bits =

@@ -21,6 +21,7 @@
 #include "loom/codegen/low/lower.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/func_symbol_facts.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,7 +52,10 @@ typedef struct loom_low_source_selection_t {
   // Module-local target.profile symbol referenced by |func|.
   loom_symbol_ref_t target_ref;
 
-  // Effective target bundle from |func_facts|.
+  // Storage for the effective target bundle selected by |func|.
+  loom_target_bundle_storage_t target_bundle_storage;
+
+  // Effective target bundle selected by |func|.
   const loom_target_bundle_t* target_bundle;
 
   // Lowering policy selected by |target_bundle|.

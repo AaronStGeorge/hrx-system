@@ -14,6 +14,7 @@
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/target/facts.h"
+#include "loom/target/function_contract.h"
 
 uint32_t loom_target_module_compile_max_errors(
     const loom_target_module_compile_options_t* options,
@@ -259,15 +260,6 @@ static void loom_target_module_compile_entry_from_facts(
       .symbol_id = symbol_id,
   };
   out_entry->target_ref = func_facts->target_symbol;
-  out_entry->bundle_storage.snapshot = *func_facts->target_bundle->snapshot;
-  out_entry->bundle_storage.export_plan = func_facts->export_plan;
-  out_entry->bundle_storage.config = *func_facts->target_bundle->config;
-  out_entry->bundle_storage.bundle = (loom_target_bundle_t){
-      .name = func_facts->target_bundle->name,
-      .snapshot = &out_entry->bundle_storage.snapshot,
-      .export_plan = &out_entry->bundle_storage.export_plan,
-      .config = &out_entry->bundle_storage.config,
-  };
 }
 
 static void loom_target_module_compile_assign_entry(
@@ -295,7 +287,7 @@ static iree_status_t loom_target_module_compile_try_entry(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "entry symbol is not a func with a body");
   }
-  if (func_facts->target_bundle == NULL) {
+  if (!loom_symbol_ref_is_valid(func_facts->target_symbol)) {
     if (!require_compatible) {
       return iree_ok_status();
     }
@@ -307,6 +299,8 @@ static iree_status_t loom_target_module_compile_try_entry(
   loom_target_module_compile_entry_t entry = {0};
   loom_target_module_compile_entry_from_facts(module, symbol_id, func_facts,
                                               &entry);
+  IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve(
+      module, fact_table, func_facts, &entry.bundle_storage));
   if (!predicate(predicate_user_data, &entry)) {
     if (!require_compatible) {
       return iree_ok_status();

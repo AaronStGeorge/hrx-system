@@ -15,9 +15,8 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/op_registry.h"
-#include "loom/ops/target/facts.h"
-#include "loom/target/preset_registry.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/test/ops.h"
 #include "loom/target/types.h"
 
 namespace loom {
@@ -28,87 +27,33 @@ struct ModuleDeleter {
 };
 using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
 
-static const loom_target_snapshot_t kPresetSnapshot = {
-    .name = IREE_SVL("test.profile"),
-    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_WASM,
-    .target_triple = IREE_SVL("wasm32-unknown-unknown"),
-    .data_layout = IREE_SVL(""),
-    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY,
-    .target_cpu = IREE_SVL("generic"),
-    .target_features = IREE_SVL("+simd128"),
-    .default_pointer_bitwidth = 32,
-    .index_bitwidth = 32,
-    .offset_bitwidth = 32,
-    .memory_spaces =
-        {
-            .generic = 0,
-            .global = 0,
-            .workgroup = UINT32_MAX,
-            .constant = 0,
-            .private_memory = UINT32_MAX,
-            .host = UINT32_MAX,
-            .descriptor = UINT32_MAX,
-        },
-};
-
-static const loom_target_export_plan_t kPresetExportPlan = {
-    .name = IREE_SVL("test.profile"),
-    .export_symbol = IREE_SVL("must_not_escape"),
-    .abi_kind = LOOM_TARGET_ABI_WASM_FUNCTION,
-    .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
-    .hal_kernel =
-        {
-            .binding_alignment = 0,
-            .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
-            .flat_workgroup_size_min = 0,
-            .flat_workgroup_size_max = 0,
-            .buffer_resource_flags = 0,
-        },
-};
-
-static const loom_target_config_t kPresetConfig = {
-    .name = IREE_SVL("test.profile"),
-    .contract_set_key = IREE_SVL("wasm.core.simd128"),
-    .contract_feature_bits = 1,
-};
-
-static const loom_target_bundle_t kPresetBundle = {
-    .name = IREE_SVL("test.profile"),
-    .snapshot = &kPresetSnapshot,
-    .export_plan = &kPresetExportPlan,
-    .config = &kPresetConfig,
-};
-
-static const loom_target_bundle_t* const kPresetBundles[] = {
-    &kPresetBundle,
-};
-
-static const loom_target_preset_registry_t kPresetRegistry = {
-    .target_bundles = kPresetBundles,
-    .target_bundle_count = IREE_ARRAYSIZE(kPresetBundles),
-};
-
 class FuncSymbolFactsTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_op_registry_initialize_context(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
     iree_arena_initialize(&block_pool_, &analysis_arena_);
-    resources_[0] =
-        loom_target_profile_preset_registry_resource(&kPresetRegistry);
-    const loom_symbol_fact_table_options_t options = {
-        .resources = loom_make_symbol_fact_resource_list(resources_, 1),
-    };
-    loom_symbol_fact_table_initialize_with_options(&fact_table_, &options,
-                                                   &analysis_arena_);
+    loom_symbol_fact_table_initialize(&fact_table_, &analysis_arena_);
   }
 
   void TearDown() override {
     iree_arena_deinitialize(&analysis_arena_);
     loom_context_deinitialize(&context_);
     iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t *
+                                                              out_count);
+
+  void RegisterDialect(loom_dialect_id_t dialect_id, DialectVtablesFn fn) {
+    iree_host_size_t vtable_count = 0;
+    const loom_op_vtable_t* const* vtables = fn(&vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)vtable_count));
   }
 
   ModulePtr ParseModule(const char* source) {
@@ -143,7 +88,7 @@ class FuncSymbolFactsTest : public ::testing::Test {
   // Block pool shared by parser, module allocation, and analysis storage.
   iree_arena_block_pool_t block_pool_;
 
-  // Context with production dialects registered.
+  // Context with only the func dialect and synthetic test record dialect.
   loom_context_t context_;
 
   // Arena for symbol fact table storage and fact payloads.
@@ -151,9 +96,6 @@ class FuncSymbolFactsTest : public ::testing::Test {
 
   // Dense symbol fact table under test.
   loom_symbol_fact_table_t fact_table_;
-
-  // Resource storage borrowed by the symbol fact table.
-  loom_symbol_fact_resource_t resources_[1];
 };
 
 TEST_F(FuncSymbolFactsTest, SourceFuncFactsRemainTargetIndependent) {
@@ -174,8 +116,8 @@ func.def public device @semantic() {
   EXPECT_EQ(facts->argument_count, 0);
   EXPECT_EQ(facts->result_count, 0);
   EXPECT_FALSE(loom_symbol_ref_is_valid(facts->target_symbol));
-  EXPECT_EQ(facts->target_profile, nullptr);
-  EXPECT_EQ(facts->target_bundle, nullptr);
+  EXPECT_FALSE(facts->has_abi);
+  EXPECT_FALSE(facts->exports);
 }
 
 TEST_F(FuncSymbolFactsTest, DeclarationFactsCarryImportContract) {
@@ -205,12 +147,19 @@ func.decl import("env") @do_work(%arg0: i32) -> (i32)
   EXPECT_TRUE(iree_string_view_equal(facts->import_symbol, IREE_SV("do_work")));
 }
 
-TEST_F(FuncSymbolFactsTest, LowFuncResolvesTargetProfile) {
+TEST_F(FuncSymbolFactsTest, FunctionOwnedContractRemainsTargetNeutral) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
+test.record @profile
+test.record @artifact
 
-low.func.def target(@wasm) @kernel() {
-  low.return
+func.def target(@profile) abi(hal_kernel, {
+  hal_binding_alignment = 16
+}) export("dispatch", {
+  artifact = @artifact,
+  linkage = "dso_local",
+  ordinal = 5
+}) @kernel() {
+  func.return
 }
 )");
 
@@ -218,48 +167,15 @@ low.func.def target(@wasm) @kernel() {
       LookupFunc(module.get(), IREE_SV("kernel"));
   EXPECT_TRUE(iree_string_view_equal(facts->name, IREE_SV("kernel")));
   EXPECT_TRUE(loom_symbol_ref_is_valid(facts->target_symbol));
-  ASSERT_NE(facts->target_profile, nullptr);
-  ASSERT_NE(facts->target_bundle, nullptr);
-  EXPECT_EQ(facts->target_bundle->snapshot, &facts->target_profile->snapshot);
-  EXPECT_EQ(facts->export_plan.abi_kind, LOOM_TARGET_ABI_WASM_FUNCTION);
-  EXPECT_TRUE(iree_string_view_is_empty(facts->export_plan.export_symbol));
-}
-
-TEST_F(FuncSymbolFactsTest, FuncOwnedContractOverridesPreset) {
-  ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
-
-low.func.def target(@wasm) abi(hal_kernel, {
-  hal_binding_alignment = 16,
-  hal_workgroup_size_x = 8,
-  hal_workgroup_size_y = 4,
-  hal_workgroup_size_z = 2,
-  hal_flat_workgroup_size_min = 32,
-  hal_flat_workgroup_size_max = 64,
-  hal_buffer_resource_flags = 7
-}) export("dispatch", {linkage = "dso_local", ordinal = 5}) @kernel() {
-  low.return
-}
-)");
-
-  const loom_func_symbol_facts_t* facts =
-      LookupFunc(module.get(), IREE_SV("kernel"));
-  ASSERT_NE(facts->target_profile, nullptr);
-  ASSERT_NE(facts->target_bundle, nullptr);
+  EXPECT_TRUE(facts->has_abi);
+  EXPECT_EQ(facts->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
+  EXPECT_EQ(facts->abi_attrs.count, 1u);
   EXPECT_TRUE(facts->exports);
-  EXPECT_EQ(facts->export_plan.abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
-  EXPECT_EQ(facts->export_plan.linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
   EXPECT_TRUE(
-      iree_string_view_equal(facts->export_plan.name, IREE_SV("kernel")));
-  EXPECT_TRUE(iree_string_view_equal(facts->export_plan.export_symbol,
-                                     IREE_SV("dispatch")));
-  EXPECT_EQ(facts->export_plan.hal_kernel.binding_alignment, 16u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.x, 8u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.y, 4u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.z, 2u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.flat_workgroup_size_min, 32u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.flat_workgroup_size_max, 64u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.buffer_resource_flags, 7u);
+      iree_string_view_equal(facts->export_symbol, IREE_SV("dispatch")));
+  EXPECT_TRUE(loom_symbol_ref_is_valid(facts->artifact_symbol));
+  EXPECT_TRUE(facts->has_export_linkage);
+  EXPECT_EQ(facts->export_linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
   EXPECT_TRUE(facts->has_export_ordinal);
   EXPECT_EQ(facts->export_ordinal, 5u);
 }
@@ -277,25 +193,6 @@ func.def abi(wasm_function) @semantic() {
       loom_symbol_fact_table_lookup(
           &fact_table_, module.get(),
           FindSymbol(module.get(), IREE_SV("semantic")), &base_facts));
-  EXPECT_EQ(base_facts, nullptr);
-}
-
-TEST_F(FuncSymbolFactsTest, TargetMustResolveToTargetProfileFacts) {
-  ModulePtr module = ParseModule(R"(
-target.profile @profile preset("test.profile")
-target.artifact @not_profile target(@profile)
-
-low.func.def target(@not_profile) @kernel() {
-  low.return
-}
-)");
-
-  const loom_symbol_facts_base_t* base_facts = nullptr;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_symbol_fact_table_lookup(&fact_table_, module.get(),
-                                    FindSymbol(module.get(), IREE_SV("kernel")),
-                                    &base_facts));
   EXPECT_EQ(base_facts, nullptr);
 }
 

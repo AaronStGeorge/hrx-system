@@ -52,6 +52,20 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "function_contract",
+    srcs = ["function_contract.c"],
+    hdrs = ["function_contract.h"],
+    deps = [
+        ":types",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:func_symbol_facts",
+        "//loom/src/loom/ops/target",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "compile_report",
     srcs = ["compile_report.c"],
     hdrs = ["compile_report.h"],
@@ -151,6 +165,7 @@ loom_cc_library(
     srcs = ["module_compiler.c"],
     hdrs = ["module_compiler.h"],
     deps = [
+        ":function_contract",
         ":low_descriptor_registry",
         ":types",
         "//loom/src/loom/analysis:symbol_facts",
@@ -173,6 +188,25 @@ loom_cc_library(
     deps = [
         ":low_descriptor_registry",
         "//loom/src/loom/target/test:low_registry",
+    ],
+)
+
+loom_cc_test(
+    name = "function_contract_test",
+    srcs = ["function_contract_test.cc"],
+    deps = [
+        ":function_contract",
+        ":preset_registry",
+        ":types",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:func_symbol_facts",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/target",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
