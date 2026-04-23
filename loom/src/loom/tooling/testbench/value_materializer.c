@@ -81,17 +81,27 @@ void loom_testbench_value_table_deinitialize(
   if (!table) {
     return;
   }
+  loom_testbench_value_table_reset(table);
   if (table->variants) {
-    for (iree_host_size_t value_index = 0; value_index < table->value_count;
-         ++value_index) {
-      iree_vm_variant_reset(&table->variants[value_index]);
-    }
     iree_allocator_free(table->host_allocator, table->variants);
   }
   if (table->assigned) {
     iree_allocator_free(table->host_allocator, table->assigned);
   }
   memset(table, 0, sizeof(*table));
+}
+
+void loom_testbench_value_table_reset(loom_testbench_value_table_t* table) {
+  IREE_ASSERT_ARGUMENT(table);
+  if (table->variants) {
+    for (iree_host_size_t value_index = 0; value_index < table->value_count;
+         ++value_index) {
+      iree_vm_variant_reset(&table->variants[value_index]);
+    }
+  }
+  if (table->assigned) {
+    memset(table->assigned, 0, table->value_count * sizeof(*table->assigned));
+  }
 }
 
 bool loom_testbench_value_table_contains(

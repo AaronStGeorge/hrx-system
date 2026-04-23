@@ -86,6 +86,26 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    executor
+  HDRS
+    "executor.h"
+  SRCS
+    "executor.c"
+  DEPS
+    ::expectation
+    ::invocation
+    ::testbench
+    ::value_materializer
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     testbench_test
@@ -139,6 +159,26 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::check
+    loom::src::loom::util::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm
+)
+
+loom_cc_test(
+  NAME
+    executor_test
+  SRCS
+    "executor_test.cc"
+  DEPS
+    ::executor
+    ::testbench
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::check
+    loom::src::loom::ops::test
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main

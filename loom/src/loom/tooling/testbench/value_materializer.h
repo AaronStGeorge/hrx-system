@@ -79,6 +79,9 @@ iree_status_t loom_testbench_value_table_initialize(
 void loom_testbench_value_table_deinitialize(
     loom_testbench_value_table_t* table);
 
+// Clears all assigned values while retaining allocated table storage.
+void loom_testbench_value_table_reset(loom_testbench_value_table_t* table);
+
 // Returns true when |value_id| has a materialized value in |table|.
 bool loom_testbench_value_table_contains(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id);
