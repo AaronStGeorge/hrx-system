@@ -26,6 +26,26 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    value_materializer
+  HDRS
+    "value_materializer.h"
+  SRCS
+    "value_materializer.c"
+  DEPS
+    ::testbench
+    iree::base
+    iree::base::internal::prng
+    iree::hal
+    iree::io::stream
+    iree::modules::hal::types
+    loom::src::loom::ir
+    iree::tooling::numpy_io
+    iree::vm
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     testbench_test
@@ -41,6 +61,29 @@ loom_cc_test(
     loom::src::loom::ops::test
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    value_materializer_test
+  SRCS
+    "value_materializer_test.cc"
+  DEPS
+    ::testbench
+    ::value_materializer
+    iree::base
+    iree::base::internal::arena
+    iree::hal
+    iree::io::stream
+    iree::modules::hal::types
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::check
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::tooling::numpy_io
+    iree::tooling::testdata::npy
+    iree::vm
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
