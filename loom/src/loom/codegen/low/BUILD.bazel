@@ -6,11 +6,12 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_fuzz",
     "loom_cc_library",
     "loom_cc_test",
 )
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_benchmark")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_assert_no_dependencies")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -507,13 +508,19 @@ loom_cc_library(
     srcs = ["source_workload.c"],
     hdrs = ["source_workload.h"],
     deps = [
+        ":lower",
+        ":packetization",
+        ":source_selection",
+        ":verify",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/testing:gen",
+        "//loom/src/loom/verify",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -523,22 +530,30 @@ loom_cc_test(
     name = "source_lowering_stress_test",
     srcs = ["source_lowering_stress_test.cc"],
     deps = [
-        ":lower",
-        ":packet",
-        ":packetization",
-        ":source_selection",
         ":source_workload",
-        ":verify",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/low",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/target/test:lower",
         "//loom/src/loom/testing:context",
-        "//loom/src/loom/verify",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_benchmark(
+    name = "source_lowering_benchmark",
+    srcs = ["source_lowering_benchmark.cc"],
+    deps = [
+        ":source_workload",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/target/test:lower",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:benchmark_main",
+        "@com_google_benchmark//:benchmark",
     ],
 )
 
@@ -546,18 +561,11 @@ loom_cc_fuzz(
     name = "source_lowering_fuzz",
     srcs = ["source_lowering_fuzz.cc"],
     deps = [
-        ":lower",
-        ":packet",
-        ":packetization",
-        ":source_selection",
         ":source_workload",
-        ":verify",
-        "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ir",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/target/test:lower",
         "//loom/src/loom/testing:context",
-        "//loom/src/loom/verify",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],

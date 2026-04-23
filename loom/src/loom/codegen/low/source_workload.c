@@ -9,13 +9,18 @@
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/source_selection.h"
+#include "loom/codegen/low/verify.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/verify/verify.h"
 
 //===----------------------------------------------------------------------===//
 // Types
@@ -390,4 +395,199 @@ void loom_low_source_workload_count_func_ops(
       loom_low_source_workload_count_op(op, out_counts);
     }
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Pipeline
+//===----------------------------------------------------------------------===//
+
+static iree_status_t loom_low_source_workload_resolve_func_op(
+    const loom_module_t* module, loom_symbol_ref_t func_ref,
+    const loom_op_t** out_func_op) {
+  IREE_ASSERT_ARGUMENT(out_func_op);
+  *out_func_op = NULL;
+  if (!loom_symbol_ref_is_valid(func_ref) || func_ref.module_id != 0 ||
+      func_ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "source workload function symbol is invalid");
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[func_ref.symbol_id];
+  if (!loom_func_def_isa(symbol->defining_op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "source workload symbol must define a func.def");
+  }
+  *out_func_op = symbol->defining_op;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_source_workload_verify_source_module(
+    const loom_module_t* module) {
+  loom_verify_options_t options = {0};
+  loom_verify_result_t result = {0};
+  IREE_RETURN_IF_ERROR(loom_verify_module(module, &options, &result));
+  if (result.error_count != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "generated source failed verification");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_source_workload_verify_low_module(
+    const loom_module_t* module,
+    const loom_low_source_workload_pipeline_options_t* options) {
+  const loom_low_verify_options_t verify_options = {
+      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
+      .descriptor_registry = options->descriptor_registry,
+      .descriptor_requirements = options->descriptor_requirements,
+      .max_errors = 20,
+  };
+  loom_low_verify_result_t result = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_module(module, &verify_options, &result));
+  if (result.error_count != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "generated low function failed verification");
+  }
+  return iree_ok_status();
+}
+
+static uint32_t loom_low_source_workload_count_low_descriptor_ops(
+    const loom_op_t* low_func_op) {
+  uint32_t count = 0;
+  const loom_region_t* body = loom_low_func_def_body(low_func_op);
+  for (uint16_t block_index = 0; block_index < body->block_count;
+       ++block_index) {
+    const loom_block_t* block = loom_region_const_block(body, block_index);
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (loom_low_op_isa(op) || loom_low_const_isa(op)) {
+        ++count;
+      }
+    }
+  }
+  return count;
+}
+
+iree_status_t loom_low_source_workload_run_pipeline(
+    loom_module_t* module, loom_symbol_ref_t func_ref,
+    const loom_low_source_workload_pipeline_options_t* options,
+    iree_arena_block_pool_t* block_pool,
+    loom_low_source_workload_pipeline_counters_t* out_counters) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(options->descriptor_registry);
+  IREE_ASSERT_ARGUMENT(options->policy_registry);
+  IREE_ASSERT_ARGUMENT(block_pool);
+  IREE_ASSERT_ARGUMENT(out_counters);
+  memset(out_counters, 0, sizeof(*out_counters));
+
+  const loom_op_t* source_func_op = NULL;
+  iree_status_t status = loom_low_source_workload_resolve_func_op(
+      module, func_ref, &source_func_op);
+  if (iree_status_is_ok(status)) {
+    loom_low_source_workload_count_func_ops(source_func_op,
+                                            &out_counters->source_counts);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_source_workload_verify_source_module(module);
+  }
+
+  iree_arena_allocator_t lowering_arena;
+  bool lowering_arena_initialized = false;
+  loom_low_lower_result_t lower_result = {0};
+  if (iree_status_is_ok(status)) {
+    iree_arena_initialize(block_pool, &lowering_arena);
+    lowering_arena_initialized = true;
+    const loom_symbol_t* symbol = &module->symbols.entries[func_ref.symbol_id];
+    const iree_string_view_t func_name =
+        module->strings.entries[symbol->name_id];
+    const loom_low_source_selection_options_t selection_options = {
+        .func_symbol_name = func_name,
+        .descriptor_registry = options->descriptor_registry,
+        .policy_registry = options->policy_registry,
+    };
+    loom_low_source_selection_t selection = {0};
+    status = loom_low_select_source_func(module, &selection_options,
+                                         &lowering_arena, &selection);
+    if (iree_status_is_ok(status)) {
+      const loom_low_lower_options_t lower_options = {
+          .target_ref = selection.target_ref,
+          .bundle = selection.target_bundle,
+          .descriptor_registry = options->descriptor_registry,
+          .descriptor_requirements = options->descriptor_requirements,
+          .policy = selection.policy,
+          .max_errors = 20,
+      };
+      status = loom_low_lower_function(module, selection.func, &lower_options,
+                                       &lower_result);
+    }
+    if (iree_status_is_ok(status)) {
+      out_counters->lower_error_count = lower_result.error_count;
+      out_counters->lower_remark_count = lower_result.remark_count;
+      if (lower_result.error_count != 0) {
+        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "source lowering produced errors");
+      } else if (lower_result.low_func_op == NULL) {
+        status = iree_make_status(IREE_STATUS_INTERNAL,
+                                  "source lowering did not emit low.func.def");
+      }
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_source_workload_verify_low_module(module, options);
+  }
+  if (iree_status_is_ok(status)) {
+    out_counters->low_descriptor_op_count =
+        loom_low_source_workload_count_low_descriptor_ops(
+            lower_result.low_func_op);
+  }
+
+  iree_arena_allocator_t packet_arena;
+  bool packet_arena_initialized = false;
+  if (iree_status_is_ok(status)) {
+    iree_arena_initialize(block_pool, &packet_arena);
+    packet_arena_initialized = true;
+    const loom_low_packetization_options_t packet_options = {
+        .descriptor_registry = options->descriptor_registry,
+        .schedule_strategy = options->schedule_strategy,
+    };
+    loom_low_packetization_t packetization = {0};
+    status = loom_low_packetize_function(module, lower_result.low_func_op,
+                                         &packet_options, &packet_arena,
+                                         &packetization);
+    if (iree_status_is_ok(status)) {
+      out_counters->schedule_node_count =
+          packetization.schedule.scheduled_node_count;
+      out_counters->schedule_dependency_count =
+          packetization.schedule.dependency_count;
+      out_counters->schedule_resource_use_count =
+          packetization.schedule.resource_use_count;
+      out_counters->schedule_hazard_gap_count =
+          packetization.schedule.hazard_gap_count;
+      out_counters->allocation_assignment_count =
+          packetization.allocation.assignment_count;
+      out_counters->allocation_spill_count =
+          packetization.allocation.spill_count;
+      out_counters->allocation_coalesced_copy_count =
+          packetization.allocation.coalesced_copy_count;
+      out_counters->allocation_materialized_copy_count =
+          packetization.allocation.materialized_copy_count;
+    }
+  }
+
+  out_counters->module_arena_used_bytes = module->arena.used_allocation_size;
+  out_counters->module_arena_allocated_bytes =
+      module->arena.total_allocation_size;
+  if (lowering_arena_initialized) {
+    out_counters->lowering_arena_used_bytes =
+        lowering_arena.used_allocation_size;
+  }
+  if (packet_arena_initialized) {
+    out_counters->packet_arena_used_bytes = packet_arena.used_allocation_size;
+    iree_arena_deinitialize(&packet_arena);
+  }
+  if (lowering_arena_initialized) {
+    iree_arena_deinitialize(&lowering_arena);
+  }
+  return status;
 }

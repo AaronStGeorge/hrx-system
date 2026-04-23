@@ -15,6 +15,9 @@
 #define LOOM_CODEGEN_LOW_SOURCE_WORKLOAD_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
+#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/packetization.h"
 #include "loom/ir/ir.h"
 #include "loom/testing/gen.h"
 
@@ -51,6 +54,52 @@ typedef struct loom_low_source_workload_counts_t {
   uint32_t index_madd_op_count;
 } loom_low_source_workload_counts_t;
 
+typedef struct loom_low_source_workload_pipeline_options_t {
+  // Low descriptor registry linked into the caller.
+  const loom_low_descriptor_registry_t* descriptor_registry;
+  // Target lowering policies linked into the caller.
+  const loom_low_lower_policy_registry_t* policy_registry;
+  // Descriptor payload requirements needed after lowering.
+  loom_low_descriptor_requirement_flags_t descriptor_requirements;
+  // Candidate selection strategy used by packetization.
+  loom_low_schedule_strategy_t schedule_strategy;
+} loom_low_source_workload_pipeline_options_t;
+
+typedef struct loom_low_source_workload_pipeline_counters_t {
+  // Source op category counts before lowering.
+  loom_low_source_workload_counts_t source_counts;
+  // Number of low.op and low.const packets emitted by lowering.
+  uint32_t low_descriptor_op_count;
+  // Number of source-to-low error diagnostics emitted by lowering.
+  uint32_t lower_error_count;
+  // Number of source-to-low remark diagnostics emitted by lowering.
+  uint32_t lower_remark_count;
+  // Number of schedule nodes produced by packetization.
+  iree_host_size_t schedule_node_count;
+  // Number of schedule dependency edges produced by packetization.
+  iree_host_size_t schedule_dependency_count;
+  // Number of descriptor resource-use rows produced by packetization.
+  iree_host_size_t schedule_resource_use_count;
+  // Number of schedule hazard-gap rows produced by packetization.
+  iree_host_size_t schedule_hazard_gap_count;
+  // Number of register-allocation assignments produced by packetization.
+  iree_host_size_t allocation_assignment_count;
+  // Number of assignments placed in spill slots.
+  iree_host_size_t allocation_spill_count;
+  // Number of low.copy ops coalesced by allocation.
+  iree_host_size_t allocation_coalesced_copy_count;
+  // Number of low.copy ops left materialized by allocation.
+  iree_host_size_t allocation_materialized_copy_count;
+  // Module arena bytes used after generation and lowering.
+  iree_host_size_t module_arena_used_bytes;
+  // Module arena bytes reserved after generation and lowering.
+  iree_host_size_t module_arena_allocated_bytes;
+  // Lowering scratch arena bytes used before cleanup.
+  iree_host_size_t lowering_arena_used_bytes;
+  // Packetization scratch arena bytes used before cleanup.
+  iree_host_size_t packet_arena_used_bytes;
+} loom_low_source_workload_pipeline_counters_t;
+
 // Returns a generated source-to-low workload config using |target_preset|.
 // Scale 1 produces a compact body; larger scales increase only the op count.
 loom_low_source_workload_config_t loom_low_source_workload_config_make(
@@ -76,6 +125,14 @@ iree_status_t loom_low_source_workload_generate_seeded_module(
 // Counts source ops emitted by loom_low_source_workload_generate_module().
 void loom_low_source_workload_count_func_ops(
     const loom_op_t* func_op, loom_low_source_workload_counts_t* out_counts);
+
+// Runs the generated workload through source verification, source-to-low
+// lowering, low verification, packetization, scheduling, and allocation.
+iree_status_t loom_low_source_workload_run_pipeline(
+    loom_module_t* module, loom_symbol_ref_t func_ref,
+    const loom_low_source_workload_pipeline_options_t* options,
+    iree_arena_block_pool_t* block_pool,
+    loom_low_source_workload_pipeline_counters_t* out_counters);
 
 #ifdef __cplusplus
 }  // extern "C"

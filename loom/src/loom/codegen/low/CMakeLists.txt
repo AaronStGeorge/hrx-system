@@ -516,15 +516,21 @@ loom_cc_library(
   SRCS
     "source_workload.c"
   DEPS
+    ::lower
+    ::packetization
+    ::source_selection
+    ::verify
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::index
+    loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target
     loom::src::loom::ops::vector
     loom::src::loom::testing::gen
+    loom::src::loom::verify
   TESTONLY
   PUBLIC
 )
@@ -535,22 +541,32 @@ loom_cc_test(
   SRCS
     "source_lowering_stress_test.cc"
   DEPS
-    ::lower
-    ::packet
-    ::packetization
-    ::source_selection
     ::source_workload
-    ::verify
     iree::base::internal::arena
     loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     loom::src::loom::testing::context
-    loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+loom_cc_benchmark(
+  NAME
+    source_lowering_benchmark
+  SRCS
+    "source_lowering_benchmark.cc"
+  DEPS
+    ::source_workload
+    benchmark
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::target::test::lower
+    loom::src::loom::testing::context
+    iree::testing::benchmark_main
+  TESTONLY
 )
 
 loom_cc_fuzz(
@@ -559,20 +575,13 @@ loom_cc_fuzz(
   SRCS
     "source_lowering_fuzz.cc"
   DEPS
-    ::lower
-    ::packet
-    ::packetization
-    ::source_selection
     ::source_workload
-    ::verify
     iree::base
     iree::base::internal::arena
-    loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     loom::src::loom::testing::context
-    loom::src::loom::verify
 )
 
 loom_cc_library(
