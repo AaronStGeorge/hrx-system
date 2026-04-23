@@ -46,6 +46,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    invocation
+  HDRS
+    "invocation.h"
+  SRCS
+    "invocation.c"
+  DEPS
+    ::testbench
+    ::value_materializer
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    iree::vm
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     testbench_test
@@ -61,6 +78,26 @@ loom_cc_test(
     loom::src::loom::ops::test
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    invocation_test
+  SRCS
+    "invocation_test.cc"
+  DEPS
+    ::invocation
+    ::testbench
+    ::value_materializer
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::check
+    loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm
 )
 
 loom_cc_test(

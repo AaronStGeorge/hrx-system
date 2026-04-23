@@ -54,6 +54,8 @@ typedef enum loom_testbench_issue_kind_e {
   LOOM_TESTBENCH_ISSUE_INVALID_VALUE_SOURCE = 4,
   // A file output op cannot be planned as a deterministic sink.
   LOOM_TESTBENCH_ISSUE_INVALID_FILE_WRITE = 5,
+  // An actual or oracle invocation op cannot be planned for execution.
+  LOOM_TESTBENCH_ISSUE_INVALID_INVOCATION = 6,
 } loom_testbench_issue_kind_t;
 
 typedef enum loom_testbench_value_source_kind_e {
@@ -70,6 +72,15 @@ typedef enum loom_testbench_value_source_kind_e {
   // Fixture file input from check.file.read.npy.
   LOOM_TESTBENCH_VALUE_SOURCE_FILE_READ_NPY = 5,
 } loom_testbench_value_source_kind_t;
+
+typedef enum loom_testbench_invocation_kind_e {
+  // Invalid or uninitialized invocation slot.
+  LOOM_TESTBENCH_INVOCATION_NONE = 0,
+  // Semantic call-like op that invokes the function under test.
+  LOOM_TESTBENCH_INVOCATION_ACTUAL = 1,
+  // check.oracle.call op that invokes a reference provider.
+  LOOM_TESTBENCH_INVOCATION_ORACLE = 2,
+} loom_testbench_invocation_kind_t;
 
 typedef struct loom_testbench_plan_options_t {
   // Maximum samples retained per case after cartesian expansion.
@@ -199,6 +210,27 @@ typedef struct loom_testbench_file_write_plan_t {
   loom_check_file_write_npy_mode_t mode;
 } loom_testbench_file_write_plan_t;
 
+typedef struct loom_testbench_invocation_plan_t {
+  // Invocation kind and provider discriminator.
+  loom_testbench_invocation_kind_t kind;
+  // Operation that declared the invocation.
+  const loom_op_t* op;
+  // Function symbol passed to the execution or oracle provider.
+  loom_symbol_ref_t callee_ref;
+  // Interned provider string ID for oracle invocations, or INVALID otherwise.
+  loom_string_id_t provider_id;
+  // Borrowed provider name for oracle invocations, or empty otherwise.
+  iree_string_view_t provider;
+  // Borrowed SSA value IDs used as invocation inputs.
+  const loom_value_id_t* input_value_ids;
+  // Number of entries in |input_value_ids|.
+  iree_host_size_t input_count;
+  // Borrowed SSA value IDs assigned from invocation results.
+  const loom_value_id_t* result_value_ids;
+  // Number of entries in |result_value_ids|.
+  iree_host_size_t result_count;
+} loom_testbench_invocation_plan_t;
+
 typedef struct loom_testbench_issue_t {
   // Structured issue classification.
   loom_testbench_issue_kind_t kind;
@@ -235,6 +267,10 @@ typedef struct loom_testbench_case_plan_t {
   const loom_testbench_file_write_plan_t* file_writes;
   // Number of entries in |file_writes|.
   iree_host_size_t file_write_count;
+  // Invocation plans in source order.
+  const loom_testbench_invocation_plan_t* invocations;
+  // Number of entries in |invocations|.
+  iree_host_size_t invocation_count;
   // Full cartesian sample count before applying |max_samples_per_case|.
   iree_host_size_t cartesian_sample_count;
   // Number of samples retained for execution after budget capping.

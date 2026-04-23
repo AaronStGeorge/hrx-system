@@ -28,6 +28,8 @@ typedef struct loom_testbench_plan_counts_t {
   iree_host_size_t value_source_count;
   // Number of file output ops in all case bodies.
   iree_host_size_t file_write_count;
+  // Number of invocation ops in all case bodies.
+  iree_host_size_t invocation_count;
   // Maximum number of structured issues this planning pass can emit.
   iree_host_size_t issue_capacity;
 } loom_testbench_plan_counts_t;
@@ -360,6 +362,109 @@ static bool loom_testbench_plan_file_write(
          out_file_write->mode < LOOM_CHECK_FILE_WRITE_NPY_MODE_COUNT_;
 }
 
+static bool loom_testbench_value_ids_are_in_range(
+    const loom_module_t* module, const loom_value_id_t* value_ids,
+    iree_host_size_t value_count) {
+  for (iree_host_size_t value_index = 0; value_index < value_count;
+       ++value_index) {
+    if (value_ids[value_index] >= module->values.count) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_testbench_is_actual_invocation_op(const loom_module_t* module,
+                                                   const loom_op_t* op) {
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  return vtable && vtable->call_like &&
+         vtable->call_like->kind == LOOM_CALL_LIKE_KIND_SEMANTIC;
+}
+
+static bool loom_testbench_plan_actual_invocation(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_testbench_invocation_plan_t* out_invocation) {
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable || !vtable->call_like ||
+      vtable->call_like->kind != LOOM_CALL_LIKE_KIND_SEMANTIC) {
+    return false;
+  }
+
+  const loom_call_like_vtable_t* call_like = vtable->call_like;
+  if (call_like->callee_attr_index >= op->attribute_count ||
+      call_like->operand_offset > op->operand_count ||
+      call_like->result_offset > op->result_count) {
+    return false;
+  }
+
+  memset(out_invocation, 0, sizeof(*out_invocation));
+  out_invocation->kind = LOOM_TESTBENCH_INVOCATION_ACTUAL;
+  out_invocation->op = op;
+  out_invocation->callee_ref = loom_attr_as_symbol(
+      loom_op_const_attrs(op)[call_like->callee_attr_index]);
+  out_invocation->provider_id = LOOM_STRING_ID_INVALID;
+  out_invocation->provider = iree_string_view_empty();
+  out_invocation->input_value_ids =
+      loom_op_const_operands(op) + call_like->operand_offset;
+  out_invocation->input_count = op->operand_count - call_like->operand_offset;
+  out_invocation->result_value_ids =
+      loom_op_const_results(op) + call_like->result_offset;
+  out_invocation->result_count = op->result_count - call_like->result_offset;
+  return loom_symbol_ref_is_valid(out_invocation->callee_ref) &&
+         loom_testbench_value_ids_are_in_range(module,
+                                               out_invocation->input_value_ids,
+                                               out_invocation->input_count) &&
+         loom_testbench_value_ids_are_in_range(module,
+                                               out_invocation->result_value_ids,
+                                               out_invocation->result_count);
+}
+
+static bool loom_testbench_plan_oracle_invocation(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_testbench_invocation_plan_t* out_invocation) {
+  if (!loom_check_oracle_call_isa(op)) {
+    return false;
+  }
+
+  loom_value_slice_t inputs = loom_check_oracle_call_inputs(op);
+  loom_value_slice_t results = loom_check_oracle_call_results(op);
+  memset(out_invocation, 0, sizeof(*out_invocation));
+  out_invocation->kind = LOOM_TESTBENCH_INVOCATION_ORACLE;
+  out_invocation->op = op;
+  out_invocation->callee_ref = loom_check_oracle_call_callee(op);
+  out_invocation->provider_id = loom_check_oracle_call_provider(op);
+  out_invocation->provider =
+      loom_testbench_string_from_id(module, out_invocation->provider_id);
+  out_invocation->input_value_ids = inputs.values;
+  out_invocation->input_count = inputs.count;
+  out_invocation->result_value_ids = results.values;
+  out_invocation->result_count = results.count;
+  return loom_symbol_ref_is_valid(out_invocation->callee_ref) &&
+         out_invocation->provider_id < module->strings.count &&
+         !iree_string_view_is_empty(out_invocation->provider) &&
+         loom_testbench_value_ids_are_in_range(module,
+                                               out_invocation->input_value_ids,
+                                               out_invocation->input_count) &&
+         loom_testbench_value_ids_are_in_range(module,
+                                               out_invocation->result_value_ids,
+                                               out_invocation->result_count);
+}
+
+static bool loom_testbench_is_invocation_op(const loom_module_t* module,
+                                            const loom_op_t* op) {
+  return loom_check_oracle_call_isa(op) ||
+         loom_testbench_is_actual_invocation_op(module, op);
+}
+
+static bool loom_testbench_plan_invocation(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_testbench_invocation_plan_t* out_invocation) {
+  if (loom_check_oracle_call_isa(op)) {
+    return loom_testbench_plan_oracle_invocation(module, op, out_invocation);
+  }
+  return loom_testbench_plan_actual_invocation(module, op, out_invocation);
+}
+
 static bool loom_testbench_is_parameter_op(const loom_op_t* op) {
   return loom_check_param_range_isa(op) || loom_check_param_choice_isa(op) ||
          loom_check_param_seed_isa(op);
@@ -397,13 +502,12 @@ static bool loom_testbench_is_supported_check_body_op(
     default:
       break;
   }
-  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
-  return vtable && vtable->call_like &&
-         vtable->call_like->kind == LOOM_CALL_LIKE_KIND_SEMANTIC;
+  return loom_testbench_is_actual_invocation_op(module, op);
 }
 
 static void loom_testbench_count_case_body(
-    const loom_op_t* case_op, loom_testbench_plan_counts_t* counts) {
+    const loom_module_t* module, const loom_op_t* case_op,
+    loom_testbench_plan_counts_t* counts) {
   loom_region_t* body = loom_check_case_body(case_op);
   loom_block_t* block = NULL;
   loom_region_for_each_block(body, block) {
@@ -413,6 +517,9 @@ static void loom_testbench_count_case_body(
       if (loom_testbench_is_parameter_op(op)) ++counts->parameter_count;
       if (loom_testbench_is_value_source_op(op)) ++counts->value_source_count;
       if (loom_check_file_write_npy_isa(op)) ++counts->file_write_count;
+      if (loom_testbench_is_invocation_op(module, op)) {
+        ++counts->invocation_count;
+      }
     }
   }
 }
@@ -426,7 +533,7 @@ static void loom_testbench_count_module(const loom_module_t* module,
     if (!op) continue;
     if (loom_check_case_isa(op)) {
       ++counts->case_count;
-      loom_testbench_count_case_body(op, counts);
+      loom_testbench_count_case_body(module, op, counts);
     } else if (loom_check_benchmark_isa(op)) {
       ++counts->benchmark_count;
       ++counts->issue_capacity;
@@ -501,7 +608,9 @@ static void loom_testbench_plan_case_body(
     loom_testbench_value_source_plan_t* value_sources,
     iree_host_size_t* inout_value_source_count,
     loom_testbench_file_write_plan_t* file_writes,
-    iree_host_size_t* inout_file_write_count, loom_testbench_issue_t* issues,
+    iree_host_size_t* inout_file_write_count,
+    loom_testbench_invocation_plan_t* invocations,
+    iree_host_size_t* inout_invocation_count, loom_testbench_issue_t* issues,
     iree_host_size_t issue_capacity, iree_host_size_t* inout_issue_count) {
   case_plan->parameters =
       parameters ? parameters + *inout_parameter_count : NULL;
@@ -509,6 +618,8 @@ static void loom_testbench_plan_case_body(
       value_sources ? value_sources + *inout_value_source_count : NULL;
   case_plan->file_writes =
       file_writes ? file_writes + *inout_file_write_count : NULL;
+  case_plan->invocations =
+      invocations ? invocations + *inout_invocation_count : NULL;
   case_plan->issues = issues ? issues + *inout_issue_count : NULL;
   case_plan->cartesian_sample_count = 1;
   case_plan->sample_count = 1;
@@ -565,6 +676,18 @@ static void loom_testbench_plan_case_body(
         }
         continue;
       }
+
+      if (loom_testbench_is_invocation_op(module, op)) {
+        loom_testbench_invocation_plan_t* invocation =
+            &invocations[(*inout_invocation_count)++];
+        if (!loom_testbench_plan_invocation(module, op, invocation)) {
+          loom_testbench_append_issue(
+              issues, issue_capacity, inout_issue_count,
+              LOOM_TESTBENCH_ISSUE_INVALID_INVOCATION, case_index,
+              LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID, op, case_plan->ref);
+        }
+        continue;
+      }
     }
   }
 
@@ -579,6 +702,10 @@ static void loom_testbench_plan_case_body(
   case_plan->file_write_count =
       case_plan->file_writes
           ? (file_writes + *inout_file_write_count) - case_plan->file_writes
+          : 0;
+  case_plan->invocation_count =
+      case_plan->invocations
+          ? (invocations + *inout_invocation_count) - case_plan->invocations
           : 0;
   case_plan->issue_count =
       case_plan->issues ? (issues + *inout_issue_count) - case_plan->issues : 0;
@@ -651,6 +778,11 @@ iree_status_t loom_testbench_plan_module(
       arena, counts.file_write_count, sizeof(*file_writes),
       (void**)&file_writes));
 
+  loom_testbench_invocation_plan_t* invocations = NULL;
+  IREE_RETURN_IF_ERROR(loom_testbench_allocate_array(
+      arena, counts.invocation_count, sizeof(*invocations),
+      (void**)&invocations));
+
   loom_testbench_issue_t* issues = NULL;
   IREE_RETURN_IF_ERROR(loom_testbench_allocate_array(
       arena, counts.issue_capacity, sizeof(*issues), (void**)&issues));
@@ -696,12 +828,14 @@ iree_status_t loom_testbench_plan_module(
   iree_host_size_t parameter_count = 0;
   iree_host_size_t value_source_count = 0;
   iree_host_size_t file_write_count = 0;
+  iree_host_size_t invocation_count = 0;
   iree_host_size_t issue_count = 0;
   for (iree_host_size_t i = 0; i < case_count; ++i) {
     loom_testbench_plan_case_body(
         module, i, max_samples_per_case, &cases[i], parameters,
         &parameter_count, value_sources, &value_source_count, file_writes,
-        &file_write_count, issues, counts.issue_capacity, &issue_count);
+        &file_write_count, invocations, &invocation_count, issues,
+        counts.issue_capacity, &issue_count);
   }
 
   for (iree_host_size_t i = 0; i < benchmark_count; ++i) {

@@ -89,6 +89,12 @@ iree_status_t loom_testbench_value_table_lookup_retain(
     const loom_testbench_value_table_t* table, loom_value_id_t value_id,
     iree_vm_variant_t* out_variant);
 
+// Assigns |variant| to |value_id|, replacing any previous value. On success,
+// ownership moves into |table| and |variant| is reset to empty.
+iree_status_t loom_testbench_value_table_assign_move(
+    loom_testbench_value_table_t* table, loom_value_id_t value_id,
+    iree_vm_variant_t* variant);
+
 // Materializes parameters and source values for one concrete case sample.
 iree_status_t loom_testbench_materialize_case_sample(
     const loom_testbench_value_materializer_options_t* options,

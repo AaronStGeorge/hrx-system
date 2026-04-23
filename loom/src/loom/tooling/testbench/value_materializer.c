@@ -100,9 +100,11 @@ bool loom_testbench_value_table_contains(
   return value_id < table->value_count && table->assigned[value_id];
 }
 
-static iree_status_t loom_testbench_value_table_set_variant_move(
+iree_status_t loom_testbench_value_table_assign_move(
     loom_testbench_value_table_t* table, loom_value_id_t value_id,
     iree_vm_variant_t* variant) {
+  IREE_ASSERT_ARGUMENT(table);
+  IREE_ASSERT_ARGUMENT(variant);
   if (value_id >= table->value_count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "value ID %u is outside the module value table",
@@ -121,7 +123,7 @@ static iree_status_t loom_testbench_value_table_set_value(
     loom_testbench_value_table_t* table, loom_value_id_t value_id,
     iree_vm_value_t value) {
   iree_vm_variant_t variant = iree_vm_make_variant_value(value);
-  return loom_testbench_value_table_set_variant_move(table, value_id, &variant);
+  return loom_testbench_value_table_assign_move(table, value_id, &variant);
 }
 
 iree_status_t loom_testbench_value_table_lookup_retain(
@@ -703,8 +705,8 @@ static iree_status_t loom_testbench_materialize_generated_source(
 
   iree_vm_ref_t buffer_view_ref = iree_hal_buffer_view_move_ref(buffer_view);
   iree_vm_variant_t variant = iree_vm_make_variant_ref_assign(buffer_view_ref);
-  return loom_testbench_value_table_set_variant_move(table, source->value_id,
-                                                     &variant);
+  return loom_testbench_value_table_assign_move(table, source->value_id,
+                                                &variant);
 }
 
 static iree_status_t loom_testbench_validate_buffer_view_type(
@@ -786,8 +788,8 @@ static iree_status_t loom_testbench_materialize_file_read_npy(
   }
   iree_vm_ref_t buffer_view_ref = iree_hal_buffer_view_move_ref(buffer_view);
   iree_vm_variant_t variant = iree_vm_make_variant_ref_assign(buffer_view_ref);
-  return loom_testbench_value_table_set_variant_move(table, source->value_id,
-                                                     &variant);
+  return loom_testbench_value_table_assign_move(table, source->value_id,
+                                                &variant);
 }
 
 static iree_status_t loom_testbench_materialize_value_source(
