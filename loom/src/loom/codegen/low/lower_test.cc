@@ -25,6 +25,7 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/link/linker.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/low/ops.h"
@@ -561,10 +562,24 @@ class LowLowerTest : public ::testing::Test {
     return loom_symbol_ref_t{.module_id = 0, .symbol_id = symbol_id};
   }
 
-  ModulePtr ParseAndLowerTargetedSource(const char* source,
-                                        EmissionCollector* collector,
-                                        loom_low_lower_result_t* out_result) {
-    ModulePtr module = ParseSource(source);
+  ModulePtr LinkModules(std::initializer_list<loom_module_t*> source_modules) {
+    std::vector<const loom_module_t*> inputs;
+    inputs.reserve(source_modules.size());
+    for (loom_module_t* module : source_modules) {
+      inputs.push_back(module);
+    }
+    loom_link_options_t options = {
+        .module_name = IREE_SV("linked"),
+    };
+    loom_module_t* linked_module = nullptr;
+    IREE_CHECK_OK(loom_link_materialized_modules(
+        inputs.data(), inputs.size(), &options, &block_pool_,
+        iree_allocator_system(), &linked_module));
+    return ModulePtr(linked_module);
+  }
+
+  void LowerTargetedSource(loom_module_t* module, EmissionCollector* collector,
+                           loom_low_lower_result_t* out_result) {
     iree_arena_allocator_t selection_arena;
     iree_arena_initialize(module->arena.block_pool, &selection_arena);
     const loom_low_source_selection_options_t selection_options = {
@@ -572,7 +587,7 @@ class LowLowerTest : public ::testing::Test {
         .policy_registry = &policy_registry_,
     };
     loom_low_source_selection_t selection = {};
-    IREE_CHECK_OK(loom_low_select_source_func(module.get(), &selection_options,
+    IREE_CHECK_OK(loom_low_select_source_func(module, &selection_options,
                                               &selection_arena, &selection));
     const loom_low_lower_options_t options = {
         .target_ref = selection.target_ref,
@@ -584,9 +599,16 @@ class LowLowerTest : public ::testing::Test {
         .emitter = collector->emitter(),
         .max_errors = 20,
     };
-    IREE_CHECK_OK(loom_low_lower_function(module.get(), selection.func,
-                                          &options, out_result));
+    IREE_CHECK_OK(
+        loom_low_lower_function(module, selection.func, &options, out_result));
     iree_arena_deinitialize(&selection_arena);
+  }
+
+  ModulePtr ParseAndLowerTargetedSource(const char* source,
+                                        EmissionCollector* collector,
+                                        loom_low_lower_result_t* out_result) {
+    ModulePtr module = ParseSource(source);
+    LowerTargetedSource(module.get(), collector, out_result);
     return module;
   }
 
@@ -849,6 +871,37 @@ TEST_F(LowLowerTest, LowersScalarFunctionAndSurvivesTextAndBytecodeRoundTrip) {
   EXPECT_NE(disassembled_text.find("@add_const__low"), std::string::npos);
   EXPECT_NE(disassembled_text.find("asm<test.low.core>"), std::string::npos);
   EXPECT_NE(disassembled_text.find("test.add.i32"), std::string::npos);
+}
+
+TEST_F(LowLowerTest,
+       LowersLinkedTargetNeutralDefinitionWithDeclarationContract) {
+  ModulePtr harness = ParseSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "\n"
+      "func.decl target(@test_target) @add(%lhs: i32, %rhs: i32) -> (i32)\n");
+  ModulePtr corpus = ParseSource(
+      "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n");
+  ModulePtr linked = LinkModules({harness.get(), corpus.get()});
+
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  LowerTargetedSource(linked.get(), &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+
+  std::string text;
+  IREE_ASSERT_OK(PrintModule(linked.get(), nullptr, &text));
+  EXPECT_EQ(text.find("func.decl @add"), std::string::npos);
+  EXPECT_NE(text.find("func.def target(@test_target) @add"), std::string::npos);
+  EXPECT_NE(text.find("low.func.def target(@test_target) "
+                      "abi(object_function) @add__low"),
+            std::string::npos);
 }
 
 TEST_F(LowLowerTest, ComposedRuleSetsContinueAfterRejectedOverlap) {

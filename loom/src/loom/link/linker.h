@@ -39,7 +39,9 @@ typedef struct loom_link_options_t {
 //
 // Symbol policy:
 // - Module-local symbols with the same name resolve to one output symbol.
-// - A func.decl may be superseded by a concrete definition with the same name.
+// - A func.decl may be superseded by a concrete definition with the same name;
+//   compatible declaration-owned signature, target, ABI, export, import, and
+//   modifier contracts merge into the selected symbol-defining op.
 // - Multiple concrete definitions for the same name are rejected.
 // - Unresolved references stay unresolved for the verifier to diagnose.
 iree_status_t loom_link_materialized_modules(

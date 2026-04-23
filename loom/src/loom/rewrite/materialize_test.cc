@@ -183,6 +183,49 @@ TEST_F(MaterializeTest, ClonesNestedRegionsAndBlockArguments) {
             loom_region_entry_arg_id(cloned_body, 0));
 }
 
+TEST_F(MaterializeTest, ClonesOpResultTypesReferencingRegionArguments) {
+  loom_type_t tile_type = loom_type_shaped_1d(
+      LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_INDEX, loom_dim_pack_static(4), 0);
+
+  loom_op_t* input_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&source_builder_, loom_attr_i64(0),
+                                          tile_type, LOOM_LOCATION_UNKNOWN,
+                                          &input_op));
+  loom_value_id_t source_input = loom_test_constant_result(input_op);
+
+  loom_op_t* map_op = nullptr;
+  IREE_ASSERT_OK(loom_test_map_build(&source_builder_, &source_input, 1,
+                                     tile_type, nullptr, 0,
+                                     LOOM_LOCATION_UNKNOWN, &map_op));
+  loom_region_t* source_body = loom_test_map_body(map_op);
+  loom_value_id_t source_element = loom_region_entry_arg_id(source_body, 0);
+  loom_type_t dynamic_result_type =
+      loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_INDEX,
+                          loom_dim_pack_dynamic(source_element), 0);
+  IREE_ASSERT_OK(loom_module_set_value_type(
+      source_, loom_test_map_result(map_op), dynamic_result_type));
+
+  loom_op_t* target_input_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&target_builder_, loom_attr_i64(0),
+                                          tile_type, LOOM_LOCATION_UNKNOWN,
+                                          &target_input_op));
+  loom_value_id_t target_input = loom_test_constant_result(target_input_op);
+
+  loom_ir_remap_t remap = InitializeRemap();
+  IREE_ASSERT_OK(loom_ir_remap_map_value(&remap, source_input, target_input));
+  loom_op_t* cloned_map_op = nullptr;
+  IREE_ASSERT_OK(
+      loom_ir_clone_op(&target_builder_, map_op, &remap, &cloned_map_op));
+
+  loom_region_t* cloned_body = loom_test_map_body(cloned_map_op);
+  ASSERT_NE(cloned_body, nullptr);
+  loom_type_t cloned_result_type =
+      loom_module_value_type(target_, loom_test_map_result(cloned_map_op));
+  ASSERT_TRUE(loom_type_dim_is_dynamic_at(cloned_result_type, 0));
+  EXPECT_EQ(loom_type_dim_value_id_at(cloned_result_type, 0),
+            loom_region_entry_arg_id(cloned_body, 0));
+}
+
 TEST_F(MaterializeTest, ClonesRegionSuccessorsToClonedBlocks) {
   loom_region_t* source_region = nullptr;
   IREE_ASSERT_OK(loom_module_allocate_region(source_, 2, &source_region));

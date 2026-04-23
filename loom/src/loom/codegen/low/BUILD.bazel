@@ -640,6 +640,7 @@ loom_cc_test(
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
+        "//loom/src/loom/link:linker",
         "//loom/src/loom/ops/cfg",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/index",

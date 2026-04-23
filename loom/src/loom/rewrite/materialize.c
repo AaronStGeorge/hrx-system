@@ -170,27 +170,50 @@ static iree_status_t loom_ir_clone_op_attrs(loom_ir_remap_t* remap,
   return iree_ok_status();
 }
 
-static iree_status_t loom_ir_clone_op_regions(loom_builder_t* builder,
-                                              const loom_op_t* source_op,
-                                              loom_ir_remap_t* remap,
-                                              loom_op_t* target_op) {
-  loom_region_t** target_regions = loom_op_regions(target_op);
-  loom_region_t* const* source_regions = loom_op_regions(source_op);
+static iree_status_t loom_ir_clone_region_skeleton(
+    loom_ir_remap_t* remap, const loom_region_t* source_region,
+    loom_region_t** out_target_region) {
+  *out_target_region = NULL;
+  loom_region_t* target_region = NULL;
+  IREE_RETURN_IF_ERROR(loom_module_allocate_region(
+      remap->target_module, source_region->block_count, &target_region));
+  target_region->flags = source_region->flags;
+
+  for (uint16_t block_index = 0; block_index < source_region->block_count;
+       ++block_index) {
+    const loom_block_t* source_block =
+        loom_region_const_block(source_region, block_index);
+    loom_block_t* target_block = loom_region_block(target_region, block_index);
+    IREE_RETURN_IF_ERROR(
+        loom_ir_remap_map_block(remap, source_block, target_block));
+    target_block->flags = source_block->flags;
+    IREE_RETURN_IF_ERROR(
+        loom_ir_clone_block_label(remap, source_block, target_block));
+    IREE_RETURN_IF_ERROR(
+        loom_ir_clone_block_args(remap, source_block, target_block));
+  }
+
+  *out_target_region = target_region;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_ir_clone_region_ops(
+    loom_builder_t* builder, const loom_region_t* source_region,
+    loom_ir_remap_t* remap, loom_region_t* target_region) {
   loom_builder_ip_t saved_ip = loom_builder_save(builder);
+  loom_op_t* parent_op = builder->ip.parent_op;
   iree_status_t status = iree_ok_status();
-  for (uint8_t i = 0; i < source_op->region_count && iree_status_is_ok(status);
-       ++i) {
-    target_regions[i] = NULL;
-    if (!source_regions[i]) continue;
-    builder->ip.parent_op = target_op;
-    status = loom_ir_clone_region(builder, source_regions[i], remap,
-                                  &target_regions[i]);
-    if (!iree_status_is_ok(status)) continue;
-    target_regions[i]->flags = source_regions[i]->flags;
-    for (uint16_t block_index = 0; block_index < target_regions[i]->block_count;
-         ++block_index) {
-      target_regions[i]->blocks[block_index]->parent_region = target_regions[i];
-    }
+  for (uint16_t block_index = 0;
+       block_index < source_region->block_count && iree_status_is_ok(status);
+       ++block_index) {
+    const loom_block_t* source_block =
+        loom_region_const_block(source_region, block_index);
+    loom_block_t* target_block = loom_region_block(target_region, block_index);
+    builder->ip.block = target_block;
+    builder->ip.parent_op = parent_op;
+    builder->ip.before_op = NULL;
+    status = loom_ir_clone_block_ops(builder, source_block, remap,
+                                     /*options=*/NULL);
   }
   loom_builder_restore(builder, saved_ip);
   return status;
@@ -239,6 +262,23 @@ iree_status_t loom_ir_clone_op(loom_builder_t* builder,
         (void**)&target_successors));
     IREE_RETURN_IF_ERROR(
         loom_ir_clone_op_successors(remap, source_op, target_successors));
+  }
+
+  loom_region_t** target_regions = NULL;
+  loom_region_t* const* source_regions = loom_op_regions(source_op);
+  if (source_op->region_count > 0) {
+    // Region entry arguments can appear in parent op result types and attrs
+    // (for example dynamic function signatures), so map the region skeleton
+    // before remapping parent op payloads.
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        remap->arena, source_op->region_count, sizeof(loom_region_t*),
+        (void**)&target_regions));
+    for (uint8_t i = 0; i < source_op->region_count; ++i) {
+      target_regions[i] = NULL;
+      if (!source_regions[i]) continue;
+      IREE_RETURN_IF_ERROR(loom_ir_clone_region_skeleton(
+          remap, source_regions[i], &target_regions[i]));
+    }
   }
 
   loom_value_id_t* target_results = NULL;
@@ -290,6 +330,18 @@ iree_status_t loom_ir_clone_op(loom_builder_t* builder,
         loom_op_successors(target_op), target_successors,
         (iree_host_size_t)source_op->successor_count * sizeof(loom_block_t*));
   }
+  if (source_op->region_count > 0) {
+    memcpy(loom_op_regions(target_op), target_regions,
+           (iree_host_size_t)source_op->region_count * sizeof(loom_region_t*));
+    for (uint8_t i = 0; i < source_op->region_count; ++i) {
+      if (!target_regions[i]) continue;
+      for (uint16_t block_index = 0;
+           block_index < target_regions[i]->block_count; ++block_index) {
+        target_regions[i]->blocks[block_index]->parent_region =
+            target_regions[i];
+      }
+    }
+  }
   if (source_op->result_count > 0) {
     memcpy(loom_op_results(target_op), target_results,
            (iree_host_size_t)source_op->result_count * sizeof(loom_value_id_t));
@@ -305,8 +357,19 @@ iree_status_t loom_ir_clone_op(loom_builder_t* builder,
                sizeof(loom_attribute_t));
   }
 
-  IREE_RETURN_IF_ERROR(
-      loom_ir_clone_op_regions(builder, source_op, remap, target_op));
+  if (source_op->region_count > 0) {
+    loom_builder_ip_t saved_ip = loom_builder_save(builder);
+    builder->ip.parent_op = target_op;
+    iree_status_t status = iree_ok_status();
+    for (uint8_t i = 0;
+         i < source_op->region_count && iree_status_is_ok(status); ++i) {
+      if (!source_regions[i]) continue;
+      status = loom_ir_clone_region_ops(builder, source_regions[i], remap,
+                                        target_regions[i]);
+    }
+    loom_builder_restore(builder, saved_ip);
+    IREE_RETURN_IF_ERROR(status);
+  }
   IREE_RETURN_IF_ERROR(loom_builder_finalize_op(builder, target_op));
   *out_cloned_op = target_op;
   return iree_ok_status();
@@ -346,41 +409,10 @@ iree_status_t loom_ir_clone_region(loom_builder_t* builder,
   }
   *out_target_region = NULL;
   loom_region_t* target_region = NULL;
-  IREE_RETURN_IF_ERROR(loom_module_allocate_region(
-      remap->target_module, source_region->block_count, &target_region));
-  target_region->flags = source_region->flags;
-
-  for (uint16_t block_index = 0; block_index < source_region->block_count;
-       ++block_index) {
-    const loom_block_t* source_block =
-        loom_region_const_block(source_region, block_index);
-    loom_block_t* target_block = loom_region_block(target_region, block_index);
-    IREE_RETURN_IF_ERROR(
-        loom_ir_remap_map_block(remap, source_block, target_block));
-    target_block->flags = source_block->flags;
-    IREE_RETURN_IF_ERROR(
-        loom_ir_clone_block_label(remap, source_block, target_block));
-    IREE_RETURN_IF_ERROR(
-        loom_ir_clone_block_args(remap, source_block, target_block));
-  }
-
-  loom_builder_ip_t saved_ip = loom_builder_save(builder);
-  loom_op_t* parent_op = builder->ip.parent_op;
-  iree_status_t status = iree_ok_status();
-  for (uint16_t block_index = 0;
-       block_index < source_region->block_count && iree_status_is_ok(status);
-       ++block_index) {
-    const loom_block_t* source_block =
-        loom_region_const_block(source_region, block_index);
-    loom_block_t* target_block = loom_region_block(target_region, block_index);
-    builder->ip.block = target_block;
-    builder->ip.parent_op = parent_op;
-    builder->ip.before_op = NULL;
-    status = loom_ir_clone_block_ops(builder, source_block, remap,
-                                     /*options=*/NULL);
-  }
-  loom_builder_restore(builder, saved_ip);
-
+  IREE_RETURN_IF_ERROR(
+      loom_ir_clone_region_skeleton(remap, source_region, &target_region));
+  iree_status_t status =
+      loom_ir_clone_region_ops(builder, source_region, remap, target_region);
   IREE_RETURN_IF_ERROR(status);
   *out_target_region = target_region;
   return iree_ok_status();

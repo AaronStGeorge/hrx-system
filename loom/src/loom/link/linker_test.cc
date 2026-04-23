@@ -54,20 +54,26 @@ class LinkerTest : public ::testing::Test {
   }
 
   loom_module_t* Link(std::initializer_list<loom_module_t*> source_modules) {
+    loom_module_t* linked_module = nullptr;
+    IREE_CHECK_OK(LinkStatus(source_modules, &linked_module));
+    modules_.push_back(linked_module);
+    return linked_module;
+  }
+
+  iree_status_t LinkStatus(std::initializer_list<loom_module_t*> source_modules,
+                           loom_module_t** out_module) {
     std::vector<const loom_module_t*> inputs;
     inputs.reserve(source_modules.size());
     for (loom_module_t* module : source_modules) {
       inputs.push_back(module);
     }
-    loom_module_t* linked_module = nullptr;
     loom_link_options_t options = {
         .module_name = IREE_SV("linked"),
     };
-    IREE_CHECK_OK(loom_link_materialized_modules(
+    iree_status_t status = loom_link_materialized_modules(
         inputs.data(), inputs.size(), &options, &block_pool_,
-        iree_allocator_system(), &linked_module));
-    modules_.push_back(linked_module);
-    return linked_module;
+        iree_allocator_system(), out_module);
+    return status;
   }
 
   std::string Print(const loom_module_t* module) {
@@ -138,6 +144,86 @@ func.def @identity(%x: i32) -> (i32) {
   std::string text = Print(linked);
   EXPECT_EQ(text.find("func.decl @identity"), std::string::npos);
   EXPECT_NE(text.find("func.def @identity"), std::string::npos);
+}
+
+TEST_F(LinkerTest, MergesDeclarationTargetContractIntoDefinition) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+target.profile @test_target preset("test-low")
+
+func.decl target(@test_target) abi(object_function) export("identity_export") @identity(%x: i32) -> (i32)
+)"));
+  loom_module_t* corpus = Parse(IREE_SV(R"(
+func.def @identity(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked = Link({harness, corpus});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_EQ(text.find("func.decl @identity"), std::string::npos);
+  EXPECT_NE(text.find("func.def target(@test_target) abi(object_function) "
+                      "export(\"identity_export\") @identity"),
+            std::string::npos);
+}
+
+TEST_F(LinkerTest, MergesDeclarationPredicatesIntoDefinition) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+target.profile @test_target preset("test-low")
+
+func.decl target(@test_target) @bounded(%m: index, %x: tensor<[%m]xf32>) -> (tensor<[%m]xf32>) where [mul(%m, 16)]
+)"));
+  loom_module_t* corpus = Parse(IREE_SV(R"(
+func.def @bounded(%m: index, %x: tensor<[%m]xf32>) -> (tensor<[%m]xf32>) {
+  func.return %x : tensor<[%m]xf32>
+}
+)"));
+
+  loom_module_t* linked = Link({harness, corpus});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_EQ(text.find("func.decl @bounded"), std::string::npos);
+  EXPECT_NE(text.find("func.def target(@test_target) @bounded"),
+            std::string::npos);
+  EXPECT_NE(text.find("where [mul(%m, 16)]"), std::string::npos);
+}
+
+TEST_F(LinkerTest, RejectsDeclarationDefinitionTargetConflict) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+target.profile @decl_target preset("test-low")
+
+func.decl target(@decl_target) @identity(%x: i32) -> (i32)
+)"));
+  loom_module_t* corpus = Parse(IREE_SV(R"(
+target.profile @def_target preset("test-low")
+
+func.def target(@def_target) @identity(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        LinkStatus({harness, corpus}, &linked));
+  EXPECT_EQ(linked, nullptr);
+}
+
+TEST_F(LinkerTest, RejectsDeclarationDefinitionSignatureConflict) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+func.decl @identity(%x: i64) -> (i64)
+)"));
+  loom_module_t* corpus = Parse(IREE_SV(R"(
+func.def @identity(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        LinkStatus({harness, corpus}, &linked));
+  EXPECT_EQ(linked, nullptr);
 }
 
 TEST_F(LinkerTest, KeepsDeclarationWhenNoDefinitionExists) {
