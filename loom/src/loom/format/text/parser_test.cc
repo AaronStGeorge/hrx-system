@@ -862,6 +862,38 @@ TEST_F(ParserTest, LowAsmRegionSelectsDescriptorSet) {
   loom_module_free(module);
 }
 
+TEST_F(ParserTest, LowAsmRegionBuildsStructuralCopy) {
+  loom_module_t* module = ParseOk(
+      "test.low_asm_region asm<test.low.core> {\n"
+      "  %c0 = test.const.i32 7\n"
+      "  %copy = copy %c0 : reg<test.i32> -> reg<test.i32>\n"
+      "  return %copy\n"
+      "}\n");
+  ASSERT_NE(module, nullptr);
+
+  loom_block_t* module_block = loom_module_block(module);
+  ASSERT_EQ(module_block->op_count, 1u);
+  loom_region_t* region =
+      loom_test_low_asm_region_body(loom_block_op(module_block, 0));
+  loom_block_t* entry = GetEntryBlock(region);
+  ASSERT_NE(entry, nullptr);
+  ASSERT_EQ(entry->op_count, 3u);
+
+  loom_op_t* const_op = loom_block_op(entry, 0);
+  ASSERT_TRUE(loom_low_const_isa(const_op));
+
+  loom_op_t* copy_op = loom_block_op(entry, 1);
+  ASSERT_TRUE(loom_low_copy_isa(copy_op));
+  EXPECT_EQ(loom_low_copy_source(copy_op), loom_low_const_result(const_op));
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_low_copy_result(copy_op));
+  ASSERT_TRUE(loom_type_is_register(result_type));
+  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(result_type)),
+            "test.i32");
+
+  loom_module_free(module);
+}
+
 TEST_F(ParserTest, LowAsmRegionRejectsAmbiguousInferredResultType) {
   const auto& diagnostics = ParseExpectErrors(
       "test.low_asm_region asm<test.low.core> {\n"

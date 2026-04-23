@@ -7,10 +7,10 @@ func.def target(@x86_target) @x86_arith(%lhs: vector<16xi32>, %rhs: vector<16xi3
   func.return %diff : vector<16xi32>
 }
 // ----
-low.func.def target(@x86_target) abi(object_function) @x86_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) {
-  %sum = low.op<x86.avx512.vpaddd.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  %diff = low.op<x86.avx512.vpsubd.zmm>(%sum, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  low.return %diff : reg<x86.zmm>
+low.func.def target(@x86_target) abi(object_function) @x86_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) asm<x86.avx512.core> {
+  %sum = vpaddd %lhs, %rhs
+  %diff = vpsubd %sum, %rhs
+  return %diff
 }
 
 // ====
@@ -26,13 +26,13 @@ func.def target(@x86_f32_target) @x86_f32_arith(%lhs: vector<16xf32>, %rhs: vect
 }
 
 // ----
-low.func.def target(@x86_f32_target) abi(object_function) @x86_f32_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) {
-  %sum = low.op<x86.avx512.vaddps.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  %difference = low.op<x86.avx512.vsubps.zmm>(%sum, %lhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  %product = low.op<x86.avx512.vmulps.zmm>(%difference, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  %13 = low.copy %product : reg<x86.zmm> -> reg<x86.zmm>
-  %fma = low.op<x86.avx512.vfmadd231ps.zmm>(%13, %lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>, reg<x86.zmm>) -> %13 as reg<x86.zmm>
-  low.return %fma : reg<x86.zmm>
+low.func.def target(@x86_f32_target) abi(object_function) @x86_f32_arith__low(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) asm<x86.avx512.core> {
+  %sum = vaddps %lhs, %rhs
+  %difference = vsubps %sum, %lhs
+  %product = vmulps %difference, %rhs
+  %13 = copy %product : reg<x86.zmm> -> reg<x86.zmm>
+  %fma = vfmadd231ps %13, %lhs, %rhs
+  return %fma
 }
 
 // ====
@@ -50,12 +50,12 @@ func.def target(@x86_static_memory_target) @x86_static_memory(%input: buffer, %o
 }
 
 // ----
-low.func.def target(@x86_static_memory_target) abi(object_function) @x86_static_memory__low(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>) {
-  %input_base = low.const<x86.avx512.movimm.gpr64> {imm64 = 16} : reg<x86.gpr64>
-  %output_base = low.const<x86.avx512.movimm.gpr64> {imm64 = 32} : reg<x86.gpr64>
-  %loaded = low.op<x86.avx512.vmovdqu32.load.zmm>(%input_view) {disp32 = 32} : (reg<x86.gpr64>) -> reg<x86.zmm>
-  low.op<x86.avx512.vmovdqu32.store.zmm>(%loaded, %output_view) {disp32 = 64} : (reg<x86.zmm>, reg<x86.gpr64>)
-  low.return
+low.func.def target(@x86_static_memory_target) abi(object_function) @x86_static_memory__low(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>) asm<x86.avx512.core> {
+  %input_base = mov.imm64 16
+  %output_base = mov.imm64 32
+  %loaded = vmovdqu32.load %input_view {disp32 = 32}
+  vmovdqu32.store %loaded, %output_view {disp32 = 64}
+  return
 }
 
 // ====
@@ -73,12 +73,12 @@ func.def target(@x86_dynamic_memory_target) @x86_dynamic_memory(%input: buffer, 
 }
 
 // ----
-low.func.def target(@x86_dynamic_memory_target) abi(object_function) @x86_dynamic_memory__low(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %i: reg<x86.gpr64>) {
-  %input_base = low.const<x86.avx512.movimm.gpr64> {imm64 = 16} : reg<x86.gpr64>
-  %output_base = low.const<x86.avx512.movimm.gpr64> {imm64 = 32} : reg<x86.gpr64>
-  %loaded = low.op<x86.avx512.vmovdqu32.load.indexed.zmm>(%input_view, %i) {disp32 = 16, scale = 4} : (reg<x86.gpr64>, reg<x86.gpr64>) -> reg<x86.zmm>
-  low.op<x86.avx512.vmovdqu32.store.indexed.zmm>(%loaded, %output_view, %i) {disp32 = 32, scale = 4} : (reg<x86.zmm>, reg<x86.gpr64>, reg<x86.gpr64>)
-  low.return
+low.func.def target(@x86_dynamic_memory_target) abi(object_function) @x86_dynamic_memory__low(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %i: reg<x86.gpr64>) asm<x86.avx512.core> {
+  %input_base = mov.imm64 16
+  %output_base = mov.imm64 32
+  %loaded = vmovdqu32.load.indexed %input_view, %i {disp32 = 16, scale = 4}
+  vmovdqu32.store.indexed %loaded, %output_view, %i {disp32 = 32, scale = 4}
+  return
 }
 
 // ====
@@ -96,12 +96,12 @@ func.def target(@x86_index_add_memory_target) @x86_index_add_memory(%input: buff
 }
 
 // ----
-low.func.def target(@x86_index_add_memory_target) abi(object_function) @x86_index_add_memory__low(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %i: reg<x86.gpr64>, %j: reg<x86.gpr64>) {
-  %zero = low.const<x86.avx512.movimm.gpr64> {imm64 = 0} : reg<x86.gpr64>
-  %sum = low.op<x86.avx512.lea.add.gpr64>(%i, %j) : (reg<x86.gpr64>, reg<x86.gpr64>) -> reg<x86.gpr64>
-  %loaded = low.op<x86.avx512.vmovdqu32.load.indexed.zmm>(%input_view, %sum) {disp32 = 0, scale = 4} : (reg<x86.gpr64>, reg<x86.gpr64>) -> reg<x86.zmm>
-  low.op<x86.avx512.vmovdqu32.store.indexed.zmm>(%loaded, %output_view, %sum) {disp32 = 0, scale = 4} : (reg<x86.zmm>, reg<x86.gpr64>, reg<x86.gpr64>)
-  low.return
+low.func.def target(@x86_index_add_memory_target) abi(object_function) @x86_index_add_memory__low(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %i: reg<x86.gpr64>, %j: reg<x86.gpr64>) asm<x86.avx512.core> {
+  %zero = mov.imm64 0
+  %sum = lea %i, %j
+  %loaded = vmovdqu32.load.indexed %input_view, %sum {disp32 = 0, scale = 4}
+  vmovdqu32.store.indexed %loaded, %output_view, %sum {disp32 = 0, scale = 4}
+  return
 }
 
 // ====
@@ -119,12 +119,12 @@ func.def target(@x86_index_madd_memory_target) @x86_index_madd_memory(%input: bu
 }
 
 // ----
-low.func.def target(@x86_index_madd_memory_target) abi(object_function) @x86_index_madd_memory__low(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %row: reg<x86.gpr64>, %stride: reg<x86.gpr64>, %col: reg<x86.gpr64>) {
-  %zero = low.const<x86.avx512.movimm.gpr64> {imm64 = 0} : reg<x86.gpr64>
-  %16 = low.copy %row : reg<x86.gpr64> -> reg<x86.gpr64>
-  %17 = low.op<x86.avx512.imul.gpr64>(%16, %stride) : (reg<x86.gpr64>, reg<x86.gpr64>) -> %16 as reg<x86.gpr64>
-  %linear = low.op<x86.avx512.lea.add.gpr64>(%17, %col) : (reg<x86.gpr64>, reg<x86.gpr64>) -> reg<x86.gpr64>
-  %loaded = low.op<x86.avx512.vmovdqu32.load.indexed.zmm>(%input_view, %linear) {disp32 = 0, scale = 4} : (reg<x86.gpr64>, reg<x86.gpr64>) -> reg<x86.zmm>
-  low.op<x86.avx512.vmovdqu32.store.indexed.zmm>(%loaded, %output_view, %linear) {disp32 = 0, scale = 4} : (reg<x86.zmm>, reg<x86.gpr64>, reg<x86.gpr64>)
-  low.return
+low.func.def target(@x86_index_madd_memory_target) abi(object_function) @x86_index_madd_memory__low(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %row: reg<x86.gpr64>, %stride: reg<x86.gpr64>, %col: reg<x86.gpr64>) asm<x86.avx512.core> {
+  %zero = mov.imm64 0
+  %16 = copy %row : reg<x86.gpr64> -> reg<x86.gpr64>
+  %17 = imul %16, %stride
+  %linear = lea %17, %col
+  %loaded = vmovdqu32.load.indexed %input_view, %linear {disp32 = 0, scale = 4}
+  vmovdqu32.store.indexed %loaded, %output_view, %linear {disp32 = 0, scale = 4}
+  return
 }

@@ -1,11 +1,11 @@
 // RUN: emit x86-asm @x86_fragment
 target.profile @x86_target preset("x86-avx512")
 
-low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>) {
-  %loaded = low.op<x86.avx512.vmovdqu32.load.zmm>(%base) {disp32 = 0} : (reg<x86.gpr64>) -> reg<x86.zmm>
-  %sum = low.op<x86.avx512.vpaddd.zmm>(%loaded, %lhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
-  low.op<x86.avx512.vmovdqu32.store.zmm>(%sum, %base) {disp32 = 64} : (reg<x86.zmm>, reg<x86.gpr64>)
-  low.return
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>) asm<x86.avx512.core> {
+  %loaded = vmovdqu32.load %base {disp32 = 0}
+  %sum = vpaddd %loaded, %lhs
+  vmovdqu32.store %sum, %base {disp32 = 64}
+  return
 }
 // ----
 .Lbb0:

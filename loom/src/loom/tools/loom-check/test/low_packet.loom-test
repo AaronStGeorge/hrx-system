@@ -2,11 +2,11 @@
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @packet(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) {
-  %c0 = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>
-  %sum = low.op<test.add.i32>(%lhs, %c0) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  %out = low.op<test.add.i32>(%sum, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  low.return %out : reg<test.i32>
+low.func.def target(@test_target) @packet(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
+  %c0 = test.const.i32 7
+  %sum = test.add.i32 %lhs, %c0
+  %out = test.add.i32 %sum, %rhs
+  return %out
 }
 
 // ----
@@ -42,11 +42,11 @@ low.func.def target(@test_target) @branch_packet(%lhs : reg<test.i32>, %rhs : re
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @hazard_packet(%ptr : reg<test.ptr>, %lhs : reg<test.v4i32>) -> (reg<test.v4i32>) {
-  %a = low.op<test.load.v4i32>(%ptr) : (reg<test.ptr>) -> reg<test.v4i32>
-  %b = low.op<test.load.v4i32>(%ptr) : (reg<test.ptr>) -> reg<test.v4i32>
-  %out = low.op<test.add.v4i32>(%a, %b) : (reg<test.v4i32>, reg<test.v4i32>) -> reg<test.v4i32>
-  low.return %out : reg<test.v4i32>
+low.func.def target(@test_target) @hazard_packet(%ptr : reg<test.ptr>, %lhs : reg<test.v4i32>) -> (reg<test.v4i32>) asm<test.low.core> {
+  %a = test.load.v4i32 %ptr
+  %b = test.load.v4i32 %ptr
+  %out = test.add.v4i32 %a, %b
+  return %out
 }
 
 // ----

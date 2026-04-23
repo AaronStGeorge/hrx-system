@@ -2,12 +2,12 @@
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @sched(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) {
-  %a = low.op<test.call.i32>(%lhs) {callee_ordinal = 0} : (reg<test.i32>) -> reg<test.i32>
-  %c0 = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>
-  %b = low.op<test.call.i32>(%rhs) {callee_ordinal = 1} : (reg<test.i32>) -> reg<test.i32>
-  %sum = low.op<test.add.i32>(%a, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  low.return %sum : reg<test.i32>
+low.func.def target(@test_target) @sched(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
+  %a = test.call.i32 %lhs {callee = 0}
+  %c0 = test.const.i32 7
+  %b = test.call.i32 %rhs {callee = 1}
+  %sum = test.add.i32 %a, %b
+  return %sum
 }
 
 // ----

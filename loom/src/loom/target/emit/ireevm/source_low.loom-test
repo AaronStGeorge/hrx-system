@@ -6,7 +6,7 @@ func.def target(@vm_target) @vm_add(%lhs: i32, %rhs: i32) -> (i32) {
   func.return %sum : i32
 }
 // ----
-low.func.def target(@vm_target) abi(vm_module_function) @vm_add__low(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>) {
-  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
-  low.return %sum : reg<vm.i32>
+low.func.def target(@vm_target) abi(vm_module_function) @vm_add__low(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>) asm<iree.vm.core> {
+  %sum = vm.add.i32 %lhs, %rhs
+  return %sum
 }

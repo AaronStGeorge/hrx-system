@@ -2,11 +2,11 @@
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @alloc(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) {
-  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  %one = low.const<test.const.i32> {i32_value = 1} : reg<test.i32>
-  %next = low.op<test.add.i32>(%sum, %one) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  low.return %next : reg<test.i32>
+low.func.def target(@test_target) @alloc(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
+  %sum = test.add.i32 %lhs, %rhs
+  %one = test.const.i32 1
+  %next = test.add.i32 %sum, %one
+  return %next
 }
 
 // ----
@@ -61,10 +61,10 @@ low.func.def target(@test_target) @phys_predicted_spill(%lhs : reg<test.phys>, %
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @copy(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) {
-  %copy = low.copy %lhs : reg<test.i32> -> reg<test.i32>
-  %sum = low.op<test.add.i32>(%copy, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  low.return %sum : reg<test.i32>
+low.func.def target(@test_target) @copy(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
+  %copy = copy %lhs : reg<test.i32> -> reg<test.i32>
+  %sum = test.add.i32 %copy, %rhs
+  return %sum
 }
 
 // ----

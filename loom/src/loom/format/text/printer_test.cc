@@ -621,8 +621,9 @@ TEST_F(LowAsmPrinterTest, PrintsStructuralIntrinsics) {
       "  %pair = concat(%arg0, %arg0) : (reg<test.i32>, reg<test.i32>) -> "
       "reg<test.i32 x2>\n"
       "  %lane = slice %pair[1] : reg<test.i32 x2> -> reg<test.i32>\n"
+      "  %copied = copy %lane : reg<test.i32> -> reg<test.i32>\n"
       "  %addr = frame_index @spill0 {offset = 0} : reg<test.i32>\n"
-      "  return %lane\n"
+      "  return %copied\n"
       "}\n";
   loom_module_t* module = ParseOk(source);
   ASSERT_NE(module, nullptr);

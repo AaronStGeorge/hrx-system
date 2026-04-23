@@ -109,15 +109,21 @@ def _vector_dot_schedule_class(vector_bit_width: int) -> str:
 
 def _asm(
     *,
+    mnemonic: str | None = None,
     results: tuple[str, ...] = (),
     operands: tuple[str, ...] = (),
     immediates: tuple[str, ...] = (),
+    named_immediates: bool = False,
 ) -> tuple[AsmForm, ...]:
     return (
         AsmForm(
+            mnemonic=mnemonic,
             results=results,
             operands=operands,
-            immediates=tuple(AsmImmediate(field_name) for field_name in immediates),
+            immediates=tuple(
+                AsmImmediate(field_name, name=field_name if named_immediates else None)
+                for field_name in immediates
+            ),
         ),
     )
 
@@ -514,6 +520,13 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="memory.load.i32x16",
             operands=(_zmm_result(), _gpr64_resource("base")),
             immediates=(_DISP32_IMMEDIATE,),
+            asm_forms=_asm(
+                mnemonic="vmovdqu32.load",
+                results=("dst",),
+                operands=("base",),
+                immediates=("disp32",),
+                named_immediates=True,
+            ),
             effects=(_LOAD_EFFECT,),
             schedule_class=_SCHEDULE_MEMORY_LOAD,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -528,6 +541,13 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _gpr64_resource("index"),
             ),
             immediates=(_DISP32_IMMEDIATE, _ADDRESS_SCALE_IMMEDIATE),
+            asm_forms=_asm(
+                mnemonic="vmovdqu32.load.indexed",
+                results=("dst",),
+                operands=("base", "index"),
+                immediates=("disp32", "scale"),
+                named_immediates=True,
+            ),
             effects=(_LOAD_EFFECT,),
             schedule_class=_SCHEDULE_MEMORY_LOAD,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -538,6 +558,12 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="memory.store.i32x16",
             operands=(_zmm_operand("value"), _gpr64_resource("base")),
             immediates=(_DISP32_IMMEDIATE,),
+            asm_forms=_asm(
+                mnemonic="vmovdqu32.store",
+                operands=("value", "base"),
+                immediates=("disp32",),
+                named_immediates=True,
+            ),
             effects=(_STORE_EFFECT,),
             schedule_class=_SCHEDULE_MEMORY_STORE,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -552,6 +578,12 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _gpr64_resource("index"),
             ),
             immediates=(_DISP32_IMMEDIATE, _ADDRESS_SCALE_IMMEDIATE),
+            asm_forms=_asm(
+                mnemonic="vmovdqu32.store.indexed",
+                operands=("value", "base", "index"),
+                immediates=("disp32", "scale"),
+                named_immediates=True,
+            ),
             effects=(_STORE_EFFECT,),
             schedule_class=_SCHEDULE_MEMORY_STORE,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -610,6 +642,11 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.const.i64",
             operands=(_gpr64_result(),),
             immediates=(_IMM64_IMMEDIATE,),
+            asm_forms=_asm(
+                mnemonic="mov.imm64",
+                results=("dst",),
+                immediates=("imm64",),
+            ),
             schedule_class=_SCHEDULE_SCALAR,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),

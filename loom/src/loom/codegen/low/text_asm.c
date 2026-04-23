@@ -969,12 +969,6 @@ static iree_status_t loom_low_descriptor_text_asm_build_return(
   return loom_low_return_build(builder, values, value_count, location, out_op);
 }
 
-static iree_string_view_t loom_low_descriptor_text_asm_op_name(
-    const loom_module_t* module, const loom_op_t* op) {
-  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
-  return vtable ? loom_op_vtable_name(vtable) : IREE_SV("<unknown>");
-}
-
 static iree_status_t loom_low_descriptor_text_asm_opcode_attr(
     const loom_module_t* module, const loom_op_t* op, uint8_t attr_index,
     iree_string_view_t* out_opcode) {
@@ -1449,6 +1443,13 @@ static iree_status_t loom_low_descriptor_text_asm_build_structural(
       }
       return loom_low_descriptor_text_asm_build_frame_index(
           builder, attributes, result_type, location, out_op);
+    case LOOM_TEXT_LOW_ASM_STRUCTURAL_COPY:
+      if (operand_count != 1) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm copy takes one operand");
+      }
+      return loom_low_copy_build(builder, operands[0], result_type, location,
+                                 out_op);
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown low asm structural kind %u",
@@ -1572,6 +1573,23 @@ static iree_status_t loom_low_descriptor_text_asm_describe_slice(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_descriptor_text_asm_describe_copy(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_text_low_asm_statement_t* out_statement) {
+  (void)module;
+  *out_statement = (loom_text_low_asm_statement_t){
+      .kind = LOOM_TEXT_LOW_ASM_STATEMENT_STRUCTURAL,
+      .op = op,
+      .structural_kind = LOOM_TEXT_LOW_ASM_STRUCTURAL_COPY,
+      .results = loom_op_const_results(op),
+      .result_count = 1,
+      .operands = loom_op_const_operands(op),
+      .operand_count = 1,
+      .location = op->location,
+  };
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_descriptor_text_asm_symbol_name(
     const loom_module_t* module, loom_symbol_ref_t ref,
     iree_string_view_t* out_name) {
@@ -1653,15 +1671,16 @@ static iree_status_t loom_low_descriptor_text_asm_describe_operation(
     return loom_low_descriptor_text_asm_describe_slice(module, op,
                                                        out_statement);
   }
+  if (loom_low_copy_isa(op)) {
+    return loom_low_descriptor_text_asm_describe_copy(module, op,
+                                                      out_statement);
+  }
   if (loom_low_frame_index_isa(op)) {
     return loom_low_descriptor_text_asm_describe_frame_index(module, op,
                                                              out_statement);
   }
 
-  iree_string_view_t op_name = loom_low_descriptor_text_asm_op_name(module, op);
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "low asm region contains unsupported op '%.*s'",
-                          (int)op_name.size, op_name.data);
+  return iree_ok_status();
 }
 
 static const loom_text_low_asm_vtable_t kLowDescriptorTextAsmVtable = {
