@@ -500,6 +500,24 @@ loom_cc_test(
     ],
 )
 
+loom_cc_library(
+    name = "source_workload",
+    testonly = True,
+    srcs = ["source_workload.c"],
+    hdrs = ["source_workload.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/testing:gen",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_cc_test(
     name = "source_lowering_stress_test",
     srcs = ["source_lowering_stress_test.cc"],
@@ -508,18 +526,14 @@ loom_cc_test(
         ":packet",
         ":packetization",
         ":source_selection",
+        ":source_workload",
         ":verify",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/vector",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/target/test:lower",
         "//loom/src/loom/testing:context",
-        "//loom/src/loom/testing:gen",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

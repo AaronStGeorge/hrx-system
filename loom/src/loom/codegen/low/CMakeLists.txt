@@ -508,6 +508,27 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_library(
+  NAME
+    source_workload
+  HDRS
+    "source_workload.h"
+  SRCS
+    "source_workload.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::target
+    loom::src::loom::ops::vector
+    loom::src::loom::testing::gen
+  TESTONLY
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     source_lowering_stress_test
@@ -518,19 +539,15 @@ loom_cc_test(
     ::packet
     ::packetization
     ::source_selection
+    ::source_workload
     ::verify
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::func
-    loom::src::loom::ops::index
     loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
-    loom::src::loom::ops::vector
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     loom::src::loom::testing::context
-    loom::src::loom::testing::gen
     loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
