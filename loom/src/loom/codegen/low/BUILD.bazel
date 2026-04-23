@@ -627,32 +627,112 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "lower_test",
-    srcs = ["lower_test.cc"],
+    name = "lower_policy_registry_test",
+    srcs = ["lower_policy_registry_test.cc"],
+    deps = [
+        ":lower",
+        "//loom/src/loom/target/test:lower",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "lower_rule_selection_test",
+    srcs = ["lower_rule_selection_test.cc"],
+    deps = [
+        ":lower",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target/test:descriptors_ids",
+        "//loom/src/loom/target/test:lower",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "source_lowering_function_test",
+    srcs = ["source_lowering_function_test.cc"],
     deps = [
         ":lower",
         ":source_selection",
-        ":text_asm",
         ":verify",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/bytecode:reader",
-        "//loom/src/loom/format/bytecode:writer",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
-        "//loom/src/loom/link:linker",
-        "//loom/src/loom/ops/cfg",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/target/test:lower",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "source_lowering_rule_emission_test",
+    srcs = ["source_lowering_rule_emission_test.cc"],
+    deps = [
+        ":lower",
+        ":source_selection",
+        ":verify",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/vector",
         "//loom/src/loom/target/test:descriptors_ids",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/target/test:lower",
         "//loom/src/loom/testing:context",
         "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "source_lowering_rule_selection_test",
+    srcs = ["source_lowering_rule_selection_test.cc"],
+    deps = [
+        ":lower",
+        ":source_selection",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/target/test:descriptors_ids",
+        "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/target/test:lower",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "source_lowering_link_test",
+    srcs = ["source_lowering_link_test.cc"],
+    deps = [
+        ":lower",
+        ":source_selection",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/link:linker",
+        "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/target/test:lower",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

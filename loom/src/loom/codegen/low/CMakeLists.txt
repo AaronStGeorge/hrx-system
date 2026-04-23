@@ -648,30 +648,115 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    lower_test
+    lower_policy_registry_test
   SRCS
-    "lower_test.cc"
+    "lower_policy_registry_test.cc"
+  DEPS
+    ::lower
+    loom::src::loom::target::test::lower
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    lower_rule_selection_test
+  SRCS
+    "lower_rule_selection_test.cc"
+  DEPS
+    ::lower
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::ops::vector
+    loom::src::loom::target::test::descriptors_ids
+    loom::src::loom::target::test::lower
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    source_lowering_function_test
+  SRCS
+    "source_lowering_function_test.cc"
   DEPS
     ::lower
     ::source_selection
-    ::text_asm
     ::verify
     iree::base::internal::arena
-    iree::io::stream
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::target::test::lower
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    source_lowering_rule_emission_test
+  SRCS
+    "source_lowering_rule_emission_test.cc"
+  DEPS
+    ::lower
+    ::source_selection
+    ::verify
+    iree::base::internal::arena
     loom::src::loom::error::error_defs
-    loom::src::loom::format::bytecode::reader
-    loom::src::loom::format::bytecode::writer
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::scalar
+    loom::src::loom::target::test::descriptors_ids
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::target::test::lower
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    source_lowering_rule_selection_test
+  SRCS
+    "source_lowering_rule_selection_test.cc"
+  DEPS
+    ::lower
+    ::source_selection
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::scalar
+    loom::src::loom::target::test::descriptors_ids
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::target::test::lower
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    source_lowering_link_test
+  SRCS
+    "source_lowering_link_test.cc"
+  DEPS
+    ::lower
+    ::source_selection
+    iree::base::internal::arena
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::link::linker
-    loom::src::loom::ops::cfg
-    loom::src::loom::ops::func
-    loom::src::loom::ops::index
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::vector
-    loom::src::loom::target::test::descriptors_ids
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     loom::src::loom::testing::context

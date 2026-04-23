@@ -1,0 +1,274 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include <memory>
+#include <string>
+
+#include "iree/base/internal/arena.h"
+#include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower_rules.h"
+#include "loom/codegen/low/source_selection.h"
+#include "loom/format/text/parser.h"
+#include "loom/format/text/printer.h"
+#include "loom/ir/context.h"
+#include "loom/ir/module.h"
+#include "loom/ops/scalar/ops.h"
+#include "loom/target/test/descriptors.h"
+#include "loom/target/test/low_registry.h"
+#include "loom/target/test/lower.h"
+#include "loom/testing/context.h"
+
+namespace loom {
+namespace {
+
+struct ModuleDeleter {
+  void operator()(loom_module_t* module) const { loom_module_free(module); }
+};
+
+using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
+
+enum TestRejectedScalarAddValueRef : uint16_t {
+  kTestRejectedScalarAddOperand0,
+  kTestRejectedScalarAddOperand1,
+  kTestRejectedScalarAddResult0,
+};
+
+static const loom_low_lower_value_ref_t kTestRejectedScalarAddValueRefs[] = {
+    {
+        .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+        .index = 0,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_VALUE_REF_OPERAND,
+        .index = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_VALUE_REF_RESULT,
+        .index = 0,
+    },
+};
+
+static const loom_low_lower_type_pattern_t kTestRejectedScalarAddTypes[] = {
+    {
+        .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE,
+        .type_kind = LOOM_TYPE_VECTOR,
+        .element_type_mask =
+            LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
+        .rank = 1,
+        .static_dim0_min = 4,
+        .static_dim0_max = 4,
+    },
+};
+
+static const loom_low_lower_diagnostic_t kTestRejectedScalarAddDiagnostics[] = {
+    {
+        .subject_kind = IREE_SVL("type"),
+        .subject_name = IREE_SVL("vector<4xi32>"),
+        .reason =
+            IREE_SVL("test lowering requires vector<4xi32> vector values"),
+    },
+};
+
+static const loom_low_lower_guard_t kTestRejectedScalarAddGuards[] = {
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestRejectedScalarAddOperand0,
+        .type_pattern_index = 0,
+        .diagnostic_index = 0,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestRejectedScalarAddOperand1,
+        .type_pattern_index = 0,
+        .diagnostic_index = 0,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = kTestRejectedScalarAddResult0,
+        .type_pattern_index = 0,
+        .diagnostic_index = 0,
+    },
+};
+
+static const loom_low_lower_emit_t kTestRejectedScalarAddEmits[] = {
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
+        .operand_ref_start = kTestRejectedScalarAddOperand0,
+        .operand_ref_count = 2,
+        .result_ref_start = kTestRejectedScalarAddResult0,
+        .result_ref_count = 1,
+    },
+};
+
+static const loom_low_lower_rule_t kTestRejectedScalarAddRules[] = {
+    {
+        .source_op_kind = LOOM_OP_SCALAR_ADDI,
+        .guard_start = 0,
+        .guard_count = 3,
+        .emit_start = 0,
+        .emit_count = 1,
+    },
+};
+
+static const loom_low_lower_rule_span_t kTestRejectedScalarAddSpans[] = {
+    {
+        .source_op_kind = LOOM_OP_SCALAR_ADDI,
+        .rule_start = 0,
+        .rule_count = 1,
+    },
+};
+
+static const loom_low_lower_rule_set_t kTestRejectedScalarAddRuleSet = {
+    .spans = kTestRejectedScalarAddSpans,
+    .span_count = IREE_ARRAYSIZE(kTestRejectedScalarAddSpans),
+    .rules = kTestRejectedScalarAddRules,
+    .rule_count = IREE_ARRAYSIZE(kTestRejectedScalarAddRules),
+    .type_patterns = kTestRejectedScalarAddTypes,
+    .type_pattern_count = IREE_ARRAYSIZE(kTestRejectedScalarAddTypes),
+    .value_refs = kTestRejectedScalarAddValueRefs,
+    .value_ref_count = IREE_ARRAYSIZE(kTestRejectedScalarAddValueRefs),
+    .guards = kTestRejectedScalarAddGuards,
+    .guard_count = IREE_ARRAYSIZE(kTestRejectedScalarAddGuards),
+    .emits = kTestRejectedScalarAddEmits,
+    .emit_count = IREE_ARRAYSIZE(kTestRejectedScalarAddEmits),
+    .diagnostics = kTestRejectedScalarAddDiagnostics,
+    .diagnostic_count = IREE_ARRAYSIZE(kTestRejectedScalarAddDiagnostics),
+};
+
+static const loom_low_lower_rule_set_t* const kTestComposedRuleSets[] = {
+    &kTestRejectedScalarAddRuleSet,
+    &loom_test_low_lower_rule_set,
+};
+
+static const loom_low_lower_policy_t kTestComposedLowerPolicy = {
+    .name = IREE_SVL("test-composed-lower-policy"),
+    .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
+    .map_argument = {.fn = loom_test_low_lower_map_argument,
+                     .user_data = nullptr},
+    .rule_sets =
+        {
+            .count = IREE_ARRAYSIZE(kTestComposedRuleSets),
+            .values = kTestComposedRuleSets,
+        },
+};
+
+static loom_low_lower_policy_registry_t MakeTestComposedPolicyRegistry() {
+  static const loom_low_lower_policy_registry_entry_t kEntries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &kTestComposedLowerPolicy,
+      },
+  };
+  loom_low_lower_policy_registry_t registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &registry, kEntries, IREE_ARRAYSIZE(kEntries));
+  return registry;
+}
+
+class SourceLoweringRuleSelectionTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
+                                                       &context_));
+    loom_test_low_descriptor_registry_initialize(&registry_);
+    policy_registry_ = MakeTestComposedPolicyRegistry();
+    IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
+  }
+
+  void TearDown() override {
+    loom_context_deinitialize(&context_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  ModulePtr ParseSource(const char* source) {
+    loom_text_parse_options_t parse_options = {};
+    parse_options.max_errors = 20;
+    loom_module_t* module = nullptr;
+    IREE_CHECK_OK(
+        loom_text_parse(iree_make_cstring_view(source),
+                        IREE_SV("source_lowering_rule_selection.loom"),
+                        &context_, &block_pool_, &parse_options, &module));
+    IREE_ASSERT(module != nullptr);
+    return ModulePtr(module);
+  }
+
+  void LowerTargetedSource(loom_module_t* module,
+                           loom_low_lower_result_t* out_result) {
+    iree_arena_allocator_t selection_arena;
+    iree_arena_initialize(module->arena.block_pool, &selection_arena);
+    const loom_low_source_selection_options_t selection_options = {
+        .descriptor_registry = &registry_.registry,
+        .policy_registry = &policy_registry_,
+    };
+    loom_low_source_selection_t selection = {};
+    IREE_CHECK_OK(loom_low_select_source_func(module, &selection_options,
+                                              &selection_arena, &selection));
+    const loom_low_lower_options_t options = {
+        .target_ref = selection.target_ref,
+        .bundle = selection.target_bundle,
+        .descriptor_registry = &registry_.registry,
+        .descriptor_requirements =
+            LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        .policy = selection.policy,
+        .max_errors = 20,
+    };
+    IREE_CHECK_OK(
+        loom_low_lower_function(module, selection.func, &options, out_result));
+    iree_arena_deinitialize(&selection_arena);
+  }
+
+  iree_status_t PrintModule(const loom_module_t* module,
+                            std::string* out_text) {
+    out_text->clear();
+    iree_string_builder_t builder;
+    iree_string_builder_initialize(iree_allocator_system(), &builder);
+    iree_status_t status = loom_text_print_module_to_builder(
+        module, &builder, LOOM_TEXT_PRINT_DEFAULT);
+    if (iree_status_is_ok(status)) {
+      *out_text = std::string(iree_string_builder_buffer(&builder),
+                              iree_string_builder_size(&builder));
+    }
+    iree_string_builder_deinitialize(&builder);
+    return status;
+  }
+
+  iree_arena_block_pool_t block_pool_;
+  loom_context_t context_;
+  loom_target_low_descriptor_registry_t registry_ = {};
+  loom_low_lower_policy_registry_t policy_registry_ = {};
+};
+
+TEST_F(SourceLoweringRuleSelectionTest,
+       ContinuesAfterRejectedRuleSetCandidate) {
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n");
+  LowerTargetedSource(module.get(), &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_NE(lower_result.low_func_op, nullptr);
+
+  std::string text;
+  IREE_ASSERT_OK(PrintModule(module.get(), &text));
+  EXPECT_NE(text.find("@add__low"), std::string::npos);
+  EXPECT_NE(text.find("low.op<test.add.i32>"), std::string::npos);
+}
+
+}  // namespace
+}  // namespace loom
