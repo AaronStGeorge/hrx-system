@@ -508,6 +508,34 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    source_lowering_stress_test
+  SRCS
+    "source_lowering_stress_test.cc"
+  DEPS
+    ::lower
+    ::packet
+    ::packetization
+    ::source_selection
+    ::verify
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::ops::low
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::target
+    loom::src::loom::ops::vector
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::target::test::lower
+    loom::src::loom::testing::context
+    loom::src::loom::testing::gen
+    loom::src::loom::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     source_selection
