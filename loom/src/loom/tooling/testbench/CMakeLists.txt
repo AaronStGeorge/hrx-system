@@ -63,6 +63,27 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    expectation
+  HDRS
+    "expectation.h"
+  SRCS
+    "expectation.c"
+  DEPS
+    ::testbench
+    ::value_materializer
+    iree::base
+    iree::base::internal
+    iree::base::internal::arena
+    iree::hal
+    iree::modules::hal::types
+    loom::src::loom::ir
+    iree::tooling::buffer_view_matchers
+    iree::vm
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     testbench_test
@@ -95,6 +116,27 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::check
     loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm
+)
+
+loom_cc_test(
+  NAME
+    expectation_test
+  SRCS
+    "expectation_test.cc"
+  DEPS
+    ::expectation
+    ::testbench
+    ::value_materializer
+    iree::base
+    iree::base::internal::arena
+    iree::hal
+    iree::modules::hal::types
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::check
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm

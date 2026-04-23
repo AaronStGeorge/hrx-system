@@ -103,6 +103,9 @@ check.benchmark @scale_latency case(@scale_case) attrs({iterations = 100})
             LOOM_TESTBENCH_INVOCATION_ACTUAL);
   EXPECT_EQ(plan.cases[0].invocations[0].input_count, 1u);
   EXPECT_EQ(plan.cases[0].invocations[0].result_count, 1u);
+  ASSERT_EQ(plan.cases[0].expectation_count, 1u);
+  EXPECT_EQ(plan.cases[0].expectations[0].kind,
+            LOOM_TESTBENCH_EXPECTATION_EQUAL);
   EXPECT_EQ(plan.cases[0].sample_count, 1u);
   EXPECT_TRUE(
       iree_string_view_equal(plan.cases[1].name, IREE_SV("private_case")));
@@ -164,6 +167,9 @@ check.case @sources {
                                      IREE_SV("outputs/actual.npy")));
   EXPECT_EQ(case_plan.file_writes[0].mode,
             LOOM_CHECK_FILE_WRITE_NPY_MODE_ALWAYS);
+  ASSERT_EQ(case_plan.expectation_count, 2u);
+  EXPECT_EQ(case_plan.expectations[0].kind, LOOM_TESTBENCH_EXPECTATION_EQUAL);
+  EXPECT_EQ(case_plan.expectations[1].kind, LOOM_TESTBENCH_EXPECTATION_BITWISE);
   EXPECT_EQ(case_plan.issue_count, 0u);
   EXPECT_EQ(plan.issue_count, 0u);
 

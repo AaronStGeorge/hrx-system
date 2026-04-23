@@ -56,6 +56,8 @@ typedef enum loom_testbench_issue_kind_e {
   LOOM_TESTBENCH_ISSUE_INVALID_FILE_WRITE = 5,
   // An actual or oracle invocation op cannot be planned for execution.
   LOOM_TESTBENCH_ISSUE_INVALID_INVOCATION = 6,
+  // A check.expect.* op cannot be planned for evaluation.
+  LOOM_TESTBENCH_ISSUE_INVALID_EXPECTATION = 7,
 } loom_testbench_issue_kind_t;
 
 typedef enum loom_testbench_value_source_kind_e {
@@ -81,6 +83,21 @@ typedef enum loom_testbench_invocation_kind_e {
   // check.oracle.call op that invokes a reference provider.
   LOOM_TESTBENCH_INVOCATION_ORACLE = 2,
 } loom_testbench_invocation_kind_t;
+
+typedef enum loom_testbench_expectation_kind_e {
+  // Invalid or uninitialized expectation slot.
+  LOOM_TESTBENCH_EXPECTATION_NONE = 0,
+  // check.expect.equal over scalar values or shaped buffer views.
+  LOOM_TESTBENCH_EXPECTATION_EQUAL = 1,
+  // check.expect.bitwise over scalar values or shaped buffer views.
+  LOOM_TESTBENCH_EXPECTATION_BITWISE = 2,
+  // check.expect.close approximate comparison.
+  LOOM_TESTBENCH_EXPECTATION_CLOSE = 3,
+  // check.expect.shape metadata comparison.
+  LOOM_TESTBENCH_EXPECTATION_SHAPE = 4,
+  // check.expect<provider> custom validation.
+  LOOM_TESTBENCH_EXPECTATION_CUSTOM = 5,
+} loom_testbench_expectation_kind_t;
 
 typedef struct loom_testbench_plan_options_t {
   // Maximum samples retained per case after cartesian expansion.
@@ -231,6 +248,56 @@ typedef struct loom_testbench_invocation_plan_t {
   iree_host_size_t result_count;
 } loom_testbench_invocation_plan_t;
 
+typedef struct loom_testbench_close_expectation_plan_t {
+  // Absolute tolerance.
+  double absolute_tolerance;
+  // Relative tolerance.
+  double relative_tolerance;
+  // NaN comparison policy.
+  loom_check_expect_close_nan_t nan_policy;
+} loom_testbench_close_expectation_plan_t;
+
+typedef struct loom_testbench_shape_expectation_plan_t {
+  // Borrowed dynamic dimension value IDs in source order.
+  const loom_value_id_t* dimension_value_ids;
+  // Number of entries in |dimension_value_ids|.
+  iree_host_size_t dimension_value_count;
+  // Borrowed static dimensions with INT64_MIN sentinels for dynamic positions.
+  const int64_t* static_dimensions;
+  // Rank represented by |static_dimensions|.
+  iree_host_size_t static_dimension_count;
+} loom_testbench_shape_expectation_plan_t;
+
+typedef struct loom_testbench_custom_expectation_plan_t {
+  // Interned provider string ID.
+  loom_string_id_t provider_id;
+  // Borrowed provider name.
+  iree_string_view_t provider;
+  // Borrowed custom validation attributes.
+  loom_named_attr_slice_t attrs;
+} loom_testbench_custom_expectation_plan_t;
+
+typedef struct loom_testbench_expectation_plan_t {
+  // Expectation kind and payload discriminator.
+  loom_testbench_expectation_kind_t kind;
+  // Operation that declared the expectation.
+  const loom_op_t* op;
+  // Primary actual value checked by the expectation.
+  loom_value_id_t actual_value_id;
+  // Expected value checked by binary expectations, or INVALID for shape.
+  loom_value_id_t expected_value_id;
+  // Type of |actual_value_id| at planning time.
+  loom_type_t type;
+  union {
+    // Payload for check.expect.close.
+    loom_testbench_close_expectation_plan_t close;
+    // Payload for check.expect.shape.
+    loom_testbench_shape_expectation_plan_t shape;
+    // Payload for check.expect<provider>.
+    loom_testbench_custom_expectation_plan_t custom;
+  };
+} loom_testbench_expectation_plan_t;
+
 typedef struct loom_testbench_issue_t {
   // Structured issue classification.
   loom_testbench_issue_kind_t kind;
@@ -271,6 +338,10 @@ typedef struct loom_testbench_case_plan_t {
   const loom_testbench_invocation_plan_t* invocations;
   // Number of entries in |invocations|.
   iree_host_size_t invocation_count;
+  // Expectation plans in source order.
+  const loom_testbench_expectation_plan_t* expectations;
+  // Number of entries in |expectations|.
+  iree_host_size_t expectation_count;
   // Full cartesian sample count before applying |max_samples_per_case|.
   iree_host_size_t cartesian_sample_count;
   // Number of samples retained for execution after budget capping.

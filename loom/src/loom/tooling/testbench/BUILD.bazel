@@ -60,6 +60,24 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "expectation",
+    srcs = ["expectation.c"],
+    hdrs = ["expectation.h"],
+    deps = [
+        ":testbench",
+        ":value_materializer",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/modules/hal:types",
+        "//runtime/src/iree/tooling:buffer_view_matchers",
+        "//runtime/src/iree/vm",
+    ],
+)
+
 loom_cc_test(
     name = "testbench_test",
     srcs = ["testbench_test.cc"],
@@ -89,6 +107,26 @@ loom_cc_test(
         "//loom/src/loom/ops/test",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "expectation_test",
+    srcs = ["expectation_test.cc"],
+    deps = [
+        ":expectation",
+        ":testbench",
+        ":value_materializer",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/check",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/modules/hal:types",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
         "//runtime/src/iree/vm",

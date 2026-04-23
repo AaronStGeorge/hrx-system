@@ -15,6 +15,7 @@
 
 enum {
   LOOM_TESTBENCH_INTERNAL_INDEX_INVALID = UINT32_MAX,
+  LOOM_TESTBENCH_MAX_SHAPE_RANK = 32,
 };
 
 typedef struct loom_testbench_plan_counts_t {
@@ -30,6 +31,8 @@ typedef struct loom_testbench_plan_counts_t {
   iree_host_size_t file_write_count;
   // Number of invocation ops in all case bodies.
   iree_host_size_t invocation_count;
+  // Number of expectation ops in all case bodies.
+  iree_host_size_t expectation_count;
   // Maximum number of structured issues this planning pass can emit.
   iree_host_size_t issue_capacity;
 } loom_testbench_plan_counts_t;
@@ -465,6 +468,104 @@ static bool loom_testbench_plan_invocation(
   return loom_testbench_plan_actual_invocation(module, op, out_invocation);
 }
 
+static bool loom_testbench_is_expectation_op(const loom_op_t* op) {
+  return loom_check_expect_equal_isa(op) || loom_check_expect_bitwise_isa(op) ||
+         loom_check_expect_close_isa(op) || loom_check_expect_shape_isa(op) ||
+         loom_check_expect_isa(op);
+}
+
+static bool loom_testbench_plan_expectation(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_testbench_expectation_plan_t* out_expectation) {
+  memset(out_expectation, 0, sizeof(*out_expectation));
+  out_expectation->op = op;
+  out_expectation->expected_value_id = LOOM_VALUE_ID_INVALID;
+
+  if (loom_check_expect_equal_isa(op)) {
+    out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_EQUAL;
+    out_expectation->actual_value_id = loom_check_expect_equal_actual(op);
+    out_expectation->expected_value_id = loom_check_expect_equal_expected(op);
+  } else if (loom_check_expect_bitwise_isa(op)) {
+    out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_BITWISE;
+    out_expectation->actual_value_id = loom_check_expect_bitwise_actual(op);
+    out_expectation->expected_value_id = loom_check_expect_bitwise_expected(op);
+  } else if (loom_check_expect_close_isa(op)) {
+    out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_CLOSE;
+    out_expectation->actual_value_id = loom_check_expect_close_actual(op);
+    out_expectation->expected_value_id = loom_check_expect_close_expected(op);
+    out_expectation->close.absolute_tolerance =
+        loom_check_expect_close_atol(op);
+    out_expectation->close.relative_tolerance =
+        loom_check_expect_close_rtol(op);
+    out_expectation->close.nan_policy =
+        (loom_check_expect_close_nan_t)loom_check_expect_close_nan(op);
+    if (out_expectation->close.absolute_tolerance < 0.0 ||
+        out_expectation->close.relative_tolerance < 0.0 ||
+        out_expectation->close.nan_policy <= 0 ||
+        out_expectation->close.nan_policy >=
+            LOOM_CHECK_EXPECT_CLOSE_NAN_COUNT_) {
+      return false;
+    }
+  } else if (loom_check_expect_shape_isa(op)) {
+    out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_SHAPE;
+    out_expectation->actual_value_id = loom_check_expect_shape_value(op);
+    loom_value_slice_t dimensions = loom_check_expect_shape_dims(op);
+    loom_attribute_t static_dimensions =
+        loom_check_expect_shape_static_dims(op);
+    out_expectation->shape.dimension_value_ids = dimensions.values;
+    out_expectation->shape.dimension_value_count = dimensions.count;
+    out_expectation->shape.static_dimensions = static_dimensions.i64_array;
+    out_expectation->shape.static_dimension_count = static_dimensions.count;
+  } else if (loom_check_expect_isa(op)) {
+    out_expectation->kind = LOOM_TESTBENCH_EXPECTATION_CUSTOM;
+    out_expectation->actual_value_id = loom_check_expect_actual(op);
+    out_expectation->expected_value_id = loom_check_expect_expected(op);
+    out_expectation->custom.provider_id = loom_check_expect_provider(op);
+    out_expectation->custom.provider = loom_testbench_string_from_id(
+        module, out_expectation->custom.provider_id);
+    out_expectation->custom.attrs = loom_check_expect_attrs(op);
+  } else {
+    return false;
+  }
+
+  if (out_expectation->actual_value_id >= module->values.count) {
+    return false;
+  }
+  out_expectation->type =
+      loom_testbench_value_type(module, out_expectation->actual_value_id);
+
+  switch (out_expectation->kind) {
+    case LOOM_TESTBENCH_EXPECTATION_EQUAL:
+    case LOOM_TESTBENCH_EXPECTATION_BITWISE:
+    case LOOM_TESTBENCH_EXPECTATION_CLOSE:
+      return out_expectation->expected_value_id < module->values.count;
+    case LOOM_TESTBENCH_EXPECTATION_SHAPE: {
+      if (out_expectation->shape.static_dimension_count >
+          LOOM_TESTBENCH_MAX_SHAPE_RANK) {
+        return false;
+      }
+      iree_host_size_t dynamic_dimension_count = 0;
+      for (iree_host_size_t i = 0;
+           i < out_expectation->shape.static_dimension_count; ++i) {
+        if (out_expectation->shape.static_dimensions[i] == INT64_MIN) {
+          ++dynamic_dimension_count;
+        }
+      }
+      return dynamic_dimension_count ==
+                 out_expectation->shape.dimension_value_count &&
+             loom_testbench_value_ids_are_in_range(
+                 module, out_expectation->shape.dimension_value_ids,
+                 out_expectation->shape.dimension_value_count);
+    }
+    case LOOM_TESTBENCH_EXPECTATION_CUSTOM:
+      return out_expectation->expected_value_id < module->values.count &&
+             out_expectation->custom.provider_id < module->strings.count &&
+             !iree_string_view_is_empty(out_expectation->custom.provider);
+    default:
+      return false;
+  }
+}
+
 static bool loom_testbench_is_parameter_op(const loom_op_t* op) {
   return loom_check_param_range_isa(op) || loom_check_param_choice_isa(op) ||
          loom_check_param_seed_isa(op);
@@ -493,16 +594,12 @@ static bool loom_testbench_is_supported_check_body_op(
     case LOOM_OP_CHECK_FILE_READ_NPY:
     case LOOM_OP_CHECK_FILE_WRITE_NPY:
     case LOOM_OP_CHECK_ORACLE_CALL:
-    case LOOM_OP_CHECK_EXPECT_EQUAL:
-    case LOOM_OP_CHECK_EXPECT_BITWISE:
-    case LOOM_OP_CHECK_EXPECT_CLOSE:
-    case LOOM_OP_CHECK_EXPECT_SHAPE:
-    case LOOM_OP_CHECK_EXPECT:
       return true;
     default:
       break;
   }
-  return loom_testbench_is_actual_invocation_op(module, op);
+  return loom_testbench_is_expectation_op(op) ||
+         loom_testbench_is_actual_invocation_op(module, op);
 }
 
 static void loom_testbench_count_case_body(
@@ -519,6 +616,9 @@ static void loom_testbench_count_case_body(
       if (loom_check_file_write_npy_isa(op)) ++counts->file_write_count;
       if (loom_testbench_is_invocation_op(module, op)) {
         ++counts->invocation_count;
+      }
+      if (loom_testbench_is_expectation_op(op)) {
+        ++counts->expectation_count;
       }
     }
   }
@@ -610,7 +710,9 @@ static void loom_testbench_plan_case_body(
     loom_testbench_file_write_plan_t* file_writes,
     iree_host_size_t* inout_file_write_count,
     loom_testbench_invocation_plan_t* invocations,
-    iree_host_size_t* inout_invocation_count, loom_testbench_issue_t* issues,
+    iree_host_size_t* inout_invocation_count,
+    loom_testbench_expectation_plan_t* expectations,
+    iree_host_size_t* inout_expectation_count, loom_testbench_issue_t* issues,
     iree_host_size_t issue_capacity, iree_host_size_t* inout_issue_count) {
   case_plan->parameters =
       parameters ? parameters + *inout_parameter_count : NULL;
@@ -620,6 +722,8 @@ static void loom_testbench_plan_case_body(
       file_writes ? file_writes + *inout_file_write_count : NULL;
   case_plan->invocations =
       invocations ? invocations + *inout_invocation_count : NULL;
+  case_plan->expectations =
+      expectations ? expectations + *inout_expectation_count : NULL;
   case_plan->issues = issues ? issues + *inout_issue_count : NULL;
   case_plan->cartesian_sample_count = 1;
   case_plan->sample_count = 1;
@@ -688,6 +792,18 @@ static void loom_testbench_plan_case_body(
         }
         continue;
       }
+
+      if (loom_testbench_is_expectation_op(op)) {
+        loom_testbench_expectation_plan_t* expectation =
+            &expectations[(*inout_expectation_count)++];
+        if (!loom_testbench_plan_expectation(module, op, expectation)) {
+          loom_testbench_append_issue(
+              issues, issue_capacity, inout_issue_count,
+              LOOM_TESTBENCH_ISSUE_INVALID_EXPECTATION, case_index,
+              LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID, op, case_plan->ref);
+        }
+        continue;
+      }
     }
   }
 
@@ -706,6 +822,10 @@ static void loom_testbench_plan_case_body(
   case_plan->invocation_count =
       case_plan->invocations
           ? (invocations + *inout_invocation_count) - case_plan->invocations
+          : 0;
+  case_plan->expectation_count =
+      case_plan->expectations
+          ? (expectations + *inout_expectation_count) - case_plan->expectations
           : 0;
   case_plan->issue_count =
       case_plan->issues ? (issues + *inout_issue_count) - case_plan->issues : 0;
@@ -783,6 +903,11 @@ iree_status_t loom_testbench_plan_module(
       arena, counts.invocation_count, sizeof(*invocations),
       (void**)&invocations));
 
+  loom_testbench_expectation_plan_t* expectations = NULL;
+  IREE_RETURN_IF_ERROR(loom_testbench_allocate_array(
+      arena, counts.expectation_count, sizeof(*expectations),
+      (void**)&expectations));
+
   loom_testbench_issue_t* issues = NULL;
   IREE_RETURN_IF_ERROR(loom_testbench_allocate_array(
       arena, counts.issue_capacity, sizeof(*issues), (void**)&issues));
@@ -829,13 +954,14 @@ iree_status_t loom_testbench_plan_module(
   iree_host_size_t value_source_count = 0;
   iree_host_size_t file_write_count = 0;
   iree_host_size_t invocation_count = 0;
+  iree_host_size_t expectation_count = 0;
   iree_host_size_t issue_count = 0;
   for (iree_host_size_t i = 0; i < case_count; ++i) {
     loom_testbench_plan_case_body(
         module, i, max_samples_per_case, &cases[i], parameters,
         &parameter_count, value_sources, &value_source_count, file_writes,
-        &file_write_count, invocations, &invocation_count, issues,
-        counts.issue_capacity, &issue_count);
+        &file_write_count, invocations, &invocation_count, expectations,
+        &expectation_count, issues, counts.issue_capacity, &issue_count);
   }
 
   for (iree_host_size_t i = 0; i < benchmark_count; ++i) {
