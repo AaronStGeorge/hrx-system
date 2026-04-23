@@ -167,8 +167,12 @@ loom_cc_library(
     srcs = [
         "lower.c",
         "lower_avx512_rules.c",
+        "lower_packed_dot.c",
     ],
-    hdrs = ["lower.h"],
+    hdrs = [
+        "lower.h",
+        "lower_internal.h",
+    ],
     deps = [
         ":avx512_descriptors_ids",
         ":packed_dot_contract",

@@ -113,9 +113,11 @@ loom_cc_library(
     lower
   HDRS
     "lower.h"
+    "lower_internal.h"
   SRCS
     "lower.c"
     "lower_avx512_rules.c"
+    "lower_packed_dot.c"
   DEPS
     ::avx512_descriptors_ids
     ::packed_dot_contract
