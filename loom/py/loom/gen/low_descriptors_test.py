@@ -108,7 +108,14 @@ def test_generate_x86_avx512_core_descriptor_set() -> None:
     assert "x86.avx512.vpdpbusd.zmm" in generated.source
     assert "x86.avx512.vdpbf16ps.zmm" in generated.source
     assert "x86.avx512.kandq" in generated.source
+    assert "x86.avx512.korq" in generated.source
+    assert "x86.avx512.kxorq" in generated.source
     assert "x86.avx512.jmp" in generated.source
+    assert "X86_AVX512_CORE_REG_CLASS_ID_X86_GPR32" in generated.header
+    assert "X86_AVX512_CORE_REG_CLASS_ID_X86_GPR64" in generated.header
+    assert "X86_AVX512_CORE_REG_CLASS_ID_X86_XMM" in generated.header
+    assert "X86_AVX512_CORE_REG_CLASS_ID_X86_ZMM" in generated.header
+    assert "X86_AVX512_CORE_REG_CLASS_ID_X86_K" in generated.header
     assert "fingerprint" not in generated.source
     assert "fingerprint" not in generated.manifest_json
 
@@ -121,14 +128,17 @@ def test_generate_x86_avx512_core_descriptor_set() -> None:
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["descriptor_id_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["asm_forms"] >= 6
-    assert manifest["table_counts"]["reg_classes"] == 3
     assert manifest["table_counts"]["resources"] >= 7
     assert "x86.vector.i32.512" in generated.source
     assert "x86.vector.dot.512" in generated.source
     assert any(descriptor["key"] == "x86.avx512.vpdpbusd.zmm" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "x86.avx512.kandq" for descriptor in manifest["descriptors"])
+    assert any(descriptor["key"] == "x86.avx512.korq" for descriptor in manifest["descriptors"])
+    assert any(descriptor["key"] == "x86.avx512.kxorq" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "x86.avx512.jmp" for descriptor in manifest["descriptors"])
     assert any(form["mnemonic"] == "vpaddd" for form in manifest["asm_forms"])
+    assert any(form["mnemonic"] == "korq" for form in manifest["asm_forms"])
+    assert any(form["mnemonic"] == "kxorq" for form in manifest["asm_forms"])
 
 
 def test_generate_x86_packed_dot_descriptor_set() -> None:

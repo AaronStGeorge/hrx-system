@@ -51,7 +51,9 @@ func.def @i32x16_compare_select(%lhs: vector<16xi32>, %rhs: vector<16xi32>, %fal
 func.def @i32x16_mask_and_select(%lhs: vector<16xi32>, %rhs: vector<16xi32>, %fallback: vector<16xi32>) -> (vector<16xi32>) {
   %greater = vector.cmpi sgt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
   %less = vector.cmpi slt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
-  %condition = vector.andi %greater, %less : vector<16xi1>
+  %either = vector.ori %greater, %less : vector<16xi1>
+  %greater_again = vector.andi %either, %greater : vector<16xi1>
+  %condition = vector.xori %greater_again, %less : vector<16xi1>
   %result = vector.select %condition, %lhs, %fallback : vector<16xi32>
   func.return %result : vector<16xi32>
 }
