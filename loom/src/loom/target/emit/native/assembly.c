@@ -132,6 +132,15 @@ static iree_status_t loom_native_assembly_append_packet(
   return loom_native_assembly_append_structural_packet(options, context);
 }
 
+static void loom_native_assembly_truncate_builder(
+    iree_string_builder_t* builder, iree_host_size_t size) {
+  IREE_ASSERT(size <= iree_string_builder_size(builder));
+  builder->size = size;
+  if (builder->buffer != NULL) {
+    builder->buffer[size] = 0;
+  }
+}
+
 iree_status_t loom_native_assembly_format_fragment(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
@@ -179,9 +188,15 @@ iree_status_t loom_native_assembly_format_fragment(
         IREE_RETURN_IF_ERROR(options->append_before_packet.fn(
             options->append_before_packet.user_data, &context));
       }
+      const iree_host_size_t line_start = iree_string_builder_size(builder);
       IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "  "));
+      const iree_host_size_t content_start = iree_string_builder_size(builder);
       IREE_RETURN_IF_ERROR(
           loom_native_assembly_append_packet(options, &context));
+      if (iree_string_builder_size(builder) == content_start) {
+        loom_native_assembly_truncate_builder(builder, line_start);
+        continue;
+      }
       IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
     }
   }

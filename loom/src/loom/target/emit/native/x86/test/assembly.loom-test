@@ -155,3 +155,28 @@ low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : re
 .Lbb2:
   vmovdqu32 [rax + 64], zmm1
   ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
+low.func.def target(@x86_target) @x86_fragment(%input : reg<x86.gpr64>, %output : reg<x86.gpr64>, %row : reg<x86.gpr64>, %stride : reg<x86.gpr64>, %col : reg<x86.gpr64>) asm<x86.avx512.core> {
+  %bias = mov.imm64 256
+  %row_copy = copy %row : reg<x86.gpr64> -> reg<x86.gpr64>
+  %linear = imul %row_copy, %stride
+  %index = lea %linear, %col
+  %biased_index = lea %index, %bias
+  %loaded = vmovdqu32.load.indexed %input, %biased_index {disp32 = 0, scale = 4}
+  vmovdqu32.store.indexed %loaded, %output, %biased_index {disp32 = 64, scale = 4}
+  return
+}
+
+// ----
+.Lbb0:
+  mov rbp, 256
+  imul rax, rcx
+  lea rax, [rax + rdx]
+  lea rax, [rax + rbp]
+  vmovdqu32 zmm0, [rbx + rax * 4]
+  vmovdqu32 [rsp + rax * 4 + 64], zmm0
+  ret

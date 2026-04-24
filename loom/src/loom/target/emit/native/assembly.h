@@ -38,7 +38,8 @@ typedef iree_status_t (*loom_native_assembly_append_packet_fn_t)(
     void* user_data, const loom_native_assembly_packet_context_t* context);
 
 typedef struct loom_native_assembly_append_packet_callback_t {
-  // Function that appends one packet to the output builder.
+  // Function that appends one packet to the output builder. It may append no
+  // text when a structural packet has been coalesced away.
   loom_native_assembly_append_packet_fn_t fn;
   // Opaque callback state forwarded to |fn|.
   void* user_data;
