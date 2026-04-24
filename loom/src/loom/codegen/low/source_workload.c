@@ -208,6 +208,66 @@ static iree_status_t loom_low_source_workload_gen_vector4xi32_binary(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_source_workload_gen_vector4xi32_extract(
+    const loom_test_gen_hook_context_t* context, void* user_data,
+    loom_test_gen_hook_result_t* out_result) {
+  (void)user_data;
+  loom_type_t vector_type = loom_low_source_workload_vector4xi32_type();
+  loom_value_id_t source = loom_test_gen_values_pick_exact_type(
+      context->gen, context->values, vector_type);
+  if (source == LOOM_VALUE_ID_INVALID) {
+    *out_result = LOOM_TEST_GEN_HOOK_SKIPPED;
+    return iree_ok_status();
+  }
+
+  int64_t* static_indices = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(context->builder->arena, 1,
+                                                 sizeof(*static_indices),
+                                                 (void**)&static_indices));
+  static_indices[0] =
+      (int64_t)loom_test_gen_next_range(context->gen, /*upper_exclusive=*/4);
+
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_extract_build(
+      context->builder, source, NULL, 0, static_indices, 1,
+      loom_low_source_workload_i32_type(), LOOM_LOCATION_UNKNOWN, &op));
+  loom_test_gen_values_add(context->values, loom_vector_extract_result(op),
+                           loom_low_source_workload_i32_type());
+  *out_result = LOOM_TEST_GEN_HOOK_EMITTED;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_source_workload_gen_vector4xi32_shuffle(
+    const loom_test_gen_hook_context_t* context, void* user_data,
+    loom_test_gen_hook_result_t* out_result) {
+  (void)user_data;
+  loom_type_t vector_type = loom_low_source_workload_vector4xi32_type();
+  loom_value_id_t source = loom_test_gen_values_pick_exact_type(
+      context->gen, context->values, vector_type);
+  if (source == LOOM_VALUE_ID_INVALID) {
+    *out_result = LOOM_TEST_GEN_HOOK_SKIPPED;
+    return iree_ok_status();
+  }
+
+  int64_t* source_lanes = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(context->builder->arena, 4,
+                                                 sizeof(*source_lanes),
+                                                 (void**)&source_lanes));
+  for (iree_host_size_t i = 0; i < 4; ++i) {
+    source_lanes[i] =
+        (int64_t)loom_test_gen_next_range(context->gen, /*upper_exclusive=*/4);
+  }
+
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_shuffle_build(context->builder, source_lanes,
+                                                 4, source, vector_type,
+                                                 LOOM_LOCATION_UNKNOWN, &op));
+  loom_test_gen_values_add(context->values, loom_vector_shuffle_result(op),
+                           vector_type);
+  *out_result = LOOM_TEST_GEN_HOOK_EMITTED;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_source_workload_gen_index_madd(
     const loom_test_gen_hook_context_t* context, void* user_data,
     loom_test_gen_hook_result_t* out_result) {
@@ -238,6 +298,8 @@ static const loom_test_gen_op_hook_t kLoomLowSourceWorkloadHooks[] = {
     {1, loom_low_source_workload_gen_scalar_i32_constant, NULL, NULL},
     {4, loom_low_source_workload_gen_scalar_i32_binary, NULL, NULL},
     {4, loom_low_source_workload_gen_vector4xi32_binary, NULL, NULL},
+    {2, loom_low_source_workload_gen_vector4xi32_extract, NULL, NULL},
+    {2, loom_low_source_workload_gen_vector4xi32_shuffle, NULL, NULL},
     {3, loom_low_source_workload_gen_index_madd, NULL, NULL},
 };
 
@@ -401,6 +463,12 @@ static void loom_low_source_workload_count_op(
     case LOOM_OP_VECTOR_SUBI:
       ++counts->vector_integer_op_count;
       break;
+    case LOOM_OP_VECTOR_EXTRACT:
+      ++counts->vector_extract_op_count;
+      break;
+    case LOOM_OP_VECTOR_SHUFFLE:
+      ++counts->vector_shuffle_op_count;
+      break;
     case LOOM_OP_INDEX_MADD:
       ++counts->index_madd_op_count;
       break;
@@ -457,6 +525,8 @@ static void loom_low_source_workload_count_module_source_ops(
     out_counts->scalar_integer_op_count += func_counts.scalar_integer_op_count;
     out_counts->scalar_constant_count += func_counts.scalar_constant_count;
     out_counts->vector_integer_op_count += func_counts.vector_integer_op_count;
+    out_counts->vector_extract_op_count += func_counts.vector_extract_op_count;
+    out_counts->vector_shuffle_op_count += func_counts.vector_shuffle_op_count;
     out_counts->index_madd_op_count += func_counts.index_madd_op_count;
   }
 }

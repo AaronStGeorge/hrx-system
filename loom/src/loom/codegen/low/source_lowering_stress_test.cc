@@ -76,6 +76,10 @@ TEST_F(SourceLoweringStressTest, GeneratedSupportedSourceLowersAndPacketizes) {
         counters.source_counts.scalar_constant_count;
     aggregate.source_counts.vector_integer_op_count +=
         counters.source_counts.vector_integer_op_count;
+    aggregate.source_counts.vector_extract_op_count +=
+        counters.source_counts.vector_extract_op_count;
+    aggregate.source_counts.vector_shuffle_op_count +=
+        counters.source_counts.vector_shuffle_op_count;
     aggregate.source_counts.index_madd_op_count +=
         counters.source_counts.index_madd_op_count;
     aggregate.low_descriptor_op_count += counters.low_descriptor_op_count;
@@ -87,6 +91,8 @@ TEST_F(SourceLoweringStressTest, GeneratedSupportedSourceLowersAndPacketizes) {
   EXPECT_GT(aggregate.source_counts.scalar_integer_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.scalar_constant_count, 0u);
   EXPECT_GT(aggregate.source_counts.vector_integer_op_count, 0u);
+  EXPECT_GT(aggregate.source_counts.vector_extract_op_count, 0u);
+  EXPECT_GT(aggregate.source_counts.vector_shuffle_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.index_madd_op_count, 0u);
   EXPECT_GT(aggregate.low_descriptor_op_count, 0u);
   EXPECT_GT(aggregate.schedule_node_count, 0u);

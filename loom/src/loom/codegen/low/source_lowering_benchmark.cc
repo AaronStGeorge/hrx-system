@@ -82,6 +82,8 @@ static uint64_t SourceOpCount(
   return counters.source_counts.scalar_integer_op_count +
          counters.source_counts.scalar_constant_count +
          counters.source_counts.vector_integer_op_count +
+         counters.source_counts.vector_extract_op_count +
+         counters.source_counts.vector_shuffle_op_count +
          counters.source_counts.index_madd_op_count;
 }
 
