@@ -13,6 +13,7 @@
 // REPORT: COMPILE-REPORT: schedule nodes={{[0-9]+}}
 // REPORT: COMPILE-REPORT: allocation assignments={{[0-9]+}} spills=0
 // REPORT: COMPILE-REPORT: emission instructions={{[0-9]+}}
+// REPORT: COMPILE-REPORT: source_low selected_ops={{[0-9]+}}
 // REPORT: COMPILE-REPORT: pressure_rows copied=0 total={{[0-9]+}}
 
 target.profile @vm_target preset("iree-vm")

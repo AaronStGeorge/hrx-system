@@ -46,6 +46,11 @@ iree_status_t loom_low_lower_policy_verify(
         IREE_STATUS_INVALID_ARGUMENT,
         "target-low lowering policy rule set list is required");
   }
+  if (policy->rule_sets.count > UINT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target-low lowering policy rule set list is too large");
+  }
   for (iree_host_size_t i = 0; i < policy->rule_sets.count; ++i) {
     if (policy->rule_sets.values[i] == NULL) {
       return iree_make_status(

@@ -6,6 +6,8 @@
 
 #include "loom/target/compile_report_format.h"
 
+#include <stdint.h>
+
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/types.h"
@@ -41,6 +43,20 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           .reload_count = 2,
       },
   };
+  loom_target_compile_report_source_low_row_t source_low_rows[] = {
+      {
+          .function_name = IREE_SVL("branchy"),
+          .source_op_name = IREE_SVL("scalar.addi"),
+          .source_op_kind = 42,
+          .selection_kind =
+              LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_RULE,
+          .rule_set_index = 0,
+          .rule_index = 1,
+          .plan_id = UINT64_MAX,
+          .descriptor_id = 7,
+          .emitted_low_op_count = 1,
+      },
+  };
   loom_target_compile_report_t report = {};
   loom_target_compile_report_initialize(&report);
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
@@ -58,8 +74,14 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   report.spill_rows = spill_rows;
   report.spill_row_count = IREE_ARRAYSIZE(spill_rows);
   report.spill_row_total_count = 3;
+  report.source_low_selected_op_count = 4;
+  report.source_low_emitted_op_count = 5;
+  report.source_low_rows = source_low_rows;
+  report.source_low_row_count = IREE_ARRAYSIZE(source_low_rows);
+  report.source_low_row_total_count = 4;
   report.detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
-                         LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS;
+                         LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
+                         LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -83,6 +105,12 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
       iree_string_view_find(output, IREE_SV("pressure[0] class=test.i32"), 0),
       IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("spill[0] value=rhs"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("source_low selected_ops=4"), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("source_low[0] function=branchy"), 0),
             IREE_STRING_VIEW_NPOS);
 
   iree_string_builder_deinitialize(&builder);

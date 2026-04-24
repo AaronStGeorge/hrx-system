@@ -43,7 +43,18 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS = 1u << 5,
   // Per-spill-plan rows were recorded or counted.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS = 1u << 6,
+  // Source-to-target-low selection rows were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS = 1u << 7,
 };
+
+typedef enum loom_target_compile_report_source_low_selection_kind_e {
+  // No source-low selection was recorded.
+  LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_NONE = 0,
+  // Selection came from a table-driven lowering rule.
+  LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_RULE = 1,
+  // Selection came from a target-owned callback plan.
+  LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_PLAN = 2,
+} loom_target_compile_report_source_low_selection_kind_t;
 
 // One register-pressure peak row copied into a compile report.
 typedef struct loom_target_compile_report_pressure_row_t {
@@ -91,6 +102,28 @@ typedef struct loom_target_compile_report_spill_row_t {
   uint64_t reload_count;
 } loom_target_compile_report_spill_row_t;
 
+// One source-to-target-low selection row copied into a compile report.
+typedef struct loom_target_compile_report_source_low_row_t {
+  // Source function symbol containing the lowered source operation.
+  iree_string_view_t function_name;
+  // Source operation mnemonic lowered by this row.
+  iree_string_view_t source_op_name;
+  // Numeric source operation kind lowered by this row.
+  uint32_t source_op_kind;
+  // Selection mechanism used for this source operation.
+  loom_target_compile_report_source_low_selection_kind_t selection_kind;
+  // Policy rule-set ordinal for table-driven rules, or UINT16_MAX otherwise.
+  uint16_t rule_set_index;
+  // Rule-table ordinal inside |rule_set_index|, or UINT16_MAX otherwise.
+  uint16_t rule_index;
+  // Target-owned plan id for callback selections, or UINT64_MAX otherwise.
+  uint64_t plan_id;
+  // First stable low descriptor id emitted by a table rule, or none for plans.
+  uint64_t descriptor_id;
+  // Number of low operations emitted for this source operation.
+  uint32_t emitted_low_op_count;
+} loom_target_compile_report_source_low_row_t;
+
 // Caller-owned storage for optional detailed compile report rows.
 typedef struct loom_target_compile_report_row_storage_t {
   // Caller-owned pressure row storage.
@@ -101,6 +134,10 @@ typedef struct loom_target_compile_report_row_storage_t {
   loom_target_compile_report_spill_row_t* spill_rows;
   // Capacity of |spill_rows|.
   iree_host_size_t spill_row_capacity;
+  // Caller-owned source-low row storage.
+  loom_target_compile_report_source_low_row_t* source_low_rows;
+  // Capacity of |source_low_rows|.
+  iree_host_size_t source_low_row_capacity;
 } loom_target_compile_report_row_storage_t;
 
 // Structured feedback from one module-to-artifact compilation.
@@ -175,6 +212,10 @@ typedef struct loom_target_compile_report_t {
   uint64_t emitted_code_byte_count;
   // Number of target code storage bytes including target-local padding.
   uint64_t emitted_code_storage_byte_count;
+  // Number of source operations selected during source-to-low lowering.
+  uint64_t source_low_selected_op_count;
+  // Number of low operations emitted during source-to-low lowering.
+  uint64_t source_low_emitted_op_count;
   // Caller-owned pressure row storage.
   loom_target_compile_report_pressure_row_t* pressure_rows;
   // Capacity of |pressure_rows|.
@@ -191,6 +232,14 @@ typedef struct loom_target_compile_report_t {
   iree_host_size_t spill_row_count;
   // Total number of available spill rows before capacity truncation.
   iree_host_size_t spill_row_total_count;
+  // Caller-owned source-low row storage.
+  loom_target_compile_report_source_low_row_t* source_low_rows;
+  // Capacity of |source_low_rows|.
+  iree_host_size_t source_low_row_capacity;
+  // Number of source-low rows copied into |source_low_rows|.
+  iree_host_size_t source_low_row_count;
+  // Total number of available source-low rows before capacity truncation.
+  iree_host_size_t source_low_row_total_count;
   // Estimated target private memory bytes.
   uint64_t private_memory_bytes;
   // Estimated target local/shared memory bytes.
@@ -251,6 +300,11 @@ void loom_target_compile_report_record_pressure_row(
 void loom_target_compile_report_record_spill_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_spill_row_t* row);
+
+// Records one source-low row, truncating only the copied row storage when full.
+void loom_target_compile_report_record_source_low_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_source_low_row_t* row);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -122,13 +122,17 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
     const loom_target_module_compile_entry_t* entry,
     loom_func_like_t source_function,
     loom_target_module_compile_diagnostic_emitter_t* diagnostic_emitter,
-    uint32_t max_errors, loom_low_lower_result_t* out_result) {
+    uint32_t max_errors, iree_arena_allocator_t* sidecar_arena,
+    loom_target_compile_report_t* report, loom_low_lower_result_t* out_result) {
   loom_low_lower_policy_registry_t policy_registry = {0};
   loom_ireevm_low_lower_policy_registry_initialize(&policy_registry);
   const loom_low_lower_policy_t* policy = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_lookup_for_bundle(
       &policy_registry, &entry->bundle_storage.bundle, &policy));
 
+  loom_low_lower_report_storage_t report_storage = {0};
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_allocate_low_lowering_rows(
+      report, sidecar_arena, &report_storage));
   const loom_low_lower_options_t lower_options = {
       .target_ref = entry->target_ref,
       .bundle = &entry->bundle_storage.bundle,
@@ -138,9 +142,14 @@ static iree_status_t loom_ireevm_module_compile_lower_function(
       .policy = policy,
       .emitter = loom_target_module_compile_emitter(diagnostic_emitter),
       .max_errors = max_errors,
+      .report_enabled = report != NULL,
+      .report_storage = report_storage,
   };
   IREE_RETURN_IF_ERROR(loom_low_lower_function(module, source_function,
                                                &lower_options, out_result));
+  if (report != NULL) {
+    loom_target_compile_report_record_low_lowering(report, out_result);
+  }
   if (out_result->error_count > 0 || out_result->low_func_op == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -231,7 +240,7 @@ iree_status_t loom_ireevm_compile_module_archive(
   if (iree_status_is_ok(status)) {
     status = loom_ireevm_module_compile_lower_function(
         module, &low_registry, &entry, source_function, &diagnostic_emitter,
-        max_errors, &lower_result);
+        max_errors, &sidecar_arena, report, &lower_result);
   }
   if (iree_status_is_ok(status) && report != NULL) {
     status = loom_ireevm_module_compile_symbol_name(

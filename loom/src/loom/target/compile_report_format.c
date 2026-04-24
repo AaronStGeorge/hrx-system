@@ -56,6 +56,19 @@ static iree_string_view_t loom_target_compile_report_artifact_kind_name(
   }
 }
 
+static iree_string_view_t loom_target_compile_report_source_low_selection_name(
+    loom_target_compile_report_source_low_selection_kind_t kind) {
+  switch (kind) {
+    case LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_RULE:
+      return IREE_SV("rule");
+    case LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_PLAN:
+      return IREE_SV("plan");
+    case LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_NONE:
+    default:
+      return IREE_SV("none");
+  }
+}
+
 static iree_string_view_t loom_target_compile_report_type_kind_name(
     uint32_t type_kind) {
   switch (type_kind) {
@@ -178,6 +191,17 @@ static iree_status_t loom_target_compile_report_format_summary(
   }
 
   if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        "COMPILE-REPORT: source_low selected_ops=%" PRIu64
+        " emitted_ops=%" PRIu64 " rows copied=%" PRIhsz " total=%" PRIhsz "\n",
+        report->source_low_selected_op_count,
+        report->source_low_emitted_op_count, report->source_low_row_count,
+        report->source_low_row_total_count));
+  }
+
+  if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_MEMORY)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder,
@@ -267,6 +291,45 @@ static iree_status_t loom_target_compile_report_format_spill_rows(
   return iree_ok_status();
 }
 
+static iree_status_t loom_target_compile_report_format_source_low_rows(
+    const loom_target_compile_report_t* report,
+    iree_string_builder_t* builder) {
+  for (iree_host_size_t i = 0; i < report->source_low_row_count; ++i) {
+    const loom_target_compile_report_source_low_row_t* row =
+        &report->source_low_rows[i];
+    const iree_string_view_t function_name =
+        loom_target_compile_report_non_empty(row->function_name);
+    const iree_string_view_t source_op_name =
+        loom_target_compile_report_non_empty(row->source_op_name);
+    const iree_string_view_t selection_name =
+        loom_target_compile_report_source_low_selection_name(
+            row->selection_kind);
+    if (row->selection_kind ==
+        LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_RULE) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          builder,
+          "COMPILE-REPORT: source_low[%" PRIhsz
+          "] function=%.*s source_op=%.*s selection=%.*s rule_set=%u rule=%u "
+          "descriptor=%" PRIu64 " emitted_ops=%u\n",
+          i, (int)function_name.size, function_name.data,
+          (int)source_op_name.size, source_op_name.data,
+          (int)selection_name.size, selection_name.data, row->rule_set_index,
+          row->rule_index, row->descriptor_id, row->emitted_low_op_count));
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        "COMPILE-REPORT: source_low[%" PRIhsz
+        "] function=%.*s source_op=%.*s selection=%.*s plan=%" PRIu64
+        " descriptor=%" PRIu64 " emitted_ops=%u\n",
+        i, (int)function_name.size, function_name.data,
+        (int)source_op_name.size, source_op_name.data, (int)selection_name.size,
+        selection_name.data, row->plan_id, row->descriptor_id,
+        row->emitted_low_op_count));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_target_compile_report_format_text(
     const loom_target_compile_report_t* report,
     const loom_target_compile_report_format_options_t* options,
@@ -284,6 +347,8 @@ iree_status_t loom_target_compile_report_format_text(
         loom_target_compile_report_format_pressure_rows(report, builder));
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_spill_rows(report, builder));
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_format_source_low_rows(report, builder));
   }
   return iree_ok_status();
 }

@@ -105,7 +105,9 @@ loom_cc_library(
   DEPS
     ::compile_report
     iree::base
+    iree::base::internal::arena
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::packetization
     loom::src::loom::ir
   PUBLIC

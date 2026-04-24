@@ -170,6 +170,45 @@ typedef struct loom_low_lower_selected_plan_view_t {
   loom_low_lower_plan_t plan;
 } loom_low_lower_selected_plan_view_t;
 
+typedef enum loom_low_lower_report_selection_kind_e {
+  // No source-low selection was recorded.
+  LOOM_LOW_LOWER_REPORT_SELECTION_NONE = 0,
+  // Selection came from a table-driven lowering rule.
+  LOOM_LOW_LOWER_REPORT_SELECTION_RULE = 1,
+  // Selection came from a target-owned callback plan.
+  LOOM_LOW_LOWER_REPORT_SELECTION_PLAN = 2,
+} loom_low_lower_report_selection_kind_t;
+
+// One source-to-target-low selection row captured for production diagnostics.
+typedef struct loom_low_lower_report_row_t {
+  // Source function symbol containing the lowered source operation.
+  iree_string_view_t function_name;
+  // Source operation mnemonic lowered by this row.
+  iree_string_view_t source_op_name;
+  // Numeric source operation kind lowered by this row.
+  loom_op_kind_t source_op_kind;
+  // Selection mechanism used for this source operation.
+  loom_low_lower_report_selection_kind_t selection_kind;
+  // Policy rule-set ordinal for table-driven rules, or UINT16_MAX otherwise.
+  uint16_t rule_set_index;
+  // Rule-table ordinal inside |rule_set_index|, or UINT16_MAX otherwise.
+  uint16_t rule_index;
+  // Target-owned plan id for callback selections, or PLAN_ID_NONE otherwise.
+  loom_low_lower_plan_id_t plan_id;
+  // First stable low descriptor id emitted by a table rule, or none for plans.
+  uint64_t descriptor_id;
+  // Number of low operations emitted for this source operation.
+  uint32_t emitted_low_op_count;
+} loom_low_lower_report_row_t;
+
+// Caller-owned row storage for source-to-low report details.
+typedef struct loom_low_lower_report_storage_t {
+  // Caller-owned source-low row storage.
+  loom_low_lower_report_row_t* rows;
+  // Capacity of |rows|.
+  iree_host_size_t row_capacity;
+} loom_low_lower_report_storage_t;
+
 typedef iree_status_t (*loom_low_lower_select_op_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_low_lower_plan_t* out_plan);
@@ -288,6 +327,10 @@ typedef struct loom_low_lower_options_t {
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting. Zero means no limit.
   uint32_t max_errors;
+  // Enables production source-to-low report counters and optional rows.
+  bool report_enabled;
+  // Optional caller-owned storage for production source-low report rows.
+  loom_low_lower_report_storage_t report_storage;
 } loom_low_lower_options_t;
 
 typedef struct loom_low_lower_result_t {
@@ -301,6 +344,18 @@ typedef struct loom_low_lower_result_t {
   loom_op_t* low_func_op;
   // Module-local symbol reference for |low_func_op|.
   loom_symbol_ref_t low_func_ref;
+  // Reported number of non-structural source operations selected for lowering.
+  uint64_t selected_source_op_count;
+  // Reported number of low operations emitted from source operation selections.
+  uint64_t emitted_low_op_count;
+  // Caller-owned source-low report row storage.
+  loom_low_lower_report_row_t* report_rows;
+  // Capacity of |report_rows|.
+  iree_host_size_t report_row_capacity;
+  // Number of rows copied into |report_rows|.
+  iree_host_size_t report_row_count;
+  // Total number of available report rows before capacity truncation.
+  iree_host_size_t report_row_total_count;
 } loom_low_lower_result_t;
 
 // Lowers one func.def-like source function into a low.func.def in place.

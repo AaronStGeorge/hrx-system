@@ -23,6 +23,8 @@
 typedef struct loom_low_lower_selected_plan_t {
   // Source op this selected plan lowers.
   const loom_op_t* source_op;
+  // Policy rule-set ordinal for table-driven selections.
+  uint16_t rule_set_index;
   // Rule set owning |rule|, or NULL for target-owned callbacks.
   const loom_low_lower_rule_set_t* rule_set;
   // Table rule selected during planning, or NULL for target-owned callbacks.
@@ -721,6 +723,53 @@ static iree_status_t loom_low_lower_record_selected_plan(
   return iree_ok_status();
 }
 
+static uint16_t loom_low_lower_rule_index(
+    const loom_low_lower_rule_set_t* rule_set,
+    const loom_low_lower_rule_t* rule) {
+  IREE_ASSERT(rule >= rule_set->rules);
+  const uintptr_t index = (uintptr_t)(rule - rule_set->rules);
+  IREE_ASSERT_LT(index, rule_set->rule_count);
+  IREE_ASSERT_LE(index, UINT16_MAX);
+  return (uint16_t)index;
+}
+
+static void loom_low_lower_record_report_row(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_selected_plan_t* selected_plan,
+    uint32_t emitted_low_op_count) {
+  loom_low_lower_result_t* result = context->result;
+  ++result->selected_source_op_count;
+  result->emitted_low_op_count += emitted_low_op_count;
+  ++result->report_row_total_count;
+  if (result->report_rows == NULL ||
+      result->report_row_count >= result->report_row_capacity) {
+    return;
+  }
+
+  loom_low_lower_report_row_t* row =
+      &result->report_rows[result->report_row_count++];
+  *row = (loom_low_lower_report_row_t){
+      .function_name = loom_low_lower_function_name(context),
+      .source_op_name = loom_op_name(context->module, selected_plan->source_op),
+      .source_op_kind = selected_plan->source_op->kind,
+      .selection_kind = LOOM_LOW_LOWER_REPORT_SELECTION_PLAN,
+      .rule_set_index = UINT16_MAX,
+      .rule_index = UINT16_MAX,
+      .plan_id = selected_plan->plan.id,
+      .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
+      .emitted_low_op_count = emitted_low_op_count,
+  };
+  if (selected_plan->rule != NULL) {
+    row->selection_kind = LOOM_LOW_LOWER_REPORT_SELECTION_RULE;
+    row->rule_set_index = selected_plan->rule_set_index;
+    row->rule_index =
+        loom_low_lower_rule_index(selected_plan->rule_set, selected_plan->rule);
+    row->plan_id = LOOM_LOW_LOWER_PLAN_ID_NONE;
+    row->descriptor_id = loom_low_lower_rule_first_descriptor_id(
+        selected_plan->rule_set, selected_plan->rule);
+  }
+}
+
 static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op) {
   if (source_op->region_count != 0) {
@@ -746,9 +795,11 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select(
         context, rule_set, source_op, &rule_selection));
     if (rule_selection.rule != NULL) {
+      IREE_ASSERT_LE(i, UINT16_MAX);
       return loom_low_lower_record_selected_plan(
           context, (loom_low_lower_selected_plan_t){
                        .source_op = source_op,
+                       .rule_set_index = (uint16_t)i,
                        .rule_set = rule_set,
                        .rule = rule_selection.rule,
                        .plan = loom_low_lower_plan_empty(),
@@ -780,6 +831,7 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     return loom_low_lower_record_selected_plan(context,
                                                (loom_low_lower_selected_plan_t){
                                                    .source_op = source_op,
+                                                   .rule_set_index = UINT16_MAX,
                                                    .rule_set = NULL,
                                                    .rule = NULL,
                                                    .plan = plan,
@@ -1180,15 +1232,32 @@ static iree_status_t loom_low_lower_emit_selected_plan(
   const loom_low_lower_selected_plan_t selected_plan =
       context->selected_plans[context->selected_plan_emit_index++];
   IREE_ASSERT_EQ(selected_plan.source_op, source_op);
+  const bool report_enabled = context->options->report_enabled;
+  loom_block_t* insertion_block = context->builder.ip.block;
+  uint32_t before_op_count = 0;
+  if (report_enabled) {
+    IREE_ASSERT(insertion_block != NULL);
+    before_op_count = insertion_block->op_count;
+  }
+  iree_status_t status = iree_ok_status();
   if (selected_plan.rule != NULL) {
     IREE_ASSERT(selected_plan.rule_set != NULL);
-    return loom_low_lower_rule_set_emit_rule(context, selected_plan.rule_set,
-                                             source_op, selected_plan.rule);
+    status = loom_low_lower_rule_set_emit_rule(context, selected_plan.rule_set,
+                                               source_op, selected_plan.rule);
+  } else {
+    IREE_ASSERT_FALSE(loom_low_lower_plan_is_empty(selected_plan.plan));
+    IREE_ASSERT(context->policy->emit_op.fn != NULL);
+    status =
+        context->policy->emit_op.fn(context->policy->emit_op.user_data, context,
+                                    source_op, selected_plan.plan);
   }
-  IREE_ASSERT_FALSE(loom_low_lower_plan_is_empty(selected_plan.plan));
-  IREE_ASSERT(context->policy->emit_op.fn != NULL);
-  return context->policy->emit_op.fn(context->policy->emit_op.user_data,
-                                     context, source_op, selected_plan.plan);
+  if (report_enabled && iree_status_is_ok(status)) {
+    const uint32_t after_op_count = insertion_block->op_count;
+    IREE_ASSERT_GE(after_op_count, before_op_count);
+    loom_low_lower_record_report_row(context, &selected_plan,
+                                     after_op_count - before_op_count);
+  }
+  return status;
 }
 
 static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
@@ -1259,6 +1328,10 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
       .result = out_result,
       .value_map_count = module->values.count,
   };
+  if (options->report_enabled) {
+    out_result->report_rows = options->report_storage.rows;
+    out_result->report_row_capacity = options->report_storage.row_capacity;
+  }
   iree_arena_initialize(module->arena.block_pool, &context.arena);
 
   iree_status_t status = loom_value_fact_table_initialize(

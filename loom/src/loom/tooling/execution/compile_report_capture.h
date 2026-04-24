@@ -40,6 +40,8 @@ typedef struct loom_run_compile_report_capture_t {
   loom_target_compile_report_pressure_row_t* pressure_rows;
   // Capture-owned spill row storage passed to candidate compilation.
   loom_target_compile_report_spill_row_t* spill_rows;
+  // Capture-owned source-low row storage passed to candidate compilation.
+  loom_target_compile_report_source_low_row_t* source_low_rows;
 } loom_run_compile_report_capture_t;
 
 // Initializes capture options with report output disabled.

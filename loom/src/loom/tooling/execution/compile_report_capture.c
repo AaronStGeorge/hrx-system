@@ -60,8 +60,18 @@ static iree_status_t loom_run_compile_report_capture_allocate_rows(
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "compile report spill row storage is too large");
   }
-  return iree_allocator_malloc(capture->host_allocator, spill_rows_size,
-                               (void**)&capture->spill_rows);
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+      capture->host_allocator, spill_rows_size, (void**)&capture->spill_rows));
+  iree_host_size_t source_low_rows_size = 0;
+  if (!iree_host_size_checked_mul(capture->options.row_limit,
+                                  sizeof(*capture->source_low_rows),
+                                  &source_low_rows_size)) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "compile report source-low row storage is too large");
+  }
+  return iree_allocator_malloc(capture->host_allocator, source_low_rows_size,
+                               (void**)&capture->source_low_rows);
 }
 
 iree_status_t loom_run_compile_report_capture_initialize(
@@ -100,6 +110,9 @@ void loom_run_compile_report_capture_configure_compile_options(
           .spill_rows = capture->spill_rows,
           .spill_row_capacity =
               capture->spill_rows != NULL ? capture->options.row_limit : 0,
+          .source_low_rows = capture->source_low_rows,
+          .source_low_row_capacity =
+              capture->source_low_rows != NULL ? capture->options.row_limit : 0,
       };
 }
 
@@ -140,5 +153,6 @@ void loom_run_compile_report_capture_deinitialize(
   }
   iree_allocator_free(capture->host_allocator, capture->spill_rows);
   iree_allocator_free(capture->host_allocator, capture->pressure_rows);
+  iree_allocator_free(capture->host_allocator, capture->source_low_rows);
   *capture = (loom_run_compile_report_capture_t){0};
 }

@@ -84,9 +84,12 @@ TEST_F(IreeVmCandidateTest, CompileVmArchiveCandidate) {
   loom_run_candidate_compile_options_t options = {};
   InitializeCompileOptions(&run_module, &options);
   loom_target_compile_report_pressure_row_t pressure_rows[4] = {};
+  loom_target_compile_report_source_low_row_t source_low_rows[4] = {};
   options.report_row_storage = {
       .pressure_rows = pressure_rows,
       .pressure_row_capacity = IREE_ARRAYSIZE(pressure_rows),
+      .source_low_rows = source_low_rows,
+      .source_low_row_capacity = IREE_ARRAYSIZE(source_low_rows),
   };
   loom_target_compile_report_t report = {};
   options.report = &report;
@@ -110,6 +113,9 @@ TEST_F(IreeVmCandidateTest, CompileVmArchiveCandidate) {
   EXPECT_TRUE(
       iree_all_bits_set(candidate.compile_report.detail_flags,
                         LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS));
+  EXPECT_TRUE(
+      iree_all_bits_set(candidate.compile_report.detail_flags,
+                        LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS));
   EXPECT_FALSE(
       iree_string_view_is_empty(candidate.compile_report.target_bundle_name));
   EXPECT_FALSE(
@@ -125,12 +131,21 @@ TEST_F(IreeVmCandidateTest, CompileVmArchiveCandidate) {
   EXPECT_GT(candidate.compile_report.pressure_row_total_count, 0u);
   EXPECT_GT(candidate.compile_report.pressure_row_count, 0u);
   EXPECT_GT(candidate.compile_report.pressure_rows[0].peak_live_units, 0u);
+  EXPECT_EQ(candidate.compile_report.source_low_rows, source_low_rows);
+  EXPECT_GT(candidate.compile_report.source_low_selected_op_count, 0u);
+  EXPECT_GT(candidate.compile_report.source_low_emitted_op_count, 0u);
+  EXPECT_GT(candidate.compile_report.source_low_row_total_count, 0u);
+  EXPECT_GT(candidate.compile_report.source_low_row_count, 0u);
+  EXPECT_GT(candidate.compile_report.source_low_rows[0].emitted_low_op_count,
+            0u);
   EXPECT_EQ(candidate.compile_report.artifact_size,
             candidate.archive.data_length);
   EXPECT_EQ(report.artifact_kind, candidate.compile_report.artifact_kind);
   EXPECT_EQ(report.artifact_size, candidate.compile_report.artifact_size);
   EXPECT_EQ(report.pressure_row_total_count,
             candidate.compile_report.pressure_row_total_count);
+  EXPECT_EQ(report.source_low_row_total_count,
+            candidate.compile_report.source_low_row_total_count);
 
   loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);

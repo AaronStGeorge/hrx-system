@@ -52,6 +52,69 @@ static iree_string_view_t loom_target_compile_report_op_name(
   return loom_op_name(module, op);
 }
 
+static loom_target_compile_report_source_low_selection_kind_t
+loom_target_compile_report_source_low_selection_kind(
+    loom_low_lower_report_selection_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_LOWER_REPORT_SELECTION_RULE:
+      return LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_RULE;
+    case LOOM_LOW_LOWER_REPORT_SELECTION_PLAN:
+      return LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_PLAN;
+    case LOOM_LOW_LOWER_REPORT_SELECTION_NONE:
+    default:
+      return LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_NONE;
+  }
+}
+
+void loom_target_compile_report_record_low_lowering(
+    loom_target_compile_report_t* report,
+    const loom_low_lower_result_t* lower_result) {
+  IREE_ASSERT_ARGUMENT(report);
+  IREE_ASSERT_ARGUMENT(lower_result);
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
+  report->source_low_selected_op_count +=
+      lower_result->selected_source_op_count;
+  report->source_low_emitted_op_count += lower_result->emitted_low_op_count;
+  for (iree_host_size_t i = 0; i < lower_result->report_row_count; ++i) {
+    const loom_low_lower_report_row_t* source_row =
+        &lower_result->report_rows[i];
+    const loom_target_compile_report_source_low_row_t row = {
+        .function_name = source_row->function_name,
+        .source_op_name = source_row->source_op_name,
+        .source_op_kind = source_row->source_op_kind,
+        .selection_kind = loom_target_compile_report_source_low_selection_kind(
+            source_row->selection_kind),
+        .rule_set_index = source_row->rule_set_index,
+        .rule_index = source_row->rule_index,
+        .plan_id = source_row->plan_id,
+        .descriptor_id = source_row->descriptor_id,
+        .emitted_low_op_count = source_row->emitted_low_op_count,
+    };
+    loom_target_compile_report_record_source_low_row(report, &row);
+  }
+  if (lower_result->report_row_total_count > lower_result->report_row_count) {
+    report->source_low_row_total_count +=
+        lower_result->report_row_total_count - lower_result->report_row_count;
+  }
+}
+
+iree_status_t loom_target_compile_report_allocate_low_lowering_rows(
+    const loom_target_compile_report_t* report, iree_arena_allocator_t* arena,
+    loom_low_lower_report_storage_t* out_storage) {
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_storage);
+  *out_storage = (loom_low_lower_report_storage_t){0};
+  if (report == NULL || report->source_low_rows == NULL ||
+      report->source_low_row_count >= report->source_low_row_capacity) {
+    return iree_ok_status();
+  }
+  out_storage->row_capacity =
+      report->source_low_row_capacity - report->source_low_row_count;
+  return iree_arena_allocate_array(arena, out_storage->row_capacity,
+                                   sizeof(*out_storage->rows),
+                                   (void**)&out_storage->rows);
+}
+
 static void loom_target_compile_report_record_pressure_rows(
     loom_target_compile_report_t* report,
     const loom_liveness_analysis_t* liveness) {

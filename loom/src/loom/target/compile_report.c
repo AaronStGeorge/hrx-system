@@ -28,6 +28,12 @@ void loom_target_compile_report_set_row_storage(
       report->spill_rows != NULL ? row_storage->spill_row_capacity : 0;
   report->spill_row_count = 0;
   report->spill_row_total_count = 0;
+  report->source_low_rows = row_storage ? row_storage->source_low_rows : NULL;
+  report->source_low_row_capacity = report->source_low_rows != NULL
+                                        ? row_storage->source_low_row_capacity
+                                        : 0;
+  report->source_low_row_count = 0;
+  report->source_low_row_total_count = 0;
 }
 
 void loom_target_compile_report_record_status(
@@ -134,5 +140,18 @@ void loom_target_compile_report_record_spill_row(
   if (report->spill_rows != NULL &&
       report->spill_row_count < report->spill_row_capacity) {
     report->spill_rows[report->spill_row_count++] = *row;
+  }
+}
+
+void loom_target_compile_report_record_source_low_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_source_low_row_t* row) {
+  IREE_ASSERT_ARGUMENT(report);
+  IREE_ASSERT_ARGUMENT(row);
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
+  ++report->source_low_row_total_count;
+  if (report->source_low_rows != NULL &&
+      report->source_low_row_count < report->source_low_row_capacity) {
+    report->source_low_rows[report->source_low_row_count++] = *row;
   }
 }
