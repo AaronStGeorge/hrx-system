@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Source func selection for source-to-low lowering.
+// Source module selection for source-to-low lowering.
 //
 // This is cold compilation setup: it resolves a func-owned target profile
 // through symbol facts, checks that the low lowering policy supports the
@@ -83,9 +83,10 @@ iree_status_t loom_low_select_source_funcs(
 // for the arena lifetime. Malformed user IR returns status so command-line
 // tools can report the failure through their normal diagnostic wrapper.
 //
-// This helper is for tests and narrow callers that intentionally require their
-// module to contain exactly one compatible function. Production module passes
-// should use loom_low_select_source_funcs.
+// This helper is for tests and narrow one-shot emitters that intentionally
+// require their module to contain exactly one compatible function. It never
+// accepts a function symbol. Production module passes should use
+// loom_low_select_source_funcs.
 iree_status_t loom_low_select_source_func(
     const loom_module_t* module,
     const loom_low_source_selection_options_t* options,

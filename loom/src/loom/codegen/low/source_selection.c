@@ -31,7 +31,7 @@ static iree_status_t loom_low_source_selection_initialize_fact_table(
       descriptor_registry->target_bundles == NULL) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "source-to-low func selection requires target profile presets");
+        "source-to-low selection requires target profile presets");
   }
   loom_target_preset_registry_t* preset_registry = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate(arena, sizeof(*preset_registry),
@@ -175,7 +175,7 @@ iree_status_t loom_low_select_source_funcs(
       options->policy_registry == NULL) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "source-to-low func selection requires descriptor and policy "
+        "source-to-low selection requires descriptor and policy "
         "registries");
   }
   IREE_RETURN_IF_ERROR(
@@ -227,7 +227,7 @@ iree_status_t loom_low_select_source_func(
       options->policy_registry == NULL) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "source-to-low func selection requires descriptor and policy "
+        "source-to-low selection requires descriptor and policy "
         "registries");
   }
   IREE_RETURN_IF_ERROR(
