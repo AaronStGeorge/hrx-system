@@ -325,3 +325,23 @@ low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : re
   vfmadd231ss xmm1, xmm0, xmm2
   vmovdqu32 [rax + 96], xmm1
   ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512-packed-dot")
+
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %bf16_acc : reg<x86.zmm>, %bf16_lhs : reg<x86.zmm>, %bf16_rhs : reg<x86.zmm>, %i8_acc : reg<x86.zmm>, %i8_lhs : reg<x86.zmm>, %i8_rhs : reg<x86.zmm>) asm<x86.avx512_packed_dot.core> {
+  %bf16_dot = vdpbf16ps %bf16_acc, %bf16_lhs, %bf16_rhs
+  vmovdqu32.store %bf16_dot, %base {disp32 = 0}
+  %i8_dot = vpdpbusd %i8_acc, %i8_lhs, %i8_rhs
+  vmovdqu32.store %i8_dot, %base {disp32 = 64}
+  return
+}
+
+// ----
+.Lbb0:
+  vdpbf16ps zmm0, zmm1, zmm2
+  vmovdqu32 [rax], zmm0
+  vpdpbusd zmm3, zmm4, zmm5
+  vmovdqu32 [rax + 64], zmm3
+  ret

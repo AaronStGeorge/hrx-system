@@ -16,6 +16,8 @@
 
 #define LOOM_X86_CONTRACT_SET_AVX512_CORE IREE_SV("x86.avx512.core")
 #define LOOM_X86_CONTRACT_SET_PACKED_DOT_CORE IREE_SV("x86.packed_dot.core")
+#define LOOM_X86_CONTRACT_SET_AVX512_PACKED_DOT_CORE \
+  IREE_SV("x86.avx512_packed_dot.core")
 
 static bool loom_x86_contract_set_key_is_avx512_core(
     iree_string_view_t contract_set_key) {
@@ -29,10 +31,17 @@ static bool loom_x86_contract_set_key_is_packed_dot_core(
                                 LOOM_X86_CONTRACT_SET_PACKED_DOT_CORE);
 }
 
+static bool loom_x86_contract_set_key_is_avx512_packed_dot_core(
+    iree_string_view_t contract_set_key) {
+  return iree_string_view_equal(contract_set_key,
+                                LOOM_X86_CONTRACT_SET_AVX512_PACKED_DOT_CORE);
+}
+
 static bool loom_x86_contract_set_key_is_x86(
     iree_string_view_t contract_set_key) {
   return loom_x86_contract_set_key_is_avx512_core(contract_set_key) ||
-         loom_x86_contract_set_key_is_packed_dot_core(contract_set_key);
+         loom_x86_contract_set_key_is_packed_dot_core(contract_set_key) ||
+         loom_x86_contract_set_key_is_avx512_packed_dot_core(contract_set_key);
 }
 
 static bool loom_x86_scalar_type_has_packed_dot_register_width(
@@ -56,8 +65,8 @@ static bool loom_x86_scalar_type_has_packed_dot_register_width(
   }
 }
 
-static bool loom_x86_type_static_vector_bit_width(loom_type_t type,
-                                                  uint32_t* out_bit_width) {
+bool loom_x86_packed_dot_type_static_vector_bit_width(loom_type_t type,
+                                                      uint32_t* out_bit_width) {
   *out_bit_width = 0;
   if (!loom_type_is_vector(type) || loom_type_rank(type) != 1 ||
       !loom_type_is_all_static(type)) {
@@ -84,7 +93,8 @@ iree_status_t loom_x86_map_packed_dot_type(void* user_data,
                                            loom_type_t* out_low_type) {
   (void)user_data;
   uint32_t vector_bit_width = 0;
-  if (loom_x86_type_static_vector_bit_width(source_type, &vector_bit_width)) {
+  if (loom_x86_packed_dot_type_static_vector_bit_width(source_type,
+                                                       &vector_bit_width)) {
     switch (vector_bit_width) {
       case 128:
         return loom_low_lower_make_register_type(
@@ -362,11 +372,12 @@ iree_status_t loom_x86_low_legality_verify_packed_dot(
   }
   *out_handled = true;
 
-  if (!loom_x86_contract_set_key_is_packed_dot_core(contract_set_key)) {
+  if (!loom_x86_contract_set_key_is_packed_dot_core(contract_set_key) &&
+      !loom_x86_contract_set_key_is_avx512_packed_dot_core(contract_set_key)) {
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("contract"), contract_set_key,
-        IREE_SV("x86 vector dot ops require the x86.packed_dot.core "
-                "target-low contract set"));
+        IREE_SV("x86 vector dot ops require an x86 packed-dot target-low "
+                "contract set"));
   }
 
   loom_x86_packed_dot_match_diagnostic_t diagnostic = {0};

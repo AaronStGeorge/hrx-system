@@ -401,6 +401,15 @@ def _packed_dot_semantic_tag(descriptor: PackedDotDescriptor) -> str:
 
 
 def _packed_dot_descriptor(descriptor: PackedDotDescriptor) -> Descriptor:
+    asm_forms: tuple[AsmForm, ...] = ()
+    if descriptor.vector_bit_width == 512:
+        asm_forms = _asm(
+            mnemonic=_vector_asm_mnemonic(
+                descriptor.mnemonic, descriptor.vector_bit_width
+            ),
+            results=("dst",),
+            operands=("acc", "lhs", "rhs"),
+        )
     return Descriptor(
         key=descriptor.key,
         mnemonic=descriptor.mnemonic,
@@ -412,6 +421,7 @@ def _packed_dot_descriptor(descriptor: PackedDotDescriptor) -> Descriptor:
             _vector_operand(descriptor.vector_bit_width, "rhs"),
         ),
         constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
+        asm_forms=asm_forms,
         schedule_class=_vector_dot_schedule_class(descriptor.vector_bit_width),
         feature_mask_words=(descriptor.required_feature_bits,),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -1743,4 +1753,62 @@ X86_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
     descriptors=tuple(
         _packed_dot_descriptor(descriptor) for descriptor in X86_PACKED_DOT_DESCRIPTORS
     ),
+)
+
+_AVX512_PACKED_DOT_EXCLUDED_CORE_DESCRIPTOR_KEYS = frozenset(
+    (
+        "x86.avx512.vpdpbusd.zmm",
+        "x86.avx512.vdpbf16ps.zmm",
+    )
+)
+
+
+def _missing_schedule_classes(
+    base: tuple[ScheduleClass, ...],
+    extra: tuple[ScheduleClass, ...],
+) -> tuple[ScheduleClass, ...]:
+    names = {schedule_class.name for schedule_class in base}
+    return tuple(
+        schedule_class for schedule_class in extra if schedule_class.name not in names
+    )
+
+
+X86_AVX512_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
+    key="x86.avx512_packed_dot.core",
+    target_key="x86",
+    feature_key="x86.avx512_packed_dot.v1",
+    c_header_path=Path("loom/src/loom/target/arch/x86/avx512_packed_dot_descriptors.h"),
+    c_source_path=Path("loom/src/loom/target/arch/x86/avx512_packed_dot_descriptors.c"),
+    header_guard="LOOM_TARGET_ARCH_X86_AVX512_PACKED_DOT_DESCRIPTORS_H_",
+    public_header="loom/target/arch/x86/avx512_packed_dot_descriptors.h",
+    function_name="loom_x86_avx512_packed_dot_core_descriptor_set",
+    c_table_prefix="X86Avx512PackedDotCore",
+    c_enum_prefix="X86_AVX512_PACKED_DOT_CORE",
+    generator_version=1,
+    # Preserve AVX512 core register-class IDs so the shared AVX512 lowerers can
+    # be reused by this composite target; append YMM for packed-dot forms.
+    reg_classes=(
+        *X86_AVX512_CORE_DESCRIPTOR_SET.reg_classes,
+        RegClass(
+            _REG_YMM,
+            256,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=32,
+            alias_set_id=2,
+        ),
+    ),
+    resources=X86_AVX512_CORE_DESCRIPTOR_SET.resources,
+    schedule_classes=X86_AVX512_CORE_DESCRIPTOR_SET.schedule_classes
+    + _missing_schedule_classes(
+        X86_AVX512_CORE_DESCRIPTOR_SET.schedule_classes,
+        X86_PACKED_DOT_DESCRIPTOR_SET.schedule_classes,
+    ),
+    enum_domains=X86_AVX512_CORE_DESCRIPTOR_SET.enum_domains,
+    descriptors=tuple(
+        descriptor
+        for descriptor in X86_AVX512_CORE_DESCRIPTOR_SET.descriptors
+        if descriptor.key not in _AVX512_PACKED_DOT_EXCLUDED_CORE_DESCRIPTOR_KEYS
+    )
+    + X86_PACKED_DOT_DESCRIPTOR_SET.descriptors,
 )

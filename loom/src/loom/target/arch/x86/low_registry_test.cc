@@ -45,8 +45,8 @@ TEST(X86LowRegistryTest, VerifiesLinkedRegistryPackage) {
   loom_target_low_descriptor_registry_t registry = {};
   loom_x86_low_descriptor_registry_initialize(&registry);
 
-  EXPECT_EQ(registry.registry.descriptor_set_provider_count, 2u);
-  EXPECT_EQ(registry.target_bundle_count, 2u);
+  EXPECT_EQ(registry.registry.descriptor_set_provider_count, 3u);
+  EXPECT_EQ(registry.target_bundle_count, 3u);
   IREE_ASSERT_OK(loom_target_low_descriptor_registry_verify(
       &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 
@@ -56,6 +56,10 @@ TEST(X86LowRegistryTest, VerifiesLinkedRegistryPackage) {
   ExpectBundleSelectsDescriptorSet(&registry, IREE_SV("x86-packed-dot"),
                                    &loom_x86_low_target_bundle_packed_dot_core,
                                    IREE_SV("x86.packed_dot.core"));
+  ExpectBundleSelectsDescriptorSet(
+      &registry, IREE_SV("x86-avx512-packed-dot"),
+      &loom_x86_low_target_bundle_avx512_packed_dot_core,
+      IREE_SV("x86.avx512_packed_dot.core"));
 }
 
 }  // namespace

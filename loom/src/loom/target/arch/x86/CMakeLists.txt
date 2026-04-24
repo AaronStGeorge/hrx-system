@@ -77,6 +77,27 @@ loom_low_descriptor_cc_library(
     loom::src::loom::codegen::low::descriptors
 )
 
+loom_low_descriptor_cc_library(
+  NAME
+    avx512_packed_dot_descriptors
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptor_shard.py"
+  SOURCE
+    "avx512_packed_dot_descriptors.c"
+  HEADER
+    "avx512_packed_dot_descriptors.h"
+  ARGS
+    "--descriptor-set=x86_avx512_packed_dot_core"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/low_descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/x86/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/x86/packed_dot_data.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/descriptor_sets.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+  DEPS
+    loom::src::loom::codegen::low::descriptors
+)
+
 loom_cc_test(
   NAME
     packed_dot_descriptors_test
@@ -99,6 +120,7 @@ loom_cc_library(
     "low_registry.c"
   DEPS
     ::avx512_descriptors
+    ::avx512_packed_dot_descriptors
     ::feature_bits
     ::packed_dot_descriptors
     iree::base
@@ -122,6 +144,7 @@ loom_cc_library(
     "lower_packed_dot.c"
   DEPS
     ::avx512_descriptors_ids
+    ::avx512_packed_dot_descriptors_ids
     ::packed_dot_contract
     ::packed_dot_descriptors_ids
     ::packed_dot_vector
@@ -188,6 +211,17 @@ iree_executable_test(
     "source_low"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_avx512_packed_dot"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_avx512_packed_dot.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

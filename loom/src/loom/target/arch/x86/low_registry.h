@@ -18,6 +18,8 @@ extern "C" {
 
 extern const loom_target_bundle_t loom_x86_low_target_bundle_avx512_core;
 extern const loom_target_bundle_t loom_x86_low_target_bundle_packed_dot_core;
+extern const loom_target_bundle_t
+    loom_x86_low_target_bundle_avx512_packed_dot_core;
 
 void loom_x86_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry);

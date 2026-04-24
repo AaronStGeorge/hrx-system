@@ -36,6 +36,7 @@ loom_assert_no_dependencies(
     ],
     targets = [
         ":avx512_descriptors",
+        ":avx512_packed_dot_descriptors",
         ":low_registry",
         ":packed_dot_contract",
         ":packed_dot_descriptors",
@@ -47,6 +48,7 @@ loom_assert_no_dependencies(
     name = "core_target_interfaces_no_x86_target_deps",
     dependencies = [
         ":avx512_descriptors",
+        ":avx512_packed_dot_descriptors",
         ":feature_bits",
         ":low_registry",
         ":packed_dot_contract",
@@ -135,6 +137,23 @@ loom_low_descriptor_cc_library(
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
+loom_low_descriptor_cc_library(
+    name = "avx512_packed_dot_descriptors",
+    args = ["--descriptor-set=x86_avx512_packed_dot_core"],
+    cmake_generator = "//loom/py/loom:gen/low_descriptor_shard.py",
+    cmake_generator_deps = [
+        "//loom/py/loom:gen/low_descriptors.py",
+        "//loom/py/loom:target/arch/x86/descriptors.py",
+        "//loom/py/loom:target/arch/x86/packed_dot_data.py",
+        "//loom/py/loom:target/descriptor_sets.py",
+        "//loom/py/loom:target/low_descriptors.py",
+    ],
+    generator = "//loom/py/loom:x86_low_descriptor_shard",
+    header = "avx512_packed_dot_descriptors.h",
+    source = "avx512_packed_dot_descriptors.c",
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
 loom_cc_test(
     name = "packed_dot_descriptors_test",
     srcs = ["packed_dot_descriptors_test.cc"],
@@ -153,6 +172,7 @@ loom_cc_library(
     hdrs = ["low_registry.h"],
     deps = [
         ":avx512_descriptors",
+        ":avx512_packed_dot_descriptors",
         ":feature_bits",
         ":packed_dot_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
@@ -177,6 +197,7 @@ loom_cc_library(
     ],
     deps = [
         ":avx512_descriptors_ids",
+        ":avx512_packed_dot_descriptors_ids",
         ":packed_dot_contract",
         ":packed_dot_descriptors_ids",
         ":packed_dot_vector",
@@ -237,6 +258,7 @@ loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
         "source_low.loom-test",
+        "source_low_avx512_packed_dot.loom-test",
         "source_low_packed_dot.loom-test",
         "source_low_scalar_f32.loom-test",
         "source_low_v4.loom-test",

@@ -65,6 +65,13 @@ DESCRIPTOR_SET_REGISTRATIONS = (
         generates_checked_in_c=False,
     ),
     DescriptorSetRegistration(
+        key="x86.avx512_packed_dot.core",
+        module_name="loom.target.arch.x86.descriptors",
+        symbol_name="X86_AVX512_PACKED_DOT_DESCRIPTOR_SET",
+        aliases=("x86_avx512_packed_dot_core",),
+        generates_checked_in_c=False,
+    ),
+    DescriptorSetRegistration(
         key="test.low.core",
         module_name="loom.target.test.descriptors",
         symbol_name="TEST_LOW_CORE_DESCRIPTOR_SET",

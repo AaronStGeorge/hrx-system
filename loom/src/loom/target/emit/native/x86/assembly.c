@@ -11,6 +11,7 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
+#include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
 #include "loom/target/arch/x86/packed_dot_descriptors.h"
 #include "loom/target/emit/native/assembly.h"
 
@@ -27,6 +28,7 @@ static const char* const kX86Gpr32Names[] = {
 typedef enum loom_x86_descriptor_set_kind_e {
   LOOM_X86_DESCRIPTOR_SET_AVX512_CORE = 0,
   LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE = 1,
+  LOOM_X86_DESCRIPTOR_SET_AVX512_PACKED_DOT_CORE = 2,
 } loom_x86_descriptor_set_kind_t;
 
 typedef enum loom_x86_register_class_kind_e {
@@ -54,6 +56,11 @@ static iree_status_t loom_x86_resolve_descriptor_set_kind(
   if (iree_string_view_equal(schedule->target.descriptor_set_key,
                              IREE_SV("x86.packed_dot.core"))) {
     *out_kind = LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(schedule->target.descriptor_set_key,
+                             IREE_SV("x86.avx512_packed_dot.core"))) {
+    *out_kind = LOOM_X86_DESCRIPTOR_SET_AVX512_PACKED_DOT_CORE;
     return iree_ok_status();
   }
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
@@ -141,6 +148,30 @@ static iree_status_t loom_x86_register_class_kind(
           return iree_ok_status();
         case X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_ZMM:
           *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
+          return iree_ok_status();
+        default:
+          break;
+      }
+      break;
+    case LOOM_X86_DESCRIPTOR_SET_AVX512_PACKED_DOT_CORE:
+      switch (assignment->descriptor_reg_class_id) {
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_GPR32:
+          *out_kind = LOOM_X86_REGISTER_CLASS_GPR32;
+          return iree_ok_status();
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_GPR64:
+          *out_kind = LOOM_X86_REGISTER_CLASS_GPR64;
+          return iree_ok_status();
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_XMM:
+          *out_kind = LOOM_X86_REGISTER_CLASS_XMM;
+          return iree_ok_status();
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_YMM:
+          *out_kind = LOOM_X86_REGISTER_CLASS_YMM;
+          return iree_ok_status();
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_ZMM:
+          *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
+          return iree_ok_status();
+        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_K:
+          *out_kind = LOOM_X86_REGISTER_CLASS_K;
           return iree_ok_status();
         default:
           break;
@@ -900,6 +931,10 @@ static iree_status_t loom_x86_append_descriptor_packet(
   }
   if (descriptor->stable_id ==
       X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_LEA_ADD_GPR64) {
+    return loom_x86_append_lea_add_packet(state, context);
+  }
+  if (descriptor->stable_id ==
+      X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_ID_X86_AVX512_LEA_ADD_GPR64) {
     return loom_x86_append_lea_add_packet(state, context);
   }
   return loom_x86_append_canonical_asm_form_packet(state, context);

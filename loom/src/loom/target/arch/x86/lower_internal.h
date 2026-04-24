@@ -52,6 +52,11 @@ iree_status_t loom_x86_map_packed_dot_type(void* user_data,
                                            loom_type_t source_type,
                                            loom_type_t* out_low_type);
 
+// Returns true when |type| is a static vector shape that can live in an x86
+// packed-dot vector register, and writes the total register bit width.
+bool loom_x86_packed_dot_type_static_vector_bit_width(loom_type_t type,
+                                                      uint32_t* out_bit_width);
+
 // Selects a target-owned plan for x86 packed-dot source ops.
 iree_status_t loom_x86_select_packed_dot_op(void* user_data,
                                             loom_low_lower_context_t* context,

@@ -16,6 +16,7 @@ from loom.gen.low_descriptors import DescriptorAllowlist, generate_descriptor_se
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
 from loom.target.arch.x86.descriptors import (
     X86_AVX512_CORE_DESCRIPTOR_SET,
+    X86_AVX512_PACKED_DOT_DESCRIPTOR_SET,
     X86_PACKED_DOT_DESCRIPTOR_SET,
 )
 from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
@@ -169,6 +170,26 @@ def test_generate_x86_packed_dot_descriptor_set() -> None:
     assert "x86.vector.dot.256" in generated.source
     assert "x86.vector.dot.512" in generated.source
     assert any(descriptor["key"] == "x86.avx10_2.vdpphps.zmm" for descriptor in manifest["descriptors"])
+
+
+def test_generate_x86_avx512_packed_dot_descriptor_set() -> None:
+    generated = generate_descriptor_set(X86_AVX512_PACKED_DOT_DESCRIPTOR_SET)
+
+    assert "loom_x86_avx512_packed_dot_core_descriptor_set" in generated.header
+    assert "X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_GPR64" in generated.header
+    assert "X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_X86_YMM" in generated.header
+    assert "x86.avx512.vmovdqu32.store.zmm" in generated.source
+    assert "x86.avx512_bf16.vdpbf16ps.zmm" in generated.source
+    assert "x86.avx_vnni.vpdpbusd.ymm" in generated.source
+    assert "x86.avx512.vdpbf16ps.zmm" not in generated.source
+
+    manifest = json.loads(generated.manifest_json)
+    assert manifest["key"] == "x86.avx512_packed_dot.core"
+    assert manifest["target"] == "x86"
+    assert manifest["feature_namespace"] == "x86.avx512_packed_dot.v1"
+    assert manifest["table_counts"]["reg_classes"] == 6
+    assert any(descriptor["key"] == "x86.avx512_bf16.vdpbf16ps.zmm" for descriptor in manifest["descriptors"])
+    assert any(descriptor["key"] == "x86.avx512.vmovdqu32.store.zmm" for descriptor in manifest["descriptors"])
 
 
 def test_generate_test_low_core_descriptor_set() -> None:
