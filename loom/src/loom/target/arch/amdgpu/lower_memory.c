@@ -902,44 +902,12 @@ static bool loom_amdgpu_select_ds2_memory_descriptor(
   return false;
 }
 
-// The current slot builder may reorder multiple LDS slots around the low
-// function anchor, so a single source LDS root is the only source-local proof
-// that the selected slot will receive byte offset zero.
-bool loom_amdgpu_source_function_proves_zero_lds_slot_base(
-    loom_func_like_t source_function, loom_value_id_t root_value_id) {
-  if (!loom_func_like_isa(source_function)) {
-    return false;
-  }
-  loom_region_t* body = loom_func_like_body(source_function);
-  if (body == NULL) {
-    return false;
-  }
-  bool found_root = false;
-  uint32_t workgroup_alloca_count = 0;
-  for (uint16_t block_index = 0; block_index < body->block_count;
-       ++block_index) {
-    const loom_block_t* block = loom_region_const_block(body, block_index);
-    const loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      if (!loom_buffer_alloca_isa(op) ||
-          loom_buffer_alloca_memory_space(op) !=
-              LOOM_BUFFER_MEMORY_SPACE_WORKGROUP) {
-        continue;
-      }
-      ++workgroup_alloca_count;
-      found_root = found_root || loom_buffer_alloca_result(op) == root_value_id;
-      if (workgroup_alloca_count > 1) {
-        return false;
-      }
-    }
-  }
-  return found_root && workgroup_alloca_count == 1;
-}
-
 static bool loom_amdgpu_try_select_ds_addtid_memory_descriptor(
     const loom_low_descriptor_set_t* descriptor_set,
-    loom_func_like_t source_function, loom_amdgpu_memory_access_plan_t* access,
+    const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
+    loom_amdgpu_memory_access_plan_t* access,
     loom_amdgpu_memory_operation_kind_t kind) {
+  uint64_t root_byte_offset = 0;
   if (access->vgpr_count != 1 ||
       access->source.dynamic_index == LOOM_VALUE_ID_INVALID ||
       access->dynamic_index_kind != LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR ||
@@ -950,8 +918,10 @@ static bool loom_amdgpu_try_select_ds_addtid_memory_descriptor(
           access->source.element_byte_count ||
       access->source.vector_lane_byte_stride !=
           access->source.element_byte_count ||
-      !loom_amdgpu_source_function_proves_zero_lds_slot_base(
-          source_function, access->source.root_value_id)) {
+      !loom_amdgpu_source_lds_layout_lookup_root(fact_table, source_function,
+                                                 access->source.root_value_id,
+                                                 &root_byte_offset) ||
+      root_byte_offset != 0) {
     return false;
   }
 
@@ -1129,13 +1099,14 @@ static loom_amdgpu_memory_address_attempt_result_t
 loom_amdgpu_memory_address_attempt_apply(
     const loom_amdgpu_memory_address_attempt_t* attempt,
     const loom_low_descriptor_set_t* descriptor_set,
-    loom_func_like_t source_function, loom_amdgpu_memory_operation_kind_t kind,
+    const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
+    loom_amdgpu_memory_operation_kind_t kind,
     loom_amdgpu_memory_access_plan_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
   switch (attempt->kind) {
     case LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_DS_ADDTID:
       return loom_amdgpu_try_select_ds_addtid_memory_descriptor(
-                 descriptor_set, source_function, access, kind)
+                 descriptor_set, fact_table, source_function, access, kind)
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
                  : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
     case LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_DS_2ADDR:
@@ -1180,7 +1151,7 @@ loom_amdgpu_memory_address_attempt_apply(
 
 static bool loom_amdgpu_memory_access_select_address_form(
     const loom_low_descriptor_set_t* descriptor_set,
-    loom_func_like_t source_function,
+    const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
     loom_amdgpu_memory_descriptor_domain_t descriptor_domain,
     loom_amdgpu_memory_operation_kind_t kind,
     loom_amdgpu_memory_access_plan_t* access,
@@ -1196,8 +1167,8 @@ static bool loom_amdgpu_memory_access_select_address_form(
   for (iree_host_size_t i = 0; i < attempt_count; ++i) {
     const loom_amdgpu_memory_address_attempt_result_t result =
         loom_amdgpu_memory_address_attempt_apply(&attempts[i], descriptor_set,
-                                                 source_function, kind, access,
-                                                 diagnostic);
+                                                 fact_table, source_function,
+                                                 kind, access, diagnostic);
     if (result == LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED) {
       return true;
     }
@@ -1320,8 +1291,8 @@ bool loom_amdgpu_memory_access_select(
   }
 
   return loom_amdgpu_memory_access_select_address_form(
-      descriptor_set, source_function, descriptor_domain, kind, out_access,
-      out_diagnostic);
+      descriptor_set, fact_table, source_function, descriptor_domain, kind,
+      out_access, out_diagnostic);
 }
 
 static bool loom_amdgpu_memory_access_select_with_source_function(

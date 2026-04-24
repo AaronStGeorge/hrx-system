@@ -94,12 +94,16 @@ static iree_status_t loom_amdgpu_lower_buffer_alloca(
       loom_buffer_alloca_result(source_op), &slot_ref));
 
   loom_builder_t* builder = loom_low_lower_context_builder(context);
-  loom_op_t* low_func_op = loom_low_lower_context_low_function(context);
+  loom_func_like_t source_function =
+      loom_low_lower_context_source_function(context);
   loom_builder_ip_t saved_ip = loom_builder_save(builder);
-  loom_builder_set_after(builder, low_func_op);
+  // The source function stays live until lowering completes; inserting before
+  // it appends low.slot records in source alloca order.
+  loom_builder_set_before(builder, source_function.op);
   loom_op_t* slot_op = NULL;
   iree_status_t status = loom_low_slot_build(
-      builder, slot_ref, loom_low_func_def_callee(low_func_op),
+      builder, slot_ref,
+      loom_low_func_def_callee(loom_low_lower_context_low_function(context)),
       LOOM_LOW_SLOT_SPACE_LDS, plan->byte_length, plan->base_alignment,
       source_op->location, &slot_op);
   loom_builder_restore(builder, saved_ip);

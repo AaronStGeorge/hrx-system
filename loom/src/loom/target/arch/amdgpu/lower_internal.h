@@ -176,6 +176,12 @@ bool loom_amdgpu_module_value_as_i32_constant(const loom_module_t* module,
 bool loom_amdgpu_value_facts_as_exact_non_negative_i64(loom_value_facts_t facts,
                                                        int64_t* out_value);
 
+// Resolves the source-order LDS slot base for a workgroup buffer.alloca root.
+// The layout must match the low.slot order emitted by buffer lowering.
+bool loom_amdgpu_source_lds_layout_lookup_root(
+    const loom_value_fact_table_t* fact_table, loom_func_like_t source_function,
+    loom_value_id_t root_value_id, uint64_t* out_byte_offset);
+
 // Returns true when an attribute can encode as a signed 32-bit immediate.
 bool loom_amdgpu_attr_is_i32_immediate(loom_attribute_t value);
 

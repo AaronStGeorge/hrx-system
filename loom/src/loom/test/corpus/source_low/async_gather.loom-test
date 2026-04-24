@@ -53,3 +53,22 @@ func.def @async_gather_two_stage(%input: buffer) {
   kernel.async.wait %load1 {newer_groups = 0} : kernel.async.group
   func.return
 }
+
+// ====
+
+func.def @async_gather_second_lds_slot(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %pad_bytes = index.constant 256 : offset
+  %scratch_bytes = index.constant 1024 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source_base = buffer.view %global[%zero] : buffer -> view<64x16xi8, #dense>
+  %source = view.subview %source_base[%tid, 0] : view<64x16xi8, #dense> -> view<1x16xi8, #dense>
+  %pad = buffer.alloca %pad_bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch = buffer.alloca %scratch_bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x16xi8, #dense>
+  %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x16xi8, #dense> to view<64x1x16xi8, #dense> -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}

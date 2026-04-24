@@ -119,11 +119,6 @@ bool loom_amdgpu_memory_access_select_dynamic_index_kind(
     const loom_module_t* module, loom_amdgpu_memory_access_plan_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic);
 
-// Returns true when the current source function layout proves |root_value_id|
-// is the only LDS slot and therefore has byte offset zero.
-bool loom_amdgpu_source_function_proves_zero_lds_slot_base(
-    loom_func_like_t source_function, loom_value_id_t root_value_id);
-
 // Emits the VGPR address operand for a selected memory access.
 iree_status_t loom_amdgpu_emit_memory_vaddr(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

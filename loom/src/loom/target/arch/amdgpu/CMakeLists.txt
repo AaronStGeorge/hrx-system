@@ -466,6 +466,7 @@ loom_cc_library(
     "lower_dot_rules.c"
     "lower_emit_support.c"
     "lower_integer_rules.c"
+    "lower_lds_layout.c"
     "lower_mask.c"
     "lower_memory.c"
     "lower_memory_cache.c"

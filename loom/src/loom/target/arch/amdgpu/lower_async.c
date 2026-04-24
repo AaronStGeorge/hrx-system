@@ -196,8 +196,10 @@ static bool loom_amdgpu_async_gather_select_dest(
         LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DEST_MEMORY_SPACE;
     return false;
   }
-  if (!loom_amdgpu_source_function_proves_zero_lds_slot_base(
-          source_function, dest_reference.root_value_id)) {
+  uint64_t lds_root_byte_offset = 0;
+  if (!loom_amdgpu_source_lds_layout_lookup_root(fact_table, source_function,
+                                                 dest_reference.root_value_id,
+                                                 &lds_root_byte_offset)) {
     diagnostic->rejection_bits |=
         LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DEST_SLOT_BASE;
     return false;
@@ -206,12 +208,19 @@ static bool loom_amdgpu_async_gather_select_dest(
   int64_t dest_byte_offset = 0;
   if (!loom_amdgpu_async_gather_exact_i64(dest_reference.base_byte_offset,
                                           &dest_byte_offset) ||
-      dest_byte_offset < 0 || dest_byte_offset > UINT32_MAX) {
+      dest_byte_offset < 0) {
     diagnostic->rejection_bits |=
         LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DEST_OFFSET;
     return false;
   }
-  plan->dest_byte_offset = (uint32_t)dest_byte_offset;
+  const uint64_t view_byte_offset = (uint64_t)dest_byte_offset;
+  if (lds_root_byte_offset > UINT32_MAX ||
+      view_byte_offset > UINT32_MAX - lds_root_byte_offset) {
+    diagnostic->rejection_bits |=
+        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DEST_OFFSET;
+    return false;
+  }
+  plan->dest_byte_offset = (uint32_t)(lds_root_byte_offset + view_byte_offset);
   return true;
 }
 
@@ -496,8 +505,7 @@ static iree_string_view_t loom_amdgpu_async_gather_rejection_detail(
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DEST_SLOT_BASE)) {
-    return IREE_SV(
-        "destination LDS root must have provable byte-zero slot base");
+    return IREE_SV("destination LDS root must have a known slot base");
   }
   if (iree_any_bit_set(diagnostic->rejection_bits,
                        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_DEST_OFFSET)) {
