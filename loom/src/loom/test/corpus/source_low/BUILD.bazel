@@ -14,6 +14,7 @@ package(
 
 exports_files([
     "index_addressing.loom-test",
+    "lookup_table.loom-test",
     "memory_cache_policy_non_temporal.loom-test",
     "memory_cache_policy_scopes.loom-test",
     "memory_workgroup_indexed.loom-test",
@@ -36,6 +37,7 @@ loom_check_test_suite(
     name = "test",
     srcs = [
         "index_addressing.loom-test",
+        "lookup_table.loom-test",
         "memory_cache_policy_non_temporal.loom-test",
         "memory_cache_policy_scopes.loom-test",
         "memory_workgroup_indexed.loom-test",

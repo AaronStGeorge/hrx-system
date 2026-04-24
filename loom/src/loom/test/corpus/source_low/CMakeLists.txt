@@ -23,6 +23,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "lookup_table"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/lookup_table.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "memory_cache_policy_non_temporal"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/memory_cache_policy_non_temporal.loom-test"

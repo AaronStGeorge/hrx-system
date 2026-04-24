@@ -791,6 +791,7 @@ loom_check_test_suite(
     ],
     data = [
         "//loom/src/loom/test/corpus/source_low:index_addressing.loom-test",
+        "//loom/src/loom/test/corpus/source_low:lookup_table.loom-test",
         "//loom/src/loom/test/corpus/source_low:memory_cache_policy_non_temporal.loom-test",
         "//loom/src/loom/test/corpus/source_low:memory_cache_policy_scopes.loom-test",
         "//loom/src/loom/test/corpus/source_low:memory_workgroup_indexed.loom-test",
