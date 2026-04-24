@@ -71,6 +71,16 @@ static loom_type_t loom_low_source_workload_view4xi32_type(
   return type;
 }
 
+static loom_type_t loom_low_source_workload_view4xf32_type(
+    loom_value_id_t layout_id) {
+  loom_type_t type =
+      loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(4), /*encoding_id=*/0);
+  type.encoding_id = (uint16_t)layout_id;
+  type.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+  return type;
+}
+
 //===----------------------------------------------------------------------===//
 // Config
 //===----------------------------------------------------------------------===//
@@ -330,10 +340,14 @@ typedef struct loom_low_source_workload_hook_context_t {
   loom_builder_t* builder;
   // Live source values available for operand selection.
   loom_low_source_workload_values_t* values;
-  // Source view used by generated loads.
-  loom_value_id_t load_view;
-  // Source view used by generated stores.
-  loom_value_id_t store_view;
+  // Source i32 vector view used by generated loads.
+  loom_value_id_t integer_load_view;
+  // Source i32 vector view used by generated stores.
+  loom_value_id_t integer_store_view;
+  // Source f32 vector view used by generated loads.
+  loom_value_id_t float_load_view;
+  // Source f32 vector view used by generated stores.
+  loom_value_id_t float_store_view;
 } loom_low_source_workload_hook_context_t;
 
 typedef iree_status_t (*loom_low_source_workload_hook_fn_t)(
@@ -745,8 +759,8 @@ static iree_status_t loom_low_source_workload_gen_vector4xi32_load(
 
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(loom_vector_load_build(
-      context->builder, 0, context->load_view, NULL, 0, static_indices, 1, 0, 0,
-      vector_type, LOOM_LOCATION_UNKNOWN, &op));
+      context->builder, 0, context->integer_load_view, NULL, 0, static_indices,
+      1, 0, 0, vector_type, LOOM_LOCATION_UNKNOWN, &op));
   loom_low_source_workload_values_add(context->values,
                                       loom_vector_load_result(op), vector_type);
   *out_result = LOOM_LOW_SOURCE_WORKLOAD_HOOK_EMITTED;
@@ -769,8 +783,49 @@ static iree_status_t loom_low_source_workload_gen_vector4xi32_store(
       context->builder, &static_indices));
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(loom_vector_store_build(
-      context->builder, 0, value, context->store_view, NULL, 0, static_indices,
-      1, 0, 0, LOOM_LOCATION_UNKNOWN, &op));
+      context->builder, 0, value, context->integer_store_view, NULL, 0,
+      static_indices, 1, 0, 0, LOOM_LOCATION_UNKNOWN, &op));
+  (void)op;
+  *out_result = LOOM_LOW_SOURCE_WORKLOAD_HOOK_EMITTED;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_source_workload_gen_vector4xf32_load(
+    const loom_low_source_workload_hook_context_t* context,
+    loom_low_source_workload_hook_result_t* out_result) {
+  loom_type_t vector_type = loom_low_source_workload_vector4xf32_type();
+  int64_t* static_indices = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_source_workload_allocate_static_zero_index(
+      context->builder, &static_indices));
+
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_load_build(
+      context->builder, 0, context->float_load_view, NULL, 0, static_indices, 1,
+      0, 0, vector_type, LOOM_LOCATION_UNKNOWN, &op));
+  loom_low_source_workload_values_add(context->values,
+                                      loom_vector_load_result(op), vector_type);
+  *out_result = LOOM_LOW_SOURCE_WORKLOAD_HOOK_EMITTED;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_source_workload_gen_vector4xf32_store(
+    const loom_low_source_workload_hook_context_t* context,
+    loom_low_source_workload_hook_result_t* out_result) {
+  loom_type_t vector_type = loom_low_source_workload_vector4xf32_type();
+  loom_value_id_t value = loom_low_source_workload_values_pick_exact_type(
+      context->random, context->values, vector_type);
+  if (value == LOOM_VALUE_ID_INVALID) {
+    *out_result = LOOM_LOW_SOURCE_WORKLOAD_HOOK_SKIPPED;
+    return iree_ok_status();
+  }
+
+  int64_t* static_indices = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_source_workload_allocate_static_zero_index(
+      context->builder, &static_indices));
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_store_build(
+      context->builder, 0, value, context->float_store_view, NULL, 0,
+      static_indices, 1, 0, 0, LOOM_LOCATION_UNKNOWN, &op));
   (void)op;
   *out_result = LOOM_LOW_SOURCE_WORKLOAD_HOOK_EMITTED;
   return iree_ok_status();
@@ -817,6 +872,8 @@ static const loom_low_source_workload_hook_t kLoomLowSourceWorkloadHooks[] = {
     {2, loom_low_source_workload_gen_vector4xi32_select},
     {2, loom_low_source_workload_gen_vector4xi32_load},
     {2, loom_low_source_workload_gen_vector4xi32_store},
+    {2, loom_low_source_workload_gen_vector4xf32_load},
+    {2, loom_low_source_workload_gen_vector4xf32_store},
     {3, loom_low_source_workload_gen_index_madd},
 };
 
@@ -846,8 +903,9 @@ static iree_status_t loom_low_source_workload_generate_body(
     loom_low_source_workload_random_t* random,
     const loom_low_source_workload_hook_t* hooks, iree_host_size_t hook_count,
     uint16_t op_count, loom_builder_t* builder,
-    loom_low_source_workload_values_t* values, loom_value_id_t load_view,
-    loom_value_id_t store_view) {
+    loom_low_source_workload_values_t* values,
+    loom_value_id_t integer_load_view, loom_value_id_t integer_store_view,
+    loom_value_id_t float_load_view, loom_value_id_t float_store_view) {
   if (hook_count == 0) {
     return iree_ok_status();
   }
@@ -858,8 +916,10 @@ static iree_status_t loom_low_source_workload_generate_body(
         .random = random,
         .builder = builder,
         .values = values,
-        .load_view = load_view,
-        .store_view = store_view,
+        .integer_load_view = integer_load_view,
+        .integer_store_view = integer_store_view,
+        .float_load_view = float_load_view,
+        .float_store_view = float_store_view,
     };
     iree_host_size_t hook_index =
         loom_low_source_workload_select_hook(random, hooks, hook_count);
@@ -969,25 +1029,43 @@ static iree_status_t loom_low_source_workload_generate_module_into(
   IREE_RETURN_IF_ERROR(loom_index_constant_build(
       &builder, loom_attr_i64(0), loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET),
       LOOM_LOCATION_UNKNOWN, &zero_op));
-  loom_type_t view_type = loom_low_source_workload_view4xi32_type(
+  loom_type_t integer_view_type = loom_low_source_workload_view4xi32_type(
       loom_encoding_layout_dense_result(layout_op));
-  loom_op_t* load_view_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_buffer_view_build(&builder, loom_block_arg_id(entry_block, 0),
-                             loom_index_constant_result(zero_op), view_type,
-                             LOOM_LOCATION_UNKNOWN, &load_view_op));
-  loom_value_id_t load_view = loom_buffer_view_result(load_view_op);
-  loom_op_t* store_view_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_buffer_view_build(&builder, loom_block_arg_id(entry_block, 1),
-                             loom_index_constant_result(zero_op), view_type,
-                             LOOM_LOCATION_UNKNOWN, &store_view_op));
-  loom_value_id_t store_view = loom_buffer_view_result(store_view_op);
+  loom_op_t* integer_load_view_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_buffer_view_build(
+      &builder, loom_block_arg_id(entry_block, 0),
+      loom_index_constant_result(zero_op), integer_view_type,
+      LOOM_LOCATION_UNKNOWN, &integer_load_view_op));
+  loom_value_id_t integer_load_view =
+      loom_buffer_view_result(integer_load_view_op);
+  loom_op_t* integer_store_view_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_buffer_view_build(
+      &builder, loom_block_arg_id(entry_block, 1),
+      loom_index_constant_result(zero_op), integer_view_type,
+      LOOM_LOCATION_UNKNOWN, &integer_store_view_op));
+  loom_value_id_t integer_store_view =
+      loom_buffer_view_result(integer_store_view_op);
+  loom_type_t float_view_type = loom_low_source_workload_view4xf32_type(
+      loom_encoding_layout_dense_result(layout_op));
+  loom_op_t* float_load_view_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_buffer_view_build(
+      &builder, loom_block_arg_id(entry_block, 0),
+      loom_index_constant_result(zero_op), float_view_type,
+      LOOM_LOCATION_UNKNOWN, &float_load_view_op));
+  loom_value_id_t float_load_view = loom_buffer_view_result(float_load_view_op);
+  loom_op_t* float_store_view_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_buffer_view_build(
+      &builder, loom_block_arg_id(entry_block, 1),
+      loom_index_constant_result(zero_op), float_view_type,
+      LOOM_LOCATION_UNKNOWN, &float_store_view_op));
+  loom_value_id_t float_store_view =
+      loom_buffer_view_result(float_store_view_op);
 
   IREE_RETURN_IF_ERROR(loom_low_source_workload_generate_body(
       random, kLoomLowSourceWorkloadHooks,
       IREE_ARRAYSIZE(kLoomLowSourceWorkloadHooks), config->op_count, &builder,
-      &values, load_view, store_view));
+      &values, integer_load_view, integer_store_view, float_load_view,
+      float_store_view));
 
   loom_value_id_t returns[] = {
       loom_low_source_workload_pick_latest_exact_type(
@@ -1071,7 +1149,8 @@ iree_status_t loom_low_source_workload_generate_fuzz_module(
 //===----------------------------------------------------------------------===//
 
 static void loom_low_source_workload_count_op(
-    const loom_op_t* op, loom_low_source_workload_counts_t* counts) {
+    const loom_module_t* module, const loom_op_t* op,
+    loom_low_source_workload_counts_t* counts) {
   switch (op->kind) {
     case LOOM_OP_SCALAR_ADDI:
     case LOOM_OP_SCALAR_SUBI:
@@ -1119,9 +1198,17 @@ static void loom_low_source_workload_count_op(
       break;
     case LOOM_OP_VECTOR_LOAD:
       ++counts->vector_load_op_count;
+      if (loom_type_element_type(loom_module_value_type(
+              module, loom_vector_load_result(op))) == LOOM_SCALAR_TYPE_F32) {
+        ++counts->vector_float_load_op_count;
+      }
       break;
     case LOOM_OP_VECTOR_STORE:
       ++counts->vector_store_op_count;
+      if (loom_type_element_type(loom_module_value_type(
+              module, loom_vector_store_value(op))) == LOOM_SCALAR_TYPE_F32) {
+        ++counts->vector_float_store_op_count;
+      }
       break;
     case LOOM_OP_INDEX_MADD:
       ++counts->index_madd_op_count;
@@ -1132,7 +1219,9 @@ static void loom_low_source_workload_count_op(
 }
 
 void loom_low_source_workload_count_func_ops(
-    const loom_op_t* func_op, loom_low_source_workload_counts_t* out_counts) {
+    const loom_module_t* module, const loom_op_t* func_op,
+    loom_low_source_workload_counts_t* out_counts) {
+  IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(func_op);
   IREE_ASSERT_ARGUMENT(out_counts);
   memset(out_counts, 0, sizeof(*out_counts));
@@ -1142,7 +1231,7 @@ void loom_low_source_workload_count_func_ops(
     const loom_block_t* block = loom_region_const_block(body, block_index);
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
-      loom_low_source_workload_count_op(op, out_counts);
+      loom_low_source_workload_count_op(module, op, out_counts);
     }
   }
 }
@@ -1172,7 +1261,11 @@ void loom_low_source_workload_counts_accumulate(
   target_counts->vector_select_op_count +=
       source_counts->vector_select_op_count;
   target_counts->vector_load_op_count += source_counts->vector_load_op_count;
+  target_counts->vector_float_load_op_count +=
+      source_counts->vector_float_load_op_count;
   target_counts->vector_store_op_count += source_counts->vector_store_op_count;
+  target_counts->vector_float_store_op_count +=
+      source_counts->vector_float_store_op_count;
   target_counts->index_madd_op_count += source_counts->index_madd_op_count;
 }
 
@@ -1216,7 +1309,7 @@ static void loom_low_source_workload_count_module_source_ops(
       continue;
     }
     loom_low_source_workload_counts_t func_counts;
-    loom_low_source_workload_count_func_ops(op, &func_counts);
+    loom_low_source_workload_count_func_ops(module, op, &func_counts);
     loom_low_source_workload_counts_accumulate(out_counts, &func_counts);
   }
 }

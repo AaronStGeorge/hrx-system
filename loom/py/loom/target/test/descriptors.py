@@ -563,12 +563,38 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.SIDE_EFFECTING,),
         ),
         Descriptor(
+            key="test.load.v4f32",
+            mnemonic="test.load.v4f32",
+            semantic_tag="memory.load.v128.f32",
+            operands=(
+                Operand("dst", OperandRole.RESULT, _F32_ALT, unit_count=4),
+                _ptr_resource("address"),
+            ),
+            asm_forms=_asm(results=("dst",), operands=("address",)),
+            effects=(_LOAD_EFFECT,),
+            schedule_class=_SCHEDULE_LOAD,
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        Descriptor(
             key="test.store.v4i32",
             mnemonic="test.store.v4i32",
             semantic_tag="memory.store.v128",
             operands=(
                 _ptr_resource("address"),
                 Operand("value", OperandRole.OPERAND, _I32_ALT, unit_count=4),
+            ),
+            asm_forms=_asm(operands=("address", "value")),
+            effects=(_STORE_EFFECT,),
+            schedule_class=_SCHEDULE_STORE,
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        Descriptor(
+            key="test.store.v4f32",
+            mnemonic="test.store.v4f32",
+            semantic_tag="memory.store.v128.f32",
+            operands=(
+                _ptr_resource("address"),
+                Operand("value", OperandRole.OPERAND, _F32_ALT, unit_count=4),
             ),
             asm_forms=_asm(operands=("address", "value")),
             effects=(_STORE_EFFECT,),

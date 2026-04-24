@@ -1505,6 +1505,50 @@ static bool loom_test_low_source_memory_access_is_supported(
          plan->cache_policy.build_flags == 0;
 }
 
+typedef struct loom_test_low_memory_access_plan_t {
+  // Target-independent source memory decomposition.
+  loom_low_source_memory_access_plan_t access;
+  // Test-low memory descriptor selected during source op selection.
+  uint64_t descriptor_id;
+} loom_test_low_memory_access_plan_t;
+
+static bool loom_test_low_memory_access_descriptor_id(
+    const loom_module_t* module, const loom_op_t* source_op,
+    uint64_t* out_descriptor_id) {
+  IREE_ASSERT_ARGUMENT(out_descriptor_id);
+  *out_descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
+  switch (source_op->kind) {
+    case LOOM_OP_VECTOR_LOAD: {
+      const loom_type_t result_type =
+          loom_module_value_type(module, loom_vector_load_result(source_op));
+      if (loom_test_low_is_vector_4xi32(result_type)) {
+        *out_descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_LOAD_V4I32;
+        return true;
+      }
+      if (loom_test_low_is_vector_4xf32(result_type)) {
+        *out_descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_LOAD_V4F32;
+        return true;
+      }
+      return false;
+    }
+    case LOOM_OP_VECTOR_STORE: {
+      const loom_type_t value_type =
+          loom_module_value_type(module, loom_vector_store_value(source_op));
+      if (loom_test_low_is_vector_4xi32(value_type)) {
+        *out_descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_STORE_V4I32;
+        return true;
+      }
+      if (loom_test_low_is_vector_4xf32(value_type)) {
+        *out_descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_STORE_V4F32;
+        return true;
+      }
+      return false;
+    }
+    default:
+      return false;
+  }
+}
+
 static iree_status_t loom_test_low_select_memory_access(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_source_memory_operation_kind_t operation_kind,
@@ -1521,11 +1565,19 @@ static iree_status_t loom_test_low_select_memory_access(
       !loom_test_low_source_memory_access_is_supported(&access)) {
     return iree_ok_status();
   }
+  uint64_t descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE;
+  if (!loom_test_low_memory_access_descriptor_id(
+          loom_low_lower_context_module(context), source_op, &descriptor_id)) {
+    return iree_ok_status();
+  }
 
-  loom_low_source_memory_access_plan_t* plan_data = NULL;
+  loom_test_low_memory_access_plan_t* plan_data = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
       context, sizeof(*plan_data), (void**)&plan_data));
-  *plan_data = access;
+  *plan_data = (loom_test_low_memory_access_plan_t){
+      .access = access,
+      .descriptor_id = descriptor_id,
+  };
   *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
   return iree_ok_status();
 }
@@ -1565,17 +1617,17 @@ static iree_status_t loom_test_low_emit_buffer_view(
 
 static iree_status_t loom_test_low_emit_vector_load(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_low_source_memory_access_plan_t* access) {
-  IREE_ASSERT_ARGUMENT(access);
+    const loom_test_low_memory_access_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, access->view_value_id, &low_resource));
+      context, plan->access.view_value_id, &low_resource));
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
       context, source_op, loom_vector_load_result(source_op), &result_type));
   loom_op_t* low_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_LOAD_V4I32, &low_resource, 1,
+      context, plan->descriptor_id, &low_resource, 1,
       loom_named_attr_slice_empty(), &result_type, 1, NULL, 0,
       source_op->location, &low_op));
   return loom_low_lower_bind_value(
@@ -1585,11 +1637,11 @@ static iree_status_t loom_test_low_emit_vector_load(
 
 static iree_status_t loom_test_low_emit_vector_store(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_low_source_memory_access_plan_t* access) {
-  IREE_ASSERT_ARGUMENT(access);
+    const loom_test_low_memory_access_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, access->view_value_id, &low_resource));
+      context, plan->access.view_value_id, &low_resource));
   loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, loom_vector_store_value(source_op), &low_value));
@@ -1599,10 +1651,9 @@ static iree_status_t loom_test_low_emit_vector_store(
   };
   loom_op_t* low_op = NULL;
   return loom_low_lower_emit_descriptor_op(
-      context, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_STORE_V4I32, operands,
-      IREE_ARRAYSIZE(operands), loom_named_attr_slice_empty(),
-      /*result_types=*/NULL, /*result_count=*/0, NULL, 0, source_op->location,
-      &low_op);
+      context, plan->descriptor_id, operands, IREE_ARRAYSIZE(operands),
+      loom_named_attr_slice_empty(), /*result_types=*/NULL, /*result_count=*/0,
+      NULL, 0, source_op->location, &low_op);
 }
 
 static iree_status_t loom_test_low_emit_op(void* user_data,
@@ -1616,11 +1667,11 @@ static iree_status_t loom_test_low_emit_op(void* user_data,
     case LOOM_OP_VECTOR_LOAD:
       return loom_test_low_emit_vector_load(
           context, source_op,
-          (const loom_low_source_memory_access_plan_t*)plan.target_data);
+          (const loom_test_low_memory_access_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_STORE:
       return loom_test_low_emit_vector_store(
           context, source_op,
-          (const loom_low_source_memory_access_plan_t*)plan.target_data);
+          (const loom_test_low_memory_access_plan_t*)plan.target_data);
     default:
       IREE_ASSERT_UNREACHABLE();
       return iree_ok_status();

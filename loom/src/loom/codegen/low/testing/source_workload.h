@@ -70,8 +70,16 @@ typedef struct loom_low_source_workload_counts_t {
   uint32_t vector_select_op_count;
   // Number of generated vector.load ops.
   uint32_t vector_load_op_count;
+  // Number of generated vector.load ops returning floating-point vectors. This
+  // is a subset of vector_load_op_count and is not included separately in the
+  // total count.
+  uint32_t vector_float_load_op_count;
   // Number of generated vector.store ops.
   uint32_t vector_store_op_count;
+  // Number of generated vector.store ops storing floating-point vectors. This
+  // is a subset of vector_store_op_count and is not included separately in the
+  // total count.
+  uint32_t vector_float_store_op_count;
   // Number of generated index.madd ops.
   uint32_t index_madd_op_count;
 } loom_low_source_workload_counts_t;
@@ -148,7 +156,8 @@ iree_status_t loom_low_source_workload_generate_fuzz_module(
 
 // Counts source ops emitted by generated source workloads.
 void loom_low_source_workload_count_func_ops(
-    const loom_op_t* func_op, loom_low_source_workload_counts_t* out_counts);
+    const loom_module_t* module, const loom_op_t* func_op,
+    loom_low_source_workload_counts_t* out_counts);
 
 // Adds |source_counts| into |target_counts|.
 void loom_low_source_workload_counts_accumulate(
