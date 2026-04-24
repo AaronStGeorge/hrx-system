@@ -100,6 +100,7 @@ loom_cc_library(
     hdrs = ["contract_storage.h"],
     deps = [
         ":contract",
+        "//loom/src/loom/ops/encoding",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],

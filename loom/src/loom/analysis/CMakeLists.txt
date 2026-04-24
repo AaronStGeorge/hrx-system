@@ -119,6 +119,7 @@ loom_cc_library(
   DEPS
     ::contract
     iree::base
+    loom::src::loom::ops::encoding
     loom::src::loom::util::fact_table
   PUBLIC
 )

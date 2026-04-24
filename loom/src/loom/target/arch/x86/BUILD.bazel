@@ -331,6 +331,7 @@ loom_cc_test(
     deps = [
         ":packed_dot_contract",
         ":packed_dot_contract_projection",
+        "//loom/src/loom/analysis:contract_storage",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

@@ -10,19 +10,12 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/analysis/contract_storage.h"
 
 namespace {
 
 std::string ToString(iree_string_view_t value) {
   return std::string(value.data, value.size);
-}
-
-loom_contract_operand_t Operand(loom_contract_operand_role_t role,
-                                loom_contract_numeric_type_t numeric_type) {
-  return (loom_contract_operand_t){
-      .role = role,
-      .numeric_type = numeric_type,
-  };
 }
 
 loom_contract_arithmetic_t ArithmeticForAccumulator(
@@ -38,44 +31,57 @@ loom_contract_arithmetic_t ArithmeticForAccumulator(
   }
 }
 
-loom_contract_request_t PackedDotRequest(
+loom_contract_view_payload_t PlainPayload(
+    loom_contract_operand_role_t role,
+    loom_contract_numeric_type_t numeric_type) {
+  return (loom_contract_view_payload_t){
+      .kind = LOOM_CONTRACT_VIEW_PAYLOAD_PLAIN_ELEMENT,
+      .operand =
+          (loom_contract_operand_t){
+              .role = role,
+              .numeric_type = numeric_type,
+          },
+      .scale_kind = LOOM_CONTRACT_SCALE_NONE,
+  };
+}
+
+bool BuildPackedDotRequest(
     loom_contract_numeric_type_t lhs_numeric_type,
     loom_contract_numeric_type_t rhs_numeric_type,
     loom_contract_numeric_type_t accumulator_numeric_type,
     loom_contract_numeric_type_t result_numeric_type, uint16_t vector_bit_width,
     uint16_t source_lane_count, uint16_t result_lane_count,
-    uint16_t k_group_size) {
-  loom_contract_request_t request = {};
-  loom_contract_request_initialize(&request);
-  request.kind = LOOM_CONTRACT_KIND_MATRIX_MULTIPLY;
-  request.arithmetic = ArithmeticForAccumulator(accumulator_numeric_type);
-  request.shape = {
+    uint16_t k_group_size, loom_contract_request_t* out_request) {
+  loom_contract_matrix_request_options_t options = {};
+  options.shape = {
       .m = result_lane_count,
       .n = 1,
       .k = source_lane_count,
   };
-  request.k_group_size = k_group_size;
-  request.lhs = Operand(LOOM_CONTRACT_OPERAND_ROLE_LHS, lhs_numeric_type);
-  request.rhs = Operand(LOOM_CONTRACT_OPERAND_ROLE_RHS, rhs_numeric_type);
-  request.accumulator =
-      Operand(LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR, accumulator_numeric_type);
-  request.result =
-      Operand(LOOM_CONTRACT_OPERAND_ROLE_RESULT, result_numeric_type);
-  request.fragment = {
+  options.k_group_size = k_group_size;
+  options.lhs = PlainPayload(LOOM_CONTRACT_OPERAND_ROLE_LHS, lhs_numeric_type);
+  options.rhs = PlainPayload(LOOM_CONTRACT_OPERAND_ROLE_RHS, rhs_numeric_type);
+  options.accumulator_numeric_type = accumulator_numeric_type;
+  options.result_numeric_type = result_numeric_type;
+  options.arithmetic = ArithmeticForAccumulator(accumulator_numeric_type);
+  options.fragment = {
       .atom_bits = LOOM_CONTRACT_FRAGMENT_VECTOR_LANE,
       .vector_bit_width = vector_bit_width,
       .source_lane_count = source_lane_count,
       .result_lane_count = result_lane_count,
   };
-  request.capability_class = LOOM_CONTRACT_CAPABILITY_CLASS_CPU_PACKED_DOT;
-  request.policy = LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED;
-  return request;
+  options.capability_class = LOOM_CONTRACT_CAPABILITY_CLASS_CPU_PACKED_DOT;
+  options.policy = LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED;
+  return loom_contract_request_from_matrix_payloads(&options, out_request,
+                                                    NULL);
 }
 
 TEST(PackedDotContractProjectionTest, ProjectsBf16ContractToAvx512Bf16) {
-  loom_contract_request_t contract = PackedDotRequest(
+  loom_contract_request_t contract = {};
+  ASSERT_TRUE(BuildPackedDotRequest(
       LOOM_CONTRACT_NUMERIC_BF16, LOOM_CONTRACT_NUMERIC_BF16,
-      LOOM_CONTRACT_NUMERIC_F32, LOOM_CONTRACT_NUMERIC_F32, 256, 16, 8, 2);
+      LOOM_CONTRACT_NUMERIC_F32, LOOM_CONTRACT_NUMERIC_F32, 256, 16, 8, 2,
+      &contract));
 
   loom_x86_packed_dot_feature_bits_t feature_bits = 0;
   IREE_ASSERT_OK(loom_x86_packed_dot_feature_bits_for_name(
@@ -91,9 +97,11 @@ TEST(PackedDotContractProjectionTest, ProjectsBf16ContractToAvx512Bf16) {
 }
 
 TEST(PackedDotContractProjectionTest, ProjectsU8S8ContractToAvxVnni) {
-  loom_contract_request_t contract = PackedDotRequest(
+  loom_contract_request_t contract = {};
+  ASSERT_TRUE(BuildPackedDotRequest(
       LOOM_CONTRACT_NUMERIC_U8, LOOM_CONTRACT_NUMERIC_I8,
-      LOOM_CONTRACT_NUMERIC_I32, LOOM_CONTRACT_NUMERIC_I32, 256, 32, 8, 4);
+      LOOM_CONTRACT_NUMERIC_I32, LOOM_CONTRACT_NUMERIC_I32, 256, 32, 8, 4,
+      &contract));
 
   loom_x86_packed_dot_feature_bits_t feature_bits = 0;
   IREE_ASSERT_OK(loom_x86_packed_dot_feature_bits_for_name(
@@ -109,9 +117,11 @@ TEST(PackedDotContractProjectionTest, ProjectsU8S8ContractToAvxVnni) {
 }
 
 TEST(PackedDotContractProjectionTest, RejectsMissingVectorFragmentFacts) {
-  loom_contract_request_t contract = PackedDotRequest(
+  loom_contract_request_t contract = {};
+  ASSERT_TRUE(BuildPackedDotRequest(
       LOOM_CONTRACT_NUMERIC_BF16, LOOM_CONTRACT_NUMERIC_BF16,
-      LOOM_CONTRACT_NUMERIC_F32, LOOM_CONTRACT_NUMERIC_F32, 256, 16, 8, 2);
+      LOOM_CONTRACT_NUMERIC_F32, LOOM_CONTRACT_NUMERIC_F32, 256, 16, 8, 2,
+      &contract));
   contract.fragment.atom_bits = 0;
 
   loom_x86_packed_dot_match_request_t x86_request = {};
@@ -122,9 +132,11 @@ TEST(PackedDotContractProjectionTest, RejectsMissingVectorFragmentFacts) {
 }
 
 TEST(PackedDotContractProjectionTest, RejectsUnsupportedNumericType) {
-  loom_contract_request_t contract = PackedDotRequest(
+  loom_contract_request_t contract = {};
+  ASSERT_TRUE(BuildPackedDotRequest(
       LOOM_CONTRACT_NUMERIC_FP8, LOOM_CONTRACT_NUMERIC_BF8,
-      LOOM_CONTRACT_NUMERIC_F32, LOOM_CONTRACT_NUMERIC_F32, 256, 16, 8, 2);
+      LOOM_CONTRACT_NUMERIC_F32, LOOM_CONTRACT_NUMERIC_F32, 256, 16, 8, 2,
+      &contract));
 
   loom_x86_packed_dot_match_request_t x86_request = {};
   loom_contract_diagnostic_t diagnostic = {};

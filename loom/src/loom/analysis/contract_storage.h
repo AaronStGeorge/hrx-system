@@ -36,6 +36,91 @@ bool loom_contract_operand_from_storage_schema(
     loom_contract_operand_role_t role, loom_value_fact_storage_schema_t schema,
     loom_contract_operand_t* out_operand);
 
+typedef enum loom_contract_view_payload_kind_e {
+  // No usable payload interpretation is known.
+  LOOM_CONTRACT_VIEW_PAYLOAD_UNKNOWN = 0,
+  // The view payload is the shaped type's element type.
+  LOOM_CONTRACT_VIEW_PAYLOAD_PLAIN_ELEMENT = 1,
+  // The view payload is a matrix storage schema with native-fragment facts.
+  LOOM_CONTRACT_VIEW_PAYLOAD_MATRIX_STORAGE_SCHEMA = 2,
+  // The view has a storage schema, but not one representable as a native
+  // matrix contract payload.
+  LOOM_CONTRACT_VIEW_PAYLOAD_UNSUPPORTED_STORAGE_SCHEMA = 3,
+} loom_contract_view_payload_kind_t;
+
+typedef struct loom_contract_view_payload_t {
+  // Payload interpretation category.
+  loom_contract_view_payload_kind_t kind;
+
+  // Generic operand facts for this payload.
+  loom_contract_operand_t operand;
+
+  // Explicit scale operand shape proven by the payload schema.
+  loom_contract_scale_kind_t scale_kind;
+
+  // Generic capability flags proven by the payload schema.
+  loom_contract_capability_flags_t available_capability_flags;
+
+  // Raw storage-schema facts recovered from the view type, when present.
+  loom_value_fact_storage_schema_t storage_schema;
+} loom_contract_view_payload_t;
+
+// Queries a view type's contract payload interpretation.
+//
+// Physical storage schemas are preserved as schema-backed payloads. Views
+// without storage schemas fall back to their shaped element type. Integer
+// element views use |plain_integer_is_unsigned| to select signedness because
+// Loom integer element types do not carry signedness.
+bool loom_contract_view_payload_from_type(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t view_type, loom_contract_operand_role_t role,
+    bool plain_integer_is_unsigned, loom_contract_view_payload_t* out_payload);
+
+typedef struct loom_contract_matrix_request_options_t {
+  // Exact matrix/vector contraction shape.
+  loom_contract_shape_t shape;
+
+  // Number of K payload elements reduced into each accumulator contribution.
+  uint16_t k_group_size;
+
+  // Left-hand payload interpretation.
+  loom_contract_view_payload_t lhs;
+
+  // Right-hand payload interpretation.
+  loom_contract_view_payload_t rhs;
+
+  // Accumulator lane numeric type.
+  loom_contract_numeric_type_t accumulator_numeric_type;
+
+  // Result lane numeric type.
+  loom_contract_numeric_type_t result_numeric_type;
+
+  // Target-independent arithmetic family.
+  loom_contract_arithmetic_t arithmetic;
+
+  // Fragment ownership facts that must survive target selection.
+  loom_contract_fragment_t fragment;
+
+  // Requested target primitive capability class.
+  loom_contract_capability_class_t capability_class;
+
+  // Capability flags the selected target primitive must require.
+  loom_contract_capability_flags_t required_capability_flags;
+
+  // Fallback and target primitive selection policy.
+  loom_lowering_policy_t policy;
+} loom_contract_matrix_request_options_t;
+
+// Builds a target-independent matrix/packed-dot contract from view payloads.
+//
+// The resulting request does not name target descriptors, processor feature
+// bits, opcodes, packets, intrinsics, or target-specific enum values. Target
+// adapters project this generic request into their own descriptor tables.
+bool loom_contract_request_from_matrix_payloads(
+    const loom_contract_matrix_request_options_t* options,
+    loom_contract_request_t* out_request,
+    loom_contract_diagnostic_t* out_diagnostic);
+
 #ifdef __cplusplus
 }
 #endif

@@ -323,6 +323,7 @@ loom_cc_test(
   DEPS
     ::packed_dot_contract
     ::packed_dot_contract_projection
+    loom::src::loom::analysis::contract_storage
     iree::testing::gtest
     iree::testing::gtest_main
 )

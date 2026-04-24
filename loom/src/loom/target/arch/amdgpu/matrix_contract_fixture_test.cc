@@ -37,120 +37,41 @@ loom_amdgpu_matrix_payload_shape_t PayloadShape(
   return payload;
 }
 
-enum class ViewPayloadKind {
-  kPlainElement,
-  kMatrixStorageSchema,
-  kUnsupportedStorageSchema,
-};
-
 struct ModuleDeleter {
   void operator()(loom_module_t* module) const { loom_module_free(module); }
 };
 
 using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
 
-struct ViewPayload {
-  // Origin of the target payload interpretation.
-  ViewPayloadKind kind = ViewPayloadKind::kPlainElement;
-  // Generic contract operand facts used before target projection.
-  loom_contract_operand_t operand = {};
-  // Generic scale operand shape required by encoded matrix storage, if any.
-  loom_contract_scale_kind_t scale_kind = LOOM_CONTRACT_SCALE_NONE;
-  // Generic capability classes proven available from the view type/facts.
-  loom_contract_capability_flags_t available_flags = 0;
-  // Target-independent storage-schema facts recovered from the view type.
-  loom_value_fact_storage_schema_t storage_schema = {};
-};
-
-bool PlainElementPayload(loom_scalar_type_t element_type,
-                         loom_contract_operand_t* out_operand) {
-  *out_operand = {};
-  loom_contract_numeric_type_t numeric_type = LOOM_CONTRACT_NUMERIC_UNKNOWN;
-  if (!loom_contract_numeric_type_from_scalar(element_type, false,
-                                              &numeric_type)) {
-    return false;
-  }
-  out_operand->numeric_type = numeric_type;
-  return true;
-}
-
-bool QueryViewPayload(const loom_value_fact_table_t* fact_table,
-                      const loom_module_t* module, loom_type_t view_type,
-                      ViewPayload* out_payload) {
-  *out_payload = {};
-  if (!loom_type_is_view(view_type)) {
-    return false;
-  }
-
-  loom_value_fact_storage_schema_t storage_schema = {};
-  if (loom_encoding_query_type_storage_schema(&fact_table->context, module,
-                                              view_type, &storage_schema)) {
-    out_payload->kind = ViewPayloadKind::kUnsupportedStorageSchema;
-    out_payload->storage_schema = storage_schema;
-    if (!loom_contract_operand_from_storage_schema(
-            LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN, storage_schema,
-            &out_payload->operand)) {
-      return true;
-    }
-    if (!loom_contract_scale_kind_from_storage_schema(
-            storage_schema, &out_payload->scale_kind)) {
-      return false;
-    }
-    out_payload->kind = ViewPayloadKind::kMatrixStorageSchema;
-    out_payload->available_flags =
-        loom_contract_capability_flags_from_storage_schema(storage_schema);
-    return true;
-  }
-
-  out_payload->kind = ViewPayloadKind::kPlainElement;
-  return PlainElementPayload(loom_type_element_type(view_type),
-                             &out_payload->operand);
-}
-
-loom_contract_operand_t OperandWithRole(loom_contract_operand_role_t role,
-                                        loom_contract_operand_t operand) {
-  operand.role = role;
-  return operand;
-}
-
-loom_contract_request_t MatrixContractRequest(
-    int64_t m, int64_t n, int64_t k, loom_contract_operand_t lhs,
-    loom_contract_operand_t rhs,
+bool BuildMatrixContractRequest(
+    int64_t m, int64_t n, int64_t k, loom_contract_view_payload_t lhs,
+    loom_contract_view_payload_t rhs,
     loom_contract_numeric_type_t accumulator_numeric_type,
     loom_contract_numeric_type_t result_numeric_type,
-    loom_contract_scale_kind_t scale_kind,
-    loom_contract_capability_flags_t available_flags,
-    loom_contract_capability_flags_t required_flags) {
-  loom_contract_request_t request = {};
-  loom_contract_request_initialize(&request);
-  request.kind = LOOM_CONTRACT_KIND_MATRIX_MULTIPLY;
-  request.arithmetic = LOOM_CONTRACT_ARITHMETIC_MIXED_DOT;
-  request.shape = {
+    loom_contract_capability_flags_t required_flags,
+    loom_contract_request_t* out_request) {
+  loom_contract_matrix_request_options_t options = {};
+  options.shape = {
       .m = m,
       .n = n,
       .k = k,
   };
-  request.k_group_size = 1;
-  request.lhs = OperandWithRole(LOOM_CONTRACT_OPERAND_ROLE_LHS, lhs);
-  request.rhs = OperandWithRole(LOOM_CONTRACT_OPERAND_ROLE_RHS, rhs);
-  request.accumulator = {
-      .role = LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
-      .numeric_type = accumulator_numeric_type,
-  };
-  request.result = {
-      .role = LOOM_CONTRACT_OPERAND_ROLE_RESULT,
-      .numeric_type = result_numeric_type,
-  };
-  request.fragment = {
+  options.k_group_size = 1;
+  options.lhs = lhs;
+  options.rhs = rhs;
+  options.accumulator_numeric_type = accumulator_numeric_type;
+  options.result_numeric_type = result_numeric_type;
+  options.arithmetic = LOOM_CONTRACT_ARITHMETIC_MIXED_DOT;
+  options.fragment = {
       .atom_bits = LOOM_CONTRACT_FRAGMENT_SUBGROUP_LANE,
       .subgroup_size = 64,
   };
-  request.capability_class = LOOM_CONTRACT_CAPABILITY_CLASS_GPU_MATRIX;
-  request.available_capability_flags = available_flags;
-  request.required_capability_flags = required_flags;
-  request.scale_kind = scale_kind;
-  request.policy = LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED;
-  return request;
+  options.capability_class = LOOM_CONTRACT_CAPABILITY_CLASS_GPU_MATRIX;
+  options.required_capability_flags = required_flags;
+  options.policy = LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED;
+
+  return loom_contract_request_from_matrix_payloads(&options, out_request,
+                                                    NULL);
 }
 
 class MatrixContractFixtureTest : public ::testing::Test {
@@ -261,23 +182,28 @@ func.def @i8_mfma(%buffer: buffer, %base: offset) {
       CollectBufferViewTypes(module_ptr.get(), function);
   ASSERT_EQ(view_types.size(), 2u);
 
-  ViewPayload lhs = {};
-  ViewPayload rhs = {};
-  ASSERT_TRUE(
-      QueryViewPayload(&fact_table, module_ptr.get(), view_types[0], &lhs));
-  ASSERT_TRUE(
-      QueryViewPayload(&fact_table, module_ptr.get(), view_types[1], &rhs));
-  EXPECT_EQ(lhs.kind, ViewPayloadKind::kPlainElement);
-  EXPECT_EQ(rhs.kind, ViewPayloadKind::kPlainElement);
+  loom_contract_view_payload_t lhs = {};
+  loom_contract_view_payload_t rhs = {};
+  ASSERT_TRUE(loom_contract_view_payload_from_type(
+      &fact_table.context, module_ptr.get(), view_types[0],
+      LOOM_CONTRACT_OPERAND_ROLE_LHS, /*plain_integer_is_unsigned=*/false,
+      &lhs));
+  ASSERT_TRUE(loom_contract_view_payload_from_type(
+      &fact_table.context, module_ptr.get(), view_types[1],
+      LOOM_CONTRACT_OPERAND_ROLE_RHS, /*plain_integer_is_unsigned=*/false,
+      &rhs));
+  EXPECT_EQ(lhs.kind, LOOM_CONTRACT_VIEW_PAYLOAD_PLAIN_ELEMENT);
+  EXPECT_EQ(rhs.kind, LOOM_CONTRACT_VIEW_PAYLOAD_PLAIN_ELEMENT);
   EXPECT_EQ(lhs.operand.numeric_type, LOOM_CONTRACT_NUMERIC_I8);
   EXPECT_EQ(rhs.operand.numeric_type, LOOM_CONTRACT_NUMERIC_I8);
 
   loom_amdgpu_matrix_feature_bits_t feature_bits = 0;
   IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(
       IREE_SV("gfx908"), &feature_bits));
-  loom_contract_request_t contract = MatrixContractRequest(
-      16, 16, 16, lhs.operand, rhs.operand, LOOM_CONTRACT_NUMERIC_I32,
-      LOOM_CONTRACT_NUMERIC_I32, LOOM_CONTRACT_SCALE_NONE, 0, 0);
+  loom_contract_request_t contract = {};
+  ASSERT_TRUE(BuildMatrixContractRequest(
+      16, 16, 16, lhs, rhs, LOOM_CONTRACT_NUMERIC_I32,
+      LOOM_CONTRACT_NUMERIC_I32, 0, &contract));
   loom_contract_diagnostic_t contract_diagnostic = {};
   ASSERT_TRUE(loom_contract_request_validate(&contract, &contract_diagnostic));
   loom_amdgpu_matrix_contract_match_request_t request = {};
@@ -329,14 +255,18 @@ func.def @scaled_fp6_mfma(%buffer: buffer, %base: offset) {
       IREE_ARRAYSIZE(stride_storage), &layout));
   EXPECT_EQ(layout.kind, LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE);
 
-  ViewPayload lhs = {};
-  ViewPayload rhs = {};
-  ASSERT_TRUE(
-      QueryViewPayload(&fact_table, module_ptr.get(), view_types[0], &lhs));
-  ASSERT_TRUE(
-      QueryViewPayload(&fact_table, module_ptr.get(), view_types[1], &rhs));
-  EXPECT_EQ(lhs.kind, ViewPayloadKind::kMatrixStorageSchema);
-  EXPECT_EQ(rhs.kind, ViewPayloadKind::kMatrixStorageSchema);
+  loom_contract_view_payload_t lhs = {};
+  loom_contract_view_payload_t rhs = {};
+  ASSERT_TRUE(loom_contract_view_payload_from_type(
+      &fact_table.context, module_ptr.get(), view_types[0],
+      LOOM_CONTRACT_OPERAND_ROLE_LHS, /*plain_integer_is_unsigned=*/false,
+      &lhs));
+  ASSERT_TRUE(loom_contract_view_payload_from_type(
+      &fact_table.context, module_ptr.get(), view_types[1],
+      LOOM_CONTRACT_OPERAND_ROLE_RHS, /*plain_integer_is_unsigned=*/false,
+      &rhs));
+  EXPECT_EQ(lhs.kind, LOOM_CONTRACT_VIEW_PAYLOAD_MATRIX_STORAGE_SCHEMA);
+  EXPECT_EQ(rhs.kind, LOOM_CONTRACT_VIEW_PAYLOAD_MATRIX_STORAGE_SCHEMA);
   EXPECT_EQ(lhs.operand.numeric_type, LOOM_CONTRACT_NUMERIC_FP6);
   EXPECT_EQ(rhs.operand.numeric_type, LOOM_CONTRACT_NUMERIC_BF6);
   EXPECT_EQ(lhs.scale_kind, LOOM_CONTRACT_SCALE_32);
@@ -345,15 +275,13 @@ func.def @scaled_fp6_mfma(%buffer: buffer, %base: offset) {
   loom_amdgpu_matrix_feature_bits_t feature_bits = 0;
   IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(
       IREE_SV("gfx950"), &feature_bits));
-  loom_contract_capability_flags_t available_flags =
-      lhs.available_flags | rhs.available_flags;
   loom_contract_capability_flags_t required_flags =
       LOOM_CONTRACT_CAPABILITY_SCALE_OPERANDS |
       LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS;
-  loom_contract_request_t contract = MatrixContractRequest(
-      16, 16, 128, lhs.operand, rhs.operand, LOOM_CONTRACT_NUMERIC_F32,
-      LOOM_CONTRACT_NUMERIC_F32, lhs.scale_kind, available_flags,
-      required_flags);
+  loom_contract_request_t contract = {};
+  ASSERT_TRUE(BuildMatrixContractRequest(
+      16, 16, 128, lhs, rhs, LOOM_CONTRACT_NUMERIC_F32,
+      LOOM_CONTRACT_NUMERIC_F32, required_flags, &contract));
   loom_contract_diagnostic_t contract_diagnostic = {};
   ASSERT_TRUE(loom_contract_request_validate(&contract, &contract_diagnostic));
   loom_amdgpu_matrix_contract_match_request_t request = {};
@@ -402,10 +330,13 @@ func.def @ggml_q4_reference(%buffer: buffer, %base: offset) {
       IREE_ARRAYSIZE(stride_storage), &layout));
   EXPECT_EQ(layout.kind, LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE);
 
-  ViewPayload weights = {};
-  ASSERT_TRUE(
-      QueryViewPayload(&fact_table, module_ptr.get(), view_types[0], &weights));
-  EXPECT_EQ(weights.kind, ViewPayloadKind::kUnsupportedStorageSchema);
+  loom_contract_view_payload_t weights = {};
+  ASSERT_TRUE(loom_contract_view_payload_from_type(
+      &fact_table.context, module_ptr.get(), view_types[0],
+      LOOM_CONTRACT_OPERAND_ROLE_LHS, /*plain_integer_is_unsigned=*/false,
+      &weights));
+  EXPECT_EQ(weights.kind,
+            LOOM_CONTRACT_VIEW_PAYLOAD_UNSUPPORTED_STORAGE_SCHEMA);
   EXPECT_NE(weights.storage_schema.static_spec_encoding_id, 0u);
   EXPECT_EQ(weights.storage_schema.matrix.format,
             LOOM_VALUE_FACT_MATRIX_FORMAT_UNKNOWN);
