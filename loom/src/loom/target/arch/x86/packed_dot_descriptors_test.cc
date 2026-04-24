@@ -84,7 +84,7 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
       loom_x86_packed_dot_core_descriptor_set();
 
   const loom_low_descriptor_t* avx512_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512-vnni.vpdpbusd.512"));
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512_vnni.vpdpbusd.zmm"));
   ASSERT_NE(avx512_descriptor, nullptr);
   EXPECT_EQ(DescriptorString(descriptor_set,
                              avx512_descriptor->semantic_tag_string_offset),
@@ -101,14 +101,14 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
   EXPECT_EQ(avx512_issue_use->units, 4u);
 
   const loom_low_descriptor_t* saturating_descriptor = LookupDescriptor(
-      descriptor_set, IREE_SV("x86.avx512-vnni.vpdpbusds.512"));
+      descriptor_set, IREE_SV("x86.avx512_vnni.vpdpbusds.zmm"));
   ASSERT_NE(saturating_descriptor, nullptr);
   EXPECT_EQ(DescriptorString(descriptor_set,
                              saturating_descriptor->semantic_tag_string_offset),
             "dot.u8s8.i32x16.sat");
 
   const loom_low_descriptor_t* int8_descriptor = LookupDescriptor(
-      descriptor_set, IREE_SV("x86.avx-vnni-int8.vpdpbssd.256"));
+      descriptor_set, IREE_SV("x86.avx_vnni_int8.vpdpbssd.ymm"));
   ASSERT_NE(int8_descriptor, nullptr);
   EXPECT_EQ(descriptor_set
                 ->feature_mask_words[int8_descriptor->feature_mask_word_start],
@@ -121,7 +121,7 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
   EXPECT_EQ(int8_issue_use->units, 2u);
 
   const loom_low_descriptor_t* avx10_descriptor =
-      LookupDescriptor(descriptor_set, IREE_SV("x86.avx10.2.vdpphps.512"));
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx10_2.vdpphps.zmm"));
   ASSERT_NE(avx10_descriptor, nullptr);
   EXPECT_EQ(DescriptorString(descriptor_set,
                              avx10_descriptor->semantic_tag_string_offset),
@@ -131,7 +131,7 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
             LOOM_X86_FEATURE_AVX10_2);
 
   const loom_low_descriptor_t* bf16_descriptor = LookupDescriptor(
-      descriptor_set, IREE_SV("x86.avx512-bf16.vdpbf16ps.512"));
+      descriptor_set, IREE_SV("x86.avx512_bf16.vdpbf16ps.zmm"));
   ASSERT_NE(bf16_descriptor, nullptr);
   EXPECT_EQ(DescriptorString(descriptor_set,
                              bf16_descriptor->semantic_tag_string_offset),

@@ -123,7 +123,7 @@ func.def @f16_dot2(%lhs: vector<32xf16>, %rhs: vector<32xf16>, %acc: vector<16xf
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&request, nullptr);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx10.2.vdpphps.512");
+  EXPECT_EQ(ToString(descriptor->name), "x86.avx10_2.vdpphps.zmm");
 }
 
 TEST_F(PackedDotContractFixtureTest, ParsedBf16Dot2SelectsAvx512Bf16) {
@@ -149,7 +149,7 @@ func.def @bf16_dot2(%lhs: vector<16xbf16>, %rhs: vector<16xbf16>, %acc: vector<8
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&request, nullptr);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx512-bf16.vdpbf16ps.256");
+  EXPECT_EQ(ToString(descriptor->name), "x86.avx512_bf16.vdpbf16ps.ymm");
 }
 
 TEST_F(PackedDotContractFixtureTest, ParsedU8S8Dot4SelectsAvxVnni256) {
@@ -175,7 +175,7 @@ func.def @u8s8_dot4(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&request, nullptr);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx-vnni.vpdpbusd.256");
+  EXPECT_EQ(ToString(descriptor->name), "x86.avx_vnni.vpdpbusd.ymm");
 }
 
 TEST_F(PackedDotContractFixtureTest, ParsedS8S8Dot4NeedsInt8Feature) {
@@ -207,7 +207,7 @@ func.def @s8s8_dot4(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&request, nullptr);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx-vnni-int8.vpdpbssd.256");
+  EXPECT_EQ(ToString(descriptor->name), "x86.avx_vnni_int8.vpdpbssd.ymm");
 }
 
 TEST_F(PackedDotContractFixtureTest, ParsedS8S8Dot4SelectsAvx10WideForm) {
@@ -234,7 +234,7 @@ func.def @s8s8_dot4_wide(%lhs: vector<64xi8>, %rhs: vector<64xi8>, %acc: vector<
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&request, nullptr);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx10.2.vpdpbssd.512");
+  EXPECT_EQ(ToString(descriptor->name), "x86.avx10_2.vpdpbssd.zmm");
 }
 
 TEST_F(PackedDotContractFixtureTest, ParsedDot8I4DoesNotInferCpuRequest) {

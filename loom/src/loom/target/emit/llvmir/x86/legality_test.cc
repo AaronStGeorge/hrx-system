@@ -178,7 +178,7 @@ TEST_F(LlvmIrX86LegalityTest, ReportsPackedDotDescriptorSelection) {
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_OK);
   EXPECT_EQ(event_log.count, 1);
   EXPECT_EQ(event_log.detail, "selected x86 packed-dot descriptor");
-  EXPECT_EQ(event_log.target_detail, "x86.avx-vnni-int8.vpdpbssd.256");
+  EXPECT_EQ(event_log.target_detail, "x86.avx_vnni_int8.vpdpbssd.ymm");
 }
 
 }  // namespace

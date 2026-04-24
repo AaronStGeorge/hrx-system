@@ -75,7 +75,7 @@ TEST(PackedDotContractTest, DescriptorNamesAreUnique) {
 }
 
 TEST(PackedDotContractTest, LookupRejectsMissingDescriptor) {
-  EXPECT_EQ(FindDescriptor("x86.avx512-vnni.vpdpimaginary.512"), nullptr);
+  EXPECT_EQ(FindDescriptor("x86.avx512_vnni.vpdpimaginary.zmm"), nullptr);
 }
 
 TEST(PackedDotContractTest, NamesExposeStableDisplayStrings) {
@@ -92,7 +92,7 @@ TEST(PackedDotContractTest, NamesExposeStableDisplayStrings) {
 
 TEST(PackedDotContractTest, Avx512VnniByteDescriptor) {
   const loom_x86_packed_dot_descriptor_t* descriptor =
-      FindDescriptor("x86.avx512-vnni.vpdpbusd.512");
+      FindDescriptor("x86.avx512_vnni.vpdpbusd.zmm");
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(descriptor->family, LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI);
   EXPECT_EQ(ToString(descriptor->llvm_intrinsic_name),
@@ -112,7 +112,7 @@ TEST(PackedDotContractTest, Avx512VnniByteDescriptor) {
 
 TEST(PackedDotContractTest, AvxVnniInt8SignedSignedDescriptor) {
   const loom_x86_packed_dot_descriptor_t* descriptor =
-      FindDescriptor("x86.avx-vnni-int8.vpdpbssd.256");
+      FindDescriptor("x86.avx_vnni_int8.vpdpbssd.ymm");
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(descriptor->family, LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8);
   EXPECT_EQ(ToString(descriptor->llvm_intrinsic_name),
@@ -126,7 +126,7 @@ TEST(PackedDotContractTest, AvxVnniInt8SignedSignedDescriptor) {
 
 TEST(PackedDotContractTest, Avx10Fp16Descriptor) {
   const loom_x86_packed_dot_descriptor_t* descriptor =
-      FindDescriptor("x86.avx10.2.vdpphps.512");
+      FindDescriptor("x86.avx10_2.vdpphps.zmm");
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(descriptor->family, LOOM_X86_PACKED_DOT_FAMILY_AVX10_2);
   EXPECT_EQ(ToString(descriptor->llvm_intrinsic_name),
@@ -141,7 +141,7 @@ TEST(PackedDotContractTest, Avx10Fp16Descriptor) {
 
 TEST(PackedDotContractTest, Avx512Bf16Descriptor) {
   const loom_x86_packed_dot_descriptor_t* descriptor =
-      FindDescriptor("x86.avx512-bf16.vdpbf16ps.256");
+      FindDescriptor("x86.avx512_bf16.vdpbf16ps.ymm");
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(descriptor->family, LOOM_X86_PACKED_DOT_FAMILY_AVX512_BF16);
   EXPECT_EQ(descriptor->required_feature_bits,
@@ -180,7 +180,7 @@ TEST(PackedDotContractTest, SelectsAvxVnniByteDot) {
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&request, &diagnostic);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx-vnni.vpdpbusd.256");
+  EXPECT_EQ(ToString(descriptor->name), "x86.avx_vnni.vpdpbusd.ymm");
   EXPECT_EQ(diagnostic.rejection_bits, LOOM_X86_PACKED_DOT_REJECTION_NONE);
   EXPECT_GT(diagnostic.payload_candidate_count, 0u);
   EXPECT_GT(diagnostic.feature_candidate_count, 0u);
@@ -197,7 +197,7 @@ TEST(PackedDotContractTest, SelectsSaturatingVariantWhenRequired) {
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&request, nullptr);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx-vnni.vpdpbusds.256");
+  EXPECT_EQ(ToString(descriptor->name), "x86.avx_vnni.vpdpbusds.ymm");
   EXPECT_EQ(descriptor->flags & LOOM_X86_PACKED_DOT_CONTRACT_FLAG_SATURATING,
             LOOM_X86_PACKED_DOT_CONTRACT_FLAG_SATURATING);
 }
@@ -223,7 +223,7 @@ TEST(PackedDotContractTest, SignedSignedByteDotNeedsInt8Feature) {
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&int8_request, nullptr);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx-vnni-int8.vpdpbssd.256");
+  EXPECT_EQ(ToString(descriptor->name), "x86.avx_vnni_int8.vpdpbssd.ymm");
 }
 
 TEST(PackedDotContractTest, RejectsPackedI4FallbackShape) {

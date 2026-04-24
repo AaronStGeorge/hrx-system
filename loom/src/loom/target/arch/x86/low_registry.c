@@ -81,7 +81,7 @@ static const loom_target_config_t kX86_64Avx512Config = {
 };
 
 static const loom_target_config_t kX86_64PackedDotConfig = {
-    .name = IREE_SVL("x86.packed-dot.core"),
+    .name = IREE_SVL("x86.packed_dot.core"),
     .contract_set_key = LOOM_X86_64_PACKED_DOT_DESCRIPTOR_SET,
     .contract_feature_bits =
         LOOM_X86_FEATURE_AVX512_BF16 | LOOM_X86_FEATURE_AVX512_VL |

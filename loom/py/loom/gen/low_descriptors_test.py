@@ -147,10 +147,10 @@ def test_generate_x86_packed_dot_descriptor_set() -> None:
     assert "loom_x86_packed_dot_core_descriptor_set" in generated.header
     assert "X86_PACKED_DOT_CORE_REG_CLASS_ID_X86_XMM" in generated.header
     assert 'LOOM_BSTRING_LITERAL("\\x13", "x86.packed_dot.core")' in generated.source
-    assert "x86.avx512-vnni.vpdpbusd.512" in generated.source
-    assert "x86.avx512-bf16.vdpbf16ps.512" in generated.source
-    assert "x86.avx-vnni-int8.vpdpbssd.256" in generated.source
-    assert "x86.avx10.2.vdpphps.512" in generated.source
+    assert "x86.avx512_vnni.vpdpbusd.zmm" in generated.source
+    assert "x86.avx512_bf16.vdpbf16ps.zmm" in generated.source
+    assert "x86.avx_vnni_int8.vpdpbssd.ymm" in generated.source
+    assert "x86.avx10_2.vdpphps.zmm" in generated.source
     assert "fingerprint" not in generated.source
     assert "fingerprint" not in generated.manifest_json
 
@@ -168,7 +168,7 @@ def test_generate_x86_packed_dot_descriptor_set() -> None:
     assert "x86.vector.dot.128" in generated.source
     assert "x86.vector.dot.256" in generated.source
     assert "x86.vector.dot.512" in generated.source
-    assert any(descriptor["key"] == "x86.avx10.2.vdpphps.512" for descriptor in manifest["descriptors"])
+    assert any(descriptor["key"] == "x86.avx10_2.vdpphps.zmm" for descriptor in manifest["descriptors"])
 
 
 def test_generate_test_low_core_descriptor_set() -> None:
