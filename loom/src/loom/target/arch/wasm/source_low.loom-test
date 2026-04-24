@@ -46,6 +46,58 @@ low.func.def target(@target) abi(wasm_function) @i32x4_splat_add(%value: reg<was
 
 // ====
 
+func.def @i32x4_lane_edit(%v: vector<4xi32>, %x: i32) -> (vector<4xi32>) {
+  %lane = vector.extract %v[1] : vector<4xi32> -> i32
+  %sum = scalar.addi %lane, %x : i32
+  %updated = vector.insert %sum into %v[2] : i32, vector<4xi32>
+  func.return %updated : vector<4xi32>
+}
+
+// ----
+low.func.def target(@target) abi(wasm_function) @i32x4_lane_edit(%v: reg<wasm.v128>, %x: reg<wasm.i32>) -> (reg<wasm.v128>) asm<wasm.core.simd128> {
+  %lane = i32x4.extract_lane %v, 1
+  %sum = i32.add %lane, %x
+  %updated = i32x4.replace_lane %v, %sum, 2
+  return %updated
+}
+
+// ====
+
+func.def @i32x4_shuffle_reduce(%v: vector<4xi32>, %init: i32) -> (i32) {
+  %reversed = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
+  %sum = vector.reduce<addi> %reversed, %init : vector<4xi32>, i32
+  func.return %sum : i32
+}
+
+// ----
+low.func.def target(@target) abi(wasm_function) @i32x4_shuffle_reduce(%v: reg<wasm.v128>, %init: reg<wasm.i32>) -> (reg<wasm.i32>) asm<wasm.core.simd128> {
+  %reversed = i8x16.shuffle %v, %v, 12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3
+  %9 = i32x4.extract_lane %reversed, 0
+  %10 = i32.add %init, %9
+  %11 = i32x4.extract_lane %reversed, 1
+  %12 = i32.add %10, %11
+  %13 = i32x4.extract_lane %reversed, 2
+  %14 = i32.add %12, %13
+  %15 = i32x4.extract_lane %reversed, 3
+  %sum = i32.add %14, %15
+  return %sum
+}
+
+// ====
+
+func.def @f32x4_shuffle(%v: vector<4xf32>) -> (vector<4xf32>) {
+  %shuffled = vector.shuffle<[3, 1, 2, 0]> %v : vector<4xf32>
+  func.return %shuffled : vector<4xf32>
+}
+
+// ----
+low.func.def target(@target) abi(wasm_function) @f32x4_shuffle(%v: reg<wasm.v128>) -> (reg<wasm.v128>) asm<wasm.core.simd128> {
+  %shuffled = i8x16.shuffle %v, %v, 12, 13, 14, 15, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2, 3
+  return %shuffled
+}
+
+// ====
+
 func.def @i32x4_select(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %true_value: vector<4xi32>, %false_value: vector<4xi32>) -> (vector<4xi32>) {
   %mask = vector.cmpi slt, %lhs, %rhs : vector<4xi32> -> vector<4xi1>
   %selected = vector.select %mask, %true_value, %false_value : vector<4xi32>

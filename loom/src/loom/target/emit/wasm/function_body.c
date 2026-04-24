@@ -33,7 +33,10 @@ enum {
   LOOM_WASM_SIMD_SUBOPCODE_V128_LOAD = 0x00,
   LOOM_WASM_SIMD_SUBOPCODE_V128_STORE = 0x0B,
   LOOM_WASM_SIMD_SUBOPCODE_V128_CONST = 0x0C,
+  LOOM_WASM_SIMD_SUBOPCODE_I8X16_SHUFFLE = 0x0D,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_SPLAT = 0x11,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_EXTRACT_LANE = 0x1B,
+  LOOM_WASM_SIMD_SUBOPCODE_I32X4_REPLACE_LANE = 0x1C,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_EQ = 0x37,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_NE = 0x38,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_LT_S = 0x39,
@@ -64,8 +67,16 @@ enum {
       (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_V128_STORE,
   LOOM_WASM_ENCODING_V128_CONST =
       (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_V128_CONST,
+  LOOM_WASM_ENCODING_I8X16_SHUFFLE = (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) |
+                                     LOOM_WASM_SIMD_SUBOPCODE_I8X16_SHUFFLE,
   LOOM_WASM_ENCODING_I32X4_SPLAT = (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) |
                                    LOOM_WASM_SIMD_SUBOPCODE_I32X4_SPLAT,
+  LOOM_WASM_ENCODING_I32X4_EXTRACT_LANE =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) |
+      LOOM_WASM_SIMD_SUBOPCODE_I32X4_EXTRACT_LANE,
+  LOOM_WASM_ENCODING_I32X4_REPLACE_LANE =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) |
+      LOOM_WASM_SIMD_SUBOPCODE_I32X4_REPLACE_LANE,
   LOOM_WASM_ENCODING_I32X4_EQ =
       (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_EQ,
   LOOM_WASM_ENCODING_I32X4_NE =
@@ -140,24 +151,58 @@ typedef struct loom_wasm_local_layout_t {
   uint32_t parameter_count;
 } loom_wasm_local_layout_t;
 
+typedef struct loom_wasm_attr_name_ids_t {
+  // Module string ID for wasm.i32.const's immediate payload.
+  loom_string_id_t i32_value;
+  // Module string ID for wasm.v128.const's low 64-bit immediate payload.
+  loom_string_id_t lo64;
+  // Module string ID for wasm.v128.const's high 64-bit immediate payload.
+  loom_string_id_t hi64;
+  // Module string ID for i32x4 lane-immediate payloads.
+  loom_string_id_t lane;
+  // Module string IDs for i8x16.shuffle byte-lane immediate payloads.
+  loom_string_id_t shuffle_lanes[16];
+} loom_wasm_attr_name_ids_t;
+
 typedef struct loom_wasm_emit_state_t {
   // Schedule sidecar being emitted.
   const loom_low_schedule_sidecar_t* schedule;
   // Allocation sidecar supplying class-local target ids.
   const loom_low_allocation_sidecar_t* allocation;
+  // Cached module attr-name IDs used to decode low packet immediates.
+  loom_wasm_attr_name_ids_t attr_names;
   // Derived Wasm local namespace layout.
   loom_wasm_local_layout_t locals;
   // Mutable body payload writer.
   loom_wasm_binary_writer_t writer;
 } loom_wasm_emit_state_t;
 
-static iree_string_view_t loom_wasm_module_string(const loom_module_t* module,
-                                                  loom_string_id_t string_id) {
-  if (string_id == LOOM_STRING_ID_INVALID ||
-      string_id >= module->strings.count) {
-    return iree_string_view_empty();
+static const iree_string_view_t kWasmAttrI32ValueName = IREE_SVL("i32_value");
+static const iree_string_view_t kWasmAttrLo64Name = IREE_SVL("lo64");
+static const iree_string_view_t kWasmAttrHi64Name = IREE_SVL("hi64");
+static const iree_string_view_t kWasmAttrLaneName = IREE_SVL("lane");
+static const iree_string_view_t kWasmShuffleLaneAttrNames[16] = {
+    IREE_SVL("lane0"),  IREE_SVL("lane1"),  IREE_SVL("lane2"),
+    IREE_SVL("lane3"),  IREE_SVL("lane4"),  IREE_SVL("lane5"),
+    IREE_SVL("lane6"),  IREE_SVL("lane7"),  IREE_SVL("lane8"),
+    IREE_SVL("lane9"),  IREE_SVL("lane10"), IREE_SVL("lane11"),
+    IREE_SVL("lane12"), IREE_SVL("lane13"), IREE_SVL("lane14"),
+    IREE_SVL("lane15"),
+};
+
+static void loom_wasm_attr_name_ids_initialize(
+    const loom_module_t* module, loom_wasm_attr_name_ids_t* out_attr_names) {
+  *out_attr_names = (loom_wasm_attr_name_ids_t){
+      .i32_value = loom_module_lookup_string(module, kWasmAttrI32ValueName),
+      .lo64 = loom_module_lookup_string(module, kWasmAttrLo64Name),
+      .hi64 = loom_module_lookup_string(module, kWasmAttrHi64Name),
+      .lane = loom_module_lookup_string(module, kWasmAttrLaneName),
+  };
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kWasmShuffleLaneAttrNames);
+       ++i) {
+    out_attr_names->shuffle_lanes[i] =
+        loom_module_lookup_string(module, kWasmShuffleLaneAttrNames[i]);
   }
-  return module->strings.entries[string_id];
 }
 
 static iree_status_t loom_wasm_write_opcode(loom_wasm_binary_writer_t* writer,
@@ -426,25 +471,26 @@ static iree_status_t loom_wasm_lookup_local(
   return iree_ok_status();
 }
 
-static const loom_named_attr_t* loom_wasm_find_named_attr(
-    const loom_module_t* module, loom_named_attr_slice_t attrs,
-    iree_string_view_t name) {
+static const loom_named_attr_t* loom_wasm_find_named_attr_by_id(
+    loom_named_attr_slice_t attrs, loom_string_id_t name_id) {
+  if (name_id == LOOM_STRING_ID_INVALID) {
+    return NULL;
+  }
   for (iree_host_size_t i = 0; i < attrs.count; ++i) {
     const loom_named_attr_t* attr = &attrs.entries[i];
-    if (iree_string_view_equal(loom_wasm_module_string(module, attr->name_id),
-                               name)) {
+    if (attr->name_id == name_id) {
       return attr;
     }
   }
   return NULL;
 }
 
-static iree_status_t loom_wasm_read_i64_attr(const loom_module_t* module,
-                                             loom_named_attr_slice_t attrs,
+static iree_status_t loom_wasm_read_i64_attr(loom_named_attr_slice_t attrs,
                                              iree_string_view_t name,
+                                             loom_string_id_t name_id,
                                              int64_t* out_value) {
   const loom_named_attr_t* attr =
-      loom_wasm_find_named_attr(module, attrs, name);
+      loom_wasm_find_named_attr_by_id(attrs, name_id);
   if (!attr) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "Wasm emission missing required '%.*s' attribute",
@@ -456,6 +502,23 @@ static iree_status_t loom_wasm_read_i64_attr(const loom_module_t* module,
                             name.data);
   }
   *out_value = attr->value.i64;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_read_u8_attr(loom_named_attr_slice_t attrs,
+                                            iree_string_view_t name,
+                                            loom_string_id_t name_id,
+                                            uint8_t maximum_value,
+                                            uint8_t* out_value) {
+  IREE_ASSERT_ARGUMENT(out_value);
+  int64_t value = 0;
+  IREE_RETURN_IF_ERROR(loom_wasm_read_i64_attr(attrs, name, name_id, &value));
+  if (value < 0 || value > maximum_value) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "Wasm attribute '%.*s' is outside [0, %" PRIu8 "]",
+                            (int)name.size, name.data, maximum_value);
+  }
+  *out_value = (uint8_t)value;
   return iree_ok_status();
 }
 
@@ -495,9 +558,9 @@ static iree_status_t loom_wasm_emit_i32_const(
                             "wasm.i32.const must be a unary low.const");
   }
   int64_t value = 0;
-  IREE_RETURN_IF_ERROR(loom_wasm_read_i64_attr(state->schedule->module,
-                                               loom_low_const_attrs(op),
-                                               IREE_SV("i32_value"), &value));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_read_i64_attr(loom_low_const_attrs(op), kWasmAttrI32ValueName,
+                              state->attr_names.i32_value, &value));
   if (value < INT32_MIN || value > INT32_MAX) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "wasm.i32.const value is outside i32 range");
@@ -518,12 +581,12 @@ static iree_status_t loom_wasm_emit_v128_const(
   }
   int64_t low_bits = 0;
   int64_t high_bits = 0;
-  IREE_RETURN_IF_ERROR(loom_wasm_read_i64_attr(state->schedule->module,
-                                               loom_low_const_attrs(op),
-                                               IREE_SV("lo64"), &low_bits));
-  IREE_RETURN_IF_ERROR(loom_wasm_read_i64_attr(state->schedule->module,
-                                               loom_low_const_attrs(op),
-                                               IREE_SV("hi64"), &high_bits));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_read_i64_attr(loom_low_const_attrs(op), kWasmAttrLo64Name,
+                              state->attr_names.lo64, &low_bits));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_read_i64_attr(loom_low_const_attrs(op), kWasmAttrHi64Name,
+                              state->attr_names.hi64, &high_bits));
   IREE_RETURN_IF_ERROR(
       loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
   IREE_RETURN_IF_ERROR(
@@ -578,6 +641,57 @@ static iree_status_t loom_wasm_emit_ternary_stack_op(
   IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[2]));
   IREE_RETURN_IF_ERROR(
       loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
+  return loom_wasm_emit_local_set(state, results.values[0]);
+}
+
+static iree_status_t loom_wasm_emit_lane_stack_op(
+    loom_wasm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  const uint16_t expected_operand_count =
+      descriptor->encoding_id == LOOM_WASM_ENCODING_I32X4_EXTRACT_LANE ? 1 : 2;
+  if (!loom_low_op_isa(op) || op->operand_count != expected_operand_count ||
+      op->result_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm lane packet shape is invalid");
+  }
+  loom_named_attr_slice_t attrs = loom_low_op_attrs(op);
+  uint8_t lane = 0;
+  IREE_RETURN_IF_ERROR(loom_wasm_read_u8_attr(attrs, kWasmAttrLaneName,
+                                              state->attr_names.lane,
+                                              /*maximum_value=*/3, &lane));
+  loom_value_slice_t operands = loom_low_op_operands(op);
+  loom_value_slice_t results = loom_low_op_results(op);
+  for (iree_host_size_t i = 0; i < operands.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[i]));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
+  IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u8(&state->writer, lane));
+  return loom_wasm_emit_local_set(state, results.values[0]);
+}
+
+static iree_status_t loom_wasm_emit_i8x16_shuffle(
+    loom_wasm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  if (!loom_low_op_isa(op) || op->operand_count != 2 || op->result_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "wasm.i8x16.shuffle packet shape is invalid");
+  }
+  loom_value_slice_t operands = loom_low_op_operands(op);
+  loom_value_slice_t results = loom_low_op_results(op);
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[0]));
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[1]));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
+  loom_named_attr_slice_t attrs = loom_low_op_attrs(op);
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kWasmShuffleLaneAttrNames);
+       ++i) {
+    uint8_t lane = 0;
+    IREE_RETURN_IF_ERROR(loom_wasm_read_u8_attr(
+        attrs, kWasmShuffleLaneAttrNames[i], state->attr_names.shuffle_lanes[i],
+        /*maximum_value=*/31, &lane));
+    IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u8(&state->writer, lane));
+  }
   return loom_wasm_emit_local_set(state, results.values[0]);
 }
 
@@ -651,9 +765,16 @@ static iree_status_t loom_wasm_emit_descriptor_packet(
     case LOOM_WASM_ENCODING_V128_BITSELECT:
       return loom_wasm_emit_ternary_stack_op(state, packet->node->op,
                                              packet->descriptor);
+    case LOOM_WASM_ENCODING_I8X16_SHUFFLE:
+      return loom_wasm_emit_i8x16_shuffle(state, packet->node->op,
+                                          packet->descriptor);
     case LOOM_WASM_ENCODING_I32X4_SPLAT:
       return loom_wasm_emit_unary_stack_op(state, packet->node->op,
                                            packet->descriptor);
+    case LOOM_WASM_ENCODING_I32X4_EXTRACT_LANE:
+    case LOOM_WASM_ENCODING_I32X4_REPLACE_LANE:
+      return loom_wasm_emit_lane_stack_op(state, packet->node->op,
+                                          packet->descriptor);
     case LOOM_WASM_ENCODING_V128_LOAD:
       return loom_wasm_emit_v128_load(state, packet->node->op,
                                       packet->descriptor);
@@ -804,6 +925,7 @@ iree_status_t loom_wasm_emit_function_body(
       .schedule = schedule,
       .allocation = allocation,
   };
+  loom_wasm_attr_name_ids_initialize(schedule->module, &state.attr_names);
   loom_wasm_binary_writer_initialize(allocator, &state.writer);
   iree_status_t status =
       loom_wasm_build_local_layout(allocation, allocator, &state.locals);

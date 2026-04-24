@@ -52,6 +52,12 @@ static bool loom_wasm_type_is_vector_4xf32(loom_type_t type) {
          loom_type_dim_static_size_at(type, 0) == 4;
 }
 
+static bool loom_wasm_type_is_v128_source_vector(loom_type_t type) {
+  return loom_wasm_type_is_vector_4xi32(type) ||
+         loom_wasm_type_is_vector_4xi1(type) ||
+         loom_wasm_type_is_vector_4xf32(type);
+}
+
 static iree_status_t loom_wasm_make_i32_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
@@ -882,6 +888,16 @@ static const loom_low_lower_rule_set_t* const kWasmRuleSets[] = {
     &loom_wasm_rule_set,
 };
 
+typedef struct loom_wasm_lane_plan_t {
+  // Zero-based i32x4 lane selected by the source vector op.
+  uint8_t lane;
+} loom_wasm_lane_plan_t;
+
+typedef struct loom_wasm_shuffle_plan_t {
+  // Wasm byte lane selected for each i8x16.shuffle immediate.
+  uint8_t byte_lanes[16];
+} loom_wasm_shuffle_plan_t;
+
 static bool loom_wasm_memory_space_is_linear(
     loom_value_fact_memory_space_t memory_space) {
   switch (memory_space) {
@@ -936,6 +952,100 @@ static bool loom_wasm_select_memory_access(
   return true;
 }
 
+static bool loom_wasm_select_static_i32x4_lane(
+    loom_attribute_t static_indices, loom_value_slice_t dynamic_indices,
+    uint8_t* out_lane) {
+  IREE_ASSERT_ARGUMENT(out_lane);
+  if (dynamic_indices.count != 0 ||
+      static_indices.kind != LOOM_ATTR_I64_ARRAY || static_indices.count != 1 ||
+      static_indices.i64_array == NULL || static_indices.i64_array[0] < 0 ||
+      static_indices.i64_array[0] > 3) {
+    return false;
+  }
+  *out_lane = (uint8_t)static_indices.i64_array[0];
+  return true;
+}
+
+static bool loom_wasm_select_vector_extract(const loom_module_t* module,
+                                            const loom_op_t* source_op,
+                                            loom_wasm_lane_plan_t* out_plan) {
+  const loom_type_t source_type =
+      loom_module_value_type(module, loom_vector_extract_source(source_op));
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_extract_result(source_op));
+  if (!loom_wasm_type_is_vector_4xi32(source_type) ||
+      !loom_wasm_type_is_address_i32(result_type)) {
+    return false;
+  }
+  return loom_wasm_select_static_i32x4_lane(
+      loom_vector_extract_static_indices(source_op),
+      loom_vector_extract_indices(source_op), &out_plan->lane);
+}
+
+static bool loom_wasm_select_vector_insert(const loom_module_t* module,
+                                           const loom_op_t* source_op,
+                                           loom_wasm_lane_plan_t* out_plan) {
+  const loom_type_t value_type =
+      loom_module_value_type(module, loom_vector_insert_value(source_op));
+  const loom_type_t dest_type =
+      loom_module_value_type(module, loom_vector_insert_dest(source_op));
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_insert_result(source_op));
+  if (!loom_wasm_type_is_address_i32(value_type) ||
+      !loom_wasm_type_is_vector_4xi32(dest_type) ||
+      !loom_wasm_type_is_vector_4xi32(result_type)) {
+    return false;
+  }
+  return loom_wasm_select_static_i32x4_lane(
+      loom_vector_insert_static_indices(source_op),
+      loom_vector_insert_indices(source_op), &out_plan->lane);
+}
+
+static bool loom_wasm_select_vector_shuffle(
+    const loom_module_t* module, const loom_op_t* source_op,
+    loom_wasm_shuffle_plan_t* out_plan) {
+  const loom_type_t source_type =
+      loom_module_value_type(module, loom_vector_shuffle_source(source_op));
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_shuffle_result(source_op));
+  if (!loom_wasm_type_is_v128_source_vector(source_type) ||
+      !loom_wasm_type_is_v128_source_vector(result_type)) {
+    return false;
+  }
+  loom_attribute_t source_lanes = loom_vector_shuffle_source_lanes(source_op);
+  if (source_lanes.kind != LOOM_ATTR_I64_ARRAY || source_lanes.count != 4 ||
+      source_lanes.i64_array == NULL) {
+    return false;
+  }
+  for (uint8_t result_lane = 0; result_lane < 4; ++result_lane) {
+    int64_t source_lane = source_lanes.i64_array[result_lane];
+    if (source_lane < 0 || source_lane > 3) {
+      return false;
+    }
+    for (uint8_t byte = 0; byte < 4; ++byte) {
+      out_plan->byte_lanes[result_lane * 4 + byte] =
+          (uint8_t)(source_lane * 4 + byte);
+    }
+  }
+  return true;
+}
+
+static bool loom_wasm_select_vector_reduce(const loom_module_t* module,
+                                           const loom_op_t* source_op) {
+  if (loom_vector_reduce_kind(source_op) != LOOM_VECTOR_REDUCE_KIND_ADDI) {
+    return false;
+  }
+  const loom_type_t input_type =
+      loom_module_value_type(module, loom_vector_reduce_input(source_op));
+  const loom_type_t init_type =
+      loom_module_value_type(module, loom_vector_reduce_init(source_op));
+  const loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_reduce_result(source_op));
+  return loom_wasm_type_is_vector_4xi32(input_type) &&
+         loom_wasm_type_is_address_i32(init_type) &&
+         loom_wasm_type_is_address_i32(result_type);
+}
+
 static iree_status_t loom_wasm_select_op(void* user_data,
                                          loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
@@ -958,24 +1068,76 @@ static iree_status_t loom_wasm_select_op(void* user_data,
       }
       return iree_ok_status();
     }
+    case LOOM_OP_VECTOR_EXTRACT: {
+      loom_wasm_lane_plan_t selected_plan = {0};
+      if (loom_wasm_select_vector_extract(
+              loom_low_lower_context_module(context), source_op,
+              &selected_plan)) {
+        loom_wasm_lane_plan_t* plan = NULL;
+        IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+            context, sizeof(*plan), (void**)&plan));
+        *plan = selected_plan;
+        *out_plan = loom_low_lower_plan_make(source_op->kind, plan);
+      }
+      return iree_ok_status();
+    }
+    case LOOM_OP_VECTOR_INSERT: {
+      loom_wasm_lane_plan_t selected_plan = {0};
+      if (loom_wasm_select_vector_insert(loom_low_lower_context_module(context),
+                                         source_op, &selected_plan)) {
+        loom_wasm_lane_plan_t* plan = NULL;
+        IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+            context, sizeof(*plan), (void**)&plan));
+        *plan = selected_plan;
+        *out_plan = loom_low_lower_plan_make(source_op->kind, plan);
+      }
+      return iree_ok_status();
+    }
+    case LOOM_OP_VECTOR_SHUFFLE: {
+      loom_wasm_shuffle_plan_t selected_plan = {0};
+      if (loom_wasm_select_vector_shuffle(
+              loom_low_lower_context_module(context), source_op,
+              &selected_plan)) {
+        loom_wasm_shuffle_plan_t* plan = NULL;
+        IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+            context, sizeof(*plan), (void**)&plan));
+        *plan = selected_plan;
+        *out_plan = loom_low_lower_plan_make(source_op->kind, plan);
+      }
+      return iree_ok_status();
+    }
+    case LOOM_OP_VECTOR_REDUCE:
+      if (loom_wasm_select_vector_reduce(loom_low_lower_context_module(context),
+                                         source_op)) {
+        *out_plan = loom_low_lower_plan_make(source_op->kind, NULL);
+      }
+      return iree_ok_status();
     default:
       return iree_ok_status();
   }
 }
 
-static iree_status_t loom_wasm_make_i32_value_attr(
-    loom_low_lower_context_t* context, int64_t value,
-    loom_named_attr_t* out_attr) {
+static iree_status_t loom_wasm_make_i64_attr(loom_low_lower_context_t* context,
+                                             iree_string_view_t name,
+                                             int64_t value,
+                                             loom_named_attr_t* out_attr) {
   IREE_ASSERT_ARGUMENT(out_attr);
-  IREE_ASSERT(loom_wasm_i64_fits_i32(value));
   loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      loom_low_lower_context_module(context), IREE_SV("i32_value"), &name_id));
+      loom_low_lower_context_module(context), name, &name_id));
   *out_attr = (loom_named_attr_t){
       .name_id = name_id,
       .value = loom_attr_i64(value),
   };
   return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_make_i32_value_attr(
+    loom_low_lower_context_t* context, int64_t value,
+    loom_named_attr_t* out_attr) {
+  IREE_ASSERT(loom_wasm_i64_fits_i32(value));
+  return loom_wasm_make_i64_attr(context, IREE_SV("i32_value"), value,
+                                 out_attr);
 }
 
 static iree_status_t loom_wasm_emit_i32_const(loom_low_lower_context_t* context,
@@ -1010,6 +1172,51 @@ static iree_status_t loom_wasm_emit_i32_binary(
       context, descriptor_id, operands, IREE_ARRAYSIZE(operands),
       loom_named_attr_slice_empty(), &result_type, 1, NULL, 0, location, &op));
   *out_value_id = loom_value_slice_get(loom_low_op_results(op), 0);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_emit_i32x4_extract_lane(
+    loom_low_lower_context_t* context, loom_value_id_t source, uint8_t lane,
+    loom_location_id_t location, loom_value_id_t* out_value_id) {
+  IREE_ASSERT_ARGUMENT(out_value_id);
+  *out_value_id = LOOM_VALUE_ID_INVALID;
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_wasm_make_i32_register_type(context, &result_type));
+  loom_named_attr_t attr = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_make_i64_attr(context, IREE_SV("lane"), lane, &attr));
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
+      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_EXTRACT_LANE, &source,
+      1, loom_make_named_attr_slice(&attr, 1), &result_type, 1, NULL, 0,
+      location, &op));
+  *out_value_id = loom_value_slice_get(loom_low_op_results(op), 0);
+  return iree_ok_status();
+}
+
+static const iree_string_view_t kWasmShuffleLaneAttrNames[16] = {
+    IREE_SVL("lane0"),  IREE_SVL("lane1"),  IREE_SVL("lane2"),
+    IREE_SVL("lane3"),  IREE_SVL("lane4"),  IREE_SVL("lane5"),
+    IREE_SVL("lane6"),  IREE_SVL("lane7"),  IREE_SVL("lane8"),
+    IREE_SVL("lane9"),  IREE_SVL("lane10"), IREE_SVL("lane11"),
+    IREE_SVL("lane12"), IREE_SVL("lane13"), IREE_SVL("lane14"),
+    IREE_SVL("lane15"),
+};
+
+static iree_status_t loom_wasm_make_shuffle_attrs(
+    loom_low_lower_context_t* context, const loom_wasm_shuffle_plan_t* plan,
+    loom_named_attr_slice_t* out_attrs) {
+  IREE_ASSERT_ARGUMENT(out_attrs);
+  loom_named_attr_t* attrs = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
+      context, IREE_ARRAYSIZE(plan->byte_lanes), sizeof(*attrs),
+      (void**)&attrs));
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(plan->byte_lanes); ++i) {
+    IREE_RETURN_IF_ERROR(loom_wasm_make_i64_attr(
+        context, kWasmShuffleLaneAttrNames[i], plan->byte_lanes[i], &attrs[i]));
+  }
+  *out_attrs =
+      loom_make_named_attr_slice(attrs, IREE_ARRAYSIZE(plan->byte_lanes));
   return iree_ok_status();
 }
 
@@ -1110,6 +1317,87 @@ static iree_status_t loom_wasm_lower_vector_store(
       source_op->location, &store_op);
 }
 
+static iree_status_t loom_wasm_lower_vector_extract(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_wasm_lane_plan_t* plan) {
+  loom_value_id_t source = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_vector_extract_source(source_op), &source));
+  loom_value_id_t result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_i32x4_extract_lane(
+      context, source, plan->lane, source_op->location, &result));
+  return loom_low_lower_bind_value(
+      context, loom_vector_extract_result(source_op), result);
+}
+
+static iree_status_t loom_wasm_lower_vector_insert(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_wasm_lane_plan_t* plan) {
+  loom_value_id_t dest = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_vector_insert_dest(source_op), &dest));
+  loom_value_id_t value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_vector_insert_value(source_op), &value));
+  loom_named_attr_t attr = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_make_i64_attr(context, IREE_SV("lane"), plan->lane, &attr));
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_make_v128_register_type(context, &result_type));
+  loom_value_id_t operands[] = {dest, value};
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
+      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_REPLACE_LANE,
+      operands, IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(&attr, 1),
+      &result_type, 1, NULL, 0, source_op->location, &op));
+  return loom_low_lower_bind_value(
+      context, loom_vector_insert_result(source_op),
+      loom_value_slice_get(loom_low_op_results(op), 0));
+}
+
+static iree_status_t loom_wasm_lower_vector_shuffle(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_wasm_shuffle_plan_t* plan) {
+  loom_value_id_t source = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_vector_shuffle_source(source_op), &source));
+  loom_named_attr_slice_t attrs = loom_named_attr_slice_empty();
+  IREE_RETURN_IF_ERROR(loom_wasm_make_shuffle_attrs(context, plan, &attrs));
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_make_v128_register_type(context, &result_type));
+  loom_value_id_t operands[] = {source, source};
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
+      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I8X16_SHUFFLE, operands,
+      IREE_ARRAYSIZE(operands), attrs, &result_type, 1, NULL, 0,
+      source_op->location, &op));
+  return loom_low_lower_bind_value(
+      context, loom_vector_shuffle_result(source_op),
+      loom_value_slice_get(loom_low_op_results(op), 0));
+}
+
+static iree_status_t loom_wasm_lower_vector_reduce(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_vector_reduce_input(source_op), &input));
+  loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, loom_vector_reduce_init(source_op), &accumulator));
+  for (uint8_t lane = 0; lane < 4; ++lane) {
+    loom_value_id_t lane_value = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_wasm_emit_i32x4_extract_lane(
+        context, input, lane, source_op->location, &lane_value));
+    IREE_RETURN_IF_ERROR(loom_wasm_emit_i32_binary(
+        context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD, accumulator,
+        lane_value, source_op->location, &accumulator));
+  }
+  return loom_low_lower_bind_value(
+      context, loom_vector_reduce_result(source_op), accumulator);
+}
+
 static iree_status_t loom_wasm_emit_op(void* user_data,
                                        loom_low_lower_context_t* context,
                                        const loom_op_t* source_op,
@@ -1132,6 +1420,18 @@ static iree_status_t loom_wasm_emit_op(void* user_data,
       return loom_wasm_lower_vector_store(
           context, source_op,
           (const loom_low_source_memory_access_plan_t*)plan.target_data);
+    case LOOM_OP_VECTOR_EXTRACT:
+      return loom_wasm_lower_vector_extract(
+          context, source_op, (const loom_wasm_lane_plan_t*)plan.target_data);
+    case LOOM_OP_VECTOR_INSERT:
+      return loom_wasm_lower_vector_insert(
+          context, source_op, (const loom_wasm_lane_plan_t*)plan.target_data);
+    case LOOM_OP_VECTOR_SHUFFLE:
+      return loom_wasm_lower_vector_shuffle(
+          context, source_op,
+          (const loom_wasm_shuffle_plan_t*)plan.target_data);
+    case LOOM_OP_VECTOR_REDUCE:
+      return loom_wasm_lower_vector_reduce(context, source_op);
     default:
       IREE_ASSERT_UNREACHABLE();
       return iree_ok_status();

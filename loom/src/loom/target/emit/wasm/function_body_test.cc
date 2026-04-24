@@ -39,6 +39,9 @@ constexpr uint8_t kWasmTypeV128 = 0x7B;
 constexpr uint32_t kWasmSimdV128Load = 0x00;
 constexpr uint32_t kWasmSimdV128Store = 0x0B;
 constexpr uint32_t kWasmSimdV128Const = 0x0C;
+constexpr uint32_t kWasmSimdI8x16Shuffle = 0x0D;
+constexpr uint32_t kWasmSimdI32x4ExtractLane = 0x1B;
+constexpr uint32_t kWasmSimdI32x4ReplaceLane = 0x1C;
 constexpr uint32_t kWasmSimdI32x4Add = 0xAE;
 constexpr uint32_t kWasmSimdI32x4Mul = 0xB5;
 
@@ -371,6 +374,76 @@ TEST_F(WasmFunctionBodyTest, EmitsStraightLineSimdFunctionBody) {
   const uint32_t out = reader.ExpectLocalSet();
 
   EXPECT_EQ(reader.ExpectLocalGet(), out);
+  reader.ExpectU8(kWasmOpcodeReturn);
+  reader.ExpectU8(kWasmOpcodeEnd);
+  reader.ExpectConsumed();
+}
+
+TEST_F(WasmFunctionBodyTest, EmitsSimdLaneFunctionBody) {
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_allocation_sidecar_t allocation = {};
+  BuildSidecars(
+      "low.func.def target(@wasm_target) @wasm_test(%v : reg<wasm.v128>, "
+      "%x : reg<wasm.i32>) -> (reg<wasm.v128>) {\n"
+      "  %lane = low.op<wasm.i32x4.extract_lane>(%v) {lane = 1} : "
+      "(reg<wasm.v128>) -> reg<wasm.i32>\n"
+      "  %sum = low.op<wasm.i32.add>(%lane, %x) : "
+      "(reg<wasm.i32>, reg<wasm.i32>) -> reg<wasm.i32>\n"
+      "  %updated = low.op<wasm.i32x4.replace_lane>(%v, %sum) {lane = 2} : "
+      "(reg<wasm.v128>, reg<wasm.i32>) -> reg<wasm.v128>\n"
+      "  %shuffled = low.op<wasm.i8x16.shuffle>(%updated, %updated) "
+      "{lane0 = 12, lane1 = 13, lane2 = 14, lane3 = 15, lane4 = 8, "
+      "lane5 = 9, lane6 = 10, lane7 = 11, lane8 = 4, lane9 = 5, "
+      "lane10 = 6, lane11 = 7, lane12 = 0, lane13 = 1, lane14 = 2, "
+      "lane15 = 31} : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>\n"
+      "  low.return %shuffled : reg<wasm.v128>\n"
+      "}\n",
+      &schedule, &allocation);
+
+  FunctionBodyOwner owner;
+  IREE_ASSERT_OK(loom_wasm_emit_function_body(
+      &schedule, &allocation, iree_allocator_system(), &owner.body));
+
+  EXPECT_EQ(owner.body.parameter_count, 2u);
+  EXPECT_GE(owner.body.local_count, 2u);
+
+  WasmReader reader(owner.body);
+  EXPECT_EQ(reader.ReadU32Leb(), owner.body.body_length);
+  const uint32_t local_declaration_count = reader.ReadU32Leb();
+  for (uint32_t i = 0; i < local_declaration_count; ++i) {
+    EXPECT_GT(reader.ReadU32Leb(), 0u);
+    const uint8_t type = reader.ReadU8();
+    EXPECT_TRUE(type == kWasmTypeI32 || type == kWasmTypeV128);
+  }
+
+  EXPECT_EQ(reader.ExpectLocalGet(), 0u);
+  reader.ExpectSimd(kWasmSimdI32x4ExtractLane);
+  EXPECT_EQ(reader.ReadU8(), 1u);
+  const uint32_t lane = reader.ExpectLocalSet();
+
+  EXPECT_EQ(reader.ExpectLocalGet(), lane);
+  EXPECT_EQ(reader.ExpectLocalGet(), 1u);
+  reader.ExpectU8(kWasmOpcodeI32Add);
+  const uint32_t sum = reader.ExpectLocalSet();
+
+  EXPECT_EQ(reader.ExpectLocalGet(), 0u);
+  EXPECT_EQ(reader.ExpectLocalGet(), sum);
+  reader.ExpectSimd(kWasmSimdI32x4ReplaceLane);
+  EXPECT_EQ(reader.ReadU8(), 2u);
+  const uint32_t updated = reader.ExpectLocalSet();
+
+  EXPECT_EQ(reader.ExpectLocalGet(), updated);
+  EXPECT_EQ(reader.ExpectLocalGet(), updated);
+  reader.ExpectSimd(kWasmSimdI8x16Shuffle);
+  const uint8_t expected_lanes[16] = {
+      12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 31,
+  };
+  for (uint8_t expected_lane : expected_lanes) {
+    EXPECT_EQ(reader.ReadU8(), expected_lane);
+  }
+  const uint32_t shuffled = reader.ExpectLocalSet();
+
+  EXPECT_EQ(reader.ExpectLocalGet(), shuffled);
   reader.ExpectU8(kWasmOpcodeReturn);
   reader.ExpectU8(kWasmOpcodeEnd);
   reader.ExpectConsumed();

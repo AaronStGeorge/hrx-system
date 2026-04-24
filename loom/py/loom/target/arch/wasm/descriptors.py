@@ -127,6 +127,23 @@ _V128_HI_IMMEDIATE = Immediate(
     unsigned_max=(2**64) - 1,
 )
 
+_LANE_I32X4_IMMEDIATE = Immediate(
+    "lane",
+    ImmediateKind.UNSIGNED,
+    bit_width=2,
+    unsigned_max=3,
+)
+
+_SHUFFLE_BYTE_IMMEDIATES = tuple(
+    Immediate(
+        f"lane{i}",
+        ImmediateKind.UNSIGNED,
+        bit_width=5,
+        unsigned_max=31,
+    )
+    for i in range(16)
+)
+
 _OP_BR = 0x0C
 _OP_BR_IF = 0x0D
 _OP_RETURN = 0x0F
@@ -145,7 +162,10 @@ def _simd_encoding_id(subopcode: int) -> int:
 _OP_V128_LOAD = _simd_encoding_id(0x00)
 _OP_V128_STORE = _simd_encoding_id(0x0B)
 _OP_V128_CONST = _simd_encoding_id(0x0C)
+_OP_I8X16_SHUFFLE = _simd_encoding_id(0x0D)
 _OP_I32X4_SPLAT = _simd_encoding_id(0x11)
+_OP_I32X4_EXTRACT_LANE = _simd_encoding_id(0x1B)
+_OP_I32X4_REPLACE_LANE = _simd_encoding_id(0x1C)
 _OP_I32X4_EQ = _simd_encoding_id(0x37)
 _OP_I32X4_NE = _simd_encoding_id(0x38)
 _OP_I32X4_LT_S = _simd_encoding_id(0x39)
@@ -347,12 +367,65 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
+            key="wasm.i8x16.shuffle",
+            mnemonic="i8x16.shuffle",
+            semantic_tag="vector.shuffle.i8x16",
+            encoding_id=_OP_I8X16_SHUFFLE,
+            operands=(
+                _v128_result(),
+                _v128_operand("lhs"),
+                _v128_operand("rhs"),
+            ),
+            immediates=_SHUFFLE_BYTE_IMMEDIATES,
+            asm_forms=_asm(
+                results=("dst",),
+                operands=("lhs", "rhs"),
+                immediates=tuple(
+                    immediate.field_name for immediate in _SHUFFLE_BYTE_IMMEDIATES
+                ),
+            ),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
             key="wasm.i32x4.splat",
             mnemonic="i32x4.splat",
             semantic_tag="vector.splat.i32x4",
             encoding_id=_OP_I32X4_SPLAT,
             operands=(_v128_result(), _i32_operand("value")),
             asm_forms=_asm(results=("dst",), operands=("value",)),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.extract_lane",
+            mnemonic="i32x4.extract_lane",
+            semantic_tag="vector.extract.i32x4",
+            encoding_id=_OP_I32X4_EXTRACT_LANE,
+            operands=(_i32_result(), _v128_operand("source")),
+            immediates=(_LANE_I32X4_IMMEDIATE,),
+            asm_forms=_asm(
+                results=("dst",), operands=("source",), immediates=("lane",)
+            ),
+            schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.i32x4.replace_lane",
+            mnemonic="i32x4.replace_lane",
+            semantic_tag="vector.insert.i32x4",
+            encoding_id=_OP_I32X4_REPLACE_LANE,
+            operands=(
+                _v128_result(),
+                _v128_operand("dest"),
+                _i32_operand("value"),
+            ),
+            immediates=(_LANE_I32X4_IMMEDIATE,),
+            asm_forms=_asm(
+                results=("dst",),
+                operands=("dest", "value"),
+                immediates=("lane",),
+            ),
             schedule_class=_SCHEDULE_SIMD_I32X4,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
