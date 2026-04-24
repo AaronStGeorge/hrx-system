@@ -731,7 +731,7 @@ test_invoke = Op(
             kind=CallLikeKind.SEMANTIC,
         ),
     ],
-    verify="loom_test_invoke_verify",
+    verify="loom_test_call_like_verify",
     format=[
         SymbolRef("callee"),
         GLUE,
@@ -749,6 +749,100 @@ test_invoke = Op(
     ],
     examples=[
         "%output, %count = test.invoke @callee(%weights, %input) : (tile<4xf32>, index) -> (%weights as tile<4xf32>, index)",
+    ],
+)
+
+# ============================================================================
+# test.low_call / test.low_invoke — non-semantic call-like kind fixtures
+# ============================================================================
+
+test_low_call = Op(
+    "test.low_call",
+    group=test_ops,
+    doc="Test call-like op classified like a target-low internal call.",
+    operands=[
+        Operand("operands", ANY, variadic=True),
+    ],
+    attrs=[
+        AttrDef(
+            "callee",
+            "symbol",
+            symbol_ref=SymbolReference("function", ["func_like"]),
+        ),
+    ],
+    results=[Result("results", ANY, variadic=True)],
+    traits=[UNKNOWN_EFFECTS],
+    interfaces=[
+        CallLikeInterface(
+            callee="callee",
+            operands="operands",
+            results="results",
+            kind=CallLikeKind.LOW_INTERNAL,
+        ),
+    ],
+    verify="loom_test_call_like_verify",
+    format=[
+        SymbolRef("callee"),
+        GLUE,
+        LPAREN,
+        Refs("operands"),
+        RPAREN,
+        COLON,
+        LPAREN,
+        TypesOf("operands"),
+        RPAREN,
+        OptionalGroup(
+            [ARROW, ResultTypeList("results")],
+            anchor="results",
+        ),
+    ],
+    examples=[
+        "test.low_call @callee() : ()",
+    ],
+)
+
+test_low_invoke = Op(
+    "test.low_invoke",
+    group=test_ops,
+    doc="Test call-like op classified like an explicit target-low invocation.",
+    operands=[
+        Operand("operands", ANY, variadic=True),
+    ],
+    attrs=[
+        AttrDef(
+            "callee",
+            "symbol",
+            symbol_ref=SymbolReference("function", ["func_like"]),
+        ),
+    ],
+    results=[Result("results", ANY, variadic=True)],
+    traits=[UNKNOWN_EFFECTS],
+    interfaces=[
+        CallLikeInterface(
+            callee="callee",
+            operands="operands",
+            results="results",
+            kind=CallLikeKind.LOW_INVOKE,
+        ),
+    ],
+    verify="loom_test_call_like_verify",
+    format=[
+        SymbolRef("callee"),
+        GLUE,
+        LPAREN,
+        Refs("operands"),
+        RPAREN,
+        COLON,
+        LPAREN,
+        TypesOf("operands"),
+        RPAREN,
+        OptionalGroup(
+            [ARROW, ResultTypeList("results")],
+            anchor="results",
+        ),
+    ],
+    examples=[
+        "test.low_invoke @callee() : ()",
     ],
 )
 
@@ -1547,6 +1641,8 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_map,
     test_update,
     test_invoke,
+    test_low_call,
+    test_low_invoke,
     test_slice,
     test_loop,
     test_block_args,

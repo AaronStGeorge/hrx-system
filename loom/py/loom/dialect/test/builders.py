@@ -147,6 +147,32 @@ class TestBuilders:
         _operands.extend(operands)
         return cast(list[ValueRef], self._b.build("test.invoke", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def low_call(self, *, callee: str, operands: list[ValueRef], results: list[Type | TiedResultSpec]) -> list[ValueRef]:
+        """Test call-like op classified like a target-low internal call.
+
+        Example::
+            test.low_call @callee() : ()
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["callee"] = callee
+        _operands.extend(operands)
+        return cast(list[ValueRef], self._b.build("test.low_call", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def low_invoke(self, *, callee: str, operands: list[ValueRef], results: list[Type | TiedResultSpec]) -> list[ValueRef]:
+        """Test call-like op classified like an explicit target-low invocation.
+
+        Example::
+            test.low_invoke @callee() : ()
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["callee"] = callee
+        _operands.extend(operands)
+        return cast(list[ValueRef], self._b.build("test.low_invoke", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def slice(self, *, source: ValueRef, offsets: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
         """Test index list with mixed static/dynamic offsets.
 

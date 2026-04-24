@@ -38,8 +38,12 @@ static iree_string_view_t loom_test_symbol_definition_name(
   return loom_symbol_definition_descriptor_name(symbol->definition);
 }
 
+static loom_symbol_ref_t loom_test_call_like_callee(const loom_op_t* op) {
+  return loom_attr_as_symbol(loom_op_const_attrs(op)[0]);
+}
+
 static iree_status_t loom_test_emit_callee_diagnostic(
-    iree_diagnostic_emitter_t emitter, const loom_op_t* invoke_op,
+    iree_diagnostic_emitter_t emitter, const loom_op_t* call_op,
     const loom_op_t* definition_op, const loom_error_def_t* error,
     const loom_diagnostic_param_t* params, iree_host_size_t param_count) {
   loom_diagnostic_related_op_t related_ops[] = {{
@@ -47,7 +51,7 @@ static iree_status_t loom_test_emit_callee_diagnostic(
       .op = definition_op,
   }};
   loom_diagnostic_emission_t emission = {
-      .op = invoke_op,
+      .op = call_op,
       .error = error,
       .params = params,
       .param_count = param_count,
@@ -58,7 +62,7 @@ static iree_status_t loom_test_emit_callee_diagnostic(
 }
 
 static iree_status_t loom_test_emit_callee_kind_mismatch(
-    const loom_module_t* module, const loom_op_t* invoke_op,
+    const loom_module_t* module, const loom_op_t* call_op,
     iree_diagnostic_emitter_t emitter, loom_symbol_ref_t callee,
     const loom_symbol_t* symbol) {
   loom_diagnostic_param_t params[] = {
@@ -67,14 +71,14 @@ static iree_status_t loom_test_emit_callee_kind_mismatch(
       loom_param_string(IREE_SV("function")),
   };
   return loom_test_emit_callee_diagnostic(
-      emitter, invoke_op, symbol->defining_op,
+      emitter, call_op, symbol->defining_op,
       loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3), params,
       IREE_ARRAYSIZE(params));
 }
 
 static const loom_symbol_t* loom_test_lookup_callee_symbol(
-    const loom_module_t* module, const loom_op_t* invoke_op) {
-  loom_symbol_ref_t callee = loom_test_invoke_callee(invoke_op);
+    const loom_module_t* module, const loom_op_t* call_op) {
+  loom_symbol_ref_t callee = loom_test_call_like_callee(call_op);
   if (!loom_symbol_ref_is_valid(callee) || callee.module_id != 0 ||
       callee.symbol_id >= module->symbols.count) {
     return NULL;
@@ -104,21 +108,21 @@ static bool loom_test_load_callee_signature(
 }
 
 static loom_value_id_t loom_test_map_callee_value_id(
-    const loom_test_callee_signature_t* signature, const loom_op_t* invoke_op,
+    const loom_test_callee_signature_t* signature, const loom_op_t* call_op,
     loom_value_id_t callee_value_id) {
-  const loom_value_id_t* invoke_operands = loom_op_const_operands(invoke_op);
+  const loom_value_id_t* call_operands = loom_op_const_operands(call_op);
   for (uint16_t i = 0;
-       i < signature->argument_count && i < invoke_op->operand_count; ++i) {
+       i < signature->argument_count && i < call_op->operand_count; ++i) {
     if (signature->argument_ids[i] == callee_value_id) {
-      return invoke_operands[i];
+      return call_operands[i];
     }
   }
 
-  const loom_value_id_t* invoke_results = loom_op_const_results(invoke_op);
-  for (uint16_t i = 0;
-       i < signature->result_count && i < invoke_op->result_count; ++i) {
+  const loom_value_id_t* call_results = loom_op_const_results(call_op);
+  for (uint16_t i = 0; i < signature->result_count && i < call_op->result_count;
+       ++i) {
     if (signature->result_ids[i] == callee_value_id) {
-      return invoke_results[i];
+      return call_results[i];
     }
   }
 
@@ -126,63 +130,62 @@ static loom_value_id_t loom_test_map_callee_value_id(
 }
 
 static bool loom_test_signature_encoding_matches(
-    const loom_test_callee_signature_t* signature, const loom_op_t* invoke_op,
-    loom_type_t invoke_type, loom_type_t callee_type) {
-  if (invoke_type.encoding_flags != callee_type.encoding_flags) {
+    const loom_test_callee_signature_t* signature, const loom_op_t* call_op,
+    loom_type_t call_type, loom_type_t callee_type) {
+  if (call_type.encoding_flags != callee_type.encoding_flags) {
     return false;
   }
   if (!iree_all_bits_set(callee_type.encoding_flags, LOOM_ENCODING_FLAG_SSA)) {
-    return invoke_type.encoding_id == callee_type.encoding_id;
+    return call_type.encoding_id == callee_type.encoding_id;
   }
-  return invoke_type.encoding_id ==
-         (uint16_t)loom_test_map_callee_value_id(signature, invoke_op,
+  return call_type.encoding_id ==
+         (uint16_t)loom_test_map_callee_value_id(signature, call_op,
                                                  callee_type.encoding_id);
 }
 
 static bool loom_test_signature_dim_matches(
-    const loom_test_callee_signature_t* signature, const loom_op_t* invoke_op,
-    uint64_t invoke_dim, uint64_t callee_dim) {
-  if (loom_dim_is_dynamic(invoke_dim) != loom_dim_is_dynamic(callee_dim)) {
+    const loom_test_callee_signature_t* signature, const loom_op_t* call_op,
+    uint64_t call_dim, uint64_t callee_dim) {
+  if (loom_dim_is_dynamic(call_dim) != loom_dim_is_dynamic(callee_dim)) {
     return false;
   }
   if (!loom_dim_is_dynamic(callee_dim)) {
-    return loom_dim_static_size(invoke_dim) == loom_dim_static_size(callee_dim);
+    return loom_dim_static_size(call_dim) == loom_dim_static_size(callee_dim);
   }
-  return loom_dim_value_id(invoke_dim) ==
-         loom_test_map_callee_value_id(signature, invoke_op,
+  return loom_dim_value_id(call_dim) ==
+         loom_test_map_callee_value_id(signature, call_op,
                                        loom_dim_value_id(callee_dim));
 }
 
 static bool loom_test_signature_type_matches(
-    const loom_test_callee_signature_t* signature, const loom_op_t* invoke_op,
-    loom_type_t invoke_type, loom_type_t callee_type) {
-  if (loom_type_kind(invoke_type) != loom_type_kind(callee_type) ||
-      loom_type_element_type(invoke_type) !=
+    const loom_test_callee_signature_t* signature, const loom_op_t* call_op,
+    loom_type_t call_type, loom_type_t callee_type) {
+  if (loom_type_kind(call_type) != loom_type_kind(callee_type) ||
+      loom_type_element_type(call_type) !=
           loom_type_element_type(callee_type) ||
-      loom_type_rank(invoke_type) != loom_type_rank(callee_type) ||
-      !loom_test_signature_encoding_matches(signature, invoke_op, invoke_type,
+      loom_type_rank(call_type) != loom_type_rank(callee_type) ||
+      !loom_test_signature_encoding_matches(signature, call_op, call_type,
                                             callee_type)) {
     return false;
   }
 
   switch (loom_type_kind(callee_type)) {
     case LOOM_TYPE_FUNCTION: {
-      const loom_func_type_data_t* invoke_data =
-          loom_type_func_data(invoke_type);
+      const loom_func_type_data_t* call_data = loom_type_func_data(call_type);
       const loom_func_type_data_t* callee_data =
           loom_type_func_data(callee_type);
-      if (!invoke_data || !callee_data) {
-        return invoke_data == callee_data;
+      if (!call_data || !callee_data) {
+        return call_data == callee_data;
       }
-      if (invoke_data->arg_count != callee_data->arg_count ||
-          invoke_data->result_count != callee_data->result_count) {
+      if (call_data->arg_count != callee_data->arg_count ||
+          call_data->result_count != callee_data->result_count) {
         return false;
       }
       uint16_t nested_type_count =
           (uint16_t)(callee_data->arg_count + callee_data->result_count);
       for (uint16_t i = 0; i < nested_type_count; ++i) {
-        if (!loom_test_signature_type_matches(signature, invoke_op,
-                                              invoke_data->types[i],
+        if (!loom_test_signature_type_matches(signature, call_op,
+                                              call_data->types[i],
                                               callee_data->types[i])) {
           return false;
         }
@@ -191,19 +194,19 @@ static bool loom_test_signature_type_matches(
     }
     case LOOM_TYPE_DIALECT: {
       uint16_t param_count = loom_type_dialect_param_count(callee_type);
-      if (loom_type_dialect_name_id(invoke_type) !=
+      if (loom_type_dialect_name_id(call_type) !=
               loom_type_dialect_name_id(callee_type) ||
-          loom_type_dialect_param_count(invoke_type) != param_count) {
+          loom_type_dialect_param_count(call_type) != param_count) {
         return false;
       }
-      const loom_type_t* invoke_params = loom_type_dialect_params(invoke_type);
+      const loom_type_t* call_params = loom_type_dialect_params(call_type);
       const loom_type_t* callee_params = loom_type_dialect_params(callee_type);
-      if (!invoke_params || !callee_params) {
-        return invoke_params == callee_params;
+      if (!call_params || !callee_params) {
+        return call_params == callee_params;
       }
       for (uint16_t i = 0; i < param_count; ++i) {
         if (!loom_test_signature_type_matches(
-                signature, invoke_op, invoke_params[i], callee_params[i])) {
+                signature, call_op, call_params[i], callee_params[i])) {
           return false;
         }
       }
@@ -216,8 +219,8 @@ static bool loom_test_signature_type_matches(
     case LOOM_TYPE_POOL: {
       uint8_t rank = loom_type_rank(callee_type);
       for (uint8_t i = 0; i < rank; ++i) {
-        if (!loom_test_signature_dim_matches(signature, invoke_op,
-                                             loom_type_dim(invoke_type, i),
+        if (!loom_test_signature_dim_matches(signature, call_op,
+                                             loom_type_dim(call_type, i),
                                              loom_type_dim(callee_type, i))) {
           return false;
         }
@@ -236,18 +239,18 @@ static bool loom_test_signature_type_matches(
   return false;
 }
 
-static iree_status_t loom_test_emit_invoke_count_mismatch(
-    const loom_module_t* module, const loom_op_t* invoke_op,
+static iree_status_t loom_test_emit_call_like_count_mismatch(
+    const loom_module_t* module, const loom_op_t* call_op,
     const loom_op_t* definition_op, iree_diagnostic_emitter_t emitter,
     const loom_error_def_t* error, uint16_t actual_count,
     uint16_t expected_count) {
   loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_op_name(module, invoke_op)),
+      loom_param_string(loom_op_name(module, call_op)),
       loom_param_u32(actual_count),
       loom_param_u32(expected_count),
   };
   return loom_test_emit_callee_diagnostic(
-      emitter, invoke_op, definition_op, error, params, IREE_ARRAYSIZE(params));
+      emitter, call_op, definition_op, error, params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_test_emit_constant_kind_mismatch(
@@ -284,30 +287,30 @@ static iree_status_t loom_test_emit_constant_result_type_mismatch(
   return iree_diagnostic_emit(emitter, &emission);
 }
 
-static iree_status_t loom_test_verify_invoke_argument_count(
-    const loom_module_t* module, const loom_op_t* invoke_op,
+static iree_status_t loom_test_verify_call_like_argument_count(
+    const loom_module_t* module, const loom_op_t* call_op,
     const loom_test_callee_signature_t* signature,
     iree_diagnostic_emitter_t emitter) {
-  if (invoke_op->operand_count == signature->argument_count) {
+  if (call_op->operand_count == signature->argument_count) {
     return iree_ok_status();
   }
-  return loom_test_emit_invoke_count_mismatch(
-      module, invoke_op, signature->definition_op, emitter,
+  return loom_test_emit_call_like_count_mismatch(
+      module, call_op, signature->definition_op, emitter,
       loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1),
-      invoke_op->operand_count, signature->argument_count);
+      call_op->operand_count, signature->argument_count);
 }
 
-static iree_status_t loom_test_verify_invoke_result_count(
-    const loom_module_t* module, const loom_op_t* invoke_op,
+static iree_status_t loom_test_verify_call_like_result_count(
+    const loom_module_t* module, const loom_op_t* call_op,
     const loom_test_callee_signature_t* signature,
     iree_diagnostic_emitter_t emitter) {
-  if (invoke_op->result_count == signature->result_count) {
+  if (call_op->result_count == signature->result_count) {
     return iree_ok_status();
   }
-  return loom_test_emit_invoke_count_mismatch(
-      module, invoke_op, signature->definition_op, emitter,
+  return loom_test_emit_call_like_count_mismatch(
+      module, call_op, signature->definition_op, emitter,
       loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 2),
-      invoke_op->result_count, signature->result_count);
+      call_op->result_count, signature->result_count);
 }
 
 static void loom_test_format_field_name(char* buffer,
@@ -317,88 +320,87 @@ static void loom_test_format_field_name(char* buffer,
   iree_snprintf(buffer, buffer_capacity, "%s %u", prefix, field_index);
 }
 
-static iree_status_t loom_test_emit_invoke_type_mismatch(
-    const loom_op_t* invoke_op, const loom_op_t* definition_op,
+static iree_status_t loom_test_emit_call_like_type_mismatch(
+    const loom_op_t* call_op, const loom_op_t* definition_op,
     iree_diagnostic_emitter_t emitter,
-    loom_diagnostic_field_kind_t invoke_field_kind, uint16_t invoke_field_index,
-    const char* invoke_field_prefix, loom_type_t invoke_type,
+    loom_diagnostic_field_kind_t call_field_kind, uint16_t call_field_index,
+    const char* call_field_prefix, loom_type_t call_type,
     const char* callee_field_prefix, loom_type_t callee_type) {
-  char invoke_field_name[32];
+  char call_field_name[32];
   char callee_field_name[32];
-  loom_test_format_field_name(invoke_field_name, sizeof(invoke_field_name),
-                              invoke_field_prefix, invoke_field_index);
+  loom_test_format_field_name(call_field_name, sizeof(call_field_name),
+                              call_field_prefix, call_field_index);
   loom_test_format_field_name(callee_field_name, sizeof(callee_field_name),
-                              callee_field_prefix, invoke_field_index);
+                              callee_field_prefix, call_field_index);
   loom_diagnostic_param_t params[] = {
       loom_param_with_field_ref(
-          loom_param_string(iree_make_cstring_view(invoke_field_name)),
-          loom_diagnostic_field_ref(invoke_field_kind, invoke_field_index)),
-      loom_param_type(invoke_type),
+          loom_param_string(iree_make_cstring_view(call_field_name)),
+          loom_diagnostic_field_ref(call_field_kind, call_field_index)),
+      loom_param_type(call_type),
       loom_param_string(iree_make_cstring_view(callee_field_name)),
       loom_param_type(callee_type),
   };
   return loom_test_emit_callee_diagnostic(
-      emitter, invoke_op, definition_op,
+      emitter, call_op, definition_op,
       loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1), params,
       IREE_ARRAYSIZE(params));
 }
 
-static iree_status_t loom_test_verify_invoke_argument_types(
-    const loom_module_t* module, const loom_op_t* invoke_op,
+static iree_status_t loom_test_verify_call_like_argument_types(
+    const loom_module_t* module, const loom_op_t* call_op,
     const loom_test_callee_signature_t* signature,
     iree_diagnostic_emitter_t emitter) {
-  uint16_t compare_count = invoke_op->operand_count;
+  uint16_t compare_count = call_op->operand_count;
   if (compare_count > signature->argument_count) {
     compare_count = signature->argument_count;
   }
 
-  const loom_value_id_t* invoke_operands = loom_op_const_operands(invoke_op);
+  const loom_value_id_t* call_operands = loom_op_const_operands(call_op);
   for (uint16_t i = 0; i < compare_count; ++i) {
-    loom_type_t invoke_type =
-        loom_module_value_type(module, invoke_operands[i]);
+    loom_type_t call_type = loom_module_value_type(module, call_operands[i]);
     loom_type_t callee_type =
         loom_module_value_type(module, signature->argument_ids[i]);
-    if (loom_test_signature_type_matches(signature, invoke_op, invoke_type,
+    if (loom_test_signature_type_matches(signature, call_op, call_type,
                                          callee_type)) {
       continue;
     }
-    IREE_RETURN_IF_ERROR(loom_test_emit_invoke_type_mismatch(
-        invoke_op, signature->definition_op, emitter,
-        LOOM_DIAGNOSTIC_FIELD_OPERAND, i, "operand", invoke_type,
+    IREE_RETURN_IF_ERROR(loom_test_emit_call_like_type_mismatch(
+        call_op, signature->definition_op, emitter,
+        LOOM_DIAGNOSTIC_FIELD_OPERAND, i, "operand", call_type,
         "callee argument", callee_type));
   }
   return iree_ok_status();
 }
 
-static iree_status_t loom_test_verify_invoke_result_types(
-    const loom_module_t* module, const loom_op_t* invoke_op,
+static iree_status_t loom_test_verify_call_like_result_types(
+    const loom_module_t* module, const loom_op_t* call_op,
     const loom_test_callee_signature_t* signature,
     iree_diagnostic_emitter_t emitter) {
-  uint16_t compare_count = invoke_op->result_count;
+  uint16_t compare_count = call_op->result_count;
   if (compare_count > signature->result_count) {
     compare_count = signature->result_count;
   }
 
-  const loom_value_id_t* invoke_results = loom_op_const_results(invoke_op);
+  const loom_value_id_t* call_results = loom_op_const_results(call_op);
   for (uint16_t i = 0; i < compare_count; ++i) {
-    loom_type_t invoke_type = loom_module_value_type(module, invoke_results[i]);
+    loom_type_t call_type = loom_module_value_type(module, call_results[i]);
     loom_type_t callee_type =
         loom_module_value_type(module, signature->result_ids[i]);
-    if (loom_test_signature_type_matches(signature, invoke_op, invoke_type,
+    if (loom_test_signature_type_matches(signature, call_op, call_type,
                                          callee_type)) {
       continue;
     }
-    IREE_RETURN_IF_ERROR(loom_test_emit_invoke_type_mismatch(
-        invoke_op, signature->definition_op, emitter,
-        LOOM_DIAGNOSTIC_FIELD_RESULT, i, "result", invoke_type, "callee result",
+    IREE_RETURN_IF_ERROR(loom_test_emit_call_like_type_mismatch(
+        call_op, signature->definition_op, emitter,
+        LOOM_DIAGNOSTIC_FIELD_RESULT, i, "result", call_type, "callee result",
         callee_type));
   }
   return iree_ok_status();
 }
 
-iree_status_t loom_test_invoke_verify(const loom_module_t* module,
-                                      const loom_op_t* op,
-                                      iree_diagnostic_emitter_t emitter) {
+iree_status_t loom_test_call_like_verify(const loom_module_t* module,
+                                         const loom_op_t* op,
+                                         iree_diagnostic_emitter_t emitter) {
   const loom_symbol_t* symbol = loom_test_lookup_callee_symbol(module, op);
   if (!symbol) {
     return iree_ok_status();
@@ -410,17 +412,17 @@ iree_status_t loom_test_invoke_verify(const loom_module_t* module,
   }
   if (!loom_test_load_callee_signature(module, symbol, &signature)) {
     return loom_test_emit_callee_kind_mismatch(
-        module, op, emitter, loom_test_invoke_callee(op), symbol);
+        module, op, emitter, loom_test_call_like_callee(op), symbol);
   }
 
+  IREE_RETURN_IF_ERROR(loom_test_verify_call_like_argument_count(
+      module, op, &signature, emitter));
   IREE_RETURN_IF_ERROR(
-      loom_test_verify_invoke_argument_count(module, op, &signature, emitter));
+      loom_test_verify_call_like_result_count(module, op, &signature, emitter));
+  IREE_RETURN_IF_ERROR(loom_test_verify_call_like_argument_types(
+      module, op, &signature, emitter));
   IREE_RETURN_IF_ERROR(
-      loom_test_verify_invoke_result_count(module, op, &signature, emitter));
-  IREE_RETURN_IF_ERROR(
-      loom_test_verify_invoke_argument_types(module, op, &signature, emitter));
-  IREE_RETURN_IF_ERROR(
-      loom_test_verify_invoke_result_types(module, op, &signature, emitter));
+      loom_test_verify_call_like_result_types(module, op, &signature, emitter));
   return iree_ok_status();
 }
 

@@ -11,8 +11,6 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
-#include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
 
@@ -30,24 +28,12 @@ class CallGraphTest : public ::testing::Test {
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
 
-    // Register test, func, and low dialects.
     iree_host_size_t test_vtable_count = 0;
     const loom_op_vtable_t* const* test_vtables =
         loom_test_dialect_vtables(&test_vtable_count);
     IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_TEST,
                                                  test_vtables,
                                                  (uint16_t)test_vtable_count));
-    iree_host_size_t func_vtable_count = 0;
-    const loom_op_vtable_t* const* func_vtables =
-        loom_func_dialect_vtables(&func_vtable_count);
-    IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_FUNC,
-                                                 func_vtables,
-                                                 (uint16_t)func_vtable_count));
-    iree_host_size_t low_vtable_count = 0;
-    const loom_op_vtable_t* const* low_vtables =
-        loom_low_dialect_vtables(&low_vtable_count);
-    IREE_ASSERT_OK(loom_context_register_dialect(
-        &context_, LOOM_DIALECT_LOW, low_vtables, (uint16_t)low_vtable_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
 
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
@@ -55,7 +41,6 @@ class CallGraphTest : public ::testing::Test {
                                         iree_allocator_system(), &module_));
     loom_builder_initialize(module_, &module_->arena,
                             loom_module_block(module_), &module_builder_);
-    target_ref_ = add_symbol("test_target");
     iree_arena_initialize(&block_pool_, &graph_arena_);
   }
 
@@ -72,6 +57,12 @@ class CallGraphTest : public ::testing::Test {
     loom_symbol_id_t symbol_id;
     loom_op_t* func_op;
     loom_region_t* body;
+  };
+
+  enum class CallKind {
+    kSemantic,
+    kLowInternal,
+    kLowInvoke,
   };
 
   loom_symbol_ref_t add_symbol(const char* name) {
@@ -94,21 +85,8 @@ class CallGraphTest : public ::testing::Test {
     return {(uint16_t)callee.symbol_id, func_op, body};
   }
 
-  FuncInfo create_low_func(const char* name) {
-    loom_symbol_ref_t callee = add_symbol(name);
-    loom_op_t* func_op = NULL;
-    IREE_CHECK_OK(loom_low_func_def_build(
-        &module_builder_, 0, 0, 0, 0, 0, 0, target_ref_, 0,
-        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
-        loom_named_attr_slice_empty(), callee, NULL, 0, NULL, 0, NULL, 0, NULL,
-        0, LOOM_LOCATION_UNKNOWN, &func_op));
-    loom_func_like_t func_like = loom_func_like_cast(module_, func_op);
-    loom_region_t* body = loom_func_like_body(func_like);
-    return {(uint16_t)callee.symbol_id, func_op, body};
-  }
-
-  // Adds a func.call inside a function body.
-  void add_call(FuncInfo& caller, uint16_t callee_symbol_id) {
+  void add_call(FuncInfo& caller, uint16_t callee_symbol_id,
+                CallKind kind = CallKind::kSemantic) {
     loom_builder_t body_builder;
     loom_builder_initialize(module_, &module_->arena,
                             loom_region_entry_block(caller.body),
@@ -117,23 +95,26 @@ class CallGraphTest : public ::testing::Test {
     loom_symbol_ref_t callee_ref = {.module_id = 0,
                                     .symbol_id = callee_symbol_id};
     loom_op_t* call_op = NULL;
-    IREE_CHECK_OK(loom_func_call_build(&body_builder, 0, 0, callee_ref, NULL, 0,
-                                       NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
-                                       &call_op));
-  }
-
-  void add_low_call(FuncInfo& caller, uint16_t callee_symbol_id) {
-    loom_builder_t body_builder;
-    loom_builder_initialize(module_, &module_->arena,
-                            loom_region_entry_block(caller.body),
-                            &body_builder);
-    body_builder.ip.parent_op = caller.func_op;
-    loom_symbol_ref_t callee_ref = {.module_id = 0,
-                                    .symbol_id = callee_symbol_id};
-    loom_op_t* call_op = NULL;
-    IREE_CHECK_OK(loom_low_func_call_build(&body_builder, 0, 0, callee_ref,
-                                           NULL, 0, NULL, 0, NULL, 0,
-                                           LOOM_LOCATION_UNKNOWN, &call_op));
+    switch (kind) {
+      case CallKind::kSemantic: {
+        IREE_CHECK_OK(loom_test_invoke_build(&body_builder, callee_ref, NULL, 0,
+                                             NULL, 0, NULL, 0,
+                                             LOOM_LOCATION_UNKNOWN, &call_op));
+        break;
+      }
+      case CallKind::kLowInternal: {
+        IREE_CHECK_OK(loom_test_low_call_build(
+            &body_builder, callee_ref, NULL, 0, NULL, 0, NULL, 0,
+            LOOM_LOCATION_UNKNOWN, &call_op));
+        break;
+      }
+      case CallKind::kLowInvoke: {
+        IREE_CHECK_OK(loom_test_low_invoke_build(
+            &body_builder, callee_ref, NULL, 0, NULL, 0, NULL, 0,
+            LOOM_LOCATION_UNKNOWN, &call_op));
+        break;
+      }
+    }
   }
 
   void finalize() { IREE_ASSERT_OK(loom_module_compute_uses(module_)); }
@@ -142,7 +123,6 @@ class CallGraphTest : public ::testing::Test {
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
   loom_builder_t module_builder_;
-  loom_symbol_ref_t target_ref_ = {};
   iree_arena_allocator_t graph_arena_;
 };
 
@@ -250,10 +230,26 @@ TEST_F(CallGraphTest, DisconnectedFunctions) {
   EXPECT_FALSE(loom_call_graph_is_recursive(&graph, b.symbol_id));
 }
 
-TEST_F(CallGraphTest, LowFunctionCallEdge) {
-  auto a = create_low_func("low_a");
-  auto b = create_low_func("low_b");
-  add_low_call(a, b.symbol_id);
+TEST_F(CallGraphTest, LowInternalCallEdge) {
+  auto a = create_func("low_a");
+  auto b = create_func("low_b");
+  add_call(a, b.symbol_id, CallKind::kLowInternal);
+  finalize();
+
+  loom_call_graph_t graph;
+  IREE_ASSERT_OK(loom_call_graph_build(module_, &graph_arena_, &graph));
+
+  const loom_call_graph_node_t* node =
+      loom_call_graph_node(&graph, a.symbol_id);
+  ASSERT_NE(node, nullptr);
+  ASSERT_EQ(node->callee_count, 1u);
+  EXPECT_EQ(node->callees[0], b.symbol_id);
+}
+
+TEST_F(CallGraphTest, LowInvokeCallEdge) {
+  auto a = create_func("invoke_a");
+  auto b = create_func("invoke_b");
+  add_call(a, b.symbol_id, CallKind::kLowInvoke);
   finalize();
 
   loom_call_graph_t graph;
