@@ -275,16 +275,12 @@ loom_cc_test(
     ::assembly
     iree::base
     iree::base::internal::arena
-    loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::packetization
-    loom::src::loom::codegen::low::source_selection
     loom::src::loom::codegen::low::verify
     loom::src::loom::format::text::parser
     loom::src::loom::ir
-    loom::src::loom::ops::func
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::low_registry
-    loom::src::loom::target::arch::amdgpu::lower
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::arch::amdgpu::wait_plan
     loom::src::loom::testing::context
