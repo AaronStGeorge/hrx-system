@@ -343,6 +343,20 @@ TEST(X86DescriptorsTest, Avx512AsmFormsNameUnambiguousPackets) {
             "x86.avx512.vpaddd.zmm");
 
   IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("vpaddd.xmm"), &asm_form_ordinal));
+  asm_form =
+      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
+  ASSERT_NE(asm_form, nullptr);
+  EXPECT_EQ(asm_form->result_operand_index_count, 1u);
+  EXPECT_EQ(asm_form->operand_index_count, 2u);
+
+  descriptor = loom_low_descriptor_set_descriptor_at(
+      descriptor_set, asm_form->descriptor_ordinal);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
+            "x86.avx512.vpaddd.xmm");
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
       descriptor_set, IREE_SV("vpsubd"), &asm_form_ordinal));
   asm_form =
       loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);

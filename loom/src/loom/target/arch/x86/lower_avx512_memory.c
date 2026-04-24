@@ -31,10 +31,25 @@ static bool loom_x86_i64_fits_disp32(int64_t value) {
   return value >= INT32_MIN && value <= INT32_MAX;
 }
 
-static bool loom_x86_memory_access_shape_is_zmm32(
+typedef enum loom_x86_memory_value_kind_e {
+  LOOM_X86_MEMORY_VALUE_NONE = 0,
+  LOOM_X86_MEMORY_VALUE_XMM32 = 1,
+  LOOM_X86_MEMORY_VALUE_ZMM32 = 2,
+} loom_x86_memory_value_kind_t;
+
+static loom_x86_memory_value_kind_t loom_x86_select_memory_value_kind(
     const loom_low_source_memory_access_plan_t* plan) {
-  return plan->element_byte_count == 4 && plan->vector_lane_count == 16 &&
-         plan->vector_lane_byte_stride == 4;
+  if (plan->element_byte_count != 4 || plan->vector_lane_byte_stride != 4) {
+    return LOOM_X86_MEMORY_VALUE_NONE;
+  }
+  switch (plan->vector_lane_count) {
+    case 4:
+      return LOOM_X86_MEMORY_VALUE_XMM32;
+    case 16:
+      return LOOM_X86_MEMORY_VALUE_ZMM32;
+    default:
+      return LOOM_X86_MEMORY_VALUE_NONE;
+  }
 }
 
 typedef enum loom_x86_memory_address_kind_e {
@@ -45,6 +60,8 @@ typedef enum loom_x86_memory_address_kind_e {
 typedef struct loom_x86_memory_access_plan_t {
   // Target-independent memory decomposition shared across targets.
   loom_low_source_memory_access_plan_t source;
+  // Selected x86 register-width value form.
+  loom_x86_memory_value_kind_t value_kind;
   // Selected x86 addressing form.
   loom_x86_memory_address_kind_t address_kind;
   // x86 index scale for LOOM_X86_MEMORY_ADDRESS_INDEXED.
@@ -85,7 +102,8 @@ static bool loom_x86_select_memory_access(
           &out_plan->source, &diagnostic)) {
     return false;
   }
-  if (!loom_x86_memory_access_shape_is_zmm32(&out_plan->source) ||
+  out_plan->value_kind = loom_x86_select_memory_value_kind(&out_plan->source);
+  if (out_plan->value_kind == LOOM_X86_MEMORY_VALUE_NONE ||
       !loom_x86_memory_space_is_object_memory(out_plan->source.memory_space) ||
       !loom_x86_i64_fits_disp32(out_plan->source.static_byte_offset) ||
       !loom_x86_source_value_is_block_argument(
@@ -183,15 +201,24 @@ static iree_status_t loom_x86_lower_vector_load(
   IREE_RETURN_IF_ERROR(loom_x86_make_disp32_attr(
       context, plan->source.static_byte_offset, &attrs[0]));
   loom_type_t result_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_x86_make_zmm_register_type(context, &result_type));
   uint64_t descriptor_id =
       X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_ZMM;
+  if (plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32) {
+    IREE_RETURN_IF_ERROR(
+        loom_x86_make_xmm_register_type(context, &result_type));
+    descriptor_id = X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_XMM;
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_x86_make_zmm_register_type(context, &result_type));
+  }
   loom_value_id_t operands[2] = {base, LOOM_VALUE_ID_INVALID};
   iree_host_size_t operand_count = 1;
   iree_host_size_t attr_count = 1;
   if (plan->address_kind == LOOM_X86_MEMORY_ADDRESS_INDEXED) {
     descriptor_id =
-        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_INDEXED_ZMM;
+        plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32
+            ? X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_INDEXED_XMM
+            : X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_INDEXED_ZMM;
     IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
         context, plan->source.dynamic_index, &operands[1]));
     IREE_RETURN_IF_ERROR(
@@ -224,12 +251,18 @@ static iree_status_t loom_x86_lower_vector_store(
       context, plan->source.static_byte_offset, &attrs[0]));
   uint64_t descriptor_id =
       X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_ZMM;
+  if (plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32) {
+    descriptor_id =
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_XMM;
+  }
   loom_value_id_t operands[3] = {value, base, LOOM_VALUE_ID_INVALID};
   iree_host_size_t operand_count = 2;
   iree_host_size_t attr_count = 1;
   if (plan->address_kind == LOOM_X86_MEMORY_ADDRESS_INDEXED) {
     descriptor_id =
-        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_INDEXED_ZMM;
+        plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32
+            ? X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_INDEXED_XMM
+            : X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_INDEXED_ZMM;
     IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
         context, plan->source.dynamic_index, &operands[2]));
     IREE_RETURN_IF_ERROR(
