@@ -1,0 +1,57 @@
+// RUN: roundtrip
+
+func.def @i32_bitwise(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %mask = vector.constant 15 : vector<1xi32>
+  %masked = vector.andi %loaded, %mask : vector<1xi32>
+  %tag = vector.constant 240 : vector<1xi32>
+  %with_tag = vector.ori %masked, %tag : vector<1xi32>
+  %result = vector.xori %with_tag, %loaded : vector<1xi32>
+  vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  func.return
+}
+
+// ====
+
+func.def @i32_shift(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %shift = vector.constant 3 : vector<1xi32>
+  %left = vector.shli %loaded, %shift : vector<1xi32>
+  %logical = vector.shrui %loaded, %shift : vector<1xi32>
+  %arithmetic = vector.shrsi %loaded, %shift : vector<1xi32>
+  %joined = vector.ori %left, %logical : vector<1xi32>
+  %result = vector.xori %joined, %arithmetic : vector<1xi32>
+  vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  func.return
+}
+
+// ====
+
+func.def @i32_scalarized(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  %lane0 = vector.extract %loaded[0] : vector<4xi32> -> i32
+  %lane1 = vector.extract %loaded[1] : vector<4xi32> -> i32
+  %mask = scalar.constant 255 : i32
+  %masked = scalar.andi %lane0, %mask : i32
+  %shift = scalar.constant 3 : i32
+  %left = scalar.shli %masked, %shift : i32
+  %logical = scalar.shrui %lane1, %shift : i32
+  %mixed = scalar.xori %left, %logical : i32
+  %lane2 = vector.extract %loaded[2] : vector<4xi32> -> i32
+  %lane3 = vector.extract %loaded[3] : vector<4xi32> -> i32
+  %result = vector.from_elements %mixed, %logical, %lane2, %lane3 : vector<4xi32>
+  vector.store %result, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  func.return
+}

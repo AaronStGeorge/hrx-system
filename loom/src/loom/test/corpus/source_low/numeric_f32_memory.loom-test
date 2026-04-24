@@ -1,0 +1,60 @@
+// RUN: roundtrip
+
+func.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xf32, #dense>
+  %lhs = vector.load %lhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>
+  %rhs = vector.load %rhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>
+  %sum = vector.addf %lhs, %rhs : vector<1xf32>
+  %product = vector.mulf %sum, %rhs : vector<1xf32>
+  vector.store %product, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>
+  func.return
+}
+
+// ====
+
+func.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xf32, #dense>
+  %lhs = vector.load %lhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>
+  %rhs = vector.load %rhs_view[%tid] : view<64xf32, #dense> -> vector<1xf32>
+  %bias = vector.constant 0.5 : vector<1xf32>
+  %fma = vector.fmaf %lhs, %rhs, %bias : vector<1xf32>
+  %result = vector.subf %fma, %bias : vector<1xf32>
+  vector.store %result, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>
+  func.return
+}
+
+// ====
+
+func.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64x4xf32, #dense>
+  %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64x4xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xf32, #dense>
+  %lhs = vector.load %lhs_view[%tid, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %rhs = vector.load %rhs_view[%tid, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %lhs0 = vector.extract %lhs[0] : vector<4xf32> -> f32
+  %rhs0 = vector.extract %rhs[0] : vector<4xf32> -> f32
+  %lane0 = scalar.addf %lhs0, %rhs0 : f32
+  %lhs1 = vector.extract %lhs[1] : vector<4xf32> -> f32
+  %rhs1 = vector.extract %rhs[1] : vector<4xf32> -> f32
+  %lane1 = scalar.mulf %lhs1, %rhs1 : f32
+  %lhs2 = vector.extract %lhs[2] : vector<4xf32> -> f32
+  %rhs2 = vector.extract %rhs[2] : vector<4xf32> -> f32
+  %lane2 = scalar.subf %lhs2, %rhs2 : f32
+  %lhs3 = vector.extract %lhs[3] : vector<4xf32> -> f32
+  %rhs3 = vector.extract %rhs[3] : vector<4xf32> -> f32
+  %bias = scalar.constant 0.5 : f32
+  %lane3 = scalar.fmaf %lhs3, %rhs3, %bias : f32
+  %result = vector.from_elements %lane0, %lane1, %lane2, %lane3 : vector<4xf32>
+  vector.store %result, %output_view[%tid, 0] : vector<4xf32>, view<64x4xf32, #dense>
+  func.return
+}

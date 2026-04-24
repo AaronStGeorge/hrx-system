@@ -689,17 +689,6 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
-    "source_low"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
     "source_low_addtid"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_addtid.loom-test"
@@ -832,9 +821,75 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_memory_global"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_memory_workgroup_b128"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_workgroup_b128.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_minmax"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_minmax.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_numeric_f32"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_numeric_f32.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_numeric_i32"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_numeric_i32.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_packed_dot"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_packed_dot.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_packed_dot_gfx950"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_packed_dot_gfx950.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

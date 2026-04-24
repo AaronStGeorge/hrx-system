@@ -67,6 +67,28 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "memory_global"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/memory_global.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "memory_workgroup_b128"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/memory_workgroup_b128.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "memory_workgroup_indexed"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/memory_workgroup_indexed.loom-test"
@@ -81,6 +103,28 @@ iree_executable_test(
     "numeric_conversion"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/numeric_conversion.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "numeric_f32_memory"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/numeric_f32_memory.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "numeric_i32_memory"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/numeric_i32_memory.loom-test"
   SRC
     loom::src::loom::tools::loom-check::loom-check-test
   LABELS
@@ -147,6 +191,28 @@ iree_executable_test(
     "packed_bitunpack"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/packed_bitunpack.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "packed_dot_i4_mixed"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/packed_dot_i4_mixed.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "packed_dot_integer"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/packed_dot_integer.loom-test"
   SRC
     loom::src::loom::tools::loom-check::loom-check-test
   LABELS

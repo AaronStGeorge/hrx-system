@@ -1,0 +1,26 @@
+// RUN: roundtrip
+
+func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
+  %base = index.constant 4 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<4xi32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[0] : vector<4xi32>, view<4xi32, #dense>
+  func.return
+}
+
+// ====
+
+func.def @i32_b128(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  %raise = vector.constant 9 : vector<4xi32>
+  %raised = vector.addi %loaded, %raise : vector<4xi32>
+  %drop = vector.constant 4 : vector<4xi32>
+  %result = vector.subi %raised, %drop : vector<4xi32>
+  vector.store %result, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  func.return
+}

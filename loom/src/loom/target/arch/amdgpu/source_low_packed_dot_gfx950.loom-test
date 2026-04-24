@@ -1,0 +1,8 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/packed_dot_i4_mixed.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+
+func.def @dot8i4_u4s4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  // ERROR@+1: BACKEND/001 "selected AMDGPU descriptor set does not contain the required packed dot packet"
+  %dot = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<1xi32>
+  func.return %dot : vector<1xi32>
+}

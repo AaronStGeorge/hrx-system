@@ -1,0 +1,134 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_i32_memory.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+
+func.def @i32_bitwise(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %mask = vector.constant 15 : vector<1xi32>
+  %masked = vector.andi %loaded, %mask : vector<1xi32>
+  %tag = vector.constant 240 : vector<1xi32>
+  %with_tag = vector.ori %masked, %tag : vector<1xi32>
+  %result = vector.xori %with_tag, %loaded : vector<1xi32>
+  vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i32_bitwise() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %16 = v_mov_b32 2
+  %17 = v_lshlrev_b32 %16, %tid
+  %18 = s_mov_b32 0
+  %loaded = buffer_load_dword %input_view, %17, %18 {offset = 0}
+  %mask = v_mov_b32 15
+  %masked = v_and_b32 %loaded, %mask
+  %tag = v_mov_b32 240
+  %with_tag = v_or_b32 %masked, %tag
+  %result = v_xor_b32 %with_tag, %loaded
+  %25 = v_mov_b32 2
+  %26 = v_lshlrev_b32 %25, %tid
+  %27 = s_mov_b32 0
+  buffer_store_dword %result, %output_view, %26, %27 {offset = 0}
+  return
+}
+
+// ====
+
+func.def @i32_shift(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %shift = vector.constant 3 : vector<1xi32>
+  %left = vector.shli %loaded, %shift : vector<1xi32>
+  %logical = vector.shrui %loaded, %shift : vector<1xi32>
+  %arithmetic = vector.shrsi %loaded, %shift : vector<1xi32>
+  %joined = vector.ori %left, %logical : vector<1xi32>
+  %result = vector.xori %joined, %arithmetic : vector<1xi32>
+  vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i32_shift() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %17 = v_mov_b32 2
+  %18 = v_lshlrev_b32 %17, %tid
+  %19 = s_mov_b32 0
+  %loaded = buffer_load_dword %input_view, %18, %19 {offset = 0}
+  %shift = v_mov_b32 3
+  %left = v_lshlrev_b32 %shift, %loaded
+  %logical = v_lshrrev_b32 %shift, %loaded
+  %arithmetic = v_ashrrev_i32 %shift, %loaded
+  %joined = v_or_b32 %left, %logical
+  %result = v_xor_b32 %joined, %arithmetic
+  %27 = v_mov_b32 2
+  %28 = v_lshlrev_b32 %27, %tid
+  %29 = s_mov_b32 0
+  buffer_store_dword %result, %output_view, %28, %29 {offset = 0}
+  return
+}
+
+// ====
+
+func.def @i32_scalarized(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  %lane0 = vector.extract %loaded[0] : vector<4xi32> -> i32
+  %lane1 = vector.extract %loaded[1] : vector<4xi32> -> i32
+  %mask = scalar.constant 255 : i32
+  %masked = scalar.andi %lane0, %mask : i32
+  %shift = scalar.constant 3 : i32
+  %left = scalar.shli %masked, %shift : i32
+  %logical = scalar.shrui %lane1, %shift : i32
+  %mixed = scalar.xori %left, %logical : i32
+  %lane2 = vector.extract %loaded[2] : vector<4xi32> -> i32
+  %lane3 = vector.extract %loaded[3] : vector<4xi32> -> i32
+  %result = vector.from_elements %mixed, %logical, %lane2, %lane3 : vector<4xi32>
+  vector.store %result, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i32_scalarized() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %22 = v_mov_b32 4
+  %23 = v_lshlrev_b32 %22, %tid
+  %24 = s_mov_b32 0
+  %loaded = buffer_load_b128 %input_view, %23, %24 {offset = 0}
+  %lane0 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %lane1 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %mask = s_mov_b32 255
+  %29 = v_mov_b32 255
+  %masked = v_and_b32 %lane0, %29
+  %shift = s_mov_b32 3
+  %32 = v_mov_b32 3
+  %left = v_lshlrev_b32 %32, %masked
+  %34 = v_mov_b32 3
+  %logical = v_lshrrev_b32 %34, %lane1
+  %mixed = v_xor_b32 %left, %logical
+  %lane2 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %lane3 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %result = concat(%mixed, %logical, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %40 = v_mov_b32 4
+  %41 = v_lshlrev_b32 %40, %tid
+  %42 = s_mov_b32 0
+  buffer_store_b128 %result, %output_view, %41, %42 {offset = 0}
+  return
+}
