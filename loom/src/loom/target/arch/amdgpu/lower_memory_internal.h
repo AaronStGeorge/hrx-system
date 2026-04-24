@@ -19,6 +19,8 @@
 #include "loom/target/arch/amdgpu/lower_plan.h"
 #include "loom/target/low_legality.h"
 
+struct iree_string_builder_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -116,6 +118,14 @@ iree_status_t loom_amdgpu_memory_cache_policy_rejected_status(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_plan_t* access,
     const loom_vector_memory_cache_policy_t* policy);
+
+// Appends a diagnostic detail explaining why the access cache policy cannot be
+// encoded.
+iree_status_t loom_amdgpu_memory_cache_policy_format_rejection_detail(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_memory_access_plan_t* access,
+    const loom_vector_memory_cache_policy_t* policy,
+    struct iree_string_builder_t* builder);
 
 // Returns the diagnostic detail for target-specific memory-access rejection
 // bits.

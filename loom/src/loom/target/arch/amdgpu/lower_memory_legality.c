@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "iree/base/api.h"
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/context.h"
 #include "loom/ops/vector/ops.h"
@@ -46,10 +47,18 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_memory(
                                            loom_op_name(module, op), detail);
   }
   if (!loom_amdgpu_memory_cache_policy_can_lower(descriptor_set, &access)) {
-    return loom_target_low_legality_reject(
-        context, provider, op, IREE_SV("cache"), loom_op_name(module, op),
-        IREE_SV("AMDGPU vector memory cache policy is not representable by "
-                "the selected descriptor set"));
+    iree_string_builder_t builder;
+    iree_string_builder_initialize(iree_allocator_system(), &builder);
+    iree_status_t status =
+        loom_amdgpu_memory_cache_policy_format_rejection_detail(
+            descriptor_set, &access, &access.source.cache_policy, &builder);
+    if (iree_status_is_ok(status)) {
+      status = loom_target_low_legality_reject(
+          context, provider, op, IREE_SV("cache"), loom_op_name(module, op),
+          iree_string_builder_view(&builder));
+    }
+    iree_string_builder_deinitialize(&builder);
+    return status;
   }
   const loom_amdgpu_memory_operation_kind_t kind =
       loom_amdgpu_memory_operation_kind_from_source(&access.source);

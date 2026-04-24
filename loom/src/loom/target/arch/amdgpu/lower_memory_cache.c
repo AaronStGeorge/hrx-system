@@ -7,6 +7,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 
+#include "iree/base/api.h"
 #include "loom/ops/cache.h"
 #include "loom/target/arch/amdgpu/lower_memory_internal.h"
 #include "loom/target/arch/amdgpu/target_info.h"
@@ -219,41 +220,82 @@ bool loom_amdgpu_memory_cache_policy_can_lower(
   return loom_amdgpu_memory_cache_policy_encode(descriptor_set, access, &attrs);
 }
 
-iree_status_t loom_amdgpu_memory_cache_policy_rejected_status(
+static iree_status_code_t loom_amdgpu_memory_cache_policy_rejection_code(
+    const loom_vector_memory_cache_policy_t* policy) {
+  return loom_amdgpu_memory_cache_policy_is_complete(policy)
+             ? IREE_STATUS_UNIMPLEMENTED
+             : IREE_STATUS_INVALID_ARGUMENT;
+}
+
+iree_status_t loom_amdgpu_memory_cache_policy_format_rejection_detail(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_amdgpu_memory_access_plan_t* access,
-    const loom_vector_memory_cache_policy_t* policy) {
+    const loom_vector_memory_cache_policy_t* policy,
+    iree_string_builder_t* builder) {
+  IREE_ASSERT_ARGUMENT(descriptor_set);
+  IREE_ASSERT_ARGUMENT(access);
+  IREE_ASSERT_ARGUMENT(policy);
+  IREE_ASSERT_ARGUMENT(builder);
+
   if (!loom_amdgpu_memory_cache_policy_is_complete(policy)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
+    return iree_string_builder_append_cstring(
+        builder,
         "AMDGPU vector memory cache policy requires both cache_scope and "
         "cache_temporal");
   }
+
   const iree_string_view_t scope_name =
       loom_amdgpu_cache_scope_name(policy->cache_scope);
   const iree_string_view_t temporal_name =
       loom_amdgpu_cache_temporal_name(policy->cache_temporal);
   if (access->source.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+    return iree_string_builder_append_format(
+        builder,
         "AMDGPU workgroup memory packets cannot encode cache policy "
         "%.*s/%.*s",
         (int)scope_name.size, scope_name.data, (int)temporal_name.size,
         temporal_name.data);
   }
+
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
       loom_amdgpu_target_info_descriptor_set_by_id(descriptor_set->stable_id);
   if (descriptor_set_info == NULL) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU descriptor set stable ID 0x%016" PRIx64
-                            " has no cache-policy target-info row",
-                            descriptor_set->stable_id);
+    return iree_string_builder_append_format(
+        builder,
+        "AMDGPU descriptor set stable ID 0x%016" PRIx64
+        " has no cache-policy target-info row",
+        descriptor_set->stable_id);
   }
-  return iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
+
+  return iree_string_builder_append_format(
+      builder,
       "AMDGPU descriptor set '%.*s' cannot faithfully encode vector memory "
       "cache policy %.*s/%.*s",
       (int)descriptor_set_info->descriptor_set_key.size,
       descriptor_set_info->descriptor_set_key.data, (int)scope_name.size,
       scope_name.data, (int)temporal_name.size, temporal_name.data);
+}
+
+iree_status_t loom_amdgpu_memory_cache_policy_rejected_status(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_amdgpu_memory_access_plan_t* access,
+    const loom_vector_memory_cache_policy_t* policy) {
+  IREE_ASSERT_ARGUMENT(descriptor_set);
+  IREE_ASSERT_ARGUMENT(access);
+  IREE_ASSERT_ARGUMENT(policy);
+
+  const iree_status_code_t rejection_code =
+      loom_amdgpu_memory_cache_policy_rejection_code(policy);
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  iree_status_t status =
+      loom_amdgpu_memory_cache_policy_format_rejection_detail(
+          descriptor_set, access, policy, &builder);
+  if (iree_status_is_ok(status)) {
+    const iree_string_view_t detail = iree_string_builder_view(&builder);
+    status =
+        iree_make_status(rejection_code, "%.*s", (int)detail.size, detail.data);
+  }
+  iree_string_builder_deinitialize(&builder);
+  return status;
 }
