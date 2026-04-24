@@ -119,9 +119,13 @@ typedef struct loom_highlight_range_t {
 // payload is only valid for the duration of the sink callback and sinks must
 // copy any data they retain.
 typedef struct loom_diagnostic_related_location_t {
+  // Human-readable note label identifying why this location is relevant.
   iree_string_view_t label;
+  // Source range for the related note.
   loom_source_range_t source_location;
+  // Optional per-token highlights within source_location.
   const loom_highlight_range_t* highlights;
+  // Number of entries in highlights.
   iree_host_size_t highlight_count;
 } loom_diagnostic_related_location_t;
 
@@ -156,13 +160,20 @@ typedef struct loom_diagnostic_t {
   // instead of underlining the full primary range. All ranges must
   // be within the same source line as origin.
   const loom_highlight_range_t* highlights;
+  // Number of entries in highlights.
   iree_host_size_t highlight_count;
+  // Number of requested source-resolved highlights omitted due to emitter
+  // storage limits.
+  iree_host_size_t highlight_omitted_count;
 
-  // Optional labeled related locations that provide secondary context. The
-  // text formatter prints each entry as a follow-on note, and the JSON sink
-  // serializes them as a machine-readable array.
+  // Optional labeled related locations that provide secondary context.
   const loom_diagnostic_related_location_t* related_locations;
+  // Number of entries in related_locations. Text formatting prints each entry
+  // as a follow-on note, and JSON serializes them as a machine-readable array.
   iree_host_size_t related_location_count;
+  // Number of source-resolved related locations omitted due to emitter storage
+  // limits.
+  iree_host_size_t related_location_omitted_count;
 } loom_diagnostic_t;
 
 // Callback invoked for each diagnostic. The diagnostic is valid only

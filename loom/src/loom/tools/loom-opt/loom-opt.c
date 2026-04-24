@@ -182,20 +182,23 @@ static iree_host_size_t loom_opt_collect_related_locations(
     const loom_opt_diagnostic_emitter_t* emitter,
     const loom_diagnostic_related_op_t* related_ops,
     iree_host_size_t related_op_count,
-    loom_diagnostic_related_location_t* out_related_locations) {
+    loom_diagnostic_related_location_t* out_related_locations,
+    iree_host_size_t* out_omitted_count) {
+  *out_omitted_count = 0;
   if (!related_ops || related_op_count == 0) {
     return 0;
   }
   iree_host_size_t related_location_count = 0;
-  for (iree_host_size_t i = 0;
-       i < related_op_count &&
-       related_location_count < LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS;
-       ++i) {
+  for (iree_host_size_t i = 0; i < related_op_count; ++i) {
     loom_source_range_t source_location = {
         .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
     };
     if (!loom_opt_resolve_emission_location(emitter, related_ops[i].op,
                                             &source_location)) {
+      continue;
+    }
+    if (related_location_count >= LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS) {
+      ++*out_omitted_count;
       continue;
     }
     out_related_locations[related_location_count++] =
@@ -231,7 +234,7 @@ static iree_status_t loom_opt_diagnostic_emitter_emit(
       related_locations[LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS];
   diagnostic.related_location_count = loom_opt_collect_related_locations(
       emitter, emission->related_ops, emission->related_op_count,
-      related_locations);
+      related_locations, &diagnostic.related_location_omitted_count);
   if (diagnostic.related_location_count > 0) {
     diagnostic.related_locations = related_locations;
   }

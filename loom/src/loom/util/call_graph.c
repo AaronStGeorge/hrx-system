@@ -25,6 +25,33 @@ typedef struct loom_edge_list_t {
   uint16_t capacity;
 } loom_edge_list_t;
 
+static iree_status_t loom_call_graph_grow_u16_bounded_array(
+    iree_arena_allocator_t* arena, iree_host_size_t existing_count,
+    iree_host_size_t minimum_capacity, iree_host_size_t element_size,
+    const char* storage_name, uint16_t* inout_capacity, void** inout_ptr) {
+  if (minimum_capacity > UINT16_MAX || existing_count > UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "%s exceeds storage limit (%u)", storage_name,
+                            (unsigned)UINT16_MAX);
+  }
+  iree_host_size_t doubled_capacity = (iree_host_size_t)*inout_capacity * 2;
+  iree_host_size_t new_capacity =
+      doubled_capacity > minimum_capacity ? doubled_capacity : minimum_capacity;
+  if (new_capacity > UINT16_MAX) {
+    new_capacity = UINT16_MAX;
+  }
+
+  void* new_ptr = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(arena, new_capacity, element_size, &new_ptr));
+  if (*inout_ptr && existing_count > 0) {
+    memcpy(new_ptr, *inout_ptr, existing_count * element_size);
+  }
+  *inout_ptr = new_ptr;
+  *inout_capacity = (uint16_t)new_capacity;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_edge_list_add(loom_edge_list_t* list,
                                         iree_arena_allocator_t* arena,
                                         loom_symbol_id_t callee) {
@@ -35,12 +62,15 @@ static iree_status_t loom_edge_list_add(loom_edge_list_t* list,
     }
   }
   if (list->count >= list->capacity) {
-    iree_host_size_t new_capacity =
-        iree_max((iree_host_size_t)list->capacity * 2, 8);
-    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        arena, list->count, new_capacity, sizeof(loom_symbol_id_t),
-        &new_capacity, (void**)&list->callees));
-    list->capacity = (uint16_t)new_capacity;
+    if (list->count == UINT16_MAX) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "call graph callee list exceeds storage limit");
+    }
+    IREE_RETURN_IF_ERROR(loom_call_graph_grow_u16_bounded_array(
+        arena, list->count,
+        iree_max((iree_host_size_t)list->count + 1, (iree_host_size_t)8),
+        sizeof(*list->callees), "call graph callee list", &list->capacity,
+        (void**)&list->callees));
   }
   list->callees[list->count++] = callee;
   return iree_ok_status();
@@ -193,11 +223,15 @@ static iree_status_t loom_call_graph_compute_sccs(
         if (state[v].lowlink == state[v].index) {
           // Grow SCC arrays if needed.
           if (scc_count >= scc_capacity) {
-            iree_host_size_t new_capacity = (iree_host_size_t)scc_capacity * 2;
-            IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-                arena, scc_count, new_capacity, sizeof(bool), &new_capacity,
+            if (scc_count == UINT16_MAX) {
+              return iree_make_status(
+                  IREE_STATUS_RESOURCE_EXHAUSTED,
+                  "call graph SCC list exceeds storage limit");
+            }
+            IREE_RETURN_IF_ERROR(loom_call_graph_grow_u16_bounded_array(
+                arena, scc_count, (iree_host_size_t)scc_count + 1,
+                sizeof(*scc_recursive), "call graph SCC list", &scc_capacity,
                 (void**)&scc_recursive));
-            scc_capacity = (uint16_t)new_capacity;
           }
 
           uint16_t scc_id = scc_count++;

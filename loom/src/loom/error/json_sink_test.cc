@@ -514,6 +514,44 @@ TEST(JsonSink, SerializesRelatedLocations) {
       << "json: " << json;
 }
 
+TEST(JsonSink, SerializesOmittedRelatedLocationCount) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("arg")),
+      loom_param_string(IREE_SV("test.invoke")),
+  };
+
+  loom_diagnostic_t diagnostic = {};
+  diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 2);
+  diagnostic.params = params;
+  diagnostic.param_count = IREE_ARRAYSIZE(params);
+  diagnostic.emitter = LOOM_EMITTER_VERIFIER;
+  diagnostic.related_location_omitted_count = 5;
+
+  std::string json = EmitJson(&diagnostic);
+  EXPECT_NE(json.find("\"related_location_omitted_count\":5"),
+            std::string::npos)
+      << "json: " << json;
+}
+
+TEST(JsonSink, SerializesOmittedHighlightCount) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("test.invoke")),
+  };
+
+  loom_diagnostic_t diagnostic = {};
+  diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 2);
+  diagnostic.params = params;
+  diagnostic.param_count = IREE_ARRAYSIZE(params);
+  diagnostic.emitter = LOOM_EMITTER_VERIFIER;
+  diagnostic.highlight_omitted_count = 6;
+
+  std::string json = EmitJson(&diagnostic);
+  EXPECT_NE(json.find("\"highlight_omitted_count\":6"), std::string::npos)
+      << "json: " << json;
+}
+
 TEST(JsonSink, RejectsInvalidParamFieldRefKind) {
   loom_diagnostic_param_t params[] = {
       loom_param_with_field_ref(

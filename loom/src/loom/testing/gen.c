@@ -204,6 +204,7 @@ void loom_test_gen_values_initialize(loom_test_gen_values_t* values) {
 
 void loom_test_gen_values_add(loom_test_gen_values_t* values,
                               loom_value_id_t id, loom_type_t type) {
+  ++values->total_count;
   if (values->count >= LOOM_TEST_GEN_VALUES_MAX_CAPACITY) return;
   values->entries[values->count] = id;
   values->types[values->count] = type;

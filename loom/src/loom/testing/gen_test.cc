@@ -373,6 +373,19 @@ TEST_F(GenTest, ValueSetPickTypedEmptyReturnsInvalid) {
       LOOM_VALUE_ID_INVALID);
 }
 
+TEST_F(GenTest, ValueSetReportsOmittedValuesAfterCapacity) {
+  loom_test_gen_values_t values;
+  loom_test_gen_values_initialize(&values);
+
+  loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  for (iree_host_size_t i = 0; i < LOOM_TEST_GEN_VALUES_MAX_CAPACITY + 3; ++i) {
+    loom_test_gen_values_add(&values, (loom_value_id_t)i, type);
+  }
+
+  EXPECT_EQ(values.count, LOOM_TEST_GEN_VALUES_MAX_CAPACITY);
+  EXPECT_EQ(values.total_count, LOOM_TEST_GEN_VALUES_MAX_CAPACITY + 3);
+}
+
 TEST_F(GenTest, ValueSetPickTypedFindsCorrectType) {
   loom_test_gen_values_t values;
   loom_test_gen_values_initialize(&values);

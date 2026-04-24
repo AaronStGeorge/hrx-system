@@ -90,12 +90,16 @@ static void loom_highlight_field_callback(void* user_data,
                                           iree_host_size_t end) {
   loom_highlight_collector_t* collector =
       (loom_highlight_collector_t*)user_data;
-  if (collector->highlight_count >= LOOM_VERIFY_MAX_HIGHLIGHTS) return;
+  if (collector->highlight_count >= LOOM_VERIFY_MAX_HIGHLIGHTS) {
+    return;
+  }
   const loom_verify_highlight_target_t* target =
       loom_verify_match_highlight_target(collector->wanted_targets,
                                          collector->wanted_count, field_ref,
                                          collector->target_occurrences);
-  if (!target) return;
+  if (!target) {
+    return;
+  }
   collector->highlights[collector->highlight_count].start = start;
   collector->highlights[collector->highlight_count].end = end;
   collector->highlights[collector->highlight_count].field_ref =
@@ -139,13 +143,20 @@ static bool loom_verify_print_field_ref(
 // Collects field highlight targets directly from structured diagnostic params.
 static iree_host_size_t loom_collect_highlight_targets(
     const loom_diagnostic_param_t* params, iree_host_size_t param_count,
-    loom_verify_highlight_target_t* out_targets) {
+    loom_verify_highlight_target_t* out_targets,
+    iree_host_size_t* out_omitted_count) {
+  *out_omitted_count = 0;
   iree_host_size_t count = 0;
-  for (iree_host_size_t i = 0;
-       i < param_count && count < LOOM_VERIFY_MAX_HIGHLIGHTS; ++i) {
-    if (!loom_diagnostic_field_ref_is_set(params[i].field_ref)) continue;
+  for (iree_host_size_t i = 0; i < param_count; ++i) {
+    if (!loom_diagnostic_field_ref_is_set(params[i].field_ref)) {
+      continue;
+    }
     loom_print_field_ref_t printer_field_ref = {0};
     if (!loom_verify_print_field_ref(params[i].field_ref, &printer_field_ref)) {
+      continue;
+    }
+    if (count >= LOOM_VERIFY_MAX_HIGHLIGHTS) {
+      ++*out_omitted_count;
       continue;
     }
     out_targets[count++] = (loom_verify_highlight_target_t){
@@ -299,22 +310,25 @@ static iree_host_size_t loom_verify_collect_related_locations(
     const loom_diagnostic_related_op_t* related_ops,
     iree_host_size_t related_op_count,
     loom_diagnostic_related_location_t* out_related_locations,
-    loom_highlight_range_t* out_related_highlights) {
+    loom_highlight_range_t* out_related_highlights,
+    iree_host_size_t* out_omitted_count) {
+  *out_omitted_count = 0;
   if (!related_ops || related_op_count == 0) {
     return 0;
   }
 
   iree_host_size_t related_location_count = 0;
-  for (iree_host_size_t i = 0;
-       i < related_op_count &&
-       related_location_count < LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS;
-       ++i) {
+  for (iree_host_size_t i = 0; i < related_op_count; ++i) {
     if (!related_ops[i].op) continue;
     loom_source_range_t source_location = {
         .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
     };
     if (!loom_verify_resolve_location(state, related_ops[i].op,
                                       &source_location)) {
+      continue;
+    }
+    if (related_location_count >= LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS) {
+      ++*out_omitted_count;
       continue;
     }
     loom_diagnostic_related_location_t* related_location =
@@ -389,7 +403,8 @@ void loom_verify_emit_diagnostic(loom_verify_state_t* state,
       related_highlights[LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS];
   diagnostic.related_location_count = loom_verify_collect_related_locations(
       state, emission->related_ops, emission->related_op_count,
-      related_locations, related_highlights);
+      related_locations, related_highlights,
+      &diagnostic.related_location_omitted_count);
   if (diagnostic.related_location_count > 0) {
     diagnostic.related_locations = related_locations;
   }
@@ -397,7 +412,8 @@ void loom_verify_emit_diagnostic(loom_verify_state_t* state,
   // Collect structured field refs from params for per-token highlighting.
   loom_verify_highlight_target_t highlight_targets[LOOM_VERIFY_MAX_HIGHLIGHTS];
   iree_host_size_t highlight_target_count = loom_collect_highlight_targets(
-      emission->params, emission->param_count, highlight_targets);
+      emission->params, emission->param_count, highlight_targets,
+      &diagnostic.highlight_omitted_count);
   loom_highlight_range_t highlights[LOOM_VERIFY_MAX_HIGHLIGHTS];
 
   // Try the source resolver first (original source text).

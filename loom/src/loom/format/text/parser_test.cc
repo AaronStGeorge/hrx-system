@@ -284,6 +284,94 @@ TEST_F(ParserTest, ParsedOpScratchFrameReusesOperandSpillStorage) {
   iree_arena_deinitialize(&parser.parser_arena);
 }
 
+TEST_F(ParserTest, ParsedOpScratchFrameRejectsStorageOverflow) {
+  loom_parser_t parser = {};
+  iree_arena_initialize(&block_pool_, &parser.parser_arena);
+
+  loom_parsed_op_t* scratch = nullptr;
+  IREE_ASSERT_OK(loom_parser_acquire_parsed_op(&parser, &scratch));
+  ASSERT_NE(scratch, nullptr);
+
+  scratch->operand_count = UINT16_MAX;
+  scratch->operand_capacity = UINT16_MAX;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_parsed_op_add_operand(scratch, &parser.parser_arena, 0));
+
+  loom_parsed_op_reset(scratch);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_parsed_op_set_operand(scratch, &parser.parser_arena, UINT16_MAX, 0));
+
+  loom_parsed_op_reset(scratch);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_parsed_op_set_successor(scratch, &parser.parser_arena, UINT8_MAX,
+                                   nullptr, loom_token_none()));
+
+  loom_parsed_op_reset(scratch);
+  scratch->result_count = UINT16_MAX;
+  scratch->result_capacity = UINT16_MAX;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_parsed_op_add_result(scratch, &parser.parser_arena,
+                                                  0, loom_token_none()));
+
+  loom_parsed_op_reset(scratch);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_parsed_op_set_attribute(scratch, &parser.parser_arena, UINT8_MAX,
+                                   loom_attr_absent()));
+
+  loom_parsed_op_reset(scratch);
+  scratch->region_count = UINT8_MAX;
+  scratch->region_capacity = UINT8_MAX;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_parsed_op_add_region(scratch, &parser.parser_arena, nullptr));
+
+  loom_parsed_op_reset(scratch);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_parsed_op_set_region(scratch, &parser.parser_arena,
+                                                  UINT8_MAX, nullptr));
+
+  loom_parsed_op_reset(scratch);
+  scratch->tied_result_count = UINT16_MAX;
+  scratch->tied_result_capacity = UINT16_MAX;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_parsed_op_add_tied_result(scratch, &parser.parser_arena,
+                                     (loom_tied_result_t){0}));
+
+  loom_parsed_op_reset(scratch);
+  scratch->field_span_count = UINT16_MAX;
+  scratch->field_span_capacity = UINT16_MAX;
+  loom_token_t token = loom_token_none();
+  token.kind = LOOM_TOKEN_BARE_IDENT;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_parsed_op_add_field_span(scratch, &parser.parser_arena,
+                                    LOOM_LOCATION_FIELD_OPERAND, 0, token,
+                                    /*end_line=*/1, /*end_column=*/1));
+
+  loom_parsed_op_reset(scratch);
+  token.line = (uint32_t)UINT16_MAX + 1;
+  token.column = 1;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_parsed_op_add_field_span(scratch, &parser.parser_arena,
+                                    LOOM_LOCATION_FIELD_OPERAND, 0, token,
+                                    /*end_line=*/1, /*end_column=*/1));
+
+  parser.pending_block_args.count = UINT16_MAX;
+  parser.pending_block_args.capacity = UINT16_MAX;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_parser_add_pending_block_arg(&parser, 0, loom_token_none()));
+
+  loom_parser_release_parsed_op(&parser, scratch);
+  iree_arena_deinitialize(&parser.parser_arena);
+}
+
 TEST_F(ParserTest, ParsedOpScratchFramesStayDepthSafeWhileParentIsActive) {
   loom_parser_t parser = {};
   iree_arena_initialize(&block_pool_, &parser.parser_arena);

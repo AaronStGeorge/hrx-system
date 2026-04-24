@@ -120,15 +120,18 @@ static iree_status_t loom_diagnostic_format_source_block(
 
 static iree_status_t loom_diagnostic_format_related_locations(
     const loom_diagnostic_t* diagnostic, loom_output_stream_t* stream) {
-  if (!diagnostic->related_locations ||
-      diagnostic->related_location_count == 0) {
+  if (diagnostic->related_location_count == 0 &&
+      diagnostic->related_location_omitted_count == 0) {
     return iree_ok_status();
   }
+  if (diagnostic->related_location_count > 0 &&
+      !diagnostic->related_locations) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "diagnostic related location count requires related locations");
+  }
 
-  iree_host_size_t note_count =
-      iree_min(diagnostic->related_location_count,
-               (iree_host_size_t)LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS);
-  for (iree_host_size_t i = 0; i < note_count; ++i) {
+  for (iree_host_size_t i = 0; i < diagnostic->related_location_count; ++i) {
     const loom_diagnostic_related_location_t* related =
         &diagnostic->related_locations[i];
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "  = note"));
@@ -151,7 +154,24 @@ static iree_status_t loom_diagnostic_format_related_locations(
         &related->source_location, related->highlights,
         related->highlight_count, stream));
   }
+  if (diagnostic->related_location_omitted_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, "  = note: %" PRIhsz " additional related location%s omitted\n",
+        diagnostic->related_location_omitted_count,
+        diagnostic->related_location_omitted_count == 1 ? "" : "s"));
+  }
   return iree_ok_status();
+}
+
+static iree_status_t loom_diagnostic_format_highlight_omissions(
+    const loom_diagnostic_t* diagnostic, loom_output_stream_t* stream) {
+  if (diagnostic->highlight_omitted_count == 0) {
+    return iree_ok_status();
+  }
+  return loom_output_stream_write_format(
+      stream, "  = note: %" PRIhsz " additional highlight%s omitted\n",
+      diagnostic->highlight_omitted_count,
+      diagnostic->highlight_omitted_count == 1 ? "" : "s");
 }
 
 iree_status_t loom_diagnostic_format(const loom_diagnostic_t* diagnostic,
@@ -199,11 +219,15 @@ iree_status_t loom_diagnostic_format(const loom_diagnostic_t* diagnostic,
           type_formatter, stream));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n"));
     }
+    IREE_RETURN_IF_ERROR(
+        loom_diagnostic_format_highlight_omissions(diagnostic, stream));
     return loom_diagnostic_format_related_locations(diagnostic, stream);
   }
 
   IREE_RETURN_IF_ERROR(loom_diagnostic_format_source_block(
       range, diagnostic->highlights, diagnostic->highlight_count, stream));
+  IREE_RETURN_IF_ERROR(
+      loom_diagnostic_format_highlight_omissions(diagnostic, stream));
 
   // Fix hint line (when structured diagnostic has one).
   if (diagnostic->error && diagnostic->error->fix_hint_template) {

@@ -2816,11 +2816,31 @@ iree_status_t loom_block_add_arg(loom_module_t* module, loom_block_t* block,
                             (unsigned)value_id, module->values.count);
   }
   if (block->arg_count >= block->arg_capacity) {
-    iree_host_size_t capacity = block->arg_capacity;
-    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        &module->arena, block->arg_count, /*minimum_capacity=*/4,
-        sizeof(loom_value_id_t), &capacity, (void**)&block->arg_ids));
-    block->arg_capacity = (uint16_t)capacity;
+    if (block->arg_count == UINT16_MAX) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "block argument count exceeds storage limit");
+    }
+    iree_host_size_t doubled_capacity =
+        (iree_host_size_t)block->arg_capacity * 2;
+    iree_host_size_t new_capacity =
+        doubled_capacity > 4 ? doubled_capacity : (iree_host_size_t)4;
+    iree_host_size_t required_capacity = (iree_host_size_t)block->arg_count + 1;
+    if (new_capacity < required_capacity) {
+      new_capacity = required_capacity;
+    }
+    if (new_capacity > UINT16_MAX) {
+      new_capacity = UINT16_MAX;
+    }
+    loom_value_id_t* new_arg_ids = NULL;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(&module->arena, new_capacity,
+                                                   sizeof(*new_arg_ids),
+                                                   (void**)&new_arg_ids));
+    if (block->arg_count > 0) {
+      memcpy(new_arg_ids, block->arg_ids,
+             (iree_host_size_t)block->arg_count * sizeof(*new_arg_ids));
+    }
+    block->arg_ids = new_arg_ids;
+    block->arg_capacity = (uint16_t)new_capacity;
   }
   uint16_t arg_index = block->arg_count++;
   block->arg_ids[arg_index] = value_id;

@@ -34,6 +34,7 @@
 //    "highlights":[{"start_byte":128,"end_byte":130,
 //                   "field":{"kind":"operand","index":1,"occurrence":0},
 //                   "param":"field_b"}],
+//    "highlight_omitted_count":1,
 //    "related_locations":[
 //      {"label":"consumed here",
 //       "source_location":{"provenance":"exact_source",
@@ -48,6 +49,7 @@
 //       "highlights":[{"start_byte":115,"end_byte":119,
 //                      "field":{"kind":"operand","index":0,
 //                               "occurrence":1}}]}],
+//    "related_location_omitted_count":2,
 //    "message":"'rhs' type f32 does not match 'lhs' type i32",
 //    "fix_hint":"Ensure 'rhs' and 'lhs' have the same type",
 //    "params":{"field_a":"lhs","type_a":"i32","field_b":"rhs","type_b":"f32"},

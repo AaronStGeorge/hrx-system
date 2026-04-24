@@ -218,6 +218,9 @@ typedef struct loom_test_gen_values_t {
   loom_type_t types[LOOM_TEST_GEN_VALUES_MAX_CAPACITY];
   // Number of valid entries.
   uint16_t count;
+  // Number of values offered to this set, including entries omitted after
+  // reaching the fixed storage capacity.
+  iree_host_size_t total_count;
   // Permutation of [0..count-1] sorted by scalar type for bucketed
   // lookup. Only valid when buckets_dirty is false.
   uint16_t bucket_indices[LOOM_TEST_GEN_VALUES_MAX_CAPACITY];

@@ -112,6 +112,38 @@ TEST(Diagnostic, MultiTokenUnderline) {
   EXPECT_NE(output.find("^^^^^^^^^^"), std::string::npos);
 }
 
+TEST(Diagnostic, OmittedHighlightsFormatAsNote) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("x")),
+  };
+  loom_diagnostic_t diagnostic = {};
+  diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
+  diagnostic.params = params;
+  diagnostic.param_count = IREE_ARRAYSIZE(params);
+  diagnostic.highlight_omitted_count = 3;
+  diagnostic.origin.filename = IREE_SV("test.loom");
+  diagnostic.origin.source = IREE_SV("%x = test.produce : i32");
+  diagnostic.origin.start = 0;
+  diagnostic.origin.end = 2;
+  diagnostic.origin.start_line = 1;
+  diagnostic.origin.start_column = 1;
+  diagnostic.origin.end_line = 1;
+  diagnostic.origin.end_column = 3;
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_ASSERT_OK(loom_diagnostic_format(&diagnostic, &stream));
+  std::string output(iree_string_builder_buffer(&builder),
+                     iree_string_builder_size(&builder));
+  iree_string_builder_deinitialize(&builder);
+
+  EXPECT_NE(output.find("3 additional highlights omitted"), std::string::npos)
+      << "output: " << output;
+}
+
 TEST(Diagnostic, WarningFormat) {
   // ERR_PARSE_003 with WARNING severity (severity comes from the diagnostic,
   // not the error def).
@@ -267,6 +299,32 @@ TEST(Diagnostic, RelatedLocationsFormatAsNotes) {
             std::string::npos)
       << "output: " << output;
   EXPECT_NE(output.find("%next = test.invoke @callee(%arg)"), std::string::npos)
+      << "output: " << output;
+}
+
+TEST(Diagnostic, OmittedRelatedLocationsFormatAsNote) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("arg")),
+      loom_param_string(IREE_SV("test.invoke")),
+  };
+  loom_diagnostic_t diagnostic = {};
+  diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 2);
+  diagnostic.params = params;
+  diagnostic.param_count = IREE_ARRAYSIZE(params);
+  diagnostic.related_location_omitted_count = 3;
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_ASSERT_OK(loom_diagnostic_format(&diagnostic, &stream));
+  std::string output(iree_string_builder_buffer(&builder),
+                     iree_string_builder_size(&builder));
+  iree_string_builder_deinitialize(&builder);
+
+  EXPECT_NE(output.find("  = note: 3 additional related locations omitted"),
+            std::string::npos)
       << "output: " << output;
 }
 

@@ -206,6 +206,24 @@ TEST_F(ModuleTest, RegionAppendBlockGrowthKeepsBlockReferencesStable) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, BlockAddArgRejectsStorageOverflow) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_value_id_t arg_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_I32), &arg_id));
+
+  loom_block_t* entry = loom_region_entry_block(module->body);
+  entry->arg_count = UINT16_MAX;
+  entry->arg_capacity = UINT16_MAX;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_block_add_arg(module, entry, arg_id));
+
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, RegionRemoveBlocksCompactsAndDropsClosedUses) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,

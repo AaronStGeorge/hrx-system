@@ -268,35 +268,55 @@ static iree_status_t loom_json_render_highlights(
 
 static iree_status_t loom_json_render_related_locations(
     loom_output_stream_t* stream, const loom_diagnostic_t* diagnostic) {
-  if (!diagnostic->related_locations ||
-      diagnostic->related_location_count == 0) {
+  if (diagnostic->related_location_count == 0 &&
+      diagnostic->related_location_omitted_count == 0) {
     return iree_ok_status();
   }
-
-  iree_host_size_t related_count =
-      iree_min(diagnostic->related_location_count,
-               (iree_host_size_t)LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS);
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"related_locations\":["));
-  for (iree_host_size_t i = 0; i < related_count; ++i) {
-    const loom_diagnostic_related_location_t* related =
-        &diagnostic->related_locations[i];
-    if (i > 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
-    }
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, "{\"label\":"));
-    IREE_RETURN_IF_ERROR(
-        loom_json_write_escaped_string(stream, related->label));
-    IREE_RETURN_IF_ERROR(loom_json_render_source_range(
-        stream, "source_location", &related->source_location));
-    IREE_RETURN_IF_ERROR(
-        loom_json_render_highlights(stream, "highlights", related->highlights,
-                                    related->highlight_count, NULL, 0));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '}'));
+  if (diagnostic->related_location_count > 0 &&
+      !diagnostic->related_locations) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "diagnostic related location count requires related locations");
   }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+
+  if (diagnostic->related_location_count > 0) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"related_locations\":["));
+    for (iree_host_size_t i = 0; i < diagnostic->related_location_count; ++i) {
+      const loom_diagnostic_related_location_t* related =
+          &diagnostic->related_locations[i];
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "{\"label\":"));
+      IREE_RETURN_IF_ERROR(
+          loom_json_write_escaped_string(stream, related->label));
+      IREE_RETURN_IF_ERROR(loom_json_render_source_range(
+          stream, "source_location", &related->source_location));
+      IREE_RETURN_IF_ERROR(
+          loom_json_render_highlights(stream, "highlights", related->highlights,
+                                      related->highlight_count, NULL, 0));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '}'));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+  }
+  if (diagnostic->related_location_omitted_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, ",\"related_location_omitted_count\":%" PRIhsz,
+        diagnostic->related_location_omitted_count));
+  }
   return iree_ok_status();
+}
+
+static iree_status_t loom_json_render_highlight_omissions(
+    loom_output_stream_t* stream, const loom_diagnostic_t* diagnostic) {
+  if (diagnostic->highlight_omitted_count == 0) {
+    return iree_ok_status();
+  }
+  return loom_output_stream_write_format(
+      stream, ",\"highlight_omitted_count\":%" PRIhsz,
+      diagnostic->highlight_omitted_count);
 }
 
 // Renders structured field refs attached to params.
@@ -382,6 +402,8 @@ iree_status_t loom_diagnostic_json_write_object(
   IREE_RETURN_IF_ERROR(loom_json_render_highlights(
       stream, "highlights", diagnostic->highlights, diagnostic->highlight_count,
       diagnostic->error, diagnostic->param_count));
+  IREE_RETURN_IF_ERROR(
+      loom_json_render_highlight_omissions(stream, diagnostic));
   IREE_RETURN_IF_ERROR(loom_json_render_related_locations(stream, diagnostic));
 
   // Message: rendered from the error def's template and params, streamed

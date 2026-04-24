@@ -48,7 +48,9 @@ struct CapturedDiagnostic {
   std::string source_text;
 
   std::vector<loom_highlight_range_t> highlights;
+  iree_host_size_t highlight_omitted_count = 0;
   std::vector<CapturedRelatedLocation> related_locations;
+  iree_host_size_t related_location_omitted_count = 0;
   std::vector<loom_diagnostic_param_t> params;
 
  private:
@@ -116,6 +118,7 @@ struct DiagnosticCapture {
     entry.source_text = entry.origin_source_storage;
 
     entry.highlights.reserve(diagnostic->highlight_count);
+    entry.highlight_omitted_count = diagnostic->highlight_omitted_count;
     if (diagnostic->highlight_count > 0) {
       EXPECT_NE(diagnostic->highlights, nullptr);
     }
@@ -126,6 +129,8 @@ struct DiagnosticCapture {
     }
 
     entry.related_locations.reserve(diagnostic->related_location_count);
+    entry.related_location_omitted_count =
+        diagnostic->related_location_omitted_count;
     if (diagnostic->related_location_count > 0) {
       EXPECT_NE(diagnostic->related_locations, nullptr);
     }
