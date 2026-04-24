@@ -111,6 +111,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "packed_bitunpack"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/packed_bitunpack.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "vector_bitcast"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_bitcast.loom-test"

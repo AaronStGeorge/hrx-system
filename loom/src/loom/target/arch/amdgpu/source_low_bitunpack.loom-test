@@ -1,13 +1,15 @@
-// RUN: emit source-low output=low
-target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
+// TEMPLATE: loom/src/loom/test/corpus/source_low/packed_bitunpack.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-func.def target(@gfx11_bitunpack_target) @i32_to_u8x4_bitunpack(%packed: vector<1xi32>) -> (vector<4xi32>) {
+// ====
+
+func.def @i32_to_u8x4_bitunpack(%packed: vector<1xi32>) -> (vector<4xi32>) {
   %unpacked = vector.bitunpacku<8> %packed : vector<1xi32> -> vector<4xi32>
   func.return %unpacked : vector<4xi32>
 }
 
 // ----
-low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i32_to_u8x4_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32_to_u8x4_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 255
   %6 = v_and_b32 %packed, %5
   %7 = v_mov_b32 8
@@ -24,16 +26,14 @@ low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i32_to_u8x4_bitunp
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_bitunpack_target) @i32_to_s8x4_bitunpack(%packed: vector<1xi32>) -> (vector<4xi32>) {
+func.def @i32_to_s8x4_bitunpack(%packed: vector<1xi32>) -> (vector<4xi32>) {
   %unpacked = vector.bitunpacks<8> %packed : vector<1xi32> -> vector<4xi32>
   func.return %unpacked : vector<4xi32>
 }
 
 // ----
-low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i32_to_s8x4_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32_to_s8x4_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 24
   %6 = v_lshlrev_b32 %5, %packed
   %7 = v_mov_b32 24
@@ -53,16 +53,14 @@ low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i32_to_s8x4_bitunp
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_bitunpack_target) @i32_to_u4x8_bitunpack(%packed: vector<1xi32>) -> (vector<8xi32>) {
+func.def @i32_to_u4x8_bitunpack(%packed: vector<1xi32>) -> (vector<8xi32>) {
   %unpacked = vector.bitunpacku<4> %packed : vector<1xi32> -> vector<8xi32>
   func.return %unpacked : vector<8xi32>
 }
 
 // ----
-low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i32_to_u4x8_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32_to_u4x8_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 15
   %6 = v_and_b32 %packed, %5
   %7 = v_mov_b32 4
@@ -91,16 +89,14 @@ low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i32_to_u4x8_bitunp
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_bitunpack_target) @i8x2_to_u2x8_bitunpack(%packed: vector<2xi8>) -> (vector<8xi32>) {
+func.def @i8x2_to_u2x8_bitunpack(%packed: vector<2xi8>) -> (vector<8xi32>) {
   %unpacked = vector.bitunpacku<2> %packed : vector<2xi8> -> vector<8xi32>
   func.return %unpacked : vector<8xi32>
 }
 
 // ----
-low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i8x2_to_u2x8_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i8x2_to_u2x8_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 3
   %6 = v_and_b32 %packed, %5
   %7 = v_mov_b32 2
@@ -129,30 +125,24 @@ low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i8x2_to_u2x8_bitun
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_bitunpack_target) @q3_width_rejected(%packed: vector<3xi8>) -> (vector<8xi32>) {
+func.def @q3_width_rejected(%packed: vector<3xi8>) -> (vector<8xi32>) {
   // ERROR@+1: BACKEND/001 "width must evenly partition a 32-bit backing register"
   %unpacked = vector.bitunpacks<3> %packed : vector<3xi8> -> vector<8xi32>
   func.return %unpacked : vector<8xi32>
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_bitunpack_target) @bitunpack_lane_count_rejected(%packed: vector<16xi8>) -> (vector<32xi32>) {
+func.def @bitunpack_lane_count_rejected(%packed: vector<16xi8>) -> (vector<32xi32>) {
   // ERROR@+1: BACKEND/001 "requires one to eight unpacked result lanes"
   %unpacked = vector.bitunpacku<4> %packed : vector<16xi8> -> vector<32xi32>
   func.return %unpacked : vector<32xi32>
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_bitunpack_target) @bitunpack_result_type_rejected(%packed: vector<1xi32>) -> (vector<4xi8>) {
+func.def @bitunpack_result_type_rejected(%packed: vector<1xi32>) -> (vector<4xi8>) {
   // ERROR@+1: BACKEND/001 "requires a static rank-1 i32 result vector"
   %unpacked = vector.bitunpacku<8> %packed : vector<1xi32> -> vector<4xi8>
   func.return %unpacked : vector<4xi8>
