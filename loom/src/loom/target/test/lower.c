@@ -257,6 +257,12 @@ static const loom_low_lower_attr_copy_t kTestLowAttrCopies[] = {
         .target_name = IREE_SVL("i32_value"),
         .source_attr_index = 0,
     },
+    {
+        .kind = LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_ELEMENT,
+        .target_name = IREE_SVL("i32_value"),
+        .source_attr_index = 0,
+        .source_element_index = 0,
+    },
 };
 
 enum {
@@ -265,6 +271,7 @@ enum {
   LOOM_TEST_LOW_DIAGNOSTIC_I64_ATTR,
   LOOM_TEST_LOW_DIAGNOSTIC_INDEX,
   LOOM_TEST_LOW_DIAGNOSTIC_MATERIALIZED,
+  LOOM_TEST_LOW_DIAGNOSTIC_STATIC_LANE,
 };
 
 static const loom_low_lower_diagnostic_t kTestLowDiagnostics[] = {
@@ -294,6 +301,11 @@ static const loom_low_lower_diagnostic_t kTestLowDiagnostics[] = {
         .subject_name = IREE_SVL("copy"),
         .reason = IREE_SVL("test lowering requires copy-materializable values"),
     },
+    {
+        .subject_kind = IREE_SVL("attr"),
+        .subject_name = IREE_SVL("static_indices"),
+        .reason = IREE_SVL("test lowering requires one static lane in [0, 3]"),
+    },
 };
 
 enum {
@@ -302,6 +314,11 @@ enum {
   LOOM_TEST_LOW_SCALAR_LHS_GUARD,
   LOOM_TEST_LOW_SCALAR_RHS_GUARD,
   LOOM_TEST_LOW_SCALAR_RESULT_GUARD,
+  LOOM_TEST_LOW_VECTOR_EXTRACT_STATIC_INDICES_KIND_GUARD,
+  LOOM_TEST_LOW_VECTOR_EXTRACT_STATIC_INDICES_COUNT_GUARD,
+  LOOM_TEST_LOW_VECTOR_EXTRACT_STATIC_LANE_RANGE_GUARD,
+  LOOM_TEST_LOW_VECTOR_EXTRACT_SOURCE_GUARD,
+  LOOM_TEST_LOW_VECTOR_EXTRACT_RESULT_GUARD,
   LOOM_TEST_LOW_VECTOR_LHS_GUARD,
   LOOM_TEST_LOW_VECTOR_LHS_DIM0_MULTIPLE_GUARD,
   LOOM_TEST_LOW_VECTOR_RHS_GUARD,
@@ -339,6 +356,38 @@ static const loom_low_lower_guard_t kTestLowGuards[] = {
         .value_ref_index = LOOM_TEST_LOW_OPERAND1,
         .type_pattern_index = LOOM_TEST_LOW_TYPE_I32,
         .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_RESULT0,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_I32,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_ATTR_KIND,
+        .attr_index = 0,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_STATIC_LANE,
+        .attr_kind = LOOM_ATTR_I64_ARRAY,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_COUNT_EQ,
+        .attr_index = 0,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_STATIC_LANE,
+        .u64 = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENT_RANGE,
+        .attr_index = 0,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_STATIC_LANE,
+        .u64 = 0,
+        .minimum_i64 = 0,
+        .maximum_i64 = 3,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_OPERAND0,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_V4I32,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I32,
     },
     {
         .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
@@ -417,6 +466,7 @@ enum {
   LOOM_TEST_LOW_EMIT_CONST_I32,
   LOOM_TEST_LOW_EMIT_ADD_I32,
   LOOM_TEST_LOW_EMIT_TIED_I32,
+  LOOM_TEST_LOW_EMIT_PROJECT_LANE_I32,
   LOOM_TEST_LOW_EMIT_ADD_V4I32,
   LOOM_TEST_LOW_EMIT_SWAPPED_ADD_V4I32,
   LOOM_TEST_LOW_EMIT_INDEX_PRODUCT,
@@ -458,6 +508,14 @@ static const loom_low_lower_emit_t kTestLowEmits[] = {
         .result_ref_count = 1,
         .tied_result_start = 0,
         .tied_result_count = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_CONST_I32,
+        .result_ref_start = LOOM_TEST_LOW_RESULT0,
+        .result_ref_count = 1,
+        .attr_copy_start = 1,
+        .attr_copy_count = 1,
     },
     {
         .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
@@ -519,6 +577,13 @@ static const loom_low_lower_rule_t kTestLowRules[] = {
         .emit_count = 1,
     },
     {
+        .source_op_kind = LOOM_OP_VECTOR_EXTRACT,
+        .guard_start = LOOM_TEST_LOW_VECTOR_EXTRACT_STATIC_INDICES_KIND_GUARD,
+        .guard_count = 5,
+        .emit_start = LOOM_TEST_LOW_EMIT_PROJECT_LANE_I32,
+        .emit_count = 1,
+    },
+    {
         .source_op_kind = LOOM_OP_VECTOR_ADDI,
         .guard_start = LOOM_TEST_LOW_VECTOR_LHS_GUARD,
         .guard_count = 6,
@@ -559,18 +624,23 @@ static const loom_low_lower_rule_span_t kTestLowSpans[] = {
         .rule_count = 1,
     },
     {
-        .source_op_kind = LOOM_OP_VECTOR_ADDI,
+        .source_op_kind = LOOM_OP_VECTOR_EXTRACT,
         .rule_start = 3,
         .rule_count = 1,
     },
     {
-        .source_op_kind = LOOM_OP_VECTOR_SUBI,
+        .source_op_kind = LOOM_OP_VECTOR_ADDI,
         .rule_start = 4,
         .rule_count = 1,
     },
     {
-        .source_op_kind = LOOM_OP_INDEX_MADD,
+        .source_op_kind = LOOM_OP_VECTOR_SUBI,
         .rule_start = 5,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_INDEX_MADD,
+        .rule_start = 6,
         .rule_count = 1,
     },
 };

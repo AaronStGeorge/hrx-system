@@ -47,13 +47,19 @@ low.func.def target(@target) abi(object_function) @i32x4_splat_add(%value: reg<x
 // ====
 
 func.def @i32x4_lane_edit(%v: vector<4xi32>, %x: i32) -> (vector<4xi32>) {
-  // ERROR@+1: BACKEND/001 "vector.extract"
   %lane = vector.extract %v[1] : vector<4xi32> -> i32
-  // ERROR@+1: BACKEND/001 "scalar.addi"
   %sum = scalar.addi %lane, %x : i32
-  // ERROR@+1: BACKEND/001 "vector.insert"
   %updated = vector.insert %sum into %v[2] : i32, vector<4xi32>
   func.return %updated : vector<4xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32x4_lane_edit(%v: reg<x86.xmm>, %x: reg<x86.gpr32>) -> (reg<x86.xmm>) asm<x86.avx512.core> {
+  %lane = vpextrd.xmm %v, 1
+  %10 = copy %lane : reg<x86.gpr32> -> reg<x86.gpr32>
+  %sum = add.gpr32 %10, %x
+  %updated = vpinsrd.xmm %v, %sum, 2
+  return %updated
 }
 
 // ====

@@ -188,11 +188,22 @@ typedef struct loom_low_lower_value_ref_t {
   uint16_t materializer_index;
 } loom_low_lower_value_ref_t;
 
+typedef enum loom_low_lower_attr_copy_kind_e {
+  // Copy the source op attribute directly into the emitted low packet.
+  LOOM_LOW_LOWER_ATTR_COPY_DIRECT = 0,
+  // Copy one i64_array element as an i64 attribute into the emitted low packet.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_ELEMENT = 1,
+} loom_low_lower_attr_copy_kind_t;
+
 typedef struct loom_low_lower_attr_copy_t {
+  // Attribute projection operation to perform.
+  loom_low_lower_attr_copy_kind_t kind;
   // Target low packet attribute name to emit.
   iree_string_view_t target_name;
   // Source op attribute ordinal copied into the emitted low packet.
   uint16_t source_attr_index;
+  // Source i64_array element ordinal copied by I64_ARRAY_ELEMENT rows.
+  uint16_t source_element_index;
 } loom_low_lower_attr_copy_t;
 
 typedef struct loom_low_lower_diagnostic_t {
@@ -227,6 +238,11 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_STATIC_DIM0_MULTIPLE = 8,
   // Source value refs must map to low registers with equal unit counts.
   LOOM_LOW_LOWER_GUARD_LOW_VALUE_REGISTER_UNIT_COUNT_EQ = 9,
+  // Source i64_array attribute must contain exactly u64 elements.
+  LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_COUNT_EQ = 10,
+  // Source i64_array attribute element u64 must fall in
+  // [minimum_i64, maximum_i64].
+  LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENT_RANGE = 11,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -244,7 +260,7 @@ typedef struct loom_low_lower_guard_t {
   uint16_t diagnostic_index;
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
-  // Required enum value or unsigned payload for guard kinds that need one.
+  // Required enum value, divisor, count, or element index payload.
   uint64_t u64;
   // Stable descriptor ID used by DESCRIPTOR_AVAILABLE guards.
   uint64_t descriptor_id;

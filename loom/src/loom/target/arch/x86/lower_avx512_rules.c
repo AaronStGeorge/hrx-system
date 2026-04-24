@@ -10,6 +10,7 @@
 
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
 
@@ -191,11 +192,24 @@ static const loom_low_lower_value_ref_t loom_x86_avx512_value_refs[] = {
         },
 };
 
+enum loom_x86_avx512_attr_copy_e {
+  LOOM_X86_AVX512_ATTR_COPY_IMM64 = 0,
+  LOOM_X86_AVX512_ATTR_COPY_STATIC_LANE0 = 1,
+};
+
 static const loom_low_lower_attr_copy_t loom_x86_avx512_attr_copies[] = {
-    {
-        .target_name = IREE_SVL("imm64"),
-        .source_attr_index = 0,
-    },
+    [LOOM_X86_AVX512_ATTR_COPY_IMM64] =
+        {
+            .target_name = IREE_SVL("imm64"),
+            .source_attr_index = 0,
+        },
+    [LOOM_X86_AVX512_ATTR_COPY_STATIC_LANE0] =
+        {
+            .kind = LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_ELEMENT,
+            .target_name = IREE_SVL("lane"),
+            .source_attr_index = 0,
+            .source_element_index = 0,
+        },
 };
 
 enum loom_x86_avx512_diagnostic_e {
@@ -210,6 +224,7 @@ enum loom_x86_avx512_diagnostic_e {
   LOOM_X86_AVX512_DIAGNOSTIC_V4I32 = 8,
   LOOM_X86_AVX512_DIAGNOSTIC_V4F32 = 9,
   LOOM_X86_AVX512_DIAGNOSTIC_V4I1 = 10,
+  LOOM_X86_AVX512_DIAGNOSTIC_STATIC_I32X4_LANE = 11,
 };
 
 static const loom_low_lower_diagnostic_t loom_x86_avx512_diagnostics[] = {
@@ -261,16 +276,14 @@ static const loom_low_lower_diagnostic_t loom_x86_avx512_diagnostics[] = {
             .subject_kind = IREE_SVL("type"),
             .subject_name = IREE_SVL("i32"),
             .reason =
-                IREE_SVL("x86 AVX512 i32 splat lowering requires i32 scalar "
-                         "values"),
+                IREE_SVL("x86 AVX512 lowering requires i32 scalar values"),
         },
     [LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_F32] =
         {
             .subject_kind = IREE_SVL("type"),
             .subject_name = IREE_SVL("f32"),
             .reason =
-                IREE_SVL("x86 AVX512 f32 splat lowering requires f32 scalar "
-                         "values"),
+                IREE_SVL("x86 AVX512 lowering requires f32 scalar values"),
         },
     [LOOM_X86_AVX512_DIAGNOSTIC_V4I32] =
         {
@@ -293,29 +306,40 @@ static const loom_low_lower_diagnostic_t loom_x86_avx512_diagnostics[] = {
             .reason = IREE_SVL("x86 AVX512VL mask lowering requires "
                                "vector<4xi1> values"),
         },
+    [LOOM_X86_AVX512_DIAGNOSTIC_STATIC_I32X4_LANE] =
+        {
+            .subject_kind = IREE_SVL("attr"),
+            .subject_name = IREE_SVL("static_indices"),
+            .reason = IREE_SVL(
+                "x86 AVX512VL i32x4 lane lowering requires one static lane in "
+                "[0, 3]"),
+        },
 };
 
 enum loom_x86_avx512_guard_e {
-  LOOM_X86_AVX512_I32_LHS_GUARD = 0,
-  LOOM_X86_AVX512_I32_RHS_GUARD = 1,
-  LOOM_X86_AVX512_I32_RESULT_GUARD = 2,
-  LOOM_X86_AVX512_F32_LHS_GUARD = 3,
-  LOOM_X86_AVX512_F32_RHS_GUARD = 4,
-  LOOM_X86_AVX512_F32_RESULT_GUARD = 5,
-  LOOM_X86_AVX512_F32_ACCUMULATOR_GUARD = 6,
-  LOOM_X86_AVX512_I32_SELECT_CONDITION_GUARD = 7,
-  LOOM_X86_AVX512_I32_SELECT_TRUE_GUARD = 8,
-  LOOM_X86_AVX512_I32_SELECT_FALSE_GUARD = 9,
-  LOOM_X86_AVX512_I32_SELECT_RESULT_GUARD = 10,
-  LOOM_X86_AVX512_F32_SELECT_CONDITION_GUARD = 11,
-  LOOM_X86_AVX512_F32_SELECT_TRUE_GUARD = 12,
-  LOOM_X86_AVX512_F32_SELECT_FALSE_GUARD = 13,
-  LOOM_X86_AVX512_F32_SELECT_RESULT_GUARD = 14,
-  LOOM_X86_AVX512_V16I1_RESULT_GUARD = 15,
-  LOOM_X86_AVX512_V16I1_LHS_GUARD = 16,
+  LOOM_X86_AVX512_SCALAR_I32_LHS_GUARD = 0,
+  LOOM_X86_AVX512_SCALAR_I32_RHS_GUARD,
+  LOOM_X86_AVX512_SCALAR_I32_RESULT_GUARD,
+  LOOM_X86_AVX512_I32_LHS_GUARD,
+  LOOM_X86_AVX512_I32_RHS_GUARD,
+  LOOM_X86_AVX512_I32_RESULT_GUARD,
+  LOOM_X86_AVX512_F32_LHS_GUARD,
+  LOOM_X86_AVX512_F32_RHS_GUARD,
+  LOOM_X86_AVX512_F32_RESULT_GUARD,
+  LOOM_X86_AVX512_F32_ACCUMULATOR_GUARD,
+  LOOM_X86_AVX512_I32_SELECT_CONDITION_GUARD,
+  LOOM_X86_AVX512_I32_SELECT_TRUE_GUARD,
+  LOOM_X86_AVX512_I32_SELECT_FALSE_GUARD,
+  LOOM_X86_AVX512_I32_SELECT_RESULT_GUARD,
+  LOOM_X86_AVX512_F32_SELECT_CONDITION_GUARD,
+  LOOM_X86_AVX512_F32_SELECT_TRUE_GUARD,
+  LOOM_X86_AVX512_F32_SELECT_FALSE_GUARD,
+  LOOM_X86_AVX512_F32_SELECT_RESULT_GUARD,
+  LOOM_X86_AVX512_V16I1_RESULT_GUARD,
+  LOOM_X86_AVX512_V16I1_LHS_GUARD,
   LOOM_X86_AVX512_V16I1_RHS_GUARD,
   LOOM_X86_AVX512_V16I1_BINARY_RESULT_GUARD,
-  LOOM_X86_AVX512_CMPI_EQ_GUARD = 19,
+  LOOM_X86_AVX512_CMPI_EQ_GUARD,
   LOOM_X86_AVX512_CMPI_NE_GUARD = LOOM_X86_AVX512_CMPI_EQ_GUARD + 4,
   LOOM_X86_AVX512_CMPI_SLT_GUARD = LOOM_X86_AVX512_CMPI_NE_GUARD + 4,
   LOOM_X86_AVX512_CMPI_SLE_GUARD = LOOM_X86_AVX512_CMPI_SLT_GUARD + 4,
@@ -376,6 +400,17 @@ enum loom_x86_avx512_guard_e {
   LOOM_X86_AVX512_I32_SPLAT_XMM_RESULT_GUARD,
   LOOM_X86_AVX512_F32_SPLAT_XMM_SCALAR_GUARD,
   LOOM_X86_AVX512_F32_SPLAT_XMM_RESULT_GUARD,
+  LOOM_X86_AVX512_EXTRACT_I32X4_LANE_KIND_GUARD,
+  LOOM_X86_AVX512_EXTRACT_I32X4_LANE_COUNT_GUARD,
+  LOOM_X86_AVX512_EXTRACT_I32X4_LANE_RANGE_GUARD,
+  LOOM_X86_AVX512_V4I32_EXTRACT_SOURCE_GUARD,
+  LOOM_X86_AVX512_V4I32_EXTRACT_RESULT_GUARD,
+  LOOM_X86_AVX512_INSERT_I32X4_LANE_KIND_GUARD,
+  LOOM_X86_AVX512_INSERT_I32X4_LANE_COUNT_GUARD,
+  LOOM_X86_AVX512_INSERT_I32X4_LANE_RANGE_GUARD,
+  LOOM_X86_AVX512_V4I32_INSERT_VALUE_GUARD,
+  LOOM_X86_AVX512_V4I32_INSERT_DEST_GUARD,
+  LOOM_X86_AVX512_V4I32_INSERT_RESULT_GUARD,
 };
 
 #define LOOM_X86_AVX512_VALUE_TYPE_GUARD(value_ref, type_pattern, diagnostic) \
@@ -392,6 +427,30 @@ enum loom_x86_avx512_guard_e {
       .attr_index = 0,                                    \
       .diagnostic_index = LOOM_LOW_LOWER_DIAGNOSTIC_NONE, \
       .u64 = enum_value,                                  \
+  }
+
+#define LOOM_X86_AVX512_STATIC_I32X4_LANE_GUARDS(base)                      \
+  [base] =                                                                  \
+      {                                                                     \
+          .kind = LOOM_LOW_LOWER_GUARD_ATTR_KIND,                           \
+          .attr_index = 0,                                                  \
+          .diagnostic_index = LOOM_X86_AVX512_DIAGNOSTIC_STATIC_I32X4_LANE, \
+          .attr_kind = LOOM_ATTR_I64_ARRAY,                                 \
+  },                                                                        \
+  [(base) + 1] =                                                            \
+      {                                                                     \
+          .kind = LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_COUNT_EQ,             \
+          .attr_index = 0,                                                  \
+          .diagnostic_index = LOOM_X86_AVX512_DIAGNOSTIC_STATIC_I32X4_LANE, \
+          .u64 = 1,                                                         \
+  },                                                                        \
+  [(base) + 2] = {                                                          \
+      .kind = LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENT_RANGE,            \
+      .attr_index = 0,                                                      \
+      .diagnostic_index = LOOM_X86_AVX512_DIAGNOSTIC_STATIC_I32X4_LANE,     \
+      .u64 = 0,                                                             \
+      .minimum_i64 = 0,                                                     \
+      .maximum_i64 = 3,                                                     \
   }
 
 #define LOOM_X86_AVX512_CMPI_GUARDS_TYPED(base, predicate, value_type,   \
@@ -429,6 +488,16 @@ enum loom_x86_avx512_guard_e {
       LOOM_X86_AVX512_DIAGNOSTIC_V16I1)
 
 static const loom_low_lower_guard_t loom_x86_avx512_guards[] = {
+    [LOOM_X86_AVX512_SCALAR_I32_LHS_GUARD] = LOOM_X86_AVX512_VALUE_TYPE_GUARD(
+        LOOM_X86_AVX512_OPERAND0, LOOM_X86_AVX512_TYPE_SCALAR_I32,
+        LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_I32),
+    [LOOM_X86_AVX512_SCALAR_I32_RHS_GUARD] = LOOM_X86_AVX512_VALUE_TYPE_GUARD(
+        LOOM_X86_AVX512_OPERAND1, LOOM_X86_AVX512_TYPE_SCALAR_I32,
+        LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_I32),
+    [LOOM_X86_AVX512_SCALAR_I32_RESULT_GUARD] =
+        LOOM_X86_AVX512_VALUE_TYPE_GUARD(LOOM_X86_AVX512_RESULT0,
+                                         LOOM_X86_AVX512_TYPE_SCALAR_I32,
+                                         LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_I32),
     [LOOM_X86_AVX512_I32_LHS_GUARD] =
         {
             .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
@@ -727,12 +796,37 @@ static const loom_low_lower_guard_t loom_x86_avx512_guards[] = {
         LOOM_X86_AVX512_VALUE_TYPE_GUARD(LOOM_X86_AVX512_RESULT0,
                                          LOOM_X86_AVX512_TYPE_V4F32,
                                          LOOM_X86_AVX512_DIAGNOSTIC_V4F32),
+    LOOM_X86_AVX512_STATIC_I32X4_LANE_GUARDS(
+        LOOM_X86_AVX512_EXTRACT_I32X4_LANE_KIND_GUARD),
+    [LOOM_X86_AVX512_V4I32_EXTRACT_SOURCE_GUARD] =
+        LOOM_X86_AVX512_VALUE_TYPE_GUARD(LOOM_X86_AVX512_OPERAND0,
+                                         LOOM_X86_AVX512_TYPE_V4I32,
+                                         LOOM_X86_AVX512_DIAGNOSTIC_V4I32),
+    [LOOM_X86_AVX512_V4I32_EXTRACT_RESULT_GUARD] =
+        LOOM_X86_AVX512_VALUE_TYPE_GUARD(LOOM_X86_AVX512_RESULT0,
+                                         LOOM_X86_AVX512_TYPE_SCALAR_I32,
+                                         LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_I32),
+    LOOM_X86_AVX512_STATIC_I32X4_LANE_GUARDS(
+        LOOM_X86_AVX512_INSERT_I32X4_LANE_KIND_GUARD),
+    [LOOM_X86_AVX512_V4I32_INSERT_VALUE_GUARD] =
+        LOOM_X86_AVX512_VALUE_TYPE_GUARD(LOOM_X86_AVX512_OPERAND0,
+                                         LOOM_X86_AVX512_TYPE_SCALAR_I32,
+                                         LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_I32),
+    [LOOM_X86_AVX512_V4I32_INSERT_DEST_GUARD] =
+        LOOM_X86_AVX512_VALUE_TYPE_GUARD(LOOM_X86_AVX512_OPERAND1,
+                                         LOOM_X86_AVX512_TYPE_V4I32,
+                                         LOOM_X86_AVX512_DIAGNOSTIC_V4I32),
+    [LOOM_X86_AVX512_V4I32_INSERT_RESULT_GUARD] =
+        LOOM_X86_AVX512_VALUE_TYPE_GUARD(LOOM_X86_AVX512_RESULT0,
+                                         LOOM_X86_AVX512_TYPE_V4I32,
+                                         LOOM_X86_AVX512_DIAGNOSTIC_V4I32),
 };
 
 #undef LOOM_X86_AVX512_CMPF_GUARDS
 #undef LOOM_X86_AVX512_CMPF_GUARDS_TYPED
 #undef LOOM_X86_AVX512_CMPI_GUARDS
 #undef LOOM_X86_AVX512_CMPI_GUARDS_TYPED
+#undef LOOM_X86_AVX512_STATIC_I32X4_LANE_GUARDS
 #undef LOOM_X86_AVX512_ATTR_ENUM_GUARD
 #undef LOOM_X86_AVX512_VALUE_TYPE_GUARD
 
@@ -745,7 +839,8 @@ static const loom_tied_result_t loom_x86_avx512_tied_results[] = {
 };
 
 enum loom_x86_avx512_emit_e {
-  LOOM_X86_AVX512_EMIT_VADDPS = 0,
+  LOOM_X86_AVX512_EMIT_ADD_GPR32 = 0,
+  LOOM_X86_AVX512_EMIT_VADDPS,
   LOOM_X86_AVX512_EMIT_VADDPS_XMM,
   LOOM_X86_AVX512_EMIT_VSUBPS,
   LOOM_X86_AVX512_EMIT_VSUBPS_XMM,
@@ -805,6 +900,8 @@ enum loom_x86_avx512_emit_e {
   LOOM_X86_AVX512_EMIT_VPBROADCASTD_XMM,
   LOOM_X86_AVX512_EMIT_VBROADCASTSS,
   LOOM_X86_AVX512_EMIT_VBROADCASTSS_XMM,
+  LOOM_X86_AVX512_EMIT_VPEXTRD_XMM,
+  LOOM_X86_AVX512_EMIT_VPINSRD_XMM,
   LOOM_X86_AVX512_EMIT_MOVIMM_GPR64,
   LOOM_X86_AVX512_EMIT_LEA_ADD_GPR64,
   LOOM_X86_AVX512_EMIT_IMUL_GPR64,
@@ -843,6 +940,18 @@ enum loom_x86_avx512_emit_e {
   }
 
 static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
+    [LOOM_X86_AVX512_EMIT_ADD_GPR32] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id = X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_ADD_GPR32,
+            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
+            .operand_ref_count = 2,
+            .copy_operand_mask = 0x1,
+            .result_ref_start = LOOM_X86_AVX512_RESULT0,
+            .result_ref_count = 1,
+            .tied_result_start = 0,
+            .tied_result_count = 1,
+        },
     [LOOM_X86_AVX512_EMIT_VADDPS] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
         X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VADDPS_ZMM),
     [LOOM_X86_AVX512_EMIT_VADDPS_XMM] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
@@ -980,6 +1089,31 @@ static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
     [LOOM_X86_AVX512_EMIT_VBROADCASTSS_XMM] =
         LOOM_X86_AVX512_UNARY_DESCRIPTOR_EMIT(
             X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VBROADCASTSS_XMM),
+    [LOOM_X86_AVX512_EMIT_VPEXTRD_XMM] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .descriptor_id =
+                X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPEXTRD_GPR32_XMM,
+            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
+            .operand_ref_count = 1,
+            .result_ref_start = LOOM_X86_AVX512_RESULT0,
+            .result_ref_count = 1,
+            .attr_copy_start = LOOM_X86_AVX512_ATTR_COPY_STATIC_LANE0,
+            .attr_copy_count = 1,
+        },
+    [LOOM_X86_AVX512_EMIT_VPINSRD_XMM] =
+        {
+            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+            .flags = LOOM_LOW_LOWER_EMIT_FLAG_SWAP_OPERANDS_0_1,
+            .descriptor_id =
+                X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPINSRD_XMM,
+            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
+            .operand_ref_count = 2,
+            .result_ref_start = LOOM_X86_AVX512_RESULT0,
+            .result_ref_count = 1,
+            .attr_copy_start = LOOM_X86_AVX512_ATTR_COPY_STATIC_LANE0,
+            .attr_copy_count = 1,
+        },
     [LOOM_X86_AVX512_EMIT_MOVIMM_GPR64] =
         {
             .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST,
@@ -987,7 +1121,7 @@ static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
                 X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_MOVIMM_GPR64,
             .result_ref_start = LOOM_X86_AVX512_RESULT0,
             .result_ref_count = 1,
-            .attr_copy_start = 0,
+            .attr_copy_start = LOOM_X86_AVX512_ATTR_COPY_IMM64,
             .attr_copy_count = 1,
         },
     [LOOM_X86_AVX512_EMIT_LEA_ADD_GPR64] =
@@ -1038,10 +1172,13 @@ static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
 #undef LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT
 
 enum loom_x86_avx512_rule_e {
-  LOOM_X86_AVX512_RULE_VECTOR_SPLAT_I32 = 0,
+  LOOM_X86_AVX512_RULE_SCALAR_ADDI = 0,
+  LOOM_X86_AVX512_RULE_VECTOR_SPLAT_I32,
   LOOM_X86_AVX512_RULE_VECTOR_SPLAT_I32_XMM,
   LOOM_X86_AVX512_RULE_VECTOR_SPLAT_F32,
   LOOM_X86_AVX512_RULE_VECTOR_SPLAT_F32_XMM,
+  LOOM_X86_AVX512_RULE_VECTOR_EXTRACT_I32X4,
+  LOOM_X86_AVX512_RULE_VECTOR_INSERT_I32X4,
   LOOM_X86_AVX512_RULE_VECTOR_SELECT_V16I32,
   LOOM_X86_AVX512_RULE_VECTOR_SELECT_V16F32,
   LOOM_X86_AVX512_RULE_VECTOR_SELECT_V4I32,
@@ -1114,6 +1251,9 @@ enum loom_x86_avx512_rule_e {
   }
 
 static const loom_low_lower_rule_t loom_x86_avx512_rules[] = {
+    [LOOM_X86_AVX512_RULE_SCALAR_ADDI] = LOOM_X86_AVX512_RULE(
+        LOOM_OP_SCALAR_ADDI, LOOM_X86_AVX512_SCALAR_I32_LHS_GUARD, 3,
+        LOOM_X86_AVX512_EMIT_ADD_GPR32),
     [LOOM_X86_AVX512_RULE_VECTOR_SPLAT_I32] = LOOM_X86_AVX512_RULE(
         LOOM_OP_VECTOR_SPLAT, LOOM_X86_AVX512_I32_SPLAT_SCALAR_GUARD, 2,
         LOOM_X86_AVX512_EMIT_VPBROADCASTD),
@@ -1126,6 +1266,12 @@ static const loom_low_lower_rule_t loom_x86_avx512_rules[] = {
     [LOOM_X86_AVX512_RULE_VECTOR_SPLAT_F32_XMM] = LOOM_X86_AVX512_RULE(
         LOOM_OP_VECTOR_SPLAT, LOOM_X86_AVX512_F32_SPLAT_XMM_SCALAR_GUARD, 2,
         LOOM_X86_AVX512_EMIT_VBROADCASTSS_XMM),
+    [LOOM_X86_AVX512_RULE_VECTOR_EXTRACT_I32X4] = LOOM_X86_AVX512_RULE(
+        LOOM_OP_VECTOR_EXTRACT, LOOM_X86_AVX512_EXTRACT_I32X4_LANE_KIND_GUARD,
+        5, LOOM_X86_AVX512_EMIT_VPEXTRD_XMM),
+    [LOOM_X86_AVX512_RULE_VECTOR_INSERT_I32X4] = LOOM_X86_AVX512_RULE(
+        LOOM_OP_VECTOR_INSERT, LOOM_X86_AVX512_INSERT_I32X4_LANE_KIND_GUARD, 6,
+        LOOM_X86_AVX512_EMIT_VPINSRD_XMM),
     [LOOM_X86_AVX512_RULE_VECTOR_SELECT_V16I32] = LOOM_X86_AVX512_RULE(
         LOOM_OP_VECTOR_SELECT, LOOM_X86_AVX512_I32_SELECT_CONDITION_GUARD, 4,
         LOOM_X86_AVX512_EMIT_VPBLENDMD),
@@ -1318,9 +1464,24 @@ static const loom_low_lower_rule_t loom_x86_avx512_rules[] = {
 
 static const loom_low_lower_rule_span_t loom_x86_avx512_rule_spans[] = {
     {
+        .source_op_kind = LOOM_OP_SCALAR_ADDI,
+        .rule_start = LOOM_X86_AVX512_RULE_SCALAR_ADDI,
+        .rule_count = 1,
+    },
+    {
         .source_op_kind = LOOM_OP_VECTOR_SPLAT,
         .rule_start = LOOM_X86_AVX512_RULE_VECTOR_SPLAT_I32,
         .rule_count = 4,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_EXTRACT,
+        .rule_start = LOOM_X86_AVX512_RULE_VECTOR_EXTRACT_I32X4,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_INSERT,
+        .rule_start = LOOM_X86_AVX512_RULE_VECTOR_INSERT_I32X4,
+        .rule_count = 1,
     },
     {
         .source_op_kind = LOOM_OP_VECTOR_SELECT,

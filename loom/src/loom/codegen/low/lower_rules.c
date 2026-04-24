@@ -310,6 +310,31 @@ static iree_status_t loom_low_lower_rule_guard_matches(
                      loom_op_const_attrs(source_op)[guard->attr_index].i64 <=
                          guard->maximum_i64;
       return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_COUNT_EQ:
+      if (guard->attr_index >= source_op->attribute_count ||
+          loom_op_const_attrs(source_op)[guard->attr_index].kind !=
+              LOOM_ATTR_I64_ARRAY) {
+        return iree_ok_status();
+      }
+      *out_matches =
+          (uint64_t)loom_op_const_attrs(source_op)[guard->attr_index].count ==
+          guard->u64;
+      return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENT_RANGE:
+      if (guard->attr_index >= source_op->attribute_count ||
+          loom_op_const_attrs(source_op)[guard->attr_index].kind !=
+              LOOM_ATTR_I64_ARRAY) {
+        return iree_ok_status();
+      }
+      if (guard->u64 >=
+          loom_op_const_attrs(source_op)[guard->attr_index].count) {
+        return iree_ok_status();
+      }
+      *out_matches = loom_op_const_attrs(source_op)[guard->attr_index]
+                             .i64_array[guard->u64] >= guard->minimum_i64 &&
+                     loom_op_const_attrs(source_op)[guard->attr_index]
+                             .i64_array[guard->u64] <= guard->maximum_i64;
+      return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE:
       *out_matches = loom_low_descriptor_set_lookup_descriptor_by_id(
                          match_context->descriptor_set, guard->descriptor_id) !=
@@ -595,6 +620,7 @@ static iree_status_t loom_low_lower_rule_build_attrs(
   if (emit->attr_copy_count == 0) {
     return iree_ok_status();
   }
+  const loom_attribute_t* source_attrs = loom_op_const_attrs(source_op);
   loom_named_attr_t* attrs = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
       context, emit->attr_copy_count, sizeof(*attrs), (void**)&attrs));
@@ -607,8 +633,23 @@ static iree_status_t loom_low_lower_rule_build_attrs(
     IREE_RETURN_IF_ERROR(
         loom_module_intern_string(loom_low_lower_context_module(context),
                                   attr_copy->target_name, &attrs[i].name_id));
-    attrs[i].value =
-        loom_op_const_attrs(source_op)[attr_copy->source_attr_index];
+    switch (attr_copy->kind) {
+      case LOOM_LOW_LOWER_ATTR_COPY_DIRECT:
+        attrs[i].value = source_attrs[attr_copy->source_attr_index];
+        break;
+      case LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_ELEMENT: {
+        loom_attribute_t source_attr =
+            source_attrs[attr_copy->source_attr_index];
+        IREE_ASSERT_EQ(source_attr.kind, LOOM_ATTR_I64_ARRAY);
+        IREE_ASSERT_LT(attr_copy->source_element_index, source_attr.count);
+        attrs[i].value = loom_attr_i64(
+            source_attr.i64_array[attr_copy->source_element_index]);
+        break;
+      }
+      default:
+        IREE_ASSERT_UNREACHABLE();
+        break;
+    }
   }
   *out_attrs = loom_make_named_attr_slice(attrs, emit->attr_copy_count);
   return iree_ok_status();

@@ -209,6 +209,10 @@ def _gpr64_resource(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.RESOURCE, _GPR64_ALT)
 
 
+def _gpr32_result(field_name: str = "dst") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _GPR32_ALT)
+
+
 def _gpr32_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _GPR32_ALT)
 
@@ -281,6 +285,13 @@ _IMM64_IMMEDIATE = Immediate(
     bit_width=64,
     signed_min=-(2**63) + 1,
     unsigned_max=(2**63) - 1,
+)
+
+_LANE_I32X4_IMMEDIATE = Immediate(
+    "lane",
+    ImmediateKind.UNSIGNED,
+    bit_width=8,
+    unsigned_max=3,
 )
 
 _ADDRESS_SCALE_ENUM = "x86.address.scale"
@@ -870,6 +881,24 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
     ),
     descriptors=(
+        Descriptor(
+            key="x86.avx512.add.gpr32",
+            mnemonic="add",
+            semantic_tag="integer.add.i32",
+            operands=(
+                _gpr32_result(),
+                _gpr32_operand("lhs"),
+                _gpr32_operand("rhs"),
+            ),
+            constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
+            asm_forms=_asm(
+                mnemonic="add.gpr32",
+                results=("dst",),
+                operands=("lhs", "rhs"),
+            ),
+            schedule_class=_SCHEDULE_SCALAR,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
         _vector_splat_descriptor(
             vector_bit_width=128,
             key="x86.avx512.vpbroadcastd.xmm",
@@ -877,6 +906,40 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.splat.i32x4",
             operand=_gpr32_operand("value"),
             schedule_class=_SCHEDULE_VECTOR_I32_XMM,
+        ),
+        Descriptor(
+            key="x86.avx512.vpextrd.gpr32.xmm",
+            mnemonic="vpextrd",
+            semantic_tag="integer.extract.i32x4",
+            operands=(_gpr32_result(), _xmm_operand("source")),
+            immediates=(_LANE_I32X4_IMMEDIATE,),
+            asm_forms=_asm(
+                mnemonic="vpextrd.xmm",
+                results=("dst",),
+                operands=("source",),
+                immediates=("lane",),
+            ),
+            schedule_class=_SCHEDULE_VECTOR_I32_XMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="x86.avx512.vpinsrd.xmm",
+            mnemonic="vpinsrd",
+            semantic_tag="integer.insert.i32x4",
+            operands=(
+                _vector_result(128),
+                _xmm_operand("dest"),
+                _gpr32_operand("value"),
+            ),
+            immediates=(_LANE_I32X4_IMMEDIATE,),
+            asm_forms=_asm(
+                mnemonic="vpinsrd.xmm",
+                results=("dst",),
+                operands=("dest", "value"),
+                immediates=("lane",),
+            ),
+            schedule_class=_SCHEDULE_VECTOR_I32_XMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         _vector_splat_descriptor(
             vector_bit_width=128,

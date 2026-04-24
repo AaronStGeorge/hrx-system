@@ -414,6 +414,62 @@ TEST_F(SourceLoweringRuleEmissionTest, SwapsPerLaneOperands) {
   EXPECT_EQ(loom_low_slice_source(second_operand_def), low_lhs);
 }
 
+TEST_F(SourceLoweringRuleEmissionTest,
+       ProjectsI64ArrayElementIntoDescriptorImmediate) {
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  ModulePtr module = ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @extract_lane(%v: vector<4xi32>) -> "
+      "(i32) {\n"
+      "  %lane = vector.extract %v[2] : vector<4xi32> -> i32\n"
+      "  func.return %lane : i32\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 0u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_NE(lower_result.low_func_op, nullptr);
+  EXPECT_TRUE(lower_collector.emissions.empty());
+
+  EmissionCollector verify_collector;
+  loom_low_verify_result_t verify_result = {};
+  IREE_ASSERT_OK(
+      VerifyLowModule(module.get(), &verify_collector, &verify_result));
+  EXPECT_EQ(verify_result.error_count, 0u);
+  EXPECT_TRUE(verify_collector.emissions.empty());
+
+  std::string text;
+  IREE_ASSERT_OK(PrintModule(module.get(), &text));
+  EXPECT_NE(text.find("low.const<test.const.i32> {i32_value = 2}"),
+            std::string::npos);
+}
+
+TEST_F(SourceLoweringRuleEmissionTest,
+       RejectsDynamicLaneProjectionWithRuleDiagnostic) {
+  EmissionCollector lower_collector;
+  loom_low_lower_result_t lower_result = {};
+  (void)ParseAndLowerTargetedSource(
+      "target.profile @test_target preset(\"test-low\")\n"
+      "func.def target(@test_target) @extract_lane(%v: vector<4xi32>, "
+      "%lane_index: index) -> (i32) {\n"
+      "  %lane = vector.extract %v[%lane_index] : vector<4xi32> -> i32\n"
+      "  func.return %lane : i32\n"
+      "}\n",
+      &lower_collector, &lower_result);
+
+  EXPECT_EQ(lower_result.error_count, 1u);
+  EXPECT_EQ(lower_result.remark_count, 0u);
+  EXPECT_EQ(lower_result.low_func_op, nullptr);
+  ASSERT_EQ(lower_collector.emissions.size(), 1u);
+  const CollectedEmission& emission = lower_collector.emissions[0];
+  ASSERT_EQ(emission.string_params.size(), 7u);
+  EXPECT_EQ(emission.string_params[4], "attr");
+  EXPECT_EQ(emission.string_params[5], "static_indices");
+  EXPECT_EQ(emission.string_params[6],
+            "test lowering requires one static lane in [0, 3]");
+}
+
 TEST_F(SourceLoweringRuleEmissionTest, HybridPolicyUsesCallbackForUncoveredOp) {
   policy_registry_ = MakeTestHybridPolicyRegistry();
   IREE_ASSERT_OK(loom_low_lower_policy_registry_verify(&policy_registry_));
