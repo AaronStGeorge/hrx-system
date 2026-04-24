@@ -516,6 +516,24 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    amdgpu_hal_backend_test
+  SRCS
+    "amdgpu_hal_backend_test.cc"
+  DEPS
+    ::amdgpu_hal_backend
+    ::target_info
+    ::target_info_defs
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     check_provider

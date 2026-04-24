@@ -632,6 +632,23 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "amdgpu_hal_backend_test",
+    srcs = ["amdgpu_hal_backend_test.cc"],
+    deps = [
+        ":amdgpu_hal_backend",
+        ":target_info",
+        ":target_info_defs",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "check_provider",
     srcs = ["check_provider.c"],

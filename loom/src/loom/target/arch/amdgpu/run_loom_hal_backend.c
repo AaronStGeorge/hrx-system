@@ -192,6 +192,9 @@ static iree_status_t iree_run_loom_amdgpu_compile(
                   report ? report->pressure_row_capacity : 0,
               .spill_rows = report ? report->spill_rows : NULL,
               .spill_row_capacity = report ? report->spill_row_capacity : 0,
+              .source_low_rows = report ? report->source_low_rows : NULL,
+              .source_low_row_capacity =
+                  report ? report->source_low_row_capacity : 0,
           },
   };
   iree_status_t status = loom_amdgpu_compile_hal_executable(
