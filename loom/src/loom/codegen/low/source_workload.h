@@ -50,6 +50,8 @@ typedef struct loom_low_source_workload_counts_t {
   uint32_t scalar_constant_count;
   // Number of generated lanewise vector integer arithmetic ops.
   uint32_t vector_integer_op_count;
+  // Number of generated vector.reduce ops.
+  uint32_t vector_reduce_op_count;
   // Number of generated vector.extract ops.
   uint32_t vector_extract_op_count;
   // Number of generated vector.shuffle ops.

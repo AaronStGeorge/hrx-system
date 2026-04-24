@@ -296,6 +296,7 @@ enum {
   LOOM_TEST_LOW_DIAGNOSTIC_MATERIALIZED,
   LOOM_TEST_LOW_DIAGNOSTIC_STATIC_LANE,
   LOOM_TEST_LOW_DIAGNOSTIC_SHUFFLE_LANES,
+  LOOM_TEST_LOW_DIAGNOSTIC_REDUCE_KIND,
 };
 
 static const loom_low_lower_diagnostic_t kTestLowDiagnostics[] = {
@@ -336,6 +337,11 @@ static const loom_low_lower_diagnostic_t kTestLowDiagnostics[] = {
         .reason =
             IREE_SVL("test lowering requires four shuffle lanes in [0, 3]"),
     },
+    {
+        .subject_kind = IREE_SVL("attr"),
+        .subject_name = IREE_SVL("kind"),
+        .reason = IREE_SVL("test lowering requires addi reduction"),
+    },
 };
 
 enum {
@@ -360,6 +366,10 @@ enum {
   LOOM_TEST_LOW_VECTOR_RHS_UNIT_COUNT_GUARD,
   LOOM_TEST_LOW_VECTOR_RESULT_GUARD,
   LOOM_TEST_LOW_VECTOR_RESULT_UNIT_COUNT_GUARD,
+  LOOM_TEST_LOW_VECTOR_REDUCE_KIND_GUARD,
+  LOOM_TEST_LOW_VECTOR_REDUCE_INPUT_GUARD,
+  LOOM_TEST_LOW_VECTOR_REDUCE_INIT_GUARD,
+  LOOM_TEST_LOW_VECTOR_REDUCE_RESULT_GUARD,
   LOOM_TEST_LOW_INDEX_LHS_GUARD,
   LOOM_TEST_LOW_INDEX_RHS_GUARD,
   LOOM_TEST_LOW_INDEX_ACC_GUARD,
@@ -500,6 +510,30 @@ static const loom_low_lower_guard_t kTestLowGuards[] = {
         .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I32,
     },
     {
+        .kind = LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ,
+        .attr_index = 0,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_REDUCE_KIND,
+        .u64 = LOOM_VECTOR_REDUCE_KIND_ADDI,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_OPERAND0,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_V4I32,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_OPERAND1,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_I32,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_RESULT0,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_I32,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_I32,
+    },
+    {
         .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
         .value_ref_index = LOOM_TEST_LOW_OPERAND0,
         .type_pattern_index = LOOM_TEST_LOW_TYPE_INDEX,
@@ -550,6 +584,7 @@ enum {
   LOOM_TEST_LOW_EMIT_SHUFFLE_V4I32,
   LOOM_TEST_LOW_EMIT_ADD_V4I32,
   LOOM_TEST_LOW_EMIT_SWAPPED_ADD_V4I32,
+  LOOM_TEST_LOW_EMIT_REDUCE_ADD_V4I32,
   LOOM_TEST_LOW_EMIT_INDEX_PRODUCT,
   LOOM_TEST_LOW_EMIT_INDEX_ADDEND,
 };
@@ -626,6 +661,15 @@ static const loom_low_lower_emit_t kTestLowEmits[] = {
         .result_ref_count = 1,
     },
     {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
+        .operand_ref_start = LOOM_TEST_LOW_OPERAND0,
+        .operand_ref_count = 2,
+        .accumulator_operand_index = 1,
+        .result_ref_start = LOOM_TEST_LOW_RESULT0,
+        .result_ref_count = 1,
+    },
+    {
         .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
         .flags = LOOM_LOW_LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS,
         .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
@@ -654,6 +698,7 @@ enum {
   LOOM_TEST_LOW_RULE_VECTOR_SHUFFLE,
   LOOM_TEST_LOW_RULE_VECTOR_ADDI,
   LOOM_TEST_LOW_RULE_VECTOR_SUBI,
+  LOOM_TEST_LOW_RULE_VECTOR_REDUCE_ADDI,
   LOOM_TEST_LOW_RULE_INDEX_MADD,
 };
 
@@ -723,6 +768,14 @@ static const loom_low_lower_rule_t kTestLowRules[] = {
             .emit_start = LOOM_TEST_LOW_EMIT_SWAPPED_ADD_V4I32,
             .emit_count = 1,
         },
+    [LOOM_TEST_LOW_RULE_VECTOR_REDUCE_ADDI] =
+        {
+            .source_op_kind = LOOM_OP_VECTOR_REDUCE,
+            .guard_start = LOOM_TEST_LOW_VECTOR_REDUCE_KIND_GUARD,
+            .guard_count = 4,
+            .emit_start = LOOM_TEST_LOW_EMIT_REDUCE_ADD_V4I32,
+            .emit_count = 1,
+        },
     [LOOM_TEST_LOW_RULE_INDEX_MADD] =
         {
             .source_op_kind = LOOM_OP_INDEX_MADD,
@@ -768,6 +821,11 @@ static const loom_low_lower_rule_span_t kTestLowSpans[] = {
     {
         .source_op_kind = LOOM_OP_VECTOR_SUBI,
         .rule_start = LOOM_TEST_LOW_RULE_VECTOR_SUBI,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_REDUCE,
+        .rule_start = LOOM_TEST_LOW_RULE_VECTOR_REDUCE_ADDI,
         .rule_count = 1,
     },
     {
