@@ -196,6 +196,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_scalar_f32"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_scalar_f32.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_v4"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_v4.loom-test"

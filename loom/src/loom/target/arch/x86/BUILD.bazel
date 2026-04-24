@@ -237,9 +237,11 @@ loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
         "source_low.loom-test",
+        "source_low_scalar_f32.loom-test",
         "source_low_v4.loom-test",
     ],
     data = [
+        "//loom/src/loom/test/corpus/source_low:numeric_scalar_f32.loom-test",
         "//loom/src/loom/test/corpus/source_low:vector_v16.loom-test",
         "//loom/src/loom/test/corpus/source_low:vector_v4.loom-test",
     ],

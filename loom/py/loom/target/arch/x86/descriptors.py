@@ -221,6 +221,10 @@ def _xmm_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _XMM_ALT)
 
 
+def _xmm_result(field_name: str = "dst") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _XMM_ALT)
+
+
 def _zmm_result(field_name: str = "dst") -> Operand:
     return Operand(field_name, OperandRole.RESULT, _ZMM_ALT)
 
@@ -356,7 +360,7 @@ _CONTROL_EFFECT = Effect(
     flags=(EffectFlag.ORDERED,),
 )
 
-_DOT_ACCUMULATOR_CONSTRAINTS = (
+_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS = (
     Constraint(ConstraintKind.TIED, 0, 1),
     Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
 )
@@ -400,7 +404,7 @@ def _packed_dot_descriptor(descriptor: PackedDotDescriptor) -> Descriptor:
             _vector_operand(descriptor.vector_bit_width, "lhs"),
             _vector_operand(descriptor.vector_bit_width, "rhs"),
         ),
-        constraints=_DOT_ACCUMULATOR_CONSTRAINTS,
+        constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
         schedule_class=_vector_dot_schedule_class(descriptor.vector_bit_width),
         feature_mask_words=(descriptor.required_feature_bits,),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -469,6 +473,31 @@ def _vector_f32_binary_descriptor(
             operands=("lhs", "rhs"),
         ),
         schedule_class=_vector_f32_schedule_class(vector_bit_width),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _scalar_f32_binary_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> Descriptor:
+    return Descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        operands=(
+            _xmm_result(),
+            _xmm_operand("lhs"),
+            _xmm_operand("rhs"),
+        ),
+        asm_forms=_asm(
+            mnemonic=f"{mnemonic}.xmm",
+            results=("dst",),
+            operands=("lhs", "rhs"),
+        ),
+        schedule_class=_SCHEDULE_VECTOR_F32_XMM,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -1023,22 +1052,10 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="vaddps",
             semantic_tag="float.add.f32x4",
         ),
-        Descriptor(
+        _scalar_f32_binary_descriptor(
             key="x86.avx512.vaddss.xmm",
             mnemonic="vaddss",
             semantic_tag="float.add.f32",
-            operands=(
-                _vector_result(128),
-                _xmm_operand("lhs"),
-                _xmm_operand("rhs"),
-            ),
-            asm_forms=_asm(
-                mnemonic="vaddss.xmm",
-                results=("dst",),
-                operands=("lhs", "rhs"),
-            ),
-            schedule_class=_SCHEDULE_VECTOR_F32_XMM,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         _vector_f32_binary_descriptor(
             vector_bit_width=128,
@@ -1046,11 +1063,40 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="vsubps",
             semantic_tag="float.sub.f32x4",
         ),
+        _scalar_f32_binary_descriptor(
+            key="x86.avx512.vsubss.xmm",
+            mnemonic="vsubss",
+            semantic_tag="float.sub.f32",
+        ),
         _vector_f32_binary_descriptor(
             vector_bit_width=128,
             key="x86.avx512.vmulps.xmm",
             mnemonic="vmulps",
             semantic_tag="float.mul.f32x4",
+        ),
+        _scalar_f32_binary_descriptor(
+            key="x86.avx512.vmulss.xmm",
+            mnemonic="vmulss",
+            semantic_tag="float.mul.f32",
+        ),
+        Descriptor(
+            key="x86.avx512.vfmadd231ss.xmm",
+            mnemonic="vfmadd231ss",
+            semantic_tag="float.fma.f32",
+            operands=(
+                _xmm_result(),
+                _xmm_operand("acc"),
+                _xmm_operand("lhs"),
+                _xmm_operand("rhs"),
+            ),
+            constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
+            asm_forms=_asm(
+                mnemonic="vfmadd231ss.xmm",
+                results=("dst",),
+                operands=("acc", "lhs", "rhs"),
+            ),
+            schedule_class=_SCHEDULE_VECTOR_FMA_F32_XMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         _vector_f32_compare_descriptor(
             vector_bit_width=128,
@@ -1302,7 +1348,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _zmm_operand("lhs"),
                 _zmm_operand("rhs"),
             ),
-            constraints=_DOT_ACCUMULATOR_CONSTRAINTS,
+            constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
             asm_forms=_asm(results=("dst",), operands=("acc", "lhs", "rhs")),
             schedule_class=_SCHEDULE_VECTOR_FMA_F32_ZMM,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -1467,7 +1513,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _zmm_operand("lhs"),
                 _zmm_operand("rhs"),
             ),
-            constraints=_DOT_ACCUMULATOR_CONSTRAINTS,
+            constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
             asm_forms=_asm(results=("dst",), operands=("acc", "lhs", "rhs")),
             schedule_class=_SCHEDULE_VECTOR_DOT_ZMM,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -1482,7 +1528,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _zmm_operand("lhs"),
                 _zmm_operand("rhs"),
             ),
-            constraints=_DOT_ACCUMULATOR_CONSTRAINTS,
+            constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
             asm_forms=_asm(results=("dst",), operands=("acc", "lhs", "rhs")),
             schedule_class=_SCHEDULE_VECTOR_DOT_ZMM,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),

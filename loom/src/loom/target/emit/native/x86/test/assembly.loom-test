@@ -266,3 +266,26 @@ low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %v : reg<
   vaddss xmm0, xmm1, xmm0
   vmovdqu32 [rax + 64], xmm0
   ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : reg<x86.xmm>, %rhs : reg<x86.xmm>, %bias : reg<x86.xmm>) asm<x86.avx512.core> {
+  %sum = vaddss.xmm %lhs, %rhs
+  %difference = vsubss.xmm %sum, %bias
+  %product = vmulss.xmm %difference, %rhs
+  %bias_copy = copy %bias : reg<x86.xmm> -> reg<x86.xmm>
+  %result = vfmadd231ss.xmm %bias_copy, %product, %rhs
+  vmovdqu32.store.xmm %result, %base {disp32 = 96}
+  return
+}
+
+// ----
+.Lbb0:
+  vaddss xmm0, xmm0, xmm2
+  vsubss xmm0, xmm0, xmm1
+  vmulss xmm0, xmm0, xmm2
+  vfmadd231ss xmm1, xmm0, xmm2
+  vmovdqu32 [rax + 96], xmm1
+  ret

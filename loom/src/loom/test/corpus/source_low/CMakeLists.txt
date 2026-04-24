@@ -155,6 +155,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "numeric_scalar_f32"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/numeric_scalar_f32.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "numeric_scalar_i32"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/numeric_scalar_i32.loom-test"
