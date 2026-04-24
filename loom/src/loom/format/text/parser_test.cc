@@ -21,7 +21,6 @@
 #include "loom/ir/module.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/encoding/ops.h"
-#include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
@@ -73,13 +72,6 @@ class ParserTest : public ::testing::Test {
       const loom_op_vtable_t* const* vtables =
           loom_test_dialect_vtables(&count);
       IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_TEST,
-                                                   vtables, (uint16_t)count));
-    }
-    {
-      iree_host_size_t count = 0;
-      const loom_op_vtable_t* const* vtables =
-          loom_func_dialect_vtables(&count);
-      IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_FUNC,
                                                    vtables, (uint16_t)count));
     }
     {
@@ -263,11 +255,11 @@ static std::string BuildWideFunctionType(iree_host_size_t arg_count,
   return text;
 }
 
-static std::string BuildWideFuncDefSource(iree_host_size_t arg_count,
-                                          iree_host_size_t result_count) {
+static std::string BuildWideTestFuncSource(iree_host_size_t arg_count,
+                                           iree_host_size_t result_count) {
   std::string text;
   text.reserve((arg_count + result_count) * 16 + 128);
-  text.append("func.def @wide(");
+  text.append("test.func @wide(");
   for (iree_host_size_t i = 0; i < arg_count; ++i) {
     if (i > 0) text.append(", ");
     text.append("%arg");
@@ -276,7 +268,7 @@ static std::string BuildWideFuncDefSource(iree_host_size_t arg_count,
   }
   text.append(") -> (");
   AppendRepeatedScalarTypeList(&text, result_count);
-  text.append(") {\n  func.return");
+  text.append(") {\n  test.yield");
   if (result_count > 0) text.push_back(' ');
   for (iree_host_size_t i = 0; i < result_count; ++i) {
     if (i > 0) text.append(", ");
@@ -639,7 +631,7 @@ TEST_F(ParserTest, CommentOnly) {
 TEST_F(ParserTest, OperationAndBlockCommentsRoundTrip) {
   std::string text = RoundTrip(
       "// top-level function\n"
-      "func.def @comments() {\n"
+      "test.func @comments() {\n"
       "  // explicit entry block\n"
       "  ^entry:\n"
       "  // body terminator\n"
@@ -647,7 +639,7 @@ TEST_F(ParserTest, OperationAndBlockCommentsRoundTrip) {
       "}\n");
   EXPECT_EQ(text,
             "// top-level function\n"
-            "func.def @comments() {\n"
+            "test.func @comments() {\n"
             "// explicit entry block\n"
             "^entry:\n"
             "  // body terminator\n"
@@ -719,35 +711,35 @@ TEST_F(ParserTest, FunctionTypeConstantSupportsThousandArgsAndResults) {
   loom_module_free(module);
 }
 
-TEST_F(ParserTest, FuncDefSupportsThousandArgsAndResults) {
+TEST_F(ParserTest, TestFuncSupportsThousandArgsAndResults) {
   static constexpr iree_host_size_t kTypeCount = 1000;
-  std::string source = BuildWideFuncDefSource(kTypeCount, kTypeCount);
+  std::string source = BuildWideTestFuncSource(kTypeCount, kTypeCount);
 
   loom_module_t* module = ParseOk(source.c_str());
   ASSERT_NE(module, nullptr);
 
   loom_op_t* func_op = GetFirstFunctionOp(module);
   ASSERT_NE(func_op, nullptr);
-  ASSERT_TRUE(loom_func_def_isa(func_op));
+  ASSERT_TRUE(loom_test_func_isa(func_op));
   EXPECT_EQ(func_op->result_count, kTypeCount);
 
-  loom_region_t* body_region = loom_func_def_body(func_op);
+  loom_region_t* body_region = loom_test_func_body(func_op);
   ASSERT_NE(body_region, nullptr);
   loom_block_t* entry_block = GetEntryBlock(body_region);
   ASSERT_NE(entry_block, nullptr);
   EXPECT_EQ(entry_block->arg_count, kTypeCount);
   ASSERT_EQ(entry_block->op_count, 1u);
 
-  loom_op_t* return_op = loom_block_op(entry_block, 0);
-  ASSERT_TRUE(loom_func_return_isa(return_op));
-  EXPECT_EQ(return_op->operand_count, kTypeCount);
+  loom_op_t* yield_op = loom_block_op(entry_block, 0);
+  ASSERT_TRUE(loom_test_yield_isa(yield_op));
+  EXPECT_EQ(yield_op->operand_count, kTypeCount);
   for (iree_host_size_t i = 0; i < kTypeCount; ++i) {
     EXPECT_EQ(loom_module_value_type(module, entry_block->arg_ids[i]).header,
               loom_type_scalar(LOOM_SCALAR_TYPE_I32).header);
     EXPECT_EQ(
         loom_module_value_type(module, loom_op_results(func_op)[i]).header,
         loom_type_scalar(LOOM_SCALAR_TYPE_I32).header);
-    EXPECT_EQ(loom_op_operands(return_op)[i], entry_block->arg_ids[i]);
+    EXPECT_EQ(loom_op_operands(yield_op)[i], entry_block->arg_ids[i]);
   }
 
   loom_module_free(module);
@@ -1314,19 +1306,6 @@ TEST_F(ParserTest, VariadicReduce) {
   EXPECT_NE(text.find("test.reduce"), std::string::npos);
 }
 
-TEST_F(ParserTest, FuncDef) {
-  loom_module_t* module = ParseOk(
-      "func.def @identity(%x : f32) -> (f32) {\n"
-      "  func.return %x : f32\n"
-      "}\n");
-  if (module) {
-    std::string text = PrintModule(module);
-    EXPECT_NE(text.find("func.def"), std::string::npos);
-    EXPECT_NE(text.find("func.return"), std::string::npos);
-    loom_module_free(module);
-  }
-}
-
 TEST_F(ParserTest, FuncDefResultTiedToEntryArg) {
   loom_module_t* module = ParseOk(
       "test.func @identity(%x: f32) -> (%x as f32) {\n"
@@ -1478,47 +1457,6 @@ TEST_F(ParserTest, FuncDeclSignatureScopeDoesNotLeakPlaceholderNames) {
   EXPECT_EQ(diagnostics[0].origin_end_column, 40u);
 }
 
-TEST_F(ParserTest, FuncDefZeroOperandReturn) {
-  loom_module_t* module = ParseOk(
-      "func.def @empty() {\n"
-      "  func.return\n"
-      "}\n");
-  if (module) {
-    std::string text = PrintModule(module);
-    EXPECT_NE(text.find("func.def @empty()"), std::string::npos);
-    EXPECT_NE(text.find("func.return\n"), std::string::npos);
-    // Verify no stray colon after func.return.
-    EXPECT_EQ(text.find("func.return :"), std::string::npos);
-    loom_module_free(module);
-  }
-}
-
-TEST_F(ParserTest, FuncDefInitializerZeroOperandReturn) {
-  loom_module_t* module = ParseOk(
-      "func.def initializer @setup() {\n"
-      "  func.return\n"
-      "}\n");
-  if (module) {
-    std::string text = PrintModule(module);
-    EXPECT_NE(text.find("initializer"), std::string::npos);
-    EXPECT_NE(text.find("func.return\n"), std::string::npos);
-    loom_module_free(module);
-  }
-}
-
-TEST_F(ParserTest, FuncDefMultipleArgs) {
-  loom_module_t* module = ParseOk(
-      "func.def @add(%a : i32, %b : i32) -> (i32) {\n"
-      "  %r = test.addi %a, %b : i32\n"
-      "  func.return %r : i32\n"
-      "}\n");
-  if (module) {
-    std::string text = PrintModule(module);
-    EXPECT_NE(text.find("func.def @add"), std::string::npos);
-    loom_module_free(module);
-  }
-}
-
 TEST_F(ParserTest, TestFuncMultipleBlocks) {
   loom_module_t* module = ParseOk(
       "test.func @multi_block() {\n"
@@ -1580,10 +1518,10 @@ TEST_F(ParserTest, TestFuncForwardSuccessorReference) {
 
 TEST_F(ParserTest, FuncCfgBranchWithArguments) {
   std::string text = RoundTrip(
-      "func.def @cfg(%arg : i32) -> (i32) {\n"
+      "test.func @cfg(%arg : i32) -> (i32) {\n"
       "  cfg.br ^exit(%arg : i32)\n"
       "^exit(%value : i32):\n"
-      "  func.return %value : i32\n"
+      "  test.yield %value : i32\n"
       "}\n");
   EXPECT_NE(text.find("cfg.br ^exit(%arg : i32)"), std::string::npos) << text;
   EXPECT_NE(text.find("^exit(%value : i32):"), std::string::npos) << text;
@@ -1609,14 +1547,14 @@ TEST_F(ParserTest, ComparisonResultType) {
   // The format prints the operand type after the colon, and the parser
   // infers the i1 result type from LOOM_TYPE_CONSTRAINT_I1.
   loom_module_t* module = ParseOk(
-      "func.def @compare(%a: i32, %b: i32) -> (i1) {\n"
+      "test.func @compare(%a: i32, %b: i32) -> (i1) {\n"
       "  %r = test.cmp eq, %a, %b : i32\n"
-      "  func.return %r : i1\n"
+      "  test.yield %r : i1\n"
       "}\n");
   if (module) {
     std::string text = PrintModule(module);
     EXPECT_NE(text.find("test.cmp eq"), std::string::npos);
-    EXPECT_NE(text.find("func.return %r : i1"), std::string::npos)
+    EXPECT_NE(text.find("test.yield %r : i1"), std::string::npos)
         << "result type should be i1, got: " << text;
     loom_module_free(module);
   }
@@ -1628,13 +1566,13 @@ TEST_F(ParserTest, LoopWithIterArgs) {
   // bindings, and both must appear as pending block args for the body
   // region.
   loom_module_t* module = ParseOk(
-      "func.def @loop(%lo: index, %hi: index, %step: index, %init: f32)"
+      "test.func @loop(%lo: index, %hi: index, %step: index, %init: f32)"
       " -> (f32) {\n"
       "  %r = test.loop %iv = %lo to %hi step %step"
       " iter_args(%acc = %init : f32) -> (%init as f32) {\n"
       "    test.yield %acc : f32\n"
       "  }\n"
-      "  func.return %r : f32\n"
+      "  test.yield %r : f32\n"
       "}\n");
   if (module) {
     std::string text = PrintModule(module);
@@ -1644,7 +1582,7 @@ TEST_F(ParserTest, LoopWithIterArgs) {
         << "iter_args not found in: " << text;
     EXPECT_NE(text.find("-> (%init as f32)"), std::string::npos)
         << "iter_arg tie should name the init operand in: " << text;
-    EXPECT_NE(text.find("func.return %r : f32"), std::string::npos)
+    EXPECT_NE(text.find("test.yield %r : f32"), std::string::npos)
         << "return type wrong in: " << text;
 
     loom_op_t* func_op = GetFirstFunctionOp(module);
@@ -1679,7 +1617,7 @@ TEST_F(ParserTest, LoopWithIterArgs) {
 TEST_F(ParserTest, LoopWithoutIterArgs) {
   // Loop without iter_args — just the IV and no results.
   loom_module_t* module = ParseOk(
-      "func.def @simple_loop(%lo: index, %hi: index, %step: index) {\n"
+      "test.func @simple_loop(%lo: index, %hi: index, %step: index) {\n"
       "  test.loop %iv = %lo to %hi step %step {\n"
       "  }\n"
       "}\n");
@@ -1716,7 +1654,7 @@ TEST_F(ParserTest, LoopWithoutIterArgs) {
 
 TEST_F(ParserTest, LoopExplicitImplicitYieldCanonicalized) {
   loom_module_t* module = ParseOk(
-      "func.def @explicit_implicit_yield(%lo: index, %hi: index, %step: "
+      "test.func @explicit_implicit_yield(%lo: index, %hi: index, %step: "
       "index) {\n"
       "  test.loop %iv = %lo to %hi step %step {\n"
       "    test.implicit_yield\n"
@@ -1751,7 +1689,8 @@ TEST_F(ParserTest, LoopExplicitImplicitYieldCanonicalized) {
 
 TEST_F(ParserTest, LoopExplicitEmptyYieldPreserved) {
   loom_module_t* module = ParseOk(
-      "func.def @explicit_empty_yield(%lo: index, %hi: index, %step: index) {\n"
+      "test.func @explicit_empty_yield(%lo: index, %hi: index, %step: index) "
+      "{\n"
       "  test.loop %iv = %lo to %hi step %step {\n"
       "    test.yield\n"
       "  }\n"
@@ -1794,14 +1733,14 @@ TEST_F(ParserTest, CounterOp) {
   EXPECT_NE(text.find("test.counter 3"), std::string::npos);
 }
 
-// Slice parsing with static offsets. We construct valid IR via a func.def
+// Slice parsing with static offsets. We construct valid IR via a test.func
 // so the %tile operand has the correct type.
 TEST_F(ParserTest, SliceAllStatic) {
   loom_module_t* module = ParseOk(
-      "func.def @test_slice(%tile : tile<64x64xf16>) -> (tile<16x16xf16>) {\n"
+      "test.func @test_slice(%tile : tile<64x64xf16>) -> (tile<16x16xf16>) {\n"
       "  %sub = test.slice %tile[0, 32] : tile<64x64xf16> -> "
       "(tile<16x16xf16>)\n"
-      "  func.return %sub : tile<16x16xf16>\n"
+      "  test.yield %sub : tile<16x16xf16>\n"
       "}\n");
   if (module) {
     std::string text = PrintModule(module);
@@ -1964,9 +1903,9 @@ TEST_F(ParserTest, BindingListNameIsRegionLocal) {
 
 TEST_F(ParserTest, FuncResultNameIsSignatureLocal) {
   const auto& diagnostics = ParseExpectErrors(
-      "func.def @f() -> (%n: index) {\n"
+      "test.func @f() -> (%n: index) {\n"
       "  %x = test.cast %n : index to index\n"
-      "  func.return %x : index\n"
+      "  test.yield %x : index\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0],
@@ -1978,13 +1917,13 @@ TEST_F(ParserTest, FuncResultNameIsSignatureLocal) {
 
 TEST_F(ParserTest, BindingListNameCanShadowOuterScopeName) {
   loom_module_t* module = ParseOk(
-      "func.def @shadow(%x : f32) -> (f32) {\n"
+      "test.func @shadow(%x : f32) -> (f32) {\n"
       "  %tile = test.constant 0 : f32\n"
       "  %mapped = test.map(%x = %tile : f32) {\n"
       "    test.yield %x : f32\n"
       "  } -> (f32)\n"
       "  %negated = test.neg %x : f32\n"
-      "  func.return %negated : f32\n"
+      "  test.yield %negated : f32\n"
       "}\n");
   if (module) {
     loom_op_t* func_op = GetFirstFunctionOp(module);
@@ -2018,7 +1957,7 @@ TEST_F(ParserTest, BindingListNameCanShadowOuterScopeName) {
 
 TEST_F(ParserTest, LoopIvNameIsRegionLocal) {
   const auto& diagnostics = ParseExpectErrors(
-      "func.def @simple_loop(%lo: index, %hi: index, %step: index) {\n"
+      "test.func @simple_loop(%lo: index, %hi: index, %step: index) {\n"
       "  test.loop %iv = %lo to %hi step %step {\n"
       "  }\n"
       "  test.loop %again = %iv to %hi step %step {\n"
@@ -2035,13 +1974,13 @@ TEST_F(ParserTest, LoopIvNameIsRegionLocal) {
 
 TEST_F(ParserTest, LoopIterArgNameIsNotATiedResultTarget) {
   const auto& diagnostics = ParseExpectErrors(
-      "func.def @loop(%lo: index, %hi: index, %step: index, %init: f32)"
+      "test.func @loop(%lo: index, %hi: index, %step: index, %init: f32)"
       " -> (f32) {\n"
       "  %r = test.loop %iv = %lo to %hi step %step"
       " iter_args(%acc = %init : f32) -> (%acc as f32) {\n"
       "    test.yield %acc : f32\n"
       "  }\n"
-      "  func.return %r : f32\n"
+      "  test.yield %r : f32\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0],
@@ -2053,13 +1992,13 @@ TEST_F(ParserTest, LoopIterArgNameIsNotATiedResultTarget) {
 
 TEST_F(ParserTest, LoopIvNameIsNotATiedResultTarget) {
   const auto& diagnostics = ParseExpectErrors(
-      "func.def @loop(%lo: index, %hi: index, %step: index, %init: f32)"
+      "test.func @loop(%lo: index, %hi: index, %step: index, %init: f32)"
       " -> (f32) {\n"
       "  %r = test.loop %iv = %lo to %hi step %step"
       " iter_args(%acc = %init : f32) -> (%iv as f32) {\n"
       "    test.yield %acc : f32\n"
       "  }\n"
-      "  func.return %r : f32\n"
+      "  test.yield %r : f32\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0],
@@ -2071,22 +2010,22 @@ TEST_F(ParserTest, LoopIvNameIsNotATiedResultTarget) {
 
 TEST_F(ParserTest, DuplicateFunctionArgName) {
   const auto& diagnostics = ParseExpectErrors(
-      "func.def @f(%x : f32, %x : f32) {\n"
-      "  func.return\n"
+      "test.func @f(%x : f32, %x : f32) {\n"
+      "  test.yield\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0],
               loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 2));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "x");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
-  EXPECT_EQ(diagnostics[0].origin_column, 23u);
+  EXPECT_EQ(diagnostics[0].origin_column, 24u);
 }
 
 TEST_F(ParserTest, DuplicateBlockArgName) {
   const auto& diagnostics = ParseExpectErrors(
-      "func.def @f() {\n"
+      "test.func @f() {\n"
       "^bb(%x : i32, %x : i32):\n"
-      "  func.return\n"
+      "  test.yield\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0],
@@ -2157,13 +2096,13 @@ TEST_F(ParserTest, ResultBodyOpRequiresLhsNames) {
 
 TEST_F(ParserTest, SymbolDefinitionRejectsLhsNames) {
   const auto& diagnostics = ParseExpectErrors(
-      "%fn = func.def @named() {\n"
-      "  func.return\n"
+      "%fn = test.func @named() {\n"
+      "  test.yield\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0],
               loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 9));
-  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "func.def");
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "test.func");
   ExpectU32Param(diagnostics[0], 1, 0u);
   ExpectU32Param(diagnostics[0], 2, 1u);
 }
@@ -2275,8 +2214,8 @@ TEST_F(ParserTest, AttrDictTooDeep) {
 TEST_F(ParserTest, UnexpectedTokenInFuncSignature) {
   // Missing '->' in function signature triggers ERR_PARSE_003.
   const auto& diagnostics = ParseExpectErrors(
-      "func.def @bad(%x : f32) (f32) {\n"
-      "  func.return %x : f32\n"
+      "test.func @bad(%x : f32) (f32) {\n"
+      "  test.yield %x : f32\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0],
@@ -2336,9 +2275,9 @@ TEST_F(ParserTest, VectorRequiresRank) {
 
 TEST_F(ParserTest, VectorZeroExtentIsNotRankZero) {
   loom_module_t* module = ParseOk(
-      "func.def @empty(%v : vector<0xf32>, %m : vector<4x0xi32>) {\n"
+      "test.func @empty(%v : vector<0xf32>, %m : vector<4x0xi32>) {\n"
       "  test.use %v, %m : vector<0xf32>, vector<4x0xi32>\n"
-      "  func.return\n"
+      "  test.yield\n"
       "}\n");
   loom_module_free(module);
 }
@@ -2357,8 +2296,9 @@ TEST_F(ParserTest, EncodingAlias) {
   // Define an encoding alias at module level and reference it in tile types.
   loom_module_t* module = ParseOk(
       "#enc = #quantization<bits=8>\n"
-      "func.def @test_enc(%x : tile<4xf32, #enc>) -> (tile<4xf32, #enc>) {\n"
-      "  func.return %x : tile<4xf32, #enc>\n"
+      "test.func @test_enc(%x : tile<4xf32, #enc>) -> "
+      "(tile<4xf32, #enc>) {\n"
+      "  test.yield %x : tile<4xf32, #enc>\n"
       "}\n");
   if (module) {
     std::string text = PrintModule(module);
@@ -2381,9 +2321,9 @@ TEST_F(ParserTest, InvalidEncodingAliasReportsAliasToken) {
 TEST_F(ParserTest, InlineEncoding) {
   // Inline encoding definition directly in a tile type.
   loom_module_t* module = ParseOk(
-      "func.def @test_enc(%x : tile<4xf32, #dense<block=32>>) -> (tile<4xf32>) "
-      "{\n"
-      "  func.return %x : tile<4xf32>\n"
+      "test.func @test_enc(%x : tile<4xf32, #dense<block=32>>) -> "
+      "(tile<4xf32>) {\n"
+      "  test.yield %x : tile<4xf32>\n"
       "}\n");
   if (module) {
     std::string text = PrintModule(module);
@@ -2424,17 +2364,17 @@ TEST_F(ParserTest, EncodingDefineInlineSpec) {
 
 TEST_F(ParserTest, EncodingDefineDynamicParams) {
   loom_module_t* module = ParseOk(
-      "func.def @test(%group_size : index, %scale : f32) {\n"
+      "test.func @test(%group_size : index, %scale : f32) {\n"
       "  %enc = encoding.define #q8_0<block=32> "
       "{scale = %scale : f32, group_size = %group_size : index} : "
       "encoding<schema>\n"
-      "  func.return\n"
+      "  test.yield\n"
       "}\n");
   ASSERT_NE(module, nullptr);
 
   loom_op_t* func_op = GetFirstFunctionOp(module);
   ASSERT_NE(func_op, nullptr);
-  loom_block_t* entry = GetEntryBlock(loom_func_def_body(func_op));
+  loom_block_t* entry = GetEntryBlock(loom_test_func_body(func_op));
   ASSERT_NE(entry, nullptr);
   ASSERT_GE(entry->op_count, 1u);
   const loom_op_t* op = loom_block_const_op(entry, 0);
@@ -2459,21 +2399,21 @@ TEST_F(ParserTest, EncodingDefineDynamicParams) {
   EXPECT_EQ(param_names.entries[1].value.i64, 1);
 
   EXPECT_EQ(PrintModule(module),
-            "func.def @test(%group_size: index, %scale: f32) {\n"
+            "test.func @test(%group_size: index, %scale: f32) {\n"
             "  %enc = encoding.define #q8_0<block=32> "
             "{group_size = %group_size : index, scale = %scale : f32} : "
             "encoding<schema>\n"
-            "  func.return\n"
+            "  test.yield\n"
             "}\n");
   loom_module_free(module);
 }
 
 TEST_F(ParserTest, StaticEncodingRejectsSSAParameter) {
   const auto& diagnostics = ParseExpectErrors(
-      "func.def @test(%group_size : index) {\n"
+      "test.func @test(%group_size : index) {\n"
       "  %enc = encoding.define #q8_0<group_size=%group_size> : "
       "encoding<schema>\n"
-      "  func.return\n"
+      "  test.yield\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0],
@@ -2630,9 +2570,9 @@ TEST_F(ParserTest, CommentSurvivesTrailingLocation) {
 
 TEST_F(ParserTest, TopLevelDeclarationLocationRoundTrip) {
   std::string text =
-      RoundTrip("func.decl @located() loc(\"model.loom\":1:1 to 1:20)\n",
+      RoundTrip("test.decl @located() loc(\"model.loom\":1:1 to 1:20)\n",
                 LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
-  EXPECT_EQ(text, "func.decl @located() loc(\"model.loom\":1:1 to 1:20)\n");
+  EXPECT_EQ(text, "test.decl @located() loc(\"model.loom\":1:1 to 1:20)\n");
 }
 
 TEST_F(ParserTest, TrailingLocationsReuseSourceIds) {

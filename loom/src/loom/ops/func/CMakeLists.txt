@@ -32,6 +32,20 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
+    print_test
+  SRCS
+    "print_test.cc"
+  DEPS
+    ::func
+    iree::base::internal::arena
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     verify_test
   SRCS
     "verify_test.cc"

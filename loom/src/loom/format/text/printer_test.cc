@@ -20,7 +20,6 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/encoding/ops.h"
-#include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
@@ -359,12 +358,6 @@ class PrintOpTest : public ::testing::Test {
         loom_test_dialect_vtables(&test_count);
     IREE_ASSERT_OK(loom_context_register_dialect(
         &context_, LOOM_DIALECT_TEST, test_vtables, (uint16_t)test_count));
-
-    iree_host_size_t func_count = 0;
-    const loom_op_vtable_t* const* func_vtables =
-        loom_func_dialect_vtables(&func_count);
-    IREE_ASSERT_OK(loom_context_register_dialect(
-        &context_, LOOM_DIALECT_FUNC, func_vtables, (uint16_t)func_count));
 
     iree_host_size_t encoding_count = 0;
     const loom_op_vtable_t* const* encoding_vtables =
@@ -1126,72 +1119,6 @@ TEST_F(PrintOpTest, FuncWithVisibility) {
             "}\n");
 }
 
-//===----------------------------------------------------------------------===//
-// Func dialect ops
-//===----------------------------------------------------------------------===//
-
-TEST_F(PrintOpTest, FuncCallOp) {
-  loom_symbol_ref_t callee = make_symbol("callee");
-  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
-  loom_value_id_t input = def(f32);
-
-  loom_type_t result_types[] = {f32};
-  loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_func_call_build(&builder_, 0, 0, callee, &input, 1,
-                                      result_types, 1, NULL, 0,
-                                      LOOM_LOCATION_UNKNOWN, &op));
-  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
-            "%1 = func.call @callee(%0) : (f32) -> (f32)\n");
-}
-
-TEST_F(PrintOpTest, FuncApplyOp) {
-  loom_symbol_ref_t callee = make_symbol("my_template");
-  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
-  loom_value_id_t input = def(f32);
-
-  loom_type_t result_types[] = {f32};
-  loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_func_apply_build(&builder_, 0, 0, callee, &input, 1,
-                                       result_types, 1, NULL, 0,
-                                       LOOM_LOCATION_UNKNOWN, &op));
-  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
-            "%1 = func.apply @my_template(%0) : (f32) -> (f32)\n");
-}
-
-TEST_F(PrintOpTest, FuncReturnOp) {
-  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
-  loom_value_id_t input = def(f32);
-
-  loom_op_t* op = NULL;
-  IREE_ASSERT_OK(
-      loom_func_return_build(&builder_, &input, 1, LOOM_LOCATION_UNKNOWN, &op));
-  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT), "func.return %0 : f32\n");
-}
-
-TEST_F(PrintOpTest, FuncReturnZeroOperands) {
-  loom_op_t* op = NULL;
-  IREE_ASSERT_OK(
-      loom_func_return_build(&builder_, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
-  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT), "func.return\n");
-}
-
-TEST_F(PrintOpTest, FuncDefOp) {
-  loom_symbol_ref_t callee = make_symbol("entry");
-  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
-
-  loom_type_t arg_types[] = {f32};
-  loom_type_t result_types[] = {f32};
-  loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_func_def_build(
-      &builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY, 1, 0, 0,
-      loom_symbol_ref_null(), 0, loom_named_attr_slice_empty(),
-      LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), callee, arg_types,
-      1, result_types, 1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
-  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
-            "func.def public @entry(%0: f32) -> (f32) {\n"
-            "}\n");
-}
-
 TEST_F(PrintOpTest, FuncDefTiedResultPrintsEntryArgName) {
   loom_symbol_ref_t callee = make_symbol("identity");
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
@@ -1225,50 +1152,6 @@ TEST_F(PrintOpTest, FuncDeclTiedResultPrintsArgOperandName) {
       IREE_ARRAYSIZE(tied_results), LOOM_LOCATION_UNKNOWN, &op));
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "test.decl @identity(%0: f32) -> (%0 as f32)\n");
-}
-
-TEST_F(PrintOpTest, FuncTemplateOpRef) {
-  loom_symbol_ref_t callee = make_symbol("vnni_q8");
-  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
-
-  // The "implements" attribute (index 0) is a string holding the op name.
-  // We need to intern it in the module's string table so the printer
-  // can resolve string_id → string_view.
-  loom_string_id_t implements_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("tile.contract"),
-                                           &implements_id));
-
-  loom_type_t arg_types[] = {f32};
-  loom_type_t result_types[] = {f32};
-  loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_func_template_build(
-      &builder_, 0, implements_id, 0, 0, 0, /*priority=*/0, callee, arg_types,
-      1, result_types, 1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
-
-  std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
-  EXPECT_NE(output.find("func.template<tile.contract>"), std::string::npos)
-      << "Expected OP_REF in output, got: " << output;
-}
-
-TEST_F(PrintOpTest, FuncTemplateWithPriority) {
-  loom_symbol_ref_t callee = make_symbol("fast_matmul");
-  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
-  loom_string_id_t implements_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("tile.contract"),
-                                           &implements_id));
-
-  loom_type_t arg_types[] = {f32};
-  loom_type_t result_types[] = {f32};
-  loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_func_template_build(
-      &builder_, LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_PRIORITY, implements_id, 0,
-      0, 0,
-      /*priority=*/10, callee, arg_types, 1, result_types, 1, NULL, 0, NULL, 0,
-      LOOM_LOCATION_UNKNOWN, &op));
-
-  std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
-  EXPECT_NE(output.find("priority(10)"), std::string::npos)
-      << "Expected priority(10) in output, got: " << output;
 }
 
 //===----------------------------------------------------------------------===//
