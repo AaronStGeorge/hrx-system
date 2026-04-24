@@ -18,6 +18,42 @@ low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : re
 
 target.profile @x86_target preset("x86-avx512")
 
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %value : reg<x86.gpr32>, %rhs : reg<x86.zmm>) asm<x86.avx512.core> {
+  %splat = vpbroadcastd %value
+  %sum = vpaddd %splat, %rhs
+  vmovdqu32.store %sum, %base {disp32 = 128}
+  return
+}
+
+// ----
+.Lbb0:
+  vpbroadcastd zmm1, eax
+  vpaddd zmm0, zmm1, zmm0
+  vmovdqu32 [rcx + 128], zmm0
+  ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %value : reg<x86.xmm>, %rhs : reg<x86.zmm>) asm<x86.avx512.core> {
+  %splat = vbroadcastss %value
+  %sum = vaddps %splat, %rhs
+  vmovdqu32.store %sum, %base {disp32 = 192}
+  return
+}
+
+// ----
+.Lbb0:
+  vbroadcastss zmm0, xmm0
+  vaddps zmm0, zmm0, zmm1
+  vmovdqu32 [rax + 192], zmm0
+  ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
 low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>) asm<x86.avx512.core> {
   %min_s = vpminsd %lhs, %rhs
   %max_s = vpmaxsd %lhs, %rhs
