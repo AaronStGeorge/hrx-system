@@ -793,6 +793,7 @@ loom_check_test_suite(
         "//loom/src/loom/test/corpus/source_low:index_addressing.loom-test",
         "//loom/src/loom/test/corpus/source_low:memory_cache_policy_non_temporal.loom-test",
         "//loom/src/loom/test/corpus/source_low:memory_cache_policy_scopes.loom-test",
+        "//loom/src/loom/test/corpus/source_low:memory_workgroup_indexed.loom-test",
         "//loom/src/loom/test/corpus/source_low:numeric_conversion.loom-test",
         "//loom/src/loom/test/corpus/source_low:numeric_minmax.loom-test",
         "//loom/src/loom/test/corpus/source_low:numeric_reduce.loom-test",
