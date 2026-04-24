@@ -33,6 +33,7 @@ extern "C" {
 typedef enum loom_low_source_memory_operation_kind_e {
   LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD = 0,
   LOOM_LOW_SOURCE_MEMORY_OPERATION_STORE = 1,
+  LOOM_LOW_SOURCE_MEMORY_OPERATION_PREFETCH = 2,
 } loom_low_source_memory_operation_kind_t;
 
 typedef enum loom_low_source_memory_dynamic_index_source_e {
@@ -120,7 +121,7 @@ static inline bool loom_low_source_memory_access_is_dynamic(
   return plan->dynamic_index != LOOM_VALUE_ID_INVALID;
 }
 
-// Builds a target-independent source memory plan for vector.load/vector.store.
+// Builds a target-independent source memory plan for vector memory access ops.
 //
 // Returns false when the source op cannot be decomposed into a complete source
 // plan. Targets are responsible for checking their own memory spaces, address

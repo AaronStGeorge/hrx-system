@@ -214,6 +214,21 @@ typedef struct loom_amdgpu_memory_access_plan_t {
   uint64_t descriptor_id;
 } loom_amdgpu_memory_access_plan_t;
 
+typedef struct loom_amdgpu_prefetch_plan_t {
+  // Target-independent source memory access plan being wrapped.
+  loom_low_source_memory_access_plan_t source;
+  // Source operand path used for the scalar offset.
+  loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
+  // Static offset value encoded in the descriptor offset immediate.
+  int64_t immediate_offset;
+  // Static byte offset materialized through the scalar SOFFSET operand.
+  uint32_t scalar_byte_offset;
+  // Prefetch span count encoded in the descriptor count immediate.
+  uint32_t count;
+  // Stable descriptor ID selected for the active descriptor set.
+  uint64_t descriptor_id;
+} loom_amdgpu_prefetch_plan_t;
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

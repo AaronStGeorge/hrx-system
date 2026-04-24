@@ -11,6 +11,7 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
 
 static iree_status_t loom_amdgpu_select_plan_id(
@@ -81,6 +82,9 @@ static iree_status_t loom_amdgpu_select_plan_id(
     case LOOM_OP_VECTOR_STORE:
       LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_memory_access_plan_t,
                               loom_amdgpu_select_vector_store_plan);
+    case LOOM_OP_VIEW_PREFETCH:
+      LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_prefetch_plan_t,
+                              loom_amdgpu_select_view_prefetch_plan);
     default:
       return iree_ok_status();
   }
@@ -167,6 +171,10 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
       return loom_amdgpu_lower_vector_store(
           context, source_op,
           (const loom_amdgpu_memory_access_plan_t*)plan.target_data);
+    case LOOM_OP_VIEW_PREFETCH:
+      return loom_amdgpu_lower_view_prefetch(
+          context, source_op,
+          (const loom_amdgpu_prefetch_plan_t*)plan.target_data);
     default:
       IREE_ASSERT_UNREACHABLE();
       return iree_ok_status();

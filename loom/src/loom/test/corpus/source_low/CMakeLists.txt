@@ -78,6 +78,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "memory_prefetch"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/memory_prefetch.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "memory_workgroup_b128"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/memory_workgroup_b128.loom-test"

@@ -1,0 +1,39 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/memory_prefetch.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx12 output=low
+
+func.def @prefetch_static(%input: buffer) {
+  %base = index.constant 16 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<64xi32, #dense>
+  view.prefetch %input_view[4] {intent = read, locality = l1} : view<64xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @prefetch_static() asm<amdgpu.gfx12.core> {
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 272} : reg<amdgpu.sgpr x4>
+  %base = s_mov_b32 16
+  %5 = s_mov_b32 0
+  s_buffer_prefetch_data %input_view, %5 {offset = 32, count = 1}
+  return
+}
+
+// ====
+
+func.def @prefetch_workgroup_id(%input: buffer) {
+  %gid = kernel.workgroup.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  view.prefetch %input_view[%gid] {intent = read, locality = l2} : view<64xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @prefetch_workgroup_id() asm<amdgpu.gfx12.core> {
+  %gid = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %7 = s_mov_b32 2
+  %8 = s_lshl_b32 %gid, %7
+  s_buffer_prefetch_data %input_view, %8 {offset = 0, count = 1}
+  return
+}

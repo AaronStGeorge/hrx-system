@@ -65,6 +65,17 @@ typedef struct loom_amdgpu_memory_access_diagnostic_t {
   loom_amdgpu_memory_access_rejection_flags_t rejection_bits;
 } loom_amdgpu_memory_access_diagnostic_t;
 
+typedef struct loom_amdgpu_descriptor_offset_immediate_info_t {
+  // Low immediate kind required by all offset immediate fields.
+  loom_low_immediate_kind_t kind;
+  // Minimum encoded value accepted by signed offset immediate fields.
+  int64_t signed_min;
+  // Maximum encoded value accepted by every offset immediate field.
+  uint64_t unsigned_max;
+  // Byte count represented by one encoded offset unit.
+  uint32_t unit_byte_count;
+} loom_amdgpu_descriptor_offset_immediate_info_t;
+
 typedef uint32_t loom_amdgpu_memory_cache_policy_attr_flags_t;
 
 #define LOOM_AMDGPU_MEMORY_CACHE_POLICY_ATTR_SCOPE ((uint32_t)1u << 0)
@@ -86,6 +97,13 @@ typedef struct loom_amdgpu_memory_cache_policy_attrs_t {
 loom_amdgpu_memory_operation_kind_t
 loom_amdgpu_memory_operation_kind_from_source(
     const loom_low_source_memory_access_plan_t* source);
+
+// Reads common offset-immediate limits from a descriptor.
+bool loom_amdgpu_descriptor_offset_immediate_info(
+    const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t descriptor_ordinal, uint16_t expected_offset_immediate_count,
+    loom_low_immediate_kind_t expected_kind,
+    loom_amdgpu_descriptor_offset_immediate_info_t* out_info);
 
 // Selects a complete AMDGPU memory access plan from source IR and facts.
 bool loom_amdgpu_memory_access_select(

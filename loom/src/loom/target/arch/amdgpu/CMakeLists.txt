@@ -470,6 +470,7 @@ loom_cc_library(
     "lower_memory_emit.c"
     "lower_memory_legality.c"
     "lower_preamble.c"
+    "lower_prefetch.c"
     "lower_reduce_rules.c"
     "lower_structural.c"
     "lower_support.c"
@@ -493,6 +494,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
+    loom::src::loom::ops::view
     loom::src::loom::target::low_legality
     loom::src::loom::util::fact_table
   PUBLIC
@@ -932,6 +934,17 @@ iree_executable_test(
     "source_low_packed_dot_gfx950"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_packed_dot_gfx950.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_prefetch_gfx12"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_prefetch_gfx12.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

@@ -1,0 +1,18 @@
+// RUN: roundtrip
+
+func.def @prefetch_static(%input: buffer) {
+  %base = index.constant 16 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<64xi32, #dense>
+  view.prefetch %input_view[4] {intent = read, locality = l1} : view<64xi32, #dense>
+  func.return
+}
+
+// ====
+
+func.def @prefetch_workgroup_id(%input: buffer) {
+  %gid = kernel.workgroup.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  view.prefetch %input_view[%gid] {intent = read, locality = l2} : view<64xi32, #dense>
+  func.return
+}

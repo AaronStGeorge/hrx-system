@@ -483,6 +483,7 @@ loom_cc_library(
     loom::src::loom::ir::facts
     loom::src::loom::ops::kernel
     loom::src::loom::ops::vector
+    loom::src::loom::ops::view
     loom::src::loom::util::fact_table
   PUBLIC
 )

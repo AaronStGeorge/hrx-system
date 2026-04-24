@@ -13,6 +13,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 
 static bool loom_low_source_memory_access_exact_i64(loom_value_facts_t facts,
                                                     int64_t* out_value) {
@@ -360,20 +361,20 @@ bool loom_low_source_memory_access_plan_build(
   *out_plan = (loom_low_source_memory_access_plan_t){0};
   *out_diagnostic = (loom_low_source_memory_access_diagnostic_t){0};
   if (source_op->kind != LOOM_OP_VECTOR_LOAD &&
-      source_op->kind != LOOM_OP_VECTOR_STORE) {
+      source_op->kind != LOOM_OP_VECTOR_STORE &&
+      source_op->kind != LOOM_OP_VIEW_PREFETCH) {
     out_diagnostic->rejection_bits |=
         LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_UNSUPPORTED_OP;
     return false;
   }
-  loom_vector_memory_cache_policy_t cache_policy = {0};
-  if (!loom_vector_memory_cache_policy_from_op(source_op, &cache_policy)) {
-    out_diagnostic->rejection_bits |=
-        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_CACHE_POLICY;
-    return false;
-  }
-
   switch (source_op->kind) {
-    case LOOM_OP_VECTOR_LOAD:
+    case LOOM_OP_VECTOR_LOAD: {
+      loom_vector_memory_cache_policy_t cache_policy = {0};
+      if (!loom_vector_memory_cache_policy_from_op(source_op, &cache_policy)) {
+        out_diagnostic->rejection_bits |=
+            LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_CACHE_POLICY;
+        return false;
+      }
       return loom_low_source_memory_access_plan_from_components(
           module, fact_table, LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD,
           loom_vector_load_view(source_op), loom_vector_load_indices(source_op),
@@ -381,7 +382,14 @@ bool loom_low_source_memory_access_plan_build(
           loom_module_value_type(module, loom_vector_load_view(source_op)),
           loom_module_value_type(module, loom_vector_load_result(source_op)),
           cache_policy, out_plan, out_diagnostic);
-    case LOOM_OP_VECTOR_STORE:
+    }
+    case LOOM_OP_VECTOR_STORE: {
+      loom_vector_memory_cache_policy_t cache_policy = {0};
+      if (!loom_vector_memory_cache_policy_from_op(source_op, &cache_policy)) {
+        out_diagnostic->rejection_bits |=
+            LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_CACHE_POLICY;
+        return false;
+      }
       return loom_low_source_memory_access_plan_from_components(
           module, fact_table, LOOM_LOW_SOURCE_MEMORY_OPERATION_STORE,
           loom_vector_store_view(source_op),
@@ -390,6 +398,21 @@ bool loom_low_source_memory_access_plan_build(
           loom_module_value_type(module, loom_vector_store_view(source_op)),
           loom_module_value_type(module, loom_vector_store_value(source_op)),
           cache_policy, out_plan, out_diagnostic);
+    }
+    case LOOM_OP_VIEW_PREFETCH: {
+      const loom_value_id_t view_value_id = loom_view_prefetch_view(source_op);
+      const loom_type_t view_type =
+          loom_module_value_type(module, view_value_id);
+      const loom_type_t element_vector_type = loom_type_shaped_1d(
+          LOOM_TYPE_VECTOR, loom_type_element_type(view_type),
+          loom_dim_pack_static(1), /*encoding_id=*/0);
+      return loom_low_source_memory_access_plan_from_components(
+          module, fact_table, LOOM_LOW_SOURCE_MEMORY_OPERATION_PREFETCH,
+          view_value_id, loom_view_prefetch_indices(source_op),
+          loom_view_prefetch_static_indices(source_op), view_type,
+          element_vector_type, (loom_vector_memory_cache_policy_t){0}, out_plan,
+          out_diagnostic);
+    }
     default:
       out_diagnostic->rejection_bits |=
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_UNSUPPORTED_OP;
@@ -402,7 +425,7 @@ iree_string_view_t loom_low_source_memory_access_rejection_detail(
   if (iree_any_bit_set(
           rejection_bits,
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_UNSUPPORTED_OP)) {
-    return IREE_SV("source op is not a supported vector memory access");
+    return IREE_SV("source op is not a supported memory access");
   }
   if (iree_any_bit_set(
           rejection_bits,

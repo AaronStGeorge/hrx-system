@@ -271,6 +271,22 @@ iree_status_t loom_amdgpu_intern(loom_low_lower_context_t* context,
                                  iree_string_view_t string,
                                  loom_string_id_t* out_string_id);
 
+// Appends one signed integer attribute to a descriptor-backed low op.
+iree_status_t loom_amdgpu_append_i64_attr(loom_low_lower_context_t* context,
+                                          iree_string_view_t name,
+                                          int64_t value,
+                                          loom_named_attr_t* attrs,
+                                          iree_host_size_t attr_capacity,
+                                          iree_host_size_t* inout_attr_count);
+
+// Emits an SGPR byte offset from an optional source dynamic index plus a static
+// byte offset.
+iree_status_t loom_amdgpu_emit_sgpr_byte_offset(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t dynamic_index, int64_t dynamic_index_byte_stride,
+    uint32_t dynamic_index_byte_shift, uint32_t static_byte_offset,
+    loom_value_id_t* out_low_offset);
+
 // Maps a source result to the low register type already selected by the active
 // lowering policy and verifies that it is a register payload.
 iree_status_t loom_amdgpu_low_result_type(loom_low_lower_context_t* context,
@@ -475,6 +491,17 @@ iree_status_t loom_amdgpu_lower_vector_load(
 iree_status_t loom_amdgpu_lower_vector_store(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_plan_t* plan);
+
+// Selects an AMDGPU scalar-buffer data prefetch plan.
+bool loom_amdgpu_select_view_prefetch_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_prefetch_plan_t* out_plan);
+
+// Lowers a source view.prefetch to an AMDGPU scalar-buffer data prefetch
+// packet.
+iree_status_t loom_amdgpu_lower_view_prefetch(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_prefetch_plan_t* plan);
 
 // Verifies source vector memory legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_vector_memory(

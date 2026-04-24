@@ -595,17 +595,6 @@ static bool loom_amdgpu_select_memory_descriptor(
       out_descriptor_ordinal);
 }
 
-typedef struct loom_amdgpu_descriptor_offset_immediate_info_t {
-  // Low immediate kind required by all offset immediate fields.
-  loom_low_immediate_kind_t kind;
-  // Minimum encoded value accepted by signed offset immediate fields.
-  int64_t signed_min;
-  // Maximum encoded value accepted by every offset immediate field.
-  uint64_t unsigned_max;
-  // Byte count represented by one encoded offset unit.
-  uint32_t unit_byte_count;
-} loom_amdgpu_descriptor_offset_immediate_info_t;
-
 typedef struct loom_amdgpu_offset_immediate_encoding_t {
   // Target immediate encoding ID.
   uint16_t encoding_id;
@@ -663,7 +652,7 @@ static bool loom_amdgpu_immediate_encoding_address_unit_byte_count(
   return false;
 }
 
-static bool loom_amdgpu_descriptor_offset_immediate_info(
+bool loom_amdgpu_descriptor_offset_immediate_info(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_ordinal, uint16_t expected_offset_immediate_count,
     loom_low_immediate_kind_t expected_kind,
@@ -1227,6 +1216,9 @@ loom_amdgpu_memory_operation_kind_from_source(
       return LOOM_AMDGPU_MEMORY_OPERATION_LOAD;
     case LOOM_LOW_SOURCE_MEMORY_OPERATION_STORE:
       return LOOM_AMDGPU_MEMORY_OPERATION_STORE;
+    case LOOM_LOW_SOURCE_MEMORY_OPERATION_PREFETCH:
+      IREE_ASSERT_UNREACHABLE();
+      return LOOM_AMDGPU_MEMORY_OPERATION_LOAD;
   }
   return LOOM_AMDGPU_MEMORY_OPERATION_LOAD;
 }
