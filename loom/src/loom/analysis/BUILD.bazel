@@ -117,6 +117,27 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "contract_preparation",
+    srcs = ["contract_preparation.c"],
+    hdrs = ["contract_preparation.h"],
+    deps = [
+        ":contract_storage",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "contract_preparation_test",
+    srcs = ["contract_preparation_test.cc"],
+    deps = [
+        ":contract_preparation",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "contract_vector",
     srcs = ["contract_vector.c"],
     hdrs = ["contract_vector.h"],

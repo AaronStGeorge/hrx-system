@@ -137,6 +137,31 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    contract_preparation
+  HDRS
+    "contract_preparation.h"
+  SRCS
+    "contract_preparation.c"
+  DEPS
+    ::contract_storage
+    iree::base
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    contract_preparation_test
+  SRCS
+    "contract_preparation_test.cc"
+  DEPS
+    ::contract_preparation
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     contract_vector
   HDRS
     "contract_vector.h"
