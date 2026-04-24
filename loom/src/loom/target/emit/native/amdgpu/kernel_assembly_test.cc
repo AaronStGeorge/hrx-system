@@ -824,10 +824,18 @@ TEST_F(AmdgpuKernelAssemblyTest, DisassemblesGfx11ObjectWithLlvmObjdump) {
       &toolchain, iree_make_const_byte_span(object.data, object.length),
       objdump_arguments, IREE_ARRAYSIZE(objdump_arguments),
       iree_allocator_system(), &disassembly));
-  std::string disassembly_text = ToString(disassembly);
-  EXPECT_NE(disassembly_text.find("s_mov_b32"), std::string::npos);
-  EXPECT_NE(disassembly_text.find("s_add_u32"), std::string::npos);
-  EXPECT_NE(disassembly_text.find("s_endpgm"), std::string::npos);
+  const std::string disassembly_text = ToString(disassembly);
+  EXPECT_NE(disassembly_text.find("s_mov_b32 s2, 7"), std::string::npos)
+      << disassembly_text;
+  EXPECT_NE(disassembly_text.find("s_mov_b32 s3, 5"), std::string::npos)
+      << disassembly_text;
+  EXPECT_NE(disassembly_text.find("s_add_u32 s2, s2, s3"), std::string::npos)
+      << disassembly_text;
+  EXPECT_NE(disassembly_text.find("s_load_b64 s[0:1], s[0:1], s2"),
+            std::string::npos)
+      << disassembly_text;
+  EXPECT_NE(disassembly_text.find("s_endpgm"), std::string::npos)
+      << disassembly_text;
 
   loom_llvm_tool_output_deinitialize(&disassembly, iree_allocator_system());
   loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
