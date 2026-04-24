@@ -10,8 +10,8 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/text_asm_roundtrip_test_util.h"
-#include "loom/codegen/low/text_asm_test_util.h"
+#include "loom/codegen/low/testing/text_asm_roundtrip_test_util.h"
+#include "loom/codegen/low/testing/text_asm_test_util.h"
 #include "loom/target/arch/amdgpu/descriptor_test_util.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/low_registry.h"

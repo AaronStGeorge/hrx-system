@@ -1,0 +1,81 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "source_workload",
+    testonly = True,
+    srcs = ["source_workload.c"],
+    hdrs = ["source_workload.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low:packetization",
+        "//loom/src/loom/codegen/low:source_selection",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/testing:gen",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "text_asm_test_util",
+    testonly = True,
+    srcs = ["text_asm_test_util.cc"],
+    hdrs = ["text_asm_test_util.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/format/text:low_asm",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "text_asm_roundtrip_test_util",
+    testonly = True,
+    srcs = ["text_asm_roundtrip_test_util.cc"],
+    hdrs = ["text_asm_roundtrip_test_util.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/format/bytecode:reader",
+        "//loom/src/loom/format/bytecode:writer",
+        "//loom/src/loom/format/text:low_asm",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+    ],
+)

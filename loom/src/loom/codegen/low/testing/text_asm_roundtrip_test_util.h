@@ -6,8 +6,8 @@
 
 // Test helper for descriptor-backed low asm parse/print round-trips.
 
-#ifndef LOOM_CODEGEN_LOW_TEXT_ASM_ROUNDTRIP_TEST_UTIL_H_
-#define LOOM_CODEGEN_LOW_TEXT_ASM_ROUNDTRIP_TEST_UTIL_H_
+#ifndef LOOM_CODEGEN_LOW_TESTING_TEXT_ASM_ROUNDTRIP_TEST_UTIL_H_
+#define LOOM_CODEGEN_LOW_TESTING_TEXT_ASM_ROUNDTRIP_TEST_UTIL_H_
 
 #include <string>
 #include <vector>
@@ -119,4 +119,4 @@ class LowFuncAsmRoundTripHarness {
 
 }  // namespace loom::testing
 
-#endif  // LOOM_CODEGEN_LOW_TEXT_ASM_ROUNDTRIP_TEST_UTIL_H_
+#endif  // LOOM_CODEGEN_LOW_TESTING_TEXT_ASM_ROUNDTRIP_TEST_UTIL_H_

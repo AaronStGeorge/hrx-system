@@ -265,8 +265,8 @@ loom_cc_test(
     ::gfx11_descriptors
     ::low_registry
     loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::text_asm_roundtrip_test_util
-    loom::src::loom::codegen::low::text_asm_test_util
+    loom::src::loom::codegen::low::testing::text_asm_roundtrip_test_util
+    loom::src::loom::codegen::low::testing::text_asm_test_util
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -307,7 +307,7 @@ loom_cc_test(
     ::encoding_defs
     ::gfx12_descriptors
     loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::text_asm_roundtrip_test_util
+    loom::src::loom::codegen::low::testing::text_asm_roundtrip_test_util
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -388,8 +388,8 @@ loom_cc_test(
     ::encoding_defs
     ::gfx950_descriptors
     loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::text_asm_roundtrip_test_util
-    loom::src::loom::codegen::low::text_asm_test_util
+    loom::src::loom::codegen::low::testing::text_asm_roundtrip_test_util
+    loom::src::loom::codegen::low::testing::text_asm_test_util
     iree::testing::gtest
     iree::testing::gtest_main
 )

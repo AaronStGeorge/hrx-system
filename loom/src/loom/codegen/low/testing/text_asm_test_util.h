@@ -6,8 +6,8 @@
 
 // Test helpers for descriptor-backed low asm type inference.
 
-#ifndef LOOM_CODEGEN_LOW_TEXT_ASM_TEST_UTIL_H_
-#define LOOM_CODEGEN_LOW_TEXT_ASM_TEST_UTIL_H_
+#ifndef LOOM_CODEGEN_LOW_TESTING_TEXT_ASM_TEST_UTIL_H_
+#define LOOM_CODEGEN_LOW_TESTING_TEXT_ASM_TEST_UTIL_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -93,4 +93,4 @@ class LowTextAsmTypeInferenceHarness {
 
 }  // namespace loom::testing
 
-#endif  // LOOM_CODEGEN_LOW_TEXT_ASM_TEST_UTIL_H_
+#endif  // LOOM_CODEGEN_LOW_TESTING_TEXT_ASM_TEST_UTIL_H_

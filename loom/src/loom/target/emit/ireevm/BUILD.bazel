@@ -269,8 +269,8 @@ loom_cc_test(
     deps = [
         ":descriptors",
         "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:text_asm_roundtrip_test_util",
-        "//loom/src/loom/codegen/low:text_asm_test_util",
+        "//loom/src/loom/codegen/low/testing:text_asm_roundtrip_test_util",
+        "//loom/src/loom/codegen/low/testing:text_asm_test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

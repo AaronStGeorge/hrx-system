@@ -589,6 +589,10 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_VECTOR_DIVF:
     case LOOM_OP_VECTOR_DIVSI:
     case LOOM_OP_VECTOR_DIVUI:
+    case LOOM_OP_VECTOR_DOT2F:
+    case LOOM_OP_VECTOR_DOT4F8:
+    case LOOM_OP_VECTOR_DOT4I:
+    case LOOM_OP_VECTOR_DOT8I4:
     case LOOM_OP_VECTOR_EXTF:
     case LOOM_OP_VECTOR_EXTRACT:
     case LOOM_OP_VECTOR_EXTSI:
@@ -662,13 +666,6 @@ static iree_status_t loom_target_low_legality_verify_op(
           context, NULL, op, IREE_SV("op"), loom_op_name(context->module, op),
           IREE_SV("target record ops are module metadata and cannot appear "
                   "inside executable regions"));
-    case LOOM_OP_VECTOR_DOT2F:
-    case LOOM_OP_VECTOR_DOT4F8:
-    case LOOM_OP_VECTOR_DOT4I:
-    case LOOM_OP_VECTOR_DOT8I4:
-      return loom_target_low_legality_reject(
-          context, NULL, op, IREE_SV("op"), loom_op_name(context->module, op),
-          IREE_SV("op requires an explicit target-low contract provider"));
     case LOOM_OP_SCF_IF:
     case LOOM_OP_SCF_FOR:
     case LOOM_OP_SCF_WHILE:

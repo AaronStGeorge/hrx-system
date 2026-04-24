@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/text_asm_test_util.h"
+#include "loom/codegen/low/testing/text_asm_test_util.h"
 
 #include "loom/codegen/low/text_asm.h"
 

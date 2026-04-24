@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/source_workload.h"
+#include "loom/codegen/low/testing/source_workload.h"
 
 #include <string.h>
 
@@ -39,6 +39,11 @@ static loom_type_t loom_low_source_workload_index_type(void) {
 static loom_type_t loom_low_source_workload_vector4xi32_type(void) {
   return loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32,
                              loom_dim_pack_static(4), 0);
+}
+
+static loom_type_t loom_low_source_workload_vector16xi8_type(void) {
+  return loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8,
+                             loom_dim_pack_static(16), 0);
 }
 
 static loom_type_t loom_low_source_workload_view4xi32_type(
@@ -300,6 +305,34 @@ static iree_status_t loom_low_source_workload_gen_vector4xi32_reduce_addi(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_source_workload_gen_vector_dot4i_s8s8(
+    const loom_test_gen_hook_context_t* context, void* user_data,
+    loom_test_gen_hook_result_t* out_result) {
+  (void)user_data;
+  loom_type_t lhs_type = loom_low_source_workload_vector16xi8_type();
+  loom_type_t result_type = loom_low_source_workload_vector4xi32_type();
+  loom_value_id_t lhs = loom_test_gen_values_pick_exact_type(
+      context->gen, context->values, lhs_type);
+  loom_value_id_t rhs = loom_test_gen_values_pick_exact_type(
+      context->gen, context->values, lhs_type);
+  loom_value_id_t acc = loom_test_gen_values_pick_exact_type(
+      context->gen, context->values, result_type);
+  if (lhs == LOOM_VALUE_ID_INVALID || rhs == LOOM_VALUE_ID_INVALID ||
+      acc == LOOM_VALUE_ID_INVALID) {
+    *out_result = LOOM_TEST_GEN_HOOK_SKIPPED;
+    return iree_ok_status();
+  }
+
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_dot4i_build(
+      context->builder, LOOM_VECTOR_DOT4I_KIND_S8S8, lhs, rhs, acc, result_type,
+      LOOM_LOCATION_UNKNOWN, &op));
+  loom_test_gen_values_add(context->values, loom_vector_dot4i_result(op),
+                           result_type);
+  *out_result = LOOM_TEST_GEN_HOOK_EMITTED;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_source_workload_gen_vector4xi32_shuffle(
     const loom_test_gen_hook_context_t* context, void* user_data,
     loom_test_gen_hook_result_t* out_result) {
@@ -426,6 +459,7 @@ static const loom_test_gen_op_hook_t kLoomLowSourceWorkloadHooks[] = {
     {4, loom_low_source_workload_gen_scalar_i32_binary, NULL, NULL},
     {4, loom_low_source_workload_gen_vector4xi32_binary, NULL, NULL},
     {2, loom_low_source_workload_gen_vector4xi32_reduce_addi, NULL, NULL},
+    {2, loom_low_source_workload_gen_vector_dot4i_s8s8, NULL, NULL},
     {2, loom_low_source_workload_gen_vector4xi32_extract, NULL, NULL},
     {2, loom_low_source_workload_gen_vector4xi32_shuffle, NULL, NULL},
     {2, loom_low_source_workload_gen_vector4xi32_load, NULL, NULL},
@@ -473,6 +507,8 @@ static iree_status_t loom_low_source_workload_generate_module_into(
       loom_low_source_workload_i32_type(),
       loom_low_source_workload_vector4xi32_type(),
       loom_low_source_workload_vector4xi32_type(),
+      loom_low_source_workload_vector16xi8_type(),
+      loom_low_source_workload_vector16xi8_type(),
       loom_low_source_workload_index_type(),
       loom_low_source_workload_index_type(),
       loom_low_source_workload_index_type(),
@@ -632,6 +668,9 @@ static void loom_low_source_workload_count_op(
     case LOOM_OP_VECTOR_REDUCE:
       ++counts->vector_reduce_op_count;
       break;
+    case LOOM_OP_VECTOR_DOT4I:
+      ++counts->vector_dot_op_count;
+      break;
     case LOOM_OP_VECTOR_EXTRACT:
       ++counts->vector_extract_op_count;
       break;
@@ -680,6 +719,7 @@ void loom_low_source_workload_counts_accumulate(
       source_counts->vector_integer_op_count;
   target_counts->vector_reduce_op_count +=
       source_counts->vector_reduce_op_count;
+  target_counts->vector_dot_op_count += source_counts->vector_dot_op_count;
   target_counts->vector_extract_op_count +=
       source_counts->vector_extract_op_count;
   target_counts->vector_shuffle_op_count +=
@@ -694,9 +734,9 @@ uint64_t loom_low_source_workload_counts_total(
   IREE_ASSERT_ARGUMENT(counts);
   return counts->scalar_integer_op_count + counts->scalar_constant_count +
          counts->vector_integer_op_count + counts->vector_reduce_op_count +
-         counts->vector_extract_op_count + counts->vector_shuffle_op_count +
-         counts->vector_load_op_count + counts->vector_store_op_count +
-         counts->index_madd_op_count;
+         counts->vector_dot_op_count + counts->vector_extract_op_count +
+         counts->vector_shuffle_op_count + counts->vector_load_op_count +
+         counts->vector_store_op_count + counts->index_madd_op_count;
 }
 
 //===----------------------------------------------------------------------===//

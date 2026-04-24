@@ -143,45 +143,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "text_asm_test_util",
-    testonly = True,
-    srcs = ["text_asm_test_util.cc"],
-    hdrs = ["text_asm_test_util.h"],
-    deps = [
-        ":descriptors",
-        ":text_asm",
-        "//loom/src/loom/format/text:low_asm",
-        "//loom/src/loom/ir",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_library(
-    name = "text_asm_roundtrip_test_util",
-    testonly = True,
-    srcs = ["text_asm_roundtrip_test_util.cc"],
-    hdrs = ["text_asm_roundtrip_test_util.h"],
-    deps = [
-        ":descriptors",
-        ":text_asm",
-        ":verify",
-        "//loom/src/loom/format/bytecode:reader",
-        "//loom/src/loom/format/bytecode:writer",
-        "//loom/src/loom/format/text:low_asm",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/format/text:printer",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/test",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/io:stream",
-    ],
-)
-
-loom_cc_library(
     name = "target_binding",
     srcs = ["target_binding.c"],
     hdrs = ["target_binding.h"],
@@ -504,37 +465,11 @@ loom_cc_test(
     ],
 )
 
-loom_cc_library(
-    name = "source_workload",
-    testonly = True,
-    srcs = ["source_workload.c"],
-    hdrs = ["source_workload.h"],
-    deps = [
-        ":lower",
-        ":packetization",
-        ":source_selection",
-        ":verify",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/buffer",
-        "//loom/src/loom/ops/encoding",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/index",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/testing:gen",
-        "//loom/src/loom/verify",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
 loom_cc_test(
     name = "source_lowering_stress_test",
     srcs = ["source_lowering_stress_test.cc"],
     deps = [
-        ":source_workload",
+        "//loom/src/loom/codegen/low/testing:source_workload",
         "//loom/src/loom/ir",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/target/test:lower",
@@ -548,7 +483,7 @@ loom_cc_benchmark(
     name = "source_lowering_benchmark",
     srcs = ["source_lowering_benchmark.cc"],
     deps = [
-        ":source_workload",
+        "//loom/src/loom/codegen/low/testing:source_workload",
         "//loom/src/loom/ir",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/target/test:lower",
@@ -563,7 +498,7 @@ loom_cc_fuzz(
     name = "source_lowering_fuzz",
     srcs = ["source_lowering_fuzz.cc"],
     deps = [
-        ":source_workload",
+        "//loom/src/loom/codegen/low/testing:source_workload",
         "//loom/src/loom/ir",
         "//loom/src/loom/target/test:low_registry",
         "//loom/src/loom/target/test:lower",

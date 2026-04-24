@@ -17,7 +17,7 @@
 #include <cstdint>
 
 #include "iree/base/internal/arena.h"
-#include "loom/codegen/low/source_workload.h"
+#include "loom/codegen/low/testing/source_workload.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/target/test/low_registry.h"

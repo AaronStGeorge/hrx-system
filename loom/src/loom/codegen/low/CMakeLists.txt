@@ -96,51 +96,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    text_asm_test_util
-  HDRS
-    "text_asm_test_util.h"
-  SRCS
-    "text_asm_test_util.cc"
-  DEPS
-    ::descriptors
-    ::text_asm
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::format::text::low_asm
-    loom::src::loom::ir
-  TESTONLY
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    text_asm_roundtrip_test_util
-  HDRS
-    "text_asm_roundtrip_test_util.h"
-  SRCS
-    "text_asm_roundtrip_test_util.cc"
-  DEPS
-    ::descriptors
-    ::text_asm
-    ::verify
-    iree::base
-    iree::base::internal::arena
-    iree::io::stream
-    loom::src::loom::format::bytecode::reader
-    loom::src::loom::format::bytecode::writer
-    loom::src::loom::format::text::low_asm
-    loom::src::loom::format::text::parser
-    loom::src::loom::format::text::printer
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::ops::test
-  TESTONLY
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     target_binding
   HDRS
     "target_binding.h"
@@ -510,43 +465,14 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_library(
-  NAME
-    source_workload
-  HDRS
-    "source_workload.h"
-  SRCS
-    "source_workload.c"
-  DEPS
-    ::lower
-    ::packetization
-    ::source_selection
-    ::verify
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::ir
-    loom::src::loom::ops::buffer
-    loom::src::loom::ops::encoding
-    loom::src::loom::ops::func
-    loom::src::loom::ops::index
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
-    loom::src::loom::ops::vector
-    loom::src::loom::testing::gen
-    loom::src::loom::verify
-  TESTONLY
-  PUBLIC
-)
-
 loom_cc_test(
   NAME
     source_lowering_stress_test
   SRCS
     "source_lowering_stress_test.cc"
   DEPS
-    ::source_workload
     iree::base::internal::arena
+    loom::src::loom::codegen::low::testing::source_workload
     loom::src::loom::ir
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
@@ -560,10 +486,10 @@ loom_cc_benchmark(
   SRCS
     "source_lowering_benchmark.cc"
   DEPS
-    ::source_workload
     benchmark
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::testing::source_workload
     loom::src::loom::ir
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
@@ -577,9 +503,9 @@ loom_cc_fuzz(
   SRCS
     "source_lowering_fuzz.cc"
   DEPS
-    ::source_workload
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::testing::source_workload
     loom::src::loom::ir
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower

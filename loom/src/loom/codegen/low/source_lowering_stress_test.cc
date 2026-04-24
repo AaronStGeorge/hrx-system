@@ -9,7 +9,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/source_workload.h"
+#include "loom/codegen/low/testing/source_workload.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/target/test/low_registry.h"
@@ -82,6 +82,7 @@ TEST_F(SourceLoweringStressTest, GeneratedSupportedSourceLowersAndPacketizes) {
   EXPECT_GT(aggregate.source_counts.scalar_constant_count, 0u);
   EXPECT_GT(aggregate.source_counts.vector_integer_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.vector_reduce_op_count, 0u);
+  EXPECT_GT(aggregate.source_counts.vector_dot_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.vector_extract_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.vector_shuffle_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.vector_load_op_count, 0u);

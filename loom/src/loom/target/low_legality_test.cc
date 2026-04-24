@@ -275,7 +275,7 @@ TEST_F(TargetLowLegalityTest, RejectsScfBeforeCfgLowering) {
   EXPECT_NE(emission.string_params[6].find("CFG"), std::string::npos);
 }
 
-TEST_F(TargetLowLegalityTest, RejectsTargetContractWithoutProvider) {
+TEST_F(TargetLowLegalityTest, AcceptsDotSourceFunctionWithoutProvider) {
   ModulePtr module = ParseSource(
       "func.def @dot(%lhs: vector<4xi8>, %rhs: vector<4xi8>, "
       "%acc: vector<1xi32>) -> (vector<1xi32>) {\n"
@@ -288,16 +288,9 @@ TEST_F(TargetLowLegalityTest, RejectsTargetContractWithoutProvider) {
   loom_target_low_legality_result_t result = {};
   IREE_ASSERT_OK(Verify(module.get(), &collector, &result));
 
-  ASSERT_EQ(result.error_count, 1u);
-  ASSERT_EQ(collector.emissions.size(), 1u);
-  const CollectedEmission& emission = collector.emissions[0];
-  EXPECT_EQ(emission.error,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1));
-  ASSERT_EQ(emission.string_params.size(), 7u);
-  EXPECT_EQ(emission.string_params[3], "dot");
-  EXPECT_EQ(emission.string_params[4], "op");
-  EXPECT_EQ(emission.string_params[5], "vector.dot4i");
-  EXPECT_NE(emission.string_params[6].find("provider"), std::string::npos);
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_EQ(result.remark_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
 }
 
 static iree_status_t RejectScalarAddiContract(

@@ -8,8 +8,10 @@
 //
 // This verifier runs before source-to-low lowering. It checks the source
 // function against the selected target bundle and linked low descriptor set,
-// then gives target-family providers a hook to accept or reject target-owned
-// source contracts such as memory-addressing forms, packed dot, or matrix ops.
+// then gives target-family providers a hook to accept, reject, or report on
+// target-owned source contracts such as memory-addressing forms, packed dot, or
+// matrix ops. Providers are refinement points; table-driven lowering rules are
+// still the source of truth for whether a source op can be selected.
 // User IR failures are reported through structured backend diagnostics;
 // infrastructure and compiler-configuration failures are returned as status.
 

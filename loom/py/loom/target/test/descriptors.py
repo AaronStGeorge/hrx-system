@@ -43,6 +43,7 @@ from loom.target.low_descriptors import (
 )
 
 _REG_I32 = "test.i32"
+_REG_I8 = "test.i8"
 _REG_I64 = "test.i64"
 _REG_PTR = "test.ptr"
 _REG_V4I32 = "test.v4i32"
@@ -68,6 +69,7 @@ _SCHEDULE_CALL = "test.call"
 _SCHEDULE_CONTROL = "test.control"
 
 _I32_ALT = (RegClassAlt(_REG_I32),)
+_I8_ALT = (RegClassAlt(_REG_I8),)
 _I32_I64_ALT = (RegClassAlt(_REG_I32), RegClassAlt(_REG_I64))
 _PTR_ALT = (RegClassAlt(_REG_PTR),)
 _V4I32_ALT = (RegClassAlt(_REG_V4I32),)
@@ -234,6 +236,9 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
     reg_classes=(
         RegClass(
             _REG_I32, 32, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_I8, 8, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
         ),
         RegClass(
             _REG_I64, 64, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
@@ -431,6 +436,20 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _v4i32_operand("rhs"),
             ),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_VECTOR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.dot4i.s8s8",
+            mnemonic="test.dot4i.s8s8",
+            semantic_tag="integer.dot4.s8s8",
+            operands=(
+                Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
+                Operand("lhs", OperandRole.OPERAND, _I8_ALT, unit_count=16),
+                Operand("rhs", OperandRole.OPERAND, _I8_ALT, unit_count=16),
+                Operand("acc", OperandRole.OPERAND, _I32_ALT, unit_count=4),
+            ),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs", "acc")),
             schedule_class=_SCHEDULE_VECTOR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
