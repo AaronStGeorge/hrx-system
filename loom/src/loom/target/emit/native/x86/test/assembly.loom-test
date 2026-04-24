@@ -18,6 +18,24 @@ low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : re
 
 target.profile @x86_target preset("x86-avx512")
 
+low.func.def target(@x86_target) @x86_fragment(%input : reg<x86.gpr64>, %output : reg<x86.gpr64>, %i : reg<x86.gpr64>, %j : reg<x86.gpr64>) asm<x86.avx512.core> {
+  %index = lea %i, %j
+  %loaded = vmovdqu32.load.indexed %input, %index {disp32 = 16, scale = 4}
+  vmovdqu32.store.indexed %loaded, %output, %index {disp32 = 32, scale = 4}
+  return
+}
+
+// ----
+.Lbb0:
+  lea rax, [rax + rcx]
+  vmovdqu32 zmm0, [rdx + rax * 4 + 16]
+  vmovdqu32 [rbx + rax * 4 + 32], zmm0
+  ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
 low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %value : reg<x86.gpr32>, %rhs : reg<x86.zmm>) asm<x86.avx512.core> {
   %splat = vpbroadcastd %value
   %sum = vpaddd %splat, %rhs
