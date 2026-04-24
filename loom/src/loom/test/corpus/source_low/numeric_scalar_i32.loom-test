@@ -1,0 +1,15 @@
+// RUN: roundtrip
+
+// ====
+
+func.def @scalar_i32_uniform_sgpr(%lhs: i32, %rhs: i32, %shift: i32) -> (i32) {
+  %add = scalar.addi %lhs, %rhs : i32
+  %sub = scalar.subi %add, %rhs : i32
+  %and = scalar.andi %sub, %lhs : i32
+  %or = scalar.ori %and, %rhs : i32
+  %xor = scalar.xori %or, %lhs : i32
+  %shl = scalar.shli %xor, %shift : i32
+  %ashr = scalar.shrsi %shl, %shift : i32
+  %lshr = scalar.shrui %ashr, %shift : i32
+  func.return %lshr : i32
+}
