@@ -74,6 +74,7 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::target::arch::x86::low_registry
     loom::src::loom::target::arch::x86::lower
+    loom::src::loom::target::tool::llvm
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
