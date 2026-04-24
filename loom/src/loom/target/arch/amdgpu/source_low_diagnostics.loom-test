@@ -1,7 +1,9 @@
-// RUN: emit source-low diagnostics=memory output=none
-target.profile @gfx11_lds_b32_diagnostics_target preset("amdgpu-gfx11")
+// TEMPLATE: loom/src/loom/test/corpus/source_low/memory_diagnostics.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 diagnostics=memory output=low
 
-func.def target(@gfx11_lds_b32_diagnostics_target) @lds_b32_diagnostics(%output: buffer) {
+// ====
+
+func.def @lds_b32_diagnostics(%output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -17,11 +19,29 @@ func.def target(@gfx11_lds_b32_diagnostics_target) @lds_b32_diagnostics(%output:
   func.return
 }
 
-// ====
-// RUN: emit source-low diagnostics=memory output=none
-target.profile @gfx11_lds_padded_diagnostics_target preset("amdgpu-gfx11")
+// ----
+low.func.def target(@target) abi(hal_kernel) @lds_b32_diagnostics() {
+  %m0 = low.live_in<amdgpu.m0> : reg<amdgpu.m0>
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
+  %scratch_view = low.frame_index @lds_b32_diagnostics__lds4 {offset = 0} : reg<amdgpu.vgpr>
+  %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_write_addtid_b32>(%one, %m0) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
+  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
+  %17 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %18 = low.op<amdgpu.v_lshlrev_b32>(%17, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  low.op<amdgpu.buffer_store_dword>(%loaded, %output_view, %18, %19) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
 
-func.def target(@gfx11_lds_padded_diagnostics_target) @lds_padded_diagnostics(%output: buffer) {
+low.slot @lds_b32_diagnostics__lds4 {align = 16, function = @lds_b32_diagnostics, size = 256, space = lds}
+
+// ====
+
+func.def @lds_padded_diagnostics(%output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 2048 : offset
@@ -38,11 +58,38 @@ func.def target(@gfx11_lds_padded_diagnostics_target) @lds_padded_diagnostics(%o
   func.return
 }
 
-// ====
-// RUN: emit source-low diagnostics=memory output=none
-target.profile @gfx11_lds_read2_write2_diagnostics_target preset("amdgpu-gfx11")
+// ----
+low.func.def target(@target) abi(hal_kernel) @lds_padded_diagnostics() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %bytes = s_mov_b32 2048
+  %scratch_view = frame_index @lds_padded_diagnostics__lds5 {offset = 0} : reg<amdgpu.vgpr>
+  %15 = v_mov_b32 1
+  %16 = v_mov_b32 1
+  %17 = v_mov_b32 1
+  %18 = v_mov_b32 1
+  %one = concat(%15, %16, %17, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %20 = v_mov_b32 20
+  %21 = v_mul_lo_u32 %tid, %20
+  %22 = v_add_u32 %scratch_view, %21
+  ds_write_b128 %22, %one {offset = 0}
+  %23 = v_mov_b32 20
+  %24 = v_mul_lo_u32 %tid, %23
+  %25 = v_add_u32 %scratch_view, %24
+  %loaded = ds_read_b128 %25 {offset = 0}
+  %27 = v_mov_b32 4
+  %28 = v_lshlrev_b32 %27, %tid
+  %29 = s_mov_b32 0
+  buffer_store_b128 %loaded, %output_view, %28, %29 {offset = 0}
+  return
+}
 
-func.def target(@gfx11_lds_read2_write2_diagnostics_target) @lds_read2_write2_diagnostics(%output: buffer) {
+low.slot @lds_padded_diagnostics__lds5 {align = 16, function = @lds_padded_diagnostics, size = 2048, space = lds}
+
+// ====
+
+func.def @lds_read2_write2_diagnostics(%output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 2048 : offset
@@ -59,11 +106,38 @@ func.def target(@gfx11_lds_read2_write2_diagnostics_target) @lds_read2_write2_di
   func.return
 }
 
-// ====
-// RUN: emit source-low diagnostics=memory output=none
-target.profile @gfx11_lds_conflict_risk_diagnostics_target preset("amdgpu-gfx11")
+// ----
+low.func.def target(@target) abi(hal_kernel) @lds_read2_write2_diagnostics() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %bytes = s_mov_b32 2048
+  %scratch_view = frame_index @lds_read2_write2_diagnostics__lds5 {offset = 0} : reg<amdgpu.vgpr>
+  %15 = v_mov_b32 1
+  %16 = v_mov_b32 1
+  %one = concat(%15, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %18 = v_mov_b32 5
+  %19 = v_lshlrev_b32 %18, %tid
+  %20 = v_add_u32 %scratch_view, %19
+  %21 = slice %one[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %22 = slice %one[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  ds_write2_b32 %20, %21, %22 {offset0 = 0, offset1 = 2}
+  %23 = v_mov_b32 5
+  %24 = v_lshlrev_b32 %23, %tid
+  %25 = v_add_u32 %scratch_view, %24
+  %loaded = ds_read2_b32 %25 {offset0 = 0, offset1 = 2}
+  %27 = v_mov_b32 3
+  %28 = v_lshlrev_b32 %27, %tid
+  %29 = s_mov_b32 0
+  buffer_store_b64 %loaded, %output_view, %28, %29 {offset = 0}
+  return
+}
 
-func.def target(@gfx11_lds_conflict_risk_diagnostics_target) @lds_conflict_risk_diagnostics(%output: buffer) {
+low.slot @lds_read2_write2_diagnostics__lds5 {align = 16, function = @lds_read2_write2_diagnostics, size = 2048, space = lds}
+
+// ====
+
+func.def @lds_conflict_risk_diagnostics(%output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -79,11 +153,38 @@ func.def target(@gfx11_lds_conflict_risk_diagnostics_target) @lds_conflict_risk_
   func.return
 }
 
-// ====
-// RUN: emit source-low output=low
-target.profile @gfx11_i8x2_load_rejected_target preset("amdgpu-gfx11")
+// ----
+low.func.def target(@target) abi(hal_kernel) @lds_conflict_risk_diagnostics() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %bytes = s_mov_b32 1024
+  %scratch_view = frame_index @lds_conflict_risk_diagnostics__lds4 {offset = 0} : reg<amdgpu.vgpr>
+  %14 = v_mov_b32 1
+  %15 = v_mov_b32 1
+  %16 = v_mov_b32 1
+  %17 = v_mov_b32 1
+  %one = concat(%14, %15, %16, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %19 = v_mov_b32 4
+  %20 = v_lshlrev_b32 %19, %tid
+  %21 = v_add_u32 %scratch_view, %20
+  ds_write_b128 %21, %one {offset = 0}
+  %22 = v_mov_b32 4
+  %23 = v_lshlrev_b32 %22, %tid
+  %24 = v_add_u32 %scratch_view, %23
+  %loaded = ds_read_b128 %24 {offset = 0}
+  %26 = v_mov_b32 4
+  %27 = v_lshlrev_b32 %26, %tid
+  %28 = s_mov_b32 0
+  buffer_store_b128 %loaded, %output_view, %27, %28 {offset = 0}
+  return
+}
 
-func.def target(@gfx11_i8x2_load_rejected_target) @i8x2_load_rejected(%input: buffer) -> (vector<2xi8>) {
+low.slot @lds_conflict_risk_diagnostics__lds4 {align = 16, function = @lds_conflict_risk_diagnostics, size = 1024, space = lds}
+
+// ====
+
+func.def @i8x2_load_rejected(%input: buffer) -> (vector<2xi8>) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<2xi8, #dense>
   // ERROR@+1: BACKEND/001 "requires the vector footprint to exactly fill complete 32-bit memory registers"
@@ -92,10 +193,8 @@ func.def target(@gfx11_i8x2_load_rejected_target) @i8x2_load_rejected(%input: bu
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_lds_i8x8_strided_load_rejected_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_lds_i8x8_strided_load_rejected_target) @lds_i8x8_strided_load_rejected() -> (vector<8xi8>) {
+func.def @lds_i8x8_strided_load_rejected() -> (vector<8xi8>) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 4096 : offset
