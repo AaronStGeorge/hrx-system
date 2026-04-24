@@ -79,9 +79,26 @@ low.func.def target(@target) abi(object_function) @i32x4_shuffle(%v: reg<x86.xmm
 
 func.def @i32x4_shuffle_reduce(%v: vector<4xi32>, %init: i32) -> (i32) {
   %reversed = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
-  // ERROR@+1: BACKEND/001 "vector.reduce"
   %sum = vector.reduce<addi> %reversed, %init : vector<4xi32>, i32
   func.return %sum : i32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32x4_shuffle_reduce(%v: reg<x86.xmm>, %init: reg<x86.gpr32>) -> (reg<x86.gpr32>) asm<x86.avx512.core> {
+  %reversed = vpshufd.xmm %v, 27
+  %9 = vpextrd.xmm %reversed, 0
+  %10 = copy %init : reg<x86.gpr32> -> reg<x86.gpr32>
+  %11 = add.gpr32 %10, %9
+  %12 = vpextrd.xmm %reversed, 1
+  %13 = copy %11 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %14 = add.gpr32 %13, %12
+  %15 = vpextrd.xmm %reversed, 2
+  %16 = copy %14 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %17 = add.gpr32 %16, %15
+  %18 = vpextrd.xmm %reversed, 3
+  %19 = copy %17 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %sum = add.gpr32 %19, %18
+  return %sum
 }
 
 // ====

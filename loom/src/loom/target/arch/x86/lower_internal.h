@@ -22,6 +22,9 @@ extern "C" {
 // Target-local rule table for regular AVX512 source ops.
 extern const loom_low_lower_rule_set_t loom_x86_avx512_rule_set;
 
+// Target-local rule table for AVX512 source reduction ops.
+extern const loom_low_lower_rule_set_t loom_x86_avx512_reduce_rule_set;
+
 // Builds a one-unit AVX512 XMM register type in the current lowering context.
 iree_status_t loom_x86_make_xmm_register_type(loom_low_lower_context_t* context,
                                               loom_type_t* out_type);

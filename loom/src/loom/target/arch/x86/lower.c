@@ -174,6 +174,7 @@ static iree_status_t loom_x86_map_avx512_argument(
 
 static const loom_low_lower_rule_set_t* const kX86Avx512RuleSets[] = {
     &loom_x86_avx512_rule_set,
+    &loom_x86_avx512_reduce_rule_set,
 };
 
 static iree_status_t loom_x86_low_legality_try_verify_op(

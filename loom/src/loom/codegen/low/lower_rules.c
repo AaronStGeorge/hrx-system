@@ -646,15 +646,18 @@ static iree_status_t loom_low_lower_rule_build_attrs(
     IREE_ASSERT_LT(attr_copy_index, rule_set->attr_copy_count);
     const loom_low_lower_attr_copy_t* attr_copy =
         &rule_set->attr_copies[attr_copy_index];
-    IREE_ASSERT_LT(attr_copy->source_attr_index, source_op->attribute_count);
     IREE_RETURN_IF_ERROR(
         loom_module_intern_string(loom_low_lower_context_module(context),
                                   attr_copy->target_name, &attrs[i].name_id));
     switch (attr_copy->kind) {
       case LOOM_LOW_LOWER_ATTR_COPY_DIRECT:
+        IREE_ASSERT_LT(attr_copy->source_attr_index,
+                       source_op->attribute_count);
         attrs[i].value = source_attrs[attr_copy->source_attr_index];
         break;
       case LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_ELEMENT: {
+        IREE_ASSERT_LT(attr_copy->source_attr_index,
+                       source_op->attribute_count);
         loom_attribute_t source_attr =
             source_attrs[attr_copy->source_attr_index];
         IREE_ASSERT_EQ(source_attr.kind, LOOM_ATTR_I64_ARRAY);
@@ -664,6 +667,8 @@ static iree_status_t loom_low_lower_rule_build_attrs(
         break;
       }
       case LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_PACK_ELEMENTS: {
+        IREE_ASSERT_LT(attr_copy->source_attr_index,
+                       source_op->attribute_count);
         loom_attribute_t source_attr =
             source_attrs[attr_copy->source_attr_index];
         IREE_ASSERT_EQ(source_attr.kind, LOOM_ATTR_I64_ARRAY);
@@ -690,6 +695,9 @@ static iree_status_t loom_low_lower_rule_build_attrs(
         attrs[i].value = loom_attr_i64((int64_t)packed_value);
         break;
       }
+      case LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL:
+        attrs[i].value = loom_attr_i64(attr_copy->literal_i64);
+        break;
       default:
         IREE_ASSERT_UNREACHABLE();
         break;

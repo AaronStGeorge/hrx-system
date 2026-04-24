@@ -196,6 +196,8 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   // Packs contiguous i64_array elements into an i64 attribute, with the first
   // source element occupying the least-significant bitfield.
   LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_PACK_ELEMENTS = 2,
+  // Emits literal_i64 as an i64 attribute into the emitted low packet.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_LITERAL = 3,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -211,6 +213,8 @@ typedef struct loom_low_lower_attr_copy_t {
   uint16_t source_element_count;
   // Bit width of each packed source element for PACK_ELEMENTS rows.
   uint8_t source_element_bit_width;
+  // Literal value emitted by I64_LITERAL rows.
+  int64_t literal_i64;
 } loom_low_lower_attr_copy_t;
 
 typedef struct loom_low_lower_diagnostic_t {
