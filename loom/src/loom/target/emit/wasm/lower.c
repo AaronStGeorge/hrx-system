@@ -951,7 +951,9 @@ static const loom_low_lower_rule_set_t* const kWasmRuleSets[] = {
 };
 
 typedef struct loom_wasm_lane_plan_t {
-  // Zero-based i32x4 lane selected by the source vector op.
+  // Element type selected by the source vector op.
+  loom_scalar_type_t element_type;
+  // Zero-based v4 lane selected by the source vector op.
   uint8_t lane;
 } loom_wasm_lane_plan_t;
 
@@ -1014,9 +1016,9 @@ static bool loom_wasm_select_memory_access(
   return true;
 }
 
-static bool loom_wasm_select_static_i32x4_lane(
-    loom_attribute_t static_indices, loom_value_slice_t dynamic_indices,
-    uint8_t* out_lane) {
+static bool loom_wasm_select_static_v4_lane(loom_attribute_t static_indices,
+                                            loom_value_slice_t dynamic_indices,
+                                            uint8_t* out_lane) {
   IREE_ASSERT_ARGUMENT(out_lane);
   if (dynamic_indices.count != 0 ||
       static_indices.kind != LOOM_ATTR_I64_ARRAY || static_indices.count != 1 ||
@@ -1035,11 +1037,16 @@ static bool loom_wasm_select_vector_extract(const loom_module_t* module,
       loom_module_value_type(module, loom_vector_extract_source(source_op));
   const loom_type_t result_type =
       loom_module_value_type(module, loom_vector_extract_result(source_op));
-  if (!loom_wasm_type_is_vector_4xi32(source_type) ||
-      !loom_wasm_type_is_address_i32(result_type)) {
+  if (loom_wasm_type_is_vector_4xi32(source_type) &&
+      loom_wasm_type_is_address_i32(result_type)) {
+    out_plan->element_type = LOOM_SCALAR_TYPE_I32;
+  } else if (loom_wasm_type_is_vector_4xf32(source_type) &&
+             loom_wasm_type_is_scalar_f32(result_type)) {
+    out_plan->element_type = LOOM_SCALAR_TYPE_F32;
+  } else {
     return false;
   }
-  return loom_wasm_select_static_i32x4_lane(
+  return loom_wasm_select_static_v4_lane(
       loom_vector_extract_static_indices(source_op),
       loom_vector_extract_indices(source_op), &out_plan->lane);
 }
@@ -1058,7 +1065,8 @@ static bool loom_wasm_select_vector_insert(const loom_module_t* module,
       !loom_wasm_type_is_vector_4xi32(result_type)) {
     return false;
   }
-  return loom_wasm_select_static_i32x4_lane(
+  out_plan->element_type = LOOM_SCALAR_TYPE_I32;
+  return loom_wasm_select_static_v4_lane(
       loom_vector_insert_static_indices(source_op),
       loom_vector_insert_indices(source_op), &out_plan->lane);
 }
@@ -1428,8 +1436,21 @@ static iree_status_t loom_wasm_lower_vector_extract(
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, loom_vector_extract_source(source_op), &source));
   loom_value_id_t result = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_wasm_emit_i32x4_extract_lane(
-      context, source, plan->lane, source_op->location, &result));
+  switch (plan->element_type) {
+    case LOOM_SCALAR_TYPE_I32: {
+      IREE_RETURN_IF_ERROR(loom_wasm_emit_i32x4_extract_lane(
+          context, source, plan->lane, source_op->location, &result));
+      break;
+    }
+    case LOOM_SCALAR_TYPE_F32: {
+      IREE_RETURN_IF_ERROR(loom_wasm_emit_f32x4_extract_lane(
+          context, source, plan->lane, source_op->location, &result));
+      break;
+    }
+    default:
+      IREE_ASSERT_UNREACHABLE();
+      break;
+  }
   return loom_low_lower_bind_value(
       context, loom_vector_extract_result(source_op), result);
 }
