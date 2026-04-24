@@ -1,13 +1,15 @@
-// RUN: emit source-low output=low
-target.profile @gfx11_bitpack_target preset("amdgpu-gfx11")
+// TEMPLATE: loom/src/loom/test/corpus/source_low/packed_bitpack.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-func.def target(@gfx11_bitpack_target) @i32x4_to_i8x4_bitpack(%codes: vector<4xi32>) -> (vector<4xi8>) {
+// ====
+
+func.def @i32x4_to_i8x4_bitpack(%codes: vector<4xi32>) -> (vector<4xi8>) {
   %packed = vector.bitpack<8> %codes : vector<4xi32> -> vector<4xi8>
   func.return %packed : vector<4xi8>
 }
 
 // ----
-low.func.def target(@gfx11_bitpack_target) abi(hal_kernel) @i32x4_to_i8x4_bitpack(%codes: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32x4_to_i8x4_bitpack(%codes: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 255
   %6 = slice %codes[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %7 = v_and_b32 %6, %5
@@ -30,20 +32,16 @@ low.func.def target(@gfx11_bitpack_target) abi(hal_kernel) @i32x4_to_i8x4_bitpac
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_bitpack_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_bitpack_target) @bitpack_width_rejected(%codes: vector<8xi32>) -> (vector<4xi8>) {
+func.def @bitpack_width_rejected(%codes: vector<8xi32>) -> (vector<4xi8>) {
   // ERROR@+1: BACKEND/001 "AMDGPU vector.bitpack currently lowers byte packing width 8"
   %packed = vector.bitpack<4> %codes : vector<8xi32> -> vector<4xi8>
   func.return %packed : vector<4xi8>
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_bitpack_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_bitpack_target) @bitpack_source_type_rejected(%codes: vector<4xi8>) -> (vector<4xi8>) {
+func.def @bitpack_source_type_rejected(%codes: vector<4xi8>) -> (vector<4xi8>) {
   // ERROR@+1: BACKEND/001 "static rank-1 i32 source vector"
   %packed = vector.bitpack<8> %codes : vector<4xi8> -> vector<4xi8>
   func.return %packed : vector<4xi8>
