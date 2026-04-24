@@ -188,3 +188,57 @@ low.func.def target(@x86_target) @x86_fragment(%input : reg<x86.gpr64>, %output 
   vmovdqu32 zmm0, [rbx + rax * 4]
   vmovdqu32 [rsp + rax * 4 + 64], zmm0
   ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %v : reg<x86.xmm>, %init : reg<x86.gpr32>) asm<x86.avx512.core> {
+  %reversed = vpshufd.xmm %v, 27
+  %lane0 = vpextrd.xmm %reversed, 0
+  %init_copy = copy %init : reg<x86.gpr32> -> reg<x86.gpr32>
+  %acc0 = add.gpr32 %init_copy, %lane0
+  %lane1 = vpextrd.xmm %reversed, 1
+  %acc0_copy = copy %acc0 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %acc1 = add.gpr32 %acc0_copy, %lane1
+  %lane2 = vpextrd.xmm %reversed, 2
+  %acc1_copy = copy %acc1 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %acc2 = add.gpr32 %acc1_copy, %lane2
+  %lane3 = vpextrd.xmm %reversed, 3
+  %acc2_copy = copy %acc2 : reg<x86.gpr32> -> reg<x86.gpr32>
+  %sum = add.gpr32 %acc2_copy, %lane3
+  %stored = vpinsrd.xmm %v, %sum, 0
+  vmovdqu32.store.xmm %stored, %base {disp32 = 0}
+  return
+}
+
+// ----
+.Lbb0:
+  vpshufd xmm1, xmm0, 27
+  vpextrd edx, xmm1, 0
+  add eax, edx
+  vpextrd edx, xmm1, 1
+  add eax, edx
+  vpextrd edx, xmm1, 2
+  add eax, edx
+  vpextrd edx, xmm1, 3
+  add eax, edx
+  vpinsrd xmm0, xmm0, eax, 0
+  vmovdqu32 [rcx], xmm0
+  ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %v : reg<x86.xmm>) asm<x86.avx512.core> {
+  %shuffled = vpermilps.xmm %v, 39
+  vmovdqu32.store.xmm %shuffled, %base {disp32 = 32}
+  return
+}
+
+// ----
+.Lbb0:
+  vpermilps xmm0, xmm0, 39
+  vmovdqu32 [rax + 32], xmm0
+  ret
