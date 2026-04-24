@@ -278,6 +278,33 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralScalarConstantAndReturn) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest, EncodesScalarMoveToM0AndReturn) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel(%offset : "
+      "reg<amdgpu.sgpr>, %value : reg<amdgpu.vgpr>) {\n"
+      "  %m0 = low.op<amdgpu.s_mov_b32_m0>(%offset) : (reg<amdgpu.sgpr>) "
+      "-> reg<amdgpu.m0>\n"
+      "  low.op<amdgpu.ds_write_addtid_b32>(%value, %m0) {offset = 0} : "
+      "(reg<amdgpu.vgpr>, reg<amdgpu.m0>)\n"
+      "  low.return\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_GE(text.data_length, 8u);
+  const uint32_t move_word = ReadU32LE(text.data);
+  EXPECT_TRUE(IsSop1SMovB32(move_word));
+  EXPECT_EQ((move_word >> 16) & UINT32_C(0x7F), UINT32_C(124));
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(AmdgpuEncodingTest, EncodesLiteralVectorConstantAndReturn) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);

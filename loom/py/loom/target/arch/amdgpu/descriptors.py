@@ -18,7 +18,10 @@ from loom.target.arch.amdgpu.descriptor_overlay import (
     AmdgpuOperandOverlay,
     materialize_amdgpu_descriptor_overlays,
 )
-from loom.target.arch.amdgpu.encoding import AMDGPU_ENCODING_FORMAT_SOP1
+from loom.target.arch.amdgpu.encoding import (
+    AMDGPU_ENCODING_FORMAT_SOP1,
+    amdgpu_encoding_field_id,
+)
 from loom.target.arch.amdgpu.isa_xml import (
     AmdgpuIsaFactSource,
     parse_amdgpu_isa_xml_path,
@@ -35,6 +38,7 @@ from loom.target.low_descriptors import (
     Effect,
     EffectFlag,
     EffectKind,
+    EncodingFieldValue,
     Hazard,
     HazardKind,
     Immediate,
@@ -325,6 +329,7 @@ def _common_scalar_vector_memory_schedule_classes(
 
 def _asm(
     *,
+    mnemonic: str | None = None,
     results: tuple[str, ...] = (),
     operands: tuple[str, ...] = (),
     immediates: tuple[str, ...] = (),
@@ -332,6 +337,7 @@ def _asm(
 ) -> tuple[AsmForm, ...]:
     return (
         AsmForm(
+            mnemonic=mnemonic,
             results=results,
             operands=operands,
             immediates=tuple(
@@ -366,6 +372,10 @@ def _m0_implicit_resource(field_name: str = "m0") -> Operand:
         flags=(OperandFlag.IMPLICIT,),
         unit_count=1,
     )
+
+
+def _m0_result(field_name: str = "dst") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _M0_ALT, unit_count=1)
 
 
 def _vgpr_result(field_name: str = "dst", *, units: int = 1) -> Operand:
@@ -404,6 +414,46 @@ _U32_IMMEDIATE = Immediate(
     bit_width=32,
     unsigned_max=(2**32) - 1,
 )
+
+
+def _s_mov_b32_descriptors() -> tuple[Descriptor, ...]:
+    return (
+        Descriptor(
+            key="amdgpu.s_mov_b32",
+            mnemonic="s_mov_b32",
+            semantic_tag="integer.const.u32",
+            operands=(_sgpr_result(),),
+            immediates=(_U32_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("imm32",)),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="amdgpu.s_mov_b32_m0",
+            mnemonic="s_mov_b32",
+            semantic_tag="special.m0.move.u32",
+            operands=(
+                _m0_result(),
+                Operand(
+                    "src",
+                    OperandRole.OPERAND,
+                    _SGPR_ALT,
+                    encoding_field_id=amdgpu_encoding_field_id("SSRC0"),
+                ),
+            ),
+            encoding_field_values=(
+                EncodingFieldValue(amdgpu_encoding_field_id("SDST"), 124),
+            ),
+            asm_forms=_asm(
+                mnemonic="s_mov_b32_m0", results=("dst",), operands=("src",)
+            ),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+    )
+
 
 _VMCNT_IMMEDIATE = Immediate(
     "vmcnt",
@@ -4053,19 +4103,7 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=(
-        Descriptor(
-            key="amdgpu.s_mov_b32",
-            mnemonic="s_mov_b32",
-            semantic_tag="integer.const.u32",
-            operands=(_sgpr_result(),),
-            immediates=(_U32_IMMEDIATE,),
-            asm_forms=_asm(results=("dst",), immediates=("imm32",)),
-            schedule_class=_SCHEDULE_SALU,
-            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-    ),
+    descriptors=_s_mov_b32_descriptors(),
 )
 
 
@@ -4164,19 +4202,7 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=(
-        Descriptor(
-            key="amdgpu.s_mov_b32",
-            mnemonic="s_mov_b32",
-            semantic_tag="integer.const.u32",
-            operands=(_sgpr_result(),),
-            immediates=(_U32_IMMEDIATE,),
-            asm_forms=_asm(results=("dst",), immediates=("imm32",)),
-            schedule_class=_SCHEDULE_SALU,
-            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-    ),
+    descriptors=_s_mov_b32_descriptors(),
 )
 
 _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
@@ -4292,19 +4318,7 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=(
-        Descriptor(
-            key="amdgpu.s_mov_b32",
-            mnemonic="s_mov_b32",
-            semantic_tag="integer.const.u32",
-            operands=(_sgpr_result(),),
-            immediates=(_U32_IMMEDIATE,),
-            asm_forms=_asm(results=("dst",), immediates=("imm32",)),
-            schedule_class=_SCHEDULE_SALU,
-            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-    ),
+    descriptors=_s_mov_b32_descriptors(),
 )
 
 _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
@@ -4438,17 +4452,7 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
     descriptors=(
-        Descriptor(
-            key="amdgpu.s_mov_b32",
-            mnemonic="s_mov_b32",
-            semantic_tag="integer.const.u32",
-            operands=(_sgpr_result(),),
-            immediates=(_U32_IMMEDIATE,),
-            asm_forms=_asm(results=("dst",), immediates=("imm32",)),
-            schedule_class=_SCHEDULE_SALU,
-            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
+        *_s_mov_b32_descriptors(),
         Descriptor(
             key="amdgpu.v_wmma_f32_16x16x32_f16",
             mnemonic="v_wmma_f32_16x16x32_f16",

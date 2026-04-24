@@ -72,6 +72,7 @@ TEST(AmdgpuDescriptorIdsTest, CommonLoweringIdsResolveAcrossDescriptorSets) {
   for (const loom_low_descriptor_set_t* descriptor_set :
        {gfx11, gfx12, gfx1250, gfx950}) {
     ExpectHasDescriptor(descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32);
+    ExpectHasDescriptor(descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32_M0);
     ExpectHasDescriptor(descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32);
     ExpectHasDescriptor(descriptor_set,
                         LOOM_AMDGPU_DESCRIPTOR_ID_S_LOAD_DWORDX2);

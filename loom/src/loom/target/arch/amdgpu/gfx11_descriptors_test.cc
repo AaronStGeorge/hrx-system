@@ -449,6 +449,7 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowAsmRegionRoundTrips) {
       "  %c0 = s_mov_b32 7\n"
       "  %c1 = s_mov_b32 5\n"
       "  %sum = s_add_u32 %c0, %c1\n"
+      "  %m0 = s_mov_b32_m0 %sum\n"
       "  %v = v_mov_b32 42\n"
       "  s_icache_inv\n"
       "  s_set_inst_prefetch_distance {distance = 2}\n"
