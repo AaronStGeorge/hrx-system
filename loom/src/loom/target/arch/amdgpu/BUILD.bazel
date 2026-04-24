@@ -789,6 +789,7 @@ loom_check_test_suite(
         "source_low_table.loom-test",
     ],
     data = [
+        "//loom/src/loom/test/corpus/source_low:numeric_conversion.loom-test",
         "//loom/src/loom/test/corpus/source_low:vector_bitcast.loom-test",
     ],
 )

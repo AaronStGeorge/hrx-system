@@ -1,14 +1,14 @@
-// RUN: emit source-low output=low
-target.profile @gfx11_conversion_target preset("amdgpu-gfx11")
-
-func.def target(@gfx11_conversion_target) @vector_sitofp_i32x2(%input: vector<2xi32>, %scale: vector<2xf32>) -> (vector<2xf32>) {
+// TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_conversion.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+// ====
+func.def @vector_sitofp_i32x2(%input: vector<2xi32>, %scale: vector<2xf32>) -> (vector<2xf32>) {
   %converted = vector.sitofp %input : vector<2xi32> to vector<2xf32>
   %scaled = vector.mulf %converted, %scale : vector<2xf32>
   func.return %scaled : vector<2xf32>
 }
 
 // ----
-low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @vector_sitofp_i32x2(%input: reg<amdgpu.vgpr x2>, %scale: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @vector_sitofp_i32x2(%input: reg<amdgpu.vgpr x2>, %scale: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
   %8 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %9 = v_cvt_f32_i32 %8
   %10 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
@@ -25,46 +25,37 @@ low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @vector_sitofp_i32
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_conversion_target preset("amdgpu-gfx11")
-
-func.def target(@gfx11_conversion_target) @scalar_uitofp_i32(%input: i32) -> (f32) {
+func.def @scalar_uitofp_i32(%input: i32) -> (f32) {
   %converted = scalar.uitofp %input : i32 to f32
   func.return %converted : f32
 }
 
 // ----
-low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @scalar_uitofp_i32(%input: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @scalar_uitofp_i32(%input: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %converted = v_cvt_f32_u32 %input
   return %converted
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_conversion_target preset("amdgpu-gfx11")
-
-func.def target(@gfx11_conversion_target) @scalar_sitofp_i32(%input: i32) -> (f32) {
+func.def @scalar_sitofp_i32(%input: i32) -> (f32) {
   %converted = scalar.sitofp %input : i32 to f32
   func.return %converted : f32
 }
 
 // ----
-low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @scalar_sitofp_i32(%input: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @scalar_sitofp_i32(%input: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %converted = v_cvt_f32_i32 %input
   return %converted
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_conversion_target preset("amdgpu-gfx11")
-
-func.def target(@gfx11_conversion_target) @vector_uitofp_i32x2(%input: vector<2xi32>) -> (vector<2xf32>) {
+func.def @vector_uitofp_i32x2(%input: vector<2xi32>) -> (vector<2xf32>) {
   %converted = vector.uitofp %input : vector<2xi32> to vector<2xf32>
   func.return %converted : vector<2xf32>
 }
 
 // ----
-low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @vector_uitofp_i32x2(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @vector_uitofp_i32x2(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
   %5 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %6 = v_cvt_f32_u32 %5
   %7 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
