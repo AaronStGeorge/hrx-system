@@ -44,6 +44,7 @@ from loom.target.low_descriptors import (
 
 _REG_I32 = "test.i32"
 _REG_I8 = "test.i8"
+_REG_F32 = "test.f32"
 _REG_I64 = "test.i64"
 _REG_PTR = "test.ptr"
 _REG_V4I32 = "test.v4i32"
@@ -70,6 +71,7 @@ _SCHEDULE_CONTROL = "test.control"
 
 _I32_ALT = (RegClassAlt(_REG_I32),)
 _I8_ALT = (RegClassAlt(_REG_I8),)
+_F32_ALT = (RegClassAlt(_REG_F32),)
 _I32_I64_ALT = (RegClassAlt(_REG_I32), RegClassAlt(_REG_I64))
 _PTR_ALT = (RegClassAlt(_REG_PTR),)
 _V4I32_ALT = (RegClassAlt(_REG_V4I32),)
@@ -111,6 +113,14 @@ def _i32_i64_result(field_name: str = "dst") -> Operand:
 
 def _i32_i64_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _I32_I64_ALT)
+
+
+def _f32_result(field_name: str = "dst") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _F32_ALT)
+
+
+def _f32_operand(field_name: str) -> Operand:
+    return Operand(field_name, OperandRole.OPERAND, _F32_ALT)
 
 
 def _i32_predicate(field_name: str) -> Operand:
@@ -239,6 +249,9 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
         RegClass(
             _REG_I8, 8, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_F32, 32, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
         ),
         RegClass(
             _REG_I64, 64, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
@@ -385,6 +398,33 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="test.mul.i32",
             semantic_tag="integer.mul.i32",
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SCALAR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.add.f32",
+            mnemonic="test.add.f32",
+            semantic_tag="float.add.f32",
+            operands=(_f32_result(), _f32_operand("lhs"), _f32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SCALAR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.sub.f32",
+            mnemonic="test.sub.f32",
+            semantic_tag="float.sub.f32",
+            operands=(_f32_result(), _f32_operand("lhs"), _f32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SCALAR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.mul.f32",
+            mnemonic="test.mul.f32",
+            semantic_tag="float.mul.f32",
+            operands=(_f32_result(), _f32_operand("lhs"), _f32_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),

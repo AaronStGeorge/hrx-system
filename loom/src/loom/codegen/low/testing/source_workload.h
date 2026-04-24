@@ -45,12 +45,19 @@ typedef struct loom_low_source_workload_config_t {
 typedef struct loom_low_source_workload_counts_t {
   // Number of generated scalar integer arithmetic ops.
   uint32_t scalar_integer_op_count;
+  // Number of generated scalar floating-point arithmetic ops.
+  uint32_t scalar_float_op_count;
   // Number of generated scalar constants.
   uint32_t scalar_constant_count;
   // Number of generated lanewise vector integer arithmetic ops.
   uint32_t vector_integer_op_count;
+  // Number of generated lanewise vector floating-point arithmetic ops.
+  uint32_t vector_float_op_count;
   // Number of generated vector.reduce ops.
   uint32_t vector_reduce_op_count;
+  // Number of generated f32 vector.reduce ops. This is a subset of
+  // vector_reduce_op_count and is not included separately in the total count.
+  uint32_t vector_float_reduce_op_count;
   // Number of generated vector dot ops.
   uint32_t vector_dot_op_count;
   // Number of generated vector.extract ops.
