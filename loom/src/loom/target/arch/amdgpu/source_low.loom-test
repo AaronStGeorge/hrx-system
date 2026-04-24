@@ -11,7 +11,7 @@ func.def target(@gfx11_global_saddr_fallback_target) @global_saddr_fallback(%inp
 }
 
 // ----
-low.func.def target(@gfx11_global_saddr_fallback_target) abi(hal_kernel) @global_saddr_fallback__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_global_saddr_fallback_target) abi(hal_kernel) @global_saddr_fallback() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 20} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 20} : reg<amdgpu.sgpr x4>
   %base = s_mov_b32 4
@@ -43,7 +43,7 @@ func.def target(@gfx11_i32_b128_target) @i32_b128(%input: buffer, %output: buffe
 }
 
 // ----
-low.func.def target(@gfx11_i32_b128_target) abi(hal_kernel) @i32_b128__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_i32_b128_target) abi(hal_kernel) @i32_b128() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
@@ -115,7 +115,7 @@ func.def target(@gfx11_i32_bitwise_target) @i32_bitwise(%input: buffer, %output:
 }
 
 // ----
-low.func.def target(@gfx11_i32_bitwise_target) abi(hal_kernel) @i32_bitwise__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_i32_bitwise_target) abi(hal_kernel) @i32_bitwise() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -157,7 +157,7 @@ func.def target(@gfx11_i32_shift_target) @i32_shift(%input: buffer, %output: buf
 }
 
 // ----
-low.func.def target(@gfx11_i32_shift_target) abi(hal_kernel) @i32_shift__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_i32_shift_target) abi(hal_kernel) @i32_shift() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -205,7 +205,7 @@ func.def target(@gfx11_i32_scalarized_target) @i32_scalarized(%input: buffer, %o
 }
 
 // ----
-low.func.def target(@gfx11_i32_scalarized_target) abi(hal_kernel) @i32_scalarized__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_i32_scalarized_target) abi(hal_kernel) @i32_scalarized() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
@@ -254,7 +254,7 @@ func.def target(@gfx11_f32_arith_target) @f32_arith(%lhs_buffer: buffer, %rhs_bu
 }
 
 // ----
-low.func.def target(@gfx11_f32_arith_target) abi(hal_kernel) @f32_arith__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_f32_arith_target) abi(hal_kernel) @f32_arith() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -297,7 +297,7 @@ func.def target(@gfx11_f32_fma_target) @f32_fma(%lhs_buffer: buffer, %rhs_buffer
 }
 
 // ----
-low.func.def target(@gfx11_f32_fma_target) abi(hal_kernel) @f32_fma__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_f32_fma_target) abi(hal_kernel) @f32_fma() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -352,7 +352,7 @@ func.def target(@gfx11_f32_scalarized_target) @f32_scalarized(%lhs_buffer: buffe
 }
 
 // ----
-low.func.def target(@gfx11_f32_scalarized_target) abi(hal_kernel) @f32_scalarized__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_f32_scalarized_target) abi(hal_kernel) @f32_scalarized() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
@@ -407,13 +407,13 @@ func.def target(@gfx11_lds_b128_roundtrip_target) @lds_b128_roundtrip(%input: bu
 }
 
 // ----
-low.func.def target(@gfx11_lds_b128_roundtrip_target) abi(hal_kernel) @lds_b128_roundtrip__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_lds_b128_roundtrip_target) abi(hal_kernel) @lds_b128_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 1024
-  %scratch_view = frame_index @lds_b128_roundtrip__low__lds5 {offset = 0} : reg<amdgpu.vgpr>
+  %scratch_view = frame_index @lds_b128_roundtrip__lds5 {offset = 0} : reg<amdgpu.vgpr>
   %17 = v_mov_b32 4
   %18 = v_lshlrev_b32 %17, %tid
   %19 = s_mov_b32 0
@@ -433,7 +433,7 @@ low.func.def target(@gfx11_lds_b128_roundtrip_target) abi(hal_kernel) @lds_b128_
   return
 }
 
-low.slot @lds_b128_roundtrip__low__lds5 {align = 16, function = @lds_b128_roundtrip__low, size = 1024, space = lds}
+low.slot @lds_b128_roundtrip__lds5 {align = 16, function = @lds_b128_roundtrip, size = 1024, space = lds}
 
 // ====
 // RUN: emit source-low @dot4i_s8s8 output=low
@@ -446,7 +446,7 @@ func.def target(@gfx11_dot4i_s8s8_target) @dot4i_s8s8(%lhs: vector<4xi8>, %rhs: 
 }
 
 // ----
-low.func.def target(@gfx11_dot4i_s8s8_target) abi(hal_kernel) @dot4i_s8s8__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_dot4i_s8s8_target) abi(hal_kernel) @dot4i_s8s8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %dot = v_dot4_i32_i8 %lhs, %rhs, %acc
   return %dot
 }
@@ -462,7 +462,7 @@ func.def target(@gfx11_dot4i_u8u8_target) @dot4i_u8u8(%lhs: vector<4xi8>, %rhs: 
 }
 
 // ----
-low.func.def target(@gfx11_dot4i_u8u8_target) abi(hal_kernel) @dot4i_u8u8__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_dot4i_u8u8_target) abi(hal_kernel) @dot4i_u8u8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %dot = v_dot4_u32_u8 %lhs, %rhs, %acc
   return %dot
 }
@@ -478,7 +478,7 @@ func.def target(@gfx11_dot8i4_u4u4_target) @dot8i4_u4u4(%lhs: vector<1xi32>, %rh
 }
 
 // ----
-low.func.def target(@gfx11_dot8i4_u4u4_target) abi(hal_kernel) @dot8i4_u4u4__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_dot8i4_u4u4_target) abi(hal_kernel) @dot8i4_u4u4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %dot = v_dot8_u32_u4 %lhs, %rhs, %acc
   return %dot
 }
@@ -494,7 +494,7 @@ func.def target(@gfx11_dot4i_u8s8_target) @dot4i_u8s8(%lhs: vector<4xi8>, %rhs: 
 }
 
 // ----
-low.func.def target(@gfx11_dot4i_u8s8_target) abi(hal_kernel) @dot4i_u8s8__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@gfx11_dot4i_u8s8_target) abi(hal_kernel) @dot4i_u8s8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %dot = low.op<amdgpu.v_dot4_i32_iu8.u8s8>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %dot : reg<amdgpu.vgpr>
 }
@@ -510,7 +510,7 @@ func.def target(@gfx11_dot4i_s8u8_target) @dot4i_s8u8(%lhs: vector<4xi8>, %rhs: 
 }
 
 // ----
-low.func.def target(@gfx11_dot4i_s8u8_target) abi(hal_kernel) @dot4i_s8u8__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@gfx11_dot4i_s8u8_target) abi(hal_kernel) @dot4i_s8u8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %dot = low.op<amdgpu.v_dot4_i32_iu8.s8u8>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %dot : reg<amdgpu.vgpr>
 }
@@ -526,7 +526,7 @@ func.def target(@gfx11_dot8i4_signed_target) @dot8i4_s4s4(%lhs: vector<1xi32>, %
 }
 
 // ----
-low.func.def target(@gfx11_dot8i4_signed_target) abi(hal_kernel) @dot8i4_s4s4__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_dot8i4_signed_target) abi(hal_kernel) @dot8i4_s4s4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %dot = v_dot8_i32_i4 %lhs, %rhs, %acc
   return %dot
 }
@@ -542,7 +542,7 @@ func.def target(@gfx11_dot8i4_u4s4_target) @dot8i4_u4s4(%lhs: vector<1xi32>, %rh
 }
 
 // ----
-low.func.def target(@gfx11_dot8i4_u4s4_target) abi(hal_kernel) @dot8i4_u4s4__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@gfx11_dot8i4_u4s4_target) abi(hal_kernel) @dot8i4_u4s4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %dot = low.op<amdgpu.v_dot8_i32_iu4.u4s4>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %dot : reg<amdgpu.vgpr>
 }
@@ -558,7 +558,7 @@ func.def target(@gfx11_dot8i4_s4u4_target) @dot8i4_s4u4(%lhs: vector<1xi32>, %rh
 }
 
 // ----
-low.func.def target(@gfx11_dot8i4_s4u4_target) abi(hal_kernel) @dot8i4_s4u4__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@gfx11_dot8i4_s4u4_target) abi(hal_kernel) @dot8i4_s4u4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %dot = low.op<amdgpu.v_dot8_i32_iu4.s4u4>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %dot : reg<amdgpu.vgpr>
 }

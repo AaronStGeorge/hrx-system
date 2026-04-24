@@ -15,12 +15,12 @@ func.def target(@gfx11_lds_addtid_target) @lds_addtid_b32() {
 }
 
 // ----
-low.func.def target(@gfx11_lds_addtid_target) abi(hal_kernel) @lds_addtid_b32__low() {
+low.func.def target(@gfx11_lds_addtid_target) abi(hal_kernel) @lds_addtid_b32() {
   %m0 = low.live_in<amdgpu.m0> : reg<amdgpu.m0>
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
-  %scratch_view = low.frame_index @lds_addtid_b32__low__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %scratch_view = low.frame_index @lds_addtid_b32__lds3 {offset = 0} : reg<amdgpu.vgpr>
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
   low.op<amdgpu.ds_write_addtid_b32>(%one, %m0) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
   %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
@@ -28,4 +28,4 @@ low.func.def target(@gfx11_lds_addtid_target) abi(hal_kernel) @lds_addtid_b32__l
   low.return
 }
 
-low.slot @lds_addtid_b32__low__lds3 {align = 16, function = @lds_addtid_b32__low, size = 256, space = lds}
+low.slot @lds_addtid_b32__lds3 {align = 16, function = @lds_addtid_b32, size = 256, space = lds}

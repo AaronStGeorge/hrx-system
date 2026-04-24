@@ -256,7 +256,9 @@ TEST_F(SourceLoweringFunctionTest, LowersScalarFunction) {
   EXPECT_NE(text.find("low.func.def target(@test_target) "
                       "abi(object_function)"),
             std::string::npos);
-  EXPECT_NE(text.find("@add_const__low"), std::string::npos);
+  EXPECT_NE(text.find("@add_const"), std::string::npos);
+  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @add_const"),
+            std::string::npos);
   EXPECT_EQ(text.find("source(@"), std::string::npos);
   EXPECT_NE(text.find("test.const.i32"), std::string::npos);
   EXPECT_NE(text.find("test.add.i32"), std::string::npos);
@@ -295,7 +297,11 @@ TEST_F(SourceLoweringFunctionTest, CarriesTargetProfileAbiAndExport) {
   EXPECT_NE(text.find("low.func.def target(@test_target) "
                       "abi(vm_module_function) export(\"add_const_export\")"),
             std::string::npos);
-  EXPECT_NE(text.find("@add_const__low"), std::string::npos);
+  EXPECT_NE(text.find("@add_const"), std::string::npos);
+  EXPECT_EQ(text.find("\nfunc.def target(@test_target) "
+                      "abi(vm_module_function) export(\"add_const_export\") "
+                      "@add_const"),
+            std::string::npos);
   EXPECT_NE(text.find("test.const.i32"), std::string::npos);
   EXPECT_NE(text.find("test.add.i32"), std::string::npos);
   EXPECT_EQ(text.find("target.bundle"), std::string::npos);
@@ -334,7 +340,9 @@ TEST_F(SourceLoweringFunctionTest, LowersVectorCfgFunction) {
 
   std::string text;
   IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("@select_vector__low"), std::string::npos);
+  EXPECT_NE(text.find("@select_vector"), std::string::npos);
+  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @select_vector"),
+            std::string::npos);
   EXPECT_EQ(text.find("source(@"), std::string::npos);
   EXPECT_NE(text.find("reg<test.i32 x4>"), std::string::npos);
   EXPECT_NE(text.find("low.slice"), std::string::npos);
@@ -371,7 +379,9 @@ TEST_F(SourceLoweringFunctionTest, LowersResourceArgumentsAsImports) {
   EXPECT_NE(text.find("low.func.def target(@test_target) "
                       "abi(object_function)"),
             std::string::npos);
-  EXPECT_NE(text.find("@resource_entry__low()"), std::string::npos);
+  EXPECT_NE(text.find("@resource_entry()"), std::string::npos);
+  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @resource_entry"),
+            std::string::npos);
   EXPECT_NE(text.find("%buffer = low.resource<native_pointer>"),
             std::string::npos);
   EXPECT_NE(text.find("semantic_type = buffer"), std::string::npos);

@@ -570,11 +570,13 @@ TEST_F(WasmLowerTest, UnsupportedVectorShapeEmitsDiagnosticAndNoLowFunction) {
   }
   EXPECT_TRUE(saw_type_rejection);
 
-  loom_string_id_t low_name_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(loom_module_intern_string(module.get(), IREE_SV("wide__low"),
-                                           &low_name_id));
-  EXPECT_EQ(loom_module_find_symbol(module.get(), low_name_id),
-            LOOM_SYMBOL_ID_INVALID);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module.get(), IREE_SV("wide"), &name_id));
+  uint16_t symbol_id = loom_module_find_symbol(module.get(), name_id);
+  ASSERT_NE(symbol_id, LOOM_SYMBOL_ID_INVALID);
+  EXPECT_TRUE(
+      loom_func_def_isa(module.get()->symbols.entries[symbol_id].defining_op));
 }
 
 TEST_F(WasmLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {
@@ -604,11 +606,13 @@ TEST_F(WasmLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {
   EXPECT_NE(emission.string_params[6].find("descriptor mapping"),
             std::string::npos);
 
-  loom_string_id_t low_name_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(loom_module_intern_string(module.get(), IREE_SV("mul__low"),
-                                           &low_name_id));
-  EXPECT_EQ(loom_module_find_symbol(module.get(), low_name_id),
-            LOOM_SYMBOL_ID_INVALID);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module.get(), IREE_SV("mul"), &name_id));
+  uint16_t symbol_id = loom_module_find_symbol(module.get(), name_id);
+  ASSERT_NE(symbol_id, LOOM_SYMBOL_ID_INVALID);
+  EXPECT_TRUE(
+      loom_func_def_isa(module.get()->symbols.entries[symbol_id].defining_op));
 }
 
 }  // namespace

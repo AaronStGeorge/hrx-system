@@ -15,7 +15,7 @@ func.def target(@gfx11_index_madd_global_b32_target) @index_madd_global_b32(%inp
 }
 
 // ----
-low.func.def target(@gfx11_index_madd_global_b32_target) abi(hal_kernel) @index_madd_global_b32__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_index_madd_global_b32_target) abi(hal_kernel) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
   %x = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %y = live_in<amdgpu.workitem_id.y> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x4>
@@ -55,12 +55,12 @@ func.def target(@gfx11_workitem_y_lds_uses_explicit_vaddr_target) @workitem_y_ld
 }
 
 // ----
-low.func.def target(@gfx11_workitem_y_lds_uses_explicit_vaddr_target) abi(hal_kernel) @workitem_y_lds_uses_explicit_vaddr__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_workitem_y_lds_uses_explicit_vaddr_target) abi(hal_kernel) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.gfx11.core> {
   %y = live_in<amdgpu.workitem_id.y> : reg<amdgpu.vgpr>
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
-  %scratch_view = frame_index @workitem_y_lds_uses_explicit_vaddr__low__lds4 {offset = 0} : reg<amdgpu.vgpr>
+  %scratch_view = frame_index @workitem_y_lds_uses_explicit_vaddr__lds4 {offset = 0} : reg<amdgpu.vgpr>
   %value = v_mov_b32 7
   %15 = v_mov_b32 2
   %16 = v_lshlrev_b32 %15, %y
@@ -77,4 +77,4 @@ low.func.def target(@gfx11_workitem_y_lds_uses_explicit_vaddr_target) abi(hal_ke
   return
 }
 
-low.slot @workitem_y_lds_uses_explicit_vaddr__low__lds4 {align = 16, function = @workitem_y_lds_uses_explicit_vaddr__low, size = 256, space = lds}
+low.slot @workitem_y_lds_uses_explicit_vaddr__lds4 {align = 16, function = @workitem_y_lds_uses_explicit_vaddr, size = 256, space = lds}

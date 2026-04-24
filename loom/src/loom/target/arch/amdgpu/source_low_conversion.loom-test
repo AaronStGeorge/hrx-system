@@ -8,7 +8,7 @@ func.def target(@gfx11_conversion_target) @vector_sitofp_i32x2(%input: vector<2x
 }
 
 // ----
-low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @vector_sitofp_i32x2__low(%input: reg<amdgpu.vgpr x2>, %scale: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @vector_sitofp_i32x2(%input: reg<amdgpu.vgpr x2>, %scale: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
   %8 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %9 = v_cvt_f32_i32 %8
   %10 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
@@ -34,7 +34,7 @@ func.def target(@gfx11_conversion_target) @scalar_uitofp_i32(%input: i32) -> (f3
 }
 
 // ----
-low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @scalar_uitofp_i32__low(%input: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @scalar_uitofp_i32(%input: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %converted = v_cvt_f32_u32 %input
   return %converted
 }
@@ -49,7 +49,7 @@ func.def target(@gfx11_conversion_target) @scalar_sitofp_i32(%input: i32) -> (f3
 }
 
 // ----
-low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @scalar_sitofp_i32__low(%input: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @scalar_sitofp_i32(%input: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %converted = v_cvt_f32_i32 %input
   return %converted
 }
@@ -64,7 +64,7 @@ func.def target(@gfx11_conversion_target) @vector_uitofp_i32x2(%input: vector<2x
 }
 
 // ----
-low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @vector_uitofp_i32x2__low(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @vector_uitofp_i32x2(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
   %5 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %6 = v_cvt_f32_u32 %5
   %7 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>

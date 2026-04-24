@@ -14,7 +14,7 @@ func.def target(@gfx11_scalar_i32_target) @scalar_i32_uniform_sgpr(%lhs: i32, %r
 }
 
 // ----
-low.func.def target(@gfx11_scalar_i32_target) abi(hal_kernel) @scalar_i32_uniform_sgpr__low(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %shift: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_scalar_i32_target) abi(hal_kernel) @scalar_i32_uniform_sgpr(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %shift: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
   %add = s_add_u32 %lhs, %rhs
   %sub = s_sub_u32 %add, %rhs
   %and = s_and_b32 %sub, %lhs

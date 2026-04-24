@@ -14,7 +14,7 @@ func.def target(@gfx11_reduce_target) @i32_reduce_add(%input: buffer, %output: b
 }
 
 // ----
-low.func.def target(@gfx11_reduce_target) abi(hal_kernel) @i32_reduce_add__low() {
+low.func.def target(@gfx11_reduce_target) abi(hal_kernel) @i32_reduce_add() {
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -52,7 +52,7 @@ func.def target(@gfx11_reduce_target) @f32_reduce_add(%input: buffer, %output: b
 }
 
 // ----
-low.func.def target(@gfx11_reduce_target) abi(hal_kernel) @f32_reduce_add__low() {
+low.func.def target(@gfx11_reduce_target) abi(hal_kernel) @f32_reduce_add() {
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>

@@ -266,7 +266,9 @@ TEST_F(SourceLoweringRuleSelectionTest,
 
   std::string text;
   IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("@add__low"), std::string::npos);
+  EXPECT_NE(text.find("@add"), std::string::npos);
+  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @add"),
+            std::string::npos);
   EXPECT_NE(text.find("low.op<test.add.i32>"), std::string::npos);
 }
 

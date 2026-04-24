@@ -284,8 +284,6 @@ typedef struct loom_low_lower_options_t {
   loom_target_low_legality_diagnostic_flags_t legality_diagnostic_flags;
   // Target lowering policy for descriptor and type choices.
   const loom_low_lower_policy_t* policy;
-  // Optional suffix appended to the source function symbol. Empty uses "__low".
-  iree_string_view_t low_function_suffix;
   // Structured diagnostic emitter for user legality and lowering failures.
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting. Zero means no limit.
@@ -305,13 +303,15 @@ typedef struct loom_low_lower_result_t {
   loom_symbol_ref_t low_func_ref;
 } loom_low_lower_result_t;
 
-// Lowers one func.def-like source function into a sibling low.func.def.
+// Lowers one func.def-like source function into a low.func.def in place.
 //
 // User IR failures are emitted through |options->emitter| and counted in
 // |out_result|. The function returns OK in that case and does not emit a
-// low.func.def. Infrastructure failures such as malformed options, invalid
-// target symbols, or a policy that violates the lowering contract are returned
-// as status failures.
+// low.func.def. On success the emitted low.func.def preserves the source
+// function symbol and replaces the source op at the same module position.
+// Infrastructure failures such as malformed options, invalid target symbols,
+// or a policy that violates the lowering contract are returned as status
+// failures.
 iree_status_t loom_low_lower_function(loom_module_t* module,
                                       loom_func_like_t source_function,
                                       const loom_low_lower_options_t* options,

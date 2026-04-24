@@ -7,8 +7,8 @@ test.record @vm_target
 func.decl @extern_add(%lhs: i32, %rhs: i32) -> (i32)
 
 func.def @caller(%lhs: i32, %rhs: i32) -> (i32) {
-  %sum = low.invoke @extern_add__low(%lhs, %rhs) : (i32, i32) -> (i32)
+  %sum = low.invoke @vm_add_i32(%lhs, %rhs) : (i32, i32) -> (i32)
   func.return %sum : i32
 }
 
-low.func.decl target(@vm_target) @extern_add__low(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
+low.func.decl target(@vm_target) @vm_add_i32(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)

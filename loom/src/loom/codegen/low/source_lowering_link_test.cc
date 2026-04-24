@@ -186,9 +186,10 @@ TEST_F(SourceLoweringLinkTest,
   std::string text;
   IREE_ASSERT_OK(PrintModule(linked.get(), &text));
   EXPECT_EQ(text.find("func.decl @add"), std::string::npos);
-  EXPECT_NE(text.find("func.def target(@test_target) @add"), std::string::npos);
+  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @add"),
+            std::string::npos);
   EXPECT_NE(text.find("low.func.def target(@test_target) "
-                      "abi(object_function) @add__low"),
+                      "abi(object_function) @add"),
             std::string::npos);
 }
 

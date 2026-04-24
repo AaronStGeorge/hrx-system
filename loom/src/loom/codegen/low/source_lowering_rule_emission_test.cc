@@ -442,7 +442,9 @@ TEST_F(SourceLoweringRuleEmissionTest, HybridPolicyUsesCallbackForUncoveredOp) {
 
   std::string text;
   IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("@mul__low"), std::string::npos);
+  EXPECT_NE(text.find("@mul"), std::string::npos);
+  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @mul"),
+            std::string::npos);
   EXPECT_NE(text.find("low.op<test.add.i32>"), std::string::npos);
 }
 
@@ -501,11 +503,10 @@ TEST_F(SourceLoweringRuleEmissionTest,
   EXPECT_NE(emission.string_params[6].find("descriptor mapping"),
             std::string::npos);
 
-  loom_string_id_t low_name_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(loom_module_intern_string(module.get(), IREE_SV("mul__low"),
-                                           &low_name_id));
-  EXPECT_EQ(loom_module_find_symbol(module.get(), low_name_id),
-            LOOM_SYMBOL_ID_INVALID);
+  std::string text;
+  IREE_ASSERT_OK(PrintModule(module.get(), &text));
+  EXPECT_NE(text.find("func.def target(@test_target) @mul"), std::string::npos);
+  EXPECT_EQ(text.find("low.func.def"), std::string::npos);
 }
 
 }  // namespace

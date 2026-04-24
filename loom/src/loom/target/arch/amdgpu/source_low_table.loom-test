@@ -20,7 +20,7 @@ func.def target(@gfx11_table_target) @f32_table_lookup_i8_codes(%codes_buffer: b
 }
 
 // ----
-low.func.def target(@gfx11_table_target) abi(hal_kernel) @f32_table_lookup_i8_codes__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_table_target) abi(hal_kernel) @f32_table_lookup_i8_codes() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %codes_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 32} : reg<amdgpu.sgpr x4>
@@ -102,7 +102,7 @@ func.def target(@gfx11_table_target) @f32_table_lookup_i32_codes(%codes: vector<
 }
 
 // ----
-low.func.def target(@gfx11_table_target) abi(hal_kernel) @f32_table_lookup_i32_codes__low(%codes: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_table_target) abi(hal_kernel) @f32_table_lookup_i32_codes(%codes: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
   %g0 = v_mov_b32 1073741824
   %g1 = v_mov_b32 3225419776
   %g2 = v_mov_b32 1084227584

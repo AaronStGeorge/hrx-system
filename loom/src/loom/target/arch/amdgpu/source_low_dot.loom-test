@@ -8,7 +8,7 @@ func.def target(@gfx11_dotf_target) @f32_dotf(%lhs: vector<4xf32>, %rhs: vector<
 }
 
 // ----
-low.func.def target(@gfx11_dotf_target) abi(hal_kernel) @f32_dotf__low(%lhs: reg<amdgpu.vgpr x4>, %rhs: reg<amdgpu.vgpr x4>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_dotf_target) abi(hal_kernel) @f32_dotf(%lhs: reg<amdgpu.vgpr x4>, %rhs: reg<amdgpu.vgpr x4>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %9 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %10 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %11 = v_fma_f32 %9, %10, %acc

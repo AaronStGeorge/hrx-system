@@ -595,20 +595,6 @@ static iree_status_t loom_low_lower_create_derived_symbol(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_lower_create_low_symbol(
-    loom_low_lower_context_t* context, loom_symbol_ref_t* out_symbol_ref) {
-  loom_symbol_ref_t source_ref =
-      loom_func_like_callee(context->source_function);
-  iree_string_view_t source_name =
-      loom_low_lower_symbol_name(context->module, source_ref);
-  iree_string_view_t suffix = context->options->low_function_suffix;
-  if (iree_string_view_is_empty(suffix)) {
-    suffix = IREE_SV("__low");
-  }
-  return loom_low_lower_create_derived_symbol(
-      context, source_name, suffix, /*append_index=*/false, 0, out_symbol_ref);
-}
-
 iree_status_t loom_low_lower_create_function_symbol(
     loom_low_lower_context_t* context, iree_string_view_t suffix,
     bool append_index, uint32_t index, loom_symbol_ref_t* out_symbol_ref) {
@@ -942,6 +928,7 @@ static iree_status_t loom_low_lower_create_function_op(
   loom_builder_initialize(context->module, &context->module->arena,
                           loom_module_block(context->module),
                           &context->builder);
+  loom_builder_set_before(&context->builder, context->source_function.op);
   IREE_RETURN_IF_ERROR(loom_low_func_def_build(
       &context->builder, build_flags, visibility, cc, purity,
       /*allocation=*/0, /*schedule=*/0, context->options->target_ref, abi,
@@ -1321,12 +1308,9 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     status = loom_low_lower_plan_body(&context, source_body);
   }
   if (iree_status_is_ok(status) && context.result->error_count == 0) {
-    loom_symbol_ref_t low_func_ref = loom_symbol_ref_null();
-    status = loom_low_lower_create_low_symbol(&context, &low_func_ref);
-    if (iree_status_is_ok(status)) {
-      status = loom_low_lower_create_function_op(&context, source_body,
-                                                 low_func_ref);
-    }
+    loom_symbol_ref_t low_func_ref = loom_func_like_callee(source_function);
+    status =
+        loom_low_lower_create_function_op(&context, source_body, low_func_ref);
     if (iree_status_is_ok(status)) {
       status = loom_low_lower_map_blocks(&context, source_body);
     }
@@ -1338,6 +1322,17 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     }
     if (iree_status_is_ok(status)) {
       status = loom_low_lower_emit_body(&context, source_body);
+    }
+    // The replacement low op carries the source symbol while the source op
+    // still owns the symbol table entry. Erase clears that entry; relink it to
+    // the replacement so callers keep the same symbol identity.
+    if (iree_status_is_ok(status)) {
+      status = loom_op_erase(module, source_function.op);
+    }
+    if (iree_status_is_ok(status)) {
+      loom_module_link_symbol_defining_op(
+          module, context.low_func_op,
+          loom_op_vtable(module, context.low_func_op));
     }
   }
 

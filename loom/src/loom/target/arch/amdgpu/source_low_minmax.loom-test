@@ -9,7 +9,7 @@ func.def target(@gfx11_minmax_target) @scalar_f32_minnum_maxnum(%lhs: f32, %rhs:
 }
 
 // ----
-low.func.def target(@gfx11_minmax_target) abi(hal_kernel) @scalar_f32_minnum_maxnum__low(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_minmax_target) abi(hal_kernel) @scalar_f32_minnum_maxnum(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %min = v_min_f32 %lhs, %rhs
   %max = v_max_f32 %lhs, %rhs
   %sum = v_add_f32 %min, %max
@@ -28,7 +28,7 @@ func.def target(@gfx11_minmax_target) @vector_f32_minnum_maxnum(%lhs: vector<2xf
 }
 
 // ----
-low.func.def target(@gfx11_minmax_target) abi(hal_kernel) @vector_f32_minnum_maxnum__low(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_minmax_target) abi(hal_kernel) @vector_f32_minnum_maxnum(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
   %9 = slice %lhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %10 = slice %rhs[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %11 = v_min_f32 %9, %10
@@ -72,7 +72,7 @@ func.def target(@gfx11_minmax_target) @f32_reduce_minnum_maxnum(%input: buffer, 
 }
 
 // ----
-low.func.def target(@gfx11_minmax_target) abi(hal_kernel) @f32_reduce_minnum_maxnum__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_minmax_target) abi(hal_kernel) @f32_reduce_minnum_maxnum() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0

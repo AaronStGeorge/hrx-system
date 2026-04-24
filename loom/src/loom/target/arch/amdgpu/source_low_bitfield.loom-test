@@ -12,7 +12,7 @@ func.def target(@gfx11_bitfield_target) @i32_bitfield_extractu(%input: buffer, %
 }
 
 // ----
-low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_extractu__low() {
+low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_extractu() {
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -40,7 +40,7 @@ func.def target(@gfx11_bitfield_target) @i32_bitfield_extracts(%input: buffer, %
 }
 
 // ----
-low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_extracts__low() {
+low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_extracts() {
   %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -70,7 +70,7 @@ func.def target(@gfx11_bitfield_target) @i32_bitfield_insert(%field_buffer: buff
 }
 
 // ----
-low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_insert__low() {
+low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_insert() {
   %field_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %base_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %output_view = low.resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
@@ -107,7 +107,7 @@ func.def target(@gfx11_bitfield_target) @i32_bitfield_b128_shape(%input: buffer,
 }
 
 // ----
-low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_b128_shape__low() asm<amdgpu.gfx11.core> {
+low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0

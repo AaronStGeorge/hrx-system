@@ -1461,11 +1461,11 @@ class TestCrossFormatRoundTrip:
         text = (
             "test.record @vm_target\n\n"
             "func.def @caller(%lhs: i32, %rhs: i32) -> (i32) {\n"
-            "  %sum = low.invoke @extern_add__low(%lhs, %rhs) : "
+            "  %sum = low.invoke @vm_add_i32(%lhs, %rhs) : "
             "(i32, i32) -> (i32)\n"
             "  func.return %sum : i32\n"
             "}\n\n"
-            "low.func.decl target(@vm_target) @extern_add__low(%lhs: reg<vm.i32>, "
+            "low.func.decl target(@vm_target) @vm_add_i32(%lhs: reg<vm.i32>, "
             "%rhs: reg<vm.i32>) -> (reg<vm.i32>)\n"
         )
 
