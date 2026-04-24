@@ -52,6 +52,10 @@ def loom_check_test(
 def loom_check_test_suite(
         name,
         srcs,
+        size = "small",
+        tags = [],
+        data = [],
+        env = {},
         runner = "//loom/src/loom/tools/loom-check",
         **kwargs):
     """Creates one test per .loom-test file, bundled into a test suite.
@@ -63,13 +67,26 @@ def loom_check_test_suite(
     Args:
       name: Name of the generated test suite.
       srcs: List of .loom-test files to test.
+      size: Test size (default: "small").
+      tags: Additional tags to apply to each generated test and the suite.
+      data: Additional runfiles made available to each generated test.
+      env: Additional test environment variables for each generated test.
       runner: loom-check compatible runner binary.
       **kwargs: Additional attributes passed to each loom_check_test
-          and the test suite.
+          and the test suite, when supported by both.
     """
     tests = []
     for src in srcs:
         test_name = _loom_check_test_base_name(src).replace("/", "_")
-        loom_check_test(name = test_name, src = src, runner = runner, **kwargs)
+        loom_check_test(
+            name = test_name,
+            src = src,
+            size = size,
+            tags = tags,
+            data = data,
+            env = env,
+            runner = runner,
+            **kwargs
+        )
         tests.append(test_name)
-    native.test_suite(name = name, tests = tests, **kwargs)
+    native.test_suite(name = name, tests = tests, tags = tags, **kwargs)

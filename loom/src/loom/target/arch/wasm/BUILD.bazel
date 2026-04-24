@@ -166,4 +166,7 @@ loom_check_test_suite(
     srcs = [
         "source_low.loom-test",
     ],
+    data = [
+        "//loom/src/loom/test/corpus/source_low:vector_v4.loom-test",
+    ],
 )
