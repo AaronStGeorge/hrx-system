@@ -461,9 +461,9 @@ TEST(X86DescriptorsTest, Avx512LowFuncAsmRoundTripsTiedDotArguments) {
                                     &loom_x86_low_target_bundle_avx512_core));
 
   const char* source =
-      "target.profile @x86_target preset(\"x86-avx512\")\n"
-      "low.func.def target(@x86_target) @dot(%acc : reg<x86.zmm>, %lhs : "
-      "reg<x86.zmm>, %rhs : reg<x86.zmm>) -> (reg<x86.zmm>) "
+      "target.profile @x86_target preset(\"x86-avx512\")\n\n"
+      "low.func.def target(@x86_target) @dot(%acc: reg<x86.zmm>, %lhs: "
+      "reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) "
       "asm<x86.avx512.core> {\n"
       "  %out = vpdpbusd %acc, %lhs, %rhs\n"
       "  return %out\n"
@@ -471,7 +471,7 @@ TEST(X86DescriptorsTest, Avx512LowFuncAsmRoundTripsTiedDotArguments) {
   std::string printed;
   IREE_ASSERT_OK(harness.RoundTripAndVerify(
       IREE_SV(source), IREE_SV("x86.avx512.core"), &printed));
-  EXPECT_NE(printed.find("vpdpbusd %acc, %lhs, %rhs"), std::string::npos);
+  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

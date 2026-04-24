@@ -25,20 +25,6 @@ std::string ToString(iree_string_view_t value) {
   return std::string(value.data, value.size);
 }
 
-struct EventLog {
-  int count = 0;
-  std::string detail;
-  std::string target_detail;
-};
-
-void CaptureEvent(void* user_data,
-                  const loom_llvmir_target_legality_event_t* event) {
-  EventLog* log = static_cast<EventLog*>(user_data);
-  ++log->count;
-  log->detail = ToString(event->detail);
-  log->target_detail = ToString(event->target_detail);
-}
-
 class LlvmIrX86LegalityTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -99,7 +85,7 @@ class LlvmIrX86LegalityTest : public ::testing::Test {
   }
 
   iree_status_t VerifyBundle(
-      const loom_target_bundle_t* bundle, EventLog* event_log,
+      const loom_target_bundle_t* bundle,
       loom_llvmir_target_legality_diagnostic_t* diagnostic) {
     const loom_llvmir_target_legality_provider_t* providers[] = {
         loom_llvmir_x86_legality_provider(),
@@ -111,10 +97,6 @@ class LlvmIrX86LegalityTest : public ::testing::Test {
     options.config = bundle->config;
     options.providers = providers;
     options.provider_count = IREE_ARRAYSIZE(providers);
-    if (event_log) {
-      options.event_fn = CaptureEvent;
-      options.event_user_data = event_log;
-    }
     return loom_llvmir_verify_target_legality(module_, &options, diagnostic);
   }
 
@@ -158,8 +140,8 @@ TEST_F(LlvmIrX86LegalityTest, ReportsPackedDotFeatureRejection) {
   BuildDot4S8S8Function();
 
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  iree_status_t status = VerifyBundle(loom_llvmir_target_bundle_x86_64_object(),
-                                      NULL, &diagnostic);
+  iree_status_t status =
+      VerifyBundle(loom_llvmir_target_bundle_x86_64_object(), &diagnostic);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
   EXPECT_EQ(diagnostic.code,
             LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT);
@@ -167,18 +149,13 @@ TEST_F(LlvmIrX86LegalityTest, ReportsPackedDotFeatureRejection) {
   EXPECT_EQ(ToString(diagnostic.target_detail), "features");
 }
 
-TEST_F(LlvmIrX86LegalityTest, ReportsPackedDotDescriptorSelection) {
+TEST_F(LlvmIrX86LegalityTest, AcceptsPackedDotWithMatchingFeatures) {
   BuildDot4S8S8Function();
 
-  EventLog event_log;
   loom_llvmir_target_legality_diagnostic_t diagnostic;
-  IREE_ASSERT_OK(
-      VerifyBundle(loom_llvmir_target_bundle_x86_64_packed_dot_object(),
-                   &event_log, &diagnostic));
+  IREE_ASSERT_OK(VerifyBundle(
+      loom_llvmir_target_bundle_x86_64_packed_dot_object(), &diagnostic));
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_OK);
-  EXPECT_EQ(event_log.count, 1);
-  EXPECT_EQ(event_log.detail, "selected x86 packed-dot descriptor");
-  EXPECT_EQ(event_log.target_detail, "x86.avx_vnni_int8.vpdpbssd.ymm");
 }
 
 }  // namespace

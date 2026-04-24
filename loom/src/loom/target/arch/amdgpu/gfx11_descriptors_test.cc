@@ -468,12 +468,12 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorMemoryAndMatrix) {
                                     &loom_amdgpu_low_target_bundle_gfx11_core));
 
   const char* source =
-      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
-      "low.func.def target(@gfx_target) @vector_memory_matrix(%lhs : "
-      "reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %a : reg<amdgpu.vgpr x8>, "
-      "%b : reg<amdgpu.vgpr x8>, %acc : reg<amdgpu.vgpr x8>, "
-      "%resource : reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, "
-      "%soffset : reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>, "
+      "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n\n"
+      "low.func.def target(@gfx_target) @vector_memory_matrix(%lhs: "
+      "reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr x8>, "
+      "%b: reg<amdgpu.vgpr x8>, %acc: reg<amdgpu.vgpr x8>, "
+      "%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, "
+      "%soffset: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>, "
       "reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {\n"
       "  %sum = v_add_u32 %lhs, %rhs\n"
       "  %product = v_mul_lo_u32 %sum, %rhs\n"
@@ -486,19 +486,7 @@ TEST(AmdgpuDescriptorsTest, Gfx11LowFuncAsmRoundTripsVectorMemoryAndMatrix) {
   std::string printed;
   IREE_ASSERT_OK(harness.RoundTripAndVerify(
       IREE_SV(source), IREE_SV("amdgpu.gfx11.core"), &printed));
-  EXPECT_NE(printed.find("v_add_u32 %lhs, %rhs"), std::string::npos);
-  EXPECT_NE(printed.find("v_mul_lo_u32 %sum, %rhs"), std::string::npos);
-  EXPECT_NE(printed.find("buffer_load_b128 %resource, %vaddr, %soffset"),
-            std::string::npos);
-  EXPECT_NE(printed.find("{offset = 16, glc = 1}"), std::string::npos);
-  EXPECT_NE(printed.find("buffer_store_b128 %loaded, %resource, %vaddr, "
-                         "%soffset"),
-            std::string::npos);
-  EXPECT_NE(printed.find("{offset = 32}"), std::string::npos);
-  EXPECT_EQ(printed.find("slc = 0"), std::string::npos);
-  EXPECT_EQ(printed.find("dlc = 0"), std::string::npos);
-  EXPECT_NE(printed.find("v_wmma_f32_16x16x16_f16 %a, %b, %acc"),
-            std::string::npos);
+  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

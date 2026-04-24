@@ -198,9 +198,9 @@ TEST(WasmDescriptorsTest, LowFuncAsmRoundTripsMemoryPacketsWithArguments) {
                                     &loom_wasm_low_target_bundle_core_simd128));
 
   const char* source =
-      "target.profile @wasm_target preset(\"wasm-simd128\")\n"
-      "low.func.def target(@wasm_target) @memory(%addr : reg<wasm.i32>, "
-      "%lhs : reg<wasm.v128>, %rhs : reg<wasm.v128>) -> (reg<wasm.v128>) "
+      "target.profile @wasm_target preset(\"wasm-simd128\")\n\n"
+      "low.func.def target(@wasm_target) @memory(%addr: reg<wasm.i32>, "
+      "%lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) -> (reg<wasm.v128>) "
       "asm<wasm.core.simd128> {\n"
       "  %loaded = v128.load %addr\n"
       "  %sum = i32x4.add %lhs, %rhs\n"
@@ -215,10 +215,7 @@ TEST(WasmDescriptorsTest, LowFuncAsmRoundTripsMemoryPacketsWithArguments) {
   std::string printed;
   IREE_ASSERT_OK(harness.RoundTripAndVerify(
       IREE_SV(source), IREE_SV("wasm.core.simd128"), &printed));
-  EXPECT_NE(printed.find("v128.load %addr"), std::string::npos);
-  EXPECT_NE(printed.find("i32x4.sub %sum, %rhs"), std::string::npos);
-  EXPECT_NE(printed.find("f32x4.mul %fsum, %rhs"), std::string::npos);
-  EXPECT_NE(printed.find("v128.store %addr, %loaded"), std::string::npos);
+  EXPECT_EQ(printed, source);
 }
 
 }  // namespace

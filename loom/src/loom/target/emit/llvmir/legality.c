@@ -125,23 +125,6 @@ iree_status_t loom_llvmir_target_legality_fail(
                           (int)target_detail.size, target_detail.data);
 }
 
-void loom_llvmir_target_legality_emit_event(
-    loom_llvmir_target_legality_context_t* context,
-    const loom_llvmir_target_legality_provider_t* provider,
-    loom_llvmir_target_legality_event_kind_t kind, const loom_op_t* op,
-    iree_string_view_t detail, iree_string_view_t target_detail) {
-  if (!context->options->event_fn) return;
-  context->options->event_fn(
-      context->options->event_user_data,
-      &(loom_llvmir_target_legality_event_t){
-          .kind = kind,
-          .provider_name = loom_llvmir_target_legality_provider_name(provider),
-          .op_name = loom_llvmir_target_legality_op_name(context, op),
-          .detail = detail,
-          .target_detail = target_detail,
-      });
-}
-
 const loom_module_t* loom_llvmir_target_legality_module(
     const loom_llvmir_target_legality_context_t* context) {
   return context->module;

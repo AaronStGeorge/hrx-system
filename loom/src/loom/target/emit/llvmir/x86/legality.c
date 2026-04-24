@@ -126,10 +126,6 @@ static iree_status_t loom_llvmir_x86_legality_verify_packed_dot(
         loom_llvmir_x86_legality_rejection_name(diagnostic.rejection_bits));
   }
 
-  loom_llvmir_target_legality_emit_event(
-      context, provider,
-      LOOM_LLVMIR_TARGET_LEGALITY_EVENT_TARGET_CONTRACT_SELECTED, op,
-      IREE_SV("selected x86 packed-dot descriptor"), descriptor->name);
   return iree_ok_status();
 }
 

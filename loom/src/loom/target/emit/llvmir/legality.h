@@ -37,10 +37,6 @@ typedef enum loom_llvmir_target_legality_code_e {
   LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT,
 } loom_llvmir_target_legality_code_t;
 
-typedef enum loom_llvmir_target_legality_event_kind_e {
-  LOOM_LLVMIR_TARGET_LEGALITY_EVENT_TARGET_CONTRACT_SELECTED = 0,
-} loom_llvmir_target_legality_event_kind_t;
-
 typedef struct loom_llvmir_target_legality_diagnostic_t {
   // Stable diagnostic category.
   loom_llvmir_target_legality_code_t code;
@@ -54,22 +50,6 @@ typedef struct loom_llvmir_target_legality_diagnostic_t {
   // Optional target-family detail, such as a rejected contract family.
   iree_string_view_t target_detail;
 } loom_llvmir_target_legality_diagnostic_t;
-
-typedef struct loom_llvmir_target_legality_event_t {
-  // Event category.
-  loom_llvmir_target_legality_event_kind_t kind;
-  // Provider that produced the event.
-  iree_string_view_t provider_name;
-  // Source op name associated with the event.
-  iree_string_view_t op_name;
-  // Stable event reason string.
-  iree_string_view_t detail;
-  // Optional target-family detail, such as a selected contract descriptor.
-  iree_string_view_t target_detail;
-} loom_llvmir_target_legality_event_t;
-
-typedef void (*loom_llvmir_target_legality_event_fn_t)(
-    void* user_data, const loom_llvmir_target_legality_event_t* event);
 
 typedef iree_status_t (*loom_llvmir_target_legality_try_op_fn_t)(
     const loom_llvmir_target_legality_provider_t* provider,
@@ -96,18 +76,12 @@ typedef struct loom_llvmir_target_legality_options_t {
   const loom_llvmir_target_legality_provider_t* const* providers;
   // Number of provider pointers in |providers|.
   iree_host_size_t provider_count;
-  // Optional observer for non-fatal legality events such as target contract
-  // selection.
-  loom_llvmir_target_legality_event_fn_t event_fn;
-  // Opaque payload passed to |event_fn|.
-  void* event_user_data;
 } loom_llvmir_target_legality_options_t;
 
 // Verifies that |module| is legal for LLVMIR lowering under |options|.
 //
 // |out_diagnostic| is optional. When provided, it is always overwritten with
-// either OK or the first failing diagnostic. Non-fatal target-contract
-// selections are reported through |options->event_fn|.
+// either OK or the first failing diagnostic.
 iree_status_t loom_llvmir_verify_target_legality(
     const loom_module_t* module,
     const loom_llvmir_target_legality_options_t* options,
@@ -134,13 +108,6 @@ iree_status_t loom_llvmir_target_legality_fail(
     loom_llvmir_target_legality_context_t* context,
     const loom_llvmir_target_legality_provider_t* provider,
     loom_llvmir_target_legality_code_t code, const loom_op_t* op,
-    iree_string_view_t detail, iree_string_view_t target_detail);
-
-// Emits a non-fatal legality event when an event observer was provided.
-void loom_llvmir_target_legality_emit_event(
-    loom_llvmir_target_legality_context_t* context,
-    const loom_llvmir_target_legality_provider_t* provider,
-    loom_llvmir_target_legality_event_kind_t kind, const loom_op_t* op,
     iree_string_view_t detail, iree_string_view_t target_detail);
 
 // Resolves a source string attribute from |string_id|.
