@@ -191,6 +191,7 @@ loom_cc_library(
   SRCS
     "module_compiler.c"
   DEPS
+    ::artifact_plan
     ::function_contract
     ::low_descriptor_registry
     ::types
@@ -203,6 +204,7 @@ loom_cc_library(
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
+    loom::src::loom::util::call_graph
     loom::src::loom::verify
   PUBLIC
 )

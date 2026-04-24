@@ -14,7 +14,9 @@
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/target/facts.h"
+#include "loom/target/artifact_plan.h"
 #include "loom/target/function_contract.h"
+#include "loom/util/call_graph.h"
 
 uint32_t loom_target_module_compile_max_errors(
     const loom_target_module_compile_options_t* options,
@@ -25,17 +27,22 @@ uint32_t loom_target_module_compile_max_errors(
   return default_max_errors;
 }
 
+iree_string_view_t loom_target_module_compile_normalize_symbol_name(
+    iree_string_view_t symbol_name) {
+  symbol_name = iree_string_view_trim(symbol_name);
+  if (iree_string_view_starts_with_char(symbol_name, '@')) {
+    symbol_name = iree_string_view_remove_prefix(symbol_name, 1);
+  }
+  return symbol_name;
+}
+
 iree_string_view_t loom_target_module_compile_entry_symbol_name(
     const loom_target_module_compile_options_t* options) {
   if (!options) {
     return iree_string_view_empty();
   }
-  iree_string_view_t entry_symbol =
-      iree_string_view_trim(options->entry_symbol);
-  if (iree_string_view_starts_with_char(entry_symbol, '@')) {
-    entry_symbol = iree_string_view_remove_prefix(entry_symbol, 1);
-  }
-  return entry_symbol;
+  return loom_target_module_compile_normalize_symbol_name(
+      options->entry_symbol);
 }
 
 void loom_target_module_compile_diagnostic_emitter_initialize(
@@ -400,4 +407,65 @@ iree_status_t loom_target_module_compile_select_entry(
   return loom_target_module_compile_select_single_entry(
       module, &fact_table, predicate, predicate_user_data, entry_kind,
       out_entry);
+}
+
+iree_status_t loom_target_module_compile_select_artifact_entries(
+    const loom_module_t* module, iree_string_view_t artifact_symbol,
+    const loom_target_low_descriptor_registry_t* low_registry,
+    loom_target_module_compile_entry_predicate_fn_t predicate,
+    void* predicate_user_data, iree_string_view_t entry_kind,
+    iree_arena_allocator_t* arena,
+    loom_target_module_compile_entry_list_t* out_entries) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(predicate);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_entries);
+  *out_entries = (loom_target_module_compile_entry_list_t){0};
+
+  artifact_symbol =
+      loom_target_module_compile_normalize_symbol_name(artifact_symbol);
+  if (iree_string_view_is_empty(artifact_symbol)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "artifact symbol is required");
+  }
+
+  loom_symbol_fact_table_t fact_table = {0};
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_initialize_fact_table(
+      low_registry, arena, &fact_table));
+
+  uint16_t artifact_symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_target_module_compile_find_symbol_by_name(
+      module, artifact_symbol, &artifact_symbol_id));
+  loom_call_graph_t call_graph = {0};
+  IREE_RETURN_IF_ERROR(loom_call_graph_build(module, arena, &call_graph));
+  loom_target_artifact_plan_t artifact_plan = {0};
+  IREE_RETURN_IF_ERROR(loom_target_artifact_plan_build(
+      module,
+      (loom_symbol_ref_t){
+          .module_id = 0,
+          .symbol_id = artifact_symbol_id,
+      },
+      &fact_table, &call_graph, arena, &artifact_plan));
+  if (artifact_plan.entry_count == 0) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "artifact @%.*s has no exported entries",
+                            (int)artifact_symbol.size, artifact_symbol.data);
+  }
+
+  loom_target_module_compile_entry_t* entries = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, artifact_plan.entry_count, sizeof(*entries), (void**)&entries));
+  for (uint16_t i = 0; i < artifact_plan.entry_count; ++i) {
+    bool compatible = false;
+    IREE_RETURN_IF_ERROR(loom_target_module_compile_try_entry(
+        module, &fact_table, artifact_plan.entry_symbol_ids[i], predicate,
+        predicate_user_data, entry_kind, /*require_compatible=*/true,
+        &compatible, &entries[i]));
+  }
+
+  *out_entries = (loom_target_module_compile_entry_list_t){
+      .values = entries,
+      .count = artifact_plan.entry_count,
+  };
+  return iree_ok_status();
 }

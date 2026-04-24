@@ -192,6 +192,85 @@ func.def target(@wasm) abi(wasm_function) @unused() {
             FindSymbol(module.get(), IREE_SV("helper")));
 }
 
+TEST_F(ArtifactPlanTest, OrdersEntriesByDenseExportOrdinal) {
+  ModulePtr module = ParseModule(R"(
+target.profile @wasm preset("test.profile")
+target.artifact @module target(@wasm)
+
+func.def target(@wasm) abi(wasm_function) export("second", {artifact = @module, ordinal = 1}) @second() {
+  func.return
+}
+
+func.def target(@wasm) abi(wasm_function) export("first", {artifact = @module, ordinal = 0}) @first() {
+  func.return
+}
+)");
+
+  loom_call_graph_t call_graph;
+  IREE_ASSERT_OK(
+      loom_call_graph_build(module.get(), &analysis_arena_, &call_graph));
+
+  loom_target_artifact_plan_t plan;
+  IREE_ASSERT_OK(loom_target_artifact_plan_build(
+      module.get(), SymbolRef(module.get(), IREE_SV("module")), &fact_table_,
+      &call_graph, &analysis_arena_, &plan));
+
+  ASSERT_EQ(plan.entry_count, 2u);
+  EXPECT_EQ(plan.entry_symbol_ids[0],
+            FindSymbol(module.get(), IREE_SV("first")));
+  EXPECT_EQ(plan.entry_symbol_ids[1],
+            FindSymbol(module.get(), IREE_SV("second")));
+}
+
+TEST_F(ArtifactPlanTest, RejectsMixedExportOrdinalPolicy) {
+  ModulePtr module = ParseModule(R"(
+target.profile @wasm preset("test.profile")
+target.artifact @module target(@wasm)
+
+func.def target(@wasm) abi(wasm_function) export("first", {artifact = @module, ordinal = 0}) @first() {
+  func.return
+}
+
+func.def target(@wasm) abi(wasm_function) export("second", {artifact = @module}) @second() {
+  func.return
+}
+)");
+
+  loom_call_graph_t call_graph;
+  IREE_ASSERT_OK(
+      loom_call_graph_build(module.get(), &analysis_arena_, &call_graph));
+
+  loom_target_artifact_plan_t plan;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_target_artifact_plan_build(
+          module.get(), SymbolRef(module.get(), IREE_SV("module")),
+          &fact_table_, &call_graph, &analysis_arena_, &plan));
+}
+
+TEST_F(ArtifactPlanTest, RejectsEntryTargetMismatchingArtifactTarget) {
+  ModulePtr module = ParseModule(R"(
+target.profile @wasm preset("test.profile")
+target.profile @other preset("test.profile")
+target.artifact @module target(@wasm)
+
+func.def target(@other) abi(wasm_function) export("entry", {artifact = @module}) @entry() {
+  func.return
+}
+)");
+
+  loom_call_graph_t call_graph;
+  IREE_ASSERT_OK(
+      loom_call_graph_build(module.get(), &analysis_arena_, &call_graph));
+
+  loom_target_artifact_plan_t plan;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_target_artifact_plan_build(
+          module.get(), SymbolRef(module.get(), IREE_SV("module")),
+          &fact_table_, &call_graph, &analysis_arena_, &plan));
+}
+
 TEST_F(ArtifactPlanTest, RejectsClosureCrossingIntoAnotherArtifact) {
   ModulePtr module = ParseModule(R"(
 target.profile @wasm preset("test.profile")

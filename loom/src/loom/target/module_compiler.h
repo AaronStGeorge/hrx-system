@@ -54,6 +54,13 @@ typedef struct loom_target_module_compile_entry_t {
   loom_target_bundle_storage_t bundle_storage;
 } loom_target_module_compile_entry_t;
 
+typedef struct loom_target_module_compile_entry_list_t {
+  // Arena-owned entry descriptors in executable export order.
+  loom_target_module_compile_entry_t* values;
+  // Number of entries in |values|.
+  uint16_t count;
+} loom_target_module_compile_entry_list_t;
+
 typedef struct loom_target_module_compile_diagnostic_emitter_t {
   // Module containing op locations referenced by emitted diagnostics.
   const loom_module_t* module;
@@ -72,6 +79,11 @@ typedef bool(IREE_API_PTR* loom_target_module_compile_entry_predicate_fn_t)(
 uint32_t loom_target_module_compile_max_errors(
     const loom_target_module_compile_options_t* options,
     uint32_t default_max_errors);
+
+// Returns the normalized symbol name without surrounding whitespace or a
+// leading '@'.
+iree_string_view_t loom_target_module_compile_normalize_symbol_name(
+    iree_string_view_t symbol_name);
 
 // Returns the normalized entry symbol name without a leading '@'.
 iree_string_view_t loom_target_module_compile_entry_symbol_name(
@@ -117,6 +129,21 @@ iree_status_t loom_target_module_compile_select_entry(
     void* predicate_user_data, iree_string_view_t entry_kind,
     iree_arena_allocator_t* arena,
     loom_target_module_compile_entry_t* out_entry);
+
+// Selects exported artifact entries in target.artifact plan order.
+//
+// |artifact_symbol| names the target.artifact symbol without or with a leading
+// '@'. The artifact plan is derived from function export facts and call graph
+// closure; this helper only returns exported entry funcs, not private closure
+// funcs. All returned entries are target-profile-resolved and
+// predicate-checked.
+iree_status_t loom_target_module_compile_select_artifact_entries(
+    const loom_module_t* module, iree_string_view_t artifact_symbol,
+    const loom_target_low_descriptor_registry_t* low_registry,
+    loom_target_module_compile_entry_predicate_fn_t predicate,
+    void* predicate_user_data, iree_string_view_t entry_kind,
+    iree_arena_allocator_t* arena,
+    loom_target_module_compile_entry_list_t* out_entries);
 
 #ifdef __cplusplus
 }  // extern "C"

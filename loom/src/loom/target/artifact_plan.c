@@ -6,6 +6,7 @@
 
 #include "loom/target/artifact_plan.h"
 
+#include <inttypes.h>
 #include <string.h>
 
 #include "loom/ops/func_symbol_facts.h"
@@ -129,6 +130,67 @@ static iree_status_t loom_target_artifact_plan_allocate_ids(
   return iree_ok_status();
 }
 
+static iree_status_t loom_target_artifact_plan_assign_ordered_entries(
+    const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
+    const uint8_t* entry_marks, uint16_t entry_count, uint16_t ordinal_count,
+    loom_symbol_id_t* entry_symbol_ids) {
+  if (entry_count == 0) {
+    return iree_ok_status();
+  }
+  if (ordinal_count != 0 && ordinal_count != entry_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "artifact plan entries must either all declare export ordinals or none "
+        "declare export ordinals");
+  }
+
+  if (ordinal_count == 0) {
+    uint16_t entry_index = 0;
+    for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
+      if (entry_marks[i]) {
+        entry_symbol_ids[entry_index++] = (loom_symbol_id_t)i;
+      }
+    }
+    return iree_ok_status();
+  }
+
+  for (uint16_t i = 0; i < entry_count; ++i) {
+    entry_symbol_ids[i] = LOOM_SYMBOL_ID_INVALID;
+  }
+  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
+    if (!entry_marks[i]) {
+      continue;
+    }
+    const loom_func_symbol_facts_t* func_facts = NULL;
+    IREE_RETURN_IF_ERROR(loom_target_artifact_plan_lookup_func(
+        module, fact_table, (loom_symbol_id_t)i, &func_facts));
+    if (func_facts->export_ordinal >= entry_count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "artifact plan entry @%.*s export ordinal %" PRIu32
+          " is outside dense range [0, %u)",
+          (int)func_facts->name.size, func_facts->name.data,
+          func_facts->export_ordinal, (unsigned)entry_count);
+    }
+    loom_symbol_id_t* slot = &entry_symbol_ids[func_facts->export_ordinal];
+    if (*slot != LOOM_SYMBOL_ID_INVALID) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "artifact plan export ordinal %" PRIu32
+                              " is assigned more than once",
+                              func_facts->export_ordinal);
+    }
+    *slot = (loom_symbol_id_t)i;
+  }
+  for (uint16_t i = 0; i < entry_count; ++i) {
+    if (entry_symbol_ids[i] == LOOM_SYMBOL_ID_INVALID) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "artifact plan export ordinal %u is not assigned",
+                              i);
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_target_artifact_plan_build(
     const loom_module_t* module, loom_symbol_ref_t artifact_symbol,
     loom_symbol_fact_table_t* fact_table, const loom_call_graph_t* call_graph,
@@ -161,6 +223,7 @@ iree_status_t loom_target_artifact_plan_build(
 
   uint16_t entry_count = 0;
   uint16_t func_count = 0;
+  uint16_t ordinal_count = 0;
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
     const loom_func_symbol_facts_t* func_facts = NULL;
     IREE_RETURN_IF_ERROR(loom_target_artifact_plan_lookup_func(
@@ -174,8 +237,19 @@ iree_status_t loom_target_artifact_plan_build(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "artifact plan entry func must have a body");
     }
+    if (!loom_target_artifact_plan_symbol_ref_equal(
+            func_facts->target_symbol, artifact_facts->target_symbol)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "artifact plan entry func @%.*s target profile does not match the "
+          "artifact target profile",
+          (int)func_facts->name.size, func_facts->name.data);
+    }
     entry_marks[i] = 1;
     func_marks[i] = 1;
+    if (func_facts->has_export_ordinal) {
+      ++ordinal_count;
+    }
     ++entry_count;
     ++func_count;
   }
@@ -197,12 +271,12 @@ iree_status_t loom_target_artifact_plan_build(
   out_plan->entry_symbol_ids = entry_symbol_ids;
   out_plan->func_symbol_ids = func_symbol_ids;
 
-  uint16_t entry_index = 0;
+  IREE_RETURN_IF_ERROR(loom_target_artifact_plan_assign_ordered_entries(
+      module, fact_table, entry_marks, entry_count, ordinal_count,
+      entry_symbol_ids));
+
   uint16_t func_index = 0;
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
-    if (entry_marks[i]) {
-      entry_symbol_ids[entry_index++] = (loom_symbol_id_t)i;
-    }
     if (func_marks[i]) {
       func_symbol_ids[func_index++] = (loom_symbol_id_t)i;
     }

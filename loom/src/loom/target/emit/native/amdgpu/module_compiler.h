@@ -29,6 +29,10 @@ typedef struct loom_amdgpu_module_compile_options_t {
   // HAL-native-compatible function with a target profile. A leading '@' is
   // accepted for command-line ergonomics.
   iree_string_view_t entry_symbol;
+  // Optional target.artifact symbol to compile as one multi-export executable.
+  // Empty preserves single-entry selection. A leading '@' is accepted for
+  // command-line ergonomics.
+  iree_string_view_t artifact_symbol;
   // Optional AMDHSA processor name such as `gfx1100` overriding the selected
   // preset snapshot CPU. This preserves the preset's descriptor-set family
   // while letting JIT runners specialize to the concrete HAL device ISA.
