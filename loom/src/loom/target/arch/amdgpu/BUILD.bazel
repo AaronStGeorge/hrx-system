@@ -790,6 +790,7 @@ loom_check_test_suite(
     ],
     data = [
         "//loom/src/loom/test/corpus/source_low:numeric_conversion.loom-test",
+        "//loom/src/loom/test/corpus/source_low:numeric_minmax.loom-test",
         "//loom/src/loom/test/corpus/source_low:vector_bitcast.loom-test",
         "//loom/src/loom/test/corpus/source_low:vector_mask_select.loom-test",
         "//loom/src/loom/test/corpus/source_low:vector_slice.loom-test",

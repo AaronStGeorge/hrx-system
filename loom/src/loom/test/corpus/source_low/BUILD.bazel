@@ -14,6 +14,7 @@ package(
 
 exports_files([
     "numeric_conversion.loom-test",
+    "numeric_minmax.loom-test",
     "vector_bitcast.loom-test",
     "vector_mask_select.loom-test",
     "vector_slice.loom-test",
@@ -25,6 +26,7 @@ loom_check_test_suite(
     name = "test",
     srcs = [
         "numeric_conversion.loom-test",
+        "numeric_minmax.loom-test",
         "vector_bitcast.loom-test",
         "vector_mask_select.loom-test",
         "vector_slice.loom-test",

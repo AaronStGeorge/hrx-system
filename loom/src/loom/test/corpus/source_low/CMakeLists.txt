@@ -23,6 +23,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "numeric_minmax"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/numeric_minmax.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "vector_bitcast"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_bitcast.loom-test"
