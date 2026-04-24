@@ -1052,7 +1052,7 @@ TEST_F(ExecuteTest, XfailDoesNotHideRequiresHarnessFailure) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, EmitLowDescriptorManifestProducesOutputForKnownSet) {
+TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsKnownSetFields) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: emit low-descriptor-manifest test.low.core\n"
@@ -1062,7 +1062,10 @@ TEST_F(ExecuteTest, EmitLowDescriptorManifestProducesOutputForKnownSet) {
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   const std::string actual_output = ActualOutputString(result);
-  EXPECT_FALSE(actual_output.empty());
+  EXPECT_NE(actual_output.find("\"key\":\"test.low.core\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"target\":\"test.low\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"table_counts\":{\"descriptors\":"),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -1079,7 +1082,7 @@ TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsUnknownSet) {
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, EmitTargetLowRegistryManifestUsesRegistryPackage) {
+TEST_F(ExecuteTest, EmitTargetLowRegistryManifestReportsRegisteredBundle) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: emit target-low-registry-manifest\n"
@@ -1089,7 +1092,13 @@ TEST_F(ExecuteTest, EmitTargetLowRegistryManifestUsesRegistryPackage) {
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   const std::string actual_output = ActualOutputString(result);
-  EXPECT_FALSE(actual_output.empty());
+  EXPECT_NE(actual_output.find("\"descriptor_set_count\":1"),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"bundle_count\":1"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"key\":\"test.low.core\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"name\":\"test-low\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor_set\":\"test.low.core\""),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
