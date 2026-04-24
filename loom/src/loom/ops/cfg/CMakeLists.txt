@@ -55,7 +55,7 @@ loom_cc_test(
     loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
-    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::func
     loom::src::loom::testing::diagnostic_matchers
     loom::src::loom::verify
     iree::testing::gtest

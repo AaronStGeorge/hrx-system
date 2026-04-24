@@ -17,7 +17,7 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/op_registry.h"
+#include "loom/ops/target/ops.h"
 
 namespace loom {
 namespace {
@@ -92,8 +92,9 @@ class TargetProfileFactsTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_op_registry_initialize_context(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
     iree_arena_initialize(&block_pool_, &analysis_arena_);
     resources_[0] =
         loom_target_profile_preset_registry_resource(&kPresetRegistry);
@@ -117,6 +118,17 @@ class TargetProfileFactsTest : public ::testing::Test {
                                   IREE_SV("target_profile_facts_test.loom"),
                                   &context_, &block_pool_, &options, &module));
     return ModulePtr(module);
+  }
+
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+  void RegisterDialect(uint8_t dialect_id,
+                       DialectVtablesFn dialect_vtables_fn) {
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)count));
   }
 
   std::string PrintModule(const loom_module_t* module) {
@@ -163,7 +175,7 @@ class TargetProfileFactsTest : public ::testing::Test {
   // Block pool shared by parser, module allocation, and analysis storage.
   iree_arena_block_pool_t block_pool_;
 
-  // Context with production dialects registered.
+  // Context with the target dialect registered.
   loom_context_t context_;
 
   // Arena for symbol fact table storage and fact payloads.

@@ -875,8 +875,8 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::target
+    loom::src::loom::ops::test
     loom::src::loom::target::emit::ireevm::descriptors
-    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )

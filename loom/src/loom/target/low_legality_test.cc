@@ -17,11 +17,14 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/cfg/ops.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/test/low_registry.h"
-#include "loom/testing/context.h"
 
 namespace loom {
 namespace {
@@ -113,8 +116,14 @@ class TargetLowLegalityTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_KERNEL, loom_kernel_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_SCF, loom_scf_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
     IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(
         &registry_, IREE_SV("test-low"), &bundle_));
@@ -135,6 +144,17 @@ class TargetLowLegalityTest : public ::testing::Test {
                                   &block_pool_, &parse_options, &module));
     IREE_ASSERT(module != nullptr);
     return ModulePtr(module);
+  }
+
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+  void RegisterDialect(uint8_t dialect_id,
+                       DialectVtablesFn dialect_vtables_fn) {
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)count));
   }
 
   loom_func_like_t FirstFunction(loom_module_t* module) {

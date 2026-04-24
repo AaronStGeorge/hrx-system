@@ -255,7 +255,7 @@ loom_cc_test(
     loom::src::loom::analysis::symbol_facts
     loom::src::loom::format::text::parser
     loom::src::loom::ir
-    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::func
     loom::src::loom::ops::target
     loom::src::loom::util::call_graph
     iree::testing::gtest
@@ -319,11 +319,14 @@ loom_cc_test(
     loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
+    loom::src::loom::ops::cfg
+    loom::src::loom::ops::func
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::target::test::low_registry
-    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )

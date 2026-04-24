@@ -20,8 +20,8 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/ops/test/ops.h"
 #include "loom/target/emit/ireevm/descriptors.h"
-#include "loom/testing/context.h"
 
 namespace loom {
 namespace {
@@ -76,8 +76,11 @@ class LowTargetBindingTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 
   void TearDown() override {
@@ -99,6 +102,17 @@ class LowTargetBindingTest : public ::testing::Test {
 
   loom_module_t* ParseSource(const std::string& source) {
     return ParseSource(source.c_str());
+  }
+
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+  void RegisterDialect(uint8_t dialect_id,
+                       DialectVtablesFn dialect_vtables_fn) {
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)count));
   }
 
   const loom_op_t* FindFirstOp(loom_module_t* module, loom_op_kind_t kind) {

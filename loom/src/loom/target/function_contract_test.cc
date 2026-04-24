@@ -115,8 +115,8 @@ class TargetFunctionContractTest : public ::testing::Test {
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
 
-  using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t *
-                                                              out_count);
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
 
   void RegisterDialect(loom_dialect_id_t dialect_id, DialectVtablesFn fn) {
     iree_host_size_t vtable_count = 0;
