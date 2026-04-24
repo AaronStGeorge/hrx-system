@@ -21,6 +21,24 @@
 // LINK-NOT: func.decl @identity
 
 // RUN: printf '%%s\n' \
+// RUN:   'func.def @unused(%x: i32) -> (i32) {' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   '' \
+// RUN:   'func.def @identity(%x: i32) -> (i32) {' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   > %t.root_corpus.loom
+// RUN: loom-link %t.harness.loom %t.root_corpus.loom --root=@caller \
+// RUN:   | FileCheck --check-prefix=ROOT %s
+
+// ROOT-NOT: func.def @unused
+// ROOT: func.def @identity(%x: i32) -> (i32) {
+// ROOT: func.def @caller(%x: i32) -> (i32) {
+// ROOT-NOT: func.def @unused
+// ROOT-NOT: func.decl @identity
+
+// RUN: printf '%%s\n' \
 // RUN:   'func.def @duplicate(%x: i32) -> (i32) {' \
 // RUN:   '  func.return %x : i32' \
 // RUN:   '}' \

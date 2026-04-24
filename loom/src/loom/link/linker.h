@@ -29,6 +29,9 @@ extern "C" {
 typedef struct loom_link_options_t {
   // Name assigned to the linked output module.
   iree_string_view_t module_name;
+  // Root symbol names to materialize. An empty list links every materialized
+  // source symbol.
+  iree_string_view_list_t root_symbols;
 } loom_link_options_t;
 
 // Links already-materialized source modules into a freshly allocated output
@@ -44,6 +47,13 @@ typedef struct loom_link_options_t {
 //   modifier contracts merge into the selected symbol-defining op.
 // - Multiple concrete definitions for the same name are rejected.
 // - Unresolved references stay unresolved for the verifier to diagnose.
+//
+// When options.root_symbols is non-empty, the linker treats source modules as
+// libraries: it materializes only those roots and the module-local symbols
+// reachable from their attributes/regions. A declaration that is superseded by
+// a reachable definition provides the structural insertion point for that
+// definition, so small harness modules can replace func.decl placeholders with
+// library definitions without concatenating the entire library.
 iree_status_t loom_link_materialized_modules(
     const loom_module_t* const* source_modules,
     iree_host_size_t source_module_count, const loom_link_options_t* options,

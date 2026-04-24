@@ -75,15 +75,33 @@ class LinkerTest : public ::testing::Test {
     return linked_module;
   }
 
+  loom_module_t* LinkRoots(
+      std::initializer_list<loom_module_t*> source_modules,
+      std::initializer_list<iree_string_view_t> root_symbols) {
+    loom_module_t* linked_module = nullptr;
+    IREE_CHECK_OK(LinkStatus(source_modules, root_symbols, &linked_module));
+    modules_.push_back(linked_module);
+    return linked_module;
+  }
+
   iree_status_t LinkStatus(std::initializer_list<loom_module_t*> source_modules,
                            loom_module_t** out_module) {
+    return LinkStatus(source_modules, {}, out_module);
+  }
+
+  iree_status_t LinkStatus(
+      std::initializer_list<loom_module_t*> source_modules,
+      std::initializer_list<iree_string_view_t> root_symbols,
+      loom_module_t** out_module) {
     std::vector<const loom_module_t*> inputs;
     inputs.reserve(source_modules.size());
     for (loom_module_t* module : source_modules) {
       inputs.push_back(module);
     }
+    std::vector<iree_string_view_t> roots(root_symbols);
     loom_link_options_t options = {
         .module_name = IREE_SV("linked"),
+        .root_symbols = {.count = roots.size(), .values = roots.data()},
     };
     iree_status_t status = loom_link_materialized_modules(
         inputs.data(), inputs.size(), &options, &block_pool_,
@@ -159,6 +177,141 @@ func.def @identity(%x: i32) -> (i32) {
   std::string text = Print(linked);
   EXPECT_EQ(text.find("func.decl @identity"), std::string::npos);
   EXPECT_NE(text.find("func.def @identity"), std::string::npos);
+}
+
+TEST_F(LinkerTest, SelectiveRootMaterializesReachableSymbols) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+target.profile @test_target preset("test-low")
+
+func.decl target(@test_target) @identity(%x: i32) -> (i32)
+func.decl @unused_decl(%x: i32) -> (i32)
+
+func.def @caller(%x: i32) -> (i32) {
+  %y = func.call @identity(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+)"));
+  loom_module_t* corpus = Parse(IREE_SV(R"(
+func.def @identity(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+func.def @unused(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked = LinkRoots({harness, corpus}, {IREE_SV("@caller")});
+  Verify(linked);
+  EXPECT_EQ(linked->symbols.count, 3u);
+
+  std::string text = Print(linked);
+  EXPECT_NE(text.find("target.profile @test_target"), std::string::npos);
+  EXPECT_NE(text.find("func.def @caller"), std::string::npos);
+  EXPECT_NE(text.find("func.call @identity"), std::string::npos);
+  EXPECT_NE(text.find("func.def target(@test_target) @identity"),
+            std::string::npos);
+  EXPECT_EQ(text.find("func.decl @unused_decl"), std::string::npos);
+  EXPECT_EQ(text.find("func.def @unused"), std::string::npos);
+}
+
+TEST_F(LinkerTest, SelectiveRootReplacesDeclarationAtStructuralPosition) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+func.def @before(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+func.decl @identity(%x: i32) -> (i32)
+
+func.def @after(%x: i32) -> (i32) {
+  %y = func.call @identity(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+)"));
+  loom_module_t* corpus = Parse(IREE_SV(R"(
+func.def @identity(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked = LinkRoots({harness, corpus}, {IREE_SV("@after")});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  size_t before = text.find("func.def @before");
+  size_t identity = text.find("func.def @identity");
+  size_t after = text.find("func.def @after");
+  EXPECT_NE(identity, std::string::npos);
+  EXPECT_NE(after, std::string::npos);
+  EXPECT_LT(identity, after);
+  EXPECT_EQ(before, std::string::npos);
+}
+
+TEST_F(LinkerTest, SelectiveRootIgnoresUnreachableDuplicateDefinition) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+func.def @caller(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+  loom_module_t* first = Parse(IREE_SV(R"(
+func.def @unused(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+  loom_module_t* second = Parse(IREE_SV(R"(
+func.def @unused(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked =
+      LinkRoots({harness, first, second}, {IREE_SV("@caller")});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_NE(text.find("func.def @caller"), std::string::npos);
+  EXPECT_EQ(text.find("func.def @unused"), std::string::npos);
+}
+
+TEST_F(LinkerTest, SelectiveRootRejectsMissingRoot) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+func.def @caller(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+                        LinkStatus({harness}, {IREE_SV("@missing")}, &linked));
+  EXPECT_EQ(linked, nullptr);
+}
+
+TEST_F(LinkerTest, SelectiveRootOutputIgnoresUnrelatedFunctionOrder) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+func.decl @identity(%x: i32) -> (i32)
+)"));
+  loom_module_t* corpus = Parse(IREE_SV(R"(
+func.def @identity(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+  loom_module_t* corpus_with_unrelated = Parse(IREE_SV(R"(
+func.def @unrelated(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+func.def @identity(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked = LinkRoots({harness, corpus}, {IREE_SV("@identity")});
+  loom_module_t* linked_with_unrelated =
+      LinkRoots({harness, corpus_with_unrelated}, {IREE_SV("@identity")});
+
+  EXPECT_EQ(linked->symbols.count, 1u);
+  EXPECT_EQ(linked_with_unrelated->symbols.count, 1u);
+  EXPECT_EQ(Print(linked), Print(linked_with_unrelated));
 }
 
 TEST_F(LinkerTest, MergesDeclarationTargetContractIntoDefinition) {

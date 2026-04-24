@@ -25,6 +25,9 @@
 
 IREE_FLAG(string, output, "-",
           "Output path. Use '-' or the empty string for stdout.");
+IREE_FLAG_LIST(string, root,
+               "Root symbol to materialize. Repeat for multiple roots. Empty "
+               "links every materialized symbol.");
 IREE_FLAG(bool, verify, true,
           "Verify the linked output module before printing.");
 
@@ -161,8 +164,9 @@ int main(int argc, char** argv) {
       "Links an explicit set of already-materialized Loom text modules.\n"
       "\n"
       "Usage:\n"
-      "  loom-link [--output=file] [file...]\n"
-      "  loom-link harness.loom corpus.loom --output=linked.loom\n"
+      "  loom-link [--output=file] [--root=@symbol] [file...]\n"
+      "  loom-link harness.loom corpus.loom --root=@entry "
+      "--output=linked.loom\n"
       "\n"
       "Input defaults to stdin when no files are provided. A '-' input reads "
       "stdin and must be the only input path.\n");
@@ -222,8 +226,10 @@ int main(int argc, char** argv) {
   }
 
   if (iree_status_is_ok(status)) {
+    const iree_flag_string_list_t roots = FLAG_root_list();
     loom_link_options_t link_options = {
         .module_name = IREE_SV("linked"),
+        .root_symbols = roots,
     };
     status = loom_link_materialized_modules(source_modules, input_count,
                                             &link_options, &block_pool,
