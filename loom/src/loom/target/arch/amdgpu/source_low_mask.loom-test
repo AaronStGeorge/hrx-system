@@ -1,6 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/vector_mask_select.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+
 // ====
+
 func.def @i32_cmpi_select(%lhs: vector<2xi32>, %rhs: vector<2xi32>, %true_value: vector<2xi32>, %false_value: vector<2xi32>) -> (vector<2xi32>) {
   %mask = vector.cmpi slt, %lhs, %rhs : vector<2xi32> -> vector<2xi1>
   %selected = vector.select %mask, %true_value, %false_value : vector<2xi32>
@@ -29,6 +31,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_cmpi_select(%lhs: reg<amdgpu.v
 }
 
 // ====
+
 func.def @f32_cmpf_select(%lhs: vector<1xf32>, %rhs: vector<1xf32>, %true_value: vector<1xf32>, %false_value: vector<1xf32>) -> (vector<1xf32>) {
   %mask = vector.cmpf olt, %lhs, %rhs : vector<1xf32> -> vector<1xi1>
   %selected = vector.select %mask, %true_value, %false_value : vector<1xf32>

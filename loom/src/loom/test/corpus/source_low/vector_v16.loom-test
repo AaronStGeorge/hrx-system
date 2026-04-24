@@ -1,5 +1,7 @@
 // RUN: roundtrip
+
 // ====
+
 func.def @i32x16_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
   %sum = vector.addi %lhs, %rhs : vector<16xi32>
   %diff = vector.subi %sum, %rhs : vector<16xi32>
@@ -7,6 +9,7 @@ func.def @i32x16_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16
 }
 
 // ====
+
 func.def @f32x16_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<16xf32>
   %difference = vector.subf %sum, %lhs : vector<16xf32>
@@ -16,6 +19,7 @@ func.def @f32x16_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16
 }
 
 // ====
+
 func.def @f32x16_static_memory(%input: buffer, %output: buffer) {
   %input_base = index.constant 16 : offset
   %output_base = index.constant 32 : offset
@@ -27,6 +31,7 @@ func.def @f32x16_static_memory(%input: buffer, %output: buffer) {
 }
 
 // ====
+
 func.def @f32x16_dynamic_memory(%input: buffer, %output: buffer, %i: index) {
   %input_base = index.constant 16 : offset
   %output_base = index.constant 32 : offset
@@ -38,6 +43,7 @@ func.def @f32x16_dynamic_memory(%input: buffer, %output: buffer, %i: index) {
 }
 
 // ====
+
 func.def @f32x16_index_add_memory(%input: buffer, %output: buffer, %i: index, %j: index) {
   %zero = index.constant 0 : offset
   %sum = index.add %i, %j : index
@@ -49,6 +55,7 @@ func.def @f32x16_index_add_memory(%input: buffer, %output: buffer, %i: index, %j
 }
 
 // ====
+
 func.def @f32x16_index_madd_memory(%input: buffer, %output: buffer, %row: index, %stride: index, %col: index) {
   %zero = index.constant 0 : offset
   %linear = index.madd %row, %stride, %col : index

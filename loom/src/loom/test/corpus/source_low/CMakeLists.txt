@@ -45,6 +45,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "vector_slice"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/vector_slice.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "vector_v16"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_v16.loom-test"

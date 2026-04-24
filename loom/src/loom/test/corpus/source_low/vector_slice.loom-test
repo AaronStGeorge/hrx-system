@@ -1,0 +1,36 @@
+// RUN: roundtrip
+
+// ====
+
+func.def @i32x4_slice_middle(%values: vector<4xi32>) -> (vector<2xi32>) {
+  %middle = vector.slice %values[1] : vector<4xi32> -> vector<2xi32>
+  func.return %middle : vector<2xi32>
+}
+
+// ====
+
+func.def @i8x4_slice_low_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
+  %low = vector.slice %bytes[0] : vector<4xi8> -> vector<2xi8>
+  func.return %low : vector<2xi8>
+}
+
+// ====
+
+func.def @i8x4_slice_high_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
+  %high = vector.slice %bytes[2] : vector<4xi8> -> vector<2xi8>
+  func.return %high : vector<2xi8>
+}
+
+// ====
+
+func.def @dynamic_slice_rejected(%offset: index, %values: vector<4xi32>) -> (vector<2xi32>) {
+  %middle = vector.slice %values[%offset] : vector<4xi32> -> vector<2xi32>
+  func.return %middle : vector<2xi32>
+}
+
+// ====
+
+func.def @i8_cross_register_slice_rejected(%bytes: vector<8xi8>) -> (vector<4xi8>) {
+  %middle = vector.slice %bytes[2] : vector<8xi8> -> vector<4xi8>
+  func.return %middle : vector<4xi8>
+}

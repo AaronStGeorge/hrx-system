@@ -1,13 +1,15 @@
-// RUN: emit source-low output=low
-target.profile @gfx11_slice_target preset("amdgpu-gfx11")
+// TEMPLATE: loom/src/loom/test/corpus/source_low/vector_slice.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-func.def target(@gfx11_slice_target) @i32x4_slice_middle(%values: vector<4xi32>) -> (vector<2xi32>) {
+// ====
+
+func.def @i32x4_slice_middle(%values: vector<4xi32>) -> (vector<2xi32>) {
   %middle = vector.slice %values[1] : vector<4xi32> -> vector<2xi32>
   func.return %middle : vector<2xi32>
 }
 
 // ----
-low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i32x4_slice_middle(%values: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32x4_slice_middle(%values: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
   %5 = slice %values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %6 = slice %values[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %middle = concat(%5, %6) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
@@ -15,50 +17,42 @@ low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i32x4_slice_middle(%va
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_slice_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_slice_target) @i8x4_slice_low_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
+func.def @i8x4_slice_low_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
   %low = vector.slice %bytes[0] : vector<4xi8> -> vector<2xi8>
   func.return %low : vector<2xi8>
 }
 
 // ----
-low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i8x4_slice_low_half(%low: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i8x4_slice_low_half(%low: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   return %low
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_slice_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_slice_target) @i8x4_slice_high_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
+func.def @i8x4_slice_high_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
   %high = vector.slice %bytes[2] : vector<4xi8> -> vector<2xi8>
   func.return %high : vector<2xi8>
 }
 
 // ----
-low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i8x4_slice_high_half(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i8x4_slice_high_half(%bytes: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 16
   %high = v_lshrrev_b32 %5, %bytes
   return %high
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_slice_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_slice_target) @dynamic_slice_rejected(%offset: index, %values: vector<4xi32>) -> (vector<2xi32>) {
+func.def @dynamic_slice_rejected(%offset: index, %values: vector<4xi32>) -> (vector<2xi32>) {
   // ERROR@+1: BACKEND/001 "AMDGPU vector.slice currently requires static rank-1"
   %middle = vector.slice %values[%offset] : vector<4xi32> -> vector<2xi32>
   func.return %middle : vector<2xi32>
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_slice_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_slice_target) @i8_cross_register_slice_rejected(%bytes: vector<8xi8>) -> (vector<4xi8>) {
+func.def @i8_cross_register_slice_rejected(%bytes: vector<8xi8>) -> (vector<4xi8>) {
   // ERROR@+1: BACKEND/001 "packed integer bit windows contained within each selected 32-bit register"
   %middle = vector.slice %bytes[2] : vector<8xi8> -> vector<4xi8>
   func.return %middle : vector<4xi8>

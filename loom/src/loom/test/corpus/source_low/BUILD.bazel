@@ -16,6 +16,7 @@ exports_files([
     "numeric_conversion.loom-test",
     "vector_bitcast.loom-test",
     "vector_mask_select.loom-test",
+    "vector_slice.loom-test",
     "vector_v16.loom-test",
     "vector_v4.loom-test",
 ])
@@ -26,6 +27,7 @@ loom_check_test_suite(
         "numeric_conversion.loom-test",
         "vector_bitcast.loom-test",
         "vector_mask_select.loom-test",
+        "vector_slice.loom-test",
         "vector_v16.loom-test",
         "vector_v4.loom-test",
     ],

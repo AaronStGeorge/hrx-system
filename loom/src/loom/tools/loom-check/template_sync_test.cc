@@ -71,15 +71,20 @@ TEST_F(TemplateSyncTest, UsesTemplateCasesAndTargetPreamble) {
   IREE_ASSERT_OK(Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
+      "\n"
       "// ====\n",
       "// RUN: roundtrip\n"
+      "\n"
       "// ====\n"
+      "\n"
       "func.def @alpha() {\n"
       "}\n"
       "\n"
       "// ----\n"
       "ignored expected\n"
+      "\n"
       "// ====\n"
+      "\n"
       "// RUN: verify\n"
       "func.def @beta() {\n"
       "}\n",
@@ -104,7 +109,9 @@ TEST_F(TemplateSyncTest, PreservesMatchingTargetEvidenceAndDirectives) {
   IREE_ASSERT_OK(Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
+      "\n"
       "// ====\n"
+      "\n"
       "// REQUIRES: fake-target\n"
       "// XFAIL: pending target support\n"
       "// ERROR@+1: \"unsupported\"\n"
@@ -113,17 +120,23 @@ TEST_F(TemplateSyncTest, PreservesMatchingTargetEvidenceAndDirectives) {
       "\n"
       "// ----\n"
       "old target evidence\n"
+      "\n"
       "// ====\n"
+      "\n"
       "func.def @stale() {\n"
       "}\n"
       "\n"
       "// ----\n"
       "stale target evidence\n",
       "// RUN: roundtrip\n"
+      "\n"
       "// ====\n"
+      "\n"
       "func.def @alpha() {\n"
       "}\n"
+      "\n"
       "// ====\n"
+      "\n"
       "func.def @beta() {\n"
       "}\n",
       &result, &changed));
@@ -139,16 +152,82 @@ TEST_F(TemplateSyncTest, PreservesMatchingTargetEvidenceAndDirectives) {
   EXPECT_EQ(result.find("stale target evidence"), std::string::npos);
 }
 
+TEST_F(TemplateSyncTest, PreservesTargetAnnotationsAtAnchoredInputLines) {
+  std::string result;
+  bool changed = false;
+  IREE_ASSERT_OK(Build(
+      "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
+      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "\n"
+      "// ====\n"
+      "\n"
+      "func.def @alpha(%value: i32) -> (i32) {\n"
+      "  // ERROR@+1: \"unsupported\"\n"
+      "  %zero = scalar.constant 0 : i32\n"
+      "  %result = scalar.addi %value, %zero : i32\n"
+      "  func.return %result : i32\n"
+      "}\n",
+      "// RUN: roundtrip\n"
+      "\n"
+      "// ====\n"
+      "\n"
+      "func.def @alpha(%value: i32) -> (i32) {\n"
+      "  %zero = scalar.constant 0 : i32\n"
+      "  %result = scalar.addi %value, %zero : i32\n"
+      "  func.return %result : i32\n"
+      "}\n",
+      &result, &changed));
+
+  EXPECT_FALSE(changed);
+  EXPECT_NE(result.find("  // ERROR@+1: \"unsupported\"\n"
+                        "  %zero = scalar.constant 0 : i32\n"),
+            std::string::npos);
+}
+
+TEST_F(TemplateSyncTest, PreservesAnnotationLineOccurrence) {
+  const char* target_source =
+      "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
+      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "\n"
+      "// ====\n"
+      "\n"
+      "func.def @alpha() {\n"
+      "  func.return\n"
+      "  // ERROR@+1: \"second return\"\n"
+      "  func.return\n"
+      "}\n";
+  const char* template_source =
+      "// RUN: roundtrip\n"
+      "\n"
+      "// ====\n"
+      "\n"
+      "func.def @alpha() {\n"
+      "  func.return\n"
+      "  func.return\n"
+      "}\n";
+
+  std::string result;
+  bool changed = true;
+  IREE_ASSERT_OK(Build(target_source, template_source, &result, &changed));
+
+  EXPECT_FALSE(changed);
+  EXPECT_EQ(result, target_source);
+}
+
 TEST_F(TemplateSyncTest, ReportsUnchangedWhenConcreteFileIsCurrent) {
   const char* target_source =
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
+      "\n"
       "// ====\n"
+      "\n"
       "func.def @alpha() {\n"
       "}\n";
   const char* template_source =
       "// RUN: roundtrip\n"
+      "\n"
       "// ====\n"
+      "\n"
       "func.def @alpha() {\n"
       "}\n";
 
@@ -166,12 +245,16 @@ TEST_F(TemplateSyncTest, RejectsTargetCaseRunDirectives) {
   iree_status_t status = Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
+      "\n"
       "// ====\n"
+      "\n"
       "// RUN: verify\n"
       "func.def @alpha() {\n"
       "}\n",
       "// RUN: roundtrip\n"
+      "\n"
       "// ====\n"
+      "\n"
       "func.def @alpha() {\n"
       "}\n",
       &result, &changed);
@@ -185,6 +268,7 @@ TEST_F(TemplateSyncTest, RejectsEmptyTemplate) {
   iree_status_t status = Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
+      "\n"
       "// ====\n",
       "// RUN: roundtrip\n", &result, &changed);
 
@@ -197,12 +281,17 @@ TEST_F(TemplateSyncTest, RejectsDuplicateTemplateFunctions) {
   iree_status_t status = Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
+      "\n"
       "// ====\n",
       "// RUN: roundtrip\n"
+      "\n"
       "// ====\n"
+      "\n"
       "func.def @alpha() {\n"
       "}\n"
+      "\n"
       "// ====\n"
+      "\n"
       "func.def @alpha() {\n"
       "}\n",
       &result, &changed);

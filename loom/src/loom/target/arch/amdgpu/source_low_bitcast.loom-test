@@ -1,6 +1,8 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/vector_bitcast.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+
 // ====
+
 func.def @i32_to_i8x4_bitcast(%word: vector<1xi32>) -> (vector<4xi8>) {
   %bytes = vector.bitcast %word : vector<1xi32> to vector<4xi8>
   func.return %bytes : vector<4xi8>
@@ -12,6 +14,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_to_i8x4_bitcast(%bytes: reg<am
 }
 
 // ====
+
 func.def @i32x2_to_i8x8_bitcast(%words: vector<2xi32>) -> (vector<8xi8>) {
   %bytes = vector.bitcast %words : vector<2xi32> to vector<8xi8>
   func.return %bytes : vector<8xi8>
@@ -23,6 +26,7 @@ low.func.def target(@target) abi(hal_kernel) @i32x2_to_i8x8_bitcast(%bytes: reg<
 }
 
 // ====
+
 func.def @f32x2_to_i32x2_bitcast(%floats: vector<2xf32>) -> (vector<2xi32>) {
   %bits = vector.bitcast %floats : vector<2xf32> to vector<2xi32>
   func.return %bits : vector<2xi32>
