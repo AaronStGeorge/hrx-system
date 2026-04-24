@@ -69,6 +69,32 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "policy",
+    hdrs = ["policy.h"],
+)
+
+loom_cc_library(
+    name = "contract",
+    srcs = ["contract.c"],
+    hdrs = ["contract.h"],
+    deps = [
+        ":policy",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "contract_test",
+    srcs = ["contract_test.cc"],
+    deps = [
+        ":contract",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "liveness",
     srcs = ["liveness.c"],
     hdrs = ["liveness.h"],

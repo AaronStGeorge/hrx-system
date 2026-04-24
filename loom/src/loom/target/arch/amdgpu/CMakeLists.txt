@@ -1232,6 +1232,19 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    matrix_contract_projection
+  HDRS
+    "matrix_contract_projection.h"
+  SRCS
+    "matrix_contract_projection.c"
+  DEPS
+    ::matrix_contract
+    loom::src::loom::analysis::contract
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     matrix_contract_test
@@ -1240,6 +1253,18 @@ loom_cc_test(
   DEPS
     ::descriptor_ids
     ::matrix_contract
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    matrix_contract_projection_test
+  SRCS
+    "matrix_contract_projection_test.cc"
+  DEPS
+    ::matrix_contract
+    ::matrix_contract_projection
     iree::testing::gtest
     iree::testing::gtest_main
 )

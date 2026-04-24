@@ -39,6 +39,7 @@ loom_assert_no_dependencies(
         ":avx512_packed_dot_descriptors",
         ":low_registry",
         ":packed_dot_contract",
+        ":packed_dot_contract_projection",
         ":packed_dot_descriptors",
         ":packed_dot_vector",
     ],
@@ -52,6 +53,7 @@ loom_assert_no_dependencies(
         ":feature_bits",
         ":low_registry",
         ":packed_dot_contract",
+        ":packed_dot_contract_projection",
         ":packed_dot_descriptors",
     ],
     targets = [
@@ -302,11 +304,32 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "packed_dot_contract_projection",
+    srcs = ["packed_dot_contract_projection.c"],
+    hdrs = ["packed_dot_contract_projection.h"],
+    deps = [
+        ":packed_dot_contract",
+        "//loom/src/loom/analysis:contract",
+    ],
+)
+
 loom_cc_test(
     name = "packed_dot_contract_test",
     srcs = ["packed_dot_contract_test.cc"],
     deps = [
         ":packed_dot_contract",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "packed_dot_contract_projection_test",
+    srcs = ["packed_dot_contract_projection_test.cc"],
+    deps = [
+        ":packed_dot_contract",
+        ":packed_dot_contract_projection",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

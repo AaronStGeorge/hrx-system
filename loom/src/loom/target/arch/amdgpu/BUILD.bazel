@@ -60,6 +60,7 @@ loom_assert_no_dependencies(
         ":hal_resource_materialization",
         ":low_registry",
         ":matrix_contract",
+        ":matrix_contract_projection",
         ":matrix_facts",
         ":occupancy",
         ":packet_diagnostics",
@@ -101,6 +102,7 @@ loom_assert_no_dependencies(
         ":gfx950_descriptors",
         ":low_registry",
         ":matrix_contract",
+        ":matrix_contract_projection",
         ":packet_diagnostics",
     ],
     targets = [
@@ -1043,12 +1045,33 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "matrix_contract_projection",
+    srcs = ["matrix_contract_projection.c"],
+    hdrs = ["matrix_contract_projection.h"],
+    deps = [
+        ":matrix_contract",
+        "//loom/src/loom/analysis:contract",
+    ],
+)
+
 loom_cc_test(
     name = "matrix_contract_test",
     srcs = ["matrix_contract_test.cc"],
     deps = [
         ":descriptor_ids",
         ":matrix_contract",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "matrix_contract_projection_test",
+    srcs = ["matrix_contract_projection_test.cc"],
+    deps = [
+        ":matrix_contract",
+        ":matrix_contract_projection",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

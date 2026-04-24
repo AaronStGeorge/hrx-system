@@ -76,6 +76,41 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    policy
+  HDRS
+    "policy.h"
+  DEPS
+
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    contract
+  HDRS
+    "contract.h"
+  SRCS
+    "contract.c"
+  DEPS
+    ::policy
+    iree::base
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    contract_test
+  SRCS
+    "contract_test.cc"
+  DEPS
+    ::contract
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     liveness
   HDRS
     "liveness.h"

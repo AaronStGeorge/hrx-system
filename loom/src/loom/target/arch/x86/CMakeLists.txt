@@ -290,6 +290,19 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    packed_dot_contract_projection
+  HDRS
+    "packed_dot_contract_projection.h"
+  SRCS
+    "packed_dot_contract_projection.c"
+  DEPS
+    ::packed_dot_contract
+    loom::src::loom::analysis::contract
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     packed_dot_contract_test
@@ -297,6 +310,18 @@ loom_cc_test(
     "packed_dot_contract_test.cc"
   DEPS
     ::packed_dot_contract
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    packed_dot_contract_projection_test
+  SRCS
+    "packed_dot_contract_projection_test.cc"
+  DEPS
+    ::packed_dot_contract
+    ::packed_dot_contract_projection
     iree::testing::gtest
     iree::testing::gtest_main
 )
