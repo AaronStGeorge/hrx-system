@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 func.def @cache_system_bypass_load_device_writeback_store(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

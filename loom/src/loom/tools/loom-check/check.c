@@ -1120,6 +1120,71 @@ static iree_status_t loom_check_parse_template_directive_from_preamble(
   return iree_ok_status();
 }
 
+static bool loom_check_line_is_file_preamble_comment(
+    iree_string_view_t trimmed) {
+  return iree_string_view_starts_with(trimmed, iree_make_cstring_view("//")) &&
+         !loom_check_is_annotation_line(trimmed) &&
+         !loom_check_is_expected_separator(trimmed) &&
+         !loom_check_is_case_separator(trimmed);
+}
+
+// Finds the leading file preamble used by template-synchronized files.
+//
+// Ordinary .loom-test files treat leading RUN/REQUIRES directives as part of
+// the first case. A TEMPLATE directive is different: it is file metadata for
+// update tooling, so the leading directive/comment block containing it is a
+// real file preamble. The preamble ends at the first blank line after the
+// TEMPLATE block, the first case separator, or the first IR/annotation line.
+static void loom_check_find_template_preamble_prefix(
+    iree_string_view_t source, loom_check_source_range_t* out_range) {
+  *out_range = loom_check_source_range_empty();
+  if (iree_string_view_is_empty(source)) {
+    return;
+  }
+
+  const char* source_end = source.data + source.size;
+  const char* preamble_end = source.data;
+  bool saw_template = false;
+  iree_string_view_t scanner = source;
+  while (!iree_string_view_is_empty(scanner)) {
+    iree_string_view_t line = loom_check_consume_line(&scanner);
+    iree_string_view_t trimmed = iree_string_view_trim(line);
+    const char* next_line = loom_check_scanner_end(scanner, source_end);
+
+    if (iree_string_view_is_empty(trimmed)) {
+      preamble_end = next_line;
+      if (saw_template) break;
+      continue;
+    }
+
+    if (loom_check_is_case_separator(trimmed)) {
+      break;
+    }
+
+    if (loom_check_is_template_directive(trimmed)) {
+      saw_template = true;
+      preamble_end = next_line;
+      continue;
+    }
+
+    if (loom_check_is_run_directive(trimmed) ||
+        loom_check_is_requires_directive(trimmed) ||
+        loom_check_line_is_file_preamble_comment(trimmed)) {
+      preamble_end = next_line;
+      continue;
+    }
+
+    break;
+  }
+
+  if (saw_template) {
+    *out_range = (loom_check_source_range_t){
+        .start_byte = 0,
+        .end_byte = (iree_host_size_t)(preamble_end - source.data),
+    };
+  }
+}
+
 iree_status_t loom_check_parse(iree_string_view_t source,
                                iree_arena_allocator_t* arena,
                                loom_check_file_t* out_file) {
@@ -1130,11 +1195,59 @@ iree_status_t loom_check_parse(iree_string_view_t source,
   static const char kEmptySource[] = "";
   if (!source.data) source.data = kEmptySource;
 
+  out_file->default_mode = LOOM_CHECK_MODE_ROUNDTRIP;
+  out_file->default_pipeline = iree_string_view_empty();
+  out_file->default_format_target = iree_string_view_empty();
+  out_file->default_emit_target = iree_string_view_empty();
+  out_file->default_requirements = NULL;
+  out_file->default_requirement_count = 0;
+
+  loom_check_source_range_t template_preamble_range =
+      loom_check_source_range_empty();
+  loom_check_find_template_preamble_prefix(source, &template_preamble_range);
+  if (!loom_check_source_range_is_empty(template_preamble_range)) {
+    iree_string_view_t preamble_text = iree_string_view_substr(
+        source, template_preamble_range.start_byte,
+        template_preamble_range.end_byte - template_preamble_range.start_byte);
+    IREE_RETURN_IF_ERROR(loom_check_parse_template_directive_from_preamble(
+        source.data, preamble_text, out_file));
+
+    loom_check_case_t preamble_case;
+    IREE_RETURN_IF_ERROR(loom_check_parse_case_sections(
+        source.data, preamble_text, loom_check_source_range_empty(),
+        &preamble_case, /*allow_file_directives=*/true, arena));
+    if (!iree_string_view_is_empty(
+            iree_string_view_trim(preamble_case.input))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "TEMPLATE directive must be in a pure file preamble");
+    }
+    if (preamble_case.has_run_directive) {
+      out_file->default_mode = preamble_case.mode;
+      out_file->default_pipeline = preamble_case.pipeline;
+      out_file->default_format_target = preamble_case.format_target;
+      out_file->default_emit_target = preamble_case.emit_target;
+    }
+    if (preamble_case.has_requires_directive) {
+      out_file->default_requirements = preamble_case.requirements;
+      out_file->default_requirement_count = preamble_case.requirement_count;
+    }
+  }
+
+  iree_string_view_t case_source = iree_string_view_substr(
+      source, template_preamble_range.end_byte, IREE_HOST_SIZE_MAX);
+  if (!loom_check_source_range_is_empty(template_preamble_range) &&
+      iree_string_view_is_empty(iree_string_view_trim(case_source))) {
+    out_file->cases = NULL;
+    out_file->case_count = 0;
+    return iree_ok_status();
+  }
+
   // Count case separators to determine how many cases the file contains.
   // The first case starts at byte 0 (no leading separator needed), so
   // N separators means N+1 cases.
   iree_host_size_t case_count = 1;
-  iree_string_view_t scanner = source;
+  iree_string_view_t scanner = case_source;
   while (!iree_string_view_is_empty(scanner)) {
     iree_string_view_t line = loom_check_consume_line(&scanner);
     if (loom_check_is_case_separator(line)) {
@@ -1148,12 +1261,12 @@ iree_status_t loom_check_parse(iree_string_view_t source,
       arena, case_count, sizeof(loom_check_case_boundary_t),
       (void**)&boundaries));
 
-  boundaries[0].start = source.data;
+  boundaries[0].start = case_source.data;
   boundaries[0].separator_range = loom_check_source_range_empty();
   iree_host_size_t case_index = 0;
   const char* source_end = source.data + source.size;
 
-  scanner = source;
+  scanner = case_source;
   while (!iree_string_view_is_empty(scanner)) {
     const char* line_start = scanner.data;
     iree_string_view_t line = loom_check_consume_line(&scanner);
@@ -1173,24 +1286,17 @@ iree_status_t loom_check_parse(iree_string_view_t source,
   boundaries[case_index].length =
       (iree_host_size_t)(source_end - boundaries[case_index].start);
 
-  // When the file has separators, boundary 0 is the preamble — the
-  // text before the first // ====. If the preamble has no IR body
-  // (only directives and comments), it is dropped from the case list
-  // and its RUN directive (if any) becomes the file-level default.
-  // If the preamble has IR body content, it becomes case 0 and also
-  // provides the file default.
+  // Legacy files may still have a separator after a pure leading preamble.
+  // Boundary 0 is the text before that first // ====. If it has no IR body
+  // (only directives and comments), it is dropped from the case list and its
+  // RUN directive (if any) becomes the file-level default. If the preamble has
+  // IR body content, it becomes case 0 and also provides the file default.
   //
-  // When the file has no separators, there is one boundary (the whole
-  // file) and no preamble concept — it is parsed as a single case.
-  out_file->default_mode = LOOM_CHECK_MODE_ROUNDTRIP;
-  out_file->default_pipeline = iree_string_view_empty();
-  out_file->default_format_target = iree_string_view_empty();
-  out_file->default_emit_target = iree_string_view_empty();
-  out_file->default_requirements = NULL;
-  out_file->default_requirement_count = 0;
-
+  // New template-synchronized files use a real leading file preamble without a
+  // separator, handled above by slicing |case_source| past that preamble.
   iree_host_size_t first_case = 0;
-  if (case_count > 1) {
+  if (case_count > 1 &&
+      loom_check_source_range_is_empty(template_preamble_range)) {
     // Parse boundary 0 to determine whether it is a pure preamble
     // (directives only, no IR body) or a real case with content.
     iree_string_view_t preamble_text = {

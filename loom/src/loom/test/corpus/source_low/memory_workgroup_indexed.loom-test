@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 func.def @workgroup_memory_workitem_x_b32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

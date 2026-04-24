@@ -186,8 +186,6 @@ TEST_F(CheckParseTest, TemplateDirectiveInPreamble) {
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: verify\n"
       "\n"
-      "// ====\n"
-      "\n"
       "func.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 1);
   EXPECT_TRUE(file_.has_template_directive);
@@ -200,32 +198,41 @@ TEST_F(CheckParseTest, TemplateDirectiveInPreamble) {
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test");
   EXPECT_EQ(file_.default_mode, LOOM_CHECK_MODE_VERIFY);
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_VERIFY);
+  EXPECT_TRUE(loom_check_source_range_is_empty(file_.cases[0].separator_range));
+}
+
+TEST_F(CheckParseTest, TemplateDirectiveOnlyPreambleHasNoCases) {
+  IREE_ASSERT_OK(Parse(
+      "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
+      "// RUN: verify\n"
+      "\n"));
+  EXPECT_TRUE(file_.has_template_directive);
+  EXPECT_EQ(file_.default_mode, LOOM_CHECK_MODE_VERIFY);
+  EXPECT_EQ(file_.case_count, 0);
 }
 
 TEST_F(CheckParseTest, TemplateDirectiveRequiresPurePreamble) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      Parse("// TEMPLATE: "
+      Parse("func.def @f() {}\n"
+            "// TEMPLATE: "
             "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
-            "func.def @f() {}\n"
-            "\n"
-            "// ====\n"
-            "\n"
             "func.def @g() {}\n"));
 }
 
-TEST_F(CheckParseTest, TemplateDirectiveWithoutCaseSeparatorErrors) {
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
+TEST_F(CheckParseTest, TemplateDirectiveDoesNotRequireCaseSeparator) {
+  IREE_ASSERT_OK(
       Parse("// TEMPLATE: "
             "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
             "func.def @f() {}\n"));
+  ASSERT_EQ(file_.case_count, 1);
+  EXPECT_TRUE(file_.has_template_directive);
 }
 
 TEST_F(CheckParseTest, TemplateDirectiveInCaseErrors) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      Parse("// RUN: roundtrip\n"
+      Parse("func.def @first() {}\n"
             "\n"
             "// ====\n"
             "\n"
@@ -237,24 +244,18 @@ TEST_F(CheckParseTest, TemplateDirectiveInCaseErrors) {
 TEST_F(CheckParseTest, TemplateDirectiveEmptyPathErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse("// TEMPLATE: \n"
-                              "\n"
-                              "// ====\n"
                               "func.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, TemplateDirectiveAbsolutePathErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse("// TEMPLATE: /tmp/corpus.loom-test\n"
-                              "\n"
-                              "// ====\n"
                               "func.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, TemplateDirectiveParentSegmentErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse("// TEMPLATE: runtime/src/../corpus.loom-test\n"
-                              "\n"
-                              "// ====\n"
                               "func.def @f() {}\n"));
 }
 
@@ -266,7 +267,6 @@ TEST_F(CheckParseTest, MultipleTemplateDirectivesError) {
           "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
           "// TEMPLATE: loom/src/loom/test/corpus/vector/memory.loom-test\n"
           "\n"
-          "// ====\n"
           "func.def @f() {}\n"));
 }
 

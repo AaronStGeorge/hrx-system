@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 func.def @lds_b32_diagnostics(%output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

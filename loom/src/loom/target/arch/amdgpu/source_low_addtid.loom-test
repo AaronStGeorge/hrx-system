@@ -1,8 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_workgroup_indexed.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-// ====
-
 func.def @workgroup_memory_workitem_x_b32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

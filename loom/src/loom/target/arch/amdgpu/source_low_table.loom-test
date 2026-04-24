@@ -1,8 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/lookup_table.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-// ====
-
 func.def @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

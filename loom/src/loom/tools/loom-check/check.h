@@ -15,7 +15,6 @@
 //
 //   // RUN: roundtrip
 //   // TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test
-//   // ====
 //   <input IR>
 //   // ----
 //   <expected output>
@@ -63,22 +62,24 @@
 //   // ----                 Input/expected separator within a case.
 //
 // RUN inheritance:
-//   A // RUN: directive in the preamble (text before the first // ====)
-//   sets the file-level default mode. Cases without their own // RUN:
-//   inherit from the file default. Cases with their own // RUN: override
-//   it. When no preamble // RUN: exists, the default is roundtrip.
+//   A // RUN: directive in a template file preamble or in the first case sets
+//   the file-level default mode. Cases without their own // RUN: inherit from
+//   the file default. Cases with their own // RUN: override it. When no default
+//   // RUN: exists, the default is roundtrip.
 //
 // REQUIRES inheritance:
-//   A // REQUIRES: directive in the preamble sets file-level default
-//   environment requirements. Every case receives the file defaults,
-//   plus any case-local requirements it declares.
+//   A // REQUIRES: directive in a template file preamble or in the first case
+//   sets file-level default environment requirements. Every case receives the
+//   file defaults, plus any case-local requirements it declares.
 //
 // TEMPLATE:
-//   A // TEMPLATE: directive in the preamble declares a source corpus template
-//   for generated target-specific expectation files. It is metadata for update
-//   tooling, not a linking mechanism and not a case namespace. Individual case
-//   names are the function symbols inside the case IR; // CASE directives are
-//   intentionally unsupported.
+//   A // TEMPLATE: directive in the leading file preamble declares a source
+//   corpus template for generated target-specific expectation files. It is
+//   metadata for update tooling, not a linking mechanism and not a case
+//   namespace. The preamble is the leading directive/comment block containing
+//   TEMPLATE; do not add a // ==== separator before the first real case.
+//   Individual case names are the function symbols inside the case IR;
+//   // CASE directives are intentionally unsupported.
 //
 // Annotations (for verify mode — uppercase to distinguish from comments):
 //   // ERROR: DOMAIN/CODE "substring"
@@ -287,10 +288,8 @@ typedef struct loom_check_file_t {
   // Root-relative corpus template path from // TEMPLATE:.
   iree_string_view_t template_path;
 
-  // File-level default mode from the preamble (text before the first
-  // // ==== separator). Cases without their own // RUN: directive
-  // inherit these values. Defaults to ROUNDTRIP when the preamble
-  // has no // RUN: directive.
+  // File-level default mode inherited by cases without their own // RUN:
+  // directive. Defaults to ROUNDTRIP when no default // RUN: directive exists.
   loom_check_mode_t default_mode;
   iree_string_view_t default_pipeline;
   iree_string_view_t default_format_target;

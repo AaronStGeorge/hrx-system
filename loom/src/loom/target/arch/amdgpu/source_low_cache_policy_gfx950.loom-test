@@ -1,8 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_cache_policy_non_temporal.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx950 output=low
 
-// ====
-
 func.def @cache_device_non_temporal_load_store(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

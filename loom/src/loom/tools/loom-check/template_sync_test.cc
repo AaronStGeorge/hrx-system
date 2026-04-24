@@ -71,11 +71,8 @@ TEST_F(TemplateSyncTest, UsesTemplateCasesAndTargetPreamble) {
   IREE_ASSERT_OK(Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
-      "\n"
-      "// ====\n",
+      "\n",
       "// RUN: roundtrip\n"
-      "\n"
-      "// ====\n"
       "\n"
       "func.def @alpha() {\n"
       "}\n"
@@ -110,8 +107,6 @@ TEST_F(TemplateSyncTest, PreservesMatchingTargetEvidenceAndDirectives) {
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
       "\n"
-      "// ====\n"
-      "\n"
       "// REQUIRES: fake-target\n"
       "// XFAIL: pending target support\n"
       "// ERROR@+1: \"unsupported\"\n"
@@ -129,8 +124,6 @@ TEST_F(TemplateSyncTest, PreservesMatchingTargetEvidenceAndDirectives) {
       "// ----\n"
       "stale target evidence\n",
       "// RUN: roundtrip\n"
-      "\n"
-      "// ====\n"
       "\n"
       "func.def @alpha() {\n"
       "}\n"
@@ -159,8 +152,6 @@ TEST_F(TemplateSyncTest, PreservesTargetAnnotationsAtAnchoredInputLines) {
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
       "\n"
-      "// ====\n"
-      "\n"
       "func.def @alpha(%value: i32) -> (i32) {\n"
       "  // ERROR@+1: \"unsupported\"\n"
       "  %zero = scalar.constant 0 : i32\n"
@@ -168,8 +159,6 @@ TEST_F(TemplateSyncTest, PreservesTargetAnnotationsAtAnchoredInputLines) {
       "  func.return %result : i32\n"
       "}\n",
       "// RUN: roundtrip\n"
-      "\n"
-      "// ====\n"
       "\n"
       "func.def @alpha(%value: i32) -> (i32) {\n"
       "  %zero = scalar.constant 0 : i32\n"
@@ -189,8 +178,6 @@ TEST_F(TemplateSyncTest, PreservesAnnotationLineOccurrence) {
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
       "\n"
-      "// ====\n"
-      "\n"
       "func.def @alpha() {\n"
       "  func.return\n"
       "  // ERROR@+1: \"second return\"\n"
@@ -198,8 +185,6 @@ TEST_F(TemplateSyncTest, PreservesAnnotationLineOccurrence) {
       "}\n";
   const char* template_source =
       "// RUN: roundtrip\n"
-      "\n"
-      "// ====\n"
       "\n"
       "func.def @alpha() {\n"
       "  func.return\n"
@@ -219,14 +204,10 @@ TEST_F(TemplateSyncTest, ReportsUnchangedWhenConcreteFileIsCurrent) {
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
       "\n"
-      "// ====\n"
-      "\n"
       "func.def @alpha() {\n"
       "}\n";
   const char* template_source =
       "// RUN: roundtrip\n"
-      "\n"
-      "// ====\n"
       "\n"
       "func.def @alpha() {\n"
       "}\n";
@@ -246,14 +227,10 @@ TEST_F(TemplateSyncTest, RejectsTargetCaseRunDirectives) {
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
       "\n"
-      "// ====\n"
-      "\n"
       "// RUN: verify\n"
       "func.def @alpha() {\n"
       "}\n",
       "// RUN: roundtrip\n"
-      "\n"
-      "// ====\n"
       "\n"
       "func.def @alpha() {\n"
       "}\n",
@@ -268,8 +245,7 @@ TEST_F(TemplateSyncTest, RejectsEmptyTemplate) {
   iree_status_t status = Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
-      "\n"
-      "// ====\n",
+      "\n",
       "// RUN: roundtrip\n", &result, &changed);
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
@@ -281,11 +257,8 @@ TEST_F(TemplateSyncTest, RejectsDuplicateTemplateFunctions) {
   iree_status_t status = Build(
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
       "// RUN: emit source-low target-preset=test-low output=module\n"
-      "\n"
-      "// ====\n",
+      "\n",
       "// RUN: roundtrip\n"
-      "\n"
-      "// ====\n"
       "\n"
       "func.def @alpha() {\n"
       "}\n"

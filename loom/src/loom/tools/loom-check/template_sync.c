@@ -488,12 +488,14 @@ static iree_status_t loom_check_template_sync_append_input_with_annotations(
 
 static iree_status_t loom_check_template_sync_append_case(
     iree_string_view_t target_source, const loom_check_case_t* template_case,
-    const loom_check_case_t* target_case, iree_arena_allocator_t* arena,
-    iree_string_builder_t* builder) {
+    const loom_check_case_t* target_case, bool is_first_case,
+    iree_arena_allocator_t* arena, iree_string_builder_t* builder) {
   IREE_RETURN_IF_ERROR(
       loom_check_template_sync_ensure_trailing_blank_line(builder));
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(builder, "// ====\n\n"));
+  if (!is_first_case) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(builder, "// ====\n\n"));
+  }
   IREE_RETURN_IF_ERROR(loom_check_template_sync_append_target_directives(
       target_source, target_case, builder));
   IREE_RETURN_IF_ERROR(loom_check_template_sync_append_input_with_annotations(
@@ -542,12 +544,6 @@ iree_status_t loom_check_template_sync_build_source(
         IREE_STATUS_INVALID_ARGUMENT,
         "template synchronization requires a TEMPLATE directive");
   }
-  if (target_file->case_count == 0 ||
-      loom_check_source_range_is_empty(target_file->cases[0].separator_range)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "template synchronization requires a pure preamble "
-                            "followed by // ====");
-  }
 
   loom_check_file_t template_file = {0};
   IREE_RETURN_IF_ERROR(loom_check_template_sync_parse_template(
@@ -573,10 +569,15 @@ iree_status_t loom_check_template_sync_build_source(
       /*allow_empty_cases=*/true, /*reject_case_run_directives=*/true,
       &target_cases, &target_case_count));
 
-  const loom_check_source_range_t preamble_range = {
-      .start_byte = 0,
-      .end_byte = target_file->cases[0].separator_range.start_byte,
-  };
+  iree_host_size_t preamble_end = target_source.size;
+  if (target_file->case_count > 0) {
+    const loom_check_case_t* first_case = &target_file->cases[0];
+    preamble_end = loom_check_source_range_is_empty(first_case->separator_range)
+                       ? first_case->source_range.start_byte
+                       : first_case->separator_range.start_byte;
+  }
+  const loom_check_source_range_t preamble_range = {.start_byte = 0,
+                                                    .end_byte = preamble_end};
   IREE_RETURN_IF_ERROR(loom_check_template_sync_append_source_range(
       target_source, preamble_range, new_source));
 
@@ -587,7 +588,8 @@ iree_status_t loom_check_template_sync_build_source(
                                            template_record->key);
     IREE_RETURN_IF_ERROR(loom_check_template_sync_append_case(
         target_source, template_record->test_case,
-        target_record ? target_record->test_case : NULL, arena, new_source));
+        target_record ? target_record->test_case : NULL,
+        /*is_first_case=*/i == 0, arena, new_source));
   }
 
   iree_string_view_t rebuilt_source = iree_string_builder_view(new_source);

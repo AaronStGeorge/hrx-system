@@ -1,8 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_conversion.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-// ====
-
 func.def @vector_sitofp_i32x2(%input: vector<2xi32>, %scale: vector<2xf32>) -> (vector<2xf32>) {
   %converted = vector.sitofp %input : vector<2xi32> to vector<2xf32>
   %scaled = vector.mulf %converted, %scale : vector<2xf32>

@@ -1,8 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/index_addressing.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-// ====
-
 func.def @index_madd_global_b32(%input: buffer, %output: buffer) {
   %x = kernel.workitem.id<x> : index
   %y = kernel.workitem.id<y> : index

@@ -1,8 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/packed_bitfield.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-// ====
-
 func.def @i32_bitfield_extractu(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<1xi32, #dense>

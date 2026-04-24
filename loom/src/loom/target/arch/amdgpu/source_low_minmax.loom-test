@@ -1,8 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_minmax.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-// ====
-
 func.def @scalar_f32_minnum_maxnum(%lhs: f32, %rhs: f32) -> (f32) {
   %min = scalar.minnumf %lhs, %rhs : f32
   %max = scalar.maxnumf %lhs, %rhs : f32

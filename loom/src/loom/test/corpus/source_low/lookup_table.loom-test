@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 func.def @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

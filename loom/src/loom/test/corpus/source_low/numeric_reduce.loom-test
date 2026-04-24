@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 func.def @i32_reduce_add(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
