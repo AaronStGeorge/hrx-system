@@ -586,6 +586,7 @@ loom_cc_library(
         "lower_reduce_rules.c",
         "lower_structural.c",
         "lower_support.c",
+        "lower_sync.c",
         "lower_table.c",
         "lower_values.c",
     ],
@@ -835,6 +836,7 @@ loom_check_test_suite(
         "source_low_reduce.loom-test",
         "source_low_scalar_i32.loom-test",
         "source_low_slice.loom-test",
+        "source_low_sync.loom-test",
         "source_low_table.loom-test",
     ],
     data = [
@@ -858,6 +860,7 @@ loom_check_test_suite(
         "//loom/src/loom/test/corpus/source_low:packed_bitunpack.loom-test",
         "//loom/src/loom/test/corpus/source_low:packed_dot_i4_mixed.loom-test",
         "//loom/src/loom/test/corpus/source_low:packed_dot_integer.loom-test",
+        "//loom/src/loom/test/corpus/source_low:sync_barrier.loom-test",
         "//loom/src/loom/test/corpus/source_low:vector_bitcast.loom-test",
         "//loom/src/loom/test/corpus/source_low:vector_dot.loom-test",
         "//loom/src/loom/test/corpus/source_low:vector_mask_select.loom-test",

@@ -1,0 +1,13 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/sync_barrier.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+
+func.def @workgroup_barrier() {
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @workgroup_barrier() asm<amdgpu.gfx11.core> {
+  s_barrier
+  return
+}

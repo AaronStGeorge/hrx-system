@@ -474,6 +474,7 @@ loom_cc_library(
     "lower_reduce_rules.c"
     "lower_structural.c"
     "lower_support.c"
+    "lower_sync.c"
     "lower_table.c"
     "lower_values.c"
   DEPS
@@ -978,6 +979,17 @@ iree_executable_test(
     "source_low_slice"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_slice.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_sync"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_sync.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

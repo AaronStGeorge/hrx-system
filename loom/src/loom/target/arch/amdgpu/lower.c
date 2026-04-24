@@ -41,6 +41,9 @@ static iree_status_t loom_amdgpu_select_plan_id(
     case LOOM_OP_KERNEL_WORKITEM_ID:
     case LOOM_OP_KERNEL_WORKGROUP_ID:
       return loom_amdgpu_select_preamble_plan(context, source_op, out_plan);
+    case LOOM_OP_KERNEL_BARRIER:
+      return loom_amdgpu_select_kernel_barrier_plan(context, source_op,
+                                                    out_plan);
     case LOOM_OP_VECTOR_CMPI:
       LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_vector_compare_plan_t,
                               loom_amdgpu_select_vector_cmpi_plan);
@@ -118,6 +121,8 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
     case LOOM_OP_KERNEL_WORKITEM_ID:
     case LOOM_OP_KERNEL_WORKGROUP_ID:
       return loom_amdgpu_lower_preamble_op(context, source_op);
+    case LOOM_OP_KERNEL_BARRIER:
+      return loom_amdgpu_lower_kernel_barrier(context, source_op);
     case LOOM_OP_VECTOR_CMPI:
       return loom_amdgpu_lower_vector_cmpi(
           context, source_op,
@@ -190,6 +195,9 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
     case LOOM_OP_BUFFER_VIEW:
       return loom_amdgpu_low_legality_verify_buffer(provider, context, op,
                                                     out_handled);
+    case LOOM_OP_KERNEL_BARRIER:
+      return loom_amdgpu_low_legality_verify_kernel_barrier(provider, context,
+                                                            op, out_handled);
     case LOOM_OP_VECTOR_BITPACK:
     case LOOM_OP_VECTOR_BITUNPACKS:
     case LOOM_OP_VECTOR_BITUNPACKU:
