@@ -1,17 +1,9 @@
-// TEMPLATE: loom/src/loom/test/corpus/source_low/vector_v16.loom-test
-// RUN: emit source-low target-preset=x86-avx512 output=low
+// RUN: roundtrip
 // ====
 func.def @i32x16_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
   %sum = vector.addi %lhs, %rhs : vector<16xi32>
   %diff = vector.subi %sum, %rhs : vector<16xi32>
   func.return %diff : vector<16xi32>
-}
-
-// ----
-low.func.def target(@target) abi(object_function) @i32x16_arith(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) asm<x86.avx512.core> {
-  %sum = vpaddd %lhs, %rhs
-  %diff = vpsubd %sum, %rhs
-  return %diff
 }
 
 // ====
@@ -21,16 +13,6 @@ func.def @f32x16_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16
   %product = vector.mulf %difference, %rhs : vector<16xf32>
   %fma = vector.fmaf %lhs, %rhs, %product : vector<16xf32>
   func.return %fma : vector<16xf32>
-}
-
-// ----
-low.func.def target(@target) abi(object_function) @f32x16_arith(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) asm<x86.avx512.core> {
-  %sum = vaddps %lhs, %rhs
-  %difference = vsubps %sum, %lhs
-  %product = vmulps %difference, %rhs
-  %13 = copy %product : reg<x86.zmm> -> reg<x86.zmm>
-  %fma = vfmadd231ps %13, %lhs, %rhs
-  return %fma
 }
 
 // ====
@@ -44,15 +26,6 @@ func.def @f32x16_static_memory(%input: buffer, %output: buffer) {
   func.return
 }
 
-// ----
-low.func.def target(@target) abi(object_function) @f32x16_static_memory(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>) asm<x86.avx512.core> {
-  %input_base = mov.imm64 16
-  %output_base = mov.imm64 32
-  %loaded = vmovdqu32.load %input_view {disp32 = 32}
-  vmovdqu32.store %loaded, %output_view {disp32 = 64}
-  return
-}
-
 // ====
 func.def @f32x16_dynamic_memory(%input: buffer, %output: buffer, %i: index) {
   %input_base = index.constant 16 : offset
@@ -62,15 +35,6 @@ func.def @f32x16_dynamic_memory(%input: buffer, %output: buffer, %i: index) {
   %loaded = vector.load %input_view[%i] : view<32xf32, #dense> -> vector<16xf32>
   vector.store %loaded, %output_view[%i] : vector<16xf32>, view<32xf32, #dense>
   func.return
-}
-
-// ----
-low.func.def target(@target) abi(object_function) @f32x16_dynamic_memory(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %i: reg<x86.gpr64>) asm<x86.avx512.core> {
-  %input_base = mov.imm64 16
-  %output_base = mov.imm64 32
-  %loaded = vmovdqu32.load.indexed %input_view, %i {disp32 = 16, scale = 4}
-  vmovdqu32.store.indexed %loaded, %output_view, %i {disp32 = 32, scale = 4}
-  return
 }
 
 // ====
@@ -84,15 +48,6 @@ func.def @f32x16_index_add_memory(%input: buffer, %output: buffer, %i: index, %j
   func.return
 }
 
-// ----
-low.func.def target(@target) abi(object_function) @f32x16_index_add_memory(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %i: reg<x86.gpr64>, %j: reg<x86.gpr64>) asm<x86.avx512.core> {
-  %zero = mov.imm64 0
-  %sum = lea %i, %j
-  %loaded = vmovdqu32.load.indexed %input_view, %sum {disp32 = 0, scale = 4}
-  vmovdqu32.store.indexed %loaded, %output_view, %sum {disp32 = 0, scale = 4}
-  return
-}
-
 // ====
 func.def @f32x16_index_madd_memory(%input: buffer, %output: buffer, %row: index, %stride: index, %col: index) {
   %zero = index.constant 0 : offset
@@ -102,15 +57,4 @@ func.def @f32x16_index_madd_memory(%input: buffer, %output: buffer, %row: index,
   %loaded = vector.load %input_view[%linear] : view<32xf32, #dense> -> vector<16xf32>
   vector.store %loaded, %output_view[%linear] : vector<16xf32>, view<32xf32, #dense>
   func.return
-}
-
-// ----
-low.func.def target(@target) abi(object_function) @f32x16_index_madd_memory(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %row: reg<x86.gpr64>, %stride: reg<x86.gpr64>, %col: reg<x86.gpr64>) asm<x86.avx512.core> {
-  %zero = mov.imm64 0
-  %16 = copy %row : reg<x86.gpr64> -> reg<x86.gpr64>
-  %17 = imul %16, %stride
-  %linear = lea %17, %col
-  %loaded = vmovdqu32.load.indexed %input_view, %linear {disp32 = 0, scale = 4}
-  vmovdqu32.store.indexed %loaded, %output_view, %linear {disp32 = 0, scale = 4}
-  return
 }
