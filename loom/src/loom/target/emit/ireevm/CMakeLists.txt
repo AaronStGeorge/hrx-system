@@ -305,4 +305,15 @@ iree_executable_test(
     "loom-check"
 )
 
+iree_executable_test(
+  NAME
+    "source_low_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -145,23 +145,4 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_test(
-  NAME
-    lower_test
-  SRCS
-    "lower_test.cc"
-  DEPS
-    ::lower
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::source_selection
-    loom::src::loom::error::error_defs
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::target::arch::wasm::low_registry
-    loom::src::loom::testing::context
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

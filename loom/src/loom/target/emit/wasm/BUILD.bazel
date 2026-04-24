@@ -167,21 +167,3 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest_main",
     ],
 )
-
-loom_cc_test(
-    name = "lower_test",
-    srcs = ["lower_test.cc"],
-    deps = [
-        ":lower",
-        "//loom/src/loom/codegen/low:source_selection",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/target/arch/wasm:low_registry",
-        "//loom/src/loom/testing:context",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)

@@ -339,5 +339,6 @@ loom_check_test_suite(
     srcs = [
         "pass_source_low.loom-test",
         "source_low.loom-test",
+        "source_low_diagnostics.loom-test",
     ],
 )

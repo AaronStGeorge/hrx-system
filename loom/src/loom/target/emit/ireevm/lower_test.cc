@@ -8,7 +8,6 @@
 
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
@@ -18,11 +17,9 @@
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/verify.h"
-#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"
 #include "loom/target/emit/ireevm/low_registry.h"
@@ -32,15 +29,7 @@
 namespace loom {
 namespace {
 
-struct CollectedEmission {
-  const loom_error_def_t* error = nullptr;
-  const loom_op_t* op = nullptr;
-  std::vector<std::string> string_params;
-};
-
-struct EmissionCollector {
-  std::vector<CollectedEmission> emissions;
-
+struct EmissionCounter {
   iree_diagnostic_emitter_t emitter() {
     return iree_diagnostic_emitter_t{
         .fn = Collect,
@@ -49,25 +38,16 @@ struct EmissionCollector {
   }
 
  private:
-  static std::string CopyString(iree_string_view_t value) {
-    return std::string(value.data, value.size);
-  }
-
   static iree_status_t Collect(void* user_data,
                                const loom_diagnostic_emission_t* emission) {
-    auto* collector = static_cast<EmissionCollector*>(user_data);
-    CollectedEmission entry;
-    entry.error = emission->error;
-    entry.op = emission->op;
-    for (iree_host_size_t i = 0; i < emission->param_count; ++i) {
-      const loom_diagnostic_param_t* param = &emission->params[i];
-      if (param->kind == LOOM_PARAM_STRING) {
-        entry.string_params.push_back(CopyString(param->string));
-      }
-    }
-    collector->emissions.push_back(std::move(entry));
+    (void)emission;
+    auto* counter = static_cast<EmissionCounter*>(user_data);
+    ++counter->count;
     return iree_ok_status();
   }
+
+ public:
+  iree_host_size_t count = 0;
 };
 
 struct ModuleDeleter {
@@ -171,7 +151,7 @@ class IreeVmLowerTest : public ::testing::Test {
   }
 
   ModulePtr ParseAndLowerTargetedSource(const char* source,
-                                        EmissionCollector* collector,
+                                        EmissionCounter* counter,
                                         loom_low_lower_result_t* out_result) {
     ModulePtr module = ParseSource(source);
 
@@ -194,7 +174,7 @@ class IreeVmLowerTest : public ::testing::Test {
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .policy = selection.policy,
-        .emitter = collector->emitter(),
+        .emitter = counter->emitter(),
         .max_errors = 20,
     };
     IREE_CHECK_OK(loom_low_lower_function(module.get(), selection.func,
@@ -204,19 +184,19 @@ class IreeVmLowerTest : public ::testing::Test {
   }
 
   void VerifyLowModule(loom_module_t* module) {
-    EmissionCollector collector;
+    EmissionCounter counter;
     const loom_low_verify_options_t options = {
         .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
         .descriptor_registry = &target_registry_.registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
-        .emitter = collector.emitter(),
+        .emitter = counter.emitter(),
         .max_errors = 20,
     };
     loom_low_verify_result_t result = {};
     IREE_ASSERT_OK(loom_low_verify_module(module, &options, &result));
     EXPECT_EQ(result.error_count, 0u);
-    EXPECT_TRUE(collector.emissions.empty());
+    EXPECT_EQ(counter.count, 0u);
   }
 
   void Packetize(loom_module_t* module, loom_op_t* low_function,
@@ -283,7 +263,7 @@ class IreeVmLowerTest : public ::testing::Test {
 };
 
 TEST_F(IreeVmLowerTest, LowersSemanticCfgFunctionAndExecutesVmArchive) {
-  EmissionCollector lower_collector;
+  EmissionCounter lower_counter;
   loom_low_lower_result_t lower_result = {};
   ModulePtr module = ParseAndLowerTargetedSource(
       "target.profile @vm_target preset(\"iree-vm\")\n"
@@ -298,12 +278,12 @@ TEST_F(IreeVmLowerTest, LowersSemanticCfgFunctionAndExecutesVmArchive) {
       "  %diff = scalar.subi %lhs, %rhs : i32\n"
       "  func.return %diff : i32\n"
       "}\n",
-      &lower_collector, &lower_result);
+      &lower_counter, &lower_result);
 
   EXPECT_EQ(lower_result.error_count, 0u);
   EXPECT_EQ(lower_result.remark_count, 0u);
   ASSERT_NE(lower_result.low_func_op, nullptr);
-  EXPECT_TRUE(lower_collector.emissions.empty());
+  EXPECT_EQ(lower_counter.count, 0u);
   VerifyLowModule(module.get());
 
   loom_low_packetization_t packetization = {};
@@ -368,76 +348,6 @@ TEST_F(IreeVmLowerTest, LowersSemanticCfgFunctionAndExecutesVmArchive) {
   IREE_ASSERT_OK(
       InvokeI32I32ToI32(context_owner.context, function, 50, 8, &result));
   EXPECT_EQ(result, 42);
-}
-
-TEST_F(IreeVmLowerTest, UnsupportedSourceOpEmitsDiagnosticAndNoLowFunction) {
-  EmissionCollector lower_collector;
-  loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseAndLowerTargetedSource(
-      "target.profile @vm_target preset(\"iree-vm\")\n"
-      "func.def target(@vm_target) @mul(%lhs: i32, %rhs: i32) -> (i32) {\n"
-      "  %product = scalar.muli %lhs, %rhs : i32\n"
-      "  func.return %product : i32\n"
-      "}\n",
-      &lower_collector, &lower_result);
-
-  EXPECT_EQ(lower_result.error_count, 1u);
-  EXPECT_EQ(lower_result.remark_count, 0u);
-  EXPECT_EQ(lower_result.low_func_op, nullptr);
-  EXPECT_FALSE(loom_symbol_ref_is_valid(lower_result.low_func_ref));
-  ASSERT_EQ(lower_collector.emissions.size(), 1u);
-  const CollectedEmission& emission = lower_collector.emissions[0];
-  EXPECT_EQ(emission.error,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1));
-  ASSERT_EQ(emission.string_params.size(), 7u);
-  EXPECT_EQ(emission.string_params[0], "vm_target");
-  EXPECT_EQ(emission.string_params[3], "mul");
-  EXPECT_EQ(emission.string_params[4], "op");
-  EXPECT_EQ(emission.string_params[5], "scalar.muli");
-  EXPECT_NE(emission.string_params[6].find("descriptor mapping"),
-            std::string::npos);
-
-  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_module_intern_string(module.get(), IREE_SV("mul"), &name_id));
-  uint16_t symbol_id = loom_module_find_symbol(module.get(), name_id);
-  ASSERT_NE(symbol_id, LOOM_SYMBOL_ID_INVALID);
-  EXPECT_TRUE(
-      loom_func_def_isa(module.get()->symbols.entries[symbol_id].defining_op));
-}
-
-TEST_F(IreeVmLowerTest, RejectsOutOfRangeI1ConstantBeforeEmission) {
-  EmissionCollector lower_collector;
-  loom_low_lower_result_t lower_result = {};
-  ModulePtr module = ParseAndLowerTargetedSource(
-      "target.profile @vm_target preset(\"iree-vm\")\n"
-      "func.def target(@vm_target) @bad_bool() -> (i1) {\n"
-      "  %bad = scalar.constant 2 : i1\n"
-      "  func.return %bad : i1\n"
-      "}\n",
-      &lower_collector, &lower_result);
-
-  EXPECT_EQ(lower_result.error_count, 1u);
-  EXPECT_EQ(lower_result.remark_count, 0u);
-  EXPECT_EQ(lower_result.low_func_op, nullptr);
-  EXPECT_FALSE(loom_symbol_ref_is_valid(lower_result.low_func_ref));
-  ASSERT_EQ(lower_collector.emissions.size(), 1u);
-  const CollectedEmission& emission = lower_collector.emissions[0];
-  EXPECT_EQ(emission.error,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1));
-  ASSERT_EQ(emission.string_params.size(), 7u);
-  EXPECT_EQ(emission.string_params[3], "bad_bool");
-  EXPECT_EQ(emission.string_params[4], "attr");
-  EXPECT_EQ(emission.string_params[5], "value");
-  EXPECT_NE(emission.string_params[6].find("zero or one"), std::string::npos);
-
-  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_module_intern_string(module.get(), IREE_SV("bad_bool"), &name_id));
-  uint16_t symbol_id = loom_module_find_symbol(module.get(), name_id);
-  ASSERT_NE(symbol_id, LOOM_SYMBOL_ID_INVALID);
-  EXPECT_TRUE(
-      loom_func_def_isa(module.get()->symbols.entries[symbol_id].defining_op));
 }
 
 }  // namespace

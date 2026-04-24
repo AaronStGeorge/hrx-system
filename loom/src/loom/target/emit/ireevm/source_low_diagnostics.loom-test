@@ -1,0 +1,7 @@
+// RUN: emit source-low target-preset=iree-vm output=low
+
+func.def @unsupported_source_op(%lhs: i32, %rhs: i32) -> (i32) {
+  // ERROR@+1: BACKEND/001 "scalar.muli" "descriptor mapping"
+  %product = scalar.muli %lhs, %rhs : i32
+  func.return %product : i32
+}
