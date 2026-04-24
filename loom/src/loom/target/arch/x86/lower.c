@@ -31,6 +31,16 @@ static bool loom_x86_type_is_vector_16xi1(loom_type_t type) {
          loom_type_dim_static_size_at(type, 0) == 16;
 }
 
+static bool loom_x86_type_is_scalar_i32(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32;
+}
+
+static bool loom_x86_type_is_scalar_f32(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_F32;
+}
+
 static bool loom_x86_type_is_address_gpr64(loom_type_t type) {
   if (!loom_type_is_scalar(type)) {
     return false;
@@ -48,6 +58,18 @@ static iree_status_t loom_x86_make_gpr64_register_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {
   return loom_low_lower_make_register_type(
       context, X86_AVX512_CORE_REG_CLASS_ID_X86_GPR64, 1, out_type);
+}
+
+static iree_status_t loom_x86_make_gpr32_register_type(
+    loom_low_lower_context_t* context, loom_type_t* out_type) {
+  return loom_low_lower_make_register_type(
+      context, X86_AVX512_CORE_REG_CLASS_ID_X86_GPR32, 1, out_type);
+}
+
+static iree_status_t loom_x86_make_xmm_register_type(
+    loom_low_lower_context_t* context, loom_type_t* out_type) {
+  return loom_low_lower_make_register_type(
+      context, X86_AVX512_CORE_REG_CLASS_ID_X86_XMM, 1, out_type);
 }
 
 iree_status_t loom_x86_make_zmm_register_type(loom_low_lower_context_t* context,
@@ -71,6 +93,12 @@ static iree_status_t loom_x86_map_avx512_type(void* user_data,
   if (loom_x86_type_is_address_gpr64(source_type)) {
     return loom_x86_make_gpr64_register_type(context, out_low_type);
   }
+  if (loom_x86_type_is_scalar_i32(source_type)) {
+    return loom_x86_make_gpr32_register_type(context, out_low_type);
+  }
+  if (loom_x86_type_is_scalar_f32(source_type)) {
+    return loom_x86_make_xmm_register_type(context, out_low_type);
+  }
   if (loom_x86_type_is_vector_16xi32(source_type) ||
       loom_x86_type_is_vector_16xf32(source_type)) {
     return loom_x86_make_zmm_register_type(context, out_low_type);
@@ -81,8 +109,8 @@ static iree_status_t loom_x86_map_avx512_type(void* user_data,
   return loom_low_lower_emit_reject(
       context, source_op, IREE_SV("type"), IREE_SV("source"),
       IREE_SV("x86 AVX512 lowering currently supports only index/offset "
-              "address values and vector<16xi1>/vector<16xi32>/vector<16xf32> "
-              "values"));
+              "address values, i32/f32 scalar splat values, and "
+              "vector<16xi1>/vector<16xi32>/vector<16xf32> values"));
 }
 
 static iree_status_t loom_x86_map_avx512_argument(

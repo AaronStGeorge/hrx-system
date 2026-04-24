@@ -19,17 +19,23 @@ static const char* const kX86Gpr64Names[] = {
     "r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",
 };
 
+static const char* const kX86Gpr32Names[] = {
+    "eax", "ecx", "edx",  "ebx",  "esp",  "ebp",  "esi",  "edi",
+    "r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d",
+};
+
 typedef enum loom_x86_descriptor_set_kind_e {
   LOOM_X86_DESCRIPTOR_SET_AVX512_CORE = 0,
   LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE = 1,
 } loom_x86_descriptor_set_kind_t;
 
 typedef enum loom_x86_register_class_kind_e {
-  LOOM_X86_REGISTER_CLASS_GPR64 = 0,
-  LOOM_X86_REGISTER_CLASS_XMM = 1,
-  LOOM_X86_REGISTER_CLASS_YMM = 2,
-  LOOM_X86_REGISTER_CLASS_ZMM = 3,
-  LOOM_X86_REGISTER_CLASS_K = 4,
+  LOOM_X86_REGISTER_CLASS_GPR32 = 0,
+  LOOM_X86_REGISTER_CLASS_GPR64 = 1,
+  LOOM_X86_REGISTER_CLASS_XMM = 2,
+  LOOM_X86_REGISTER_CLASS_YMM = 3,
+  LOOM_X86_REGISTER_CLASS_ZMM = 4,
+  LOOM_X86_REGISTER_CLASS_K = 5,
 } loom_x86_register_class_kind_t;
 
 typedef struct loom_x86_assembly_state_t {
@@ -106,8 +112,14 @@ static iree_status_t loom_x86_register_class_kind(
   switch (state->descriptor_set_kind) {
     case LOOM_X86_DESCRIPTOR_SET_AVX512_CORE:
       switch (assignment->descriptor_reg_class_id) {
+        case X86_AVX512_CORE_REG_CLASS_ID_X86_GPR32:
+          *out_kind = LOOM_X86_REGISTER_CLASS_GPR32;
+          return iree_ok_status();
         case X86_AVX512_CORE_REG_CLASS_ID_X86_GPR64:
           *out_kind = LOOM_X86_REGISTER_CLASS_GPR64;
+          return iree_ok_status();
+        case X86_AVX512_CORE_REG_CLASS_ID_X86_XMM:
+          *out_kind = LOOM_X86_REGISTER_CLASS_XMM;
           return iree_ok_status();
         case X86_AVX512_CORE_REG_CLASS_ID_X86_ZMM:
           *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
@@ -163,6 +175,15 @@ static iree_status_t loom_x86_append_assignment(
   loom_x86_register_class_kind_t register_class_kind = 0;
   IREE_RETURN_IF_ERROR(loom_x86_register_class_kind(state, context, assignment,
                                                     &register_class_kind));
+  if (register_class_kind == LOOM_X86_REGISTER_CLASS_GPR32) {
+    if (assignment->location_base >= IREE_ARRAYSIZE(kX86Gpr32Names)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "x86 GPR index %" PRIu32 " is out of range",
+                              assignment->location_base);
+    }
+    return iree_string_builder_append_cstring(
+        context->builder, kX86Gpr32Names[assignment->location_base]);
+  }
   if (register_class_kind == LOOM_X86_REGISTER_CLASS_GPR64) {
     if (assignment->location_base >= IREE_ARRAYSIZE(kX86Gpr64Names)) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -687,6 +708,7 @@ static iree_status_t loom_x86_append_copy_packet(
           iree_string_builder_append_cstring(context->builder, "vmovdqa32 "));
       break;
     }
+    case LOOM_X86_REGISTER_CLASS_GPR32:
     case LOOM_X86_REGISTER_CLASS_GPR64: {
       IREE_RETURN_IF_ERROR(
           iree_string_builder_append_cstring(context->builder, "mov "));

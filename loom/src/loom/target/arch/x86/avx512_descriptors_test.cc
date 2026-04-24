@@ -51,7 +51,7 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorSetVerifies) {
   EXPECT_GE(descriptor_set->descriptor_count, 7u);
   EXPECT_EQ(descriptor_set->descriptor_ref_count,
             descriptor_set->descriptor_count);
-  EXPECT_EQ(descriptor_set->reg_class_count, 3u);
+  EXPECT_GE(descriptor_set->reg_class_count, 5u);
   EXPECT_GE(descriptor_set->schedule_class_count, 6u);
   EXPECT_GE(descriptor_set->resource_count, 7u);
   for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {
@@ -60,11 +60,37 @@ TEST(X86DescriptorsTest, Avx512CoreDescriptorSetVerifies) {
         0u);
     EXPECT_GT(descriptor_set->reg_classes[i].physical_count, 0u);
   }
+  EXPECT_EQ(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_GPR32]
+                .alias_set_id,
+            descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_GPR64]
+                .alias_set_id);
+  EXPECT_NE(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_GPR32]
+                .alias_set_id,
+            0u);
+  EXPECT_EQ(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_XMM]
+                .alias_set_id,
+            descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_ZMM]
+                .alias_set_id);
+  EXPECT_NE(descriptor_set->reg_classes[X86_AVX512_CORE_REG_CLASS_ID_X86_XMM]
+                .alias_set_id,
+            0u);
 }
 
 TEST(X86DescriptorsTest, Avx512CoreDescriptorLookupUsesStableKeys) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_x86_avx512_core_descriptor_set();
+
+  const loom_low_descriptor_t* splat_i32_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vpbroadcastd.zmm"));
+  ASSERT_NE(splat_i32_descriptor, nullptr);
+  EXPECT_EQ(splat_i32_descriptor->operand_count, 2u);
+  EXPECT_EQ(splat_i32_descriptor->result_count, 1u);
+
+  const loom_low_descriptor_t* splat_f32_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vbroadcastss.zmm"));
+  ASSERT_NE(splat_f32_descriptor, nullptr);
+  EXPECT_EQ(splat_f32_descriptor->operand_count, 2u);
+  EXPECT_EQ(splat_f32_descriptor->result_count, 1u);
 
   const loom_low_descriptor_t* add_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vpaddd.zmm"));

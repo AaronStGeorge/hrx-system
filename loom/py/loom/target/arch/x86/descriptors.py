@@ -55,6 +55,7 @@ from loom.target.low_descriptors import (
     SpillSlotSpace,
 )
 
+_REG_GPR32 = "x86.gpr32"
 _REG_GPR64 = "x86.gpr64"
 _REG_XMM = "x86.xmm"
 _REG_YMM = "x86.ymm"
@@ -83,6 +84,7 @@ _SCHEDULE_MEMORY_LOAD = "x86.memory.load"
 _SCHEDULE_MEMORY_STORE = "x86.memory.store"
 _SCHEDULE_CONTROL = "x86.control"
 
+_GPR32_ALT = (RegClassAlt(_REG_GPR32),)
 _GPR64_ALT = (RegClassAlt(_REG_GPR64),)
 _XMM_ALT = (RegClassAlt(_REG_XMM),)
 _YMM_ALT = (RegClassAlt(_REG_YMM),)
@@ -139,6 +141,14 @@ def _gpr64_operand(field_name: str) -> Operand:
 
 def _gpr64_resource(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.RESOURCE, _GPR64_ALT)
+
+
+def _gpr32_operand(field_name: str) -> Operand:
+    return Operand(field_name, OperandRole.OPERAND, _GPR32_ALT)
+
+
+def _xmm_operand(field_name: str) -> Operand:
+    return Operand(field_name, OperandRole.OPERAND, _XMM_ALT)
 
 
 def _zmm_result(field_name: str = "dst") -> Operand:
@@ -299,6 +309,25 @@ def _zmm_i32_binary_descriptor(
     )
 
 
+def _zmm_splat_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+    operand: Operand,
+    schedule_class: str,
+) -> Descriptor:
+    return Descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        operands=(_zmm_result(), operand),
+        asm_forms=_asm(results=("dst",), operands=("value",)),
+        schedule_class=schedule_class,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _zmm_i32_compare_descriptor(
     *,
     key: str,
@@ -372,11 +401,28 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
     generator_version=1,
     reg_classes=(
         RegClass(
+            _REG_GPR32,
+            32,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=16,
+            alias_set_id=1,
+        ),
+        RegClass(
             _REG_GPR64,
             64,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=16,
+            alias_set_id=1,
+        ),
+        RegClass(
+            _REG_XMM,
+            128,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=32,
+            alias_set_id=2,
         ),
         RegClass(
             _REG_ZMM,
@@ -384,6 +430,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=32,
+            alias_set_id=2,
         ),
         RegClass(
             _REG_K,
@@ -531,6 +578,20 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
     ),
     descriptors=(
+        _zmm_splat_descriptor(
+            key="x86.avx512.vpbroadcastd.zmm",
+            mnemonic="vpbroadcastd",
+            semantic_tag="integer.splat.i32x16",
+            operand=_gpr32_operand("value"),
+            schedule_class=_SCHEDULE_VECTOR_I32_ZMM,
+        ),
+        _zmm_splat_descriptor(
+            key="x86.avx512.vbroadcastss.zmm",
+            mnemonic="vbroadcastss",
+            semantic_tag="float.splat.f32x16",
+            operand=_xmm_operand("value"),
+            schedule_class=_SCHEDULE_VECTOR_F32_ZMM,
+        ),
         _zmm_i32_binary_descriptor(
             key="x86.avx512.vpaddd.zmm",
             mnemonic="vpaddd",
@@ -966,6 +1027,7 @@ X86_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=32,
+            alias_set_id=2,
         ),
         RegClass(
             _REG_YMM,
@@ -973,6 +1035,7 @@ X86_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=32,
+            alias_set_id=2,
         ),
         RegClass(
             _REG_ZMM,
@@ -980,6 +1043,7 @@ X86_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=32,
+            alias_set_id=2,
         ),
     ),
     resources=(

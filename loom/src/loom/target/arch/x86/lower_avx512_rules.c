@@ -17,7 +17,9 @@ enum loom_x86_avx512_type_pattern_e {
   LOOM_X86_AVX512_TYPE_V16I32 = 0,
   LOOM_X86_AVX512_TYPE_V16F32 = 1,
   LOOM_X86_AVX512_TYPE_V16I1 = 2,
-  LOOM_X86_AVX512_TYPE_ADDRESS_GPR64 = 3,
+  LOOM_X86_AVX512_TYPE_SCALAR_I32 = 3,
+  LOOM_X86_AVX512_TYPE_SCALAR_F32 = 4,
+  LOOM_X86_AVX512_TYPE_ADDRESS_GPR64 = 5,
 };
 
 static const loom_low_lower_type_pattern_t loom_x86_avx512_type_patterns[] = {
@@ -56,6 +58,22 @@ static const loom_low_lower_type_pattern_t loom_x86_avx512_type_patterns[] = {
                 LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I1),
             .rank = 1,
             .static_dim0 = 16,
+        },
+    [LOOM_X86_AVX512_TYPE_SCALAR_I32] =
+        {
+            .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT,
+            .type_kind = LOOM_TYPE_SCALAR,
+            .element_type_mask =
+                LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
+        },
+    [LOOM_X86_AVX512_TYPE_SCALAR_F32] =
+        {
+            .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                     LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT,
+            .type_kind = LOOM_TYPE_SCALAR,
+            .element_type_mask =
+                LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_F32),
         },
     [LOOM_X86_AVX512_TYPE_ADDRESS_GPR64] =
         {
@@ -148,6 +166,8 @@ enum loom_x86_avx512_diagnostic_e {
   LOOM_X86_AVX512_DIAGNOSTIC_I64_ATTR = 3,
   LOOM_X86_AVX512_DIAGNOSTIC_ADDRESS_GPR64 = 4,
   LOOM_X86_AVX512_DIAGNOSTIC_IMM64_RANGE = 5,
+  LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_I32 = 6,
+  LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_F32 = 7,
 };
 
 static const loom_low_lower_diagnostic_t loom_x86_avx512_diagnostics[] = {
@@ -193,6 +213,22 @@ static const loom_low_lower_diagnostic_t loom_x86_avx512_diagnostics[] = {
             .subject_name = IREE_SVL("value"),
             .reason = IREE_SVL("x86 AVX512 imm64 constants must fit in the "
                                "signed 64-bit descriptor range"),
+        },
+    [LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_I32] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("i32"),
+            .reason =
+                IREE_SVL("x86 AVX512 i32 splat lowering requires i32 scalar "
+                         "values"),
+        },
+    [LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_F32] =
+        {
+            .subject_kind = IREE_SVL("type"),
+            .subject_name = IREE_SVL("f32"),
+            .reason =
+                IREE_SVL("x86 AVX512 f32 splat lowering requires f32 scalar "
+                         "values"),
         },
 };
 
@@ -248,6 +284,10 @@ enum loom_x86_avx512_guard_e {
   LOOM_X86_AVX512_ADDRESS_MADD_RHS_GUARD,
   LOOM_X86_AVX512_ADDRESS_MADD_ACC_GUARD,
   LOOM_X86_AVX512_ADDRESS_MADD_RESULT_GUARD,
+  LOOM_X86_AVX512_I32_SPLAT_SCALAR_GUARD,
+  LOOM_X86_AVX512_I32_SPLAT_RESULT_GUARD,
+  LOOM_X86_AVX512_F32_SPLAT_SCALAR_GUARD,
+  LOOM_X86_AVX512_F32_SPLAT_RESULT_GUARD,
 };
 
 #define LOOM_X86_AVX512_VALUE_TYPE_GUARD(value_ref, type_pattern, diagnostic) \
@@ -490,6 +530,18 @@ static const loom_low_lower_guard_t loom_x86_avx512_guards[] = {
             .type_pattern_index = LOOM_X86_AVX512_TYPE_ADDRESS_GPR64,
             .diagnostic_index = LOOM_X86_AVX512_DIAGNOSTIC_ADDRESS_GPR64,
         },
+    [LOOM_X86_AVX512_I32_SPLAT_SCALAR_GUARD] = LOOM_X86_AVX512_VALUE_TYPE_GUARD(
+        LOOM_X86_AVX512_OPERAND0, LOOM_X86_AVX512_TYPE_SCALAR_I32,
+        LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_I32),
+    [LOOM_X86_AVX512_I32_SPLAT_RESULT_GUARD] = LOOM_X86_AVX512_VALUE_TYPE_GUARD(
+        LOOM_X86_AVX512_RESULT0, LOOM_X86_AVX512_TYPE_V16I32,
+        LOOM_X86_AVX512_DIAGNOSTIC_V16I32),
+    [LOOM_X86_AVX512_F32_SPLAT_SCALAR_GUARD] = LOOM_X86_AVX512_VALUE_TYPE_GUARD(
+        LOOM_X86_AVX512_OPERAND0, LOOM_X86_AVX512_TYPE_SCALAR_F32,
+        LOOM_X86_AVX512_DIAGNOSTIC_SCALAR_F32),
+    [LOOM_X86_AVX512_F32_SPLAT_RESULT_GUARD] = LOOM_X86_AVX512_VALUE_TYPE_GUARD(
+        LOOM_X86_AVX512_RESULT0, LOOM_X86_AVX512_TYPE_V16F32,
+        LOOM_X86_AVX512_DIAGNOSTIC_V16F32),
 };
 
 #undef LOOM_X86_AVX512_CMPF_GUARDS
@@ -549,6 +601,8 @@ enum loom_x86_avx512_emit_e {
   LOOM_X86_AVX512_EMIT_VCMPPS_UNE,
   LOOM_X86_AVX512_EMIT_VCMPPS_UNO,
   LOOM_X86_AVX512_EMIT_VBLENDMPS,
+  LOOM_X86_AVX512_EMIT_VPBROADCASTD,
+  LOOM_X86_AVX512_EMIT_VBROADCASTSS,
   LOOM_X86_AVX512_EMIT_MOVIMM_GPR64,
   LOOM_X86_AVX512_EMIT_LEA_ADD_GPR64,
   LOOM_X86_AVX512_EMIT_IMUL_GPR64,
@@ -574,6 +628,16 @@ enum loom_x86_avx512_emit_e {
       .operand_ref_count = 3,                                        \
       .result_ref_start = LOOM_X86_AVX512_RESULT0,                   \
       .result_ref_count = 1,                                         \
+  }
+
+#define LOOM_X86_AVX512_UNARY_DESCRIPTOR_EMIT(descriptor_id_value) \
+  {                                                                \
+      .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,                   \
+      .descriptor_id = (descriptor_id_value),                      \
+      .operand_ref_start = LOOM_X86_AVX512_OPERAND0,               \
+      .operand_ref_count = 1,                                      \
+      .result_ref_start = LOOM_X86_AVX512_RESULT0,                 \
+      .result_ref_count = 1,                                       \
   }
 
 static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
@@ -674,6 +738,10 @@ static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
         X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VCMPPS_UNO_ZMM),
     [LOOM_X86_AVX512_EMIT_VBLENDMPS] = LOOM_X86_AVX512_TERNARY_DESCRIPTOR_EMIT(
         X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VBLENDMPS_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPBROADCASTD] = LOOM_X86_AVX512_UNARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPBROADCASTD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VBROADCASTSS] = LOOM_X86_AVX512_UNARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VBROADCASTSS_ZMM),
     [LOOM_X86_AVX512_EMIT_MOVIMM_GPR64] =
         {
             .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST,
@@ -727,11 +795,14 @@ static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
         },
 };
 
+#undef LOOM_X86_AVX512_UNARY_DESCRIPTOR_EMIT
 #undef LOOM_X86_AVX512_TERNARY_DESCRIPTOR_EMIT
 #undef LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT
 
 enum loom_x86_avx512_rule_e {
-  LOOM_X86_AVX512_RULE_VECTOR_SELECT_V16I32 = 0,
+  LOOM_X86_AVX512_RULE_VECTOR_SPLAT_I32 = 0,
+  LOOM_X86_AVX512_RULE_VECTOR_SPLAT_F32,
+  LOOM_X86_AVX512_RULE_VECTOR_SELECT_V16I32,
   LOOM_X86_AVX512_RULE_VECTOR_SELECT_V16F32,
   LOOM_X86_AVX512_RULE_VECTOR_CMPI_EQ,
   LOOM_X86_AVX512_RULE_VECTOR_CMPI_NE,
@@ -790,6 +861,12 @@ enum loom_x86_avx512_rule_e {
   }
 
 static const loom_low_lower_rule_t loom_x86_avx512_rules[] = {
+    [LOOM_X86_AVX512_RULE_VECTOR_SPLAT_I32] = LOOM_X86_AVX512_RULE(
+        LOOM_OP_VECTOR_SPLAT, LOOM_X86_AVX512_I32_SPLAT_SCALAR_GUARD, 2,
+        LOOM_X86_AVX512_EMIT_VPBROADCASTD),
+    [LOOM_X86_AVX512_RULE_VECTOR_SPLAT_F32] = LOOM_X86_AVX512_RULE(
+        LOOM_OP_VECTOR_SPLAT, LOOM_X86_AVX512_F32_SPLAT_SCALAR_GUARD, 2,
+        LOOM_X86_AVX512_EMIT_VBROADCASTSS),
     [LOOM_X86_AVX512_RULE_VECTOR_SELECT_V16I32] = LOOM_X86_AVX512_RULE(
         LOOM_OP_VECTOR_SELECT, LOOM_X86_AVX512_I32_SELECT_CONDITION_GUARD, 4,
         LOOM_X86_AVX512_EMIT_VPBLENDMD),
@@ -942,6 +1019,11 @@ static const loom_low_lower_rule_t loom_x86_avx512_rules[] = {
 #undef LOOM_X86_AVX512_RULE
 
 static const loom_low_lower_rule_span_t loom_x86_avx512_rule_spans[] = {
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SPLAT,
+        .rule_start = LOOM_X86_AVX512_RULE_VECTOR_SPLAT_I32,
+        .rule_count = 2,
+    },
     {
         .source_op_kind = LOOM_OP_VECTOR_SELECT,
         .rule_start = LOOM_X86_AVX512_RULE_VECTOR_SELECT_V16I32,
