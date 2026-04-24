@@ -178,6 +178,7 @@ _OP_I32X4_SPLAT = _simd_encoding_id(0x11)
 _OP_I32X4_EXTRACT_LANE = _simd_encoding_id(0x1B)
 _OP_I32X4_REPLACE_LANE = _simd_encoding_id(0x1C)
 _OP_F32X4_EXTRACT_LANE = _simd_encoding_id(0x1F)
+_OP_F32X4_REPLACE_LANE = _simd_encoding_id(0x20)
 _OP_I32X4_EQ = _simd_encoding_id(0x37)
 _OP_I32X4_NE = _simd_encoding_id(0x38)
 _OP_I32X4_LT_S = _simd_encoding_id(0x39)
@@ -467,6 +468,25 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             immediates=(_LANE_I32X4_IMMEDIATE,),
             asm_forms=_asm(
                 results=("dst",), operands=("source",), immediates=("lane",)
+            ),
+            schedule_class=_SCHEDULE_SIMD_F32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.f32x4.replace_lane",
+            mnemonic="f32x4.replace_lane",
+            semantic_tag="vector.insert.f32x4",
+            encoding_id=_OP_F32X4_REPLACE_LANE,
+            operands=(
+                _v128_result(),
+                _v128_operand("dest"),
+                _f32_operand("value"),
+            ),
+            immediates=(_LANE_I32X4_IMMEDIATE,),
+            asm_forms=_asm(
+                results=("dst",),
+                operands=("dest", "value"),
+                immediates=("lane",),
             ),
             schedule_class=_SCHEDULE_SIMD_F32X4,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),

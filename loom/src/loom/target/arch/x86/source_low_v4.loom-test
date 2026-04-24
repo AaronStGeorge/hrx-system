@@ -46,6 +46,23 @@ low.func.def target(@target) abi(object_function) @f32x4_lane_extract(%v: reg<x8
 
 // ====
 
+func.def @f32x4_lane_edit(%v: vector<4xf32>, %x: f32) -> (vector<4xf32>) {
+  %lane = vector.extract %v[1] : vector<4xf32> -> f32
+  %sum = scalar.addf %lane, %x : f32
+  %updated = vector.insert %sum into %v[2] : f32, vector<4xf32>
+  func.return %updated : vector<4xf32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32x4_lane_edit(%v: reg<x86.xmm>, %x: reg<x86.xmm>) -> (reg<x86.xmm>) asm<x86.avx512.core> {
+  %lane = vpermilps.xmm %v, 1
+  %sum = vaddss.xmm %lane, %x
+  %updated = vinsertps.xmm %v, %sum, 32
+  return %updated
+}
+
+// ====
+
 func.def @i32x4_splat_add(%value: i32, %rhs: vector<4xi32>) -> (vector<4xi32>) {
   %splat = vector.splat %value : vector<4xi32>
   %sum = vector.addi %splat, %rhs : vector<4xi32>

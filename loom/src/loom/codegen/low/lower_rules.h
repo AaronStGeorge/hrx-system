@@ -213,6 +213,8 @@ typedef struct loom_low_lower_attr_copy_t {
   uint16_t source_element_count;
   // Bit width of each packed source element for PACK_ELEMENTS rows.
   uint8_t source_element_bit_width;
+  // Low bit position of the projected or packed value in the emitted i64.
+  uint8_t target_bit_offset;
   // Literal value emitted by I64_LITERAL rows.
   int64_t literal_i64;
 } loom_low_lower_attr_copy_t;

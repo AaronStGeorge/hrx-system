@@ -1060,12 +1060,17 @@ static bool loom_wasm_select_vector_insert(const loom_module_t* module,
       loom_module_value_type(module, loom_vector_insert_dest(source_op));
   const loom_type_t result_type =
       loom_module_value_type(module, loom_vector_insert_result(source_op));
-  if (!loom_wasm_type_is_address_i32(value_type) ||
-      !loom_wasm_type_is_vector_4xi32(dest_type) ||
-      !loom_wasm_type_is_vector_4xi32(result_type)) {
+  if (loom_wasm_type_is_address_i32(value_type) &&
+      loom_wasm_type_is_vector_4xi32(dest_type) &&
+      loom_wasm_type_is_vector_4xi32(result_type)) {
+    out_plan->element_type = LOOM_SCALAR_TYPE_I32;
+  } else if (loom_wasm_type_is_scalar_f32(value_type) &&
+             loom_wasm_type_is_vector_4xf32(dest_type) &&
+             loom_wasm_type_is_vector_4xf32(result_type)) {
+    out_plan->element_type = LOOM_SCALAR_TYPE_F32;
+  } else {
     return false;
   }
-  out_plan->element_type = LOOM_SCALAR_TYPE_I32;
   return loom_wasm_select_static_v4_lane(
       loom_vector_insert_static_indices(source_op),
       loom_vector_insert_indices(source_op), &out_plan->lane);
@@ -1467,15 +1472,27 @@ static iree_status_t loom_wasm_lower_vector_insert(
   loom_named_attr_t attr = {0};
   IREE_RETURN_IF_ERROR(
       loom_wasm_make_i64_attr(context, IREE_SV("lane"), plan->lane, &attr));
+  uint64_t descriptor_id = 0;
+  switch (plan->element_type) {
+    case LOOM_SCALAR_TYPE_I32:
+      descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_REPLACE_LANE;
+      break;
+    case LOOM_SCALAR_TYPE_F32:
+      descriptor_id = WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_F32X4_REPLACE_LANE;
+      break;
+    default:
+      IREE_ASSERT_UNREACHABLE();
+      break;
+  }
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
       loom_wasm_make_v128_register_type(context, &result_type));
   loom_value_id_t operands[] = {dest, value};
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
-      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32X4_REPLACE_LANE,
-      operands, IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(&attr, 1),
-      &result_type, 1, NULL, 0, source_op->location, &op));
+      context, descriptor_id, operands, IREE_ARRAYSIZE(operands),
+      loom_make_named_attr_slice(&attr, 1), &result_type, 1, NULL, 0,
+      source_op->location, &op));
   return loom_low_lower_bind_value(
       context, loom_vector_insert_result(source_op),
       loom_value_slice_get(loom_low_op_results(op), 0));

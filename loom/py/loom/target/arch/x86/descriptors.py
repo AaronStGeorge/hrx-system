@@ -305,6 +305,13 @@ _SHUFFLE_4X2_CONTROL_IMMEDIATE = Immediate(
     unsigned_max=255,
 )
 
+_INSERTPS_CONTROL_IMMEDIATE = Immediate(
+    "control",
+    ImmediateKind.UNSIGNED,
+    bit_width=8,
+    unsigned_max=255,
+)
+
 _ADDRESS_SCALE_ENUM = "x86.address.scale"
 
 _ADDRESS_SCALE_IMMEDIATE = Immediate(
@@ -1010,6 +1017,25 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
                 mnemonic="vpermilps.xmm",
                 results=("dst",),
                 operands=("source",),
+                immediates=("control",),
+            ),
+            schedule_class=_SCHEDULE_VECTOR_F32_XMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="x86.avx512.vinsertps.xmm",
+            mnemonic="vinsertps",
+            semantic_tag="float.insert.f32x4",
+            operands=(
+                _vector_result(128),
+                _xmm_operand("dest"),
+                _xmm_operand("value"),
+            ),
+            immediates=(_INSERTPS_CONTROL_IMMEDIATE,),
+            asm_forms=_asm(
+                mnemonic="vinsertps.xmm",
+                results=("dst",),
+                operands=("dest", "value"),
                 immediates=("control",),
             ),
             schedule_class=_SCHEDULE_VECTOR_F32_XMM,
