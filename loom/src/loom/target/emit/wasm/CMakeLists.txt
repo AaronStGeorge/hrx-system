@@ -139,6 +139,7 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::target::arch::wasm::descriptors
     loom::src::loom::target::arch::wasm::low_registry
+    loom::src::loom::target::tool::llvm
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
@@ -151,16 +152,12 @@ loom_cc_test(
     "lower_test.cc"
   DEPS
     ::lower
-    ::module_binary
     iree::base::internal::arena
-    loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::source_selection
-    loom::src::loom::codegen::low::verify
     loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::func
-    loom::src::loom::ops::low
     loom::src::loom::target::arch::wasm::low_registry
     loom::src::loom::testing::context
     iree::testing::gtest

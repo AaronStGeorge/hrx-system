@@ -21,6 +21,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/wasm/descriptors.h"
 #include "loom/target/arch/wasm/low_registry.h"
+#include "loom/target/tool/llvm.h"
 #include "loom/testing/context.h"
 
 namespace loom {
@@ -36,6 +37,22 @@ constexpr uint8_t kWasmTypeV128 = 0x7B;
 constexpr uint8_t kWasmFunctionType = 0x60;
 constexpr uint8_t kWasmExportFunction = 0;
 constexpr uint8_t kWasmLimitsMinOnly = 0;
+
+std::string ToString(const loom_llvm_tool_output_t& output) {
+  return output.data ? std::string(output.data, output.length) : std::string();
+}
+
+bool IsToolUnavailable(iree_status_t status) {
+  return iree_status_is_not_found(status) ||
+         iree_status_is_unavailable(status) ||
+         iree_status_is_unimplemented(status);
+}
+
+bool VersionTextListsWasmTarget(const std::string& version_text) {
+  return version_text.find("wasm32") != std::string::npos ||
+         version_text.find("wasm64") != std::string::npos ||
+         version_text.find("WebAssembly") != std::string::npos;
+}
 
 struct ModuleOwner {
   ~ModuleOwner() {
@@ -370,6 +387,74 @@ TEST_F(WasmModuleBinaryTest, EmitsSimdMemoryModule) {
   reader.ReadSection(kWasmSectionCode, &code_section);
   ExpectSingleCodeBody(&code_section);
   reader.ExpectConsumed();
+}
+
+TEST_F(WasmModuleBinaryTest, DisassemblesSimdMemoryModuleWithLlvmObjdump) {
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_allocation_sidecar_t allocation = {};
+  BuildSidecars(
+      "low.func.def target(@wasm_target) @wasm_test(%addr : reg<wasm.i32>, "
+      "%lhs : reg<wasm.v128>, %rhs : reg<wasm.v128>) -> "
+      "(reg<wasm.v128>) {\n"
+      "  %loaded = low.op<wasm.v128.load>(%addr) : (reg<wasm.i32>) -> "
+      "reg<wasm.v128>\n"
+      "  %sum = low.op<wasm.i32x4.add>(%loaded, %lhs) : "
+      "(reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>\n"
+      "  low.op<wasm.v128.store>(%addr, %sum) : "
+      "(reg<wasm.i32>, reg<wasm.v128>)\n"
+      "  %out = low.op<wasm.i32x4.mul>(%sum, %rhs) : "
+      "(reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>\n"
+      "  low.return %out : reg<wasm.v128>\n"
+      "}\n",
+      &schedule, &allocation);
+
+  ModuleOwner owner;
+  IREE_ASSERT_OK(loom_wasm_emit_single_function_module(
+      &schedule, &allocation, IREE_SV("simd_mem"), iree_allocator_system(),
+      &owner.module));
+
+  loom_llvm_toolchain_t toolchain;
+  loom_llvm_toolchain_initialize_from_environment(&toolchain);
+
+  loom_llvm_tool_output_t objdump_version_text = {};
+  iree_status_t status = loom_llvm_tool_query_version(
+      &toolchain, LOOM_LLVM_TOOL_LLVM_OBJDUMP, iree_allocator_system(),
+      &objdump_version_text);
+  if (IsToolUnavailable(status)) {
+    IREE_EXPECT_NOT_OK(status);
+    GTEST_SKIP() << "llvm-objdump is unavailable in this test environment";
+  }
+  IREE_ASSERT_OK(status);
+
+  std::string objdump_version = ToString(objdump_version_text);
+  loom_llvm_tool_output_deinitialize(&objdump_version_text,
+                                     iree_allocator_system());
+  if (!VersionTextListsWasmTarget(objdump_version)) {
+    GTEST_SKIP() << "llvm-objdump does not report WebAssembly target support";
+  }
+
+  const iree_string_view_t objdump_arguments[] = {
+      IREE_SV("--disassemble"),
+      IREE_SV("--triple=wasm32"),
+  };
+  loom_llvm_tool_output_t disassembly = {};
+  IREE_ASSERT_OK(loom_llvm_tool_disassemble_object(
+      &toolchain,
+      iree_make_const_byte_span(owner.module.data, owner.module.data_length),
+      objdump_arguments, IREE_ARRAYSIZE(objdump_arguments),
+      iree_allocator_system(), &disassembly));
+  const std::string disassembly_text = ToString(disassembly);
+  EXPECT_NE(disassembly_text.find("v128.load"), std::string::npos)
+      << disassembly_text;
+  EXPECT_NE(disassembly_text.find("i32x4.add"), std::string::npos)
+      << disassembly_text;
+  EXPECT_NE(disassembly_text.find("v128.store"), std::string::npos)
+      << disassembly_text;
+  EXPECT_NE(disassembly_text.find("i32x4.mul"), std::string::npos)
+      << disassembly_text;
+  EXPECT_NE(disassembly_text.find("return"), std::string::npos)
+      << disassembly_text;
+  loom_llvm_tool_output_deinitialize(&disassembly, iree_allocator_system());
 }
 
 TEST_F(WasmModuleBinaryTest, RejectsEmptyExportName) {
