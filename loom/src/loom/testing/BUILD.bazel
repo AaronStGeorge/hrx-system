@@ -61,21 +61,37 @@ loom_cc_library(
     testonly = True,
     srcs = [
         "gen.c",
-        "gen_func_dialect.c",
-        "gen_scalar_dialect.c",
         "gen_test_dialect.c",
-        "gen_vector_dialect.c",
     ],
     hdrs = ["gen.h"],
     deps = [
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/test",
-        "//loom/src/loom/ops/vector",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:prng",
+    ],
+)
+
+loom_cc_library(
+    name = "gen_scalar_hooks",
+    testonly = True,
+    srcs = ["gen_scalar_dialect.c"],
+    deps = [
+        ":gen",
+        "//loom/src/loom/ops/scalar",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "gen_vector_hooks",
+    testonly = True,
+    srcs = ["gen_vector_dialect.c"],
+    deps = [
+        ":gen",
+        "//loom/src/loom/ops/vector",
+        "//runtime/src/iree/base",
     ],
 )
 
@@ -88,11 +104,27 @@ loom_cc_test(
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/util:stream",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "gen_dialect_profiles_test",
+    srcs = ["gen_dialect_profiles_test.cc"],
+    deps = [
+        ":gen",
+        ":gen_scalar_hooks",
+        ":gen_vector_hooks",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/ir",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/test",
         "//loom/src/loom/ops/vector",
-        "//loom/src/loom/util:stream",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -107,10 +139,7 @@ loom_cc_fuzz(
         ":gen",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/test",
-        "//loom/src/loom/ops/vector",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
     ],

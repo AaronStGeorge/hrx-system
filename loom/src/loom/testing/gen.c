@@ -12,7 +12,6 @@
 #include "iree/base/internal/prng.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
 #include "loom/ops/test/ops.h"
 
 //===----------------------------------------------------------------------===//
@@ -719,12 +718,10 @@ iree_status_t loom_test_gen_module(loom_test_gen_t* gen,
     }
 
     loom_op_t* decl_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_func_decl_build(
-        &builder, 0, 0, LOOM_STRING_ID_INVALID, LOOM_STRING_ID_INVALID, 0, 0,
-        loom_symbol_ref_null(), 0, loom_named_attr_slice_empty(),
-        LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), sig->ref,
-        sig->arg_types, sig->arg_count, sig->result_types, sig->result_count,
-        NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &decl_op));
+    IREE_RETURN_IF_ERROR(loom_test_decl_build(
+        &builder, 0, 0, 0, sig->ref, sig->arg_types, sig->arg_count,
+        sig->result_types, sig->result_count, NULL, 0, LOOM_LOCATION_UNKNOWN,
+        &decl_op));
     signature_count++;
   }
 
@@ -746,16 +743,14 @@ iree_status_t loom_test_gen_module(loom_test_gen_t* gen,
     }
 
     loom_op_t* def_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_func_def_build(
-        &builder, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
-        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
-        loom_named_attr_slice_empty(), sig->ref, sig->arg_types, sig->arg_count,
+    IREE_RETURN_IF_ERROR(loom_test_func_build(
+        &builder, 0, 0, 0, sig->ref, sig->arg_types, sig->arg_count,
         sig->result_types, sig->result_count, NULL, 0, NULL, 0,
         LOOM_LOCATION_UNKNOWN, &def_op));
     signature_count++;
 
     // Generate function body.
-    loom_region_t* body = loom_func_def_body(def_op);
+    loom_region_t* body = loom_test_func_body(def_op);
     loom_builder_ip_t saved = loom_builder_enter_region(&builder, def_op, body);
 
     loom_test_gen_values_t values;
@@ -784,9 +779,11 @@ iree_status_t loom_test_gen_module(loom_test_gen_t* gen,
     IREE_RETURN_IF_ERROR(loom_test_gen_body_internal(gen, &config->body_config,
                                                      &builder, &values, 0));
 
-    // Insert func.call ops for other functions.
+    // Insert call-like ops for other functions.
     for (uint16_t c = 0; c < config->calls_per_function; ++c) {
-      if (signature_count == 0) break;
+      if (signature_count == 0) {
+        break;
+      }
       uint16_t target =
           (uint16_t)loom_test_gen_next_range(gen, signature_count);
       loom_test_gen_func_sig_t* target_sig = &signatures[target];
@@ -814,8 +811,8 @@ iree_status_t loom_test_gen_module(loom_test_gen_t* gen,
       }
 
       loom_op_t* call_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_func_call_build(
-          &builder, 0, 0, target_sig->ref, call_operands, target_sig->arg_count,
+      IREE_RETURN_IF_ERROR(loom_test_invoke_build(
+          &builder, target_sig->ref, call_operands, target_sig->arg_count,
           target_sig->result_types, target_sig->result_count, NULL, 0,
           LOOM_LOCATION_UNKNOWN, &call_op));
 
@@ -825,7 +822,7 @@ iree_status_t loom_test_gen_module(loom_test_gen_t* gen,
       }
     }
 
-    // Build func.return with values matching the function's result types.
+    // Build test.yield with values matching the function's result types.
     loom_value_id_t return_vals[LOOM_TEST_GEN_MAX_FUNC_RESULTS];
     for (uint16_t j = 0; j < sig->result_count; ++j) {
       loom_scalar_type_t scalar = loom_type_element_type(sig->result_types[j]);
@@ -845,8 +842,8 @@ iree_status_t loom_test_gen_module(loom_test_gen_t* gen,
     }
     loom_op_t* return_op = NULL;
     IREE_RETURN_IF_ERROR(
-        loom_func_return_build(&builder, return_vals, sig->result_count,
-                               LOOM_LOCATION_UNKNOWN, &return_op));
+        loom_test_yield_build(&builder, return_vals, sig->result_count,
+                              LOOM_LOCATION_UNKNOWN, &return_op));
 
     loom_builder_restore(&builder, saved);
   }
@@ -855,30 +852,20 @@ iree_status_t loom_test_gen_module(loom_test_gen_t* gen,
   return iree_ok_status();
 }
 
-// Populates the config's inline hooks array with the scalar, vector, and test
-// dialect hooks. The hooks are copied by value so the config is self-contained.
+// Populates the config's inline hooks array with synthetic test-dialect hooks.
+// Production dialect hook sets are explicit profiles layered by callers that
+// register those dialects.
 static void loom_test_gen_config_add_default_hooks(
     loom_test_gen_body_config_t* config) {
-  iree_host_size_t scalar_count = 0;
-  const loom_test_gen_op_hook_t* scalar_hooks =
-      loom_test_gen_scalar_hooks(&scalar_count);
-  iree_host_size_t vector_count = 0;
-  const loom_test_gen_op_hook_t* vector_hooks =
-      loom_test_gen_vector_hooks(&vector_count);
   iree_host_size_t test_count = 0;
   const loom_test_gen_op_hook_t* test_hooks =
       loom_test_gen_test_hooks(&test_count);
 
-  iree_host_size_t total = scalar_count + vector_count + test_count;
-  IREE_ASSERT(total <= LOOM_TEST_GEN_MAX_BUILTIN_HOOKS);
+  IREE_ASSERT(test_count <= LOOM_TEST_GEN_MAX_BUILTIN_HOOKS);
 
-  memcpy(config->hooks, scalar_hooks,
-         scalar_count * sizeof(loom_test_gen_op_hook_t));
-  memcpy(config->hooks + scalar_count, vector_hooks,
-         vector_count * sizeof(loom_test_gen_op_hook_t));
-  memcpy(config->hooks + scalar_count + vector_count, test_hooks,
+  memcpy(config->hooks, test_hooks,
          test_count * sizeof(loom_test_gen_op_hook_t));
-  config->hook_count = total;
+  config->hook_count = test_count;
 }
 
 //===----------------------------------------------------------------------===//
@@ -977,15 +964,19 @@ loom_test_gen_module_config_t loom_test_gen_module_config_representative(
   config.declaration_count = (uint16_t)(1 + scale / 2);
   config.calls_per_function = (uint16_t)(1 + scale / 2);
   config.body_config = loom_test_gen_body_config_representative(scale);
-  // func.def creates its own args — don't double-create via body gen.
+  // Function-like ops create their own args; don't double-create via body gen.
   config.body_config.block_arg_count = 0;
   return config;
 }
 
 loom_test_gen_module_config_t loom_test_gen_module_config_fuzz_preset(
     uint8_t preset_index, uint32_t scale) {
-  if (scale == 0) scale = 1;
-  if (scale > 10) scale = 10;
+  if (scale == 0) {
+    scale = 1;
+  }
+  if (scale > 10) {
+    scale = 10;
+  }
   switch (preset_index % 5) {
     case 0:
       return loom_test_gen_module_config_representative(scale);

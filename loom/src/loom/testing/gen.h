@@ -33,17 +33,10 @@
 // calls it to emit one or more ops. This decouples the generation
 // core from dialect-specific op knowledge.
 //
-// Built-in hook sets are provided for the scalar, test, and func
-// dialects. Callers compose hook arrays by concatenating built-in
-// sets with custom hooks:
-//
-//   iree_host_size_t scalar_count, test_count;
-//   const loom_test_gen_op_hook_t* scalar =
-//   loom_test_gen_scalar_hooks(&scalar_count); const loom_test_gen_op_hook_t*
-//   test = loom_test_gen_test_hooks(&test_count); loom_test_gen_op_hook_t
-//   combined[scalar_count + test_count]; memcpy(combined, scalar, scalar_count
-//   * sizeof(combined[0])); memcpy(combined + scalar_count, test, test_count *
-//   sizeof(combined[0]));
+// The default presets use only the synthetic test dialect so generator
+// infrastructure tests stay independent of production dialects. Production
+// dialect hook sets are exposed as explicit profiles; callers opt into them by
+// registering those dialects and installing the corresponding hook table.
 //
 // Preset configs bundle hooks, palettes, and sizing parameters for
 // common scenarios (representative IR, CSE stress, DCE stress, deep
@@ -512,13 +505,6 @@ const loom_test_gen_op_hook_t* loom_test_gen_scalar_hooks(
 const loom_test_gen_op_hook_t* loom_test_gen_test_hooks(
     iree_host_size_t* out_hook_count);
 
-// Returns the built-in func dialect op hooks. The returned array
-// is in static storage and valid for the lifetime of the program.
-// Func hooks generate return and call ops. |out_hook_count|
-// receives the number of hooks.
-const loom_test_gen_op_hook_t* loom_test_gen_func_hooks(
-    iree_host_size_t* out_hook_count);
-
 // Returns the built-in vector dialect op hooks. The returned array
 // is in static storage and valid for the lifetime of the program.
 // Vector hooks generate target-agnostic vector construction, arithmetic, and
@@ -532,8 +518,8 @@ const loom_test_gen_op_hook_t* loom_test_gen_vector_hooks(
 
 // Body config for representative IR. Produces a balanced mix of op
 // kinds, moderate nesting, some dead code, and occasional duplicates.
-// Scale 1 produces tens of ops; scale 10 produces thousands. The
-// returned config's hooks pointer references static storage.
+// Scale 1 produces tens of ops; scale 10 produces thousands. The returned
+// config owns an inline copy of the selected hook table.
 loom_test_gen_body_config_t loom_test_gen_body_config_representative(
     uint32_t scale);
 

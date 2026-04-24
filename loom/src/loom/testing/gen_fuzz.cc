@@ -29,10 +29,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
-#include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
-#include "loom/ops/vector/ops.h"
 #include "loom/testing/gen.h"
 #include "loom/verify/verify.h"
 
@@ -63,18 +60,6 @@ static void ensure_context() {
   trap_with_status(loom_context_register_dialect(&g_context, LOOM_DIALECT_TEST,
                                                  vtables, (uint16_t)count));
 
-  vtables = loom_scalar_dialect_vtables(&count);
-  trap_with_status(loom_context_register_dialect(
-      &g_context, LOOM_DIALECT_SCALAR, vtables, (uint16_t)count));
-
-  vtables = loom_func_dialect_vtables(&count);
-  trap_with_status(loom_context_register_dialect(&g_context, LOOM_DIALECT_FUNC,
-                                                 vtables, (uint16_t)count));
-
-  vtables = loom_vector_dialect_vtables(&count);
-  trap_with_status(loom_context_register_dialect(
-      &g_context, LOOM_DIALECT_VECTOR, vtables, (uint16_t)count));
-
   trap_with_status(loom_context_finalize(&g_context));
   g_initialized = true;
 }
@@ -84,7 +69,9 @@ static void ensure_context() {
 //===----------------------------------------------------------------------===//
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  if (size < 2) return 0;
+  if (size < 2) {
+    return 0;
+  }
   ensure_context();
 
   // First byte: preset selection. Second byte: scale (clamped to 1-5).

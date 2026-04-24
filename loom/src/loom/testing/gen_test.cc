@@ -25,11 +25,8 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
-#include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
-#include "loom/ops/vector/ops.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
 
@@ -43,34 +40,13 @@ class GenTest : public ::testing::Test {
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
 
-    // Register all three dialects the generator uses.
+    // Core generator presets use only the synthetic test dialect.
     iree_host_size_t test_vtable_count = 0;
     const loom_op_vtable_t* const* test_vtables =
         loom_test_dialect_vtables(&test_vtable_count);
     IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_TEST,
                                                  test_vtables,
                                                  (uint16_t)test_vtable_count));
-
-    iree_host_size_t scalar_vtable_count = 0;
-    const loom_op_vtable_t* const* scalar_vtables =
-        loom_scalar_dialect_vtables(&scalar_vtable_count);
-    IREE_ASSERT_OK(loom_context_register_dialect(
-        &context_, LOOM_DIALECT_SCALAR, scalar_vtables,
-        (uint16_t)scalar_vtable_count));
-
-    iree_host_size_t func_vtable_count = 0;
-    const loom_op_vtable_t* const* func_vtables =
-        loom_func_dialect_vtables(&func_vtable_count);
-    IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_FUNC,
-                                                 func_vtables,
-                                                 (uint16_t)func_vtable_count));
-
-    iree_host_size_t vector_vtable_count = 0;
-    const loom_op_vtable_t* const* vector_vtables =
-        loom_vector_dialect_vtables(&vector_vtable_count);
-    IREE_ASSERT_OK(loom_context_register_dialect(
-        &context_, LOOM_DIALECT_VECTOR, vector_vtables,
-        (uint16_t)vector_vtable_count));
 
     IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
@@ -92,16 +68,10 @@ class GenTest : public ::testing::Test {
     loom_verify_options_t options = {};
     options.sink = {loom_diagnostic_stderr_sink, NULL};
     loom_verify_result_t result = {};
-    // Print the module first so diagnostics are readable in context.
-    iree_string_builder_t builder;
-    iree_string_builder_initialize(iree_allocator_system(), &builder);
-    IREE_RETURN_IF_ERROR(
-        loom_text_print_module_to_builder(*out_module, &builder, 0));
-    fprintf(stderr, "Generated module (seed=%" PRIu64 "):\n%.*s\n", seed,
-            (int)iree_string_builder_size(&builder),
-            iree_string_builder_buffer(&builder));
-    iree_string_builder_deinitialize(&builder);
-    IREE_RETURN_IF_ERROR(loom_verify_module(*out_module, &options, &result));
+    iree_status_t status = loom_verify_module(*out_module, &options, &result);
+    if (!iree_status_is_ok(status)) {
+      return status;
+    }
     if (result.error_count > 0) {
       return iree_make_status(
           IREE_STATUS_INTERNAL,
@@ -238,33 +208,6 @@ TEST_F(GenTest, FormatStressPresetVerifies) {
 
   loom_module_t* module = nullptr;
   IREE_ASSERT_OK(generate_and_verify(500, config, &module));
-  loom_module_free(module);
-}
-
-TEST_F(GenTest, VectorHooksVerifyAndEmitVectorOps) {
-  loom_test_gen_body_config_t body =
-      loom_test_gen_body_config_representative(1);
-  iree_host_size_t vector_hook_count = 0;
-  const loom_test_gen_op_hook_t* vector_hooks =
-      loom_test_gen_vector_hooks(&vector_hook_count);
-  ASSERT_LE(vector_hook_count, IREE_ARRAYSIZE(body.hooks));
-  for (iree_host_size_t i = 0; i < vector_hook_count; ++i) {
-    body.hooks[i] = vector_hooks[i];
-  }
-  body.hook_count = vector_hook_count;
-  body.op_count = 30;
-  body.block_arg_count = 0;
-
-  loom_test_gen_module_config_t config = {0};
-  config.function_count = 1;
-  config.declaration_count = 0;
-  config.calls_per_function = 0;
-  config.body_config = body;
-
-  loom_module_t* module = nullptr;
-  IREE_ASSERT_OK(generate_and_verify(550, config, &module));
-  std::string text = print_module(module);
-  EXPECT_NE(text.find("vector."), std::string::npos);
   loom_module_free(module);
 }
 

@@ -70,18 +70,38 @@ loom_cc_library(
     "gen.h"
   SRCS
     "gen.c"
-    "gen_func_dialect.c"
-    "gen_scalar_dialect.c"
     "gen_test_dialect.c"
-    "gen_vector_dialect.c"
   DEPS
     iree::base
     iree::base::internal::prng
     loom::src::loom::ir
-    loom::src::loom::ops::func
     loom::src::loom::ops::op_defs
-    loom::src::loom::ops::scalar
     loom::src::loom::ops::test
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    gen_scalar_hooks
+  SRCS
+    "gen_scalar_dialect.c"
+  DEPS
+    ::gen
+    iree::base
+    loom::src::loom::ops::scalar
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    gen_vector_hooks
+  SRCS
+    "gen_vector_dialect.c"
+  DEPS
+    ::gen
+    iree::base
     loom::src::loom::ops::vector
   TESTONLY
   PUBLIC
@@ -98,12 +118,29 @@ loom_cc_test(
     loom::src::loom::error::diagnostic
     loom::src::loom::format::text::printer
     loom::src::loom::ir
-    loom::src::loom::ops::func
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    loom::src::loom::util::stream
+    loom::src::loom::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    gen_dialect_profiles_test
+  SRCS
+    "gen_dialect_profiles_test.cc"
+  DEPS
+    ::gen
+    ::gen_scalar_hooks
+    ::gen_vector_hooks
+    iree::base::internal::arena
+    loom::src::loom::error::diagnostic
+    loom::src::loom::ir
     loom::src::loom::ops::scalar
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
-    loom::src::loom::util::stream
     loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
@@ -119,10 +156,7 @@ loom_cc_fuzz(
     iree::base
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::scalar
     loom::src::loom::ops::test
-    loom::src::loom::ops::vector
     loom::src::loom::verify
 )
 
