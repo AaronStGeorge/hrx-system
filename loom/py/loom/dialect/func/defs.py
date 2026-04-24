@@ -49,6 +49,7 @@ from loom.dialect.target.defs import ExportAbiKind
 from loom.dsl import (
     ANY,
     ISOLATED_FROM_ABOVE,
+    POISON_BOUNDARY,
     SYMBOL_DEFINE,
     TERMINATOR,
     UNKNOWN_EFFECTS,
@@ -541,7 +542,7 @@ func_return = Op(
     group=func_ops,
     doc="Return values from function body. Types must match enclosing function's result types.",
     operands=[Operand("operands", ANY, variadic=True)],
-    traits=[TERMINATOR],
+    traits=[TERMINATOR, POISON_BOUNDARY],
     format=[
         OptionalGroup(
             [Refs("operands"), COLON, TypesOf("operands")],

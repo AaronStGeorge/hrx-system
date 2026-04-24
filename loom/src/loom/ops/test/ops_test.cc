@@ -129,7 +129,9 @@ TEST(Vtable, BranchRegions) {
 }
 
 TEST(Vtable, YieldTraits) {
-  EXPECT_NE(TestVtable(LOOM_OP_TEST_YIELD)->traits & LOOM_TRAIT_TERMINATOR, 0u);
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_YIELD);
+  EXPECT_NE(vtable->traits & LOOM_TRAIT_TERMINATOR, 0u);
+  EXPECT_NE(vtable->traits & LOOM_TRAIT_POISON_BOUNDARY, 0u);
 }
 
 TEST(Vtable, MapTraits) {

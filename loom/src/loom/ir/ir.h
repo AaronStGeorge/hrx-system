@@ -661,6 +661,10 @@ enum loom_trait_bits_e {
   // canonicalization may rewrite those references when the rewritten result
   // value has no users that require the original type/shape/encoding identity.
   LOOM_TRAIT_REFINABLE_RESULT_TYPE_REFS = 1u << 17,
+  // Op observes poison operands at a semantic boundary where poison can no
+  // longer propagate as an ordinary SSA value. Examples include return-like
+  // terminators and externally-visible boundary ops.
+  LOOM_TRAIT_POISON_BOUNDARY = 1u << 18,
 };
 typedef uint32_t loom_trait_flags_t;
 

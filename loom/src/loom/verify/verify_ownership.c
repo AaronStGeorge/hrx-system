@@ -238,11 +238,11 @@ void loom_verify_operand_dominance(loom_verify_state_t* state,
 static bool loom_verify_op_observes_poison(
     const loom_module_t* module, const loom_op_t* op,
     iree_string_view_t* out_boundary_kind) {
-  if (loom_func_return_isa(op)) {
-    *out_boundary_kind = IREE_SV("function return");
+  loom_trait_flags_t traits = loom_op_effective_traits(module, op);
+  if (iree_any_bit_set(traits, LOOM_TRAIT_POISON_BOUNDARY)) {
+    *out_boundary_kind = IREE_SV("observation boundary");
     return true;
   }
-  loom_trait_flags_t traits = loom_op_effective_traits(module, op);
   const loom_trait_flags_t boundary_traits =
       LOOM_TRAIT_READS_MEMORY | LOOM_TRAIT_WRITES_MEMORY |
       LOOM_TRAIT_NON_DETERMINISTIC | LOOM_TRAIT_UNKNOWN_EFFECTS;

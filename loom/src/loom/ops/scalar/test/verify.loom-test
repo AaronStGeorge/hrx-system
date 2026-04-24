@@ -10,10 +10,10 @@ func.def @dead_poison_not_observed(%x: i32) {
 
 // ====
 
-// Function returns observe poison escaping ordinary SSA propagation.
+// Return-like boundaries observe poison escaping ordinary SSA propagation.
 func.def @return_poison() -> (i32) {
   %p = scalar.poison : i32
-  // ERROR@+1: TYPE/012 "poison" "function return" "func.return"
+  // ERROR@+1: TYPE/012 "poison" "observation boundary" "func.return"
   func.return %p : i32
 }
 

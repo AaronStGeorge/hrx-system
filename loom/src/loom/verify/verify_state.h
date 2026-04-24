@@ -10,7 +10,6 @@
 #include "iree/base/internal/arena.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
 #include "loom/ops/special_values.h"
 #include "loom/verify/verify.h"
 

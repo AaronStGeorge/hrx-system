@@ -128,6 +128,7 @@ __all__ = [
     "HINT",
     "SAFE_TO_SPECULATE",
     "REFINABLE_RESULT_TYPE_REFS",
+    "POISON_BOUNDARY",
     # Trait constructors.
     "AllTypesMatch",
     "HasAncestor",
@@ -766,6 +767,9 @@ SAFE_TO_SPECULATE = Trait("SafeToSpeculate")
 # Result types carry op-owned SSA references. Local canonicalization may retarget
 # those references after proving the result has no type-sensitive users.
 REFINABLE_RESULT_TYPE_REFS = Trait("RefinableResultTypeRefs")
+# Op observes poison operands at a semantic boundary where poison can no longer
+# propagate as an ordinary SSA value.
+POISON_BOUNDARY = Trait("PoisonBoundary")
 
 
 # ============================================================================

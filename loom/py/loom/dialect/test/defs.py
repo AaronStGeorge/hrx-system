@@ -63,6 +63,7 @@ from loom.dsl import (
     INTEGER,
     INVOLUTION,
     ISOLATED_FROM_ABOVE,
+    POISON_BOUNDARY,
     POOL,
     PURE,
     SYMBOL_DEFINE,
@@ -1022,7 +1023,7 @@ test_yield = Op(
     group=test_ops,
     doc="Test yield terminator.",
     operands=[Operand("values", ANY, variadic=True)],
-    traits=[TERMINATOR],
+    traits=[TERMINATOR, POISON_BOUNDARY],
     format=[
         OptionalGroup(
             [Refs("values"), COLON, TypesOf("values")],

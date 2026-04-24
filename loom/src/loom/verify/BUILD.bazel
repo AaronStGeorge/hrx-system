@@ -4,12 +4,18 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_assert_no_dependencies", "loom_cc_library", "loom_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+loom_assert_no_dependencies(
+    name = "core_verify_no_func_dialect_dep",
+    dependencies = ["//loom/src/loom/ops/func"],
+    targets = [":verify"],
 )
 
 loom_cc_library(
@@ -39,7 +45,6 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops:special_values",
-        "//loom/src/loom/ops/func",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/base/internal:unicode",
