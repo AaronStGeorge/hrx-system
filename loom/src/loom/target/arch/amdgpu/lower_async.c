@@ -349,19 +349,18 @@ iree_status_t loom_amdgpu_select_kernel_async_wait_plan(
       .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
   };
   *out_selected = false;
-  if (loom_kernel_async_wait_newer_groups(source_op) != 0) {
-    return iree_ok_status();
-  }
   const loom_module_t* module = loom_low_lower_context_module(context);
   if (!loom_amdgpu_async_wait_group_contains_local_gather(module, source_op)) {
     *out_selected = true;
     return iree_ok_status();
   }
 
+  const uint16_t target_count =
+      (uint16_t)loom_kernel_async_wait_newer_groups(source_op);
   loom_amdgpu_wait_packet_selection_t selection = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_select_counter_mask(
       loom_low_lower_context_descriptor_set(context),
-      LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD, /*target_count=*/0, &selection));
+      LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD, target_count, &selection));
   out_plan->descriptor_id = selection.descriptor_id;
   out_plan->immediate_count = selection.immediate_count;
   for (iree_host_size_t i = 0; i < selection.immediate_count; ++i) {
@@ -591,12 +590,6 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_async(
       return loom_amdgpu_low_legality_verify_kernel_async_group(provider,
                                                                 context, op);
     case LOOM_OP_KERNEL_ASYNC_WAIT:
-      if (loom_kernel_async_wait_newer_groups(op) != 0) {
-        return loom_target_low_legality_reject(
-            context, provider, op, IREE_SV("async"), IREE_SV("wait"),
-            IREE_SV("AMDGPU source-to-low currently supports only "
-                    "newer_groups = 0 async waits"));
-      }
       return iree_ok_status();
     case LOOM_OP_KERNEL_ASYNC_GATHER:
       return loom_amdgpu_low_legality_verify_kernel_async_gather(provider,

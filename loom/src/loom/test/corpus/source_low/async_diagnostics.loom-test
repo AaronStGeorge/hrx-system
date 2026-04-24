@@ -1,13 +1,5 @@
 // RUN: roundtrip
 
-func.def @async_wait_newer_groups_rejected() {
-  %group = kernel.async.group -> kernel.async.group
-  kernel.async.wait %group {newer_groups = 1} : kernel.async.group
-  func.return
-}
-
-// ====
-
 func.def @async_group_argument_rejected(%group: kernel.async.group) {
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
   func.return

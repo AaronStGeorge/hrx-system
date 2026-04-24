@@ -1,15 +1,6 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/async_diagnostics.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-func.def @async_wait_newer_groups_rejected() {
-  %group = kernel.async.group -> kernel.async.group
-  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low currently supports only newer_groups = 0 async waits"
-  kernel.async.wait %group {newer_groups = 1} : kernel.async.group
-  func.return
-}
-
-// ====
-
 // ERROR@+1: BACKEND/001 "async control values must be consumed by kernel.async ops before target-low lowering"
 func.def @async_group_argument_rejected(%group: kernel.async.group) {
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
