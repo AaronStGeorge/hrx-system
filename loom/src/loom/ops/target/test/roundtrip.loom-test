@@ -1,0 +1,4 @@
+// RUN: roundtrip
+
+// Production target preset authoring record.
+target.profile @vm_target preset("iree-vm")

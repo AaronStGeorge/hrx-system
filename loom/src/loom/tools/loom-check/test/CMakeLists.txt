@@ -12,6 +12,50 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
+    "pass"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/pass.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "requires"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/requires.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "roundtrip"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "verify"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "low_allocation"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/low_allocation.loom-test"
@@ -59,50 +103,6 @@ iree_executable_test(
     "low_verify"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/low_verify.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check::loom-check-test
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "pass"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/pass.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check::loom-check-test
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "requires"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/requires.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check::loom-check-test
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "roundtrip"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check::loom-check-test
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "verify"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
   SRC
     loom::src::loom::tools::loom-check::loom-check-test
   LABELS

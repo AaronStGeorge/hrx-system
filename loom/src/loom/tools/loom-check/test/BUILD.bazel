@@ -14,11 +14,6 @@ package(
 loom_check_test_suite(
     name = "core_test",
     srcs = [
-        "low_allocation.loom-test",
-        "low_allocation_materialization.loom-test",
-        "low_packet.loom-test",
-        "low_schedule.loom-test",
-        "low_verify.loom-test",
         "pass.loom-test",
         "requires.loom-test",
         "roundtrip.loom-test",
@@ -27,9 +22,22 @@ loom_check_test_suite(
     runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )
 
+loom_check_test_suite(
+    name = "low_tool_test",
+    srcs = [
+        "low_allocation.loom-test",
+        "low_allocation_materialization.loom-test",
+        "low_packet.loom-test",
+        "low_schedule.loom-test",
+        "low_verify.loom-test",
+    ],
+    runner = "//loom/src/loom/tools/loom-check:loom-check-test",
+)
+
 test_suite(
     name = "test",
     tests = [
         ":core_test",
+        ":low_tool_test",
     ],
 )

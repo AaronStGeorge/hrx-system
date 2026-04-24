@@ -1,0 +1,57 @@
+// RUN: roundtrip
+
+// Function definition and call ops.
+func.def @identity(%x: f32) -> (f32) {
+  func.return %x : f32
+}
+
+func.def @call_identity(%x: f32) -> (f32) {
+  %r = func.call @identity(%x) : (f32) -> (f32)
+  func.return %r : f32
+}
+
+// ====
+
+// External function declaration with no body.
+func.decl @extern_matmul(%a: f32, %b: f32) -> (f32)
+
+// ====
+
+// Declaration with import source module.
+func.decl import("linalg_lib") @matmul(%a: f32, %b: f32) -> (f32)
+
+// ====
+
+// Declaration with import source module and aliased symbol name.
+func.decl import("math_lib", "matmul_v2") @my_matmul(%a: f32) -> (f32)
+
+// ====
+
+// Public re-exported import declaration.
+func.decl public import("upstream") @relu(%x: f32) -> (f32)
+
+// ====
+
+// Multiple function definitions in a single module.
+func.def @first(%a: i32, %b: i32) -> (i32) {
+  func.return %a : i32
+}
+
+func.def @second(%x: f32) -> (f32) {
+  func.return %x : f32
+}
+
+func.def @third() {
+  func.return
+}
+
+// ====
+
+// Initializer and deinitializer calling conventions with zero-operand return.
+func.def initializer @setup() {
+  func.return
+}
+
+func.def deinitializer @teardown() {
+  func.return
+}
