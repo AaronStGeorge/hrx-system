@@ -100,6 +100,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "packed_bitfield"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/packed_bitfield.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "packed_bitpack"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/packed_bitpack.loom-test"
