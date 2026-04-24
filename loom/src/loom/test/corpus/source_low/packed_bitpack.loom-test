@@ -4,17 +4,3 @@ func.def @i32x4_to_i8x4_bitpack(%codes: vector<4xi32>) -> (vector<4xi8>) {
   %packed = vector.bitpack<8> %codes : vector<4xi32> -> vector<4xi8>
   func.return %packed : vector<4xi8>
 }
-
-// ====
-
-func.def @bitpack_width_rejected(%codes: vector<8xi32>) -> (vector<4xi8>) {
-  %packed = vector.bitpack<4> %codes : vector<8xi32> -> vector<4xi8>
-  func.return %packed : vector<4xi8>
-}
-
-// ====
-
-func.def @bitpack_source_type_rejected(%codes: vector<4xi8>) -> (vector<4xi8>) {
-  %packed = vector.bitpack<8> %codes : vector<4xi8> -> vector<4xi8>
-  func.return %packed : vector<4xi8>
-}

@@ -12,17 +12,6 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
-    "async_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/async_diagnostics.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check::loom-check-test
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
     "async_empty"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/async_empty.loom-test"
@@ -81,17 +70,6 @@ iree_executable_test(
     "memory_cache_policy_scopes"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/memory_cache_policy_scopes.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check::loom-check-test
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "memory_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/memory_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check::loom-check-test
   LABELS

@@ -28,19 +28,3 @@ low.func.def target(@target) abi(hal_kernel) @i32x4_to_i8x4_bitpack(%codes: reg<
   %packed = v_or_b32 %17, %21
   return %packed
 }
-
-// ====
-
-func.def @bitpack_width_rejected(%codes: vector<8xi32>) -> (vector<4xi8>) {
-  // ERROR@+1: BACKEND/001 "AMDGPU vector.bitpack currently lowers byte packing width 8"
-  %packed = vector.bitpack<4> %codes : vector<8xi32> -> vector<4xi8>
-  func.return %packed : vector<4xi8>
-}
-
-// ====
-
-func.def @bitpack_source_type_rejected(%codes: vector<4xi8>) -> (vector<4xi8>) {
-  // ERROR@+1: BACKEND/001 "static rank-1 i32 source vector"
-  %packed = vector.bitpack<8> %codes : vector<4xi8> -> vector<4xi8>
-  func.return %packed : vector<4xi8>
-}

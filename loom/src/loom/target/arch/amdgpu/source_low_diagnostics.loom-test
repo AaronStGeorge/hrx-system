@@ -1,4 +1,3 @@
-// TEMPLATE: loom/src/loom/test/corpus/source_low/memory_diagnostics.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 diagnostics=memory output=low
 
 func.def @lds_b32_diagnostics(%output: buffer) {

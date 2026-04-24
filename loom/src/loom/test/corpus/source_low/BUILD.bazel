@@ -14,13 +14,11 @@ package(
 
 exports_files([
     "async_empty.loom-test",
-    "async_diagnostics.loom-test",
     "async_gather.loom-test",
     "index_addressing.loom-test",
     "lookup_table.loom-test",
     "memory_cache_policy_non_temporal.loom-test",
     "memory_cache_policy_scopes.loom-test",
-    "memory_diagnostics.loom-test",
     "memory_global.loom-test",
     "memory_prefetch.loom-test",
     "memory_workgroup_atomic.loom-test",
@@ -51,14 +49,12 @@ exports_files([
 loom_check_test_suite(
     name = "test",
     srcs = [
-        "async_diagnostics.loom-test",
         "async_empty.loom-test",
         "async_gather.loom-test",
         "index_addressing.loom-test",
         "lookup_table.loom-test",
         "memory_cache_policy_non_temporal.loom-test",
         "memory_cache_policy_scopes.loom-test",
-        "memory_diagnostics.loom-test",
         "memory_global.loom-test",
         "memory_prefetch.loom-test",
         "memory_workgroup_atomic.loom-test",

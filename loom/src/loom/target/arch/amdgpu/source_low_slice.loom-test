@@ -39,19 +39,3 @@ low.func.def target(@target) abi(hal_kernel) @i8x4_slice_high_half(%bytes: reg<a
   %high = v_lshrrev_b32 %5, %bytes
   return %high
 }
-
-// ====
-
-func.def @dynamic_slice_rejected(%offset: index, %values: vector<4xi32>) -> (vector<2xi32>) {
-  // ERROR@+1: BACKEND/001 "AMDGPU vector.slice currently requires static rank-1"
-  %middle = vector.slice %values[%offset] : vector<4xi32> -> vector<2xi32>
-  func.return %middle : vector<2xi32>
-}
-
-// ====
-
-func.def @i8_cross_register_slice_rejected(%bytes: vector<8xi8>) -> (vector<4xi8>) {
-  // ERROR@+1: BACKEND/001 "packed integer bit windows contained within each selected 32-bit register"
-  %middle = vector.slice %bytes[2] : vector<8xi8> -> vector<4xi8>
-  func.return %middle : vector<4xi8>
-}

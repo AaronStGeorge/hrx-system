@@ -1,4 +1,3 @@
-// TEMPLATE: loom/src/loom/test/corpus/source_low/async_diagnostics.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
 // ERROR@+1: BACKEND/001 "async control values must be consumed by kernel.async ops before target-low lowering"

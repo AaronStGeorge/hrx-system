@@ -818,9 +818,31 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_bitpack_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_bitpack_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_bitunpack"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_bitunpack.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_bitunpack_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_bitunpack_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -950,6 +972,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_minmax_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_minmax_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_numeric_f32"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_numeric_f32.loom-test"
@@ -1038,6 +1071,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_slice_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_slice_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_sync"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_sync.loom-test"
@@ -1052,6 +1096,17 @@ iree_executable_test(
     "source_low_table"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_table.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_table_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_table_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

@@ -99,19 +99,3 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_minnum_maxnum() asm<amd
   buffer_store_b64 %stored, %output_view, %36, %37 {offset = 0}
   return
 }
-
-// ====
-
-func.def @scalar_ieee_minimum_rejected(%lhs: f32, %rhs: f32) -> (f32) {
-  // ERROR@+1: BACKEND/001
-  %min = scalar.minimumf %lhs, %rhs : f32
-  func.return %min : f32
-}
-
-// ====
-
-func.def @vector_ieee_maximum_rejected(%lhs: vector<2xf32>, %rhs: vector<2xf32>) -> (vector<2xf32>) {
-  // ERROR@+1: BACKEND/001
-  %max = vector.maximumf %lhs, %rhs : vector<2xf32>
-  func.return %max : vector<2xf32>
-}
