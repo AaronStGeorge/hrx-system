@@ -786,6 +786,10 @@ iree_status_t loom_movement_analysis_analyze_function(
                                                  function);
 }
 
+bool loom_movement_op_kind_is_async(loom_op_kind_t op_kind) {
+  return loom_movement_async_descriptor_for(op_kind) != NULL;
+}
+
 iree_status_t loom_movement_request_describe_op(
     loom_movement_analysis_t* analysis, const loom_op_t* op,
     loom_movement_request_t* out_request,

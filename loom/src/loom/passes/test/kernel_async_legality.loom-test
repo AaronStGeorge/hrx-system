@@ -76,3 +76,100 @@ func.def @rejects_region_wait_without_parent_wait(%cond: i1) {
   }
   func.return
 }
+
+// ====
+
+func.def @allows_static_disjoint_pending_async_destinations(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %sixteen = index.constant 16 : offset
+  %bytes = index.constant 64 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source0 = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
+  %source1 = buffer.view %global[%sixteen] : buffer -> view<16xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest0 = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
+  %dest1 = buffer.view %scratch[%sixteen] : buffer -> view<16xi8, #dense>
+  %copy0 = kernel.async.copy %source0 to %dest0 {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, #dense> to view<16xi8, #dense> -> kernel.async.token
+  %group0 = kernel.async.group %copy0 : kernel.async.token -> kernel.async.group
+  %copy1 = kernel.async.copy %source1 to %dest1 {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, #dense> to view<16xi8, #dense> -> kernel.async.token
+  %group1 = kernel.async.group %copy1 : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group0 {newer_groups = 1} : kernel.async.group
+  kernel.async.wait %group1 {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @rejects_overlapping_pending_async_destinations(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 64 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest0 = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
+  %dest1 = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
+  %copy0 = kernel.async.copy %source to %dest0 {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, #dense> to view<16xi8, #dense> -> kernel.async.token
+  %group0 = kernel.async.group %copy0 : kernel.async.token -> kernel.async.group
+  %copy1 = kernel.async.copy %source to %dest1 {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, #dense> to view<16xi8, #dense> -> kernel.async.token
+  // ERROR@+1: LOWERING/001 "kernel.async.group" "kernel-async-legality" "pending async destination may overlap an earlier uncompleted async destination"
+  %group1 = kernel.async.group %copy1 : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group0 {newer_groups = 1} : kernel.async.group
+  kernel.async.wait %group1 {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @rejects_unknown_same_root_pending_async_overlap(%input: buffer, %dest_offset: offset) {
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 64 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest0 = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
+  %dest1 = buffer.view %scratch[%dest_offset] : buffer -> view<16xi8, #dense>
+  %copy0 = kernel.async.copy %source to %dest0 {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, #dense> to view<16xi8, #dense> -> kernel.async.token
+  %group0 = kernel.async.group %copy0 : kernel.async.token -> kernel.async.group
+  %copy1 = kernel.async.copy %source to %dest1 {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, #dense> to view<16xi8, #dense> -> kernel.async.token
+  // ERROR@+1: LOWERING/001 "kernel.async.group" "kernel-async-legality" "pending async destination may overlap an earlier uncompleted async destination"
+  %group1 = kernel.async.group %copy1 : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group0 {newer_groups = 1} : kernel.async.group
+  kernel.async.wait %group1 {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @rejects_destination_overwrite_before_wait(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 64 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
+  %copy = kernel.async.copy %source to %dest {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, #dense> to view<16xi8, #dense> -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  %value = scalar.constant 1 : i8
+  // ERROR@+1: LOWERING/001 "view.store" "kernel-async-legality" "synchronous write may overwrite a pending async destination before wait"
+  view.store %value, %dest[0] : i8, view<16xi8, #dense>
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @rejects_destination_read_before_wait(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 64 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source = buffer.view %global[%zero] : buffer -> view<16xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<16xi8, #dense>
+  %copy = kernel.async.copy %source to %dest {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, #dense> to view<16xi8, #dense> -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  // ERROR@+1: LOWERING/001 "view.load" "kernel-async-legality" "synchronous read may observe a pending async destination before wait"
+  %loaded = view.load %dest[0] : view<16xi8, #dense> -> i8
+  test.use %loaded : i8
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}

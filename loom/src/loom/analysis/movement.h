@@ -244,6 +244,9 @@ iree_status_t loom_movement_analysis_initialize(
 iree_status_t loom_movement_analysis_analyze_function(
     loom_movement_analysis_t* analysis, loom_func_like_t function);
 
+// Returns true when op_kind is represented by the async movement table.
+bool loom_movement_op_kind_is_async(loom_op_kind_t op_kind);
+
 // Classifies one source IR operation as a movement request.
 //
 // Unsupported or unrepresentable operations return OK with |out_described| set
