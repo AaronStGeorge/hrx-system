@@ -72,8 +72,10 @@ loom_cc_library(
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
+    loom::src::loom::ops::func
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::target
     loom::src::loom::pass::builtin_registry
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::tooling

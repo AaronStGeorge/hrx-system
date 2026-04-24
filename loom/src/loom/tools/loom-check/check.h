@@ -40,8 +40,11 @@
 //                           [class=units...].
 //                           Source lowering tests use source-low
 //                           [output=module|low|none]
-//                           [diagnostics=none|memory|all]. Linked providers may
-//                           add target-specific emit forms.
+//                           [diagnostics=none|memory|all]
+//                           [target-preset=<preset>]. target-preset
+//                           materializes one target.profile and attaches it to
+//                           untargeted func.def ops before lowering. Linked
+//                           providers may add target-specific emit forms.
 //                           output=none is only valid with diagnostic
 //                           annotations or non-none diagnostics=... evidence.
 //                           Low schedule diagnostics are one of none,

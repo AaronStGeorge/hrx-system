@@ -20,8 +20,10 @@
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/target/ops.h"
 #include "loom/target/low_packet_diagnostics.h"
 #include "loom/target/module_compiler.h"
 #include "loom/tools/loom-check/diagnostics.h"
@@ -104,8 +106,12 @@ typedef struct loom_check_emit_request_t {
   loom_check_emit_source_low_output_t source_low_output;
   // Source-low legality diagnostics requested by the RUN line.
   loom_target_low_legality_diagnostic_flags_t source_low_diagnostic_flags;
+  // Preset to materialize as a target profile before source-low lowering.
+  iree_string_view_t source_low_target_preset;
   // True once a source-low diagnostics option has been parsed.
   bool has_source_low_diagnostics_option;
+  // True once a source-low target-preset option has been parsed.
+  bool has_source_low_target_preset_option;
 } loom_check_emit_request_t;
 
 static iree_status_t loom_check_emit_parse_low_allocation_budget(
@@ -246,6 +252,20 @@ static iree_status_t loom_check_emit_parse_source_low_option(
           (int)value.size, value.data);
     }
     request->has_source_low_diagnostics_option = true;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(name, IREE_SV("target-preset"))) {
+    if (request->has_source_low_target_preset_option) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "duplicate source-low option 'target-preset'");
+    }
+    if (iree_string_view_is_empty(value)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "source-low option 'target-preset' requires a "
+                              "preset name");
+    }
+    request->source_low_target_preset = value;
+    request->has_source_low_target_preset_option = true;
     return iree_ok_status();
   }
   if (!iree_string_view_equal(name, IREE_SV("output"))) {
@@ -1043,6 +1063,137 @@ static iree_status_t loom_check_emit_write_source_low_artifacts(
   return iree_ok_status();
 }
 
+static bool loom_check_emit_module_has_symbol_name(
+    const loom_module_t* module, iree_string_view_t symbol_name) {
+  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
+    const loom_symbol_t* symbol = &module->symbols.entries[i];
+    if (symbol->name_id < module->strings.count &&
+        iree_string_view_equal(module->strings.entries[symbol->name_id],
+                               symbol_name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_check_emit_add_module_symbol(
+    loom_module_t* module, iree_string_view_t symbol_name,
+    loom_symbol_ref_t* out_ref) {
+  loom_string_id_t symbol_name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(module, symbol_name, &symbol_name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_add_symbol(module, symbol_name_id, &symbol_id));
+  *out_ref = (loom_symbol_ref_t){
+      .module_id = 0,
+      .symbol_id = symbol_id,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_emit_add_source_low_target_symbol(
+    loom_module_t* module, loom_symbol_ref_t* out_ref) {
+  if (!loom_check_emit_module_has_symbol_name(module, IREE_SV("target"))) {
+    return loom_check_emit_add_module_symbol(module, IREE_SV("target"),
+                                             out_ref);
+  }
+
+  iree_string_builder_t symbol_name_builder;
+  iree_string_builder_initialize(module->allocator, &symbol_name_builder);
+  iree_status_t status = iree_ok_status();
+  for (uint32_t i = 0; i < UINT16_MAX && iree_status_is_ok(status); ++i) {
+    iree_string_builder_reset(&symbol_name_builder);
+    status = iree_string_builder_append_format(&symbol_name_builder,
+                                               "target_%u", (unsigned)i);
+    iree_string_view_t symbol_name =
+        iree_string_builder_view(&symbol_name_builder);
+    if (iree_status_is_ok(status) &&
+        !loom_check_emit_module_has_symbol_name(module, symbol_name)) {
+      status = loom_check_emit_add_module_symbol(module, symbol_name, out_ref);
+      iree_string_builder_deinitialize(&symbol_name_builder);
+      return status;
+    }
+  }
+  iree_string_builder_deinitialize(&symbol_name_builder);
+  if (!iree_status_is_ok(status)) {
+    return status;
+  }
+  return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                          "unable to create a unique source-low target symbol");
+}
+
+static iree_string_view_t loom_check_emit_symbol_name(
+    const loom_module_t* module, iree_host_size_t symbol_index) {
+  if (symbol_index >= module->symbols.count) {
+    return IREE_SV("<invalid>");
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_index];
+  if (symbol->name_id >= module->strings.count) {
+    return IREE_SV("<invalid>");
+  }
+  return module->strings.entries[symbol->name_id];
+}
+
+static iree_status_t loom_check_emit_prepare_source_low_target_preset(
+    loom_module_t* module, const loom_check_emit_request_t* request) {
+  if (!request->has_source_low_target_preset_option) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t targetable_func_count = 0;
+  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
+    const loom_symbol_t* symbol = &module->symbols.entries[i];
+    if (!symbol->defining_op || !loom_func_def_isa(symbol->defining_op)) {
+      continue;
+    }
+    if (loom_symbol_ref_is_valid(loom_func_def_target(symbol->defining_op))) {
+      iree_string_view_t func_name = loom_check_emit_symbol_name(module, i);
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "source-low target-preset cannot be used with pre-targeted func "
+          "@%.*s",
+          (int)func_name.size, func_name.data);
+    }
+    ++targetable_func_count;
+  }
+  if (targetable_func_count == 0) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "source-low target-preset found no func.def ops to "
+                            "target");
+  }
+
+  loom_symbol_ref_t target_ref = loom_symbol_ref_null();
+  IREE_RETURN_IF_ERROR(
+      loom_check_emit_add_source_low_target_symbol(module, &target_ref));
+
+  loom_string_id_t preset_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      module, request->source_low_target_preset, &preset_id));
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &builder);
+  if (loom_module_block(module)->first_op) {
+    loom_builder_set_before(&builder, loom_module_block(module)->first_op);
+  }
+  loom_op_t* target_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_target_profile_build(
+      &builder, target_ref, preset_id, loom_named_attr_slice_empty(),
+      LOOM_LOCATION_UNKNOWN, &target_op));
+  (void)target_op;
+
+  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
+    const loom_symbol_t* symbol = &module->symbols.entries[i];
+    if (!symbol->defining_op || !loom_func_def_isa(symbol->defining_op)) {
+      continue;
+    }
+    loom_op_attrs(symbol->defining_op)[loom_func_def_target_ATTR_INDEX] =
+        loom_attr_symbol(target_ref);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_emit_write_source_low_text(
     loom_module_t* module, const loom_check_emit_request_t* request,
     const loom_target_low_descriptor_registry_t* low_registry,
@@ -1052,6 +1203,8 @@ static iree_status_t loom_check_emit_write_source_low_text(
     loom_check_diagnostic_collector_t* diagnostic_collector,
     loom_check_result_t* result) {
   IREE_RETURN_IF_ERROR(loom_low_lower_policy_registry_verify(policy_registry));
+  IREE_RETURN_IF_ERROR(
+      loom_check_emit_prepare_source_low_target_preset(module, request));
 
   const loom_target_module_compile_options_t compile_options = {
       .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,

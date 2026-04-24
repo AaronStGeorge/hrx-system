@@ -1142,6 +1142,59 @@ TEST_F(ExecuteTest, EmitSourceLowLowersEveryTargetedFunction) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, EmitSourceLowTargetPresetTargetsUntargetedFunctions) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit source-low target-preset=test-low "
+                   "output=module\n"
+                   "func.def @first(%lhs: i32, %rhs: i32) -> (i32) {\n"
+                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n"
+                   "\n"
+                   "func.def @second(%lhs: i32, %rhs: i32) -> (i32) {\n"
+                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string actual_output = ActualOutputString(result);
+  EXPECT_NE(actual_output.find("target.profile @target preset(\"test-low\")"),
+            std::string::npos);
+  EXPECT_NE(actual_output.find(
+                "low.func.def target(@target) abi(object_function) @first"),
+            std::string::npos);
+  EXPECT_NE(actual_output.find(
+                "low.func.def target(@target) abi(object_function) @second"),
+            std::string::npos);
+  EXPECT_EQ(actual_output.find("func.def @first"), std::string::npos);
+  EXPECT_EQ(actual_output.find("func.def @second"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitSourceLowTargetPresetRejectsPreTargetedFunctions) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit source-low target-preset=test-low "
+                   "output=module\n"
+                   "target.profile @explicit preset(\"test-low\")\n"
+                   "\n"
+                   "func.def target(@explicit) @first(%lhs: i32, %rhs: i32) "
+                   "-> (i32) {\n"
+                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string detail = DetailString(result);
+  EXPECT_NE(detail.find("target-preset cannot be used with pre-targeted func "
+                        "@first"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, EmitLowScheduleJsonAnchorsLiveInPreamble) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
