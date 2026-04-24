@@ -25,3 +25,55 @@ func.def @lds_atomic_add_f32() {
   %old = view.atomic.rmw<addf> %one, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense> -> f32
   func.return
 }
+
+// ====
+
+func.def @lds_atomic_bitwise_i32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %mask = scalar.constant 255 : i32
+  view.atomic.reduce<andi> %mask, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  view.atomic.reduce<ori> %mask, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  view.atomic.reduce<xori> %mask, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  %old_and = view.atomic.rmw<andi> %mask, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_or = view.atomic.rmw<ori> %mask, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_xor = view.atomic.rmw<xori> %mask, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ====
+
+func.def @lds_atomic_sub_i32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %delta = scalar.constant 1 : i32
+  view.atomic.reduce<subi> %delta, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  %old_sub = view.atomic.rmw<subi> %delta, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ====
+
+func.def @lds_atomic_minmax_i32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %limit = scalar.constant 1 : i32
+  view.atomic.reduce<minsi> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  view.atomic.reduce<maxsi> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  view.atomic.reduce<minui> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  view.atomic.reduce<maxui> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  %old_minsi = view.atomic.rmw<minsi> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_maxsi = view.atomic.rmw<maxsi> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_minui = view.atomic.rmw<minui> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_maxui = view.atomic.rmw<maxui> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  func.return
+}

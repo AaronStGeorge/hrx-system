@@ -60,33 +60,100 @@ typedef struct loom_amdgpu_atomic_descriptor_candidate_t {
   uint64_t descriptor_id;
 } loom_amdgpu_atomic_descriptor_candidate_t;
 
+#define LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(operation_kind_, atomic_kind_, \
+                                                value_kind_, descriptor_id_)   \
+  {                                                                            \
+      .operation_kind = operation_kind_,                                       \
+      .atomic_kind = atomic_kind_,                                             \
+      .value_kind = value_kind_,                                               \
+      .descriptor_id = descriptor_id_,                                         \
+  }
+
 static const loom_amdgpu_atomic_descriptor_candidate_t
     kAmdgpuAtomicDescriptorCandidates[] = {
-        {
-            .operation_kind = LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE,
-            .atomic_kind = LOOM_ATOMIC_KIND_ADDI,
-            .value_kind = LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_DS_ADD_U32,
-        },
-        {
-            .operation_kind = LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE,
-            .atomic_kind = LOOM_ATOMIC_KIND_ADDF,
-            .value_kind = LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_DS_ADD_F32,
-        },
-        {
-            .operation_kind = LOOM_AMDGPU_ATOMIC_OPERATION_RMW,
-            .atomic_kind = LOOM_ATOMIC_KIND_ADDI,
-            .value_kind = LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_DS_ADD_RTN_U32,
-        },
-        {
-            .operation_kind = LOOM_AMDGPU_ATOMIC_OPERATION_RMW,
-            .atomic_kind = LOOM_ATOMIC_KIND_ADDF,
-            .value_kind = LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32,
-            .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_DS_ADD_RTN_F32,
-        },
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE, LOOM_ATOMIC_KIND_ADDI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_ADD_U32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE, LOOM_ATOMIC_KIND_SUBI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_SUB_U32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE, LOOM_ATOMIC_KIND_MINSI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_MIN_I32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE, LOOM_ATOMIC_KIND_MAXSI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_MAX_I32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE, LOOM_ATOMIC_KIND_MINUI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_MIN_U32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE, LOOM_ATOMIC_KIND_MAXUI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_MAX_U32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE, LOOM_ATOMIC_KIND_ANDI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_AND_B32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE, LOOM_ATOMIC_KIND_ORI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_OR_B32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE, LOOM_ATOMIC_KIND_XORI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_XOR_B32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE, LOOM_ATOMIC_KIND_ADDF,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_ADD_F32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_ADDI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_ADD_RTN_U32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_SUBI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_SUB_RTN_U32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_MINSI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_MIN_RTN_I32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_MAXSI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_MAX_RTN_I32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_MINUI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_MIN_RTN_U32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_MAXUI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_MAX_RTN_U32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_ANDI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_AND_RTN_B32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_ORI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_OR_RTN_B32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_XORI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_XOR_RTN_B32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_ADDF,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_ADD_RTN_F32),
 };
+
+#undef LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE
 
 static const loom_amdgpu_atomic_rejection_detail_t
     kAmdgpuAtomicRejectionDetails[] = {
@@ -116,8 +183,8 @@ static const loom_amdgpu_atomic_rejection_detail_t
         },
         {
             .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_ATOMIC_KIND,
-            .detail = IREE_SVL(
-                "AMDGPU LDS atomic lowering currently supports addi/addf"),
+            .detail = IREE_SVL("AMDGPU LDS atomic lowering currently supports "
+                               "32-bit add/sub/min/max/and/or/xor and f32 add"),
         },
         {
             .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_VALUE_TYPE,
