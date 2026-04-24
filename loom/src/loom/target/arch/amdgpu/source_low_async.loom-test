@@ -1,0 +1,48 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/async_empty.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+
+func.def @async_empty_group_wait() {
+  %group = kernel.async.group -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @async_empty_group_wait() asm<amdgpu.gfx11.core> {
+  return
+}
+
+// ====
+
+func.def @async_wait_newer_groups_rejected() {
+  %group = kernel.async.group -> kernel.async.group
+  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low currently supports only newer_groups = 0 async waits"
+  kernel.async.wait %group {newer_groups = 1} : kernel.async.group
+  func.return
+}
+
+// ====
+
+// ERROR@+1: BACKEND/001 "async control values must be consumed by kernel.async ops before target-low lowering"
+func.def @async_group_argument_rejected(%group: kernel.async.group) {
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @async_copy_transfer_rejected(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 64 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source = buffer.view %global[%zero] : buffer -> view<16xi8, %layout>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<16xi8, %layout>
+  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low needs async transfer packet lowering"
+  %copy = kernel.async.copy %source to %dest {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8, %layout> to view<16xi8, %layout> -> kernel.async.token
+  // ERROR@+1: BACKEND/001 "AMDGPU source-to-low currently supports only empty async groups"
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}

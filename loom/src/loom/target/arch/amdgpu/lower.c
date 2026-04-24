@@ -207,6 +207,18 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
     case LOOM_OP_KERNEL_BARRIER:
       return loom_amdgpu_low_legality_verify_kernel_barrier(provider, context,
                                                             op, out_handled);
+    case LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER:
+    case LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK:
+    case LOOM_OP_KERNEL_ASYNC_COPY:
+    case LOOM_OP_KERNEL_ASYNC_COPY_MASK:
+    case LOOM_OP_KERNEL_ASYNC_GATHER:
+    case LOOM_OP_KERNEL_ASYNC_GATHER_MASK:
+    case LOOM_OP_KERNEL_ASYNC_GROUP:
+    case LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS:
+    case LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS:
+    case LOOM_OP_KERNEL_ASYNC_WAIT:
+      return loom_amdgpu_low_legality_verify_kernel_async(provider, context, op,
+                                                          out_handled);
     case LOOM_OP_VECTOR_BITPACK:
     case LOOM_OP_VECTOR_BITUNPACKS:
     case LOOM_OP_VECTOR_BITUNPACKU:
@@ -237,10 +249,9 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
 }
 
 static const loom_low_lower_rule_set_t* const kAmdgpuRuleSets[] = {
-    &loom_amdgpu_arithmetic_rule_set,
-    &loom_amdgpu_integer_rule_set,
-    &loom_amdgpu_dot_rule_set,
-    &loom_amdgpu_reduce_rule_set,
+    &loom_amdgpu_arithmetic_rule_set, &loom_amdgpu_integer_rule_set,
+    &loom_amdgpu_dot_rule_set,        &loom_amdgpu_reduce_rule_set,
+    &loom_amdgpu_async_rule_set,
 };
 
 static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {

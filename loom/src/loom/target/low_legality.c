@@ -370,6 +370,45 @@ static iree_status_t loom_target_low_legality_verify_scalar_type(
                                          IREE_SV("unknown scalar type"));
 }
 
+static bool loom_target_low_legality_type_is_opaque_dialect(
+    const loom_module_t* module, loom_type_t type, iree_string_view_t name) {
+  if (!loom_type_is_dialect(type) || loom_type_dialect_param_count(type) != 0) {
+    return false;
+  }
+  loom_string_id_t name_id = loom_type_dialect_name_id(type);
+  if (name_id == LOOM_STRING_ID_INVALID || name_id >= module->strings.count) {
+    return false;
+  }
+  return iree_string_view_equal(module->strings.entries[name_id], name);
+}
+
+static bool loom_target_low_legality_type_is_async_control(
+    const loom_module_t* module, loom_type_t type) {
+  return loom_target_low_legality_type_is_opaque_dialect(
+             module, type, IREE_SV("kernel.async.token")) ||
+         loom_target_low_legality_type_is_opaque_dialect(
+             module, type, IREE_SV("kernel.async.group"));
+}
+
+static bool loom_target_low_legality_op_accepts_async_control(
+    loom_op_kind_t kind) {
+  switch (kind) {
+    case LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER:
+    case LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK:
+    case LOOM_OP_KERNEL_ASYNC_COPY:
+    case LOOM_OP_KERNEL_ASYNC_COPY_MASK:
+    case LOOM_OP_KERNEL_ASYNC_GATHER:
+    case LOOM_OP_KERNEL_ASYNC_GATHER_MASK:
+    case LOOM_OP_KERNEL_ASYNC_GROUP:
+    case LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS:
+    case LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS:
+    case LOOM_OP_KERNEL_ASYNC_WAIT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static iree_status_t loom_target_low_legality_verify_type(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     loom_type_t type) {
@@ -410,8 +449,17 @@ static iree_status_t loom_target_low_legality_verify_value(
         context, NULL, op, IREE_SV("value"), IREE_SV("<invalid>"),
         IREE_SV("operation references an invalid SSA value"));
   }
-  return loom_target_low_legality_verify_type(
-      context, op, loom_module_value_type(context->module, value_id));
+  const loom_type_t type = loom_module_value_type(context->module, value_id);
+  if (loom_target_low_legality_type_is_async_control(context->module, type)) {
+    if (loom_target_low_legality_op_accepts_async_control(op->kind)) {
+      return iree_ok_status();
+    }
+    return loom_target_low_legality_reject(
+        context, NULL, op, IREE_SV("type"), IREE_SV("kernel.async"),
+        IREE_SV("async control values must be consumed by kernel.async ops "
+                "before target-low lowering"));
+  }
+  return loom_target_low_legality_verify_type(context, op, type);
 }
 
 static iree_status_t loom_target_low_legality_verify_op_value_types(

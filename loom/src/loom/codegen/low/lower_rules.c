@@ -904,6 +904,23 @@ static iree_status_t loom_low_lower_rule_bind_results(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_lower_rule_elide_results(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    const loom_low_lower_rule_t* rule) {
+  for (uint16_t i = 0; i < rule->elide_ref_count; ++i) {
+    const uint16_t value_ref_index = (uint16_t)(rule->elide_ref_start + i);
+    IREE_ASSERT_LT(value_ref_index, rule_set->value_ref_count);
+    const loom_low_lower_value_ref_t* value_ref =
+        &rule_set->value_refs[value_ref_index];
+    IREE_ASSERT_EQ(value_ref->kind, LOOM_LOW_LOWER_VALUE_REF_RESULT);
+    loom_value_id_t source_value_id =
+        loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+    IREE_RETURN_IF_ERROR(loom_low_lower_elide_value(context, source_value_id));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_lower_rule_emit_descriptor_const(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -1191,5 +1208,5 @@ iree_status_t loom_low_lower_rule_set_emit_rule(
         break;
     }
   }
-  return iree_ok_status();
+  return loom_low_lower_rule_elide_results(context, rule_set, source_op, rule);
 }

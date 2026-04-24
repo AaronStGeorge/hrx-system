@@ -371,6 +371,10 @@ typedef struct loom_low_lower_rule_t {
   uint16_t emit_start;
   // Number of emit-program rows for this rule.
   uint16_t emit_count;
+  // First value-ref table row whose source result is intentionally erased.
+  uint16_t elide_ref_start;
+  // Number of source result refs erased by this rule.
+  uint16_t elide_ref_count;
 } loom_low_lower_rule_t;
 
 typedef struct loom_low_lower_rule_span_t {

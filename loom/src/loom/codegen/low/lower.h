@@ -459,6 +459,13 @@ iree_status_t loom_low_lower_bind_value(loom_low_lower_context_t* context,
                                         loom_value_id_t source_value_id,
                                         loom_value_id_t low_value_id);
 
+// Marks one source SSA value as intentionally erased by the selected lowering
+// rule. This is only for source-level sequencing/control values whose users are
+// also lowered away, such as async tokens and groups. Elided values must never
+// be consumed as target-low operands.
+iree_status_t loom_low_lower_elide_value(loom_low_lower_context_t* context,
+                                         loom_value_id_t source_value_id);
+
 // Interns a descriptor-set register-class spelling in the low module.
 iree_status_t loom_low_lower_register_class_string_id(
     loom_low_lower_context_t* context, uint16_t reg_class_id,

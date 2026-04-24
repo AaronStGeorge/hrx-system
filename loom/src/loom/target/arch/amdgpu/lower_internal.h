@@ -217,6 +217,9 @@ extern const loom_low_lower_rule_set_t loom_amdgpu_dot_rule_set;
 // Target-local rule table for vector reduce source ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_reduce_rule_set;
 
+// Target-local rule table for source-level async group/wait sequencing ops.
+extern const loom_low_lower_rule_set_t loom_amdgpu_async_rule_set;
+
 // Selects a plan for value-construction source ops.
 iree_status_t loom_amdgpu_select_value_plan(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
@@ -251,6 +254,13 @@ iree_status_t loom_amdgpu_lower_kernel_barrier(
 
 // Verifies source kernel.barrier legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Verifies source kernel.async group/wait legality for AMDGPU target-low
+// selection.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_async(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);

@@ -568,6 +568,7 @@ loom_cc_library(
         "lower.c",
         "lower_abi.c",
         "lower_arithmetic_rules.c",
+        "lower_async_rules.c",
         "lower_atomic.c",
         "lower_bitfield.c",
         "lower_bitpack.c",
@@ -816,6 +817,7 @@ loom_check_test_suite(
         "low_hal_structural.loom-test",
         "low_packet_diagnostics.loom-test",
         "source_low_addtid.loom-test",
+        "source_low_async.loom-test",
         "source_low_bitcast.loom-test",
         "source_low_bitfield.loom-test",
         "source_low_bitpack.loom-test",
@@ -843,6 +845,7 @@ loom_check_test_suite(
         "source_low_table.loom-test",
     ],
     data = [
+        "//loom/src/loom/test/corpus/source_low:async_empty.loom-test",
         "//loom/src/loom/test/corpus/source_low:index_addressing.loom-test",
         "//loom/src/loom/test/corpus/source_low:lookup_table.loom-test",
         "//loom/src/loom/test/corpus/source_low:memory_cache_policy_non_temporal.loom-test",

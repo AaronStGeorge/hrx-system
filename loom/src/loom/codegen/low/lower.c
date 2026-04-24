@@ -20,6 +20,8 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
 
+#define LOOM_LOW_LOWER_VALUE_ID_ELIDED ((loom_value_id_t)(UINT32_MAX - 1))
+
 typedef struct loom_low_lower_selected_plan_t {
   // Source op this selected plan lowers.
   const loom_op_t* source_op;
@@ -482,6 +484,7 @@ iree_status_t loom_low_lower_lookup_value(loom_low_lower_context_t* context,
   IREE_ASSERT_LT(source_value_id, context->value_map_count);
   loom_value_id_t low_value_id = context->value_map[source_value_id];
   IREE_ASSERT(low_value_id != LOOM_VALUE_ID_INVALID);
+  IREE_ASSERT(low_value_id != LOOM_LOW_LOWER_VALUE_ID_ELIDED);
   *out_low_value_id = low_value_id;
   return iree_ok_status();
 }
@@ -507,6 +510,16 @@ iree_status_t loom_low_lower_bind_value(loom_low_lower_context_t* context,
   IREE_ASSERT(existing == LOOM_VALUE_ID_INVALID || existing == low_value_id);
   context->value_map[source_value_id] = low_value_id;
   return loom_low_lower_copy_value_name(context, source_value_id, low_value_id);
+}
+
+iree_status_t loom_low_lower_elide_value(loom_low_lower_context_t* context,
+                                         loom_value_id_t source_value_id) {
+  IREE_ASSERT_LT(source_value_id, context->value_map_count);
+  loom_value_id_t existing = context->value_map[source_value_id];
+  IREE_ASSERT(existing == LOOM_VALUE_ID_INVALID ||
+              existing == LOOM_LOW_LOWER_VALUE_ID_ELIDED);
+  context->value_map[source_value_id] = LOOM_LOW_LOWER_VALUE_ID_ELIDED;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_lower_validate_options(
