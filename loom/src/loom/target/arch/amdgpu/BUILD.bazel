@@ -1082,7 +1082,10 @@ loom_cc_test(
     srcs = ["matrix_contract_fixture_test.cc"],
     deps = [
         ":matrix_contract",
+        ":matrix_contract_projection",
         ":matrix_facts",
+        "//loom/src/loom/analysis:contract",
+        "//loom/src/loom/analysis:contract_storage",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/buffer",

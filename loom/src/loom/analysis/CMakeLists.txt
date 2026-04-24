@@ -111,6 +111,63 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    contract_storage
+  HDRS
+    "contract_storage.h"
+  SRCS
+    "contract_storage.c"
+  DEPS
+    ::contract
+    iree::base
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    contract_storage_test
+  SRCS
+    "contract_storage_test.cc"
+  DEPS
+    ::contract_storage
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
+    contract_vector
+  HDRS
+    "contract_vector.h"
+  SRCS
+    "contract_vector.c"
+  DEPS
+    ::contract
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::vector
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    contract_vector_test
+  SRCS
+    "contract_vector_test.cc"
+  DEPS
+    ::contract_vector
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::vector
+    loom::src::loom::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     liveness
   HDRS
     "liveness.h"

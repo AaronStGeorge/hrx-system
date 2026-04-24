@@ -299,8 +299,9 @@ loom_cc_library(
     hdrs = ["packed_dot_vector.h"],
     deps = [
         ":packed_dot_contract",
+        ":packed_dot_contract_projection",
+        "//loom/src/loom/analysis:contract_vector",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/vector",
     ],
 )
 

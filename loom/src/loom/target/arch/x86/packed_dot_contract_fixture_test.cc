@@ -79,9 +79,13 @@ class PackedDotContractFixtureTest : public ::testing::Test {
     loom_module_for_each_symbol(module, symbol) {
       const loom_func_like_t function =
           loom_func_like_cast(module, symbol->defining_op);
-      if (!loom_func_like_isa(function)) continue;
+      if (!loom_func_like_isa(function)) {
+        continue;
+      }
       loom_region_t* body = loom_func_like_body(function);
-      if (body == nullptr) continue;
+      if (body == nullptr) {
+        continue;
+      }
       loom_block_t* block = nullptr;
       loom_region_for_each_block(body, block) {
         loom_op_t* op = nullptr;

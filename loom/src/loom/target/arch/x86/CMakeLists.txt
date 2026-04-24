@@ -285,8 +285,9 @@ loom_cc_library(
     "packed_dot_vector.c"
   DEPS
     ::packed_dot_contract
+    ::packed_dot_contract_projection
+    loom::src::loom::analysis::contract_vector
     loom::src::loom::ir
-    loom::src::loom::ops::vector
   PUBLIC
 )
 

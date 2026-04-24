@@ -1276,8 +1276,11 @@ loom_cc_test(
     "matrix_contract_fixture_test.cc"
   DEPS
     ::matrix_contract
+    ::matrix_contract_projection
     ::matrix_facts
     iree::base::internal::arena
+    loom::src::loom::analysis::contract
+    loom::src::loom::analysis::contract_storage
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::buffer

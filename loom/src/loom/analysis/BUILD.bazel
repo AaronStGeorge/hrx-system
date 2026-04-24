@@ -95,6 +95,55 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "contract_storage",
+    srcs = ["contract_storage.c"],
+    hdrs = ["contract_storage.h"],
+    deps = [
+        ":contract",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "contract_storage_test",
+    srcs = ["contract_storage_test.cc"],
+    deps = [
+        ":contract_storage",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "contract_vector",
+    srcs = ["contract_vector.c"],
+    hdrs = ["contract_vector.h"],
+    deps = [
+        ":contract",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/vector",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "contract_vector_test",
+    srcs = ["contract_vector_test.cc"],
+    deps = [
+        ":contract_vector",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "liveness",
     srcs = ["liveness.c"],
     hdrs = ["liveness.h"],
