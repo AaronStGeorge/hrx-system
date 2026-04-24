@@ -668,8 +668,10 @@ iree_status_t loom_vector_to_scalar_try_materialize_def_lane(
     bool* out_materialized, loom_value_id_t* out_lane) {
   *out_materialized = false;
   loom_op_t* def_op =
-      loom_value_def_op(loom_module_value(state->rewriter->module, value));
-  if (!def_op) return iree_ok_status();
+      loom_vector_to_scalar_value_def_op(state->rewriter->module, value);
+  if (!def_op) {
+    return iree_ok_status();
+  }
   if (loom_vector_to_scalar_try_from_elements_lane(state, def_op, vector_type,
                                                    indices, out_lane)) {
     *out_materialized = true;

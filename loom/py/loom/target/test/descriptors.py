@@ -47,7 +47,6 @@ _REG_I8 = "test.i8"
 _REG_F32 = "test.f32"
 _REG_I64 = "test.i64"
 _REG_PTR = "test.ptr"
-_REG_V4I32 = "test.v4i32"
 _REG_PHYS = "test.phys"
 _REG_SPECIAL = "test.special"
 _REG_ALIAS32 = "test.alias32"
@@ -74,7 +73,6 @@ _I8_ALT = (RegClassAlt(_REG_I8),)
 _F32_ALT = (RegClassAlt(_REG_F32),)
 _I32_I64_ALT = (RegClassAlt(_REG_I32), RegClassAlt(_REG_I64))
 _PTR_ALT = (RegClassAlt(_REG_PTR),)
-_V4I32_ALT = (RegClassAlt(_REG_V4I32),)
 _PHYS_ALT = (RegClassAlt(_REG_PHYS),)
 _SPECIAL_ALT = (RegClassAlt(_REG_SPECIAL),)
 
@@ -132,11 +130,11 @@ def _ptr_resource(field_name: str) -> Operand:
 
 
 def _v4i32_result(field_name: str = "dst") -> Operand:
-    return Operand(field_name, OperandRole.RESULT, _V4I32_ALT)
+    return Operand(field_name, OperandRole.RESULT, _I32_ALT, unit_count=4)
 
 
 def _v4i32_operand(field_name: str) -> Operand:
-    return Operand(field_name, OperandRole.OPERAND, _V4I32_ALT)
+    return Operand(field_name, OperandRole.OPERAND, _I32_ALT, unit_count=4)
 
 
 def _phys_result(field_name: str = "dst") -> Operand:
@@ -258,12 +256,6 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
         RegClass(
             _REG_PTR, 64, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
-        ),
-        RegClass(
-            _REG_V4I32,
-            128,
-            SpillSlotSpace.PRIVATE,
-            flags=(RegClassFlag.VIRTUAL_ONLY,),
         ),
         RegClass(
             _REG_PHYS,

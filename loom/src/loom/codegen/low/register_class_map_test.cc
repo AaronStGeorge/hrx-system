@@ -80,6 +80,17 @@ TEST_F(RegisterClassMapTest, ResolvesModuleStringIdsToDescriptorIds) {
                              descriptor_register_class->name_string_offset),
             "test.i32");
 
+  found = false;
+  IREE_ASSERT_OK(loom_low_register_class_map_try_resolve_type(
+      &map, loom_type_register(i32_string_id, 4), &descriptor_register_class_id,
+      &descriptor_register_class, &found));
+  ASSERT_TRUE(found);
+  ASSERT_NE(descriptor_register_class, nullptr);
+  EXPECT_NE(descriptor_register_class_id, LOOM_LOW_REG_CLASS_NONE);
+  EXPECT_EQ(DescriptorString(descriptor_set,
+                             descriptor_register_class->name_string_offset),
+            "test.i32");
+
   iree_arena_deinitialize(&arena);
   loom_module_free(module);
 }
@@ -128,14 +139,14 @@ TEST(RegisterClassLookupTest, LooksUpDescriptorNamesAtConfigurationBoundary) {
   const loom_low_reg_class_t* descriptor_register_class = nullptr;
   bool found = false;
   IREE_ASSERT_OK(loom_low_register_class_try_lookup_name(
-      descriptor_set, IREE_SV("test.v4i32"), &descriptor_register_class_id,
+      descriptor_set, IREE_SV("test.ptr"), &descriptor_register_class_id,
       &descriptor_register_class, &found));
   ASSERT_TRUE(found);
   ASSERT_NE(descriptor_register_class, nullptr);
   EXPECT_NE(descriptor_register_class_id, LOOM_LOW_REG_CLASS_NONE);
   EXPECT_EQ(DescriptorString(descriptor_set,
                              descriptor_register_class->name_string_offset),
-            "test.v4i32");
+            "test.ptr");
 
   found = true;
   IREE_ASSERT_OK(loom_low_register_class_try_lookup_name(

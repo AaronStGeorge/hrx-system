@@ -121,17 +121,6 @@ static bool loom_vector_to_scalar_query_exact_i64(loom_value_facts_t facts,
   return true;
 }
 
-static const loom_op_t* loom_vector_to_scalar_defining_op(
-    const loom_vector_to_scalar_state_t* state, loom_value_id_t value_id) {
-  const loom_module_t* module = state->rewriter->module;
-  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
-    return NULL;
-  }
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value)) return NULL;
-  return loom_value_def_op(value);
-}
-
 static bool loom_vector_to_scalar_exact_leading_element_count(
     const loom_vector_to_scalar_state_t* state, loom_type_t type,
     int64_t* out_count) {
@@ -303,7 +292,7 @@ static iree_status_t loom_vector_to_scalar_validate_transform_permutation(
     loom_vector_to_scalar_state_t* state, loom_value_id_t permutation,
     loom_type_t source_type, int64_t source_lane_count) {
   const loom_op_t* def_op =
-      loom_vector_to_scalar_defining_op(state, permutation);
+      loom_vector_to_scalar_value_def_op(state->rewriter->module, permutation);
   if (def_op && loom_vector_from_elements_isa(def_op)) {
     return loom_vector_to_scalar_validate_from_elements_permutation(
         state, def_op, source_lane_count);

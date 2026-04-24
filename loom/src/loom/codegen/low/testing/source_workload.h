@@ -38,7 +38,8 @@ typedef struct loom_low_source_workload_config_t {
   iree_string_view_t target_preset;
   // Symbol name for the generated source function. Empty uses a stable default.
   iree_string_view_t function_symbol_name;
-  // Number of source ops to emit in the generated function body.
+  // Number of non-structural source ops to emit in the generated function body.
+  // CFG branches and the final return are emitted by the body shape itself.
   uint16_t op_count;
 } loom_low_source_workload_config_t;
 
@@ -88,6 +89,10 @@ typedef struct loom_low_source_workload_counts_t {
   uint32_t vector_dynamic_store_op_count;
   // Number of generated index.madd ops.
   uint32_t index_madd_op_count;
+  // Number of generated cfg.cond_br ops.
+  uint32_t cfg_cond_branch_count;
+  // Number of generated cfg.br ops.
+  uint32_t cfg_branch_count;
 } loom_low_source_workload_counts_t;
 
 typedef struct loom_low_source_workload_pipeline_options_t {

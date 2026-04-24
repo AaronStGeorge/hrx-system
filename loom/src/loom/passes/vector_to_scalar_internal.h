@@ -13,6 +13,7 @@
 #define LOOM_PASSES_VECTOR_TO_SCALAR_INTERNAL_H_
 
 #include "iree/base/api.h"
+#include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/op_defs.h"
 #include "loom/pass/types.h"
@@ -138,6 +139,20 @@ iree_status_t loom_vector_to_scalar_copy_static_indices(
     iree_host_size_t index_count, int64_t** out_indices);
 
 loom_type_t loom_vector_to_scalar_lane_type(loom_type_t vector_type);
+
+// Returns the op defining |value_id|, or NULL when the value is not an op
+// result that can be rematerialized from its defining operation.
+static inline loom_op_t* loom_vector_to_scalar_value_def_op(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
+    return NULL;
+  }
+  loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return NULL;
+  }
+  return loom_value_def_op(value);
+}
 
 iree_status_t loom_vector_to_scalar_build_scalar_constant(
     loom_builder_t* builder, loom_type_t result_type,
