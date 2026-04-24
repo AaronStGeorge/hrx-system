@@ -905,7 +905,7 @@ static bool loom_amdgpu_select_ds2_memory_descriptor(
 // The current slot builder may reorder multiple LDS slots around the low
 // function anchor, so a single source LDS root is the only source-local proof
 // that the selected slot will receive byte offset zero.
-static bool loom_amdgpu_source_function_proves_zero_lds_slot_base(
+bool loom_amdgpu_source_function_proves_zero_lds_slot_base(
     loom_func_like_t source_function, loom_value_id_t root_value_id) {
   if (!loom_func_like_isa(source_function)) {
     return false;

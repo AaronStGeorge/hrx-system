@@ -133,6 +133,22 @@ bool loom_low_source_memory_access_plan_build(
     const loom_op_t* source_op, loom_low_source_memory_access_plan_t* out_plan,
     loom_low_source_memory_access_diagnostic_t* out_diagnostic);
 
+// Builds a target-independent source memory plan for a whole typed view.
+//
+// This is the view-payload sibling of vector.load/store planning. It treats the
+// full static footprint of |view_value_id| as the transferred vector payload
+// and preserves a single materializable dynamic subview offset when the view is
+// immediately produced by view.subview. Targets use this for memory-to-memory
+// movement ops such as async global-to-workgroup gathers, where the source IR
+// names a view projection rather than an indexed vector load.
+bool loom_low_source_memory_access_plan_build_view(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_low_source_memory_operation_kind_t operation_kind,
+    loom_value_id_t view_value_id,
+    loom_vector_memory_cache_policy_t cache_policy,
+    loom_low_source_memory_access_plan_t* out_plan,
+    loom_low_source_memory_access_diagnostic_t* out_diagnostic);
+
 // Returns a diagnostic detail string for source memory access rejection flags.
 iree_string_view_t loom_low_source_memory_access_rejection_detail(
     loom_low_source_memory_access_rejection_flags_t rejection_bits);

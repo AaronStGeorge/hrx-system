@@ -265,6 +265,17 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_async(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
+// Selects an AMDGPU async gather packet for a source kernel.async.gather op.
+bool loom_amdgpu_select_kernel_async_gather_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_async_gather_plan_t* out_plan);
+
+// Lowers a source kernel.async.gather to a global-to-LDS packet and elides its
+// async token.
+iree_status_t loom_amdgpu_lower_kernel_async_gather(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_async_gather_plan_t* plan);
+
 // Selects a plan for buffer construction source ops.
 iree_status_t loom_amdgpu_select_buffer_plan(loom_low_lower_context_t* context,
                                              const loom_op_t* source_op,
@@ -280,6 +291,15 @@ iree_status_t loom_amdgpu_low_legality_verify_buffer(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
+
+// Selects a plan for view projection source ops.
+iree_status_t loom_amdgpu_select_view_plan(loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op,
+                                           loom_low_lower_plan_t* out_plan);
+
+// Lowers a view projection source op by preserving its storage root mapping.
+iree_status_t loom_amdgpu_lower_view_op(loom_low_lower_context_t* context,
+                                        const loom_op_t* source_op);
 
 // Looks up a lowered i32 value and materializes exact source constants into
 // VGPRs when a vector-style packet cannot consume the existing lowering.

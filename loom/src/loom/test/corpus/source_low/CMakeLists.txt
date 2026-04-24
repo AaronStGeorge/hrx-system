@@ -12,9 +12,31 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
+    "async_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/async_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "async_empty"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/async_empty.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "async_gather"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/async_gather.loom-test"
   SRC
     loom::src::loom::tools::loom-check::loom-check-test
   LABELS

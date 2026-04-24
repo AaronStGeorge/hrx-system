@@ -504,6 +504,7 @@ loom_cc_test(
     loom::src::loom::ops::kernel
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
+    loom::src::loom::ops::view
     loom::src::loom::testing::context
     loom::src::loom::util::fact_table
     iree::testing::gtest

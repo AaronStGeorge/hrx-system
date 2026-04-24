@@ -15,6 +15,50 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 
+static bool loom_low_source_memory_static_view_vector_type(
+    loom_type_t view_type, loom_type_t* out_vector_type,
+    loom_low_source_memory_access_diagnostic_t* out_diagnostic) {
+  IREE_ASSERT_ARGUMENT(out_vector_type);
+  *out_vector_type = loom_type_none();
+  if (!loom_type_is_view(view_type) ||
+      loom_type_rank(view_type) > LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK) {
+    out_diagnostic->rejection_bits |=
+        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_DESCRIBE_FAILED;
+    return false;
+  }
+
+  const int32_t element_bit_count =
+      loom_scalar_type_bitwidth(loom_type_element_type(view_type));
+  if (element_bit_count <= 0 || (element_bit_count % 8) != 0) {
+    out_diagnostic->rejection_bits |=
+        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_ELEMENT_WIDTH;
+    return false;
+  }
+
+  int64_t lane_count = 1;
+  const uint8_t rank = loom_type_rank(view_type);
+  for (uint8_t i = 0; i < rank; ++i) {
+    if (loom_type_dim_is_dynamic_at(view_type, i)) {
+      out_diagnostic->rejection_bits |=
+          LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VECTOR_LANE_COUNT;
+      return false;
+    }
+    const int64_t dim_size = loom_type_dim_static_size_at(view_type, i);
+    if (dim_size <= 0 ||
+        !iree_checked_mul_i64(lane_count, dim_size, &lane_count) ||
+        lane_count > UINT32_MAX) {
+      out_diagnostic->rejection_bits |=
+          LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VECTOR_LANE_COUNT;
+      return false;
+    }
+  }
+
+  *out_vector_type =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, loom_type_element_type(view_type),
+                          loom_dim_pack_static(lane_count), /*encoding_id=*/0);
+  return true;
+}
+
 static bool loom_low_source_memory_access_exact_i64(loom_value_facts_t facts,
                                                     int64_t* out_value) {
   IREE_ASSERT_ARGUMENT(out_value);
@@ -132,10 +176,10 @@ static bool loom_low_source_memory_access_add_view_base_byte_offset(
     loom_low_source_memory_access_plan_t* plan,
     loom_low_source_memory_access_diagnostic_t* diagnostic,
     int64_t* inout_static_byte_offset) {
+  IREE_ASSERT_ARGUMENT(fact_table);
   IREE_ASSERT_ARGUMENT(inout_static_byte_offset);
   loom_value_fact_view_reference_t view_reference = {0};
-  if (fact_table == NULL ||
-      !loom_value_facts_query_view_reference(
+  if (!loom_value_facts_query_view_reference(
           &fact_table->context,
           loom_value_fact_table_lookup(fact_table, view_value_id),
           &view_reference)) {
@@ -466,6 +510,66 @@ bool loom_low_source_memory_access_plan_build(
           LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_UNSUPPORTED_OP;
       return false;
   }
+}
+
+bool loom_low_source_memory_access_plan_build_view(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_low_source_memory_operation_kind_t operation_kind,
+    loom_value_id_t view_value_id,
+    loom_vector_memory_cache_policy_t cache_policy,
+    loom_low_source_memory_access_plan_t* out_plan,
+    loom_low_source_memory_access_diagnostic_t* out_diagnostic) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(out_plan);
+  IREE_ASSERT_ARGUMENT(out_diagnostic);
+  *out_plan = (loom_low_source_memory_access_plan_t){0};
+  *out_diagnostic = (loom_low_source_memory_access_diagnostic_t){0};
+  if (view_value_id >= module->values.count) {
+    out_diagnostic->rejection_bits |=
+        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_SOURCE;
+    return false;
+  }
+
+  const loom_type_t result_view_type =
+      loom_module_value_type(module, view_value_id);
+  loom_type_t vector_type = loom_type_none();
+  if (!loom_low_source_memory_static_view_vector_type(
+          result_view_type, &vector_type, out_diagnostic)) {
+    return false;
+  }
+
+  loom_value_id_t access_view_id = view_value_id;
+  loom_value_slice_t dynamic_indices = {0};
+  int64_t zero_indices[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {0};
+  loom_attribute_t static_indices =
+      loom_attr_i64_array(zero_indices, loom_type_rank(result_view_type));
+  loom_type_t access_view_type = result_view_type;
+
+  loom_value_id_t projection_view_id = view_value_id;
+  const loom_value_t* view_value = loom_module_value(module, view_value_id);
+  if (!loom_value_is_block_arg(view_value)) {
+    const loom_op_t* defining_op = loom_value_def_op(view_value);
+    if (defining_op && loom_view_refine_isa(defining_op)) {
+      projection_view_id = loom_view_refine_source(defining_op);
+    }
+  }
+
+  const loom_value_t* projection_view =
+      loom_module_value(module, projection_view_id);
+  if (!loom_value_is_block_arg(projection_view)) {
+    const loom_op_t* defining_op = loom_value_def_op(projection_view);
+    if (defining_op && loom_view_subview_isa(defining_op)) {
+      access_view_id = loom_view_subview_source(defining_op);
+      access_view_type = loom_module_value_type(module, access_view_id);
+      dynamic_indices = loom_view_subview_offsets(defining_op);
+      static_indices = loom_view_subview_static_offsets(defining_op);
+    }
+  }
+
+  return loom_low_source_memory_access_plan_from_components(
+      module, fact_table, operation_kind, access_view_id, dynamic_indices,
+      static_indices, access_view_type, vector_type, cache_policy, out_plan,
+      out_diagnostic);
 }
 
 iree_string_view_t loom_low_source_memory_access_rejection_detail(

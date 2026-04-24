@@ -456,6 +456,7 @@ loom_cc_library(
     "lower.c"
     "lower_abi.c"
     "lower_arithmetic_rules.c"
+    "lower_async.c"
     "lower_async_rules.c"
     "lower_atomic.c"
     "lower_bitfield.c"
@@ -479,6 +480,7 @@ loom_cc_library(
     "lower_sync.c"
     "lower_table.c"
     "lower_values.c"
+    "lower_view.c"
   DEPS
     ::descriptor_ids
     ::hal_kernel_abi
@@ -751,6 +753,28 @@ iree_executable_test(
     "source_low_async"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_async.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_async_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_async_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_async_gfx950"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_async_gfx950.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

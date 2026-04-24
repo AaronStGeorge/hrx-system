@@ -1,0 +1,33 @@
+// RUN: roundtrip
+
+func.def @async_gather_dword(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source_base = buffer.view %global[%zero] : buffer -> view<64x4xi8, #dense>
+  %source = view.subview %source_base[%tid, 0] : view<64x4xi8, #dense> -> view<1x4xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x4xi8, #dense>
+  %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x4xi8, #dense> to view<64x1x4xi8, #dense> -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @async_gather_b128(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 1024 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source_base = buffer.view %global[%zero] : buffer -> view<64x16xi8, #dense>
+  %source = view.subview %source_base[%tid, 0] : view<64x16xi8, #dense> -> view<1x16xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x16xi8, #dense>
+  %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x16xi8, #dense> to view<64x1x16xi8, #dense> -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}

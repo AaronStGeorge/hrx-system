@@ -247,6 +247,25 @@ typedef struct loom_amdgpu_prefetch_plan_t {
   uint64_t descriptor_id;
 } loom_amdgpu_prefetch_plan_t;
 
+typedef struct loom_amdgpu_async_gather_plan_t {
+  // Source global-like view access transferred into LDS.
+  loom_low_source_memory_access_plan_t source;
+  // Target operand path used for the dynamic source address.
+  loom_amdgpu_memory_dynamic_index_kind_t source_dynamic_index_kind;
+  // Source SSA view value passed to kernel.async.gather.
+  loom_value_id_t source_view;
+  // Destination LDS view value passed to kernel.async.gather.
+  loom_value_id_t dest_view;
+  // Static LDS byte offset materialized into M0.
+  uint32_t dest_byte_offset;
+  // Static global byte offset encoded in the packet immediate.
+  int64_t source_immediate_offset;
+  // Number of bytes moved by the selected async packet.
+  uint32_t packet_byte_count;
+  // Stable descriptor ID selected for the active descriptor set.
+  uint64_t descriptor_id;
+} loom_amdgpu_async_gather_plan_t;
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

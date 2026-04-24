@@ -1,0 +1,70 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/async_gather.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx950 output=low
+
+func.def @async_gather_dword(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source_base = buffer.view %global[%zero] : buffer -> view<64x4xi8, #dense>
+  %source = view.subview %source_base[%tid, 0] : view<64x4xi8, #dense> -> view<1x4xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x4xi8, #dense>
+  %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x4xi8, #dense> to view<64x1x4xi8, #dense> -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @async_gather_dword() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
+  %dest = low.frame_index @async_gather_dword__lds7 {offset = 0} : reg<amdgpu.vgpr>
+  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_lshlrev_b32>(%16, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %18 = low.slice %source[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %20 = low.op<amdgpu.s_mov_b32_m0>(%19) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dword_saddr>(%17, %18, %20) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.return
+}
+
+low.slot @async_gather_dword__lds7 {align = 16, function = @async_gather_dword, size = 256, space = lds}
+
+// ====
+
+func.def @async_gather_b128(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 1024 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %source_base = buffer.view %global[%zero] : buffer -> view<64x16xi8, #dense>
+  %source = view.subview %source_base[%tid, 0] : view<64x16xi8, #dense> -> view<1x16xi8, #dense>
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<64x1x16xi8, #dense>
+  %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x16xi8, #dense> to view<64x1x16xi8, #dense> -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @async_gather_b128() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 1024} : reg<amdgpu.sgpr>
+  %dest = low.frame_index @async_gather_b128__lds7 {offset = 0} : reg<amdgpu.vgpr>
+  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_lshlrev_b32>(%16, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %18 = low.slice %source[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %20 = low.op<amdgpu.s_mov_b32_m0>(%19) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  low.op<amdgpu.global_load_lds_dwordx4_saddr>(%17, %18, %20) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.return
+}
+
+low.slot @async_gather_b128__lds7 {align = 16, function = @async_gather_b128, size = 1024, space = lds}

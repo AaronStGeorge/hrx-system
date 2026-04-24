@@ -38,12 +38,18 @@ static iree_status_t loom_amdgpu_select_plan_id(
     case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
     case LOOM_OP_BUFFER_VIEW:
       return loom_amdgpu_select_buffer_plan(context, source_op, out_plan);
+    case LOOM_OP_VIEW_REFINE:
+    case LOOM_OP_VIEW_SUBVIEW:
+      return loom_amdgpu_select_view_plan(context, source_op, out_plan);
     case LOOM_OP_KERNEL_WORKITEM_ID:
     case LOOM_OP_KERNEL_WORKGROUP_ID:
       return loom_amdgpu_select_preamble_plan(context, source_op, out_plan);
     case LOOM_OP_KERNEL_BARRIER:
       return loom_amdgpu_select_kernel_barrier_plan(context, source_op,
                                                     out_plan);
+    case LOOM_OP_KERNEL_ASYNC_GATHER:
+      LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_async_gather_plan_t,
+                              loom_amdgpu_select_kernel_async_gather_plan);
     case LOOM_OP_VECTOR_CMPI:
       LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_vector_compare_plan_t,
                               loom_amdgpu_select_vector_cmpi_plan);
@@ -122,11 +128,18 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
     case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
     case LOOM_OP_BUFFER_VIEW:
       return loom_amdgpu_lower_buffer_op(context, source_op, plan);
+    case LOOM_OP_VIEW_REFINE:
+    case LOOM_OP_VIEW_SUBVIEW:
+      return loom_amdgpu_lower_view_op(context, source_op);
     case LOOM_OP_KERNEL_WORKITEM_ID:
     case LOOM_OP_KERNEL_WORKGROUP_ID:
       return loom_amdgpu_lower_preamble_op(context, source_op);
     case LOOM_OP_KERNEL_BARRIER:
       return loom_amdgpu_lower_kernel_barrier(context, source_op);
+    case LOOM_OP_KERNEL_ASYNC_GATHER:
+      return loom_amdgpu_lower_kernel_async_gather(
+          context, source_op,
+          (const loom_amdgpu_async_gather_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_CMPI:
       return loom_amdgpu_lower_vector_cmpi(
           context, source_op,

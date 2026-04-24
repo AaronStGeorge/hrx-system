@@ -4,7 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/ops/kernel/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
 
@@ -61,58 +60,4 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
   }
 
   return iree_ok_status();
-}
-
-static iree_status_t loom_amdgpu_low_legality_reject_async_transfer(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op) {
-  return loom_target_low_legality_reject(
-      context, provider, op, IREE_SV("async"), IREE_SV("transfer"),
-      IREE_SV("AMDGPU source-to-low needs async transfer packet lowering "
-              "before non-empty async groups are supported"));
-}
-
-iree_status_t loom_amdgpu_low_legality_verify_kernel_async(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled) {
-  const loom_target_bundle_t* bundle = loom_target_low_legality_bundle(context);
-  if (!loom_amdgpu_low_legality_bundle_is_amdgpu(bundle)) {
-    return iree_ok_status();
-  }
-  *out_handled = true;
-
-  switch (op->kind) {
-    case LOOM_OP_KERNEL_ASYNC_GROUP: {
-      loom_value_slice_t tokens = loom_kernel_async_group_tokens(op);
-      if (tokens.count != 0) {
-        return loom_target_low_legality_reject(
-            context, provider, op, IREE_SV("async"), IREE_SV("group"),
-            IREE_SV("AMDGPU source-to-low currently supports only empty "
-                    "async groups"));
-      }
-      return iree_ok_status();
-    }
-    case LOOM_OP_KERNEL_ASYNC_WAIT:
-      if (loom_kernel_async_wait_newer_groups(op) != 0) {
-        return loom_target_low_legality_reject(
-            context, provider, op, IREE_SV("async"), IREE_SV("wait"),
-            IREE_SV("AMDGPU source-to-low currently supports only "
-                    "newer_groups = 0 async waits"));
-      }
-      return iree_ok_status();
-    case LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER:
-    case LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK:
-    case LOOM_OP_KERNEL_ASYNC_COPY:
-    case LOOM_OP_KERNEL_ASYNC_COPY_MASK:
-    case LOOM_OP_KERNEL_ASYNC_GATHER:
-    case LOOM_OP_KERNEL_ASYNC_GATHER_MASK:
-    case LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS:
-    case LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS:
-      return loom_amdgpu_low_legality_reject_async_transfer(provider, context,
-                                                            op);
-    default:
-      IREE_ASSERT_UNREACHABLE();
-      return iree_ok_status();
-  }
 }
