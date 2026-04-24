@@ -16,7 +16,6 @@
 #include "loom/ir/module.h"
 #include "loom/ops/test/facts.h"
 #include "loom/ops/test/ops.h"
-#include "loom/testing/context.h"
 
 namespace loom {
 namespace {
@@ -31,8 +30,9 @@ class SymbolFactsTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
     iree_arena_initialize(&block_pool_, &analysis_arena_);
     loom_symbol_fact_table_initialize(&fact_table_, &analysis_arena_);
   }
@@ -50,6 +50,17 @@ class SymbolFactsTest : public ::testing::Test {
                                   IREE_SV("symbol_facts_test.loom"), &context_,
                                   &block_pool_, &options, &module));
     return ModulePtr(module);
+  }
+
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+  void RegisterDialect(uint8_t dialect_id,
+                       DialectVtablesFn dialect_vtables_fn) {
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)count));
   }
 
   loom_symbol_id_t FindSymbol(const loom_module_t* module,
@@ -75,7 +86,7 @@ class SymbolFactsTest : public ::testing::Test {
   // Block pool shared by parser, module allocation, and analysis storage.
   iree_arena_block_pool_t block_pool_;
 
-  // Context with all testing dialects registered.
+  // Context with the test dialect registered.
   loom_context_t context_;
 
   // Arena for symbol fact table storage and fact payloads.

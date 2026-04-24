@@ -15,7 +15,8 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/testing/context.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/target/ops.h"
 #include "loom/testing/diagnostic_matchers.h"
 
 namespace loom {
@@ -32,13 +33,26 @@ class FuncVerifyTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 
   void TearDown() override {
     loom_context_deinitialize(&context_);
     iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+  void RegisterDialect(uint8_t dialect_id,
+                       DialectVtablesFn dialect_vtables_fn) {
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)count));
   }
 
   loom_verify_result_t VerifySource(const char* source,

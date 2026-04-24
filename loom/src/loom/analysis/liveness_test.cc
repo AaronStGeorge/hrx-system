@@ -16,8 +16,12 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/cfg/ops.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
-#include "loom/testing/context.h"
+#include "loom/ops/scalar/ops.h"
+#include "loom/ops/test/ops.h"
 
 namespace loom {
 namespace {
@@ -32,8 +36,13 @@ class LivenessTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
     iree_arena_initialize(&block_pool_, &analysis_arena_);
   }
 
@@ -50,6 +59,17 @@ class LivenessTest : public ::testing::Test {
                                   IREE_SV("liveness_test.loom"), &context_,
                                   &block_pool_, &options, &module));
     return ModulePtr(module);
+  }
+
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+  void RegisterDialect(uint8_t dialect_id,
+                       DialectVtablesFn dialect_vtables_fn) {
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)count));
   }
 
   loom_func_like_t FindFunction(const loom_module_t* module,
