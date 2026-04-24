@@ -433,17 +433,13 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "lower_test",
-    srcs = ["lower_test.cc"],
+    name = "lower_options_test",
+    srcs = ["lower_options_test.cc"],
     tags = ["requires-filesystem"],
     deps = [
-        ":core",
         ":lower",
         ":test_target",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/vector",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

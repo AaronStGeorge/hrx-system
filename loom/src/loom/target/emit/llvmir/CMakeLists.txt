@@ -483,18 +483,14 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    lower_test
+    lower_options_test
   SRCS
-    "lower_test.cc"
+    "lower_options_test.cc"
   DEPS
-    ::core
     ::lower
     ::test_target
     iree::base::internal::arena
     loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::vector
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS

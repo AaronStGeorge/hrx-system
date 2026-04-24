@@ -87,6 +87,7 @@ static bool loom_llvmir_lowering_exact_index_constant(
     int64_t* out_value) {
   const loom_value_t* value = loom_module_value(state->source_module, value_id);
   if (!value) return false;
+  if (loom_value_is_block_arg(value)) return false;
   const loom_op_t* def_op = loom_value_def_op(value);
   if (!def_op || !loom_index_constant_isa(def_op)) return false;
   loom_attribute_t attr = loom_index_constant_value(def_op);

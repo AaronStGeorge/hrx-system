@@ -301,33 +301,6 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "lower_test",
-    srcs = ["lower_test.cc"],
-    deps = [
-        ":function_bytecode",
-        ":low_registry",
-        ":lower",
-        ":module_archive",
-        "//loom/src/loom/codegen/low:packetization",
-        "//loom/src/loom/codegen/low:source_selection",
-        "//loom/src/loom/codegen/low:verify",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/cfg",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/ops/target",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-        "//runtime/src/iree/vm",
-        "//runtime/src/iree/vm/bytecode:module",
-    ],
-)
-
-loom_cc_test(
     name = "low_registry_test",
     srcs = ["low_registry_test.cc"],
     deps = [

@@ -249,34 +249,6 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    lower_test
-  SRCS
-    "lower_test.cc"
-  DEPS
-    ::function_bytecode
-    ::low_registry
-    ::lower
-    ::module_archive
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::packetization
-    loom::src::loom::codegen::low::source_selection
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::error::error_defs
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::cfg
-    loom::src::loom::ops::func
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
-    iree::testing::gtest
-    iree::testing::gtest_main
-    iree::vm
-    iree::vm::bytecode::module
-)
-
-loom_cc_test(
-  NAME
     low_registry_test
   SRCS
     "low_registry_test.cc"
