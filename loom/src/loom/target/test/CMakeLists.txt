@@ -77,11 +77,15 @@ loom_cc_library(
     ::descriptors
     iree::base
     loom::src::loom::codegen::low::lower
+    loom::src::loom::codegen::low::source_memory_plan
     loom::src::loom::ir
+    loom::src::loom::ir::facts
+    loom::src::loom::ops::buffer
     loom::src::loom::ops::index
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
+    loom::src::loom::util::fact_table
   PUBLIC
 )
 

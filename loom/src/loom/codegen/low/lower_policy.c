@@ -5,6 +5,65 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower_rules.h"
+
+static iree_status_t loom_low_lower_policy_verify_rule_span(
+    const loom_low_lower_rule_set_t* rule_set,
+    const loom_low_lower_rule_span_t* span) {
+  if (span->rule_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target-low lowering rule spans must reference at least one rule");
+  }
+  if (span->rule_start > rule_set->rule_count ||
+      span->rule_count > rule_set->rule_count - span->rule_start) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target-low lowering rule span references rules outside the rule set");
+  }
+  for (uint16_t i = 0; i < span->rule_count; ++i) {
+    const loom_low_lower_rule_t* rule =
+        &rule_set->rules[(uint16_t)(span->rule_start + i)];
+    if (rule->source_op_kind != span->source_op_kind) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "target-low lowering rule span source op kind must match every "
+          "referenced rule");
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_policy_verify_static_rule_set(
+    const loom_low_lower_rule_set_t* rule_set) {
+  if (rule_set == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low lowering rule set is required");
+  }
+  if (rule_set->span_count != 0 && rule_set->spans == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target-low lowering rule set span table is required");
+  }
+  if (rule_set->rule_count != 0 && rule_set->rules == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target-low lowering rule set rule table is required");
+  }
+  for (uint16_t i = 0; i < rule_set->span_count; ++i) {
+    const loom_low_lower_rule_span_t* span = &rule_set->spans[i];
+    if (i > 0 &&
+        rule_set->spans[i - 1].source_op_kind >= span->source_op_kind) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "target-low lowering rule spans must be strictly sorted by source "
+          "op kind");
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_policy_verify_rule_span(rule_set, span));
+  }
+  return iree_ok_status();
+}
 
 static iree_status_t loom_low_lower_policy_registry_verify_tables(
     const loom_low_lower_policy_registry_t* registry) {
@@ -72,6 +131,16 @@ iree_status_t loom_low_lower_policy_verify(
       (!has_rule_sets && !has_callback_lowering)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "complete target-low lowering policy is required");
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_lower_policy_verify_static_tables(
+    const loom_low_lower_policy_t* policy) {
+  IREE_RETURN_IF_ERROR(loom_low_lower_policy_verify(policy));
+  for (iree_host_size_t i = 0; i < policy->rule_sets.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_lower_policy_verify_static_rule_set(
+        policy->rule_sets.values[i]));
   }
   return iree_ok_status();
 }

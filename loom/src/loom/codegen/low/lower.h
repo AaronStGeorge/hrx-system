@@ -262,6 +262,12 @@ typedef struct loom_low_lower_policy_t {
 iree_status_t loom_low_lower_policy_verify(
     const loom_low_lower_policy_t* policy);
 
+// Verifies generated/static rule-table invariants required by the lowering
+// interpreters. This is an O(table rows) target-authoring check intended for
+// registration tests and tooling diagnostics, not per-function lowering.
+iree_status_t loom_low_lower_policy_verify_static_tables(
+    const loom_low_lower_policy_t* policy);
+
 typedef struct loom_low_lower_policy_registry_entry_t {
   // Target contract-set key that selects |policy|.
   iree_string_view_t contract_set_key;

@@ -525,6 +525,8 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::ops::index
     loom::src::loom::ops::low
@@ -652,6 +654,7 @@ loom_cc_test(
     "lower_policy_registry_test.cc"
   DEPS
     ::lower
+    loom::src::loom::ops::scalar
     loom::src::loom::target::test::lower
     iree::testing::gtest
     iree::testing::gtest_main

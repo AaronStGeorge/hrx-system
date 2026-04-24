@@ -7,6 +7,8 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower.h"
+#include "loom/codegen/low/lower_rules.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/target/test/lower.h"
 
 namespace loom {
@@ -26,6 +28,7 @@ TEST(LowLowerPolicyRegistryTest, LooksUpPolicyByContractKey) {
   IREE_ASSERT_OK(loom_low_lower_policy_registry_lookup(
       &registry, IREE_SV("test.low.core"), &policy));
   EXPECT_EQ(policy, loom_test_low_lower_policy());
+  IREE_EXPECT_OK(loom_low_lower_policy_verify_static_tables(policy));
 }
 
 TEST(LowLowerPolicyRegistryTest, LooksUpPolicyForTargetBundle) {
@@ -89,6 +92,84 @@ TEST(LowLowerPolicyRegistryTest, RejectsMalformedRegistries) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       loom_low_lower_policy_registry_verify(&incomplete_registry));
+}
+
+TEST(LowLowerPolicyRegistryTest, RejectsMalformedRuleSpans) {
+  const loom_low_lower_rule_t duplicate_span_rules[] = {
+      {
+          .source_op_kind = LOOM_OP_SCALAR_ADDI,
+      },
+      {
+          .source_op_kind = LOOM_OP_SCALAR_ADDI,
+      },
+  };
+  const loom_low_lower_rule_span_t duplicate_spans[] = {
+      {
+          .source_op_kind = LOOM_OP_SCALAR_ADDI,
+          .rule_start = 0,
+          .rule_count = 1,
+      },
+      {
+          .source_op_kind = LOOM_OP_SCALAR_ADDI,
+          .rule_start = 1,
+          .rule_count = 1,
+      },
+  };
+  const loom_low_lower_rule_set_t duplicate_span_rule_set = {
+      .spans = duplicate_spans,
+      .span_count = IREE_ARRAYSIZE(duplicate_spans),
+      .rules = duplicate_span_rules,
+      .rule_count = IREE_ARRAYSIZE(duplicate_span_rules),
+  };
+  const loom_low_lower_rule_set_t* const duplicate_span_rule_sets[] = {
+      &duplicate_span_rule_set,
+  };
+  const loom_low_lower_policy_t duplicate_span_policy = {
+      .name = IREE_SVL("duplicate-span-policy"),
+      .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
+      .rule_sets =
+          {
+              .count = IREE_ARRAYSIZE(duplicate_span_rule_sets),
+              .values = duplicate_span_rule_sets,
+          },
+  };
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_low_lower_policy_verify_static_tables(&duplicate_span_policy));
+
+  const loom_low_lower_rule_t mismatched_rules[] = {
+      {
+          .source_op_kind = LOOM_OP_SCALAR_SUBI,
+      },
+  };
+  const loom_low_lower_rule_span_t mismatched_spans[] = {
+      {
+          .source_op_kind = LOOM_OP_SCALAR_ADDI,
+          .rule_start = 0,
+          .rule_count = 1,
+      },
+  };
+  const loom_low_lower_rule_set_t mismatched_rule_set = {
+      .spans = mismatched_spans,
+      .span_count = IREE_ARRAYSIZE(mismatched_spans),
+      .rules = mismatched_rules,
+      .rule_count = IREE_ARRAYSIZE(mismatched_rules),
+  };
+  const loom_low_lower_rule_set_t* const mismatched_rule_sets[] = {
+      &mismatched_rule_set,
+  };
+  const loom_low_lower_policy_t mismatched_policy = {
+      .name = IREE_SVL("mismatched-span-policy"),
+      .map_type = {.fn = loom_test_low_lower_map_type, .user_data = nullptr},
+      .rule_sets =
+          {
+              .count = IREE_ARRAYSIZE(mismatched_rule_sets),
+              .values = mismatched_rule_sets,
+          },
+  };
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_low_lower_policy_verify_static_tables(&mismatched_policy));
 }
 
 TEST(LowLowerPolicyRegistryTest, RejectsDuplicateContractKeys) {

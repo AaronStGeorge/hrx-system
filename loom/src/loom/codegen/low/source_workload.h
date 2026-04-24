@@ -54,6 +54,10 @@ typedef struct loom_low_source_workload_counts_t {
   uint32_t vector_extract_op_count;
   // Number of generated vector.shuffle ops.
   uint32_t vector_shuffle_op_count;
+  // Number of generated vector.load ops.
+  uint32_t vector_load_op_count;
+  // Number of generated vector.store ops.
+  uint32_t vector_store_op_count;
   // Number of generated index.madd ops.
   uint32_t index_madd_op_count;
 } loom_low_source_workload_counts_t;
@@ -118,9 +122,9 @@ iree_status_t loom_low_source_workload_register_dialects(
 
 // Generates one targeted source function suitable for source-to-low lowering.
 //
-// The generated function has i32, vector<4xi32>, and index arguments/results
-// and emits only source ops intentionally supported by the foundation lowering
-// path.
+// The generated function has buffer, i32, vector<4xi32>, and index
+// arguments/results and emits only source ops intentionally supported by the
+// foundation lowering path.
 iree_status_t loom_low_source_workload_generate_module(
     loom_test_gen_t* gen, const loom_low_source_workload_config_t* config,
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
