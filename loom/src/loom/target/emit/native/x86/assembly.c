@@ -821,6 +821,41 @@ static iree_status_t loom_x86_append_branch_packet(
       context->schedule, loom_low_br_dest(op), context->builder);
 }
 
+static iree_status_t loom_x86_append_cond_branch_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  const loom_x86_assembly_state_t* state =
+      (const loom_x86_assembly_state_t*)user_data;
+  const loom_op_t* op = context->packet->node->op;
+  const loom_low_allocation_assignment_t* condition_assignment = NULL;
+  IREE_RETURN_IF_ERROR(loom_x86_find_assignment(
+      context, loom_low_cond_br_condition(op), &condition_assignment));
+  loom_x86_register_class_kind_t register_class_kind = 0;
+  IREE_RETURN_IF_ERROR(loom_x86_register_class_kind(
+      state, context, condition_assignment, &register_class_kind));
+  if (register_class_kind != LOOM_X86_REGISTER_CLASS_K) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "x86 assembly conditional branch requires a mask register predicate");
+  }
+
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "kortestq "));
+  IREE_RETURN_IF_ERROR(
+      loom_x86_append_assignment(state, context, condition_assignment));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, ", "));
+  IREE_RETURN_IF_ERROR(
+      loom_x86_append_assignment(state, context, condition_assignment));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "\n  jnz "));
+  IREE_RETURN_IF_ERROR(loom_native_assembly_append_block_label(
+      context->schedule, loom_low_cond_br_true_dest(op), context->builder));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "\n  jmp "));
+  return loom_native_assembly_append_block_label(
+      context->schedule, loom_low_cond_br_false_dest(op), context->builder);
+}
+
 iree_status_t loom_x86_emit_assembly_fragment(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
@@ -865,6 +900,14 @@ iree_status_t loom_x86_emit_assembly_fragment(
                   {
                       .fn = loom_x86_append_branch_packet,
                       .user_data = NULL,
+                  },
+          },
+          {
+              .op_kind = LOOM_OP_LOW_COND_BR,
+              .append_packet =
+                  {
+                      .fn = loom_x86_append_cond_branch_packet,
+                      .user_data = &state,
                   },
           },
       };

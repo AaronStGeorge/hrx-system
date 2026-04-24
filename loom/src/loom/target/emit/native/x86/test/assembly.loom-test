@@ -127,3 +127,31 @@ low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : re
   vblendmps zmm0, k2, zmm2, zmm0
   vmovdqu32 [rax + 192], zmm0
   ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>) {
+  %condition = low.op<x86.avx512.vpcmpd.sgt.zmm>(%lhs, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.k>
+  low.cond_br %condition, ^then, ^else : reg<x86.k>
+^then:
+  low.op<x86.avx512.vmovdqu32.store.zmm>(%lhs, %base) {disp32 = 0} : (reg<x86.zmm>, reg<x86.gpr64>)
+  low.return
+^else:
+  low.op<x86.avx512.vmovdqu32.store.zmm>(%rhs, %base) {disp32 = 64} : (reg<x86.zmm>, reg<x86.gpr64>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  vpcmpd.sgt k0, zmm0, zmm1
+  kortestq k0, k0
+  jnz .Lbb1
+  jmp .Lbb2
+.Lbb1:
+  vmovdqu32 [rax], zmm0
+  ret
+.Lbb2:
+  vmovdqu32 [rax + 64], zmm1
+  ret
