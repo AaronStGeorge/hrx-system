@@ -167,6 +167,47 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    movement
+  HDRS
+    "movement.h"
+  SRCS
+    "movement.c"
+  DEPS
+    ::view_regions
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ir::facts
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::vector
+    loom::src::loom::util::fact_table
+    loom::src::loom::util::math
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    movement_test
+  SRCS
+    "movement_test.cc"
+  DEPS
+    ::movement
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::encoding
+    loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::test
+    loom::src::loom::ops::vector
+    loom::src::loom::util::fact_table
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     motion
   HDRS
     "motion.h"
