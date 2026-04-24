@@ -3757,8 +3757,7 @@ static iree_status_t loom_print_block_label_line(loom_print_context_t* ctx,
       IREE_RETURN_IF_ERROR(loom_output_stream_write(
           ctx->stream, loom_resolve_value_name(ctx->module, arg_id, name_buffer,
                                                sizeof(name_buffer))));
-      IREE_RETURN_IF_ERROR(
-          loom_output_stream_write_cstring(ctx->stream, " : "));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ": "));
       IREE_RETURN_IF_ERROR(
           loom_text_print_type(loom_module_value_type(ctx->module, arg_id),
                                ctx->module, ctx->stream));

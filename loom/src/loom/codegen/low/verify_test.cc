@@ -231,7 +231,7 @@ TEST_F(LowDescriptorVerifyTest, LowFuncDefAsmBodyParsesAndPrintsByPolicy) {
   loom_text_low_asm_environment_t environment = LowAsmEnvironment(&registry);
   std::string source =
       std::string(kVmTargetRecords) +
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) asm<iree.vm.core> {\n"
       "  %sum = vm.add.i32 %lhs, %rhs\n"
       "  return %sum\n"
@@ -346,7 +346,7 @@ TEST_F(LowDescriptorVerifyTest, AsmAuthoredPacketErrorsKeepSourceLocation) {
 TEST_F(LowDescriptorVerifyTest, ValidVmPacketsPass) {
   std::string source =
       std::string(kVmTargetRecords) +
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, "
       "reg<vm.i32>) -> reg<vm.i32>\n"
@@ -372,7 +372,7 @@ TEST_F(LowDescriptorVerifyTest, ValidVmPacketsPass) {
 TEST_F(LowDescriptorVerifyTest, ValidVmPacketsPassWithFoundationRequirements) {
   std::string source =
       std::string(kVmTargetRecords) +
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, "
       "reg<vm.i32>) -> reg<vm.i32>\n"
@@ -454,7 +454,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsMissingImmediateAttr) {
 TEST_F(LowDescriptorVerifyTest, RejectsUnexpectedImmediateAttr) {
   std::string source =
       std::string(kVmTargetRecords) +
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) {junk = 1} : "
       "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
@@ -543,7 +543,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsImmediateRangeMismatch) {
 TEST_F(LowDescriptorVerifyTest, RejectsUnknownDescriptor) {
   std::string source =
       std::string(kVmTargetRecords) +
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.missing.i32>(%lhs, %rhs) : (reg<vm.i32>, "
       "reg<vm.i32>) -> reg<vm.i32>\n"
@@ -574,7 +574,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsUnknownDescriptor) {
 TEST_F(LowDescriptorVerifyTest, RejectsResultRegisterClassMismatch) {
   std::string source =
       std::string(kVmTargetRecords) +
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i64>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, "
       "reg<vm.i32>) -> reg<vm.i64>\n"
@@ -675,7 +675,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsResourceRegisterClassMismatch) {
 TEST_F(LowDescriptorVerifyTest, RejectsOperandRegisterClassMismatch) {
   std::string source =
       std::string(kVmTargetRecords) +
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i64>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i64>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i64>, "
       "reg<vm.i32>) -> reg<vm.i32>\n"
@@ -711,7 +711,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsOperandRegisterClassMismatch) {
 TEST_F(LowDescriptorVerifyTest, RejectsOperandRegisterUnitMismatch) {
   std::string source =
       std::string(kVmTargetRecords) +
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32 x2>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32 x2>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32 x2>, "
       "reg<vm.i32>) -> reg<vm.i32>\n"
@@ -744,7 +744,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsOperandRegisterUnitMismatch) {
 TEST_F(LowDescriptorVerifyTest, RejectsOperandCountMismatch) {
   std::string source =
       std::string(kVmTargetRecords) +
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>) -> "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>) -> "
       "(reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs) : (reg<vm.i32>) -> reg<vm.i32>\n"
       "  low.return %sum : reg<vm.i32>\n"
@@ -772,7 +772,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsOperandCountMismatch) {
 TEST_F(LowDescriptorVerifyTest, RejectsResultCountMismatch) {
   std::string source =
       std::string(kVmTargetRecords) +
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) {\n"
       "  low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, reg<vm.i32>)\n"
       "  low.return\n"
@@ -1067,7 +1067,7 @@ std::string FeatureTargetRecords(const char* feature_bits) {
 std::string FeatureEnumImmediateSource(const char* mode_value) {
   return FeatureTargetRecords("5") +
          std::string(
-             "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+             "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
              "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
              "  %sum = low.op<test.add.i32>(%lhs, %rhs) {mode = ") +
          mode_value +
@@ -1115,7 +1115,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {
 
   std::string source =
       FeatureTargetRecords("1") +
-      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
@@ -1154,7 +1154,7 @@ TEST_F(LowDescriptorVerifyTest, FeatureMaskTableRowKeepsLogicalFeatureWord) {
 
   std::string source =
       FeatureTargetRecords("1") +
-      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
@@ -1286,7 +1286,7 @@ TEST_F(LowDescriptorVerifyTest, IgnoresImplicitDescriptorOperandRows) {
 
   std::string source =
       FeatureTargetRecords("5") +
-      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
@@ -1315,7 +1315,7 @@ TEST_F(LowDescriptorVerifyTest, AcceptsMatchingTiedConstraintTypes) {
 
   std::string source =
       FeatureTargetRecords("5") +
-      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
@@ -1344,7 +1344,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsTiedConstraintTypeMismatch) {
 
   std::string source =
       FeatureTargetRecords("5") +
-      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.alt x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.alt x1>\n"
@@ -1393,7 +1393,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsDestructiveConstraintTypeMismatch) {
 
   std::string source =
       FeatureTargetRecords("5") +
-      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.alt x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.alt x1>\n"
@@ -1426,7 +1426,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsCommutableConstraintTypeMismatch) {
 
   std::string source =
       FeatureTargetRecords("5") +
-      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
       "%rhs : reg<test.alt x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.alt x1>) -> reg<test.gpr x1>\n"

@@ -13,7 +13,7 @@ func.def @lowers_if_result(%cond: i1, %a: i32, %b: i32) -> (i32) {
 
 // ----
 func.def @lowers_if_result(%cond: i1, %a: i32, %b: i32) -> (i32) {
-^_bb0(%cond : i1, %a : i32, %b : i32):
+^_bb0(%cond: i1, %a: i32, %b: i32):
   cfg.cond_br %cond, ^_bb1, ^_bb2 : i1
 ^_bb1:
   %then = test.addi %a, %b : i32
@@ -21,7 +21,7 @@ func.def @lowers_if_result(%cond: i1, %a: i32, %b: i32) -> (i32) {
 ^_bb2:
   %else = test.addi %b, %b : i32
   cfg.br ^_bb3(%else : i32)
-^_bb3(%result : i32):
+^_bb3(%result: i32):
   func.return %result : i32
 }
 
@@ -39,11 +39,11 @@ func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
 
 // ----
 func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
-^_bb0(%n : index, %seed : i32, %x : i32):
+^_bb0(%n: index, %seed: i32, %x: i32):
   %zero = index.constant 0 : index
   %one = index.constant 1 : index
   cfg.br ^_bb1(%zero, %seed : index, i32)
-^_bb1(%i : index, %sum : i32):
+^_bb1(%i: index, %sum: i32):
   %12 = index.cmp slt, %i, %n : index
   cfg.cond_br %12, ^_bb2, ^_bb3 : i1
 ^_bb2:
@@ -69,9 +69,9 @@ func.def @lowers_while(%cond: i1, %seed: i32, %x: i32) -> (i32) {
 
 // ----
 func.def @lowers_while(%cond: i1, %seed: i32, %x: i32) -> (i32) {
-^_bb0(%cond : i1, %seed : i32, %x : i32):
+^_bb0(%cond: i1, %seed: i32, %x: i32):
   cfg.br ^_bb1(%seed : i32)
-^_bb1(%result : i32):
+^_bb1(%result: i32):
   %forwarded = test.addi %result, %x : i32
   cfg.cond_br %cond, ^_bb2, ^_bb3 : i1
 ^_bb2:
@@ -103,7 +103,7 @@ func.def @lowers_switch(%selector: index, %a: i32, %b: i32) -> (i32) {
 
 // ----
 func.def @lowers_switch(%selector: index, %a: i32, %b: i32) -> (i32) {
-^_bb0(%selector : index, %a : i32, %b : i32):
+^_bb0(%selector: index, %a: i32, %b: i32):
   %9 = index.constant 0 : index
   %10 = index.cmp eq, %selector, %9 : index
   cfg.cond_br %10, ^_bb2, ^_bb1 : i1
@@ -120,7 +120,7 @@ func.def @lowers_switch(%selector: index, %a: i32, %b: i32) -> (i32) {
 ^_bb4:
   %fallback = test.addi %b, %b : i32
   cfg.br ^_bb5(%fallback : i32)
-^_bb5(%result : i32):
+^_bb5(%result: i32):
   func.return %result : i32
 }
 
@@ -142,7 +142,7 @@ func.def @remaps_join_argument_dependent_type(%cond: i1, %buffer: buffer, %offse
 
 // ----
 func.def @remaps_join_argument_dependent_type(%cond: i1, %buffer: buffer, %offset: offset) {
-^_bb0(%cond : i1, %buffer : buffer, %offset : offset):
+^_bb0(%cond: i1, %buffer: buffer, %offset: offset):
   cfg.cond_br %cond, ^_bb1, ^_bb2 : i1
 ^_bb1:
   %dense = encoding.layout.dense : encoding<layout>
@@ -152,7 +152,7 @@ func.def @remaps_join_argument_dependent_type(%cond: i1, %buffer: buffer, %offse
   %strided = encoding.layout.strided [1] : encoding<layout>
   %else_view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %strided>
   cfg.br ^_bb3(%strided, %else_view : encoding<layout>, view<4xf32, %strided>)
-^_bb3(%layout : encoding<layout>, %view : view<4xf32, %layout>):
+^_bb3(%layout: encoding<layout>, %view: view<4xf32, %layout>):
   test.use %view : view<4xf32, %layout>
   func.return
 }

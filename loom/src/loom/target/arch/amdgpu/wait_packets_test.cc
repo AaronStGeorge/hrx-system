@@ -178,7 +178,7 @@ class AmdgpuWaitPacketsTest : public ::testing::Test {
 TEST_F(AmdgpuWaitPacketsTest, CoalescesCombinedMemoryWaitForGfx950) {
   std::string source = TargetPreamble("target", "amdgpu-gfx950");
   source += R"(
-low.func.def target(@target) @func(%value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@target) @func(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %loaded = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return %loaded : reg<amdgpu.vgpr>
@@ -229,7 +229,7 @@ low.func.def target(@target) @func(%value : reg<amdgpu.vgpr>, %resource : reg<am
 TEST_F(AmdgpuWaitPacketsTest, SplitsVmemStoreWaitForGfx11) {
   std::string source = TargetPreamble("target", "amdgpu-gfx11");
   source += R"(
-low.func.def target(@target) @func(%value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@target) @func(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %loaded = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return %loaded : reg<amdgpu.vgpr>
@@ -278,7 +278,7 @@ TEST_F(AmdgpuWaitPacketsTest, MaterializesSplitMemoryWaitsForGfx12AndGfx1250) {
   for (const char* preset_key : preset_keys) {
     std::string source = TargetPreamble("target", preset_key);
     source += R"(
-low.func.def target(@target) @func(%value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@target) @func(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %loaded = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return %loaded : reg<amdgpu.vgpr>

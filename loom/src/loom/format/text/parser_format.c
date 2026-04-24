@@ -518,7 +518,7 @@ static iree_status_t loom_parse_format_binding_list(
   return iree_ok_status();
 }
 
-// Parses region block arguments: (%block_arg : type, ...). Creates block arg
+// Parses region block arguments: (%block_arg: type, ...). Creates block arg
 // values and stores them as pending for the next REGION element. Names become
 // visible in that region's child scope, not in the current parent scope.
 static iree_status_t loom_parse_format_block_args(loom_parser_t* parser) {

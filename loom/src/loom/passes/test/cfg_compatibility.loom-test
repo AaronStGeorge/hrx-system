@@ -20,7 +20,7 @@ func.def @cfg_region_stays_cfg(%cond: i1, %a: i32, %b: i32) -> (i32) {
   cfg.br ^join(%sum : i32)
 ^else:
   cfg.br ^join(%a : i32)
-^join(%result : i32):
+^join(%result: i32):
   func.return %result : i32
 }
 
@@ -43,7 +43,7 @@ func.def @cfg_region_stays_cfg(%cond: i1, %a: i32, %b: i32) -> (i32) {
   cfg.br ^join(%sum : i32)
 ^else:
   cfg.br ^join(%a : i32)
-^join(%result : i32):
+^join(%result: i32):
   func.return %result : i32
 }
 

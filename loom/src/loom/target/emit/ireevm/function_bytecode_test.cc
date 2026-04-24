@@ -246,7 +246,7 @@ TEST_F(IreeVmFunctionBytecodeTest, EmitsStraightLineI32FunctionBody) {
   loom_low_schedule_sidecar_t schedule = {};
   loom_low_allocation_sidecar_t allocation = {};
   BuildSidecars(
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : "
       "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
@@ -279,10 +279,10 @@ TEST_F(IreeVmFunctionBytecodeTest, EmitsBranchRemapList) {
   loom_low_schedule_sidecar_t schedule = {};
   loom_low_allocation_sidecar_t allocation = {};
   BuildSidecars(
-      "low.func.def target(@vm_target) @branch(%arg : reg<vm.i32>) -> "
+      "low.func.def target(@vm_target) @branch(%arg: reg<vm.i32>) -> "
       "(reg<vm.i32>) {\n"
       "  low.br ^join(%arg : reg<vm.i32>)\n"
-      "^join(%result : reg<vm.i32>):\n"
+      "^join(%result: reg<vm.i32>):\n"
       "  low.return %result : reg<vm.i32>\n"
       "}\n",
       &schedule, &allocation);
@@ -324,7 +324,7 @@ TEST_F(IreeVmFunctionBytecodeTest, EmitsLoadableExecutableVmModuleArchive) {
   loom_low_schedule_sidecar_t schedule = {};
   loom_low_allocation_sidecar_t allocation = {};
   BuildSidecars(
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : "
       "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"

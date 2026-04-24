@@ -881,7 +881,7 @@ TEST_F(AmdgpuKernelAssemblyTest, RejectsFunctionArgumentsBeforeAbiLowering) {
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
   BuildSidecarsForPreset("amdgpu-gfx11", "gfx_target",
-                         "low.func.def target(@gfx_target) @loom_kernel(%arg : "
+                         "low.func.def target(@gfx_target) @loom_kernel(%arg: "
                          "reg<amdgpu.sgpr>) {\n"
                          "  low.return\n"
                          "}\n",

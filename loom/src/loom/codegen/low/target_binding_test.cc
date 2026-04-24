@@ -195,7 +195,7 @@ class LowTargetBindingTest : public ::testing::Test {
 static std::string ValidVmLowFunction() {
   return std::string(
       "target.profile @vm_target preset(\"test.iree-vm\")\n"
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, "
       "reg<vm.i32>) -> reg<vm.i32>\n"
@@ -355,7 +355,7 @@ TEST_F(LowTargetBindingTest, ResolvesDescriptorPacketToDenseOrdinal) {
 TEST_F(LowTargetBindingTest, ResolvesMissingDescriptorPacketAsUnresolved) {
   std::string source =
       "target.profile @vm_target preset(\"test.iree-vm\")\n"
-      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "low.func.def target(@vm_target) @add(%lhs: reg<vm.i32>, %rhs: "
       "reg<vm.i32>) -> (reg<vm.i32>) {\n"
       "  %sum = low.op<iree.vm.missing.i32>(%lhs, %rhs) : (reg<vm.i32>, "
       "reg<vm.i32>) -> reg<vm.i32>\n"

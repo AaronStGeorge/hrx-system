@@ -140,7 +140,7 @@ TEST_F(X86AssemblyTest, DisassemblesAvx512ObjectWithLlvmObjdump) {
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
   BuildSidecars(
-      "low.func.def target(@x86_target) @x86_fragment(%base : "
+      "low.func.def target(@x86_target) @x86_fragment(%base: "
       "reg<x86.gpr64>, %acc : reg<x86.zmm>, %lhs : reg<x86.zmm>, "
       "%rhs : reg<x86.zmm>) {\n"
       "  %loaded = low.op<x86.avx512.vmovdqu32.load.zmm>(%base) "

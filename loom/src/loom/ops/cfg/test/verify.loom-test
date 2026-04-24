@@ -4,7 +4,7 @@
 func.def @cfg_successor_arg_count(%arg: i32) {
   // ERROR@+1: STRUCTURE/025 "successor 0" "expected 1"
   cfg.br ^exit
-^exit(%value : i32):
+^exit(%value: i32):
   func.return
 }
 
@@ -14,7 +14,7 @@ func.def @cfg_successor_arg_count(%arg: i32) {
 func.def @cfg_successor_arg_type(%arg: f32) {
   // ERROR@+1: STRUCTURE/026 "successor 0" "expected i32"
   cfg.br ^exit(%arg : f32)
-^exit(%value : i32):
+^exit(%value: i32):
   func.return
 }
 
@@ -26,6 +26,6 @@ func.def @cfg_cond_successor_payload(%condition: i1) {
   cfg.cond_br %condition, ^then, ^else : i1
 ^then:
   func.return
-^else(%value : i32):
+^else(%value: i32):
   func.return
 }

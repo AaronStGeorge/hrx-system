@@ -130,7 +130,7 @@ class AmdgpuEncodingTest : public ::testing::Test {
   void BuildShiftedCopySidecars(iree_arena_allocator_t* arena,
                                 loom_low_packetization_t* out_packetization) {
     const char* body =
-        "low.func.def target(@gfx_target) @gfx_kernel(%source : "
+        "low.func.def target(@gfx_target) @gfx_kernel(%source: "
         "reg<amdgpu.sgpr x3>, %tail : reg<amdgpu.sgpr>, %value : "
         "reg<amdgpu.vgpr>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
         "reg<amdgpu.sgpr>) {\n"
@@ -241,7 +241,7 @@ TEST_F(AmdgpuEncodingTest, EncodesInlineScalarConstantAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource: "
       "reg<amdgpu.sgpr x4>) {\n"
       "  %c0 = low.op<amdgpu.s_mov_b32>() {imm32 = 7} : () -> "
       "reg<amdgpu.sgpr>\n"
@@ -268,7 +268,7 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralScalarConstantAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource: "
       "reg<amdgpu.sgpr x4>) {\n"
       "  %c0 = low.op<amdgpu.s_mov_b32>() {imm32 = 305419896} : () -> "
       "reg<amdgpu.sgpr>\n"
@@ -296,7 +296,7 @@ TEST_F(AmdgpuEncodingTest, EncodesScalarMoveToM0AndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%offset : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%offset: "
       "reg<amdgpu.sgpr>, %value : reg<amdgpu.vgpr>) {\n"
       "  %m0 = low.op<amdgpu.s_mov_b32_m0>(%offset) : (reg<amdgpu.sgpr>) "
       "-> reg<amdgpu.m0>\n"
@@ -323,7 +323,7 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralVectorConstantAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource: "
       "reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
       "reg<amdgpu.sgpr>) {\n"
       "  %v0 = low.const<amdgpu.v_mov_b32> {imm32 = 42} : "
@@ -416,7 +416,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx12SmemPrefetchPackets) {
   loom_low_packetization_t packetization = {};
   BuildSidecarsForPreset(
       "amdgpu-gfx12",
-      "low.func.def target(@gfx_target) @gfx_kernel(%base : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%base: "
       "reg<amdgpu.sgpr x2>, %resource : reg<amdgpu.sgpr x4>, "
       "%soffset : reg<amdgpu.sgpr>) {\n"
       "  low.op<amdgpu.s_prefetch_data>(%base, %soffset) {offset = 64, "
@@ -465,7 +465,7 @@ TEST_F(AmdgpuEncodingTest, EncodesConcatRegisterCopies) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%r0 : reg<amdgpu.sgpr>, "
+      "low.func.def target(@gfx_target) @gfx_kernel(%r0: reg<amdgpu.sgpr>, "
       "%r1 : reg<amdgpu.sgpr>, %r2 : reg<amdgpu.sgpr>, %r3 : "
       "reg<amdgpu.sgpr>, %value : reg<amdgpu.vgpr>, %vaddr : "
       "reg<amdgpu.vgpr>) {\n"
@@ -505,7 +505,7 @@ TEST_F(AmdgpuEncodingTest, EncodesInitialGfx11Allowlist) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%s0 : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%s0: "
       "reg<amdgpu.sgpr>, %s1 : reg<amdgpu.sgpr>, %v0 : "
       "reg<amdgpu.vgpr>, %v1 : reg<amdgpu.vgpr>, %resource : "
       "reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>) {\n"
@@ -560,7 +560,7 @@ TEST_F(AmdgpuEncodingTest,
     loom_low_packetization_t packetization = {};
     BuildSidecarsForPreset(
         test_case.preset_key,
-        "low.func.def target(@gfx_target) @gfx_kernel(%s0 : "
+        "low.func.def target(@gfx_target) @gfx_kernel(%s0: "
         "reg<amdgpu.sgpr>, %v0 : "
         "reg<amdgpu.vgpr>, %v1 : reg<amdgpu.vgpr>, %resource : "
         "reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : "
@@ -622,7 +622,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11PackedDotSourceModifiers) {
     iree_arena_initialize(&block_pool_, &arena);
     loom_low_packetization_t packetization = {};
     std::string body =
-        "low.func.def target(@gfx_target) @gfx_kernel(%lhs : "
+        "low.func.def target(@gfx_target) @gfx_kernel(%lhs: "
         "reg<amdgpu.vgpr>, %rhs : reg<amdgpu.vgpr>, %acc : "
         "reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : "
         "reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {\n"
@@ -656,7 +656,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufStoreAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%value : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%value: "
       "reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %vaddr : "
       "reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {\n"
       "  low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, "
@@ -682,7 +682,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufLoadAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource: "
       "reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
       "reg<amdgpu.sgpr>) {\n"
       "  %loaded = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, "
@@ -708,7 +708,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufOffZeroLoadStoreAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource: "
       "reg<amdgpu.sgpr x4>) {\n"
       "  %loaded = low.op<amdgpu.buffer_load_dword_off_zero>(%resource) "
       "{offset = 12} : (reg<amdgpu.sgpr x4>) -> reg<amdgpu.vgpr>\n"
@@ -736,7 +736,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufB128LoadStoreAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource: "
       "reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
       "reg<amdgpu.sgpr>) {\n"
       "  %loaded = low.op<amdgpu.buffer_load_b128>(%resource, %vaddr, "
@@ -789,7 +789,7 @@ TEST_F(AmdgpuEncodingTest, EncodesBufferB128ForCurrentAmdgpuFamilies) {
     iree_arena_initialize(&block_pool_, &arena);
     loom_low_packetization_t packetization = {};
     std::string body =
-        "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+        "low.func.def target(@gfx_target) @gfx_kernel(%resource: "
         "reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
         "reg<amdgpu.sgpr>) {\n"
         "  %loaded = low.op<";
@@ -842,7 +842,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGlobalPointerB128ForCurrentAmdgpuFamilies) {
     iree_arena_initialize(&block_pool_, &arena);
     loom_low_packetization_t packetization = {};
     std::string body =
-        "low.func.def target(@gfx_target) @gfx_kernel(%addr : "
+        "low.func.def target(@gfx_target) @gfx_kernel(%addr: "
         "reg<amdgpu.vgpr x2>";
     if (test_case.uses_m0) {
       body += ", %m0 : reg<amdgpu.m0>";
@@ -907,7 +907,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGlobalSaddrB128ForCurrentAmdgpuFamilies) {
     iree_arena_initialize(&block_pool_, &arena);
     loom_low_packetization_t packetization = {};
     std::string body =
-        "low.func.def target(@gfx_target) @gfx_kernel(%addr : "
+        "low.func.def target(@gfx_target) @gfx_kernel(%addr: "
         "reg<amdgpu.vgpr>, %saddr : reg<amdgpu.sgpr x2>";
     if (test_case.uses_m0) {
       body += ", %m0 : reg<amdgpu.m0>";
@@ -958,7 +958,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11MubufB64LoadStoreAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%resource : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%resource: "
       "reg<amdgpu.sgpr x4>, %vaddr : reg<amdgpu.vgpr>, %soffset : "
       "reg<amdgpu.sgpr>) {\n"
       "  %loaded = low.op<amdgpu.buffer_load_b64>(%resource, %vaddr, "
@@ -1000,7 +1000,7 @@ TEST_F(AmdgpuEncodingTest, EncodesDsMemoryForCurrentAmdgpuFamilies) {
     loom_low_packetization_t packetization = {};
     BuildSidecarsForPreset(
         test_case.preset_key,
-        "low.func.def target(@gfx_target) @gfx_kernel(%addr : "
+        "low.func.def target(@gfx_target) @gfx_kernel(%addr: "
         "reg<amdgpu.vgpr>) {\n"
         "  %loaded32 = low.op<amdgpu.ds_read_b32>(%addr) {offset = 4} : "
         "(reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
@@ -1039,7 +1039,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11DsMemoryBarrierAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%addr : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%addr: "
       "reg<amdgpu.vgpr>, %value64 : reg<amdgpu.vgpr x2>, %value96 : "
       "reg<amdgpu.vgpr x3>, %value128 : reg<amdgpu.vgpr x4>) {\n"
       "  low.op<amdgpu.ds_write_b64>(%addr, %value64) {offset = 8} : "
@@ -1073,7 +1073,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx11Ds2AddrMemoryAndReturn) {
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
   BuildGfx11Sidecars(
-      "low.func.def target(@gfx_target) @gfx_kernel(%addr : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%addr: "
       "reg<amdgpu.vgpr>, %value32a : reg<amdgpu.vgpr>, %value32b : "
       "reg<amdgpu.vgpr>, %value64a : reg<amdgpu.vgpr x2>, "
       "%value64b : reg<amdgpu.vgpr x2>) {\n"
@@ -1122,7 +1122,7 @@ TEST_F(AmdgpuEncodingTest, EncodesDsAddtidMemoryForCurrentAmdgpuFamilies) {
     loom_low_packetization_t packetization = {};
     BuildSidecarsForPreset(
         test_case.preset_key,
-        "low.func.def target(@gfx_target) @gfx_kernel(%m0 : reg<amdgpu.m0>, "
+        "low.func.def target(@gfx_target) @gfx_kernel(%m0: reg<amdgpu.m0>, "
         "%value : reg<amdgpu.vgpr>) {\n"
         "  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 16} : "
         "(reg<amdgpu.m0>) -> reg<amdgpu.vgpr>\n"
@@ -1164,7 +1164,7 @@ TEST_F(AmdgpuEncodingTest, EncodesDsCrosslaneForCurrentAmdgpuFamilies) {
     loom_low_packetization_t packetization = {};
     BuildSidecarsForPreset(
         test_case.preset_key,
-        "low.func.def target(@gfx_target) @gfx_kernel(%addr : "
+        "low.func.def target(@gfx_target) @gfx_kernel(%addr: "
         "reg<amdgpu.vgpr>) {\n"
         "  %swizzled = low.op<amdgpu.ds_swizzle_b32>(%addr) {offset = "
         "32} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
@@ -1198,7 +1198,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx12DsCrosslaneFetchInvalidAndReturn) {
   loom_low_packetization_t packetization = {};
   BuildSidecarsForPreset(
       "amdgpu-gfx12",
-      "low.func.def target(@gfx_target) @gfx_kernel(%addr : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%addr: "
       "reg<amdgpu.vgpr>, %value : reg<amdgpu.vgpr>) {\n"
       "  %bpermuted = low.op<amdgpu.ds_bpermute_fi_b32>(%addr, "
       "%value) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) "
@@ -1225,7 +1225,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx950DsTransposeReadsAndReturn) {
   loom_low_packetization_t packetization = {};
   BuildSidecarsForPreset(
       "amdgpu-gfx950",
-      "low.func.def target(@gfx_target) @gfx_kernel(%addr : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%addr: "
       "reg<amdgpu.vgpr>) {\n"
       "  %loaded_b4 = low.op<amdgpu.ds_read_b64_tr_b4>(%addr) "
       "{offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>\n"
@@ -1312,7 +1312,7 @@ TEST_F(AmdgpuEncodingTest, EncodesRdnaWmmaPacketAndReturn) {
     loom_low_packetization_t packetization = {};
     std::string operand_type =
         AmdgpuVgprRegisterType(test_case.operand_unit_count);
-    std::string body = "low.func.def target(@gfx_target) @gfx_kernel(%a : ";
+    std::string body = "low.func.def target(@gfx_target) @gfx_kernel(%a: ";
     body += operand_type;
     body += ", %b : ";
     body += operand_type;
@@ -1375,7 +1375,7 @@ TEST_F(AmdgpuEncodingTest, EncodesRdnaIntegerWmmaPacketsAndReturn) {
         AmdgpuVgprRegisterType(test_case.iu8_operand_unit_count);
     std::string iu4_operand_type =
         AmdgpuVgprRegisterType(test_case.iu4_operand_unit_count);
-    std::string body = "low.func.def target(@gfx_target) @gfx_kernel(%a8 : ";
+    std::string body = "low.func.def target(@gfx_target) @gfx_kernel(%a8: ";
     body += iu8_operand_type;
     body += ", %b8 : ";
     body += iu8_operand_type;
@@ -1432,7 +1432,7 @@ TEST_F(AmdgpuEncodingTest, EncodesGfx950MfmaPacketAndReturn) {
   loom_low_packetization_t packetization = {};
   BuildSidecarsForPreset(
       "amdgpu-gfx950",
-      "low.func.def target(@gfx_target) @gfx_kernel(%a : "
+      "low.func.def target(@gfx_target) @gfx_kernel(%a: "
       "reg<amdgpu.vgpr x2>, %b : reg<amdgpu.vgpr x2>, %acc : "
       "reg<amdgpu.vgpr x4>, %vaddr : reg<amdgpu.vgpr>) {\n"
       "  %out = low.op<amdgpu.v_mfma_f32_16x16x16_f16>(%a, %b, %acc) : "

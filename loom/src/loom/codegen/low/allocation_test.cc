@@ -218,7 +218,7 @@ class LowAllocationTest : public ::testing::Test {
 
 TEST_F(LowAllocationTest, CoalescesTiedResultWithOperand) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%acc : reg<test.i32>) -> "
+      "low.func.def target(@test_target) @allocated(%acc: reg<test.i32>) -> "
       "(reg<test.i32>) {\n"
       "  %out = low.op<test.tied.any>(%acc) : (reg<test.i32>) -> %acc as "
       "reg<test.i32>\n"
@@ -232,7 +232,7 @@ TEST_F(LowAllocationTest, CoalescesTiedResultWithOperand) {
 
 TEST_F(LowAllocationTest, RejectsTiedResultWhenOperandSpills) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%acc : reg<test.i32>) -> "
+      "low.func.def target(@test_target) @allocated(%acc: reg<test.i32>) -> "
       "(reg<test.i32>) {\n"
       "  %out = low.op<test.tied.any>(%acc) : (reg<test.i32>) -> %acc as "
       "reg<test.i32>\n"
@@ -255,7 +255,7 @@ TEST_F(LowAllocationTest, RejectsTiedResultWhenOperandSpills) {
 
 TEST_F(LowAllocationTest, RejectsUnspillableRegisterClassExhaustion) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%lhs : "
+      "low.func.def target(@test_target) @allocated(%lhs: "
       "reg<test.special>, %rhs : reg<test.special>) -> "
       "(reg<test.special>) {\n"
       "  %sum = low.op<test.add.special>(%lhs, %rhs) : "
@@ -273,7 +273,7 @@ TEST_F(LowAllocationTest, RejectsUnspillableRegisterClassExhaustion) {
 
 TEST_F(LowAllocationTest, FixedValueLocationIsReusableAfterLastUse) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%fixed : reg<test.phys>, "
+      "low.func.def target(@test_target) @allocated(%fixed: reg<test.phys>, "
       "%rhs : reg<test.phys>) -> (reg<test.phys>) {\n"
       "  %dead = low.op<test.add.phys>(%fixed, %rhs) : (reg<test.phys>, "
       "reg<test.phys>) -> reg<test.phys>\n"
@@ -304,7 +304,7 @@ TEST_F(LowAllocationTest, FixedValueLocationIsReusableAfterLastUse) {
 
 TEST_F(LowAllocationTest, FutureFixedValueBlocksOverlappingOrdinaryValue) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%lhs : reg<test.phys>, "
+      "low.func.def target(@test_target) @allocated(%lhs: reg<test.phys>, "
       "%rhs : reg<test.phys>) -> (reg<test.phys>, reg<test.phys>) {\n"
       "  %late = low.op<test.add.phys>(%rhs, %rhs) : (reg<test.phys>, "
       "reg<test.phys>) -> reg<test.phys>\n"
@@ -336,7 +336,7 @@ TEST_F(LowAllocationTest, FutureFixedValueBlocksOverlappingOrdinaryValue) {
 
 TEST_F(LowAllocationTest, AlignsPowerOfTwoRegisterTuples) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%scalar : "
+      "low.func.def target(@test_target) @allocated(%scalar: "
       "reg<test.phys>, %wide : reg<test.phys x4>) -> (reg<test.phys>, "
       "reg<test.phys x4>) {\n"
       "  low.return %scalar, %wide : reg<test.phys>, reg<test.phys x4>\n"
@@ -349,7 +349,7 @@ TEST_F(LowAllocationTest, AlignsPowerOfTwoRegisterTuples) {
 
 TEST_F(LowAllocationTest, RejectsMisalignedFixedRegisterTuple) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%wide : "
+      "low.func.def target(@test_target) @allocated(%wide: "
       "reg<test.phys x4>) -> (reg<test.phys x4>) {\n"
       "  low.return %wide : reg<test.phys x4>\n"
       "}\n");
@@ -374,7 +374,7 @@ TEST_F(LowAllocationTest, RejectsMisalignedFixedRegisterTuple) {
 
 TEST_F(LowAllocationTest, ReservedRangeBlocksWholeFunction) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%lhs : reg<test.phys>, "
+      "low.func.def target(@test_target) @allocated(%lhs: reg<test.phys>, "
       "%rhs : reg<test.phys>) -> (reg<test.phys>) {\n"
       "  %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, "
       "reg<test.phys>) -> reg<test.phys>\n"
@@ -403,7 +403,7 @@ TEST_F(LowAllocationTest, ReservedRangeBlocksWholeFunction) {
 
 TEST_F(LowAllocationTest, AliasedRegisterClassesDoNotOverlap) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%narrow : "
+      "low.func.def target(@test_target) @allocated(%narrow: "
       "reg<test.alias32>, %wide : reg<test.alias64>) -> "
       "(reg<test.alias32>, reg<test.alias64>) {\n"
       "  low.return %narrow, %wide : reg<test.alias32>, "
@@ -417,7 +417,7 @@ TEST_F(LowAllocationTest, AliasedRegisterClassesDoNotOverlap) {
 
 TEST_F(LowAllocationTest, BudgetAppliesToAliasedRegisterClass) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%narrow : "
+      "low.func.def target(@test_target) @allocated(%narrow: "
       "reg<test.alias32>) -> (reg<test.alias32>) {\n"
       "  low.return %narrow : reg<test.alias32>\n"
       "}\n");
@@ -439,7 +439,7 @@ TEST_F(LowAllocationTest, BudgetAppliesToAliasedRegisterClass) {
 
 TEST_F(LowAllocationTest, RejectsDuplicateAliasedRegisterBudgets) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%narrow : "
+      "low.func.def target(@test_target) @allocated(%narrow: "
       "reg<test.alias32>) -> (reg<test.alias32>) {\n"
       "  low.return %narrow : reg<test.alias32>\n"
       "}\n");
@@ -466,7 +466,7 @@ TEST_F(LowAllocationTest, RejectsDuplicateAliasedRegisterBudgets) {
 
 TEST_F(LowAllocationTest, FutureFixedValueBlocksAliasedRegisterClass) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%narrow : "
+      "low.func.def target(@test_target) @allocated(%narrow: "
       "reg<test.alias32>, %wide : reg<test.alias64>) -> "
       "(reg<test.alias32>, reg<test.alias64>) {\n"
       "  low.return %narrow, %wide : reg<test.alias32>, "
@@ -495,7 +495,7 @@ TEST_F(LowAllocationTest, FutureFixedValueBlocksAliasedRegisterClass) {
 
 TEST_F(LowAllocationTest, ReservedRangeBlocksAliasedRegisterClass) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%narrow : "
+      "low.func.def target(@test_target) @allocated(%narrow: "
       "reg<test.alias32>) -> (reg<test.alias32>) {\n"
       "  low.return %narrow : reg<test.alias32>\n"
       "}\n");
@@ -519,7 +519,7 @@ TEST_F(LowAllocationTest, ReservedRangeBlocksAliasedRegisterClass) {
 
 TEST_F(LowAllocationTest, RejectsOverlappingReservedRanges) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%lhs : reg<test.phys>, "
+      "low.func.def target(@test_target) @allocated(%lhs: reg<test.phys>, "
       "%rhs : reg<test.phys>) -> (reg<test.phys>) {\n"
       "  %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, "
       "reg<test.phys>) -> reg<test.phys>\n"
@@ -552,7 +552,7 @@ TEST_F(LowAllocationTest, RejectsOverlappingReservedRanges) {
 
 TEST_F(LowAllocationTest, RejectsOverlappingAliasedReservedRanges) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%narrow : "
+      "low.func.def target(@test_target) @allocated(%narrow: "
       "reg<test.alias32>) -> (reg<test.alias32>) {\n"
       "  low.return %narrow : reg<test.alias32>\n"
       "}\n");
@@ -583,7 +583,7 @@ TEST_F(LowAllocationTest, RejectsOverlappingAliasedReservedRanges) {
 
 TEST_F(LowAllocationTest, VerifierRejectsAliasedRegisterClassOverlap) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @allocated(%narrow : "
+      "low.func.def target(@test_target) @allocated(%narrow: "
       "reg<test.alias32>, %wide : reg<test.alias64>) -> "
       "(reg<test.alias32>, reg<test.alias64>) {\n"
       "  low.return %narrow, %wide : reg<test.alias32>, "

@@ -2,7 +2,7 @@
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @alloc(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
+low.func.def target(@test_target) @alloc(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
   %sum = test.add.i32 %lhs, %rhs
   %one = test.const.i32 1
   %next = test.add.i32 %sum, %one
@@ -18,7 +18,7 @@ low.func.def target(@test_target) @alloc(%lhs : reg<test.i32>, %rhs : reg<test.i
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @fixed_value(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) {
+low.func.def target(@test_target) @fixed_value(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %sum : reg<test.i32>
 }
@@ -32,7 +32,7 @@ low.func.def target(@test_target) @fixed_value(%lhs : reg<test.i32>, %rhs : reg<
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @spill(%a : reg<test.i32>, %b : reg<test.i32>, %c : reg<test.i32>) -> (reg<test.i32>) {
+low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
   %ab = low.op<test.add.i32>(%a, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   %bc = low.op<test.add.i32>(%b, %c) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   %sum = low.op<test.add.i32>(%ab, %bc) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -49,7 +49,7 @@ low.func.def target(@test_target) @spill(%a : reg<test.i32>, %b : reg<test.i32>,
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @phys(%lhs : reg<test.phys>, %rhs : reg<test.phys>) -> (reg<test.phys>) {
+low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {
   %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys>
   low.return %sum : reg<test.phys>
 }
@@ -64,7 +64,7 @@ low.func.def target(@test_target) @phys(%lhs : reg<test.phys>, %rhs : reg<test.p
 target.profile @test_target preset("test-low")
 
 // WARNING@+1: BACKEND/008 "test_target" "predicts spilling test.phys value 'rhs'" "64 byte(s)" "1 reload(s)"
-low.func.def target(@test_target) @phys_predicted_spill(%lhs : reg<test.phys>, %rhs : reg<test.phys>) -> (reg<test.phys>) {
+low.func.def target(@test_target) @phys_predicted_spill(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {
   %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys>
   low.return %sum : reg<test.phys>
 }
@@ -78,7 +78,7 @@ low.func.def target(@test_target) @phys_predicted_spill(%lhs : reg<test.phys>, %
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @copy(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
+low.func.def target(@test_target) @copy(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
   %copy = copy %lhs : reg<test.i32> -> reg<test.i32>
   %sum = test.add.i32 %copy, %rhs
   return %sum
@@ -93,7 +93,7 @@ low.func.def target(@test_target) @copy(%lhs : reg<test.i32>, %rhs : reg<test.i3
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @copy_diagnostics(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) {
+low.func.def target(@test_target) @copy_diagnostics(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>) {
   // REMARK@+1: BACKEND/006 "test_target" "accepted coalescing 'lhs' with 'copy'" "assigned locations match and are register-like"
   %copy = low.copy %lhs : reg<test.i32> -> reg<test.i32>
   %sum = low.op<test.add.i32>(%copy, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -109,7 +109,7 @@ low.func.def target(@test_target) @copy_diagnostics(%lhs : reg<test.i32>, %rhs :
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @copy_coalesced(%value : reg<test.i32>) -> (reg<test.i32>) {
+low.func.def target(@test_target) @copy_coalesced(%value: reg<test.i32>) -> (reg<test.i32>) {
   %copy = low.copy %value : reg<test.i32> -> reg<test.i32>
   low.return %copy : reg<test.i32>
 }
@@ -124,7 +124,7 @@ low.func.def target(@test_target) @copy_coalesced(%value : reg<test.i32>) -> (re
 // ERROR@+1: LOWERING/001 "FAILED_PRECONDITION"
 target.profile @test_target preset("test-low")
 
-low.func.def allocation(assigned) target(@test_target) @assigned(%value : reg<test.i32>) -> (reg<test.i32>) {
+low.func.def allocation(assigned) target(@test_target) @assigned(%value: reg<test.i32>) -> (reg<test.i32>) {
   low.return %value : reg<test.i32>
 }
 
@@ -135,7 +135,7 @@ low.func.def allocation(assigned) target(@test_target) @assigned(%value : reg<te
 // ERROR@+1: LOWERING/001 "INVALID_ARGUMENT"
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @bad_budget(%value : reg<test.i32>) -> (reg<test.i32>) {
+low.func.def target(@test_target) @bad_budget(%value: reg<test.i32>) -> (reg<test.i32>) {
   low.return %value : reg<test.i32>
 }
 
@@ -146,6 +146,6 @@ low.func.def target(@test_target) @bad_budget(%value : reg<test.i32>) -> (reg<te
 // ERROR@+1: LOWERING/001 "FAILED_PRECONDITION"
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @bad_register_class(%value : reg<test.typo>) -> (reg<test.typo>) {
+low.func.def target(@test_target) @bad_register_class(%value: reg<test.typo>) -> (reg<test.typo>) {
   low.return %value : reg<test.typo>
 }

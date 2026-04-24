@@ -263,7 +263,7 @@ TEST_F(WasmFunctionBodyTest, EmitsStraightLineI32FunctionBody) {
   loom_low_schedule_sidecar_t schedule = {};
   loom_low_allocation_sidecar_t allocation = {};
   BuildSidecars(
-      "low.func.def target(@wasm_target) @wasm_test(%input : reg<wasm.i32>) "
+      "low.func.def target(@wasm_target) @wasm_test(%input: reg<wasm.i32>) "
       "-> (reg<wasm.i32>) {\n"
       "  %one = low.const<wasm.i32.const> {i32_value = 1} : reg<wasm.i32>\n"
       "  %sum = low.op<wasm.i32.add>(%input, %one) : "
@@ -338,7 +338,7 @@ TEST_F(WasmFunctionBodyTest, EmitsStraightLineSimdFunctionBody) {
   loom_low_schedule_sidecar_t schedule = {};
   loom_low_allocation_sidecar_t allocation = {};
   BuildSidecars(
-      "low.func.def target(@wasm_target) @wasm_test(%addr : reg<wasm.i32>, "
+      "low.func.def target(@wasm_target) @wasm_test(%addr: reg<wasm.i32>, "
       "%lhs : reg<wasm.v128>, %rhs : reg<wasm.v128>) -> "
       "(reg<wasm.v128>) {\n"
       "  %loaded = low.op<wasm.v128.load>(%addr) : (reg<wasm.i32>) -> "
@@ -400,7 +400,7 @@ TEST_F(WasmFunctionBodyTest, EmitsSimdLaneFunctionBody) {
   loom_low_schedule_sidecar_t schedule = {};
   loom_low_allocation_sidecar_t allocation = {};
   BuildSidecars(
-      "low.func.def target(@wasm_target) @wasm_test(%v : reg<wasm.v128>, "
+      "low.func.def target(@wasm_target) @wasm_test(%v: reg<wasm.v128>, "
       "%x : reg<wasm.i32>) -> (reg<wasm.v128>) {\n"
       "  %lane = low.op<wasm.i32x4.extract_lane>(%v) {lane = 1} : "
       "(reg<wasm.v128>) -> reg<wasm.i32>\n"
@@ -470,7 +470,7 @@ TEST_F(WasmFunctionBodyTest, EmitsF32LaneFunctionBody) {
   loom_low_schedule_sidecar_t schedule = {};
   loom_low_allocation_sidecar_t allocation = {};
   BuildSidecars(
-      "low.func.def target(@wasm_target) @wasm_test(%v : reg<wasm.v128>, "
+      "low.func.def target(@wasm_target) @wasm_test(%v: reg<wasm.v128>, "
       "%x : reg<wasm.f32>) -> (reg<wasm.v128>) {\n"
       "  %lane = low.op<wasm.f32x4.extract_lane>(%v) {lane = 2} : "
       "(reg<wasm.v128>) -> reg<wasm.f32>\n"
@@ -524,7 +524,7 @@ TEST_F(WasmFunctionBodyTest, RejectsSpilledAllocation) {
   loom_low_schedule_sidecar_t schedule = {};
   loom_low_allocation_sidecar_t allocation = {};
   BuildSidecars(
-      "low.func.def target(@wasm_target) @wasm_test(%input : reg<wasm.i32>) "
+      "low.func.def target(@wasm_target) @wasm_test(%input: reg<wasm.i32>) "
       "-> (reg<wasm.i32>) {\n"
       "  low.return %input : reg<wasm.i32>\n"
       "}\n",

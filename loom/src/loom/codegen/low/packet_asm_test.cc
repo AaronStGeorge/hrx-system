@@ -161,7 +161,7 @@ loom_low_packet_asm_form_sidecar_t MakeCanonicalAsmFormSidecar(
 
 TEST_F(LowPacketAsmTest, FormatsScheduledPacketsWithCanonicalAsmForms) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @packet_asm(%lhs : reg<test.i32>, "
+      "low.func.def target(@test_target) @packet_asm(%lhs: reg<test.i32>, "
       "%rhs : reg<test.i32>) -> (reg<test.i32>) {\n"
       "  %c7 = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>\n"
       "  %sum = low.op<test.add.i32>(%lhs, %c7) : "
@@ -216,7 +216,7 @@ TEST_F(LowPacketAsmTest, FormatsScheduledPacketsWithCanonicalAsmForms) {
 
 TEST_F(LowPacketAsmTest, FormatsStructuralBranches) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @packet_asm(%lhs : reg<test.i32>, "
+      "low.func.def target(@test_target) @packet_asm(%lhs: reg<test.i32>, "
       "%rhs : reg<test.i32>) -> (reg<test.i32>) {\n"
       "  %cmp = low.op<test.cmp.eq.i32>(%lhs, %rhs) : "
       "(reg<test.i32>, reg<test.i32>) -> reg<test.i32>\n"
@@ -227,7 +227,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralBranches) {
       "  low.br ^join(%sum : reg<test.i32>)\n"
       "^else:\n"
       "  low.br ^join(%rhs : reg<test.i32>)\n"
-      "^join(%result : reg<test.i32>):\n"
+      "^join(%result: reg<test.i32>):\n"
       "  low.return %result : reg<test.i32>\n"
       "}\n");
   loom_op_t* low_function = FindFirstLowFunction(module_);
@@ -267,7 +267,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralBranches) {
 
 TEST_F(LowPacketAsmTest, FormatsStructuralConcat) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @packet_asm(%lo : reg<test.i32>, "
+      "low.func.def target(@test_target) @packet_asm(%lo: reg<test.i32>, "
       "%hi : reg<test.i32>) -> (reg<test.i32 x2>) {\n"
       "  %pair = low.concat(%lo, %hi) : (reg<test.i32>, reg<test.i32>) -> "
       "reg<test.i32 x2>\n"
@@ -309,7 +309,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralConcat) {
 
 TEST_F(LowPacketAsmTest, FormatsStructuralSlice) {
   ParseAndVerify(
-      "low.func.def target(@test_target) @packet_asm(%pair : reg<test.i32 "
+      "low.func.def target(@test_target) @packet_asm(%pair: reg<test.i32 "
       "x2>) -> (reg<test.i32>) {\n"
       "  %lane = low.slice %pair[1] : reg<test.i32 x2> -> reg<test.i32>\n"
       "  low.return %lane : reg<test.i32>\n"

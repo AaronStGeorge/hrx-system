@@ -1386,7 +1386,7 @@ TEST_F(ParserTest, CounterOp) {
 // so the %tile operand has the correct type.
 TEST_F(ParserTest, SliceAllStatic) {
   loom_module_t* module = ParseOk(
-      "test.func @test_slice(%tile : tile<64x64xf16>) -> (tile<16x16xf16>) {\n"
+      "test.func @test_slice(%tile: tile<64x64xf16>) -> (tile<16x16xf16>) {\n"
       "  %sub = test.slice %tile[0, 32] : tile<64x64xf16> -> "
       "(tile<16x16xf16>)\n"
       "  test.yield %sub : tile<16x16xf16>\n"
@@ -1566,7 +1566,7 @@ TEST_F(ParserTest, FuncResultNameIsSignatureLocal) {
 
 TEST_F(ParserTest, BindingListNameCanShadowOuterScopeName) {
   loom_module_t* module = ParseOk(
-      "test.func @shadow(%x : f32) -> (f32) {\n"
+      "test.func @shadow(%x: f32) -> (f32) {\n"
       "  %tile = test.constant 0 : f32\n"
       "  %mapped = test.map(%x = %tile : f32) {\n"
       "    test.yield %x : f32\n"
@@ -1659,7 +1659,7 @@ TEST_F(ParserTest, LoopIvNameIsNotATiedResultTarget) {
 
 TEST_F(ParserTest, DuplicateFunctionArgName) {
   const auto& diagnostics = ParseExpectErrors(
-      "test.func @f(%x : f32, %x : f32) {\n"
+      "test.func @f(%x: f32, %x: f32) {\n"
       "  test.yield\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
@@ -1667,13 +1667,13 @@ TEST_F(ParserTest, DuplicateFunctionArgName) {
               loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 2));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "x");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
-  EXPECT_EQ(diagnostics[0].origin_column, 24u);
+  EXPECT_EQ(diagnostics[0].origin_column, 23u);
 }
 
 TEST_F(ParserTest, DuplicateBlockArgName) {
   const auto& diagnostics = ParseExpectErrors(
       "test.func @f() {\n"
-      "^bb(%x : i32, %x : i32):\n"
+      "^bb(%x: i32, %x: i32):\n"
       "  test.yield\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
@@ -1681,7 +1681,7 @@ TEST_F(ParserTest, DuplicateBlockArgName) {
               loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 2));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "x");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
-  EXPECT_EQ(diagnostics[0].origin_column, 15u);
+  EXPECT_EQ(diagnostics[0].origin_column, 14u);
 }
 
 TEST_F(ParserTest, UndefinedSuccessorBlockLabel) {
@@ -1863,7 +1863,7 @@ TEST_F(ParserTest, AttrDictTooDeep) {
 TEST_F(ParserTest, UnexpectedTokenInFuncSignature) {
   // Missing '->' in function signature triggers ERR_PARSE_003.
   const auto& diagnostics = ParseExpectErrors(
-      "test.func @bad(%x : f32) (f32) {\n"
+      "test.func @bad(%x: f32) (f32) {\n"
       "  test.yield %x : f32\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
@@ -1924,7 +1924,7 @@ TEST_F(ParserTest, VectorRequiresRank) {
 
 TEST_F(ParserTest, VectorZeroExtentIsNotRankZero) {
   loom_module_t* module = ParseOk(
-      "test.func @empty(%v : vector<0xf32>, %m : vector<4x0xi32>) {\n"
+      "test.func @empty(%v: vector<0xf32>, %m: vector<4x0xi32>) {\n"
       "  test.use %v, %m : vector<0xf32>, vector<4x0xi32>\n"
       "  test.yield\n"
       "}\n");
@@ -1945,7 +1945,7 @@ TEST_F(ParserTest, EncodingAlias) {
   // Define an encoding alias at module level and reference it in tile types.
   loom_module_t* module = ParseOk(
       "#enc = #quantization<bits=8>\n"
-      "test.func @test_enc(%x : tile<4xf32, #enc>) -> "
+      "test.func @test_enc(%x: tile<4xf32, #enc>) -> "
       "(tile<4xf32, #enc>) {\n"
       "  test.yield %x : tile<4xf32, #enc>\n"
       "}\n");
@@ -1970,7 +1970,7 @@ TEST_F(ParserTest, InvalidEncodingAliasReportsAliasToken) {
 TEST_F(ParserTest, InlineEncoding) {
   // Inline encoding definition directly in a tile type.
   loom_module_t* module = ParseOk(
-      "test.func @test_enc(%x : tile<4xf32, #dense<block=32>>) -> "
+      "test.func @test_enc(%x: tile<4xf32, #dense<block=32>>) -> "
       "(tile<4xf32>) {\n"
       "  test.yield %x : tile<4xf32>\n"
       "}\n");

@@ -1587,7 +1587,7 @@ TEST_F(PrintOpTest, BlockLabel) {
   std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
   EXPECT_EQ(output,
             "test.branch %0 {\n"
-            "^next(%1 : f32):\n"
+            "^next(%1: f32):\n"
             "} else {\n"
             "}\n");
 }

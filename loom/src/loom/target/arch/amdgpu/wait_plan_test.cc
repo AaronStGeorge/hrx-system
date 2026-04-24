@@ -153,7 +153,7 @@ class AmdgpuWaitPlanTest : public ::testing::Test {
 TEST_F(AmdgpuWaitPlanTest, PlansLoadUseAndRecordsExplicitWaits) {
   std::string source = TargetPreamble("gfx11_target", "amdgpu-gfx11");
   source += R"(
-low.func.def target(@gfx11_target) @gfx11_func(%s0 : reg<amdgpu.sgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>, %v0 : reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.vgpr>) {
+low.func.def target(@gfx11_target) @gfx11_func(%s0: reg<amdgpu.sgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>, %v0: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.vgpr>) {
   %smem = low.op<amdgpu.s_buffer_load_dword>(%resource, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
   %vmem = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   %s_mix = low.op<amdgpu.s_add_u32>(%s0, %smem) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
@@ -237,7 +237,7 @@ low.func.def target(@gfx11_target) @gfx11_func(%s0 : reg<amdgpu.sgpr>, %resource
 TEST_F(AmdgpuWaitPlanTest, PlansCombinedWaitcntForGfx950) {
   std::string source = TargetPreamble("gfx950_target", "amdgpu-gfx950");
   source += R"(
-low.func.def target(@gfx950_target) @gfx950_func(%s0 : reg<amdgpu.sgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>, %v0 : reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.vgpr>) {
+low.func.def target(@gfx950_target) @gfx950_func(%s0: reg<amdgpu.sgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>, %v0: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr>, reg<amdgpu.vgpr>) {
   %smem = low.op<amdgpu.s_buffer_load_dword>(%resource, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
   %vmem = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   %s_mix = low.op<amdgpu.s_add_u32>(%s0, %smem) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
@@ -299,7 +299,7 @@ TEST_F(AmdgpuWaitPlanTest, PlansSplitWaitcntForGfx12AndGfx1250) {
   for (const char* preset_key : preset_keys) {
     std::string source = TargetPreamble("target", preset_key);
     source += R"(
-low.func.def target(@target) @func(%resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>, %v0 : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@target) @func(%resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>, %v0: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %vmem = low.op<amdgpu.buffer_load_dword>(%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
   %v_mix = low.op<amdgpu.v_add_u32>(%v0, %vmem) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.op<amdgpu.buffer_store_dword>(%v_mix, %resource, %vaddr, %soffset) {offset = 4} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
@@ -365,7 +365,7 @@ low.func.def target(@target) @func(%resource : reg<amdgpu.sgpr x4>, %soffset : r
 TEST_F(AmdgpuWaitPlanTest, PlansStoreDrainAtBlockExit) {
   std::string source = TargetPreamble("gfx11_target", "amdgpu-gfx11");
   source += R"(
-low.func.def target(@gfx11_target) @gfx11_func(%value : reg<amdgpu.vgpr>, %resource : reg<amdgpu.sgpr x4>, %soffset : reg<amdgpu.sgpr>, %vaddr : reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@gfx11_target) @gfx11_func(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return %value : reg<amdgpu.vgpr>
 }
@@ -402,7 +402,7 @@ low.func.def target(@gfx11_target) @gfx11_func(%value : reg<amdgpu.vgpr>, %resou
 TEST_F(AmdgpuWaitPlanTest, PlansWorkgroupBarrierDrain) {
   std::string source = TargetPreamble("gfx11_target", "amdgpu-gfx11");
   source += R"(
-low.func.def target(@gfx11_target) @gfx11_func(%addr : reg<amdgpu.vgpr>, %value : reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x4>) {
+low.func.def target(@gfx11_target) @gfx11_func(%addr: reg<amdgpu.vgpr>, %value: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x4>) {
   low.op<amdgpu.ds_write_b128>(%addr, %value) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>)
   low.op<amdgpu.s_barrier>() : ()
   %loaded = low.op<amdgpu.ds_read_b128>(%addr) {offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>

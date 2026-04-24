@@ -154,7 +154,7 @@ TEST_F(EncodingFormatTest, DefineInlineSpec) {
 
 TEST_F(EncodingFormatTest, DefineDynamicParams) {
   loom_module_t* module = ParseOk(
-      "test.func @test(%group_size : index, %scale : f32) {\n"
+      "test.func @test(%group_size: index, %scale: f32) {\n"
       "  %enc = encoding.define #q8_0<block=32> "
       "{scale = %scale : f32, group_size = %group_size : index} : "
       "encoding<schema>\n"
@@ -200,7 +200,7 @@ TEST_F(EncodingFormatTest, DefineDynamicParams) {
 
 TEST_F(EncodingFormatTest, StaticEncodingRejectsSSAParameter) {
   const auto& diagnostics = ParseExpectErrors(
-      "test.func @test(%group_size : index) {\n"
+      "test.func @test(%group_size: index) {\n"
       "  %enc = encoding.define #q8_0<group_size=%group_size> : "
       "encoding<schema>\n"
       "  test.yield\n"

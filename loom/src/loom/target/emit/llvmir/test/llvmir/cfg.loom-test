@@ -7,7 +7,7 @@ func.def public @cfg_select_i32(%cond: i1, %a: i32, %b: i32) -> (i32) {
   cfg.br ^join(%a : i32)
 ^else:
   cfg.br ^join(%b : i32)
-^join(%result : i32):
+^join(%result: i32):
   func.return %result : i32
 }
 
@@ -31,7 +31,7 @@ func.def @cfg_counted_accumulate(%n: index, %seed: i32, %x: i32) -> (i32) {
   %zero = index.constant 0 : index
   %one = index.constant 1 : index
   cfg.br ^loop(%zero, %seed : index, i32)
-^loop(%i : index, %acc : i32):
+^loop(%i: index, %acc: i32):
   %keep_going = index.cmp slt, %i, %n : index
   cfg.cond_br %keep_going, ^body, ^exit : i1
 ^body:

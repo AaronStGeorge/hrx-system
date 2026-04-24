@@ -2,7 +2,7 @@
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @spill(%a : reg<test.i32>, %b : reg<test.i32>, %c : reg<test.i32>) -> (reg<test.i32>) {
+low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
   %ab = low.op<test.add.i32>(%a, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   %bc = low.op<test.add.i32>(%b, %c) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   %sum = low.op<test.add.i32>(%ab, %bc) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -37,7 +37,7 @@ low.slot @spill_spill_1 {align = 4, function = @spill, size = 4, space = private
 target.profile @test_target preset("test-low")
 
 // WARNING@+1: BACKEND/009 "test_target" "value 'a'" "test.i32" "spill_spill_0"
-low.func.def target(@test_target) @spill(%a : reg<test.i32>, %b : reg<test.i32>, %c : reg<test.i32>) -> (reg<test.i32>) {
+low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
   // WARNING@+1: BACKEND/009 "test_target" "value 'ab'" "test.i32" "spill_spill_1"
   %ab = low.op<test.add.i32>(%a, %b) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   %bc = low.op<test.add.i32>(%b, %c) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
@@ -54,7 +54,7 @@ low.func.def target(@test_target) @spill(%a : reg<test.i32>, %b : reg<test.i32>,
 
 target.profile @test_target preset("test-low")
 
-low.func.def target(@test_target) @phys(%lhs : reg<test.phys>, %rhs : reg<test.phys>) -> (reg<test.phys>) {
+low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {
   %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys>
   low.return %sum : reg<test.phys>
 }
@@ -78,7 +78,7 @@ low.slot @phys_spill_0 {align = 64, function = @phys, size = 64, space = stack}
 target.profile @test_target preset("test-low")
 
 // WARNING@+1: BACKEND/009 "test_target" "value 'rhs'" "test.phys" "phys_spill_0"
-low.func.def target(@test_target) @phys(%lhs : reg<test.phys>, %rhs : reg<test.phys>) -> (reg<test.phys>) {
+low.func.def target(@test_target) @phys(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {
   %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys>
   low.return %sum : reg<test.phys>
 }

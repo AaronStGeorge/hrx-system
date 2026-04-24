@@ -93,9 +93,9 @@ class CfgVerifyTest : public ::testing::Test {
 TEST_F(CfgVerifyTest, BranchCanTerminateFunctionEntryBlock) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "func.def @forward(%arg : i32) -> (i32) {\n"
+      "func.def @forward(%arg: i32) -> (i32) {\n"
       "  cfg.br ^exit(%arg : i32)\n"
-      "^exit(%value : i32):\n"
+      "^exit(%value: i32):\n"
       "  func.return %value : i32\n"
       "}\n",
       &capture);
@@ -106,10 +106,10 @@ TEST_F(CfgVerifyTest, BranchCanTerminateFunctionEntryBlock) {
 TEST_F(CfgVerifyTest, BranchArgumentCountMustMatchDestinationBlock) {
   DiagnosticCapture capture;
   VerifySource(
-      "func.def @count_mismatch(%arg : i32) {\n"
+      "func.def @count_mismatch(%arg: i32) {\n"
       "^entry:\n"
       "  cfg.br ^exit\n"
-      "^exit(%value : i32):\n"
+      "^exit(%value: i32):\n"
       "  func.return\n"
       "}\n",
       &capture);
@@ -129,9 +129,9 @@ TEST_F(CfgVerifyTest, BranchArgumentCountMustMatchDestinationBlock) {
 TEST_F(CfgVerifyTest, BranchArgumentTypesMustMatchDestinationBlock) {
   DiagnosticCapture capture;
   VerifySource(
-      "func.def @type_mismatch(%arg : f32) {\n"
+      "func.def @type_mismatch(%arg: f32) {\n"
       "  cfg.br ^exit(%arg : f32)\n"
-      "^exit(%value : i32):\n"
+      "^exit(%value: i32):\n"
       "  func.return\n"
       "}\n",
       &capture);
@@ -152,11 +152,11 @@ TEST_F(CfgVerifyTest, BranchArgumentTypesMustMatchDestinationBlock) {
 TEST_F(CfgVerifyTest, BranchArgumentTypesMayRemapDestinationBlockArguments) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
-      "func.def @dependent_branch(%source_layout : encoding<layout>, "
+      "func.def @dependent_branch(%source_layout: encoding<layout>, "
       "%source_view : view<4xf32, %source_layout>) {\n"
       "  cfg.br ^exit(%source_layout, %source_view : encoding<layout>, "
       "view<4xf32, %source_layout>)\n"
-      "^exit(%target_layout : encoding<layout>, "
+      "^exit(%target_layout: encoding<layout>, "
       "%target_view : view<4xf32, %target_layout>):\n"
       "  func.return\n"
       "}\n",
@@ -168,11 +168,11 @@ TEST_F(CfgVerifyTest, BranchArgumentTypesMayRemapDestinationBlockArguments) {
 TEST_F(CfgVerifyTest, ConditionalBranchRequiresArgumentFreeDestinations) {
   DiagnosticCapture capture;
   VerifySource(
-      "func.def @cond_payload(%condition : i1) {\n"
+      "func.def @cond_payload(%condition: i1) {\n"
       "  cfg.cond_br %condition, ^then, ^else : i1\n"
       "^then:\n"
       "  func.return\n"
-      "^else(%value : i32):\n"
+      "^else(%value: i32):\n"
       "  func.return\n"
       "}\n",
       &capture);
@@ -192,7 +192,7 @@ TEST_F(CfgVerifyTest, ConditionalBranchRequiresArgumentFreeDestinations) {
 TEST_F(CfgVerifyTest, CfgRegionRequiresExplicitTerminators) {
   DiagnosticCapture capture;
   VerifySource(
-      "func.def @missing_terminator(%condition : i1) {\n"
+      "func.def @missing_terminator(%condition: i1) {\n"
       "  cfg.cond_br %condition, ^then, ^else : i1\n"
       "^then:\n"
       "  func.return\n"
