@@ -13,6 +13,7 @@ package(
 )
 
 exports_files([
+    "vector_bitcast.loom-test",
     "vector_v16.loom-test",
     "vector_v4.loom-test",
 ])
@@ -20,6 +21,7 @@ exports_files([
 loom_check_test_suite(
     name = "test",
     srcs = [
+        "vector_bitcast.loom-test",
         "vector_v16.loom-test",
         "vector_v4.loom-test",
     ],
