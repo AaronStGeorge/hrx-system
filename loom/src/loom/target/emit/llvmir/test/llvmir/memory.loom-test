@@ -158,6 +158,7 @@ entry:
 }
 
 // ====
+
 // RUN: emit llvmir-body amdgpu-hal
 
 // AMDGPU dense vector memory uses global address-space pointers.

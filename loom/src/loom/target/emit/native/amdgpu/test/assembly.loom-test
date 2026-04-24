@@ -18,6 +18,7 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource : reg<amdgpu.sgpr 
   s_endpgm
 
 // ====
+
 // RUN: emit amdgpu-assembly @gfx11_buffer_off_zero waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
@@ -34,6 +35,7 @@ low.func.def target(@gfx11_target) @gfx11_buffer_off_zero(%resource : reg<amdgpu
   s_endpgm
 
 // ====
+
 // RUN: emit amdgpu-assembly @gfx11_mask_select waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
@@ -52,6 +54,7 @@ low.func.def target(@gfx11_target) @gfx11_mask_select(%lhs : reg<amdgpu.vgpr>, %
   s_endpgm
 
 // ====
+
 // RUN: emit amdgpu-assembly @gfx11_global_pointer waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
@@ -68,6 +71,7 @@ low.func.def target(@gfx11_target) @gfx11_global_pointer(%addr : reg<amdgpu.vgpr
   s_endpgm
 
 // ====
+
 // RUN: emit amdgpu-assembly @gfx11_global_saddr waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
@@ -84,6 +88,7 @@ low.func.def target(@gfx11_target) @gfx11_global_saddr(%addr : reg<amdgpu.vgpr>,
   s_endpgm
 
 // ====
+
 // RUN: emit amdgpu-assembly @gfx950_global_load_lds waits=none
 target.profile @gfx950_target preset("amdgpu-gfx950")
 

@@ -48,6 +48,7 @@ entry:
 }
 
 // ====
+
 // RUN: emit llvmir-body x86_64-object
 
 // X86 intrinsics lower to declarations and calls without synthetic wrappers.
@@ -72,6 +73,7 @@ declare void @llvm.x86.sse2.pause()
 declare i64 @llvm.x86.rdtsc()
 
 // ====
+
 // RUN: emit llvmir-body amdgpu-hal
 
 // AMDGPU workitem intrinsics use the target profile's kernel ABI.
@@ -102,6 +104,7 @@ attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="64,64" "uniform-wo
 !0 = !{i32 64, i32 1, i32 1}
 
 // ====
+
 // RUN: emit llvmir-body amdgpu-hal
 
 // Public device signatures use the AMDGPU HAL binding ABI.
@@ -120,6 +123,7 @@ attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="64,64" "uniform-wo
 !0 = !{i32 64, i32 1, i32 1}
 
 // ====
+
 // RUN: emit llvmir-body amdgpu-hal
 
 // AMDGPU HAL buffer arguments lower to global address-space pointers.

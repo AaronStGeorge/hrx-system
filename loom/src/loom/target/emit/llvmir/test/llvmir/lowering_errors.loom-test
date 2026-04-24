@@ -8,6 +8,7 @@ func.def @dot4_s8s8(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32
 }
 
 // ====
+
 // RUN: emit llvmir-body
 
 // Packed i4 dot has no implicit LLVMIR reference expansion.
@@ -46,6 +47,7 @@ func.def public @dynamic_memcpy_volatile(%target: buffer, %source: buffer, %leng
 }
 
 // ====
+
 // RUN: emit llvmir-body x86_64-object
 
 // AMDGPU intrinsics stay unknown when the selected target profile is x86.
@@ -56,6 +58,7 @@ func.def public @amdgpu_intrinsic_on_x86() -> (i32) {
 }
 
 // ====
+
 // RUN: emit llvmir-body amdgpu-hal
 
 // Device kernel view parameters require explicit resource materialization.
@@ -65,6 +68,7 @@ func.def public device @bad_view_dispatch(%view: view<1xf32, #dense>) {
 }
 
 // ====
+
 // RUN: emit llvmir-body
 
 // Unsupported source ops report the op name in the lowering diagnostic.
@@ -101,6 +105,7 @@ func.def @scf_for_before_cfg(%n: index) {
 }
 
 // ====
+
 // RUN: emit llvmir spirv-vulkan
 
 // Unknown LLVMIR target profiles are reported before parsing/lowering.

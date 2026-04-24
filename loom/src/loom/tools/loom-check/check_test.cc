@@ -572,6 +572,7 @@ TEST_F(CheckParseTest, BothSeparatorsInOneFile) {
             "func.def @a() {\n"
             "}\n"
             "// ====\n"
+            "\n"
             "// RUN: roundtrip\n"
             "func.def @b() {}\n"));
   ASSERT_EQ(file_.case_count, 2);
@@ -860,6 +861,7 @@ TEST_F(CheckParseTest, PerCaseDirectives) {
       Parse("// RUN: roundtrip\n"
             "func.def @a() {}\n"
             "// ====\n"
+            "\n"
             "// RUN: verify\n"
             "func.def @b() {}\n"));
   ASSERT_EQ(file_.case_count, 2);
@@ -1335,9 +1337,11 @@ TEST_F(CheckParseTest, DirectivesPreservedAcrossParsing) {
       Parse("// RUN: roundtrip\n"
             "func.def @a() {}\n"
             "// ====\n"
+            "\n"
             "// RUN: verify\n"
             "func.def @b() {}\n"
             "// ====\n"
+            "\n"
             "// RUN: pass dce\n"
             "func.def @c() {}\n"));
   ASSERT_EQ(file_.case_count, 3);
@@ -1541,6 +1545,7 @@ TEST_F(CheckParseTest, FirstCaseRunOverriddenByCase) {
             "// ERROR@+1: PARSE/006\n"
             "bogus.nonexistent\n"
             "// ====\n"
+            "\n"
             "// RUN: roundtrip\n"
             "func.def @f() {}\n"));
   ASSERT_EQ(file_.case_count, 2);
@@ -1596,6 +1601,7 @@ TEST_F(CheckParseTest, FirstCaseRequiresInheritedAndCombined) {
       Parse("// REQUIRES: tool-dis\n"
             "func.def @a() {}\n"
             "// ====\n"
+            "\n"
             "// REQUIRES: tool-backend, tool-dis\n"
             "func.def @b() {}\n"));
   ASSERT_EQ(file_.case_count, 2);
@@ -1631,6 +1637,7 @@ TEST_F(CheckParseTest, FirstCaseRunBecomesDefault) {
       Parse("// RUN: verify\n"
             "func.def @a() {}\n"
             "// ====\n"
+            "\n"
             "// ERROR@+1: PARSE/006\n"
             "bogus.nonexistent\n"));
   ASSERT_EQ(file_.case_count, 2);

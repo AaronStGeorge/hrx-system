@@ -11,6 +11,7 @@ func.def @dce_single(%x: i32) -> (i32) {
 }
 
 // ====
+
 // RUN: pass dce
 
 // DCE runs on all functions in a module.
@@ -33,6 +34,7 @@ func.def @second(%y: i32) -> (i32) {
 }
 
 // ====
+
 // RUN: pass dce
 
 // Bodyless declarations are preserved unchanged.
@@ -50,6 +52,7 @@ func.def @has_body(%x: i32) -> (i32) {
 }
 
 // ====
+
 // RUN: pass dce
 
 // No-op: all code is live.

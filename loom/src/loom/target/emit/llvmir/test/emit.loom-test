@@ -16,6 +16,7 @@ entry:
 }
 
 // ====
+
 // RUN: emit llvmir-body @ir_target
 
 target.profile @ir_target preset("test-object")

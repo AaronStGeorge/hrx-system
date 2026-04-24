@@ -41,6 +41,7 @@ low.func.def target(@test_target) @vm_add(%lhs: reg<test.i32>, %rhs: reg<test.i3
 }
 
 // ====
+
 // RUN: pass symbol-dce
 
 target.profile @test_target preset("test-low")
@@ -81,6 +82,7 @@ low.func.def target(@test_target) @live_add(%lhs: reg<test.i32>, %rhs: reg<test.
 }
 
 // ====
+
 // RUN: pass symbol-dce
 
 target.profile @test_target preset("test-low")
