@@ -28,6 +28,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/target/ops.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/hal_resource_materialization.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
@@ -36,13 +37,29 @@
 #include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
 #include "loom/target/low_descriptor_registry.h"
-#include "loom/testing/context.h"
 
 namespace loom {
 namespace {
 
 using StreamPtr =
     std::unique_ptr<iree_io_stream_t, void (*)(iree_io_stream_t*)>;
+
+using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+void RegisterDialect(loom_context_t* context, uint8_t dialect_id,
+                     DialectVtablesFn dialect_vtables_fn) {
+  iree_host_size_t count = 0;
+  const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+  IREE_ASSERT_OK(loom_context_register_dialect(context, dialect_id, vtables,
+                                               (uint16_t)count));
+}
+
+void InitializeLowKernelContext(loom_context_t* context) {
+  loom_context_initialize(iree_allocator_system(), context);
+  RegisterDialect(context, LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
+  RegisterDialect(context, LOOM_DIALECT_LOW, loom_low_dialect_vtables);
+  IREE_ASSERT_OK(loom_context_finalize(context));
+}
 
 struct HsaApi {
   // Loaded HSA runtime shared library.
@@ -620,8 +637,7 @@ class LowKernelCompiler {
   LowKernelCompiler() {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_CHECK_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                      &context_));
+    InitializeLowKernelContext(&context_);
     loom_amdgpu_low_descriptor_registry_initialize(&target_registry_);
   }
 

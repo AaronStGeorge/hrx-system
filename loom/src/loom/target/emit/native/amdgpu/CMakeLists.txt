@@ -308,9 +308,9 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::ops::target
     loom::src::loom::target::arch::amdgpu::encoding
     loom::src::loom::target::arch::amdgpu::low_registry
-    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -330,6 +330,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::ops::target
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::hal_resource_materialization
     loom::src::loom::target::arch::amdgpu::low_registry
@@ -337,7 +338,6 @@ loom_cc_test(
     loom::src::loom::target::arch::amdgpu::wait_plan
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::tool::llvm
-    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -401,7 +401,15 @@ loom_cc_test(
     iree::hal::utils::executable_header
     loom::src::loom::format::text::parser
     loom::src::loom::ir
-    loom::src::loom::testing::context
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::encoding
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::low
+    loom::src::loom::ops::target
+    loom::src::loom::ops::vector
+    loom::src::loom::ops::view
     iree::schemas::amdgpu_executable_def_c_fbs
     iree::schemas::executable_debug_info_c_fbs
     iree::testing::gtest
@@ -428,6 +436,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::ops::target
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::hal_resource_materialization
     loom::src::loom::target::arch::amdgpu::low_registry
@@ -435,7 +444,6 @@ loom_cc_test(
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::arch::amdgpu::wait_plan
     loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
