@@ -21,6 +21,11 @@ typedef struct loom_x86_loom_check_emit_options_t {
       allocation_budgets[LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_BUDGETS];
   // Number of entries in |allocation_budgets|.
   iree_host_size_t allocation_budget_count;
+  // Fixed low allocation requests parsed from target options.
+  loom_check_low_emit_fixed_value_spec_t allocation_fixed_value_specs
+      [LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_FIXED_VALUES];
+  // Number of entries in |allocation_fixed_value_specs|.
+  iree_host_size_t allocation_fixed_value_spec_count;
 } loom_x86_loom_check_emit_options_t;
 
 static bool loom_x86_loom_check_emit_provider_matches(
@@ -62,10 +67,12 @@ static iree_status_t loom_x86_loom_check_parse_option(
   if (matched) {
     return iree_ok_status();
   }
-  return loom_check_low_emit_parse_allocation_budget(
+  return loom_check_low_emit_parse_allocation_option(
       token, IREE_SV("x86 assembly"), options->allocation_budgets,
       IREE_ARRAYSIZE(options->allocation_budgets),
-      &options->allocation_budget_count);
+      &options->allocation_budget_count, options->allocation_fixed_value_specs,
+      IREE_ARRAYSIZE(options->allocation_fixed_value_specs),
+      &options->allocation_fixed_value_spec_count);
 }
 
 static iree_status_t loom_x86_loom_check_parse_emit_options(
@@ -127,7 +134,8 @@ static iree_status_t loom_x86_loom_check_emit_provider_execute(
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
-      &packetization));
+      options.allocation_fixed_value_specs,
+      options.allocation_fixed_value_spec_count, &packetization));
   return loom_x86_loom_check_emit_assembly(&packetization,
                                            &request->result->actual_output);
 }

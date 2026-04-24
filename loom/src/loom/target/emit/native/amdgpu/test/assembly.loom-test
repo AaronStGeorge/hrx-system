@@ -265,6 +265,30 @@ low.func.def target(@gfx11_target) @gfx11_materialized_copy(%s0 : reg<amdgpu.sgp
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_overlapping_copy waits=none fixed=%source:physical_register:0:3 fixed=%shifted:physical_register:1:3
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_overlapping_copy(%source : reg<amdgpu.sgpr x3>, %tail : reg<amdgpu.sgpr>, %value : reg<amdgpu.vgpr>, %vaddr : reg<amdgpu.vgpr>, %soffset : reg<amdgpu.sgpr>) {
+  %shifted = low.copy %source : reg<amdgpu.sgpr x3> -> reg<amdgpu.sgpr x3>
+  %resource = low.concat(%shifted, %tail) : (reg<amdgpu.sgpr x3>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x4>
+  low.op<amdgpu.buffer_store_dword>(%value, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  s_mov_b32 s3, s2
+  s_mov_b32 s2, s1
+  s_mov_b32 s1, s0
+  s_mov_b32 s0, s1
+  s_mov_b32 s1, s2
+  s_mov_b32 s2, s3
+  s_mov_b32 s3, s4
+  buffer_store_dword v0, v1, s[0:3], s5 offen offset:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_concat waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 

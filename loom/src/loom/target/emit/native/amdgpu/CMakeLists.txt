@@ -268,26 +268,6 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
-    assembly_test
-  SRCS
-    "assembly_test.cc"
-  DEPS
-    ::assembly
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::packetization
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::target::arch::amdgpu::low_registry
-    loom::src::loom::testing::context
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     metadata_test
   SRCS
     "metadata_test.cc"

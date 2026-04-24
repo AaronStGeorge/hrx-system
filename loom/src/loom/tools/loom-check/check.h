@@ -33,8 +33,9 @@
 //                           Analysis targets include liveness-json @function,
 //                           low-schedule-json @function [strategy=...]
 //                           [diagnostics=...], low-allocation-json @function
-//                           [diagnostics=...] [class=units...], and
-//                           low-packet-json @function.
+//                           [diagnostics=...] [class=units...]
+//                           [fixed=%value:<kind>:<base>:<count>],
+//                           and low-packet-json @function.
 //                           Source lowering tests use source-low
 //                           [output=module|low]
 //                           [diagnostics=none|memory|all]

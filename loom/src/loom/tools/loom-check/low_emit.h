@@ -19,7 +19,21 @@ extern "C" {
 
 enum {
   LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_BUDGETS = 8,
+  LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_FIXED_VALUES = 16,
 };
+
+// Textual fixed-location request parsed from RUN options before the selected
+// low function has been resolved.
+typedef struct loom_check_low_emit_fixed_value_spec_t {
+  // SSA value name without the leading '%'.
+  iree_string_view_t value_name;
+  // Target-visible fixed location kind.
+  loom_low_allocation_location_kind_t location_kind;
+  // Base physical register or target ID.
+  uint32_t location_base;
+  // Number of contiguous units fixed at |location_base|.
+  uint32_t location_count;
+} loom_check_low_emit_fixed_value_spec_t;
 
 // Parses a shared low emit scheduling strategy value.
 iree_status_t loom_check_low_emit_parse_schedule_strategy(
@@ -32,10 +46,35 @@ iree_status_t loom_check_low_emit_parse_allocation_budget(
     loom_low_allocation_budget_t* budgets, iree_host_size_t budget_capacity,
     iree_host_size_t* budget_count);
 
+// Parses one fixed=%value:<location-kind>:<base>:<count> allocation token.
+// Location kinds use the same stable spellings as low allocation JSON:
+// physical_register and target_id.
+iree_status_t loom_check_low_emit_parse_fixed_value_spec(
+    iree_string_view_t value, iree_string_view_t option_scope,
+    loom_check_low_emit_fixed_value_spec_t* fixed_specs,
+    iree_host_size_t fixed_spec_capacity, iree_host_size_t* fixed_spec_count);
+
+// Parses either a fixed=... token or a <register-class>=<units> budget token.
+iree_status_t loom_check_low_emit_parse_allocation_option(
+    iree_string_view_t token, iree_string_view_t option_scope,
+    loom_low_allocation_budget_t* budgets, iree_host_size_t budget_capacity,
+    iree_host_size_t* budget_count,
+    loom_check_low_emit_fixed_value_spec_t* fixed_specs,
+    iree_host_size_t fixed_spec_capacity, iree_host_size_t* fixed_spec_count);
+
 // Finds a module-local low.func.def by symbol name.
 iree_status_t loom_check_low_emit_find_low_func_def(
     loom_module_t* module, iree_string_view_t symbol_name,
     loom_op_t** out_low_function);
+
+// Resolves parsed fixed-location specs against the selected low function body.
+// The returned fixed value array is allocated from |arena|.
+iree_status_t loom_check_low_emit_resolve_fixed_value_specs(
+    loom_module_t* module, loom_op_t* low_function,
+    const loom_check_low_emit_fixed_value_spec_t* fixed_specs,
+    iree_host_size_t fixed_spec_count,
+    const loom_low_allocation_fixed_value_t** out_fixed_values,
+    iree_host_size_t* out_fixed_value_count, iree_arena_allocator_t* arena);
 
 // Packetizes the selected low function through the registry linked into the
 // emit provider request. |out_packetization| stores sidecar pointers allocated
@@ -46,6 +85,8 @@ iree_status_t loom_check_low_emit_packetize_function(
     loom_low_schedule_strategy_t schedule_strategy,
     const loom_low_allocation_budget_t* allocation_budgets,
     iree_host_size_t allocation_budget_count,
+    const loom_check_low_emit_fixed_value_spec_t* allocation_fixed_specs,
+    iree_host_size_t allocation_fixed_spec_count,
     loom_low_packetization_t* out_packetization);
 
 #ifdef __cplusplus
