@@ -64,8 +64,20 @@ low.func.def target(@target) abi(object_function) @i32x4_lane_edit(%v: reg<x86.x
 
 // ====
 
+func.def @i32x4_shuffle(%v: vector<4xi32>) -> (vector<4xi32>) {
+  %shuffled = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
+  func.return %shuffled : vector<4xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32x4_shuffle(%v: reg<x86.xmm>) -> (reg<x86.xmm>) asm<x86.avx512.core> {
+  %shuffled = vpshufd.xmm %v, 27
+  return %shuffled
+}
+
+// ====
+
 func.def @i32x4_shuffle_reduce(%v: vector<4xi32>, %init: i32) -> (i32) {
-  // ERROR@+1: BACKEND/001 "vector.shuffle"
   %reversed = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
   // ERROR@+1: BACKEND/001 "vector.reduce"
   %sum = vector.reduce<addi> %reversed, %init : vector<4xi32>, i32
@@ -75,9 +87,14 @@ func.def @i32x4_shuffle_reduce(%v: vector<4xi32>, %init: i32) -> (i32) {
 // ====
 
 func.def @f32x4_shuffle(%v: vector<4xf32>) -> (vector<4xf32>) {
-  // ERROR@+1: BACKEND/001 "vector.shuffle"
   %shuffled = vector.shuffle<[3, 1, 2, 0]> %v : vector<4xf32>
   func.return %shuffled : vector<4xf32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32x4_shuffle(%v: reg<x86.xmm>) -> (reg<x86.xmm>) asm<x86.avx512.core> {
+  %shuffled = vpermilps.xmm %v, 39
+  return %shuffled
 }
 
 // ====

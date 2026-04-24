@@ -33,6 +33,13 @@ func.def @i32x4_lane_edit(%v: vector<4xi32>, %x: i32) -> (vector<4xi32>) {
 
 // ====
 
+func.def @i32x4_shuffle(%v: vector<4xi32>) -> (vector<4xi32>) {
+  %shuffled = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
+  func.return %shuffled : vector<4xi32>
+}
+
+// ====
+
 func.def @i32x4_shuffle_reduce(%v: vector<4xi32>, %init: i32) -> (i32) {
   %reversed = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
   %sum = vector.reduce<addi> %reversed, %init : vector<4xi32>, i32

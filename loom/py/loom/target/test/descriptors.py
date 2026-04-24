@@ -151,6 +151,13 @@ _I32_VALUE_IMMEDIATE = Immediate(
     unsigned_max=(2**31) - 1,
 )
 
+_SHUFFLE_CONTROL_IMMEDIATE = Immediate(
+    "shuffle_control",
+    ImmediateKind.UNSIGNED,
+    bit_width=8,
+    unsigned_max=255,
+)
+
 _TARGET_BLOCK_IMMEDIATE = Immediate(
     "target_block",
     ImmediateKind.ORDINAL,
@@ -415,6 +422,23 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _v4i32_operand("rhs"),
             ),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_VECTOR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.shuffle.v4i32",
+            mnemonic="test.shuffle.v4i32",
+            semantic_tag="vector.shuffle.i32x4",
+            operands=(
+                Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
+                Operand("source", OperandRole.OPERAND, _I32_ALT, unit_count=4),
+            ),
+            immediates=(_SHUFFLE_CONTROL_IMMEDIATE,),
+            asm_forms=_asm(
+                results=("dst",),
+                operands=("source",),
+                immediates=("shuffle_control",),
+            ),
             schedule_class=_SCHEDULE_VECTOR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),

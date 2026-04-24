@@ -294,6 +294,13 @@ _LANE_I32X4_IMMEDIATE = Immediate(
     unsigned_max=3,
 )
 
+_SHUFFLE_4X2_CONTROL_IMMEDIATE = Immediate(
+    "control",
+    ImmediateKind.UNSIGNED,
+    bit_width=8,
+    unsigned_max=255,
+)
+
 _ADDRESS_SCALE_ENUM = "x86.address.scale"
 
 _ADDRESS_SCALE_IMMEDIATE = Immediate(
@@ -941,6 +948,21 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_VECTOR_I32_XMM,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
+        Descriptor(
+            key="x86.avx512.vpshufd.xmm",
+            mnemonic="vpshufd",
+            semantic_tag="integer.shuffle.i32x4",
+            operands=(_vector_result(128), _xmm_operand("source")),
+            immediates=(_SHUFFLE_4X2_CONTROL_IMMEDIATE,),
+            asm_forms=_asm(
+                mnemonic="vpshufd.xmm",
+                results=("dst",),
+                operands=("source",),
+                immediates=("control",),
+            ),
+            schedule_class=_SCHEDULE_VECTOR_I32_XMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
         _vector_splat_descriptor(
             vector_bit_width=128,
             key="x86.avx512.vbroadcastss.xmm",
@@ -948,6 +970,21 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="float.splat.f32x4",
             operand=_xmm_operand("value"),
             schedule_class=_SCHEDULE_VECTOR_F32_XMM,
+        ),
+        Descriptor(
+            key="x86.avx512.vpermilps.xmm",
+            mnemonic="vpermilps",
+            semantic_tag="float.shuffle.f32x4",
+            operands=(_vector_result(128), _xmm_operand("source")),
+            immediates=(_SHUFFLE_4X2_CONTROL_IMMEDIATE,),
+            asm_forms=_asm(
+                mnemonic="vpermilps.xmm",
+                results=("dst",),
+                operands=("source",),
+                immediates=("control",),
+            ),
+            schedule_class=_SCHEDULE_VECTOR_F32_XMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         _vector_i32_binary_descriptor(
             vector_bit_width=128,

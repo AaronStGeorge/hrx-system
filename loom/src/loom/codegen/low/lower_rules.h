@@ -193,6 +193,9 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   LOOM_LOW_LOWER_ATTR_COPY_DIRECT = 0,
   // Copy one i64_array element as an i64 attribute into the emitted low packet.
   LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_ELEMENT = 1,
+  // Packs contiguous i64_array elements into an i64 attribute, with the first
+  // source element occupying the least-significant bitfield.
+  LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_PACK_ELEMENTS = 2,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -202,8 +205,12 @@ typedef struct loom_low_lower_attr_copy_t {
   iree_string_view_t target_name;
   // Source op attribute ordinal copied into the emitted low packet.
   uint16_t source_attr_index;
-  // Source i64_array element ordinal copied by I64_ARRAY_ELEMENT rows.
+  // First source i64_array element ordinal consumed by array projection rows.
   uint16_t source_element_index;
+  // Number of source i64_array elements consumed by PACK_ELEMENTS rows.
+  uint16_t source_element_count;
+  // Bit width of each packed source element for PACK_ELEMENTS rows.
+  uint8_t source_element_bit_width;
 } loom_low_lower_attr_copy_t;
 
 typedef struct loom_low_lower_diagnostic_t {
@@ -243,6 +250,9 @@ typedef enum loom_low_lower_guard_kind_e {
   // Source i64_array attribute element u64 must fall in
   // [minimum_i64, maximum_i64].
   LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENT_RANGE = 11,
+  // All source i64_array attribute elements must fall in
+  // [minimum_i64, maximum_i64].
+  LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENTS_RANGE = 12,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {

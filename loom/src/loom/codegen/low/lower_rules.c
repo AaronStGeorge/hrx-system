@@ -335,6 +335,23 @@ static iree_status_t loom_low_lower_rule_guard_matches(
                      loom_op_const_attrs(source_op)[guard->attr_index]
                              .i64_array[guard->u64] <= guard->maximum_i64;
       return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENTS_RANGE: {
+      if (guard->attr_index >= source_op->attribute_count ||
+          loom_op_const_attrs(source_op)[guard->attr_index].kind !=
+              LOOM_ATTR_I64_ARRAY) {
+        return iree_ok_status();
+      }
+      *out_matches = true;
+      loom_attribute_t attr = loom_op_const_attrs(source_op)[guard->attr_index];
+      for (uint16_t i = 0; i < attr.count; ++i) {
+        if (attr.i64_array[i] < guard->minimum_i64 ||
+            attr.i64_array[i] > guard->maximum_i64) {
+          *out_matches = false;
+          break;
+        }
+      }
+      return iree_ok_status();
+    }
     case LOOM_LOW_LOWER_GUARD_DESCRIPTOR_AVAILABLE:
       *out_matches = loom_low_descriptor_set_lookup_descriptor_by_id(
                          match_context->descriptor_set, guard->descriptor_id) !=
@@ -644,6 +661,33 @@ static iree_status_t loom_low_lower_rule_build_attrs(
         IREE_ASSERT_LT(attr_copy->source_element_index, source_attr.count);
         attrs[i].value = loom_attr_i64(
             source_attr.i64_array[attr_copy->source_element_index]);
+        break;
+      }
+      case LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_PACK_ELEMENTS: {
+        loom_attribute_t source_attr =
+            source_attrs[attr_copy->source_attr_index];
+        IREE_ASSERT_EQ(source_attr.kind, LOOM_ATTR_I64_ARRAY);
+        IREE_ASSERT_GT(attr_copy->source_element_count, 0);
+        IREE_ASSERT_GT(attr_copy->source_element_bit_width, 0);
+        const uint32_t packed_bit_count =
+            (uint32_t)attr_copy->source_element_count *
+            attr_copy->source_element_bit_width;
+        IREE_ASSERT_LE(packed_bit_count, 63);
+        IREE_ASSERT_LE((uint32_t)attr_copy->source_element_index +
+                           attr_copy->source_element_count,
+                       source_attr.count);
+        const uint64_t element_mask =
+            (UINT64_C(1) << attr_copy->source_element_bit_width) - 1u;
+        uint64_t packed_value = 0;
+        for (uint16_t j = 0; j < attr_copy->source_element_count; ++j) {
+          const int64_t source_value =
+              source_attr.i64_array[attr_copy->source_element_index + j];
+          IREE_ASSERT_GE(source_value, 0);
+          IREE_ASSERT_LE((uint64_t)source_value, element_mask);
+          packed_value |= (uint64_t)source_value
+                          << (j * attr_copy->source_element_bit_width);
+        }
+        attrs[i].value = loom_attr_i64((int64_t)packed_value);
         break;
       }
       default:

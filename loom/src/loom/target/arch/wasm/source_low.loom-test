@@ -63,6 +63,19 @@ low.func.def target(@target) abi(wasm_function) @i32x4_lane_edit(%v: reg<wasm.v1
 
 // ====
 
+func.def @i32x4_shuffle(%v: vector<4xi32>) -> (vector<4xi32>) {
+  %shuffled = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
+  func.return %shuffled : vector<4xi32>
+}
+
+// ----
+low.func.def target(@target) abi(wasm_function) @i32x4_shuffle(%v: reg<wasm.v128>) -> (reg<wasm.v128>) asm<wasm.core.simd128> {
+  %shuffled = i8x16.shuffle %v, %v, 12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3
+  return %shuffled
+}
+
+// ====
+
 func.def @i32x4_shuffle_reduce(%v: vector<4xi32>, %init: i32) -> (i32) {
   %reversed = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
   %sum = vector.reduce<addi> %reversed, %init : vector<4xi32>, i32
