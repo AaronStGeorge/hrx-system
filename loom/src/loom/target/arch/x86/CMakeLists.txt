@@ -192,20 +192,6 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_test(
-  NAME
-    loom_check_test
-  SRCS
-    "loom_check_test.cc"
-  DEPS
-    ::low_registry
-    ::lower
-    loom::src::loom::tools::loom-check::execute
-    loom::src::loom::tools::loom-check::test_util
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 iree_executable_test(
   NAME
     "source_low"

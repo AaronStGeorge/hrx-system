@@ -8,21 +8,17 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
     "iree_cmake_extra_content",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
-)
-load(
-    "//loom/build_tools/bazel:loom_check.bzl",
-    "loom_check_test",
-    "loom_check_test_suite",
-)
-load(
-    "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_low_descriptor_cc_library",
     "loom_low_descriptor_data_archive",
     "loom_low_descriptor_exclude_from_cmake_all",
     "loom_target_table_cc_library",
+)
+load(
+    "//loom/build_tools/bazel:loom_check.bzl",
+    "loom_check_test_suite",
 )
 load(":archives.bzl", "AMDGPU_ISA_XML_ARCHIVE")
 
@@ -804,19 +800,6 @@ loom_cc_test(
     ],
 )
 
-loom_cc_test(
-    name = "loom_check_test",
-    srcs = ["loom_check_test.cc"],
-    deps = [
-        ":low_registry",
-        ":lower",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:test_util",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
@@ -1015,7 +998,6 @@ loom_low_descriptor_exclude_from_cmake_all(
         "gfx1250_descriptors_test",
         "gfx950_descriptors_test",
         "hal_resource_materialization_test",
-        "loom_check_test",
         "low_registry_test",
         "occupancy_test",
         "wait_plan_test",

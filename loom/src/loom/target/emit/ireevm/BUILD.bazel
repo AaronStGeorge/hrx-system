@@ -334,19 +334,6 @@ loom_cc_test(
     ],
 )
 
-loom_cc_test(
-    name = "loom_check_test",
-    srcs = ["loom_check_test.cc"],
-    deps = [
-        ":low_registry",
-        ":lower",
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:test_util",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [

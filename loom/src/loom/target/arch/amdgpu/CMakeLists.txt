@@ -703,20 +703,6 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_test(
-  NAME
-    loom_check_test
-  SRCS
-    "loom_check_test.cc"
-  DEPS
-    ::low_registry
-    ::lower
-    loom::src::loom::tools::loom-check::execute
-    loom::src::loom::tools::loom-check::test_util
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 iree_executable_test(
   NAME
     "low_hal_structural"
@@ -1253,7 +1239,6 @@ loom_low_descriptor_exclude_from_all(
     "gfx12_descriptors_test"
     "gfx950_descriptors_test"
     "hal_resource_materialization_test"
-    "loom_check_test"
     "low_registry_test"
     "occupancy_test"
     "wait_packets_test"
