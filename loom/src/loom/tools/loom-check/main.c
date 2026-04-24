@@ -326,27 +326,16 @@ static iree_status_t loom_check_process_file(
          (FLAG_json.output_mode == LOOM_CHECK_JSON_OUTPUT_FAILURES &&
           results[i].final_outcome == LOOM_CHECK_FAIL));
     if ((wants_json_case || updates) && results[i].has_actual_output) {
-      iree_string_view_t comparable_expected = test_case->expected;
-      if (results[i].expected_output_defaults_to_empty &&
-          !test_case->has_expected_section) {
-        comparable_expected = iree_string_view_empty();
-      }
       iree_string_view_t stripped_expected_trimmed =
-          iree_string_view_trim(comparable_expected);
+          iree_string_view_trim(test_case->expected);
       iree_string_view_t actual_output =
           iree_string_builder_view(&results[i].actual_output);
       iree_string_view_t actual_trimmed = iree_string_view_trim(actual_output);
-      bool delete_expected_section =
-          results[i].expected_output_defaults_to_empty &&
-          test_case->has_expected_section &&
-          iree_string_view_is_empty(actual_trimmed);
-      if (delete_expected_section ||
-          !iree_string_view_equal(stripped_expected_trimmed, actual_trimmed)) {
+      if (!iree_string_view_equal(stripped_expected_trimmed, actual_trimmed)) {
         if (wants_json_case) {
           status = loom_check_build_update_edit(
-              source, test_case, actual_output,
-              results[i].expected_output_defaults_to_empty,
-              &results[i].update_edit.text, &results[i].update_edit.value);
+              source, test_case, actual_output, &results[i].update_edit.text,
+              &results[i].update_edit.value);
           if (iree_status_is_ok(status)) {
             results[i].update_edit.present = true;
           }
@@ -354,8 +343,6 @@ static iree_status_t loom_check_process_file(
         if (iree_status_is_ok(status) && updates) {
           updates[i].needs_update = true;
           updates[i].actual_output = actual_output;
-          updates[i].empty_output_omits_expected_section =
-              results[i].expected_output_defaults_to_empty;
           updates[i].input_end = test_case->input.data + test_case->input.size;
           if (test_case->has_expected_section) {
             updates[i].expected_start = test_case->expected.data;
@@ -479,15 +466,14 @@ int loom_check_main(int argc, char** argv,
       "              low-allocation-json, low-packet-json,\n"
       "              low-descriptor-manifest, target-low-registry-manifest,\n"
       "              and source-low. source-low lowers every target-profiled\n"
-      "              source func and accepts output=module|low|none and\n"
+      "              source func and accepts output=module|low and\n"
       "              diagnostics=none|memory|all. target-preset=<preset>\n"
       "              materializes a target.profile for untargeted func.def "
       "ops.\n"
       "              low-packet-json accepts\n"
-      "              output=json|none, strategy=source|pressure, and\n"
+      "              strategy=source|pressure and\n"
       "              diagnostics=none|packets|all. Linked providers may add\n"
-      "              more. output=none requires diagnostic annotations or\n"
-      "              diagnostics other than none.\n"
+      "              more.\n"
       "File format:\n"
       "  A .loom-test file contains one or more cases separated by // ====.\n"
       "  Each case has directives at the top, then input IR, and\n"

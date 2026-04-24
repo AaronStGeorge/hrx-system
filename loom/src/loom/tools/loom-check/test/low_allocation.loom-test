@@ -45,7 +45,7 @@ low.func.def target(@test_target) @phys(%lhs : reg<test.phys>, %rhs : reg<test.p
 
 // ====
 
-// RUN: emit low-allocation-json @phys_predicted_spill diagnostics=predicted-spills output=none test.phys=1
+// RUN: emit low-allocation-json @phys_predicted_spill diagnostics=predicted-spills test.phys=1
 
 target.profile @test_target preset("test-low")
 
@@ -54,6 +54,9 @@ low.func.def target(@test_target) @phys_predicted_spill(%lhs : reg<test.phys>, %
   %sum = low.op<test.add.phys>(%lhs, %rhs) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys>
   low.return %sum : reg<test.phys>
 }
+
+// ----
+{"format":"loom.low.allocation.v0","function":"phys_predicted_spill","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":3,"remark_count":1,"copy_decision_count":0,"spill_count":1,"spill_plan_count":1,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"lhs","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class_id":4,"register_class":"test.phys"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}},{"index":1,"value":{"id":1,"name":"rhs","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class_id":4,"register_class":"test.phys"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"spill_slot","slot":0,"count":1}},{"index":2,"value":{"id":3,"name":"sum","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class_id":4,"register_class":"test.phys"},"start_point":1,"end_point":2,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}}],"spill_plans":[{"index":0,"assignment":1,"slot":0,"space":"stack","value":{"id":1,"name":"rhs","type":"reg<test.phys>"},"byte_size":64,"byte_alignment":64,"store_count":1,"reload_count":1}],"copy_decisions":[],"remarks":[{"kind":"spill","assignment":1,"budget_units":1,"required_units":1}]}
 
 // ====
 
@@ -72,7 +75,7 @@ low.func.def target(@test_target) @copy(%lhs : reg<test.i32>, %rhs : reg<test.i3
 
 // ====
 
-// RUN: emit low-allocation-json @copy_diagnostics diagnostics=copy-decisions output=none
+// RUN: emit low-allocation-json @copy_diagnostics diagnostics=copy-decisions
 
 target.profile @test_target preset("test-low")
 
@@ -82,6 +85,9 @@ low.func.def target(@test_target) @copy_diagnostics(%lhs : reg<test.i32>, %rhs :
   %sum = low.op<test.add.i32>(%copy, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
   low.return %sum : reg<test.i32>
 }
+
+// ----
+{"format":"loom.low.allocation.v0","function":"copy_diagnostics","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":4,"remark_count":0,"copy_decision_count":1,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":1,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"lhs","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class_id":4,"register_class":"test.i32"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}},{"index":1,"value":{"id":1,"name":"rhs","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class_id":4,"register_class":"test.i32"},"start_point":0,"end_point":2,"unit_count":1,"location":{"kind":"target_id","base":1,"count":1}},{"index":2,"value":{"id":3,"name":"copy","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class_id":4,"register_class":"test.i32"},"start_point":1,"end_point":2,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}},{"index":3,"value":{"id":4,"name":"sum","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class_id":4,"register_class":"test.i32"},"start_point":2,"end_point":3,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}}],"spill_plans":[],"copy_decisions":[{"index":0,"kind":"coalesced","source_value":{"id":0,"name":"lhs","type":"reg<test.i32>"},"result_value":{"id":3,"name":"copy","type":"reg<test.i32>"},"source_assignment":0,"result_assignment":2}],"remarks":[]}
 
 // ====
 

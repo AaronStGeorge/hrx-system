@@ -31,21 +31,17 @@
 //                           targets include low-descriptor-manifest,
 //                           target-low-registry-manifest, and source-low.
 //                           Analysis targets include liveness-json @function,
-//                           low-schedule-json @function
-//                           [strategy=...] [diagnostics=...]
-//                           [output=json|none], and
-//                           low-allocation-json @function
-//                           [diagnostics=...] [output=json|none]
-//                           [class=units...].
+//                           low-schedule-json @function [strategy=...]
+//                           [diagnostics=...], low-allocation-json @function
+//                           [diagnostics=...] [class=units...], and
+//                           low-packet-json @function.
 //                           Source lowering tests use source-low
-//                           [output=module|low|none]
+//                           [output=module|low]
 //                           [diagnostics=none|memory|all]
 //                           [target-preset=<preset>]. target-preset
 //                           materializes one target.profile and attaches it to
 //                           untargeted func.def ops before lowering. Linked
 //                           providers may add target-specific emit forms.
-//                           output=none is only valid with diagnostic
-//                           annotations or non-none diagnostics=... evidence.
 //                           Low schedule diagnostics are one of none,
 //                           pressure, resources, hazards, candidates, model,
 //                           or all.

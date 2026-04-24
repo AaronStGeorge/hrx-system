@@ -200,54 +200,6 @@ static iree_status_t loom_check_parse_run_directive(
                           keyword.data);
 }
 
-static void loom_check_parse_option_token(iree_string_view_t token,
-                                          iree_string_view_t* out_name,
-                                          iree_string_view_t* out_value) {
-  iree_string_view_split(token, '=', out_name, out_value);
-  *out_name = iree_string_view_trim(*out_name);
-  *out_value = iree_string_view_trim(*out_value);
-}
-
-static iree_status_t loom_check_validate_no_output_contract(
-    const loom_check_case_t* test_case) {
-  if (test_case->mode != LOOM_CHECK_MODE_EMIT) {
-    return iree_ok_status();
-  }
-
-  bool suppresses_output = false;
-  bool has_diagnostic_evidence = false;
-  iree_string_view_t remaining = iree_string_view_trim(test_case->emit_target);
-  while (!iree_string_view_is_empty(remaining)) {
-    iree_string_view_t token = iree_string_view_empty();
-    iree_string_view_t next_remaining = iree_string_view_empty();
-    iree_string_view_split(remaining, ' ', &token, &next_remaining);
-    token = iree_string_view_trim(token);
-    if (!iree_string_view_is_empty(token)) {
-      iree_string_view_t name = iree_string_view_empty();
-      iree_string_view_t value = iree_string_view_empty();
-      loom_check_parse_option_token(token, &name, &value);
-      if (iree_string_view_equal(name, IREE_SV("output")) &&
-          iree_string_view_equal(value, IREE_SV("none"))) {
-        suppresses_output = true;
-      } else if (iree_string_view_equal(name, IREE_SV("diagnostics")) &&
-                 !iree_string_view_is_empty(value) &&
-                 !iree_string_view_equal(value, IREE_SV("none"))) {
-        has_diagnostic_evidence = true;
-      }
-    }
-    remaining = iree_string_view_trim(next_remaining);
-  }
-
-  if (suppresses_output && !has_diagnostic_evidence &&
-      test_case->annotation_count == 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "RUN: emit output=none requires diagnostic annotations or diagnostics "
-        "other than none");
-  }
-  return iree_ok_status();
-}
-
 static bool loom_check_is_requirement_separator(char c) {
   return c == ',' || c == ' ' || c == '\t';
 }
@@ -1346,8 +1298,6 @@ iree_status_t loom_check_parse(iree_string_view_t source,
       out_file->cases[i].format_target = out_file->default_format_target;
       out_file->cases[i].emit_target = out_file->default_emit_target;
     }
-    IREE_RETURN_IF_ERROR(
-        loom_check_validate_no_output_contract(&out_file->cases[i]));
   }
 
   // Apply REQUIRES inheritance: every case receives the file-level default

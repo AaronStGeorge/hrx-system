@@ -83,9 +83,6 @@ typedef struct loom_check_result_t {
   // True when actual_output is the comparable output for this case, even when
   // the output is intentionally empty.
   bool has_actual_output;
-  // True when a missing expected section compares as empty output instead of
-  // the input section.
-  bool expected_output_defaults_to_empty;
 
   // Machine-readable edit for accepting actual_output into the expected
   // section.
