@@ -34,6 +34,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "vector_mask_select"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/vector_mask_select.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "vector_v16"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_v16.loom-test"
