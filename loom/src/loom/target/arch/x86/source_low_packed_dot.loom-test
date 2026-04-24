@@ -1,0 +1,45 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/packed_dot_wide.loom-test
+// RUN: emit source-low target-preset=x86-packed-dot output=low
+
+func.def @bf16_dot2_256(%lhs: vector<16xbf16>, %rhs: vector<16xbf16>, %acc: vector<8xf32>) -> (vector<8xf32>) {
+  // REMARK@+1: BACKEND/002 "selected x86 packed-dot descriptor"
+  %dot = vector.dot2f %lhs, %rhs, %acc : vector<16xbf16>, vector<16xbf16>, vector<8xf32>
+  func.return %dot : vector<8xf32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @bf16_dot2_256(%lhs: reg<x86.ymm>, %rhs: reg<x86.ymm>, %acc: reg<x86.ymm>) -> (reg<x86.ymm>) {
+  %9 = low.copy %acc : reg<x86.ymm> -> reg<x86.ymm>
+  %dot = low.op<x86.avx512-bf16.vdpbf16ps.256>(%9, %lhs, %rhs) : (reg<x86.ymm>, reg<x86.ymm>, reg<x86.ymm>) -> %9 as reg<x86.ymm>
+  low.return %dot : reg<x86.ymm>
+}
+
+// ====
+
+func.def @dot4i_u8s8_256(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
+  // REMARK@+1: BACKEND/002 "selected x86 packed-dot descriptor"
+  %dot = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
+  func.return %dot : vector<8xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @dot4i_u8s8_256(%lhs: reg<x86.ymm>, %rhs: reg<x86.ymm>, %acc: reg<x86.ymm>) -> (reg<x86.ymm>) {
+  %9 = low.copy %acc : reg<x86.ymm> -> reg<x86.ymm>
+  %dot = low.op<x86.avx-vnni.vpdpbusd.256>(%9, %lhs, %rhs) : (reg<x86.ymm>, reg<x86.ymm>, reg<x86.ymm>) -> %9 as reg<x86.ymm>
+  low.return %dot : reg<x86.ymm>
+}
+
+// ====
+
+func.def @dot4i_s8s8_256(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
+  // REMARK@+1: BACKEND/002 "selected x86 packed-dot descriptor"
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
+  func.return %dot : vector<8xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @dot4i_s8s8_256(%lhs: reg<x86.ymm>, %rhs: reg<x86.ymm>, %acc: reg<x86.ymm>) -> (reg<x86.ymm>) {
+  %9 = low.copy %acc : reg<x86.ymm> -> reg<x86.ymm>
+  %dot = low.op<x86.avx-vnni-int8.vpdpbssd.256>(%9, %lhs, %rhs) : (reg<x86.ymm>, reg<x86.ymm>, reg<x86.ymm>) -> %9 as reg<x86.ymm>
+  low.return %dot : reg<x86.ymm>
+}
