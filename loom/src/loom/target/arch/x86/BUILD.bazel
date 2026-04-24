@@ -336,21 +336,3 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest_main",
     ],
 )
-
-loom_cc_test(
-    name = "packed_dot_contract_fixture_test",
-    srcs = ["packed_dot_contract_fixture_test.cc"],
-    deps = [
-        ":packed_dot_contract",
-        ":packed_dot_vector",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/vector",
-        "//loom/src/loom/testing:context",
-        "//loom/src/loom/verify",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)

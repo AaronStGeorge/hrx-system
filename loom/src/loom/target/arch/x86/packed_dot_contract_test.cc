@@ -180,7 +180,17 @@ TEST(PackedDotContractTest, SelectsAvxVnniByteDot) {
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&request, &diagnostic);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx_vnni.vpdpbusd.ymm");
+  EXPECT_EQ(descriptor->family, LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI);
+  EXPECT_EQ(descriptor->shape.vector_bit_width, 256);
+  EXPECT_EQ(descriptor->shape.input_lane_count, 32);
+  EXPECT_EQ(descriptor->shape.result_lane_count, 8);
+  EXPECT_EQ(descriptor->shape.reduction_group_size, 4);
+  EXPECT_EQ(descriptor->lhs_numeric_type, LOOM_X86_PACKED_DOT_NUMERIC_U8);
+  EXPECT_EQ(descriptor->rhs_numeric_type, LOOM_X86_PACKED_DOT_NUMERIC_I8);
+  EXPECT_EQ(descriptor->accumulator_numeric_type,
+            LOOM_X86_PACKED_DOT_NUMERIC_I32);
+  EXPECT_EQ(descriptor->result_numeric_type, LOOM_X86_PACKED_DOT_NUMERIC_I32);
+  EXPECT_EQ(descriptor->flags, 0u);
   EXPECT_EQ(diagnostic.rejection_bits, LOOM_X86_PACKED_DOT_REJECTION_NONE);
   EXPECT_GT(diagnostic.payload_candidate_count, 0u);
   EXPECT_GT(diagnostic.feature_candidate_count, 0u);
@@ -197,7 +207,9 @@ TEST(PackedDotContractTest, SelectsSaturatingVariantWhenRequired) {
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&request, nullptr);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx_vnni.vpdpbusds.ymm");
+  EXPECT_EQ(descriptor->family, LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI);
+  EXPECT_EQ(descriptor->shape.vector_bit_width, 256);
+  EXPECT_EQ(descriptor->shape.reduction_group_size, 4);
   EXPECT_EQ(descriptor->flags & LOOM_X86_PACKED_DOT_CONTRACT_FLAG_SATURATING,
             LOOM_X86_PACKED_DOT_CONTRACT_FLAG_SATURATING);
 }
@@ -223,7 +235,9 @@ TEST(PackedDotContractTest, SignedSignedByteDotNeedsInt8Feature) {
   const loom_x86_packed_dot_descriptor_t* descriptor =
       loom_x86_packed_dot_select(&int8_request, nullptr);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx_vnni_int8.vpdpbssd.ymm");
+  EXPECT_EQ(descriptor->family, LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8);
+  EXPECT_EQ(descriptor->lhs_numeric_type, LOOM_X86_PACKED_DOT_NUMERIC_I8);
+  EXPECT_EQ(descriptor->rhs_numeric_type, LOOM_X86_PACKED_DOT_NUMERIC_I8);
 }
 
 TEST(PackedDotContractTest, RejectsPackedI4FallbackShape) {

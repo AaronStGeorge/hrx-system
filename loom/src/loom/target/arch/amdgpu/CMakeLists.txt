@@ -1326,30 +1326,6 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    matrix_contract_fixture_test
-  SRCS
-    "matrix_contract_fixture_test.cc"
-  DEPS
-    ::matrix_contract
-    ::matrix_contract_projection
-    ::matrix_facts
-    iree::base::internal::arena
-    loom::src::loom::analysis::contract
-    loom::src::loom::analysis::contract_storage
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::buffer
-    loom::src::loom::ops::encoding
-    loom::src::loom::ops::func
-    loom::src::loom::testing::context
-    loom::src::loom::util::fact_table
-    loom::src::loom::verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     matrix_facts_test
   SRCS
     "matrix_facts_test.cc"

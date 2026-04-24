@@ -452,7 +452,19 @@ TEST(MatrixContractTest, MatcherSelectsMatchingDescriptor) {
   const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
       loom_amdgpu_matrix_contract_select(&request, &diagnostic);
   ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "mfma.f32.16x16x32.fp8.fp8");
+  EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_MFMA);
+  EXPECT_EQ(descriptor->tile_shape.result_row_count, 16);
+  EXPECT_EQ(descriptor->tile_shape.result_column_count, 16);
+  EXPECT_EQ(descriptor->tile_shape.reduction_count, 32);
+  EXPECT_EQ(descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_FP8);
+  EXPECT_EQ(descriptor->rhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_FP8);
+  EXPECT_EQ(descriptor->accumulator_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32);
+  EXPECT_EQ(descriptor->result_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32);
+  EXPECT_EQ(descriptor->scale_kind, LOOM_AMDGPU_MATRIX_SCALE_NONE);
   EXPECT_EQ(diagnostic.rejection_bits,
             LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE);
   EXPECT_EQ(diagnostic.wave_candidate_count, 1u);
@@ -469,15 +481,13 @@ TEST(MatrixContractTest, MatcherSelectsRdnaIntegerWmmaLowDescriptors) {
   struct Case {
     // Matrix input numeric type requested by the source contract.
     loom_amdgpu_matrix_numeric_type_t numeric_type;
-    // Expected matrix contract descriptor name.
-    const char* expected_name;
     // Expected target-low descriptor ID for native lowering.
     uint64_t expected_low_descriptor_id;
   };
   const Case cases[] = {
-      {LOOM_AMDGPU_MATRIX_NUMERIC_IU8, "wmma.i32.16x16x16.iu8",
+      {LOOM_AMDGPU_MATRIX_NUMERIC_IU8,
        LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU8},
-      {LOOM_AMDGPU_MATRIX_NUMERIC_IU4, "wmma.i32.16x16x16.iu4",
+      {LOOM_AMDGPU_MATRIX_NUMERIC_IU4,
        LOOM_AMDGPU_DESCRIPTOR_ID_V_WMMA_I32_16X16X16_IU4},
   };
   for (loom_amdgpu_matrix_feature_bits_t feature_bits :
@@ -492,7 +502,9 @@ TEST(MatrixContractTest, MatcherSelectsRdnaIntegerWmmaLowDescriptors) {
       const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
           loom_amdgpu_matrix_contract_select(&request, &diagnostic);
       ASSERT_NE(descriptor, nullptr);
-      EXPECT_EQ(ToString(descriptor->name), test_case.expected_name);
+      EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_WMMA);
+      EXPECT_EQ(descriptor->lhs_payload.numeric_type, test_case.numeric_type);
+      EXPECT_EQ(descriptor->rhs_payload.numeric_type, test_case.numeric_type);
       EXPECT_EQ(descriptor->low_descriptor_id,
                 test_case.expected_low_descriptor_id);
       EXPECT_EQ(diagnostic.rejection_bits,

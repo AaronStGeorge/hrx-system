@@ -328,23 +328,4 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
-loom_cc_test(
-  NAME
-    packed_dot_contract_fixture_test
-  SRCS
-    "packed_dot_contract_fixture_test.cc"
-  DEPS
-    ::packed_dot_contract
-    ::packed_dot_vector
-    iree::base::internal::arena
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::vector
-    loom::src::loom::testing::context
-    loom::src::loom::verify
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

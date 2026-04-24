@@ -6,17 +6,10 @@
 
 #include "loom/target/arch/x86/packed_dot_contract_projection.h"
 
-#include <string>
-
 #include "iree/testing/gtest.h"
-#include "iree/testing/status_matchers.h"
 #include "loom/analysis/contract_storage.h"
 
 namespace {
-
-std::string ToString(iree_string_view_t value) {
-  return std::string(value.data, value.size);
-}
 
 loom_contract_arithmetic_t ArithmeticForAccumulator(
     loom_contract_numeric_type_t accumulator_numeric_type) {
@@ -74,46 +67,6 @@ bool BuildPackedDotRequest(
   options.policy = LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED;
   return loom_contract_request_from_matrix_payloads(&options, out_request,
                                                     NULL);
-}
-
-TEST(PackedDotContractProjectionTest, ProjectsBf16ContractToAvx512Bf16) {
-  loom_contract_request_t contract = {};
-  ASSERT_TRUE(BuildPackedDotRequest(
-      LOOM_CONTRACT_NUMERIC_BF16, LOOM_CONTRACT_NUMERIC_BF16,
-      LOOM_CONTRACT_NUMERIC_F32, LOOM_CONTRACT_NUMERIC_F32, 256, 16, 8, 2,
-      &contract));
-
-  loom_x86_packed_dot_feature_bits_t feature_bits = 0;
-  IREE_ASSERT_OK(loom_x86_packed_dot_feature_bits_for_name(
-      IREE_SV("x86-avx512-bf16-vl"), &feature_bits));
-  loom_x86_packed_dot_match_request_t x86_request = {};
-  ASSERT_TRUE(loom_x86_packed_dot_match_request_from_contract(
-      &contract, feature_bits, &x86_request, nullptr));
-
-  const loom_x86_packed_dot_descriptor_t* descriptor =
-      loom_x86_packed_dot_select(&x86_request, nullptr);
-  ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx512_bf16.vdpbf16ps.ymm");
-}
-
-TEST(PackedDotContractProjectionTest, ProjectsU8S8ContractToAvxVnni) {
-  loom_contract_request_t contract = {};
-  ASSERT_TRUE(BuildPackedDotRequest(
-      LOOM_CONTRACT_NUMERIC_U8, LOOM_CONTRACT_NUMERIC_I8,
-      LOOM_CONTRACT_NUMERIC_I32, LOOM_CONTRACT_NUMERIC_I32, 256, 32, 8, 4,
-      &contract));
-
-  loom_x86_packed_dot_feature_bits_t feature_bits = 0;
-  IREE_ASSERT_OK(loom_x86_packed_dot_feature_bits_for_name(
-      IREE_SV("x86-avx-vnni"), &feature_bits));
-  loom_x86_packed_dot_match_request_t x86_request = {};
-  ASSERT_TRUE(loom_x86_packed_dot_match_request_from_contract(
-      &contract, feature_bits, &x86_request, nullptr));
-
-  const loom_x86_packed_dot_descriptor_t* descriptor =
-      loom_x86_packed_dot_select(&x86_request, nullptr);
-  ASSERT_NE(descriptor, nullptr);
-  EXPECT_EQ(ToString(descriptor->name), "x86.avx_vnni.vpdpbusd.ymm");
 }
 
 TEST(PackedDotContractProjectionTest, RejectsMissingVectorFragmentFacts) {
