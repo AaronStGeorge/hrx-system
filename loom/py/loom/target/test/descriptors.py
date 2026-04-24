@@ -48,6 +48,8 @@ _REG_PTR = "test.ptr"
 _REG_V4I32 = "test.v4i32"
 _REG_PHYS = "test.phys"
 _REG_SPECIAL = "test.special"
+_REG_ALIAS32 = "test.alias32"
+_REG_ALIAS64 = "test.alias64"
 
 _RESOURCE_SCALAR = "test.scalar"
 _RESOURCE_VECTOR = "test.vector"
@@ -251,6 +253,22 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             SpillSlotSpace.PRIVATE,
             flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
             physical_count=1,
+        ),
+        RegClass(
+            _REG_ALIAS32,
+            32,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=1,
+            alias_set_id=1,
+        ),
+        RegClass(
+            _REG_ALIAS64,
+            64,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=1,
+            alias_set_id=1,
         ),
     ),
     resources=(

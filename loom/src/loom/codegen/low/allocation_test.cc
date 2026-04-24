@@ -170,6 +170,15 @@ class LowAllocationTest : public ::testing::Test {
     EXPECT_EQ(assignment->location_count, location_count);
   }
 
+  void ExpectSpillSlot(const loom_low_allocation_assignment_t* assignment,
+                       uint32_t slot_index, uint32_t slot_count) {
+    ASSERT_NE(assignment, nullptr);
+    EXPECT_EQ(assignment->location_kind,
+              LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT);
+    EXPECT_EQ(assignment->location_base, slot_index);
+    EXPECT_EQ(assignment->location_count, slot_count);
+  }
+
   bool AssignmentOverlapsPhysicalLocation(
       const loom_low_allocation_assignment_t* assignment,
       uint32_t location_base, uint32_t location_count) {
@@ -377,6 +386,122 @@ TEST_F(LowAllocationTest, ReservedRangeBlocksWholeFunction) {
   }
 }
 
+TEST_F(LowAllocationTest, AliasedRegisterClassesDoNotOverlap) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%narrow : "
+      "reg<test.alias32>, %wide : reg<test.alias64>) -> "
+      "(reg<test.alias32>, reg<test.alias64>) {\n"
+      "  low.return %narrow, %wide : reg<test.alias32>, "
+      "reg<test.alias64>\n"
+      "}\n");
+  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+
+  ExpectPhysicalLocation(FindAssignmentByName(allocation, "narrow"), 0, 1);
+  ExpectSpillSlot(FindAssignmentByName(allocation, "wide"), 0, 1);
+}
+
+TEST_F(LowAllocationTest, BudgetAppliesToAliasedRegisterClass) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%narrow : "
+      "reg<test.alias32>) -> (reg<test.alias32>) {\n"
+      "  low.return %narrow : reg<test.alias32>\n"
+      "}\n");
+  const loom_low_allocation_budget_t budget = {
+      .register_class = IREE_SV("test.alias64"),
+      .max_units = 0,
+  };
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .budgets = &budget,
+      .budget_count = 1,
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+
+  ExpectSpillSlot(FindAssignmentByName(allocation, "narrow"), 0, 1);
+}
+
+TEST_F(LowAllocationTest, RejectsDuplicateAliasedRegisterBudgets) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%narrow : "
+      "reg<test.alias32>) -> (reg<test.alias32>) {\n"
+      "  low.return %narrow : reg<test.alias32>\n"
+      "}\n");
+  const loom_low_allocation_budget_t budgets[] = {
+      {
+          .register_class = IREE_SV("test.alias32"),
+          .max_units = 1,
+      },
+      {
+          .register_class = IREE_SV("test.alias64"),
+          .max_units = 1,
+      },
+  };
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .budgets = budgets,
+      .budget_count = IREE_ARRAYSIZE(budgets),
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      AllocateFirstLowFunctionWithOptions(&options, &allocation));
+}
+
+TEST_F(LowAllocationTest, FutureFixedValueBlocksAliasedRegisterClass) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%narrow : "
+      "reg<test.alias32>, %wide : reg<test.alias64>) -> "
+      "(reg<test.alias32>, reg<test.alias64>) {\n"
+      "  low.return %narrow, %wide : reg<test.alias32>, "
+      "reg<test.alias64>\n"
+      "}\n");
+  loom_value_id_t wide_value_id = FindValueIdByName("wide");
+  ASSERT_NE(wide_value_id, LOOM_VALUE_ID_INVALID);
+  const loom_low_allocation_fixed_value_t fixed_value = {
+      .value_id = wide_value_id,
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .location_base = 0,
+      .location_count = 1,
+  };
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .fixed_values = &fixed_value,
+      .fixed_value_count = 1,
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+
+  ExpectSpillSlot(FindAssignmentByName(allocation, "narrow"), 0, 1);
+  ExpectPhysicalLocation(FindAssignmentByName(allocation, "wide"), 0, 1);
+}
+
+TEST_F(LowAllocationTest, ReservedRangeBlocksAliasedRegisterClass) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%narrow : "
+      "reg<test.alias32>) -> (reg<test.alias32>) {\n"
+      "  low.return %narrow : reg<test.alias32>\n"
+      "}\n");
+  const loom_low_allocation_reserved_range_t reserved_range = {
+      .register_class = IREE_SV("test.alias64"),
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .location_base = 0,
+      .location_count = 1,
+  };
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .reserved_ranges = &reserved_range,
+      .reserved_range_count = 1,
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_ASSERT_OK(AllocateFirstLowFunctionWithOptions(&options, &allocation));
+  IREE_ASSERT_OK(loom_low_allocation_verify_sidecar(&allocation));
+
+  ExpectSpillSlot(FindAssignmentByName(allocation, "narrow"), 0, 1);
+}
+
 TEST_F(LowAllocationTest, RejectsOverlappingReservedRanges) {
   ParseAndVerify(
       "low.func.def target(@test_target) @allocated(%lhs : reg<test.phys>, "
@@ -408,6 +533,66 @@ TEST_F(LowAllocationTest, RejectsOverlappingReservedRanges) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
       AllocateFirstLowFunctionWithOptions(&options, &allocation));
+}
+
+TEST_F(LowAllocationTest, RejectsOverlappingAliasedReservedRanges) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%narrow : "
+      "reg<test.alias32>) -> (reg<test.alias32>) {\n"
+      "  low.return %narrow : reg<test.alias32>\n"
+      "}\n");
+  const loom_low_allocation_reserved_range_t reserved_ranges[] = {
+      {
+          .register_class = IREE_SV("test.alias32"),
+          .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+          .location_base = 0,
+          .location_count = 1,
+      },
+      {
+          .register_class = IREE_SV("test.alias64"),
+          .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+          .location_base = 0,
+          .location_count = 1,
+      },
+  };
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = &target_registry_.registry,
+      .reserved_ranges = reserved_ranges,
+      .reserved_range_count = IREE_ARRAYSIZE(reserved_ranges),
+  };
+  loom_low_allocation_sidecar_t allocation = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      AllocateFirstLowFunctionWithOptions(&options, &allocation));
+}
+
+TEST_F(LowAllocationTest, VerifierRejectsAliasedRegisterClassOverlap) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%narrow : "
+      "reg<test.alias32>, %wide : reg<test.alias64>) -> "
+      "(reg<test.alias32>, reg<test.alias64>) {\n"
+      "  low.return %narrow, %wide : reg<test.alias32>, "
+      "reg<test.alias64>\n"
+      "}\n");
+  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+  ASSERT_EQ(allocation.assignment_count, 2u);
+
+  loom_low_allocation_assignment_t assignments[2] = {
+      allocation.assignments[0],
+      allocation.assignments[1],
+  };
+  assignments[0].location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  assignments[0].location_base = 0;
+  assignments[0].location_count = 1;
+  assignments[1].location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  assignments[1].location_base = 0;
+  assignments[1].location_count = 1;
+
+  loom_low_allocation_sidecar_t invalid_allocation = allocation;
+  invalid_allocation.assignments = assignments;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_low_allocation_verify_sidecar(&invalid_allocation));
 }
 
 }  // namespace

@@ -128,7 +128,9 @@ typedef struct loom_low_allocation_assignment_t {
   uint32_t location_count;
 } loom_low_allocation_assignment_t;
 
-// Returns true when two assignments name the same target storage space.
+// Returns true when two assignments name the same concrete descriptor class and
+// location kind. Alias-set-aware storage checks require a descriptor set and
+// are performed by allocation verification.
 static inline bool loom_low_allocation_assignments_share_storage(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
