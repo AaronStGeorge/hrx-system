@@ -270,11 +270,22 @@ bool loom_amdgpu_select_kernel_async_gather_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_async_gather_plan_t* out_plan);
 
+// Selects an AMDGPU wait packet for a source kernel.async.wait op.
+iree_status_t loom_amdgpu_select_kernel_async_wait_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_async_wait_plan_t* out_plan, bool* out_selected);
+
 // Lowers a source kernel.async.gather to a global-to-LDS packet and elides its
 // async token.
 iree_status_t loom_amdgpu_lower_kernel_async_gather(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_async_gather_plan_t* plan);
+
+// Lowers a source kernel.async.wait to an explicit wait packet when the source
+// group contains target-visible async transfers.
+iree_status_t loom_amdgpu_lower_kernel_async_wait(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_async_wait_plan_t* plan);
 
 // Selects a plan for buffer construction source ops.
 iree_status_t loom_amdgpu_select_buffer_plan(loom_low_lower_context_t* context,

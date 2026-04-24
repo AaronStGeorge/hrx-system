@@ -485,6 +485,7 @@ loom_cc_library(
     ::descriptor_ids
     ::hal_kernel_abi
     ::target_info
+    ::wait_packets
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower

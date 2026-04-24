@@ -11,7 +11,12 @@
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
 #include "loom/target/arch/amdgpu/lower_memory_internal.h"
+#include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/util/fact_table.h"
+
+static_assert(LOOM_AMDGPU_WAIT_PACKET_SELECTION_IMMEDIATE_CAPACITY <=
+                  LOOM_AMDGPU_ASYNC_WAIT_IMMEDIATE_CAPACITY,
+              "async wait plans must hold any selected wait packet immediate");
 
 typedef uint32_t loom_amdgpu_async_gather_rejection_flags_t;
 
@@ -302,6 +307,73 @@ bool loom_amdgpu_select_kernel_async_gather_plan(
       &diagnostic);
 }
 
+static bool loom_amdgpu_async_wait_group_contains_local_gather(
+    const loom_module_t* module, const loom_op_t* wait_op) {
+  const loom_value_id_t group_id = loom_kernel_async_wait_group(wait_op);
+  if (group_id >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* group = loom_module_value(module, group_id);
+  if (loom_value_is_block_arg(group)) {
+    return false;
+  }
+  const loom_op_t* group_op = loom_value_def_op(group);
+  if (group_op == NULL || !loom_kernel_async_group_isa(group_op)) {
+    return false;
+  }
+
+  loom_value_slice_t tokens = loom_kernel_async_group_tokens(group_op);
+  for (iree_host_size_t i = 0; i < tokens.count; ++i) {
+    const loom_value_id_t token_id = tokens.values[i];
+    if (token_id >= module->values.count) {
+      return false;
+    }
+    const loom_value_t* token = loom_module_value(module, token_id);
+    if (loom_value_is_block_arg(token)) {
+      return false;
+    }
+    const loom_op_t* token_op = loom_value_def_op(token);
+    if (token_op != NULL && loom_kernel_async_gather_isa(token_op)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+iree_status_t loom_amdgpu_select_kernel_async_wait_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_async_wait_plan_t* out_plan, bool* out_selected) {
+  IREE_ASSERT_ARGUMENT(out_plan);
+  IREE_ASSERT_ARGUMENT(out_selected);
+  *out_plan = (loom_amdgpu_async_wait_plan_t){
+      .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
+  };
+  *out_selected = false;
+  if (loom_kernel_async_wait_newer_groups(source_op) != 0) {
+    return iree_ok_status();
+  }
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  if (!loom_amdgpu_async_wait_group_contains_local_gather(module, source_op)) {
+    *out_selected = true;
+    return iree_ok_status();
+  }
+
+  loom_amdgpu_wait_packet_selection_t selection = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_select_counter_mask(
+      loom_low_lower_context_descriptor_set(context),
+      LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD, /*target_count=*/0, &selection));
+  out_plan->descriptor_id = selection.descriptor_id;
+  out_plan->immediate_count = selection.immediate_count;
+  for (iree_host_size_t i = 0; i < selection.immediate_count; ++i) {
+    out_plan->immediates[i] = (loom_amdgpu_async_wait_immediate_t){
+        .name = selection.immediates[i].name,
+        .value = selection.immediates[i].value,
+    };
+  }
+  *out_selected = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_emit_m0_move(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_async_gather_plan_t* plan, loom_value_id_t* out_low_m0) {
@@ -373,6 +445,29 @@ iree_status_t loom_amdgpu_lower_kernel_async_gather(
       /*result_types=*/NULL, /*result_count=*/0, &low_op));
   return loom_low_lower_elide_value(context,
                                     loom_kernel_async_gather_token(source_op));
+}
+
+iree_status_t loom_amdgpu_lower_kernel_async_wait(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_async_wait_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+  if (plan->descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
+    return iree_ok_status();
+  }
+
+  loom_named_attr_t attrs[LOOM_AMDGPU_ASYNC_WAIT_IMMEDIATE_CAPACITY] = {0};
+  for (iree_host_size_t i = 0; i < plan->immediate_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_intern(context, plan->immediates[i].name,
+                                            &attrs[i].name_id));
+    attrs[i].value = loom_attr_i64(plan->immediates[i].value);
+  }
+
+  loom_op_t* low_op = NULL;
+  return loom_amdgpu_emit_low_op(
+      context, source_op, plan->descriptor_id, /*operands=*/NULL,
+      /*operand_count=*/0,
+      loom_make_named_attr_slice(attrs, plan->immediate_count),
+      /*result_types=*/NULL, /*result_count=*/0, &low_op);
 }
 
 static iree_string_view_t loom_amdgpu_async_gather_rejection_detail(

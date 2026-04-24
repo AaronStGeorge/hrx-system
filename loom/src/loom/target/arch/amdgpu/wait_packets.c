@@ -492,6 +492,76 @@ loom_amdgpu_wait_packet_select_descriptor(
   return best_descriptor;
 }
 
+iree_status_t loom_amdgpu_wait_packet_select_counter_mask(
+    const loom_low_descriptor_set_t* descriptor_set, uint32_t counter_mask,
+    uint16_t target_count, loom_amdgpu_wait_packet_selection_t* out_selection) {
+  IREE_ASSERT_ARGUMENT(out_selection);
+  *out_selection = (loom_amdgpu_wait_packet_selection_t){0};
+  if (counter_mask == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU wait packet selection requires a counter");
+  }
+
+  loom_amdgpu_wait_packet_builder_t builder = {
+      .descriptor_set = descriptor_set,
+  };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_analyze_target(&builder));
+
+  uint32_t covered_counter_mask = 0;
+  const loom_amdgpu_wait_packet_descriptor_t* descriptor =
+      loom_amdgpu_wait_packet_select_descriptor(&builder, counter_mask,
+                                                &covered_counter_mask);
+  if (descriptor == NULL) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU target cannot materialize wait packet for counter mask 0x%x",
+        counter_mask);
+  }
+  if (covered_counter_mask != counter_mask) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU target cannot materialize counter mask 0x%x with one wait "
+        "packet",
+        counter_mask);
+  }
+  if (descriptor->immediate_count >
+      LOOM_AMDGPU_WAIT_PACKET_SELECTION_IMMEDIATE_CAPACITY) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "AMDGPU wait packet selection immediate capacity exceeded");
+  }
+
+  *out_selection = (loom_amdgpu_wait_packet_selection_t){
+      .descriptor_ordinal = descriptor->descriptor_ordinal,
+      .descriptor_id = descriptor->descriptor->stable_id,
+      .descriptor_key = descriptor->key,
+      .counter_mask = covered_counter_mask,
+      .immediate_count = descriptor->immediate_count,
+  };
+  for (uint16_t i = 0; i < descriptor->immediate_count; ++i) {
+    const loom_amdgpu_wait_packet_descriptor_immediate_t* immediate =
+        &descriptor->immediates[i];
+    uint16_t value = immediate->no_wait_value;
+    if (iree_any_bit_set(immediate->counter_mask, covered_counter_mask)) {
+      value = target_count;
+    }
+    if (value > immediate->no_wait_value) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU wait descriptor '%.*s' immediate %" PRIu16
+                              " value %" PRIu16 " exceeds maximum %" PRIu16,
+                              (int)descriptor->key.size, descriptor->key.data,
+                              immediate->descriptor_immediate_index, value,
+                              immediate->no_wait_value);
+    }
+    out_selection->immediates[i] = (loom_amdgpu_wait_packet_immediate_t){
+        .descriptor_immediate_index = immediate->descriptor_immediate_index,
+        .name = immediate->name,
+        .value = value,
+    };
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_wait_packet_materialize_group(
     loom_amdgpu_wait_packet_builder_t* builder,
     const loom_amdgpu_wait_packet_group_t* group) {

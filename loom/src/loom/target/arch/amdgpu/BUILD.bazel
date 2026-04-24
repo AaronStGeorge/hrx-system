@@ -604,6 +604,7 @@ loom_cc_library(
         ":descriptor_ids",
         ":hal_kernel_abi",
         ":target_info",
+        ":wait_packets",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/codegen/low:source_memory_plan",

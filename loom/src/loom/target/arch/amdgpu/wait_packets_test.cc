@@ -55,6 +55,17 @@ std::string TargetPreamble(const char* target_symbol, const char* preset_key) {
   return source;
 }
 
+bool SelectionHasImmediate(const loom_amdgpu_wait_packet_selection_t& selection,
+                           iree_string_view_t name, uint16_t value) {
+  for (iree_host_size_t i = 0; i < selection.immediate_count; ++i) {
+    if (iree_string_view_equal(selection.immediates[i].name, name) &&
+        selection.immediates[i].value == value) {
+      return true;
+    }
+  }
+  return false;
+}
+
 class AmdgpuWaitPacketsTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -354,6 +365,48 @@ TEST_F(AmdgpuWaitPacketsTest, SelectsAluWaitDescriptorPerTarget) {
               LOOM_AMDGPU_WAIT_COUNTER_MASK_ALU)
         << test_case.descriptor_set_key;
     iree_arena_deinitialize(&arena);
+  }
+}
+
+TEST_F(AmdgpuWaitPacketsTest, SelectsVmemLoadCounterDrainPerTarget) {
+  struct Case {
+    const char* descriptor_set_key;
+    const char* expected_descriptor;
+    uint16_t expected_immediate_count;
+  };
+  const Case cases[] = {
+      {"amdgpu.gfx950.core", "amdgpu.s_waitcnt", 2},
+      {"amdgpu.gfx11.core", "amdgpu.s_waitcnt", 2},
+      {"amdgpu.gfx12.core", "amdgpu.s_wait_loadcnt", 1},
+      {"amdgpu.gfx1250.core", "amdgpu.s_wait_loadcnt", 1},
+  };
+  for (const Case& test_case : cases) {
+    const loom_low_descriptor_set_t* descriptor_set = nullptr;
+    IREE_ASSERT_OK(LookupDescriptorSet(
+        iree_make_cstring_view(test_case.descriptor_set_key), &descriptor_set));
+    ASSERT_NE(descriptor_set, nullptr) << test_case.descriptor_set_key;
+
+    loom_amdgpu_wait_packet_selection_t selection = {};
+    IREE_ASSERT_OK(loom_amdgpu_wait_packet_select_counter_mask(
+        descriptor_set, LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD,
+        /*target_count=*/0, &selection))
+        << test_case.descriptor_set_key;
+
+    EXPECT_EQ(ToString(selection.descriptor_key), test_case.expected_descriptor)
+        << test_case.descriptor_set_key;
+    EXPECT_EQ(selection.counter_mask, LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD)
+        << test_case.descriptor_set_key;
+    EXPECT_EQ(selection.immediate_count, test_case.expected_immediate_count)
+        << test_case.descriptor_set_key;
+    if (test_case.expected_immediate_count == 1) {
+      EXPECT_TRUE(SelectionHasImmediate(selection, IREE_SV("loadcnt"), 0))
+          << test_case.descriptor_set_key;
+    } else {
+      EXPECT_TRUE(SelectionHasImmediate(selection, IREE_SV("vmcnt"), 0))
+          << test_case.descriptor_set_key;
+      EXPECT_TRUE(SelectionHasImmediate(selection, IREE_SV("lgkmcnt"), 63))
+          << test_case.descriptor_set_key;
+    }
   }
 }
 

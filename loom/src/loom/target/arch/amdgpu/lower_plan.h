@@ -266,6 +266,25 @@ typedef struct loom_amdgpu_async_gather_plan_t {
   uint64_t descriptor_id;
 } loom_amdgpu_async_gather_plan_t;
 
+#define LOOM_AMDGPU_ASYNC_WAIT_IMMEDIATE_CAPACITY 4
+
+typedef struct loom_amdgpu_async_wait_immediate_t {
+  // Borrowed immediate field name from the selected descriptor set.
+  iree_string_view_t name;
+  // Concrete immediate value emitted for the wait packet.
+  uint16_t value;
+} loom_amdgpu_async_wait_immediate_t;
+
+typedef struct loom_amdgpu_async_wait_plan_t {
+  // Stable descriptor ID selected for the async wait packet.
+  uint64_t descriptor_id;
+  // Immediate rows emitted on the wait descriptor.
+  loom_amdgpu_async_wait_immediate_t
+      immediates[LOOM_AMDGPU_ASYNC_WAIT_IMMEDIATE_CAPACITY];
+  // Number of populated immediate rows.
+  iree_host_size_t immediate_count;
+} loom_amdgpu_async_wait_plan_t;
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

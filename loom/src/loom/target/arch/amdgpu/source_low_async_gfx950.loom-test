@@ -29,6 +29,7 @@ low.func.def target(@target) abi(hal_kernel) @async_gather_dword() {
   %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %20 = low.op<amdgpu.s_mov_b32_m0>(%19) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
   low.op<amdgpu.global_load_lds_dword_saddr>(%17, %18, %20) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 63, vmcnt = 0} : ()
   low.return
 }
 
@@ -64,6 +65,7 @@ low.func.def target(@target) abi(hal_kernel) @async_gather_b128() {
   %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %20 = low.op<amdgpu.s_mov_b32_m0>(%19) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
   low.op<amdgpu.global_load_lds_dwordx4_saddr>(%17, %18, %20) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.s_waitcnt>() {lgkmcnt = 63, vmcnt = 0} : ()
   low.return
 }
 

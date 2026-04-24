@@ -34,6 +34,25 @@ typedef struct loom_amdgpu_wait_packet_immediate_t {
   uint16_t value;
 } loom_amdgpu_wait_packet_immediate_t;
 
+#define LOOM_AMDGPU_WAIT_PACKET_SELECTION_IMMEDIATE_CAPACITY 4
+
+// One concrete AMDGPU wait packet selected for an immediate counter drain.
+typedef struct loom_amdgpu_wait_packet_selection_t {
+  // Descriptor ordinal in the selected low descriptor set.
+  uint32_t descriptor_ordinal;
+  // Stable descriptor ID for the selected wait packet.
+  uint64_t descriptor_id;
+  // Borrowed descriptor key, such as "amdgpu.s_waitcnt".
+  iree_string_view_t descriptor_key;
+  // Logical counter mask concretely drained by this packet.
+  uint32_t counter_mask;
+  // Immediate rows to materialize on the selected descriptor.
+  loom_amdgpu_wait_packet_immediate_t
+      immediates[LOOM_AMDGPU_WAIT_PACKET_SELECTION_IMMEDIATE_CAPACITY];
+  // Number of populated immediate rows.
+  iree_host_size_t immediate_count;
+} loom_amdgpu_wait_packet_selection_t;
+
 // One planned concrete AMDGPU wait packet to insert before a scheduled node.
 typedef struct loom_amdgpu_wait_packet_t {
   // Descriptor ordinal in |wait_plan->schedule->target.descriptor_set|.
@@ -71,6 +90,12 @@ typedef struct loom_amdgpu_wait_packet_plan_t {
   // Number of immediate rows.
   iree_host_size_t immediate_count;
 } loom_amdgpu_wait_packet_plan_t;
+
+// Selects one concrete wait packet that drains |counter_mask| to
+// |target_count| on |descriptor_set|.
+iree_status_t loom_amdgpu_wait_packet_select_counter_mask(
+    const loom_low_descriptor_set_t* descriptor_set, uint32_t counter_mask,
+    uint16_t target_count, loom_amdgpu_wait_packet_selection_t* out_selection);
 
 // Builds concrete AMDGPU wait packet insertions from |wait_plan|. The caller
 // must keep |wait_plan->schedule| immutable and |arena| alive for as long as

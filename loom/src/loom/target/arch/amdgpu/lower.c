@@ -50,6 +50,18 @@ static iree_status_t loom_amdgpu_select_plan_id(
     case LOOM_OP_KERNEL_ASYNC_GATHER:
       LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_async_gather_plan_t,
                               loom_amdgpu_select_kernel_async_gather_plan);
+    case LOOM_OP_KERNEL_ASYNC_WAIT: {
+      loom_amdgpu_async_wait_plan_t* plan_data = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_allocate_plan_data(
+          context, sizeof(*plan_data), (void**)&plan_data));
+      bool selected = false;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_select_kernel_async_wait_plan(
+          context, source_op, plan_data, &selected));
+      if (selected) {
+        *out_plan = loom_low_lower_plan_make(source_op->kind, plan_data);
+      }
+      return iree_ok_status();
+    }
     case LOOM_OP_VECTOR_CMPI:
       LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_vector_compare_plan_t,
                               loom_amdgpu_select_vector_cmpi_plan);
@@ -140,6 +152,10 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
       return loom_amdgpu_lower_kernel_async_gather(
           context, source_op,
           (const loom_amdgpu_async_gather_plan_t*)plan.target_data);
+    case LOOM_OP_KERNEL_ASYNC_WAIT:
+      return loom_amdgpu_lower_kernel_async_wait(
+          context, source_op,
+          (const loom_amdgpu_async_wait_plan_t*)plan.target_data);
     case LOOM_OP_VECTOR_CMPI:
       return loom_amdgpu_lower_vector_cmpi(
           context, source_op,
