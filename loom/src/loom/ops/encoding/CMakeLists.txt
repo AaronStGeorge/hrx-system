@@ -41,6 +41,24 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
+    format_test
+  SRCS
+    "format_test.cc"
+  DEPS
+    ::encoding
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::test
+    loom::src::loom::testing::diagnostic_matchers
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     facts_test
   SRCS
     "facts_test.cc"

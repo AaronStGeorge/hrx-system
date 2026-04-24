@@ -58,19 +58,33 @@ loom_cc_test(
     ::parser
     ::printer
     iree::base::internal::arena
-    loom::src::loom::codegen::low::text_asm
     loom::src::loom::error::diagnostic
     loom::src::loom::error::error_defs
     loom::src::loom::ir
-    loom::src::loom::ops::cfg
-    loom::src::loom::ops::encoding
-    loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    loom::src::loom::testing::diagnostic_matchers
+    loom::src::loom::util::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    low_asm_parser_test
+  SRCS
+    "low_asm_parser_test.cc"
+  DEPS
+    ::parser
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::text_asm
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::low
     loom::src::loom::ops::test
     loom::src::loom::target::test::alt_descriptors
     loom::src::loom::target::test::descriptors
     loom::src::loom::testing::diagnostic_matchers
-    loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -145,18 +159,31 @@ loom_cc_test(
   SRCS
     "printer_test.cc"
   DEPS
+    ::printer
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    loom::src::loom::util::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    low_asm_printer_test
+  SRCS
+    "low_asm_printer_test.cc"
+  DEPS
     ::parser
     ::printer
     iree::base::internal::arena
     loom::src::loom::codegen::low::text_asm
     loom::src::loom::ir
-    loom::src::loom::ops::encoding
     loom::src::loom::ops::low
-    loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
     loom::src::loom::target::test::alt_descriptors
     loom::src::loom::target::test::descriptors
-    loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
 )

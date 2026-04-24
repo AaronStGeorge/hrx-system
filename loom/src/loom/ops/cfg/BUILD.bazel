@@ -30,6 +30,21 @@ loom_cc_library(
 )
 
 loom_cc_test(
+    name = "format_test",
+    srcs = ["format_test.cc"],
+    deps = [
+        ":cfg",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "verify_test",
     srcs = ["verify_test.cc"],
     deps = [

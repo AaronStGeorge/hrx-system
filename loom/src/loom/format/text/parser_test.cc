@@ -12,20 +12,14 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
 #include "loom/error/error_defs.h"
 #include "loom/format/text/parser_internal.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/cfg/ops.h"
-#include "loom/ops/encoding/ops.h"
-#include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
-#include "loom/target/test/alt_descriptors.h"
-#include "loom/target/test/descriptors.h"
 #include "loom/testing/diagnostic_matchers.h"
 #include "loom/util/stream.h"
 
@@ -55,12 +49,6 @@ static const loom_encoding_vtable_t kQuantizationEncodingVtable = {
     .name = IREE_SV("quantization"),
 };
 
-static const loom_low_descriptor_set_provider_t
-    kParserTestLowDescriptorSetProviders[] = {
-        loom_test_low_core_descriptor_set,
-        loom_test_low_alt_descriptor_set,
-};
-
 class ParserTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -74,30 +62,6 @@ class ParserTest : public ::testing::Test {
       IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_TEST,
                                                    vtables, (uint16_t)count));
     }
-    {
-      iree_host_size_t count = 0;
-      const loom_op_vtable_t* const* vtables = loom_cfg_dialect_vtables(&count);
-      IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_CFG,
-                                                   vtables, (uint16_t)count));
-    }
-    {
-      iree_host_size_t count = 0;
-      const loom_op_vtable_t* const* vtables =
-          loom_encoding_dialect_vtables(&count);
-      IREE_ASSERT_OK(loom_context_register_dialect(
-          &context_, LOOM_DIALECT_ENCODING, vtables, (uint16_t)count));
-    }
-    {
-      iree_host_size_t count = 0;
-      const loom_op_vtable_t* const* vtables = loom_low_dialect_vtables(&count);
-      IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_LOW,
-                                                   vtables, (uint16_t)count));
-    }
-    low_descriptor_registry_ = {};
-    low_descriptor_registry_.descriptor_set_providers =
-        kParserTestLowDescriptorSetProviders;
-    low_descriptor_registry_.descriptor_set_provider_count =
-        IREE_ARRAYSIZE(kParserTestLowDescriptorSetProviders);
     IREE_ASSERT_OK(loom_context_register_encoding_vtable(
         &context_, &kDenseEncodingVtable));
     IREE_ASSERT_OK(
@@ -117,22 +81,11 @@ class ParserTest : public ::testing::Test {
   // Parses source text and captures diagnostics. On success, caller owns
   // |*out_module| (must free with loom_module_free).
   iree_status_t Parse(const char* source, loom_module_t** out_module) {
-    return ParseWithLowAsmEnvironment(source, /*enable_low_asm=*/true,
-                                      out_module);
-  }
-
-  iree_status_t ParseWithLowAsmEnvironment(const char* source,
-                                           bool enable_low_asm,
-                                           loom_module_t** out_module) {
     capture_.Reset();
     loom_text_parse_options_t options;
     memset(&options, 0, sizeof(options));
     options.diagnostic_sink = capture_.sink();
     options.max_errors = 100;
-    if (enable_low_asm) {
-      loom_low_descriptor_text_asm_environment_initialize(
-          &low_descriptor_registry_, &options.low_asm_environment);
-    }
     return loom_text_parse(iree_make_cstring_view(source),
                            iree_make_cstring_view("test.loom"), &context_,
                            &block_pool_, &options, out_module);
@@ -219,8 +172,6 @@ class ParserTest : public ::testing::Test {
   iree_arena_block_pool_t block_pool_;
   // Dialect/type/encoding registry used by parser calls.
   loom_context_t context_;
-  // Parser-test descriptor registry with two synthetic low asm descriptor sets.
-  loom_low_descriptor_registry_t low_descriptor_registry_;
   // Diagnostic capture sink populated by Parse helpers.
   DiagnosticCapture capture_;
 };
@@ -281,26 +232,6 @@ static std::string BuildWideTestFuncSource(iree_host_size_t arg_count,
   }
   text.append("\n}\n");
   return text;
-}
-
-static std::string StringFromId(const loom_module_t* module,
-                                loom_string_id_t string_id) {
-  if (string_id >= module->strings.count) return "";
-  iree_string_view_t value = module->strings.entries[string_id];
-  return std::string(value.data, value.size);
-}
-
-static const loom_named_attr_t* FindNamedAttr(const loom_module_t* module,
-                                              loom_named_attr_slice_t attrs,
-                                              iree_string_view_t name) {
-  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
-    if (attrs.entries[i].name_id >= module->strings.count) continue;
-    if (iree_string_view_equal(
-            module->strings.entries[attrs.entries[i].name_id], name)) {
-      return &attrs.entries[i];
-    }
-  }
-  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -745,365 +676,6 @@ TEST_F(ParserTest, TestFuncSupportsThousandArgsAndResults) {
   loom_module_free(module);
 }
 
-TEST_F(ParserTest, LowAsmRegionBuildsCanonicalLowOps) {
-  loom_module_t* module = ParseOk(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7\n"
-      "  %sum = test.add.i32 %c0, %c0\n"
-      "  %spv = OpIAdd %sum, %c0\n"
-      "  %call = test.call.i32 %spv {callee = 4}\n"
-      "  return %call\n"
-      "}\n");
-  ASSERT_NE(module, nullptr);
-
-  loom_block_t* module_block = loom_module_block(module);
-  ASSERT_EQ(module_block->op_count, 1u);
-  loom_op_t* region_op = loom_block_op(module_block, 0);
-  ASSERT_TRUE(loom_test_low_asm_region_isa(region_op));
-
-  loom_region_t* region = loom_test_low_asm_region_body(region_op);
-  ASSERT_NE(region, nullptr);
-  loom_block_t* entry = GetEntryBlock(region);
-  ASSERT_NE(entry, nullptr);
-  ASSERT_EQ(entry->op_count, 5u);
-
-  loom_op_t* const_op = loom_block_op(entry, 0);
-  ASSERT_TRUE(loom_low_const_isa(const_op));
-  EXPECT_EQ(StringFromId(module, loom_low_const_opcode(const_op)),
-            "test.const.i32");
-  loom_named_attr_slice_t const_attrs = loom_low_const_attrs(const_op);
-  const loom_named_attr_t* i32_value =
-      FindNamedAttr(module, const_attrs, IREE_SV("i32_value"));
-  ASSERT_NE(i32_value, nullptr);
-  ASSERT_EQ(i32_value->value.kind, LOOM_ATTR_I64);
-  EXPECT_EQ(i32_value->value.i64, 7);
-
-  loom_type_t const_type =
-      loom_module_value_type(module, loom_low_const_result(const_op));
-  ASSERT_TRUE(loom_type_is_register(const_type));
-  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(const_type)),
-            "test.i32");
-  EXPECT_EQ(loom_type_register_unit_count(const_type), 1u);
-
-  loom_op_t* add_op = loom_block_op(entry, 1);
-  ASSERT_TRUE(loom_low_op_isa(add_op));
-  EXPECT_EQ(StringFromId(module, loom_low_op_opcode(add_op)), "test.add.i32");
-  loom_value_slice_t add_operands = loom_low_op_operands(add_op);
-  ASSERT_EQ(add_operands.count, 2u);
-  EXPECT_EQ(add_operands.values[0], loom_low_const_result(const_op));
-  EXPECT_EQ(add_operands.values[1], loom_low_const_result(const_op));
-
-  loom_op_t* spv_op = loom_block_op(entry, 2);
-  ASSERT_TRUE(loom_low_op_isa(spv_op));
-  EXPECT_EQ(StringFromId(module, loom_low_op_opcode(spv_op)),
-            "test.spv.op_iadd.i32");
-  loom_value_slice_t spv_operands = loom_low_op_operands(spv_op);
-  ASSERT_EQ(spv_operands.count, 2u);
-  EXPECT_EQ(spv_operands.values[0], loom_low_op_results(add_op).values[0]);
-  EXPECT_EQ(spv_operands.values[1], loom_low_const_result(const_op));
-
-  loom_op_t* call_op = loom_block_op(entry, 3);
-  ASSERT_TRUE(loom_low_op_isa(call_op));
-  EXPECT_EQ(StringFromId(module, loom_low_op_opcode(call_op)), "test.call.i32");
-  loom_named_attr_slice_t call_attrs = loom_low_op_attrs(call_op);
-  const loom_named_attr_t* callee_ordinal =
-      FindNamedAttr(module, call_attrs, IREE_SV("callee_ordinal"));
-  ASSERT_NE(callee_ordinal, nullptr);
-  ASSERT_EQ(callee_ordinal->value.kind, LOOM_ATTR_I64);
-  EXPECT_EQ(callee_ordinal->value.i64, 4);
-
-  loom_op_t* return_op = loom_block_op(entry, 4);
-  ASSERT_TRUE(loom_low_return_isa(return_op));
-  loom_value_slice_t return_values = loom_low_return_values(return_op);
-  ASSERT_EQ(return_values.count, 1u);
-  EXPECT_EQ(return_values.values[0], loom_low_op_results(call_op).values[0]);
-
-  loom_module_free(module);
-}
-
-TEST_F(ParserTest, LowAsmRegionSelectsDescriptorSet) {
-  loom_module_t* module = ParseOk(
-      "test.low_asm_region asm<test.low.alt> {\n"
-      "  %c0 = test.alt.const.i32 5\n"
-      "  %neg = test.alt.neg.i32 %c0\n"
-      "  return %neg\n"
-      "}\n");
-  ASSERT_NE(module, nullptr);
-
-  loom_block_t* module_block = loom_module_block(module);
-  ASSERT_EQ(module_block->op_count, 1u);
-  loom_op_t* region_op = loom_block_op(module_block, 0);
-  ASSERT_TRUE(loom_test_low_asm_region_isa(region_op));
-
-  loom_region_t* region = loom_test_low_asm_region_body(region_op);
-  ASSERT_NE(region, nullptr);
-  loom_block_t* entry = GetEntryBlock(region);
-  ASSERT_NE(entry, nullptr);
-  ASSERT_EQ(entry->op_count, 3u);
-
-  loom_op_t* const_op = loom_block_op(entry, 0);
-  ASSERT_TRUE(loom_low_const_isa(const_op));
-  EXPECT_EQ(StringFromId(module, loom_low_const_opcode(const_op)),
-            "test.alt.const.i32");
-
-  loom_op_t* neg_op = loom_block_op(entry, 1);
-  ASSERT_TRUE(loom_low_op_isa(neg_op));
-  EXPECT_EQ(StringFromId(module, loom_low_op_opcode(neg_op)),
-            "test.alt.neg.i32");
-
-  loom_module_free(module);
-}
-
-TEST_F(ParserTest, LowAsmRegionBuildsStructuralCopy) {
-  loom_module_t* module = ParseOk(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7\n"
-      "  %copy = copy %c0 : reg<test.i32> -> reg<test.i32>\n"
-      "  return %copy\n"
-      "}\n");
-  ASSERT_NE(module, nullptr);
-
-  loom_block_t* module_block = loom_module_block(module);
-  ASSERT_EQ(module_block->op_count, 1u);
-  loom_region_t* region =
-      loom_test_low_asm_region_body(loom_block_op(module_block, 0));
-  loom_block_t* entry = GetEntryBlock(region);
-  ASSERT_NE(entry, nullptr);
-  ASSERT_EQ(entry->op_count, 3u);
-
-  loom_op_t* const_op = loom_block_op(entry, 0);
-  ASSERT_TRUE(loom_low_const_isa(const_op));
-
-  loom_op_t* copy_op = loom_block_op(entry, 1);
-  ASSERT_TRUE(loom_low_copy_isa(copy_op));
-  EXPECT_EQ(loom_low_copy_source(copy_op), loom_low_const_result(const_op));
-  loom_type_t result_type =
-      loom_module_value_type(module, loom_low_copy_result(copy_op));
-  ASSERT_TRUE(loom_type_is_register(result_type));
-  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(result_type)),
-            "test.i32");
-
-  loom_module_free(module);
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsAmbiguousInferredResultType) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %amb = test.ambiguous\n"
-      "}\n");
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  ASSERT_NE(diagnostic, nullptr);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0),
-            "result type annotation is required for one of: "
-            "reg<test.i32> | reg<test.i64>");
-  (void)diagnostics;
-}
-
-TEST_F(ParserTest, LowAsmRegionAcceptsExplicitAmbiguousResultType) {
-  loom_module_t* module = ParseOk(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %amb = test.ambiguous : reg<test.i64>\n"
-      "  return %amb\n"
-      "}\n");
-  ASSERT_NE(module, nullptr);
-
-  loom_block_t* module_block = loom_module_block(module);
-  ASSERT_EQ(module_block->op_count, 1u);
-  loom_region_t* region =
-      loom_test_low_asm_region_body(loom_block_op(module_block, 0));
-  loom_block_t* entry = GetEntryBlock(region);
-  ASSERT_NE(entry, nullptr);
-  ASSERT_EQ(entry->op_count, 2u);
-
-  loom_op_t* ambiguous_op = loom_block_op(entry, 0);
-  ASSERT_TRUE(loom_low_op_isa(ambiguous_op));
-  loom_type_t result_type = loom_module_value_type(
-      module, loom_low_op_results(ambiguous_op).values[0]);
-  ASSERT_TRUE(loom_type_is_register(result_type));
-  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(result_type)),
-            "test.i64");
-  EXPECT_EQ(loom_type_register_unit_count(result_type), 1u);
-
-  loom_module_free(module);
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsInvalidExplicitResultType) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7\n"
-      "  %bad = test.add.i32 %c0, %c0 : reg<test.i64>\n"
-      "}\n");
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  ASSERT_NE(diagnostic, nullptr);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0),
-            "result type annotation must be one of: reg<test.i32>");
-  (void)diagnostics;
-}
-
-TEST_F(ParserTest, LowAsmRegionInfersTiedResultTypeFromOperand) {
-  loom_module_t* module = ParseOk(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7\n"
-      "  %tied = test.tied.any %c0\n"
-      "  return %tied\n"
-      "}\n");
-  ASSERT_NE(module, nullptr);
-
-  loom_block_t* module_block = loom_module_block(module);
-  ASSERT_EQ(module_block->op_count, 1u);
-  loom_region_t* region =
-      loom_test_low_asm_region_body(loom_block_op(module_block, 0));
-  loom_block_t* entry = GetEntryBlock(region);
-  ASSERT_NE(entry, nullptr);
-  ASSERT_EQ(entry->op_count, 3u);
-
-  loom_op_t* tied_op = loom_block_op(entry, 1);
-  ASSERT_TRUE(loom_low_op_isa(tied_op));
-  loom_type_t result_type =
-      loom_module_value_type(module, loom_low_op_results(tied_op).values[0]);
-  ASSERT_TRUE(loom_type_is_register(result_type));
-  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(result_type)),
-            "test.i32");
-  ASSERT_EQ(tied_op->tied_result_count, 1u);
-  const loom_tied_result_t* tied_results = loom_op_tied_results(tied_op);
-  EXPECT_EQ(tied_results[0].result_index, 0u);
-  EXPECT_EQ(tied_results[0].operand_index, 0u);
-
-  loom_module_free(module);
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsExplicitTiedResultMismatch) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7\n"
-      "  %bad = test.tied.any %c0 : reg<test.i64>\n"
-      "}\n");
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  ASSERT_NE(diagnostic, nullptr);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0),
-            "result type annotation must match tied operand type");
-  (void)diagnostics;
-}
-
-TEST_F(ParserTest, LowAsmRegionRequiresConfiguredEnvironment) {
-  loom_module_t* module = nullptr;
-  IREE_ASSERT_OK(
-      ParseWithLowAsmEnvironment("test.low_asm_region asm<test.low.core> {\n"
-                                 "  return\n"
-                                 "}\n",
-                                 /*enable_low_asm=*/false, &module));
-  EXPECT_EQ(module, nullptr);
-  ASSERT_FALSE(capture_.diagnostics.empty());
-  ExpectError(capture_.diagnostics[0],
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  EXPECT_EQ(GetStringParam(capture_.diagnostics[0], 0),
-            "low asm environment is not configured");
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsUnknownDescriptorSet) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.missing> {\n"
-      "  return\n"
-      "}\n");
-  ExpectError(diagnostics[0],
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "unknown low descriptor set");
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsUnknownMnemonic) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7\n"
-      "  %bad = test.missing.i32 %c0\n"
-      "}\n");
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  ASSERT_NE(diagnostic, nullptr);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "unknown low asm mnemonic");
-  (void)diagnostics;
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsResultCountMismatch) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %lhs, %rhs = test.const.i32 7\n"
-      "}\n");
-  ExpectError(diagnostics[0],
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 9));
-  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "test.const.i32");
-  ExpectU32Param(diagnostics[0], 1, 1u);
-  ExpectU32Param(diagnostics[0], 2, 2u);
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsOperandCountMismatch) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7\n"
-      "  %sum = test.add.i32 %c0\n"
-      "}\n");
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 10));
-  ASSERT_NE(diagnostic, nullptr);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "test.add.i32");
-  ExpectU32Param(*diagnostic, 1, 2u);
-  ExpectU32Param(*diagnostic, 2, 1u);
-  (void)diagnostics;
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsUnexpectedNamedImmediate) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7\n"
-      "  %call = test.call.i32 %c0 {callee_ordinal = 4}\n"
-      "}\n");
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  ASSERT_NE(diagnostic, nullptr);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "unexpected named immediate");
-  (void)diagnostics;
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsBlockLabels) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "^entry:\n"
-      "  return\n"
-      "}\n");
-  ExpectError(diagnostics[0],
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  EXPECT_EQ(GetStringParam(diagnostics[0], 0),
-            "block labels are not supported in straight-line low asm");
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsTrailingTokenAfterLocation) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7 loc(\"test.loom\":1:1) extra\n"
-      "}\n");
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  ASSERT_NE(diagnostic, nullptr);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0), "unexpected token after packet");
-  (void)diagnostics;
-}
-
-TEST_F(ParserTest, LowAsmRegionRejectsExtraReturnTypeAnnotation) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.low_asm_region asm<test.low.core> {\n"
-      "  %c0 = test.const.i32 7\n"
-      "  return %c0 : reg<test.i32>, reg<test.i32>\n"
-      "}\n");
-  const CapturedDiagnostic* diagnostic = FindDiagnostic(
-      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  ASSERT_NE(diagnostic, nullptr);
-  EXPECT_EQ(GetStringParam(*diagnostic, 0),
-            "return type annotation count does not match value count");
-  (void)diagnostics;
-}
-
 TEST_F(ParserTest, AttrDictStringEscapesRoundTripDecodedPayload) {
   std::string text = RoundTrip(
       "%c = test.constant 0 : f32\n"
@@ -1514,17 +1086,6 @@ TEST_F(ParserTest, TestFuncForwardSuccessorReference) {
     EXPECT_NE(text.find("^exit:"), std::string::npos) << text;
     loom_module_free(module);
   }
-}
-
-TEST_F(ParserTest, FuncCfgBranchWithArguments) {
-  std::string text = RoundTrip(
-      "test.func @cfg(%arg : i32) -> (i32) {\n"
-      "  cfg.br ^exit(%arg : i32)\n"
-      "^exit(%value : i32):\n"
-      "  test.yield %value : i32\n"
-      "}\n");
-  EXPECT_NE(text.find("cfg.br ^exit(%arg : i32)"), std::string::npos) << text;
-  EXPECT_NE(text.find("^exit(%value : i32):"), std::string::npos) << text;
 }
 
 TEST_F(ParserTest, NestedMapRegion) {
@@ -2330,171 +1891,6 @@ TEST_F(ParserTest, InlineEncoding) {
     EXPECT_NE(text.find("#dense<block=32>"), std::string::npos);
     loom_module_free(module);
   }
-}
-
-TEST_F(ParserTest, EncodingDefineInlineSpec) {
-  loom_module_t* module =
-      ParseOk("%enc = encoding.define #q8_0<block=32> : encoding<schema>\n");
-  ASSERT_NE(module, nullptr);
-
-  loom_block_t* body = loom_module_block(module);
-  ASSERT_EQ(body->op_count, 1u);
-  const loom_op_t* op = loom_block_const_op(body, 0);
-  ASSERT_TRUE(loom_encoding_define_isa(op));
-
-  loom_attribute_t spec_attr = loom_op_attrs(op)[0];
-  ASSERT_EQ(spec_attr.kind, LOOM_ATTR_ENCODING);
-  const loom_encoding_t* spec_encoding =
-      loom_module_encoding(module, loom_attr_as_encoding_id(spec_attr));
-  ASSERT_NE(spec_encoding, nullptr);
-  ASSERT_LT(spec_encoding->name_id, module->strings.count);
-  EXPECT_TRUE(iree_string_view_equal(
-      module->strings.entries[spec_encoding->name_id], IREE_SV("q8_0")));
-  ASSERT_EQ(spec_encoding->attribute_count, 1u);
-  EXPECT_TRUE(iree_string_view_equal(
-      module->strings.entries[spec_encoding->attributes[0].name_id],
-      IREE_SV("block")));
-  EXPECT_EQ(spec_encoding->attributes[0].value.kind, LOOM_ATTR_I64);
-  EXPECT_EQ(spec_encoding->attributes[0].value.i64, 32);
-
-  EXPECT_EQ(PrintModule(module),
-            "%enc = encoding.define #q8_0<block=32> : encoding<schema>\n");
-  loom_module_free(module);
-}
-
-TEST_F(ParserTest, EncodingDefineDynamicParams) {
-  loom_module_t* module = ParseOk(
-      "test.func @test(%group_size : index, %scale : f32) {\n"
-      "  %enc = encoding.define #q8_0<block=32> "
-      "{scale = %scale : f32, group_size = %group_size : index} : "
-      "encoding<schema>\n"
-      "  test.yield\n"
-      "}\n");
-  ASSERT_NE(module, nullptr);
-
-  loom_op_t* func_op = GetFirstFunctionOp(module);
-  ASSERT_NE(func_op, nullptr);
-  loom_block_t* entry = GetEntryBlock(loom_test_func_body(func_op));
-  ASSERT_NE(entry, nullptr);
-  ASSERT_GE(entry->op_count, 1u);
-  const loom_op_t* op = loom_block_const_op(entry, 0);
-  ASSERT_TRUE(loom_encoding_define_isa(op));
-
-  loom_value_slice_t params = loom_encoding_define_params(op);
-  ASSERT_EQ(params.count, 2u);
-  EXPECT_EQ(params.values[0], entry->arg_ids[0]);
-  EXPECT_EQ(params.values[1], entry->arg_ids[1]);
-
-  loom_named_attr_slice_t param_names = loom_encoding_define_param_names(op);
-  ASSERT_EQ(param_names.count, 2u);
-  EXPECT_TRUE(iree_string_view_equal(
-      module->strings.entries[param_names.entries[0].name_id],
-      IREE_SV("group_size")));
-  EXPECT_EQ(param_names.entries[0].value.kind, LOOM_ATTR_I64);
-  EXPECT_EQ(param_names.entries[0].value.i64, 0);
-  EXPECT_TRUE(iree_string_view_equal(
-      module->strings.entries[param_names.entries[1].name_id],
-      IREE_SV("scale")));
-  EXPECT_EQ(param_names.entries[1].value.kind, LOOM_ATTR_I64);
-  EXPECT_EQ(param_names.entries[1].value.i64, 1);
-
-  EXPECT_EQ(PrintModule(module),
-            "test.func @test(%group_size: index, %scale: f32) {\n"
-            "  %enc = encoding.define #q8_0<block=32> "
-            "{group_size = %group_size : index, scale = %scale : f32} : "
-            "encoding<schema>\n"
-            "  test.yield\n"
-            "}\n");
-  loom_module_free(module);
-}
-
-TEST_F(ParserTest, StaticEncodingRejectsSSAParameter) {
-  const auto& diagnostics = ParseExpectErrors(
-      "test.func @test(%group_size : index) {\n"
-      "  %enc = encoding.define #q8_0<group_size=%group_size> : "
-      "encoding<schema>\n"
-      "  test.yield\n"
-      "}\n");
-  ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0],
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 28));
-  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "group_size");
-}
-
-TEST_F(ParserTest, StaticEncodingRejectsDuplicateParameter) {
-  const auto& diagnostics = ParseExpectErrors(
-      "%enc = encoding.define #q8_0<block=32, block=64> : encoding<schema>\n");
-  ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0],
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 29));
-  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "block");
-}
-
-TEST_F(ParserTest, EncodingDefineAliasSpec) {
-  loom_module_t* module = ParseOk(
-      "#enc = #q8_0<block=32>\n"
-      "%enc = encoding.define #enc : encoding<schema>\n");
-  ASSERT_NE(module, nullptr);
-
-  loom_block_t* body = loom_module_block(module);
-  ASSERT_EQ(body->op_count, 1u);
-  const loom_op_t* op = loom_block_const_op(body, 0);
-  ASSERT_TRUE(loom_encoding_define_isa(op));
-
-  loom_attribute_t spec_attr = loom_op_attrs(op)[0];
-  ASSERT_EQ(spec_attr.kind, LOOM_ATTR_ENCODING);
-  const loom_encoding_t* spec_encoding =
-      loom_module_encoding(module, loom_attr_as_encoding_id(spec_attr));
-  ASSERT_NE(spec_encoding, nullptr);
-  ASSERT_NE(spec_encoding->alias_id, LOOM_STRING_ID_INVALID);
-  EXPECT_TRUE(iree_string_view_equal(
-      module->strings.entries[spec_encoding->alias_id], IREE_SV("enc")));
-
-  EXPECT_EQ(PrintModule(module),
-            "#enc = #q8_0<block=32>\n"
-            "%enc = encoding.define #enc : encoding<schema>\n");
-  loom_module_free(module);
-}
-
-TEST_F(ParserTest, EncodingDefineNestedInlineSpec) {
-  loom_module_t* module = ParseOk(
-      "%enc = encoding.define "
-      "#quantization<spec=#q8_0<block=32>> : encoding<schema>\n");
-  ASSERT_NE(module, nullptr);
-
-  loom_block_t* body = loom_module_block(module);
-  ASSERT_EQ(body->op_count, 1u);
-  const loom_op_t* op = loom_block_const_op(body, 0);
-  ASSERT_TRUE(loom_encoding_define_isa(op));
-
-  loom_attribute_t spec_attr = loom_op_attrs(op)[0];
-  ASSERT_EQ(spec_attr.kind, LOOM_ATTR_ENCODING);
-  const loom_encoding_t* outer_encoding =
-      loom_module_encoding(module, loom_attr_as_encoding_id(spec_attr));
-  ASSERT_NE(outer_encoding, nullptr);
-  ASSERT_EQ(outer_encoding->attribute_count, 1u);
-  EXPECT_TRUE(iree_string_view_equal(
-      module->strings.entries[outer_encoding->attributes[0].name_id],
-      IREE_SV("spec")));
-
-  loom_attribute_t nested_spec = outer_encoding->attributes[0].value;
-  ASSERT_EQ(nested_spec.kind, LOOM_ATTR_ENCODING);
-  const loom_encoding_t* nested_encoding =
-      loom_module_encoding(module, loom_attr_as_encoding_id(nested_spec));
-  ASSERT_NE(nested_encoding, nullptr);
-  EXPECT_TRUE(iree_string_view_equal(
-      module->strings.entries[nested_encoding->name_id], IREE_SV("q8_0")));
-  ASSERT_EQ(nested_encoding->attribute_count, 1u);
-  EXPECT_TRUE(iree_string_view_equal(
-      module->strings.entries[nested_encoding->attributes[0].name_id],
-      IREE_SV("block")));
-  EXPECT_EQ(nested_encoding->attributes[0].value.kind, LOOM_ATTR_I64);
-  EXPECT_EQ(nested_encoding->attributes[0].value.i64, 32);
-
-  EXPECT_EQ(PrintModule(module),
-            "%enc = encoding.define "
-            "#quantization<spec=#q8_0<block=32>> : encoding<schema>\n");
-  loom_module_free(module);
 }
 
 TEST_F(ParserTest, EncodingAliasCannotShadowRegisteredFamily) {
