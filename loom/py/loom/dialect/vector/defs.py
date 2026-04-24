@@ -539,6 +539,7 @@ vector_broadcast = Op(
     results=[Result("result", VECTOR)],
     constraints=[SameElementType("source", "result")],
     verify="loom_vector_broadcast_verify",
+    facts="loom_vector_broadcast_facts",
     traits=[PURE],
     format=[Ref("source"), COLON, TypeOf("source"), ARROW, ResultType("result")],
     examples=["%wide = vector.broadcast %v : vector<4xf32> -> vector<16x4xf32>"],
@@ -640,6 +641,7 @@ vector_insert = Op(
         SameType("dest", "result"),
     ],
     verify="loom_vector_insert_verify",
+    facts="loom_vector_insert_facts",
     traits=[PURE],
     format=[
         Ref("value"),
@@ -757,6 +759,7 @@ vector_transpose = Op(
     constraints=[SameElementType("source", "result")],
     verify="loom_vector_transpose_verify",
     type_transfer="loom_vector_transpose_type_transfer",
+    facts="loom_vector_transpose_facts",
     traits=[PURE],
     format=[
         TemplateParam("permutation"),
@@ -2655,6 +2658,7 @@ vector_bitcast = Op(
     operands=[Operand("input", VECTOR)],
     results=[Result("result", VECTOR)],
     constraints=[TotalBitCountEqual("input", "result")],
+    facts="loom_vector_bitcast_facts",
     traits=[PURE],
     format=[
         Ref("input"),

@@ -180,6 +180,124 @@ func.def @reduce_from_elements_addi() -> (i32) {
 
 // ====
 
+// Structural vector ops preserve uniform summaries when their lane mapping does
+// not change the scalar element fact.
+func.def @structural_uniform_facts() -> (i32, i32, i32, i32) {
+  %seven = vector.constant 7 : vector<2xi32>
+  %wide = vector.broadcast %seven : vector<2xi32> -> vector<3x2xi32>
+  %r0 = vector.extract %wide[2, 1] : vector<3x2xi32> -> i32
+  %four = vector.constant 4 : vector<2x3xi32>
+  %transposed = vector.transpose<[1, 0]> %four : vector<2x3xi32> -> vector<3x2xi32>
+  %r1 = vector.extract %transposed[1, 0] : vector<3x2xi32> -> i32
+  %three = scalar.constant 3 : i32
+  %threes = vector.constant 3 : vector<4xi32>
+  %inserted = vector.insert %three into %threes[2] : i32, vector<4xi32>
+  %r2 = vector.extract %inserted[0] : vector<4xi32> -> i32
+  %one = vector.constant 1.0 : vector<4xf32>
+  %bits = vector.bitcast %one : vector<4xf32> to vector<4xi32>
+  %r3 = vector.extract %bits[3] : vector<4xi32> -> i32
+  func.return %r0, %r1, %r2, %r3 : i32, i32, i32, i32
+}
+// ----
+func.def @structural_uniform_facts() -> (i32, i32, i32, i32) {
+  %r0 = scalar.constant 7 : i32
+  %r1 = scalar.constant 4 : i32
+  %r2 = scalar.constant 3 : i32
+  %r3 = scalar.constant 1065353216 : i32
+  func.return %r0, %r1, %r2, %r3 : i32, i32, i32, i32
+}
+
+// ====
+
+// Broadcast facts remap trailing source axes into each result lane.
+func.def @broadcast_small_static_lanes() -> (i32, i32) {
+  %five = scalar.constant 5 : i32
+  %six = scalar.constant 6 : i32
+  %v = vector.from_elements %five, %six : vector<2xi32>
+  %wide = vector.broadcast %v : vector<2xi32> -> vector<3x2xi32>
+  %r0 = vector.extract %wide[1, 0] : vector<3x2xi32> -> i32
+  %r1 = vector.extract %wide[2, 1] : vector<3x2xi32> -> i32
+  func.return %r0, %r1 : i32, i32
+}
+// ----
+func.def @broadcast_small_static_lanes() -> (i32, i32) {
+  %r0 = scalar.constant 5 : i32
+  %r1 = scalar.constant 6 : i32
+  func.return %r0, %r1 : i32, i32
+}
+
+// ====
+
+// Insert facts overwrite only the static inserted lane.
+func.def @insert_scalar_small_static_lane() -> (i32, i32) {
+  %one = scalar.constant 1 : i32
+  %two = scalar.constant 2 : i32
+  %three = scalar.constant 3 : i32
+  %four = scalar.constant 4 : i32
+  %nine = scalar.constant 9 : i32
+  %v = vector.from_elements %one, %two, %three, %four : vector<4xi32>
+  %updated = vector.insert %nine into %v[2] : i32, vector<4xi32>
+  %r0 = vector.extract %updated[1] : vector<4xi32> -> i32
+  %r1 = vector.extract %updated[2] : vector<4xi32> -> i32
+  func.return %r0, %r1 : i32, i32
+}
+// ----
+func.def @insert_scalar_small_static_lane() -> (i32, i32) {
+  %r0 = scalar.constant 2 : i32
+  %r1 = scalar.constant 9 : i32
+  func.return %r0, %r1 : i32, i32
+}
+
+// ====
+
+// Transpose facts use the same result-axis to source-axis permutation as the
+// op verifier and type transfer.
+func.def @transpose_small_static_lanes() -> (i32, i32) {
+  %c1 = scalar.constant 1 : i32
+  %c2 = scalar.constant 2 : i32
+  %c3 = scalar.constant 3 : i32
+  %c4 = scalar.constant 4 : i32
+  %c5 = scalar.constant 5 : i32
+  %c6 = scalar.constant 6 : i32
+  %v = vector.from_elements %c1, %c2, %c3, %c4, %c5, %c6 : vector<2x3xi32>
+  %t = vector.transpose<[1, 0]> %v : vector<2x3xi32> -> vector<3x2xi32>
+  %r0 = vector.extract %t[0, 1] : vector<3x2xi32> -> i32
+  %r1 = vector.extract %t[2, 1] : vector<3x2xi32> -> i32
+  func.return %r0, %r1 : i32, i32
+}
+// ----
+func.def @transpose_small_static_lanes() -> (i32, i32) {
+  %r0 = scalar.constant 4 : i32
+  %r1 = scalar.constant 6 : i32
+  func.return %r0, %r1 : i32, i32
+}
+
+// ====
+
+// Bitcast facts reinterpret exact same-width lanes without handling wider
+// byte-pack reshapes.
+func.def @bitcast_same_lane_raw_bits() -> (f32, i32) {
+  %one_bits = scalar.constant 0x3f800000 : i32
+  %two_bits = scalar.constant 0x40000000 : i32
+  %bits = vector.from_elements %one_bits, %two_bits : vector<2xi32>
+  %floats = vector.bitcast %bits : vector<2xi32> to vector<2xf32>
+  %one = scalar.constant 1.0 : f32
+  %two = scalar.constant 2.0 : f32
+  %float_values = vector.from_elements %one, %two : vector<2xf32>
+  %roundtrip = vector.bitcast %float_values : vector<2xf32> to vector<2xi32>
+  %r0 = vector.extract %floats[0] : vector<2xf32> -> f32
+  %r1 = vector.extract %roundtrip[1] : vector<2xi32> -> i32
+  func.return %r0, %r1 : f32, i32
+}
+// ----
+func.def @bitcast_same_lane_raw_bits() -> (f32, i32) {
+  %r0 = scalar.constant 1.0 : f32
+  %r1 = scalar.constant 1073741824 : i32
+  func.return %r0, %r1 : f32, i32
+}
+
+// ====
+
 // Small per-lane facts compose with uniform facts through lanewise integer ops.
 func.def @small_lanewise_with_uniform_then_reduce() -> (i32) {
   %c1 = scalar.constant 1 : i32

@@ -437,6 +437,11 @@ iree_status_t loom_vector_broadcast_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_broadcast_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_vector_broadcast_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -506,6 +511,11 @@ iree_status_t loom_vector_insert_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_insert_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_vector_insert_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -573,6 +583,11 @@ iree_status_t loom_vector_transpose_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_transpose_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_vector_transpose_type_transfer(
     loom_type_transfer_context_t* context,
     const loom_module_t* module, loom_op_t* op);
@@ -2644,6 +2659,11 @@ iree_status_t loom_vector_bitcast_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_bitcast_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_BITFIELD_EXTRACTU: Extract one fixed bitfield from each integer source lane and zero-extend it into the corresponding result lane. The bitfield is identified by least-significant-bit offset and width.
 // %lo = vector.bitfield.extractu %bytes {offset = 0, width = 4} : vector<16xi8> -> vector<16xi32>
