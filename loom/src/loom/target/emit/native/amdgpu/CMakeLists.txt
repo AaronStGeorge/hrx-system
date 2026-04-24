@@ -281,8 +281,6 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::low_registry
-    loom::src::loom::target::arch::amdgpu::wait_packets
-    loom::src::loom::target::arch::amdgpu::wait_plan
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main

@@ -36,6 +36,42 @@ low.func.def target(@x86_target) @x86_fragment(%input : reg<x86.gpr64>, %output 
 
 target.profile @x86_target preset("x86-avx512")
 
+low.func.def target(@x86_target) @x86_fragment(%lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>, %base : reg<x86.gpr64>) {
+  %copy = low.copy %lhs : reg<x86.zmm> -> reg<x86.zmm>
+  %sum = low.op<x86.avx512.vpaddd.zmm>(%copy, %rhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
+  %second = low.op<x86.avx512.vpaddd.zmm>(%lhs, %sum) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
+  low.op<x86.avx512.vmovdqu32.store.zmm>(%second, %base) {disp32 = 128} : (reg<x86.zmm>, reg<x86.gpr64>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  vmovdqa32 zmm2, zmm1
+  vpaddd zmm0, zmm2, zmm0
+  vpaddd zmm0, zmm1, zmm0
+  vmovdqu32 [rax + 128], zmm0
+  ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
+low.func.def target(@x86_target) @x86_fragment(%value : reg<x86.zmm>) {
+  %addr = low.const<x86.avx512.movimm.gpr64> {imm64 = 1024} : reg<x86.gpr64>
+  low.op<x86.avx512.vmovdqu32.store.zmm>(%value, %addr) {disp32 = -16} : (reg<x86.zmm>, reg<x86.gpr64>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  mov rax, 1024
+  vmovdqu32 [rax - 16], zmm0
+  ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
 low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %value : reg<x86.gpr32>, %rhs : reg<x86.zmm>) asm<x86.avx512.core> {
   %splat = vpbroadcastd %value
   %sum = vpaddd %splat, %rhs
