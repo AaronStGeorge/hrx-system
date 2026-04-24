@@ -164,6 +164,37 @@ TEST(Arena, OversizedAllocation) {
   iree_arena_block_pool_deinitialize(&pool);
 }
 
+TEST(Arena, AllocationThatOnlyFitsBeforeAlignmentIsOversized) {
+  static constexpr iree_host_size_t kOddBlockSize =
+      sizeof(iree_arena_block_t) + iree_max_align_t * 8 + 1;
+  iree_arena_block_pool_t pool;
+  iree_arena_block_pool_initialize(kOddBlockSize, iree_allocator_system(),
+                                   &pool);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&pool, &arena);
+
+  ASSERT_FALSE(
+      iree_host_size_has_alignment(pool.usable_block_size, iree_max_align_t));
+
+  void* near_block_limit = NULL;
+  IREE_ASSERT_OK(
+      iree_arena_allocate(&arena, pool.usable_block_size, &near_block_limit));
+  ASSERT_NE(near_block_limit, nullptr);
+  memset(near_block_limit, 0xAB, pool.usable_block_size);
+  EXPECT_EQ(arena.block_head, nullptr);
+  EXPECT_NE(arena.allocation_head, nullptr);
+
+  void* block_allocation = NULL;
+  IREE_ASSERT_OK(iree_arena_allocate(&arena, 32, &block_allocation));
+  ASSERT_NE(block_allocation, nullptr);
+  memset(block_allocation, 0xCD, 32);
+  EXPECT_NE(arena.block_head, nullptr);
+  EXPECT_LE(arena.block_bytes_remaining, pool.usable_block_size);
+
+  iree_arena_deinitialize(&arena);
+  iree_arena_block_pool_deinitialize(&pool);
+}
+
 TEST(Arena, Reset) {
   iree_arena_block_pool_t pool;
   iree_arena_block_pool_initialize(kBlockSize, iree_allocator_system(), &pool);
