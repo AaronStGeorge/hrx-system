@@ -19,6 +19,7 @@
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/json_output.h"
+#include "loom/tools/loom-check/template_sync.h"
 #include "loom/tools/loom-check/update.h"
 #include "loom/util/stream.h"
 
@@ -162,6 +163,16 @@ static void loom_check_print_case_header(iree_string_view_t filename,
 }
 
 // File writing for --update mode (the reconstruction logic is in update.h).
+static iree_status_t loom_check_write_source(iree_string_view_t path,
+                                             iree_string_view_t source,
+                                             iree_allocator_t allocator) {
+  const iree_const_byte_span_t contents = {
+      .data = (const uint8_t*)source.data,
+      .data_length = source.size,
+  };
+  return iree_io_file_contents_write(path, contents, allocator);
+}
+
 static iree_status_t loom_check_write_updates(
     iree_string_view_t path, iree_string_view_t original_source,
     const loom_check_file_t* file, const loom_check_case_update_t* updates,
@@ -174,15 +185,9 @@ static iree_status_t loom_check_write_updates(
       original_source, file, updates, &new_source, &update_count);
 
   if (iree_status_is_ok(status) && update_count > 0) {
-    FILE* fp = fopen(path.data, "wb");
-    if (!fp) {
-      status = iree_make_status(IREE_STATUS_PERMISSION_DENIED,
-                                "failed to open '%.*s' for writing",
-                                (int)path.size, path.data);
-    } else {
-      fwrite(iree_string_builder_buffer(&new_source), 1,
-             iree_string_builder_size(&new_source), fp);
-      fclose(fp);
+    status = loom_check_write_source(
+        path, iree_string_builder_view(&new_source), allocator);
+    if (iree_status_is_ok(status)) {
       fprintf(stderr, "updated %zu case%s in %.*s\n", update_count,
               update_count == 1 ? "" : "s", (int)path.size, path.data);
     }
@@ -190,6 +195,14 @@ static iree_status_t loom_check_write_updates(
 
   iree_string_builder_deinitialize(&new_source);
   return status;
+}
+
+static iree_string_view_t loom_check_file_contents_view(
+    const iree_io_file_contents_t* contents) {
+  return (iree_string_view_t){
+      .data = (const char*)contents->const_buffer.data,
+      .size = contents->const_buffer.data_length,
+  };
 }
 
 //===----------------------------------------------------------------------===//
@@ -210,6 +223,35 @@ static iree_status_t loom_check_process_file(
 
   loom_check_file_t file = {0};
   iree_status_t status = loom_check_parse(source, &arena, &file);
+
+  iree_string_builder_t template_synced_source;
+  iree_string_builder_initialize(allocator, &template_synced_source);
+  bool template_sync_changed = false;
+  if (iree_status_is_ok(status) && FLAG_update && file.has_template_directive) {
+    if (is_stdin) {
+      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "--update cannot be used with stdin");
+    } else {
+      iree_io_file_contents_t* template_contents = NULL;
+      status = iree_io_file_contents_read(file.template_path, allocator,
+                                          &template_contents);
+      if (iree_status_is_ok(status)) {
+        status = loom_check_template_sync_build_source(
+            source, &file, filename,
+            loom_check_file_contents_view(template_contents),
+            file.template_path, context, block_pool, &arena, allocator,
+            &template_synced_source, &template_sync_changed);
+      }
+      iree_io_file_contents_free(template_contents);
+      if (iree_status_is_ok(status) && template_sync_changed) {
+        iree_arena_deinitialize(&arena);
+        iree_arena_initialize(block_pool, &arena);
+        source = iree_string_builder_view(&template_synced_source);
+        file = (loom_check_file_t){0};
+        status = loom_check_parse(source, &arena, &file);
+      }
+    }
+  }
 
   loom_check_file_report_t report = {0};
   if (iree_status_is_ok(status)) {
@@ -337,6 +379,12 @@ static iree_status_t loom_check_process_file(
     if (any_updates) {
       status =
           loom_check_write_updates(filename, source, &file, updates, allocator);
+    } else if (template_sync_changed) {
+      status = loom_check_write_source(filename, source, allocator);
+      if (iree_status_is_ok(status)) {
+        fprintf(stderr, "synchronized template cases in %.*s\n",
+                (int)filename.size, filename.data);
+      }
     }
   }
 
@@ -357,6 +405,7 @@ static iree_status_t loom_check_process_file(
     free(results);
   }
   free(updates);
+  iree_string_builder_deinitialize(&template_synced_source);
   iree_arena_deinitialize(&arena);
   return status;
 }
@@ -384,10 +433,7 @@ static iree_status_t loom_check_read_and_process(
   }
 
   if (iree_status_is_ok(status)) {
-    iree_string_view_t source = {
-        .data = (const char*)contents->const_buffer.data,
-        .size = contents->const_buffer.data_length,
-    };
+    iree_string_view_t source = loom_check_file_contents_view(contents);
     iree_string_view_t filename =
         is_stdin ? iree_make_cstring_view("<stdin>") : path;
     status = loom_check_process_file(filename, source, is_stdin, environment,

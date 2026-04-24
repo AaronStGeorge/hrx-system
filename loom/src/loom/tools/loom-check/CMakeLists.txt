@@ -169,6 +169,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    template_sync
+  HDRS
+    "template_sync.h"
+  SRCS
+    "template_sync.c"
+  DEPS
+    ::check
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     update_test
@@ -179,6 +196,22 @@ loom_cc_test(
     ::update
     iree::base
     iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    template_sync_test
+  SRCS
+    "template_sync_test.cc"
+  DEPS
+    ::check
+    ::template_sync
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -213,6 +246,7 @@ loom_cc_library(
     ::execute
     ::json_output
     ::report
+    ::template_sync
     ::update
     iree::base
     iree::base::internal::arena
