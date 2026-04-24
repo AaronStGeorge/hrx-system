@@ -20,7 +20,6 @@
 #include "loom/ops/test/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
-#include "loom/testing/context.h"
 #include "loom/util/fact_table.h"
 
 namespace loom {
@@ -32,8 +31,15 @@ class SourceMemoryPlanTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     iree_arena_initialize(&block_pool_, &analysis_arena_);
-    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_KERNEL, loom_kernel_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_VIEW, loom_view_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
                                         &block_pool_, nullptr,
                                         iree_allocator_system(), &module_));
@@ -68,6 +74,17 @@ class SourceMemoryPlanTest : public ::testing::Test {
     loom_builder_initialize(
         module_, &module_->arena,
         loom_region_entry_block(loom_func_like_body(function_)), &builder_);
+  }
+
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+  void RegisterDialect(uint8_t dialect_id,
+                       DialectVtablesFn dialect_vtables_fn) {
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)count));
   }
 
   loom_value_id_t DefineBufferArg() {

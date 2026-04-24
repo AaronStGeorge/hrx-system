@@ -18,7 +18,6 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/target/test/descriptors.h"
 #include "loom/target/test/lower.h"
-#include "loom/testing/context.h"
 
 namespace loom {
 namespace {
@@ -34,8 +33,11 @@ class LowLowerRuleSelectionTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 
   void TearDown() override {
@@ -64,6 +66,17 @@ class LowLowerRuleSelectionTest : public ::testing::Test {
     }
     ADD_FAILURE() << "expected module to contain a function";
     return (loom_func_like_t){0};
+  }
+
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+  void RegisterDialect(uint8_t dialect_id,
+                       DialectVtablesFn dialect_vtables_fn) {
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)count));
   }
 
   const loom_op_t* FirstBodyOpOfKind(loom_module_t* module,

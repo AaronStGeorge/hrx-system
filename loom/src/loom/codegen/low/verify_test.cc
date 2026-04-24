@@ -21,10 +21,12 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/target/ops.h"
+#include "loom/ops/test/ops.h"
 #include "loom/target/emit/ireevm/low_registry.h"
 #include "loom/target/types.h"
-#include "loom/testing/context.h"
 
 namespace loom {
 namespace {
@@ -86,8 +88,12 @@ class LowDescriptorVerifyTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 
   void TearDown() override {
@@ -97,6 +103,17 @@ class LowDescriptorVerifyTest : public ::testing::Test {
 
   loom_module_t* ParseSource(const std::string& source) {
     return ParseSource(source, nullptr);
+  }
+
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+  void RegisterDialect(uint8_t dialect_id,
+                       DialectVtablesFn dialect_vtables_fn) {
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
+                                                 (uint16_t)count));
   }
 
   loom_module_t* ParseSource(
