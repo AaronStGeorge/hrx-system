@@ -11,6 +11,8 @@ round-trip behavior (parse -> print -> identical output) for all
 seven func dialect ops.
 """
 
+from collections.abc import Sequence
+
 import pytest
 
 from loom.assembly import (
@@ -27,6 +29,10 @@ from loom.dialect.func import (
     func_template,
     func_ukernel,
 )
+from loom.dsl import Op
+from loom.format.bytecode.reader import read_module
+from loom.format.bytecode.writer import write_module
+from loom.ir import Module
 
 # ============================================================================
 # Structural tests
@@ -106,26 +112,46 @@ class TestOpStructure:
 # ============================================================================
 
 
-def _roundtrip(text: str) -> None:
-    """Parse text, print, assert identical."""
-    from loom.builtin_types import ALL_BUILTIN_TYPES
+def _all_roundtrip_ops() -> Sequence[Op]:
+    """Returns ops used by func dialect text round-trip fixtures."""
     from loom.dialect.test import ALL_TEST_OPS
-    from loom.format.text.parser import Parser
-    from loom.format.text.printer import Printer
 
-    all_ops = list(ALL_TEST_OPS) + list(ALL_FUNC_OPS)
+    return list(ALL_TEST_OPS) + list(ALL_FUNC_OPS)
+
+
+def _parse_module(text: str) -> Module:
+    """Parses a module with func and test dialect fixtures registered."""
+    from loom.builtin_types import ALL_BUILTIN_TYPES
+    from loom.format.text.parser import Parser
 
     parser = Parser()
-    parser.register_ops(all_ops)
+    parser.register_ops(_all_roundtrip_ops())
     parser.register_types(ALL_BUILTIN_TYPES)
-    module = parser.parse(text)
+    return parser.parse(text)
+
+
+def _print_module(module: Module) -> str:
+    """Prints a module with func and test dialect fixtures registered."""
+    from loom.builtin_types import ALL_BUILTIN_TYPES
+    from loom.format.text.printer import Printer
 
     printer = Printer()
-    printer.register_ops(all_ops)
+    printer.register_ops(_all_roundtrip_ops())
     printer.register_types(ALL_BUILTIN_TYPES)
-    printed = printer.print_module(module)
+    return printer.print_module(module)
+
+
+def _roundtrip(text: str) -> None:
+    """Parse text, print, assert identical."""
+    module = _parse_module(text)
+    printed = _print_module(module)
 
     assert printed == text, f"Round-trip failed.\nInput:\n{text}\nOutput:\n{printed}"
+
+
+def _module_text(*lines: str) -> str:
+    """Returns newline-terminated Loom text from greppable source lines."""
+    return "\n".join(lines) + "\n"
 
 
 class TestFuncDefRoundTrip:
@@ -186,6 +212,132 @@ class TestFuncDeclRoundTrip:
             parser.parse("func.decl @bad(%a: f32) -> (f32) {\n  func.return %a : f32\n}\n")
 
 
+class TestFuncImportParsing:
+    def test_basic_import(self) -> None:
+        module = _parse_module(_module_text('func.decl import("linalg_lib") @matmul(%a: f32, %b: f32) -> (f32)'))
+        assert len(module.symbols) == 1
+        sym = module.symbols[0]
+        assert sym.is_import
+        assert sym.source_module == "linalg_lib"
+        assert sym.source_symbol == ""
+        assert sym.name == "matmul"
+        assert sym.op is not None
+        assert not sym.op.regions
+
+    def test_import_with_alias(self) -> None:
+        module = _parse_module(_module_text('func.decl import("math_lib", "matmul_v2") @my_matmul(%a: f32) -> (f32)'))
+        sym = module.symbols[0]
+        assert sym.is_import
+        assert sym.source_module == "math_lib"
+        assert sym.source_symbol == "matmul_v2"
+        assert sym.name == "my_matmul"
+
+    def test_public_import(self) -> None:
+        module = _parse_module(_module_text('func.decl public import("upstream") @relu(%x: f32) -> (f32)'))
+        sym = module.symbols[0]
+        assert sym.is_import
+        assert sym.is_public
+        assert sym.source_module == "upstream"
+
+    def test_import_with_types(self) -> None:
+        module = _parse_module(_module_text('func.decl import("kernels") @conv(%N: index, %w: tensor<3x3xf32>, %x: tensor<[%N]xf32>) -> (tensor<[%N]xf32>)'))
+        sym = module.symbols[0]
+        assert sym.is_import
+        op = sym.op
+        assert op is not None
+        assert len(op.operands) == 3
+        assert len(op.results) == 1
+
+    def test_public_import_canonical_order(self) -> None:
+        module = _parse_module(_module_text('func.decl public import("lib") @f(%a: f32) -> (f32)'))
+        sym = module.symbols[0]
+        assert sym.is_import
+        assert sym.is_public
+
+    def test_non_import_has_no_source(self) -> None:
+        module = _parse_module(_module_text("func.decl @extern(%a: f32) -> (f32)"))
+        sym = module.symbols[0]
+        assert not sym.is_import
+        assert sym.source_module == ""
+
+    def test_import_in_multi_function_module(self) -> None:
+        module = _parse_module(
+            _module_text(
+                'func.decl import("lib") @imported(%a: f32) -> (f32)',
+                "",
+                "func.def @local(%x: f32) -> (f32) {",
+                "  func.return %x : f32",
+                "}",
+            )
+        )
+        assert len(module.symbols) == 2
+        syms = {s.name: s for s in module.symbols}
+        assert syms["imported"].is_import
+        assert syms["imported"].source_module == "lib"
+        assert not syms["local"].is_import
+
+
+class TestFuncImportRoundTrip:
+    def test_basic_import_roundtrip(self) -> None:
+        _roundtrip(_module_text('func.decl import("linalg_lib") @matmul(%a: f32, %b: f32) -> (f32)'))
+
+    def test_import_alias_roundtrip(self) -> None:
+        _roundtrip(_module_text('func.decl import("math_lib", "matmul") @my_matmul(%a: f32) -> (f32)'))
+
+    def test_public_import_roundtrip(self) -> None:
+        _roundtrip(_module_text('func.decl public import("upstream") @relu(%x: f32) -> (f32)'))
+
+    def test_mixed_module_roundtrip(self) -> None:
+        _roundtrip(
+            _module_text(
+                'func.decl import("lib") @imported(%a: f32) -> (f32)',
+                "",
+                "func.def @local(%x: f32) -> (f32) {",
+                "  func.return %x : f32",
+                "}",
+            )
+        )
+
+
+class TestFuncImportCrossFormatRoundTrip:
+    def _cross_roundtrip(self, text: str, expected: str | None = None) -> None:
+        module = _parse_module(text)
+        loaded = read_module(write_module(module))
+        printed = _print_module(loaded)
+        target = expected if expected is not None else text
+        assert printed == target, f"Cross-format round-trip mismatch:\n  expected: {target!r}\n  got:      {printed!r}"
+
+    def test_import_survives_bytecode(self) -> None:
+        self._cross_roundtrip(
+            _module_text('func.decl import("linalg_lib") @matmul(%a: f32, %b: f32) -> (f32)'),
+        )
+
+    def test_import_alias_survives_bytecode(self) -> None:
+        self._cross_roundtrip(
+            _module_text('func.decl import("math_lib", "matmul") @my_matmul(%a: f32) -> (f32)'),
+        )
+
+    def test_import_metadata_preserved(self) -> None:
+        module = _parse_module(_module_text('func.decl import("math_lib", "original") @alias(%a: f32) -> (f32)'))
+        loaded = read_module(write_module(module))
+        sym = loaded.symbols[0]
+        assert sym.is_import
+        assert sym.source_module == "math_lib"
+        assert sym.source_symbol == "original"
+        assert sym.name == "alias"
+
+    def test_mixed_module_survives_bytecode(self) -> None:
+        self._cross_roundtrip(
+            _module_text(
+                'func.decl import("lib") @imported(%a: f32) -> (f32)',
+                "",
+                "func.def @local(%x: f32) -> (f32) {",
+                "  func.return %x : f32",
+                "}",
+            ),
+        )
+
+
 class TestFuncCallApplyRoundTrip:
     """func.call and func.apply are body ops — they appear inside functions."""
 
@@ -219,3 +371,67 @@ class TestMultipleFunctions:
 
     def test_multiple_defs(self) -> None:
         _roundtrip("func.def @f1(%a: f32) -> (f32) {\n  func.return %a : f32\n}\n\nfunc.def @f2(%a: i32) -> (i32) {\n  func.return %a : i32\n}\n")
+
+
+class TestFuncTemplateUkernelRoundTrip:
+    def test_template_basic(self) -> None:
+        _roundtrip(
+            _module_text(
+                "func.template<tile.contract> @impl(%a: tile<4xf32>) -> (tile<4xf32>) {",
+                "  func.return %a : tile<4xf32>",
+                "}",
+            )
+        )
+
+    def test_template_with_priority(self) -> None:
+        _roundtrip(
+            _module_text(
+                "func.template<tile.contract> priority(10) @high_priority(%a: tile<4xf32>) -> (tile<4xf32>) {",
+                "  func.return %a : tile<4xf32>",
+                "}",
+            )
+        )
+
+    def test_template_device_cc(self) -> None:
+        _roundtrip(
+            _module_text(
+                "func.template<tile.contract> device @device_impl(%a: tile<4xf32>) -> (tile<4xf32>) {",
+                "  func.return %a : tile<4xf32>",
+                "}",
+            )
+        )
+
+    def test_ukernel_basic(self) -> None:
+        _roundtrip(_module_text("func.ukernel<tile.contract> @asm_impl(%a: tile<4xf32>) -> (tile<4xf32>)"))
+
+    def test_ukernel_device(self) -> None:
+        _roundtrip(_module_text("func.ukernel<tile.contract> device @asm_device(%a: tile<4xf32>) -> (tile<4xf32>)"))
+
+    def test_ukernel_with_priority(self) -> None:
+        _roundtrip(_module_text("func.ukernel<tile.contract> priority(5) @prioritized(%a: f32) -> (f32)"))
+
+    def test_template_implements_stored(self) -> None:
+        module = _parse_module(
+            _module_text(
+                "func.template<tile.contract> @impl(%a: f32) -> (f32) {",
+                "  func.return %a : f32",
+                "}",
+            )
+        )
+        op = module.symbols[0].op
+        assert op is not None
+        assert op.attributes.get("implements") == "tile.contract"
+        assert op.attributes.get("priority") is None
+
+    def test_template_priority_stored(self) -> None:
+        module = _parse_module(
+            _module_text(
+                "func.template<tile.contract> priority(42) @impl(%a: f32) -> (f32) {",
+                "  func.return %a : f32",
+                "}",
+            )
+        )
+        op = module.symbols[0].op
+        assert op is not None
+        assert op.attributes.get("implements") == "tile.contract"
+        assert op.attributes.get("priority") == 42

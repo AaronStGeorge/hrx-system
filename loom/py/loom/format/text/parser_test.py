@@ -13,8 +13,6 @@ import pytest
 
 from loom.assembly import TypeOf
 from loom.builtin_types import ALL_BUILTIN_TYPES
-from loom.dialect.encoding import ALL_ENCODING_OPS
-from loom.dialect.func import ALL_FUNC_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dsl import ANY, TypeDef, TypeParam
 from loom.format.bytecode.reader import read_module
@@ -611,21 +609,17 @@ class TestTypeRoundTrip:
 
 
 def _op_parser() -> Parser:
-    """Create a parser with test + func + encoding ops and built-in types."""
+    """Create a parser with test ops and built-in types."""
     parser = Parser()
     parser.register_ops(ALL_TEST_OPS)
-    parser.register_ops(ALL_FUNC_OPS)
-    parser.register_ops(ALL_ENCODING_OPS)
     parser.register_types(ALL_BUILTIN_TYPES)
     return parser
 
 
 def _op_printer(**kwargs: Any) -> Printer:
-    """Create a printer with test + func + encoding ops and built-in types."""
+    """Create a printer with test ops and built-in types."""
     printer = Printer(**kwargs)
     printer.register_ops(ALL_TEST_OPS)
-    printer.register_ops(ALL_FUNC_OPS)
-    printer.register_ops(ALL_ENCODING_OPS)
     printer.register_types(ALL_BUILTIN_TYPES)
     return printer
 
@@ -952,7 +946,7 @@ class TestParseModule:
 
     def test_simple_function(self) -> None:
         module = self._parse_module(
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             "  %r = test.neg %input : f32\n"
             "  test.yield %r : f32\n"
             "}\n"
@@ -969,7 +963,7 @@ class TestParseModule:
 
     def test_simple_function_records_value_metadata(self) -> None:
         module = self._parse_module(
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             "  %r = test.neg %input : f32\n"
             "  test.yield %r : f32\n"
             "}\n"
@@ -996,7 +990,7 @@ class TestParseModule:
         assert result.uses == [Use(user_op_index=1, operand_index=0, block_index=0)]
 
     def test_public_declaration(self) -> None:
-        module = self._parse_module("func.decl public @exported(%a: i32) -> (i32)\n")
+        module = self._parse_module("test.decl public @exported(%a: i32) -> (i32)\n")
         assert len(module.symbols) == 1
         op = module.symbols[0].op
         assert op is not None
@@ -1004,7 +998,7 @@ class TestParseModule:
         assert not op.regions  # Declarations have no body region.
 
     def test_declaration_signature_args_are_operand_defs(self) -> None:
-        module = self._parse_module("func.decl @identity(%a: f32) -> (%a as f32)\n")
+        module = self._parse_module("test.decl @identity(%a: f32) -> (%a as f32)\n")
         op = module.symbols[0].op
         assert op is not None
 
@@ -1024,11 +1018,11 @@ class TestParseModule:
 
     def test_multiple_functions(self) -> None:
         module = self._parse_module(
-            "func.def @f1(%a: f32) -> (f32) {\n"
+            "test.func @f1(%a: f32) -> (f32) {\n"
             "  test.yield %a : f32\n"
             "}\n"
             "\n"
-            "func.def @f2(%b: i32) -> (i32) {\n"
+            "test.func @f2(%b: i32) -> (i32) {\n"
             "  test.yield %b : i32\n"
             "}\n"
         )
@@ -1048,7 +1042,7 @@ class TestParseEncodingAlias:
     def test_alias_definition(self) -> None:
         module = self._parse_module(
             "#enc = #q8_0<block=32>\n"
-            "func.def @f(%a: tile<256xi8, #enc>) -> (tile<256xi8, #enc>) {\n"
+            "test.func @f(%a: tile<256xi8, #enc>) -> (tile<256xi8, #enc>) {\n"
             "  test.yield %a : tile<256xi8, #enc>\n"
             "}\n"
         )
@@ -1062,7 +1056,7 @@ class TestParseEncodingAlias:
     def test_alias_without_params(self) -> None:
         module = self._parse_module(
             "#w = #q6_k\n"
-            "func.def @f(%a: tile<256xi8, #w>) -> (tile<256xi8, #w>) {\n"
+            "test.func @f(%a: tile<256xi8, #w>) -> (tile<256xi8, #w>) {\n"
             "  test.yield %a : tile<256xi8, #w>\n"
             "}\n"
         )
@@ -1070,96 +1064,6 @@ class TestParseEncodingAlias:
         assert enc.alias == "w"
         assert enc.name == "q6_k"
         assert enc.params == ()
-
-    def test_encoding_define_inline_spec_attr(self) -> None:
-        module = self._parse_module(
-            "func.def @f() -> () {\n"
-            "  %enc = encoding.define #q8_0<block=32> : encoding<schema>\n"
-            "  test.yield\n"
-            "}\n"
-        )
-        func_op = module.symbols[0].op
-        assert func_op is not None
-        define_op = func_op.regions[0].blocks[0].ops[0]
-        assert define_op.name == "encoding.define"
-        assert define_op.attributes["spec"] == EncodingInstance(
-            name="q8_0",
-            params=(("block", 32),),
-        )
-        assert module.encodings == [
-            EncodingInstance(name="q8_0", params=(("block", 32),))
-        ]
-
-    def test_encoding_define_dynamic_params(self) -> None:
-        module = self._parse_module(
-            "func.def @f(%group_size: index, %scales: tensor<[%group_size]xf32>) "
-            "-> () {\n"
-            "  %enc = encoding.define #q8_0<block=32> "
-            "{scales = %scales : tensor<[%group_size]xf32>, "
-            "group_size = %group_size : index} : encoding<schema>\n"
-            "  test.yield\n"
-            "}\n"
-        )
-        printed = _op_printer().print_module(module)
-        assert printed == (
-            "func.def @f(%group_size: index, "
-            "%scales: tensor<[%group_size]xf32>) {\n"
-            "  %enc = encoding.define #q8_0<block=32> "
-            "{group_size = %group_size : index, "
-            "scales = %scales : tensor<[%group_size]xf32>} : encoding<schema>\n"
-            "  test.yield\n"
-            "}\n"
-        )
-        func_op = module.symbols[0].op
-        assert func_op is not None
-        define_op = func_op.regions[0].blocks[0].ops[0]
-        assert define_op.name == "encoding.define"
-        assert define_op.attributes["param_names"] == CanonicalAttrDict(
-            (("group_size", 0), ("scales", 1))
-        )
-
-    def test_encoding_define_rejects_static_dynamic_duplicate(self) -> None:
-        with pytest.raises(ParseError, match="both static and dynamic"):
-            self._parse_module(
-                "func.def @f(%block: index) -> () {\n"
-                "  %enc = encoding.define #q8_0<block=32> "
-                "{block = %block : index} : encoding<schema>\n"
-                "  test.yield\n"
-                "}\n"
-            )
-
-    def test_static_encoding_rejects_ssa_parameter(self) -> None:
-        with pytest.raises(ParseError, match="cannot use an SSA value"):
-            self._parse_module(
-                "func.def @f(%group_size: index) -> () {\n"
-                "  %enc = encoding.define #q8_0<group_size=%group_size> : encoding<schema>\n"
-                "  test.yield\n"
-                "}\n"
-            )
-
-    def test_encoding_define_alias_spec_attr(self) -> None:
-        module = self._parse_module(
-            "#enc = #q8_0<block=32>\n"
-            "func.def @f() -> () {\n"
-            "  %enc = encoding.define #enc : encoding<schema>\n"
-            "  test.yield\n"
-            "}\n"
-        )
-        func_op = module.symbols[0].op
-        assert func_op is not None
-        define_op = func_op.regions[0].blocks[0].ops[0]
-        assert define_op.attributes["spec"] == EncodingInstance(
-            name="q8_0",
-            alias="enc",
-            params=(("block", 32),),
-        )
-        assert module.encodings == [
-            EncodingInstance(
-                name="q8_0",
-                alias="enc",
-                params=(("block", 32),),
-            )
-        ]
 
     def test_alias_cannot_shadow_known_family(self) -> None:
         parser = _op_parser()
@@ -1178,7 +1082,7 @@ class TestEncodingValidation:
         parser.register_encodings(["q8_0", "q6_k"])
         # Should not raise.
         parser.parse(
-            "func.def @f(%a: tile<256xi8, #q8_0>) -> (tile<256xi8, #q8_0>) {\n"
+            "test.func @f(%a: tile<256xi8, #q8_0>) -> (tile<256xi8, #q8_0>) {\n"
             "  test.yield %a : tile<256xi8, #q8_0>\n"
             "}\n"
         )
@@ -1188,7 +1092,7 @@ class TestEncodingValidation:
         parser.register_encodings(["q8_0"])
         with pytest.raises(ParseError, match="unknown encoding"):
             parser.parse(
-                "func.def @f(%a: tile<256xi8, #q999>) -> (tile<256xi8, #q999>) {\n"
+                "test.func @f(%a: tile<256xi8, #q999>) -> (tile<256xi8, #q999>) {\n"
                 "  test.yield %a : tile<256xi8, #q999>\n"
                 "}\n"
             )
@@ -1212,7 +1116,7 @@ class TestRoundTrip:
 
     def test_simple_function(self) -> None:
         self._roundtrip_text(
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             "  %neg0 = test.neg %input : f32\n"
             "  test.yield %neg0 : f32\n"
             "}\n"
@@ -1221,7 +1125,7 @@ class TestRoundTrip:
     def test_operation_and_block_comments(self) -> None:
         self._roundtrip_text(
             "// top-level function\n"
-            "func.def @comments() {\n"
+            "test.func @comments() {\n"
             "// explicit entry block\n"
             "^entry:\n"
             "  // body terminator\n"
@@ -1232,7 +1136,7 @@ class TestRoundTrip:
     def test_convert_bare_result_type(self) -> None:
         """test.convert uses ResultType (bare, no parens) and round-trips."""
         self._roundtrip_text(
-            "func.def @convert(%x: i32) -> (f32) {\n"
+            "test.func @convert(%x: i32) -> (f32) {\n"
             "  %r = test.convert %x : i32 -> f32\n"
             "  test.yield %r : f32\n"
             "}\n"
@@ -1241,7 +1145,7 @@ class TestRoundTrip:
     def test_convert_tile_result_type(self) -> None:
         """test.convert with tile types round-trips with bare result."""
         self._roundtrip_text(
-            "func.def @convert_tile(%x: tile<4xi8>) -> (tile<4xf32>) {\n"
+            "test.func @convert_tile(%x: tile<4xi8>) -> (tile<4xf32>) {\n"
             "  %r = test.convert %x : tile<4xi8> -> tile<4xf32>\n"
             "  test.yield %r : tile<4xf32>\n"
             "}\n"
@@ -1249,7 +1153,7 @@ class TestRoundTrip:
 
     def test_empty_operand_dict(self) -> None:
         self._roundtrip_text(
-            "func.def @operand_dict_empty(%input: f32) -> (f32) {\n"
+            "test.func @operand_dict_empty(%input: f32) -> (f32) {\n"
             "  %result = test.operand_dict %input : f32\n"
             "  test.yield %result : f32\n"
             "}\n"
@@ -1259,7 +1163,7 @@ class TestRoundTrip:
 class TestOperandDict:
     def test_unsorted_keys_print_in_canonical_order(self) -> None:
         module = _op_parser().parse(
-            "func.def @operand_dict(%input: f32, %beta: f32, %alpha: i32) "
+            "test.func @operand_dict(%input: f32, %beta: f32, %alpha: i32) "
             "-> (f32) {\n"
             "  %result = test.operand_dict %input "
             "{beta = %beta : f32, alpha = %alpha : i32} : f32\n"
@@ -1268,7 +1172,7 @@ class TestOperandDict:
         )
         printed = _op_printer().print_module(module)
         assert printed == (
-            "func.def @operand_dict(%input: f32, %beta: f32, %alpha: i32) "
+            "test.func @operand_dict(%input: f32, %beta: f32, %alpha: i32) "
             "-> (f32) {\n"
             "  %result = test.operand_dict %input "
             "{alpha = %alpha : i32, beta = %beta : f32} : f32\n"
@@ -1279,7 +1183,7 @@ class TestOperandDict:
     def test_duplicate_key_rejected(self) -> None:
         with pytest.raises(ParseError, match="duplicate operand dictionary key"):
             _op_parser().parse(
-                "func.def @operand_dict(%input: f32, %alpha: f32) -> (f32) {\n"
+                "test.func @operand_dict(%input: f32, %alpha: f32) -> (f32) {\n"
                 "  %result = test.operand_dict %input "
                 "{alpha = %alpha : f32, alpha = %input : f32} : f32\n"
                 "  test.yield %result : f32\n"
@@ -1289,7 +1193,7 @@ class TestOperandDict:
     def test_type_annotation_mismatch_rejected(self) -> None:
         with pytest.raises(ParseError, match="operand dictionary entry 'alpha'"):
             _op_parser().parse(
-                "func.def @operand_dict(%input: f32, %alpha: i32) -> (f32) {\n"
+                "test.func @operand_dict(%input: f32, %alpha: i32) -> (f32) {\n"
                 "  %result = test.operand_dict %input {alpha = %alpha : f32} : f32\n"
                 "  test.yield %result : f32\n"
                 "}\n"
@@ -1299,7 +1203,7 @@ class TestOperandDict:
 class TestAttrTable:
     def test_grouped_rows_roundtrip(self) -> None:
         module = _op_parser().parse(
-            "func.def @attr_table(%selector: index, %a0: i32, %b0: f32, "
+            "test.func @attr_table(%selector: index, %a0: i32, %b0: f32, "
             "%a1: i32, %b1: f32, %ad: i32, %bd: f32) -> (i32, f32) {\n"
             "  %x, %y = test.attr_table %selector "
             "{0 = (%a0, %b0), 1 = (%a1, %b1)} default(%ad, %bd) : i32, f32\n"
@@ -1308,7 +1212,7 @@ class TestAttrTable:
         )
         printed = _op_printer().print_module(module)
         assert printed == (
-            "func.def @attr_table(%selector: index, %a0: i32, %b0: f32, "
+            "test.func @attr_table(%selector: index, %a0: i32, %b0: f32, "
             "%a1: i32, %b1: f32, %ad: i32, %bd: f32) -> (i32, f32) {\n"
             "  %x, %y = test.attr_table %selector {\n"
             "    0 = (%a0, %b0),\n"
@@ -1320,14 +1224,14 @@ class TestAttrTable:
 
     def test_empty_cases_roundtrip(self) -> None:
         module = _op_parser().parse(
-            "func.def @attr_table_empty(%selector: index, %fallback: i32) -> (i32) {\n"
+            "test.func @attr_table_empty(%selector: index, %fallback: i32) -> (i32) {\n"
             "  %x = test.attr_table %selector {} default(%fallback) : i32\n"
             "  test.yield %x : i32\n"
             "}\n"
         )
         printed = _op_printer().print_module(module)
         assert printed == (
-            "func.def @attr_table_empty(%selector: index, %fallback: i32) -> (i32) {\n"
+            "test.func @attr_table_empty(%selector: index, %fallback: i32) -> (i32) {\n"
             "  %x = test.attr_table %selector {} default(%fallback) : i32\n"
             "  test.yield %x : i32\n"
             "}\n"
@@ -1336,7 +1240,7 @@ class TestAttrTable:
     def test_case_row_width_mismatch_rejected(self) -> None:
         with pytest.raises(ParseError, match="attribute table rows"):
             _op_parser().parse(
-                "func.def @attr_table_bad(%selector: index, %a: i32, %b: i32) "
+                "test.func @attr_table_bad(%selector: index, %a: i32, %b: i32) "
                 "-> (i32, i32) {\n"
                 "  %x, %y = test.attr_table %selector "
                 "{0 = (%a, %b), 1 = (%a)} default(%a, %b) : i32, i32\n"
@@ -1347,7 +1251,7 @@ class TestAttrTable:
     def test_default_row_width_mismatch_rejected(self) -> None:
         with pytest.raises(ParseError, match="attribute table default row"):
             _op_parser().parse(
-                "func.def @attr_table_bad(%selector: index, %a: i32, %b: i32) "
+                "test.func @attr_table_bad(%selector: index, %a: i32, %b: i32) "
                 "-> (i32, i32) {\n"
                 "  %x, %y = test.attr_table %selector "
                 "{0 = (%a, %b)} default(%a) : i32, i32\n"
@@ -1359,7 +1263,7 @@ class TestAttrTable:
 class TestRegionTable:
     def test_grouped_regions_roundtrip(self) -> None:
         module = _op_parser().parse(
-            "func.def @region_table(%selector: index) {\n"
+            "test.func @region_table(%selector: index) {\n"
             "  test.region_table %selector {\n"
             "    case 0 {\n"
             "      test.yield\n"
@@ -1376,7 +1280,7 @@ class TestRegionTable:
         )
         printed = _op_printer().print_module(module)
         assert printed == (
-            "func.def @region_table(%selector: index) {\n"
+            "test.func @region_table(%selector: index) {\n"
             "  test.region_table %selector {\n"
             "    case 0 {\n"
             "      test.yield\n"
@@ -1394,7 +1298,7 @@ class TestRegionTable:
 
     def test_empty_cases_roundtrip(self) -> None:
         module = _op_parser().parse(
-            "func.def @region_table_empty(%selector: index) {\n"
+            "test.func @region_table_empty(%selector: index) {\n"
             "  test.region_table %selector {\n"
             "    default {\n"
             "      test.yield\n"
@@ -1405,7 +1309,7 @@ class TestRegionTable:
         )
         printed = _op_printer().print_module(module)
         assert printed == (
-            "func.def @region_table_empty(%selector: index) {\n"
+            "test.func @region_table_empty(%selector: index) {\n"
             "  test.region_table %selector {\n"
             "    default {\n"
             "      test.yield\n"
@@ -1462,7 +1366,7 @@ class TestParseMapOp:
     def test_binding_name_can_shadow_outer_scope_name(self) -> None:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         module = _op_parser().parse(
-            "func.def @shadow(%x: f32, %tile: tile<4xf32>) -> (f32) {\n"
+            "test.func @shadow(%x: f32, %tile: tile<4xf32>) -> (f32) {\n"
             "  %mapped = test.map(%x = %tile : tile<4xf32>) {\n"
             "    test.yield %x : f32\n"
             "  } -> (f32)\n"
@@ -1483,7 +1387,7 @@ class TestParseMapOp:
     def test_binding_name_is_region_local(self) -> None:
         with pytest.raises(ParseError, match="undefined SSA value '%element'"):
             _op_parser().parse(
-                "func.def @leak(%tile: tile<4xf32>) -> (f32) {\n"
+                "test.func @leak(%tile: tile<4xf32>) -> (f32) {\n"
                 "  %mapped = test.map(%element = %tile : tile<4xf32>) {\n"
                 "    test.yield %element : f32\n"
                 "  } -> (f32)\n"
@@ -1621,7 +1525,7 @@ class TestParseLoopOp:
     def test_iv_name_is_region_local(self) -> None:
         with pytest.raises(ParseError, match="undefined SSA value '%i'"):
             _op_parser().parse(
-                "func.def @loop(%lo: index, %hi: index, %step: index) {\n"
+                "test.func @loop(%lo: index, %hi: index, %step: index) {\n"
                 "  test.loop %i = %lo to %hi step %step {\n"
                 "  }\n"
                 "  test.loop %again = %i to %hi step %step {\n"
@@ -1787,7 +1691,7 @@ class TestParsePoolType:
     def test_pool_roundtrip(self) -> None:
         """pool<[%BS]> round-trips through parse → print in a function."""
         text = (
-            "func.def @use_pool(%BS: index, %pool: pool<[%BS]>) -> (pool<[%BS]>) {\n"
+            "test.func @use_pool(%BS: index, %pool: pool<[%BS]>) -> (pool<[%BS]>) {\n"
             "  test.yield %pool : pool<[%BS]>\n"
             "}\n"
         )
@@ -1813,8 +1717,10 @@ class TestParsePredicates:
         """Parse a function with where [mul(%M, 16)]."""
 
         module = self._parse_module(
-            "func.decl @f(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>)"
-            " where [mul(%M, 16)]\n"
+            "test.func @f(%M: index, %a: tensor<[%M]xf32>)"
+            " where [mul(%M, 16)] {\n"
+            "  test.yield\n"
+            "}\n"
         )
         op = module.symbols[0].op
         assert op is not None
@@ -1832,8 +1738,10 @@ class TestParsePredicates:
         """Parse a function with multiple predicates."""
 
         module = self._parse_module(
-            "func.decl @f(%M: index, %K: index, %a: tensor<[%M]x[%K]xf32>) -> (tensor<[%M]xf32>)"
-            " where [mul(%M, 16), lt(%K, 1024), ne(%K, 0), range(%M, 32, 512)]\n"
+            "test.func @f(%M: index, %K: index, %a: tensor<[%M]x[%K]xf32>)"
+            " where [mul(%M, 16), lt(%K, 1024), ne(%K, 0), range(%M, 32, 512)] {\n"
+            "  test.yield\n"
+            "}\n"
         )
         op = module.symbols[0].op
         assert op is not None
@@ -1854,8 +1762,10 @@ class TestParsePredicates:
         """Parse pow2(%N) — single-argument predicate."""
 
         module = self._parse_module(
-            "func.decl @f(%N: index, %a: tensor<[%N]xf32>) -> (tensor<[%N]xf32>)"
-            " where [pow2(%N)]\n"
+            "test.func @f(%N: index, %a: tensor<[%N]xf32>)"
+            " where [pow2(%N)] {\n"
+            "  test.yield\n"
+            "}\n"
         )
         op = module.symbols[0].op
         assert op is not None
@@ -1871,16 +1781,20 @@ class TestParsePredicates:
             ParseError, match="predicate 'pow2' expects 1 arguments, got 2"
         ):
             self._parse_module(
-                "func.decl @f(%N: index, %a: tensor<[%N]xf32>) -> (tensor<[%N]xf32>)"
-                " where [pow2(%N, 16)]\n"
+                "test.func @f(%N: index, %a: tensor<[%N]xf32>)"
+                " where [pow2(%N, 16)] {\n"
+                "  test.yield\n"
+                "}\n"
             )
 
     def test_named_result_predicate(self) -> None:
         """Parse eq(%idx, %M) — result name argument."""
 
         module = self._parse_module(
-            "func.decl @f(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>, %idx: index)"
-            " where [eq(%idx, %M)]\n"
+            "test.func @f(%M: index, %a: tensor<[%M]xf32>) -> (%idx: index)"
+            " where [eq(%idx, %M)] {\n"
+            "  test.yield %M : index\n"
+            "}\n"
         )
         op = module.symbols[0].op
         assert op is not None
@@ -1896,7 +1810,7 @@ class TestParsePredicates:
     def test_no_predicates(self) -> None:
         """Functions without where clause have empty predicates list."""
         module = self._parse_module(
-            "func.def @f(%a: f32) -> (f32) {\n  test.yield %a : f32\n}\n"
+            "test.func @f(%a: f32) -> (f32) {\n  test.yield %a : f32\n}\n"
         )
         op = module.symbols[0].op
         assert op is not None
@@ -1905,7 +1819,7 @@ class TestParsePredicates:
     def test_predicates_with_body(self) -> None:
         """Where clause followed by function body."""
         module = self._parse_module(
-            "func.def @f(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>)"
+            "test.func @f(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>)"
             " where [mul(%M, 16)] {\n"
             "  test.yield %a : tensor<[%M]xf32>\n"
             "}\n"
@@ -1929,34 +1843,40 @@ class TestPredicateRoundTrip:
             f"Round-trip failed.\nInput:\n{text}\nOutput:\n{printed}"
         )
 
-    def test_single_predicate_declaration(self) -> None:
-        """Declarations must round-trip dim names and predicates."""
+    def test_single_predicate_function(self) -> None:
+        """Function-like ops must round-trip dim names and predicates."""
         self._roundtrip_text(
-            "func.decl @f(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>)"
-            " where [mul(%M, 16)]\n"
+            "test.func @f(%M: index, %a: tensor<[%M]xf32>) where [mul(%M, 16)] {\n"
+            "  test.yield\n"
+            "}\n"
         )
 
-    def test_multiple_predicates_declaration(self) -> None:
+    def test_multiple_predicates_function(self) -> None:
         self._roundtrip_text(
-            "func.decl @f(%M: index, %K: index, %a: tensor<[%M]x[%K]xf32>) -> (tensor<[%M]xf32>)"
-            " where [mul(%M, 16), lt(%K, 1024), range(%M, 32, 512)]\n"
+            "test.func @f(%M: index, %K: index, %a: tensor<[%M]x[%K]xf32>) "
+            "where [mul(%M, 16), lt(%K, 1024), range(%M, 32, 512)] {\n"
+            "  test.yield\n"
+            "}\n"
         )
 
     def test_pow2_predicate(self) -> None:
         self._roundtrip_text(
-            "func.decl @f(%N: index, %a: tensor<[%N]xf32>) -> (tensor<[%N]xf32>)"
-            " where [pow2(%N)]\n"
+            "test.func @f(%N: index, %a: tensor<[%N]xf32>) where [pow2(%N)] {\n"
+            "  test.yield\n"
+            "}\n"
         )
 
     def test_result_name_predicate(self) -> None:
         self._roundtrip_text(
-            "func.decl @f(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>, %idx: index)"
-            " where [eq(%idx, %M)]\n"
+            "test.func @f(%M: index, %a: tensor<[%M]xf32>) -> (%idx: index) "
+            "where [eq(%idx, %M)] {\n"
+            "  test.yield %M : index\n"
+            "}\n"
         )
 
     def test_predicates_with_body(self) -> None:
         self._roundtrip_text(
-            "func.def @f(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>)"
+            "test.func @f(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>)"
             " where [mul(%M, 16)] {\n"
             "  test.yield %a : tensor<[%M]xf32>\n"
             "}\n"
@@ -1964,8 +1884,10 @@ class TestPredicateRoundTrip:
 
     def test_public_device_with_predicates(self) -> None:
         self._roundtrip_text(
-            "func.decl public device @vnni(%M: index, %K: index, %w: tensor<[%M]x[%K]xi8>) -> (tensor<[%M]xf32>)"
-            " where [mul(%M, 16), mul(%K, 32)]\n"
+            "test.func public device @vnni(%M: index, %K: index, %w: tensor<[%M]x[%K]xi8>) "
+            "where [mul(%M, 16), mul(%K, 32)] {\n"
+            "  test.yield\n"
+            "}\n"
         )
 
 
@@ -1981,7 +1903,7 @@ class TestAssumeOpRoundTrip:
 
     def test_single_predicate(self) -> None:
         self._roundtrip_text(
-            "func.def @f(%M: index) -> (index) {\n"
+            "test.func @f(%M: index) -> (index) {\n"
             "  %M2 = test.assume %M [mul(%M, 16)] : index\n"
             "  test.yield %M2 : index\n"
             "}\n"
@@ -1989,7 +1911,7 @@ class TestAssumeOpRoundTrip:
 
     def test_multiple_predicates(self) -> None:
         self._roundtrip_text(
-            "func.def @f(%M: index, %K: index) -> (index, index) {\n"
+            "test.func @f(%M: index, %K: index) -> (index, index) {\n"
             "  %M2, %K2 = test.assume %M, %K [mul(%M, 16), lt(%K, 1024)] : index, index\n"
             "  test.yield %M2, %K2 : index, index\n"
             "}\n"
@@ -1997,7 +1919,7 @@ class TestAssumeOpRoundTrip:
 
     def test_pow2_predicate(self) -> None:
         self._roundtrip_text(
-            "func.def @f(%N: index) -> (index) {\n"
+            "test.func @f(%N: index) -> (index) {\n"
             "  %N2 = test.assume %N [pow2(%N)] : index\n"
             "  test.yield %N2 : index\n"
             "}\n"
@@ -2005,7 +1927,7 @@ class TestAssumeOpRoundTrip:
 
     def test_range_predicate(self) -> None:
         self._roundtrip_text(
-            "func.def @f(%M: index) -> (index) {\n"
+            "test.func @f(%M: index) -> (index) {\n"
             "  %M2 = test.assume %M [range(%M, 32, 512)] : index\n"
             "  test.yield %M2 : index\n"
             "}\n"
@@ -2013,130 +1935,7 @@ class TestAssumeOpRoundTrip:
 
 
 # ============================================================================
-# Import declarations — parsing and round-trip
-# ============================================================================
-
-
-class TestParseImportDeclaration:
-    def _parse_module(self, text: str) -> Module:
-        return _op_parser().parse(text)
-
-    def test_basic_import(self) -> None:
-        module = self._parse_module(
-            'func.decl import("linalg_lib") @matmul(%a: f32, %b: f32) -> (f32)\n'
-        )
-        assert len(module.symbols) == 1
-        sym = module.symbols[0]
-        assert sym.is_import
-        assert sym.source_module == "linalg_lib"
-        assert sym.source_symbol == ""  # defaults to symbol name
-        assert sym.name == "matmul"
-        assert sym.op is not None
-        assert not sym.op.regions  # Declarations have no body region.
-
-    def test_import_with_alias(self) -> None:
-        module = self._parse_module(
-            'func.decl import("math_lib", "matmul_v2") @my_matmul(%a: f32) -> (f32)\n'
-        )
-        sym = module.symbols[0]
-        assert sym.is_import
-        assert sym.source_module == "math_lib"
-        assert sym.source_symbol == "matmul_v2"
-        assert sym.name == "my_matmul"
-
-    def test_public_import(self) -> None:
-        """public and import modifiers together (re-export)."""
-        module = self._parse_module(
-            'func.decl public import("upstream") @relu(%x: f32) -> (f32)\n'
-        )
-        sym = module.symbols[0]
-        assert sym.is_import
-        assert sym.is_public
-        assert sym.source_module == "upstream"
-
-    def test_import_with_types(self) -> None:
-        """Import with shaped types preserves full signature."""
-        module = self._parse_module(
-            'func.decl import("kernels") @conv(%N: index, %w: tensor<3x3xf32>, %x: tensor<[%N]xf32>)'
-            " -> (tensor<[%N]xf32>)\n"
-        )
-        sym = module.symbols[0]
-        assert sym.is_import
-        op = sym.op
-        assert op is not None
-        # func.decl: all args (including dim params) become operands.
-        assert len(op.operands) == 3
-        assert len(op.results) == 1
-
-    def test_public_import_canonical_order(self) -> None:
-        """Canonical order: visibility before import modifier."""
-        module = self._parse_module(
-            'func.decl public import("lib") @f(%a: f32) -> (f32)\n'
-        )
-        sym = module.symbols[0]
-        assert sym.is_import
-        assert sym.is_public
-
-    def test_non_import_has_no_source(self) -> None:
-        """Regular declarations are not imports."""
-        module = self._parse_module("func.decl @extern(%a: f32) -> (f32)\n")
-        sym = module.symbols[0]
-        assert not sym.is_import
-        assert sym.source_module == ""
-
-    def test_import_in_multi_function_module(self) -> None:
-        """Import mixed with definitions in a module."""
-        module = self._parse_module(
-            'func.decl import("lib") @imported(%a: f32) -> (f32)\n'
-            "\n"
-            "func.def @local(%x: f32) -> (f32) {\n"
-            "  test.yield %x : f32\n"
-            "}\n"
-        )
-        assert len(module.symbols) == 2
-        syms = {s.name: s for s in module.symbols}
-        assert syms["imported"].is_import
-        assert syms["imported"].source_module == "lib"
-        assert not syms["local"].is_import
-
-
-class TestImportRoundTrip:
-    """Text → parse → IR → print → text for import declarations."""
-
-    def _roundtrip_text(self, text: str) -> None:
-        module = _op_parser().parse(text)
-        printed = _op_printer().print_module(module)
-        assert printed == text, (
-            f"Round-trip mismatch:\n  expected: {text!r}\n  got:      {printed!r}"
-        )
-
-    def test_basic_import_roundtrip(self) -> None:
-        self._roundtrip_text(
-            'func.decl import("linalg_lib") @matmul(%a: f32, %b: f32) -> (f32)\n'
-        )
-
-    def test_import_alias_roundtrip(self) -> None:
-        self._roundtrip_text(
-            'func.decl import("math_lib", "matmul") @my_matmul(%a: f32) -> (f32)\n'
-        )
-
-    def test_public_import_roundtrip(self) -> None:
-        self._roundtrip_text(
-            'func.decl public import("upstream") @relu(%x: f32) -> (f32)\n'
-        )
-
-    def test_mixed_module_roundtrip(self) -> None:
-        self._roundtrip_text(
-            'func.decl import("lib") @imported(%a: f32) -> (f32)\n'
-            "\n"
-            "func.def @local(%x: f32) -> (f32) {\n"
-            "  test.yield %x : f32\n"
-            "}\n"
-        )
-
-
-# ============================================================================
-# Dynamic dim and encoding scoping in function signatures
+# Dynamic dim and encoding scoping in function-like signatures
 # ============================================================================
 
 
@@ -2157,7 +1956,7 @@ class TestDynamicDimScoping:
     def test_dim_references_earlier_arg(self) -> None:
         """Dynamic dim %M in second arg references %M: index first arg."""
         self._roundtrip_text(
-            "func.def @f(%M: index, %tile: tile<[%M]xf32>) -> (tile<[%M]xf32>) {\n"
+            "test.func @f(%M: index, %tile: tile<[%M]xf32>) -> (tile<[%M]xf32>) {\n"
             "  test.yield %tile : tile<[%M]xf32>\n"
             "}\n"
         )
@@ -2165,46 +1964,46 @@ class TestDynamicDimScoping:
     def test_multiple_dynamic_dims(self) -> None:
         """Two dynamic dims from separate earlier args."""
         self._roundtrip_text(
-            "func.decl @g(%M: index, %N: index, %t: tensor<[%M]x[%N]xf32>)"
+            "test.decl @g(%M: index, %N: index, %t: tensor<[%M]x[%N]xf32>)"
             " -> (tensor<[%M]x[%N]xf32>)\n"
         )
 
     def test_mixed_static_dynamic_dims(self) -> None:
         self._roundtrip_text(
-            "func.decl @h(%K: index, %t: tile<[%K]x4xf32>) -> (tile<[%K]x4xf32>)\n"
+            "test.decl @h(%K: index, %t: tile<[%K]x4xf32>) -> (tile<[%K]x4xf32>)\n"
         )
 
     def test_dim_shared_across_args(self) -> None:
         """Same dim name %M used by two different arg types."""
         self._roundtrip_text(
-            "func.decl @shared(%M: index, %a: tile<[%M]xf32>, %b: tile<[%M]xi8>)"
+            "test.decl @shared(%M: index, %a: tile<[%M]xf32>, %b: tile<[%M]xi8>)"
             " -> (tile<[%M]xf32>)\n"
         )
 
     def test_dim_explicitly_defined(self) -> None:
         """Explicitly defined %M in a type."""
         self._roundtrip_text(
-            "func.decl @explicit(%M: index, %a: tile<[%M]xf32>, %b: tile<[%M]xi8>)"
+            "test.decl @explicit(%M: index, %a: tile<[%M]xf32>, %b: tile<[%M]xi8>)"
             " -> (tile<[%M]xf32>)\n"
         )
 
     def test_dynamic_pool_references_earlier_arg(self) -> None:
         """Dynamic pool block size references earlier index arg."""
         self._roundtrip_text(
-            "func.decl @p(%BS: index, %pool: pool<[%BS]>) -> (pool<[%BS]>)\n"
+            "test.decl @p(%BS: index, %pool: pool<[%BS]>) -> (pool<[%BS]>)\n"
         )
 
     def test_dynamic_encoding_references_earlier_arg(self) -> None:
         """Dynamic encoding %enc in type references earlier encoding arg."""
         self._roundtrip_text(
-            "func.decl @enc(%enc: encoding, %t: tile<4xf32, %enc>)"
+            "test.decl @enc(%enc: encoding, %t: tile<4xf32, %enc>)"
             " -> (tile<4xf32, %enc>)\n"
         )
 
     def test_all_dynamic_in_one_signature(self) -> None:
         """Dynamic dims, encoding, and pool all in one function."""
         self._roundtrip_text(
-            "func.decl @kitchen_sink(%M: index, %N: index, %enc: encoding,"
+            "test.decl @kitchen_sink(%M: index, %N: index, %enc: encoding,"
             " %t: tile<[%M]x[%N]xf32, %enc>, %p: pool<[%M]>)"
             " -> (tile<[%M]x[%N]xf32, %enc>)\n"
         )
@@ -2212,63 +2011,10 @@ class TestDynamicDimScoping:
     def test_def_with_dynamic_dims_in_body(self) -> None:
         """Dynamic dims flow into body ops."""
         self._roundtrip_text(
-            "func.def @f(%M: index, %t: tile<[%M]xf32>) -> (tile<[%M]xf32>) {\n"
+            "test.func @f(%M: index, %t: tile<[%M]xf32>) -> (tile<[%M]xf32>) {\n"
             "  %neg = test.neg %t : tile<[%M]xf32>\n"
             "  test.yield %neg : tile<[%M]xf32>\n"
             "}\n"
-        )
-
-
-class TestImportCrossFormatRoundTrip:
-    """Text → IR → bytecode → IR → text for import declarations.
-
-    The bytecode SYMBOLS section stores arg types but not arg names
-    (names only live in the IR section as block args, which declarations
-    don't have). So cross-format round-trips through bytecode lose
-    arg names on declarations. This is a pre-existing limitation of the
-    bytecode format, not specific to imports.
-    """
-
-    def _cross_roundtrip(self, text: str, expected: str | None = None) -> None:
-        module = _op_parser().parse(text)
-        loaded = read_module(write_module(module))
-        printed = _op_printer().print_module(loaded)
-        target = expected if expected is not None else text
-        assert printed == target, (
-            f"Cross-format round-trip mismatch:\n"
-            f"  expected: {target!r}\n"
-            f"  got:      {printed!r}"
-        )
-
-    def test_import_survives_bytecode(self) -> None:
-        self._cross_roundtrip(
-            'func.decl import("linalg_lib") @matmul(%a: f32, %b: f32) -> (f32)\n',
-        )
-
-    def test_import_alias_survives_bytecode(self) -> None:
-        self._cross_roundtrip(
-            'func.decl import("math_lib", "matmul") @my_matmul(%a: f32) -> (f32)\n',
-        )
-
-    def test_import_metadata_preserved(self) -> None:
-        """Import source module and symbol survive bytecode round-trip."""
-        module = _op_parser().parse(
-            'func.decl import("math_lib", "original") @alias(%a: f32) -> (f32)\n'
-        )
-        loaded = read_module(write_module(module))
-        sym = loaded.symbols[0]
-        assert sym.is_import
-        assert sym.source_module == "math_lib"
-        assert sym.source_symbol == "original"
-        assert sym.name == "alias"
-
-    def test_mixed_module_survives_bytecode(self) -> None:
-        self._cross_roundtrip(
-            'func.decl import("lib") @imported(%a: f32) -> (f32)\n'
-            "\n"
-            "func.def @local(%x: f32) -> (f32) {\n"
-            "  test.yield %x : f32\n"
-            "}\n",
         )
 
 
@@ -2404,7 +2150,7 @@ class TestLocationRoundTrip:
 
     def test_file_location_roundtrip(self) -> None:
         self._roundtrip_with_locations(
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc("model.loom":42:3 to 42:58)\n'
             '  test.yield %neg0 : f32 loc("model.loom":43:3 to 43:28)\n'
             '} loc("model.loom":41:1 to 44:2)\n'
@@ -2412,12 +2158,12 @@ class TestLocationRoundTrip:
 
     def test_top_level_declaration_location_roundtrip(self) -> None:
         self._roundtrip_with_locations(
-            'func.decl @located() loc("model.loom":1:1 to 1:20)\n'
+            'test.decl @located() loc("model.loom":1:1 to 1:20)\n'
         )
 
     def test_comments_survive_explicit_location_roundtrip(self) -> None:
         self._roundtrip_with_locations(
-            "func.def @located() -> (i32) {\n"
+            "test.func @located() -> (i32) {\n"
             "  // located constant\n"
             '  %c = test.constant 42 : i32 loc("model.loom":42:3 to 42:58)\n'
             '  test.yield %c : i32 loc("model.loom":43:3 to 43:28)\n'
@@ -2427,7 +2173,7 @@ class TestLocationRoundTrip:
     def test_fused_location_roundtrip(self) -> None:
         """All ops have explicit locations (fused + file)."""
         self._roundtrip_with_locations(
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc(fused<"a.loom":1:1, "b.loom":2:2>)\n'
             '  test.yield %neg0 : f32 loc("a.loom":3:1 to 3:28)\n'
             '} loc(fused<"a.loom":1:1, "b.loom":3:2>)\n'
@@ -2436,7 +2182,7 @@ class TestLocationRoundTrip:
     def test_opaque_location_roundtrip(self) -> None:
         """All ops have explicit locations (opaque + file)."""
         self._roundtrip_with_locations(
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc(opaque<"torch", "node_id=42">)\n'
             '  test.yield %neg0 : f32 loc("model.loom":2:3 to 2:28)\n'
             '} loc(opaque<"torch", "node_id=func">)\n'
@@ -2445,7 +2191,7 @@ class TestLocationRoundTrip:
     def test_escaped_location_roundtrip_is_canonical(self) -> None:
         """Escaped source/tag/data strings print in one canonical form."""
         self._roundtrip_with_locations(
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc(opaque<"torch \\"aten\\"", "node\\\\id\\n\\u0001">)\n'
             '  test.yield %neg0 : f32 loc("model \\"main\\"\\\\v2\\n.loom":2:3 to 2:28)\n'
             '} loc(opaque<"torch \\"aten\\"", "fn\\\\id\\n\\u0001">)\n'
@@ -2454,7 +2200,7 @@ class TestLocationRoundTrip:
     def test_stable_after_two_rounds(self) -> None:
         """Parse → print → parse → print is stable (mixed implicit/explicit)."""
         text = (
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc("model.loom":10:3 to 10:40)\n'
             "  test.yield %neg0 : f32\n"
             "}\n"
@@ -2469,94 +2215,6 @@ class TestLocationRoundTrip:
         assert round1 == round2, (
             f"Not stable after two rounds.\nRound 1:\n{round1}\nRound 2:\n{round2}"
         )
-
-
-# ============================================================================
-# func.template and func.ukernel round-trip
-# ============================================================================
-
-
-class TestFuncTemplateUkernelRoundTrip:
-    """Round-trip tests for func.template and func.ukernel."""
-
-    def _roundtrip_text(self, text: str) -> None:
-        """Parse text, print, assert identical."""
-        module = _op_parser().parse(text)
-        printed = _op_printer().print_module(module)
-
-        assert printed == text, (
-            f"Round-trip failed.\nInput:\n{text}\nOutput:\n{printed}"
-        )
-
-    def test_template_basic(self) -> None:
-        """func.template<tile.contract> with body round-trips."""
-        self._roundtrip_text(
-            "func.template<tile.contract> @impl(%a: tile<4xf32>)"
-            " -> (tile<4xf32>) {\n"
-            "  func.return %a : tile<4xf32>\n"
-            "}\n"
-        )
-
-    def test_template_with_priority(self) -> None:
-        """func.template with priority(N) round-trips."""
-        self._roundtrip_text(
-            "func.template<tile.contract> priority(10) @high_priority(%a: tile<4xf32>)"
-            " -> (tile<4xf32>) {\n"
-            "  func.return %a : tile<4xf32>\n"
-            "}\n"
-        )
-
-    def test_template_device_cc(self) -> None:
-        """func.template with device calling convention round-trips."""
-        self._roundtrip_text(
-            "func.template<tile.contract> device @device_impl(%a: tile<4xf32>)"
-            " -> (tile<4xf32>) {\n"
-            "  func.return %a : tile<4xf32>\n"
-            "}\n"
-        )
-
-    def test_ukernel_basic(self) -> None:
-        """func.ukernel<tile.contract> (no body) round-trips."""
-        self._roundtrip_text(
-            "func.ukernel<tile.contract> @asm_impl(%a: tile<4xf32>) -> (tile<4xf32>)\n"
-        )
-
-    def test_ukernel_device(self) -> None:
-        """func.ukernel with device calling convention round-trips."""
-        self._roundtrip_text(
-            "func.ukernel<tile.contract> device @asm_device(%a: tile<4xf32>)"
-            " -> (tile<4xf32>)\n"
-        )
-
-    def test_ukernel_with_priority(self) -> None:
-        """func.ukernel with priority round-trips."""
-        self._roundtrip_text(
-            "func.ukernel<tile.contract> priority(5) @prioritized(%a: f32) -> (f32)\n"
-        )
-
-    def test_template_implements_stored(self) -> None:
-        """Verify the parsed func.template op has the implements attribute set."""
-        module = _op_parser().parse(
-            "func.template<tile.contract> @impl(%a: f32) -> (f32) {\n"
-            "  func.return %a : f32\n"
-            "}\n"
-        )
-        op = module.symbols[0].op
-        assert op is not None
-        assert op.attributes.get("implements") == "tile.contract"
-        assert op.attributes.get("priority") is None
-
-    def test_template_priority_stored(self) -> None:
-        """Verify the parsed func.template op has the priority attribute set."""
-        module = _op_parser().parse(
-            "func.template<tile.contract> priority(42) @impl(%a: f32) -> (f32) {\n"
-            "  func.return %a : f32\n"
-            "}\n"
-        )
-        op = module.symbols[0].op
-        assert op is not None
-        assert op.attributes.get("implements") == "tile.contract"
-        assert op.attributes.get("priority") == 42
 
 
 # ============================================================================
@@ -2582,7 +2240,7 @@ class TestLocationCrossFormatRoundTrip:
 
     def test_file_location_survives_bytecode(self) -> None:
         self._cross_roundtrip_with_locations(
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc("model.loom":42:3 to 42:58)\n'
             '  test.yield %neg0 : f32 loc("model.loom":43:3 to 43:28)\n'
             "}\n"
@@ -2590,7 +2248,7 @@ class TestLocationCrossFormatRoundTrip:
 
     def test_opaque_location_survives_bytecode(self) -> None:
         self._cross_roundtrip_with_locations(
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc(opaque<"torch", "node_id=42">)\n'
             '  test.yield %neg0 : f32 loc("model.loom":3:3 to 3:28)\n'
             "}\n"
@@ -2598,7 +2256,7 @@ class TestLocationCrossFormatRoundTrip:
 
     def test_fused_location_survives_bytecode(self) -> None:
         self._cross_roundtrip_with_locations(
-            "func.def @negate(%input: f32) -> (f32) {\n"
+            "test.func @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc(fused<"a.loom":1:1, "b.loom":2:2>)\n'
             '  test.yield %neg0 : f32 loc("model.loom":3:3 to 3:28)\n'
             "}\n"
@@ -2659,7 +2317,7 @@ class TestNestedDictAttr:
 
     def test_unsorted_nested_dict_cross_format_round_trip(self) -> None:
         text = (
-            "func.def @f(%x: f32) -> (f32) {\n"
+            "test.func @f(%x: f32) -> (f32) {\n"
             '  %r = test.attrs %x {meta = {phase = "link", opt = 3}, axis = 0} : f32\n'
             "  test.yield %r : f32\n"
             "}\n"
@@ -2668,7 +2326,7 @@ class TestNestedDictAttr:
         loaded = read_module(write_module(module))
         printed = _op_printer().print_module(loaded)
         assert printed == (
-            "func.def @f(%x: f32) -> (f32) {\n"
+            "test.func @f(%x: f32) -> (f32) {\n"
             '  %r = test.attrs %x {axis = 0, meta = {opt = 3, phase = "link"}} : f32\n'
             "  test.yield %r : f32\n"
             "}\n"
