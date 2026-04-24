@@ -74,12 +74,18 @@ typedef struct loom_low_source_workload_counts_t {
   // is a subset of vector_load_op_count and is not included separately in the
   // total count.
   uint32_t vector_float_load_op_count;
+  // Number of generated vector.load ops with dynamic indices. This is a subset
+  // of vector_load_op_count and is not included separately in the total count.
+  uint32_t vector_dynamic_load_op_count;
   // Number of generated vector.store ops.
   uint32_t vector_store_op_count;
   // Number of generated vector.store ops storing floating-point vectors. This
   // is a subset of vector_store_op_count and is not included separately in the
   // total count.
   uint32_t vector_float_store_op_count;
+  // Number of generated vector.store ops with dynamic indices. This is a subset
+  // of vector_store_op_count and is not included separately in the total count.
+  uint32_t vector_dynamic_store_op_count;
   // Number of generated index.madd ops.
   uint32_t index_madd_op_count;
 } loom_low_source_workload_counts_t;
