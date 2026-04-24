@@ -676,6 +676,29 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "hal_execution_test",
+    srcs = ["hal_execution_test.cc"],
+    group = "iree-loom-amdgpu-tests",
+    tags = [
+        "driver=amdgpu",
+        "nodocker",
+        "requires-gpu-amd",
+    ],
+    deps = [
+        ":execution_provider",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/tooling/execution:compile_options",
+        "//loom/src/loom/tooling/execution:execution_backend",
+        "//loom/src/loom/tooling/execution:execution_provider",
+        "//loom/src/loom/tooling/execution:one_shot",
+        "//loom/src/loom/tooling/execution:session",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "hal_kernel_abi",
     srcs = ["hal_kernel_abi.c"],

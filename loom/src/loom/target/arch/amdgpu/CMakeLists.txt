@@ -567,6 +567,30 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    hal_execution_test
+  SRCS
+    "hal_execution_test.cc"
+  DEPS
+    ::execution_provider
+    iree::base
+    loom::src::loom::ops::op_registry
+    loom::src::loom::tooling::execution::compile_options
+    loom::src::loom::tooling::execution::execution_backend
+    loom::src::loom::tooling::execution::execution_provider
+    loom::src::loom::tooling::execution::one_shot
+    loom::src::loom::tooling::execution::session
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "driver=amdgpu"
+    "nodocker"
+    "requires-gpu-amd"
+  GROUP
+    "iree-loom-amdgpu-tests"
+)
+
 loom_cc_library(
   NAME
     hal_kernel_abi
