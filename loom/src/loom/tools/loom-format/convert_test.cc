@@ -12,18 +12,33 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/format/bytecode/format.h"
-#include "loom/ops/op_registry.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/index/ops.h"
 
 namespace loom {
 namespace {
+
+using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+iree_status_t RegisterDialect(loom_context_t* context, uint8_t dialect_id,
+                              DialectVtablesFn dialect_vtables_fn) {
+  iree_host_size_t count = 0;
+  const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+  return loom_context_register_dialect(context, dialect_id, vtables,
+                                       (uint16_t)count);
+}
 
 class LoomFormatConvertTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
-    IREE_ASSERT_OK(loom_op_registry_initialize_context(iree_allocator_system(),
-                                                       &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_FUNC,
+                                   loom_func_dialect_vtables));
+    IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_INDEX,
+                                   loom_index_dialect_vtables));
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 
   void TearDown() override {

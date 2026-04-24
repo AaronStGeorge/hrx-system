@@ -6,10 +6,12 @@
 
 // Test/tooling context helpers.
 //
-// These helpers register the complete in-tree Loom dialect and built-in
-// encoding surface without depending on loom-check's execution engine. Keep
-// parser, printer, fuzzer, and corpus tests on this path so adding a dialect
-// creates one obvious registration update instead of scattered boilerplate.
+// These helpers register the complete in-tree Loom dialect surface without
+// depending on loom-check's execution engine. Use them only for full corpus,
+// production front-door fuzzing, registry composition, and tool integration
+// tests. Unit tests and generated synthetic fuzzers should register the minimal
+// dialect set they exercise so accidental production-dialect dependencies stay
+// visible in BUILD files.
 
 #ifndef LOOM_TESTING_CONTEXT_H_
 #define LOOM_TESTING_CONTEXT_H_

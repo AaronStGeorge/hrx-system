@@ -22,16 +22,16 @@
 #include "loom/format/bytecode/writer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/testing/context.h"
+#include "loom/ops/test/ops.h"
 #include "loom/testing/gen.h"
 
 namespace {
 
 static void IgnoreStatusOrAbort(iree_status_t status) {
-  if (iree_status_is_ok(status)) return;
-  iree_status_fprint(stderr, status);
-  iree_status_ignore(status);
-  abort();
+  if (iree_status_is_ok(status)) {
+    return;
+  }
+  iree_status_abort(status);
 }
 
 static iree_status_t IgnoreDiagnostic(void* user_data,
@@ -47,8 +47,12 @@ class BytecodeFixture {
   BytecodeFixture(uint8_t preset, uint32_t scale) {
     iree_arena_block_pool_initialize(65536, iree_allocator_system(),
                                      &block_pool_);
-    IgnoreStatusOrAbort(loom_testing_context_initialize_all(
-        iree_allocator_system(), &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    iree_host_size_t count = 0;
+    const loom_op_vtable_t* const* vtables = loom_test_dialect_vtables(&count);
+    IgnoreStatusOrAbort(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_TEST, vtables, (uint16_t)count));
+    IgnoreStatusOrAbort(loom_context_finalize(&context_));
 
     loom_test_gen_module_config_t config =
         loom_test_gen_module_config_fuzz_preset(preset, scale);
@@ -60,7 +64,9 @@ class BytecodeFixture {
     loom_module_t* module = nullptr;
     IgnoreStatusOrAbort(loom_test_gen_module(&generator, &config, &context_,
                                              &block_pool_, &module));
-    if (!module) abort();
+    if (!module) {
+      abort();
+    }
     bytes_ = WriteModule(module);
     loom_module_free(module);
   }

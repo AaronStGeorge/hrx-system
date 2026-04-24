@@ -33,14 +33,20 @@ static loom_context_t g_context;
 static bool g_context_initialized = false;
 
 static void fuzz_ignore_status_or_trap(iree_status_t status) {
-  if (iree_status_is_ok(status)) return;
-  iree_status_fprint(stderr, status);
-  iree_status_ignore(status);
-  __builtin_trap();
+  if (iree_status_is_ok(status)) {
+    return;
+  }
+  iree_status_abort(status);
 }
 
 static void fuzz_ensure_context(void) {
-  if (g_context_initialized) return;
+  if (g_context_initialized) {
+    return;
+  }
+  // Arbitrary bytecode fuzzing intentionally registers every checked-in
+  // dialect so malformed op payloads can reach all production bytecode
+  // decoders. Generated valid modules still come from the synthetic test
+  // generator profile.
   fuzz_ignore_status_or_trap(
       loom_testing_context_initialize_all(iree_allocator_system(), &g_context));
   g_context_initialized = true;

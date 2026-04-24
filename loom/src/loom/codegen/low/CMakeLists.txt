@@ -546,12 +546,6 @@ loom_cc_test(
     ::source_workload
     iree::base::internal::arena
     loom::src::loom::ir
-    loom::src::loom::ops::func
-    loom::src::loom::ops::index
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::target
-    loom::src::loom::ops::vector
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     iree::testing::gtest
@@ -571,7 +565,6 @@ loom_cc_benchmark(
     loom::src::loom::ir
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
-    loom::src::loom::testing::context
     iree::testing::benchmark_main
   TESTONLY
 )
@@ -588,7 +581,6 @@ loom_cc_fuzz(
     loom::src::loom::ir
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
-    loom::src::loom::testing::context
 )
 
 loom_cc_library(

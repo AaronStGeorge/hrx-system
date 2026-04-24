@@ -43,6 +43,8 @@ class ReaderCorpusTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
+    // This is a full text-corpus integration test: every checked-in dialect can
+    // appear in corpus entries and must round-trip through bytecode.
     IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
                                                        &context_));
   }

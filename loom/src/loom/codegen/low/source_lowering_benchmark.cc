@@ -19,10 +19,10 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/source_workload.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
-#include "loom/testing/context.h"
 
 namespace {
 
@@ -31,8 +31,9 @@ class SourceLoweringBenchmark {
   SourceLoweringBenchmark() {
     iree_arena_block_pool_initialize(65536, iree_allocator_system(),
                                      &block_pool_);
-    IREE_CHECK_OK(loom_testing_context_initialize_all(iree_allocator_system(),
-                                                      &context_));
+    loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_CHECK_OK(loom_low_source_workload_register_dialects(&context_));
+    IREE_CHECK_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&descriptor_registry_);
     loom_test_low_lower_policy_registry_initialize(&policy_registry_);
   }

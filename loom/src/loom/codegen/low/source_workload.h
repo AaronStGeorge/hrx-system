@@ -105,6 +105,13 @@ typedef struct loom_low_source_workload_pipeline_counters_t {
 loom_low_source_workload_config_t loom_low_source_workload_config_make(
     iree_string_view_t target_preset, uint32_t scale);
 
+// Registers the exact source and low dialects used by generated source-low
+// workloads. Callers own context initialization and finalization so they can
+// compose this with target-owned descriptor/policy registries without pulling
+// the full production op registry into fuzzers and benchmarks.
+iree_status_t loom_low_source_workload_register_dialects(
+    loom_context_t* context);
+
 // Generates one targeted source function suitable for source-to-low lowering.
 //
 // The generated function has i32, vector<4xi32>, and index arguments/results

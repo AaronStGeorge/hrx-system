@@ -22,6 +22,9 @@ namespace {
 
 iree_status_t RegisterTestContext(void* user_data, loom_context_t* context) {
   (void)user_data;
+  // loom-check execute tests are integration coverage for the test runner's
+  // production registration surface plus the synthetic test dialect providers.
+  // Narrow parser/printer/unit tests should not copy this helper.
   return loom_testing_context_register_all_dialects(context);
 }
 

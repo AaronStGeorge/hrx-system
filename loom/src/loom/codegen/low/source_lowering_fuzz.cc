@@ -18,10 +18,10 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/source_workload.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
-#include "loom/testing/context.h"
 
 static loom_context_t g_context;
 static loom_target_low_descriptor_registry_t g_descriptor_registry;
@@ -39,8 +39,15 @@ static void ensure_context(void) {
   if (g_initialized) {
     return;
   }
-  trap_with_status(
-      loom_testing_context_initialize_all(iree_allocator_system(), &g_context));
+  loom_context_initialize(iree_allocator_system(), &g_context);
+  iree_status_t status = loom_low_source_workload_register_dialects(&g_context);
+  if (iree_status_is_ok(status)) {
+    status = loom_context_finalize(&g_context);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_context_deinitialize(&g_context);
+    trap_with_status(status);
+  }
   loom_test_low_descriptor_registry_initialize(&g_descriptor_registry);
   loom_test_low_lower_policy_registry_initialize(&g_policy_registry);
   g_initialized = true;

@@ -199,7 +199,7 @@ loom_cc_test(
     deps = [
         ":hal_candidate",
         ":session",
-        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/func",
         "//loom/src/loom/target:low_descriptor_registry_core_test",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
@@ -260,7 +260,11 @@ loom_cc_test(
     deps = [
         ":session",
         ":vm_invocation",
-        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/cfg",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/target",
         "//loom/src/loom/target/emit/ireevm:candidate",
         "//loom/src/loom/target/emit/ireevm:low_registry",
         "//runtime/src/iree/base",

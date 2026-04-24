@@ -12,11 +12,22 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
-#include "loom/ops/op_registry.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/tools/loom-check/check.h"
 
 namespace loom {
 namespace {
+
+using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+iree_status_t RegisterDialect(loom_context_t* context, uint8_t dialect_id,
+                              DialectVtablesFn dialect_vtables_fn) {
+  iree_host_size_t count = 0;
+  const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+  return loom_context_register_dialect(context, dialect_id, vtables,
+                                       (uint16_t)count);
+}
 
 class TemplateSyncTest : public ::testing::Test {
  protected:
@@ -24,7 +35,10 @@ class TemplateSyncTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
-    IREE_ASSERT_OK(loom_op_registry_register_all_dialects(&context_));
+    IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_FUNC,
+                                   loom_func_dialect_vtables));
+    IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_SCALAR,
+                                   loom_scalar_dialect_vtables));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 

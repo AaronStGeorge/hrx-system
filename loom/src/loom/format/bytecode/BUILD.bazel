@@ -172,7 +172,7 @@ loom_cc_fuzz(
     deps = [
         ":writer",
         "//loom/src/loom/ir",
-        "//loom/src/loom/testing:context",
+        "//loom/src/loom/ops/test",
         "//loom/src/loom/testing:gen",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -187,7 +187,7 @@ loom_cc_benchmark(
         ":reader",
         ":writer",
         "//loom/src/loom/ir",
-        "//loom/src/loom/testing:context",
+        "//loom/src/loom/ops/test",
         "//loom/src/loom/testing:gen",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

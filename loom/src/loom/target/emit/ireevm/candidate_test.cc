@@ -8,15 +8,37 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/ops/op_registry.h"
+#include "loom/ops/cfg/ops.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/low/ops.h"
+#include "loom/ops/scalar/ops.h"
+#include "loom/ops/target/ops.h"
 #include "loom/target/emit/ireevm/low_registry.h"
 
 namespace loom {
 namespace {
 
+using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+iree_status_t RegisterDialect(loom_context_t* context, uint8_t dialect_id,
+                              DialectVtablesFn dialect_vtables_fn) {
+  iree_host_size_t count = 0;
+  const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+  return loom_context_register_dialect(context, dialect_id, vtables,
+                                       (uint16_t)count);
+}
+
 iree_status_t RegisterContext(void* user_data, loom_context_t* context) {
   (void)user_data;
-  return loom_op_registry_register_all_dialects(context);
+  IREE_RETURN_IF_ERROR(RegisterDialect(context, LOOM_DIALECT_TARGET,
+                                       loom_target_dialect_vtables));
+  IREE_RETURN_IF_ERROR(
+      RegisterDialect(context, LOOM_DIALECT_FUNC, loom_func_dialect_vtables));
+  IREE_RETURN_IF_ERROR(RegisterDialect(context, LOOM_DIALECT_SCALAR,
+                                       loom_scalar_dialect_vtables));
+  IREE_RETURN_IF_ERROR(
+      RegisterDialect(context, LOOM_DIALECT_CFG, loom_cfg_dialect_vtables));
+  return RegisterDialect(context, LOOM_DIALECT_LOW, loom_low_dialect_vtables);
 }
 
 iree_status_t InitializeLowDescriptorRegistry(

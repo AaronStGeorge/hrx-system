@@ -235,7 +235,7 @@ loom_cc_test(
     ::hal_candidate
     ::session
     iree::base
-    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::func
     loom::src::loom::target::low_descriptor_registry_core_test
     iree::testing::gtest
     iree::testing::gtest_main
@@ -301,7 +301,11 @@ loom_cc_test(
     ::session
     ::vm_invocation
     iree::base
-    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::cfg
+    loom::src::loom::ops::func
+    loom::src::loom::ops::low
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::target
     loom::src::loom::target::emit::ireevm::candidate
     loom::src::loom::target::emit::ireevm::low_registry
     iree::testing::gtest

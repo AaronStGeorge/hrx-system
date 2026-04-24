@@ -8,15 +8,25 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
-#include "loom/ops/op_registry.h"
+#include "loom/ops/func/ops.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
 
 namespace loom {
 namespace {
 
+using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+iree_status_t RegisterDialect(loom_context_t* context, uint8_t dialect_id,
+                              DialectVtablesFn dialect_vtables_fn) {
+  iree_host_size_t count = 0;
+  const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+  return loom_context_register_dialect(context, dialect_id, vtables,
+                                       (uint16_t)count);
+}
+
 iree_status_t RegisterContext(void* user_data, loom_context_t* context) {
   (void)user_data;
-  return loom_op_registry_register_all_dialects(context);
+  return RegisterDialect(context, LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
 }
 
 iree_status_t InitializeLowDescriptorRegistry(

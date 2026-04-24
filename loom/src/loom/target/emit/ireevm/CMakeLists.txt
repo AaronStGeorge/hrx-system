@@ -199,7 +199,11 @@ loom_cc_test(
     ::candidate
     ::low_registry
     iree::base
-    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::cfg
+    loom::src::loom::ops::func
+    loom::src::loom::ops::low
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::target
     iree::testing::gtest
     iree::testing::gtest_main
 )

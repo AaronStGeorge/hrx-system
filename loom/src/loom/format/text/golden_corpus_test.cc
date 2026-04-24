@@ -32,6 +32,8 @@ class GoldenCorpusTest : public ::testing::Test {
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
+    // This is the full checked-in text corpus, not a parser unit test: entries
+    // intentionally cover every production dialect available in the build.
     IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
                                                        &context_));
   }

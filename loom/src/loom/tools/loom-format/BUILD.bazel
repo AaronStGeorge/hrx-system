@@ -51,7 +51,8 @@ loom_cc_test(
     deps = [
         ":convert",
         "//loom/src/loom/format/bytecode:format",
-        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/index",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

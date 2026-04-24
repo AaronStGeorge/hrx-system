@@ -57,7 +57,8 @@ loom_cc_test(
     iree::base
     iree::base::internal::arena
     loom::src::loom::format::bytecode::format
-    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
     iree::testing::gtest
     iree::testing::gtest_main
 )

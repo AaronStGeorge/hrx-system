@@ -195,7 +195,7 @@ loom_cc_fuzz(
     iree::base::internal::arena
     iree::io::stream
     loom::src::loom::ir
-    loom::src::loom::testing::context
+    loom::src::loom::ops::test
     loom::src::loom::testing::gen
 )
 
@@ -212,7 +212,7 @@ loom_cc_benchmark(
     iree::base::internal::arena
     iree::io::stream
     loom::src::loom::ir
-    loom::src::loom::testing::context
+    loom::src::loom::ops::test
     loom::src::loom::testing::gen
     iree::testing::benchmark_main
   TESTONLY

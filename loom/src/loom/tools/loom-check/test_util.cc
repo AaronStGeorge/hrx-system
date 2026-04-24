@@ -22,6 +22,8 @@ static std::string StringBuilderToString(const iree_string_builder_t& builder) {
 iree_status_t LoomCheckRegisterProductionContext(void* user_data,
                                                  loom_context_t* context) {
   (void)user_data;
+  // This harness models the production loom-check binary. Unit tests that only
+  // exercise one dialect should register that dialect directly instead.
   return loom_op_registry_register_all_dialects(context);
 }
 

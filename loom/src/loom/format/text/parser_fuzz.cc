@@ -32,13 +32,20 @@ static loom_context_t g_context;
 static bool g_context_initialized = false;
 
 static void fuzz_ignore_status_or_trap(iree_status_t status) {
-  if (iree_status_is_ok(status)) return;
-  iree_status_ignore(status);
-  __builtin_trap();
+  if (iree_status_is_ok(status)) {
+    return;
+  }
+  iree_status_abort(status);
 }
 
 static void fuzz_ensure_context(void) {
-  if (g_context_initialized) return;
+  if (g_context_initialized) {
+    return;
+  }
+  // Raw parser fuzzing is a production text front door: broad dialect
+  // registration lets arbitrary input reach every checked-in op format parser.
+  // The generated valid-module strategy stays synthetic through the generator's
+  // default test-dialect profile.
   fuzz_ignore_status_or_trap(
       loom_testing_context_initialize_all(iree_allocator_system(), &g_context));
   g_context_initialized = true;
@@ -70,7 +77,9 @@ static void fuzz_assert_round_trip(iree_string_view_t text,
                                    iree_string_view_t filename,
                                    iree_arena_block_pool_t* block_pool) {
   loom_module_t* module = fuzz_parse_text(text, filename, block_pool);
-  if (!module) __builtin_trap();
+  if (!module) {
+    __builtin_trap();
+  }
 
   iree_string_builder_t printed_builder;
   iree_string_builder_initialize(iree_allocator_system(), &printed_builder);
@@ -81,7 +90,9 @@ static void fuzz_assert_round_trip(iree_string_view_t text,
       iree_make_string_view(iree_string_builder_buffer(&printed_builder),
                             iree_string_builder_size(&printed_builder));
   loom_module_t* reparsed = fuzz_parse_text(printed_text, filename, block_pool);
-  if (!reparsed) __builtin_trap();
+  if (!reparsed) {
+    __builtin_trap();
+  }
 
   iree_string_builder_t reprinted_builder;
   iree_string_builder_initialize(iree_allocator_system(), &reprinted_builder);
