@@ -52,6 +52,7 @@ _RESOURCE_CONTROL = "wasm.control"
 
 _SCHEDULE_CONST = "wasm.const"
 _SCHEDULE_SCALAR_I32 = "wasm.scalar.i32"
+_SCHEDULE_SCALAR_F32 = "wasm.scalar.f32"
 _SCHEDULE_SIMD_I32X4 = "wasm.simd.i32x4"
 _SCHEDULE_SIMD_F32X4 = "wasm.simd.f32x4"
 _SCHEDULE_MEMORY_LOAD = "wasm.memory.load"
@@ -59,6 +60,7 @@ _SCHEDULE_MEMORY_STORE = "wasm.memory.store"
 _SCHEDULE_CONTROL = "wasm.control"
 
 _I32_ALT = (RegClassAlt(_REG_I32),)
+_F32_ALT = (RegClassAlt(_REG_F32),)
 _V128_ALT = (RegClassAlt(_REG_V128),)
 
 
@@ -91,6 +93,14 @@ def _i32_predicate(field_name: str) -> Operand:
 
 def _i32_resource(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.RESOURCE, _I32_ALT)
+
+
+def _f32_result(field_name: str = "dst") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _F32_ALT)
+
+
+def _f32_operand(field_name: str) -> Operand:
+    return Operand(field_name, OperandRole.OPERAND, _F32_ALT)
 
 
 def _v128_result(field_name: str = "dst") -> Operand:
@@ -152,6 +162,7 @@ _OP_I32_LT_U = 0x49
 _OP_I32_ADD = 0x6A
 _OP_I32_SUB = 0x6B
 _OP_I32_MUL = 0x6C
+_OP_F32_ADD = 0x92
 _OP_SIMD_PREFIX = 0xFD
 
 
@@ -166,6 +177,7 @@ _OP_I8X16_SHUFFLE = _simd_encoding_id(0x0D)
 _OP_I32X4_SPLAT = _simd_encoding_id(0x11)
 _OP_I32X4_EXTRACT_LANE = _simd_encoding_id(0x1B)
 _OP_I32X4_REPLACE_LANE = _simd_encoding_id(0x1C)
+_OP_F32X4_EXTRACT_LANE = _simd_encoding_id(0x1F)
 _OP_I32X4_EQ = _simd_encoding_id(0x37)
 _OP_I32X4_NE = _simd_encoding_id(0x38)
 _OP_I32X4_LT_S = _simd_encoding_id(0x39)
@@ -265,6 +277,13 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
+            _SCHEDULE_SCALAR_F32,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_SCALAR, cycles=1, units=1),),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
             _SCHEDULE_SIMD_I32X4,
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=1,
@@ -356,6 +375,16 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
+            key="wasm.f32.add",
+            mnemonic="f32.add",
+            semantic_tag="float.add.f32",
+            encoding_id=_OP_F32_ADD,
+            operands=(_f32_result(), _f32_operand("lhs"), _f32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SCALAR_F32,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
             key="wasm.v128.const",
             mnemonic="v128.const",
             semantic_tag="vector.const.v128",
@@ -427,6 +456,19 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
                 immediates=("lane",),
             ),
             schedule_class=_SCHEDULE_SIMD_I32X4,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="wasm.f32x4.extract_lane",
+            mnemonic="f32x4.extract_lane",
+            semantic_tag="vector.extract.f32x4",
+            encoding_id=_OP_F32X4_EXTRACT_LANE,
+            operands=(_f32_result(), _v128_operand("source")),
+            immediates=(_LANE_I32X4_IMMEDIATE,),
+            asm_forms=_asm(
+                results=("dst",), operands=("source",), immediates=("lane",)
+            ),
+            schedule_class=_SCHEDULE_SIMD_F32X4,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(

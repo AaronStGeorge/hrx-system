@@ -116,6 +116,25 @@ low.func.def target(@target) abi(object_function) @f32x4_shuffle(%v: reg<x86.xmm
 
 // ====
 
+func.def @f32x4_shuffle_reduce(%v: vector<4xf32>, %init: f32) -> (f32) {
+  %shuffled = vector.shuffle<[3, 1, 2, 0]> %v : vector<4xf32>
+  %sum = vector.reduce<addf> %shuffled, %init : vector<4xf32>, f32
+  func.return %sum : f32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32x4_shuffle_reduce(%v: reg<x86.xmm>, %init: reg<x86.xmm>) -> (reg<x86.xmm>) asm<x86.avx512.core> {
+  %shuffled = vpermilps.xmm %v, 39
+  %9 = vpermilps.xmm %shuffled, 78
+  %10 = vaddps.xmm %shuffled, %9
+  %11 = vpermilps.xmm %10, 177
+  %12 = vaddps.xmm %10, %11
+  %sum = vaddss.xmm %init, %12
+  return %sum
+}
+
+// ====
+
 func.def @i32x4_select(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %true_value: vector<4xi32>, %false_value: vector<4xi32>) -> (vector<4xi32>) {
   %mask = vector.cmpi slt, %lhs, %rhs : vector<4xi32> -> vector<4xi1>
   %selected = vector.select %mask, %true_value, %false_value : vector<4xi32>

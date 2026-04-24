@@ -32,8 +32,10 @@ constexpr uint8_t kWasmOpcodeLocalGet = 0x20;
 constexpr uint8_t kWasmOpcodeLocalSet = 0x21;
 constexpr uint8_t kWasmOpcodeI32Const = 0x41;
 constexpr uint8_t kWasmOpcodeI32Add = 0x6A;
+constexpr uint8_t kWasmOpcodeF32Add = 0x92;
 constexpr uint8_t kWasmOpcodeSimdPrefix = 0xFD;
 constexpr uint8_t kWasmTypeI32 = 0x7F;
+constexpr uint8_t kWasmTypeF32 = 0x7D;
 constexpr uint8_t kWasmTypeV128 = 0x7B;
 
 constexpr uint32_t kWasmSimdV128Load = 0x00;
@@ -42,6 +44,7 @@ constexpr uint32_t kWasmSimdV128Const = 0x0C;
 constexpr uint32_t kWasmSimdI8x16Shuffle = 0x0D;
 constexpr uint32_t kWasmSimdI32x4ExtractLane = 0x1B;
 constexpr uint32_t kWasmSimdI32x4ReplaceLane = 0x1C;
+constexpr uint32_t kWasmSimdF32x4ExtractLane = 0x1F;
 constexpr uint32_t kWasmSimdI32x4Add = 0xAE;
 constexpr uint32_t kWasmSimdI32x4Mul = 0xB5;
 
@@ -444,6 +447,51 @@ TEST_F(WasmFunctionBodyTest, EmitsSimdLaneFunctionBody) {
   const uint32_t shuffled = reader.ExpectLocalSet();
 
   EXPECT_EQ(reader.ExpectLocalGet(), shuffled);
+  reader.ExpectU8(kWasmOpcodeReturn);
+  reader.ExpectU8(kWasmOpcodeEnd);
+  reader.ExpectConsumed();
+}
+
+TEST_F(WasmFunctionBodyTest, EmitsF32LaneFunctionBody) {
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_allocation_sidecar_t allocation = {};
+  BuildSidecars(
+      "low.func.def target(@wasm_target) @wasm_test(%v : reg<wasm.v128>, "
+      "%x : reg<wasm.f32>) -> (reg<wasm.f32>) {\n"
+      "  %lane = low.op<wasm.f32x4.extract_lane>(%v) {lane = 2} : "
+      "(reg<wasm.v128>) -> reg<wasm.f32>\n"
+      "  %sum = low.op<wasm.f32.add>(%x, %lane) : "
+      "(reg<wasm.f32>, reg<wasm.f32>) -> reg<wasm.f32>\n"
+      "  low.return %sum : reg<wasm.f32>\n"
+      "}\n",
+      &schedule, &allocation);
+
+  FunctionBodyOwner owner;
+  IREE_ASSERT_OK(loom_wasm_emit_function_body(
+      &schedule, &allocation, iree_allocator_system(), &owner.body));
+
+  EXPECT_EQ(owner.body.parameter_count, 2u);
+  EXPECT_GE(owner.body.local_count, 2u);
+
+  WasmReader reader(owner.body);
+  EXPECT_EQ(reader.ReadU32Leb(), owner.body.body_length);
+  const uint32_t local_declaration_count = reader.ReadU32Leb();
+  for (uint32_t i = 0; i < local_declaration_count; ++i) {
+    EXPECT_GT(reader.ReadU32Leb(), 0u);
+    reader.ExpectU8(kWasmTypeF32);
+  }
+
+  EXPECT_EQ(reader.ExpectLocalGet(), 0u);
+  reader.ExpectSimd(kWasmSimdF32x4ExtractLane);
+  EXPECT_EQ(reader.ReadU8(), 2u);
+  const uint32_t lane = reader.ExpectLocalSet();
+
+  EXPECT_EQ(reader.ExpectLocalGet(), 1u);
+  EXPECT_EQ(reader.ExpectLocalGet(), lane);
+  reader.ExpectU8(kWasmOpcodeF32Add);
+  const uint32_t sum = reader.ExpectLocalSet();
+
+  EXPECT_EQ(reader.ExpectLocalGet(), sum);
   reader.ExpectU8(kWasmOpcodeReturn);
   reader.ExpectU8(kWasmOpcodeEnd);
   reader.ExpectConsumed();

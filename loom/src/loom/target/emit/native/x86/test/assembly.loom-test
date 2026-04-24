@@ -242,3 +242,27 @@ low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %v : reg<
   vpermilps xmm0, xmm0, 39
   vmovdqu32 [rax + 32], xmm0
   ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %v : reg<x86.xmm>, %init : reg<x86.xmm>) asm<x86.avx512.core> {
+  %paired = vpermilps.xmm %v, 78
+  %pair_sum = vaddps.xmm %v, %paired
+  %neighbor = vpermilps.xmm %pair_sum, 177
+  %vector_sum = vaddps.xmm %pair_sum, %neighbor
+  %sum = vaddss.xmm %init, %vector_sum
+  vmovdqu32.store.xmm %sum, %base {disp32 = 64}
+  return
+}
+
+// ----
+.Lbb0:
+  vpermilps xmm2, xmm0, 78
+  vaddps xmm0, xmm0, xmm2
+  vpermilps xmm2, xmm0, 177
+  vaddps xmm0, xmm0, xmm2
+  vaddss xmm0, xmm1, xmm0
+  vmovdqu32 [rax + 64], xmm0
+  ret

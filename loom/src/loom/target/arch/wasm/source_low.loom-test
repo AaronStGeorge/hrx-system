@@ -111,6 +111,28 @@ low.func.def target(@target) abi(wasm_function) @f32x4_shuffle(%v: reg<wasm.v128
 
 // ====
 
+func.def @f32x4_shuffle_reduce(%v: vector<4xf32>, %init: f32) -> (f32) {
+  %shuffled = vector.shuffle<[3, 1, 2, 0]> %v : vector<4xf32>
+  %sum = vector.reduce<addf> %shuffled, %init : vector<4xf32>, f32
+  func.return %sum : f32
+}
+
+// ----
+low.func.def target(@target) abi(wasm_function) @f32x4_shuffle_reduce(%v: reg<wasm.v128>, %init: reg<wasm.f32>) -> (reg<wasm.f32>) asm<wasm.core.simd128> {
+  %shuffled = i8x16.shuffle %v, %v, 12, 13, 14, 15, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2, 3
+  %9 = f32x4.extract_lane %shuffled, 0
+  %10 = f32.add %init, %9
+  %11 = f32x4.extract_lane %shuffled, 1
+  %12 = f32.add %10, %11
+  %13 = f32x4.extract_lane %shuffled, 2
+  %14 = f32.add %12, %13
+  %15 = f32x4.extract_lane %shuffled, 3
+  %sum = f32.add %14, %15
+  return %sum
+}
+
+// ====
+
 func.def @i32x4_select(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %true_value: vector<4xi32>, %false_value: vector<4xi32>) -> (vector<4xi32>) {
   %mask = vector.cmpi slt, %lhs, %rhs : vector<4xi32> -> vector<4xi1>
   %selected = vector.select %mask, %true_value, %false_value : vector<4xi32>

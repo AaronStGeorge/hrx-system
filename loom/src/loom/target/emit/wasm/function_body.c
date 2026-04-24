@@ -26,6 +26,7 @@ enum {
   LOOM_WASM_OPCODE_I32_SUB = 0x6B,
   LOOM_WASM_OPCODE_I32_MUL = 0x6C,
   LOOM_WASM_OPCODE_I32_LT_U = 0x49,
+  LOOM_WASM_OPCODE_F32_ADD = 0x92,
   LOOM_WASM_OPCODE_SIMD_PREFIX = 0xFD,
 };
 
@@ -37,6 +38,7 @@ enum {
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_SPLAT = 0x11,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_EXTRACT_LANE = 0x1B,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_REPLACE_LANE = 0x1C,
+  LOOM_WASM_SIMD_SUBOPCODE_F32X4_EXTRACT_LANE = 0x1F,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_EQ = 0x37,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_NE = 0x38,
   LOOM_WASM_SIMD_SUBOPCODE_I32X4_LT_S = 0x39,
@@ -77,6 +79,9 @@ enum {
   LOOM_WASM_ENCODING_I32X4_REPLACE_LANE =
       (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) |
       LOOM_WASM_SIMD_SUBOPCODE_I32X4_REPLACE_LANE,
+  LOOM_WASM_ENCODING_F32X4_EXTRACT_LANE =
+      (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) |
+      LOOM_WASM_SIMD_SUBOPCODE_F32X4_EXTRACT_LANE,
   LOOM_WASM_ENCODING_I32X4_EQ =
       (LOOM_WASM_OPCODE_SIMD_PREFIX << 8) | LOOM_WASM_SIMD_SUBOPCODE_I32X4_EQ,
   LOOM_WASM_ENCODING_I32X4_NE =
@@ -647,8 +652,10 @@ static iree_status_t loom_wasm_emit_ternary_stack_op(
 static iree_status_t loom_wasm_emit_lane_stack_op(
     loom_wasm_emit_state_t* state, const loom_op_t* op,
     const loom_low_descriptor_t* descriptor) {
-  const uint16_t expected_operand_count =
-      descriptor->encoding_id == LOOM_WASM_ENCODING_I32X4_EXTRACT_LANE ? 1 : 2;
+  const bool extracts_lane =
+      descriptor->encoding_id == LOOM_WASM_ENCODING_I32X4_EXTRACT_LANE ||
+      descriptor->encoding_id == LOOM_WASM_ENCODING_F32X4_EXTRACT_LANE;
+  const uint16_t expected_operand_count = extracts_lane ? 1 : 2;
   if (!loom_low_op_isa(op) || op->operand_count != expected_operand_count ||
       op->result_count != 1) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -740,6 +747,7 @@ static iree_status_t loom_wasm_emit_descriptor_packet(
     case LOOM_WASM_OPCODE_I32_SUB:
     case LOOM_WASM_OPCODE_I32_MUL:
     case LOOM_WASM_OPCODE_I32_LT_U:
+    case LOOM_WASM_OPCODE_F32_ADD:
     case LOOM_WASM_ENCODING_I32X4_EQ:
     case LOOM_WASM_ENCODING_I32X4_NE:
     case LOOM_WASM_ENCODING_I32X4_LT_S:
@@ -772,6 +780,7 @@ static iree_status_t loom_wasm_emit_descriptor_packet(
       return loom_wasm_emit_unary_stack_op(state, packet->node->op,
                                            packet->descriptor);
     case LOOM_WASM_ENCODING_I32X4_EXTRACT_LANE:
+    case LOOM_WASM_ENCODING_F32X4_EXTRACT_LANE:
     case LOOM_WASM_ENCODING_I32X4_REPLACE_LANE:
       return loom_wasm_emit_lane_stack_op(state, packet->node->op,
                                           packet->descriptor);

@@ -55,6 +55,14 @@ func.def @f32x4_shuffle(%v: vector<4xf32>) -> (vector<4xf32>) {
 
 // ====
 
+func.def @f32x4_shuffle_reduce(%v: vector<4xf32>, %init: f32) -> (f32) {
+  %shuffled = vector.shuffle<[3, 1, 2, 0]> %v : vector<4xf32>
+  %sum = vector.reduce<addf> %shuffled, %init : vector<4xf32>, f32
+  func.return %sum : f32
+}
+
+// ====
+
 func.def @i32x4_select(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %true_value: vector<4xi32>, %false_value: vector<4xi32>) -> (vector<4xi32>) {
   %mask = vector.cmpi slt, %lhs, %rhs : vector<4xi32> -> vector<4xi1>
   %selected = vector.select %mask, %true_value, %false_value : vector<4xi32>

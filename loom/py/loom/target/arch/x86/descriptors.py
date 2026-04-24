@@ -1023,6 +1023,23 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="vaddps",
             semantic_tag="float.add.f32x4",
         ),
+        Descriptor(
+            key="x86.avx512.vaddss.xmm",
+            mnemonic="vaddss",
+            semantic_tag="float.add.f32",
+            operands=(
+                _vector_result(128),
+                _xmm_operand("lhs"),
+                _xmm_operand("rhs"),
+            ),
+            asm_forms=_asm(
+                mnemonic="vaddss.xmm",
+                results=("dst",),
+                operands=("lhs", "rhs"),
+            ),
+            schedule_class=_SCHEDULE_VECTOR_F32_XMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
         _vector_f32_binary_descriptor(
             vector_bit_width=128,
             key="x86.avx512.vsubps.xmm",

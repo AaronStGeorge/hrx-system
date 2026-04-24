@@ -22,9 +22,11 @@ using ::loom::testing::LowTextAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmTypeInferenceHarness;
 
 constexpr uint16_t kWasmOpcodeI32Add = 0x6A;
+constexpr uint16_t kWasmOpcodeF32Add = 0x92;
 constexpr uint16_t kWasmOpcodeV128Load = 0xFD00;
 constexpr uint16_t kWasmOpcodeI32x4Add = 0xFDAE;
 constexpr uint16_t kWasmOpcodeI32x4Sub = 0xFDB1;
+constexpr uint16_t kWasmOpcodeF32x4ExtractLane = 0xFD1F;
 constexpr uint16_t kWasmOpcodeF32x4Add = 0xFDE4;
 constexpr uint16_t kWasmOpcodeF32x4Mul = 0xFDE6;
 constexpr uint16_t kWasmOpcodeV128Store = 0xFD0B;
@@ -97,6 +99,18 @@ TEST(WasmDescriptorsTest, CoreSimd128DescriptorLookupUsesStableKeys) {
   EXPECT_EQ(f32_multiply_descriptor->result_count, 1u);
   EXPECT_EQ(f32_multiply_descriptor->encoding_id, kWasmOpcodeF32x4Mul);
 
+  uint32_t f32_extract_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
+      descriptor_set, IREE_SV("wasm.f32x4.extract_lane"),
+      &f32_extract_ordinal));
+  const loom_low_descriptor_t* f32_extract_descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set,
+                                            f32_extract_ordinal);
+  ASSERT_NE(f32_extract_descriptor, nullptr);
+  EXPECT_EQ(f32_extract_descriptor->operand_count, 2u);
+  EXPECT_EQ(f32_extract_descriptor->result_count, 1u);
+  EXPECT_EQ(f32_extract_descriptor->encoding_id, kWasmOpcodeF32x4ExtractLane);
+
   uint32_t scalar_add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
   IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
       descriptor_set, IREE_SV("wasm.i32.add"), &scalar_add_ordinal));
@@ -104,6 +118,15 @@ TEST(WasmDescriptorsTest, CoreSimd128DescriptorLookupUsesStableKeys) {
       loom_low_descriptor_set_descriptor_at(descriptor_set, scalar_add_ordinal);
   ASSERT_NE(scalar_add_descriptor, nullptr);
   EXPECT_EQ(scalar_add_descriptor->encoding_id, kWasmOpcodeI32Add);
+
+  uint32_t scalar_f32_add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
+      descriptor_set, IREE_SV("wasm.f32.add"), &scalar_f32_add_ordinal));
+  const loom_low_descriptor_t* scalar_f32_add_descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set,
+                                            scalar_f32_add_ordinal);
+  ASSERT_NE(scalar_f32_add_descriptor, nullptr);
+  EXPECT_EQ(scalar_f32_add_descriptor->encoding_id, kWasmOpcodeF32Add);
 
   uint32_t load_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
   IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
@@ -157,6 +180,8 @@ TEST(WasmDescriptorsTest, LowAsmRegionRoundTrips) {
       "  %diff = i32x4.sub %sum, %rhs\n"
       "  %fsum = f32x4.add %lhs, %rhs\n"
       "  %fproduct = f32x4.mul %fsum, %rhs\n"
+      "  %flane = f32x4.extract_lane %fproduct, 2\n"
+      "  %facc = f32.add %flane, %flane\n"
       "  %loaded = v128.load %addr\n"
       "  v128.store %addr, %loaded\n"
       "  return %fproduct\n"
@@ -182,6 +207,8 @@ TEST(WasmDescriptorsTest, LowFuncAsmRoundTripsMemoryPacketsWithArguments) {
       "  %diff = i32x4.sub %sum, %rhs\n"
       "  %fsum = f32x4.add %lhs, %rhs\n"
       "  %fproduct = f32x4.mul %fsum, %rhs\n"
+      "  %flane = f32x4.extract_lane %fproduct, 2\n"
+      "  %facc = f32.add %flane, %flane\n"
       "  v128.store %addr, %loaded\n"
       "  return %fproduct\n"
       "}\n";
