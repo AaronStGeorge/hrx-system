@@ -777,6 +777,7 @@ loom_check_test_suite(
         "source_low_bitpack.loom-test",
         "source_low_bitunpack.loom-test",
         "source_low_cache_policy.loom-test",
+        "source_low_cache_policy_gfx950.loom-test",
         "source_low_conversion.loom-test",
         "source_low_diagnostics.loom-test",
         "source_low_dot.loom-test",
@@ -790,6 +791,8 @@ loom_check_test_suite(
     ],
     data = [
         "//loom/src/loom/test/corpus/source_low:index_addressing.loom-test",
+        "//loom/src/loom/test/corpus/source_low:memory_cache_policy_non_temporal.loom-test",
+        "//loom/src/loom/test/corpus/source_low:memory_cache_policy_scopes.loom-test",
         "//loom/src/loom/test/corpus/source_low:numeric_conversion.loom-test",
         "//loom/src/loom/test/corpus/source_low:numeric_minmax.loom-test",
         "//loom/src/loom/test/corpus/source_low:numeric_reduce.loom-test",
