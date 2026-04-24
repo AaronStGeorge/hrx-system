@@ -8,6 +8,28 @@ func.def @i32x16_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16
 
 // ====
 
+func.def @i32x16_minmax_logic(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
+  %min_s = vector.minsi %lhs, %rhs : vector<16xi32>
+  %max_s = vector.maxsi %lhs, %rhs : vector<16xi32>
+  %min_u = vector.minui %lhs, %rhs : vector<16xi32>
+  %max_u = vector.maxui %lhs, %rhs : vector<16xi32>
+  %mask = vector.andi %min_s, %max_s : vector<16xi32>
+  %mixed = vector.xori %mask, %min_u : vector<16xi32>
+  %result = vector.ori %mixed, %max_u : vector<16xi32>
+  func.return %result : vector<16xi32>
+}
+
+// ====
+
+func.def @i32x16_variable_shift(%value: vector<16xi32>, %amount: vector<16xi32>) -> (vector<16xi32>) {
+  %left = vector.shli %value, %amount : vector<16xi32>
+  %signed = vector.shrsi %left, %amount : vector<16xi32>
+  %result = vector.shrui %signed, %amount : vector<16xi32>
+  func.return %result : vector<16xi32>
+}
+
+// ====
+
 func.def @f32x16_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<16xf32>
   %difference = vector.subf %sum, %lhs : vector<16xf32>

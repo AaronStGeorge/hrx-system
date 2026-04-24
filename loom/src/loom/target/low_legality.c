@@ -553,7 +553,11 @@ static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
     case LOOM_OP_VECTOR_FMAI:
     case LOOM_OP_VECTOR_INSERT:
     case LOOM_OP_VECTOR_LOAD:
+    case LOOM_OP_VECTOR_MAXSI:
+    case LOOM_OP_VECTOR_MAXUI:
     case LOOM_OP_VECTOR_MAXNUMF:
+    case LOOM_OP_VECTOR_MINSI:
+    case LOOM_OP_VECTOR_MINUI:
     case LOOM_OP_VECTOR_MINNUMF:
     case LOOM_OP_VECTOR_MULF:
     case LOOM_OP_VECTOR_MULI:

@@ -334,44 +334,40 @@ enum loom_x86_avx512_emit_e {
   LOOM_X86_AVX512_EMIT_VPADDD = 4,
   LOOM_X86_AVX512_EMIT_VPSUBD = 5,
   LOOM_X86_AVX512_EMIT_VPMULLD = 6,
-  LOOM_X86_AVX512_EMIT_MOVIMM_GPR64 = 7,
-  LOOM_X86_AVX512_EMIT_LEA_ADD_GPR64 = 8,
-  LOOM_X86_AVX512_EMIT_IMUL_GPR64 = 9,
-  LOOM_X86_AVX512_EMIT_IMUL_TEMP_GPR64 = 10,
-  LOOM_X86_AVX512_EMIT_LEA_ADD_TEMP_GPR64 = 11,
+  LOOM_X86_AVX512_EMIT_VPMINSD = 7,
+  LOOM_X86_AVX512_EMIT_VPMAXSD = 8,
+  LOOM_X86_AVX512_EMIT_VPMINUD = 9,
+  LOOM_X86_AVX512_EMIT_VPMAXUD = 10,
+  LOOM_X86_AVX512_EMIT_VPANDD = 11,
+  LOOM_X86_AVX512_EMIT_VPORD = 12,
+  LOOM_X86_AVX512_EMIT_VPXORD = 13,
+  LOOM_X86_AVX512_EMIT_VPSLLVD = 14,
+  LOOM_X86_AVX512_EMIT_VPSRAVD = 15,
+  LOOM_X86_AVX512_EMIT_VPSRLVD = 16,
+  LOOM_X86_AVX512_EMIT_MOVIMM_GPR64 = 17,
+  LOOM_X86_AVX512_EMIT_LEA_ADD_GPR64 = 18,
+  LOOM_X86_AVX512_EMIT_IMUL_GPR64 = 19,
+  LOOM_X86_AVX512_EMIT_IMUL_TEMP_GPR64 = 20,
+  LOOM_X86_AVX512_EMIT_LEA_ADD_TEMP_GPR64 = 21,
 };
 
+#define LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(descriptor_id_value) \
+  {                                                                 \
+      .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,                    \
+      .descriptor_id = (descriptor_id_value),                       \
+      .operand_ref_start = LOOM_X86_AVX512_OPERAND0,                \
+      .operand_ref_count = 2,                                       \
+      .result_ref_start = LOOM_X86_AVX512_RESULT0,                  \
+      .result_ref_count = 1,                                        \
+  }
+
 static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
-    [LOOM_X86_AVX512_EMIT_VADDPS] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id =
-                X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VADDPS_ZMM,
-            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_X86_AVX512_RESULT0,
-            .result_ref_count = 1,
-        },
-    [LOOM_X86_AVX512_EMIT_VSUBPS] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id =
-                X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VSUBPS_ZMM,
-            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_X86_AVX512_RESULT0,
-            .result_ref_count = 1,
-        },
-    [LOOM_X86_AVX512_EMIT_VMULPS] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id =
-                X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMULPS_ZMM,
-            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_X86_AVX512_RESULT0,
-            .result_ref_count = 1,
-        },
+    [LOOM_X86_AVX512_EMIT_VADDPS] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VADDPS_ZMM),
+    [LOOM_X86_AVX512_EMIT_VSUBPS] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VSUBPS_ZMM),
+    [LOOM_X86_AVX512_EMIT_VMULPS] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMULPS_ZMM),
     [LOOM_X86_AVX512_EMIT_VFMADD231PS] =
         {
             .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
@@ -385,36 +381,32 @@ static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
             .tied_result_start = 0,
             .tied_result_count = 1,
         },
-    [LOOM_X86_AVX512_EMIT_VPADDD] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id =
-                X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPADDD_ZMM,
-            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_X86_AVX512_RESULT0,
-            .result_ref_count = 1,
-        },
-    [LOOM_X86_AVX512_EMIT_VPSUBD] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id =
-                X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPSUBD_ZMM,
-            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_X86_AVX512_RESULT0,
-            .result_ref_count = 1,
-        },
-    [LOOM_X86_AVX512_EMIT_VPMULLD] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id =
-                X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPMULLD_ZMM,
-            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_X86_AVX512_RESULT0,
-            .result_ref_count = 1,
-        },
+    [LOOM_X86_AVX512_EMIT_VPADDD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPADDD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPSUBD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPSUBD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPMULLD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPMULLD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPMINSD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPMINSD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPMAXSD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPMAXSD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPMINUD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPMINUD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPMAXUD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPMAXUD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPANDD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPANDD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPORD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPORD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPXORD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPXORD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPSLLVD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPSLLVD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPSRAVD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPSRAVD_ZMM),
+    [LOOM_X86_AVX512_EMIT_VPSRLVD] = LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+        X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VPSRLVD_ZMM),
     [LOOM_X86_AVX512_EMIT_MOVIMM_GPR64] =
         {
             .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_CONST,
@@ -426,15 +418,8 @@ static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
             .attr_copy_count = 1,
         },
     [LOOM_X86_AVX512_EMIT_LEA_ADD_GPR64] =
-        {
-            .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
-            .descriptor_id =
-                X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_LEA_ADD_GPR64,
-            .operand_ref_start = LOOM_X86_AVX512_OPERAND0,
-            .operand_ref_count = 2,
-            .result_ref_start = LOOM_X86_AVX512_RESULT0,
-            .result_ref_count = 1,
-        },
+        LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT(
+            X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_LEA_ADD_GPR64),
     [LOOM_X86_AVX512_EMIT_IMUL_GPR64] =
         {
             .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
@@ -474,6 +459,8 @@ static const loom_low_lower_emit_t loom_x86_avx512_emits[] = {
             .result_ref_count = 1,
         },
 };
+
+#undef LOOM_X86_AVX512_BINARY_DESCRIPTOR_EMIT
 
 static const loom_low_lower_rule_t loom_x86_avx512_rules[] = {
     {
@@ -523,6 +510,76 @@ static const loom_low_lower_rule_t loom_x86_avx512_rules[] = {
         .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
         .guard_count = 3,
         .emit_start = LOOM_X86_AVX512_EMIT_VPMULLD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_MINSI,
+        .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_VPMINSD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_MAXSI,
+        .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_VPMAXSD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_MINUI,
+        .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_VPMINUD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_MAXUI,
+        .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_VPMAXUD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ANDI,
+        .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_VPANDD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ORI,
+        .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_VPORD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_XORI,
+        .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_VPXORD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SHLI,
+        .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_VPSLLVD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SHRSI,
+        .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_VPSRAVD,
+        .emit_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SHRUI,
+        .guard_start = LOOM_X86_AVX512_I32_LHS_GUARD,
+        .guard_count = 3,
+        .emit_start = LOOM_X86_AVX512_EMIT_VPSRLVD,
         .emit_count = 1,
     },
     {
@@ -593,23 +650,73 @@ static const loom_low_lower_rule_span_t loom_x86_avx512_rule_spans[] = {
         .rule_count = 1,
     },
     {
-        .source_op_kind = LOOM_OP_INDEX_CONSTANT,
+        .source_op_kind = LOOM_OP_VECTOR_MINSI,
         .rule_start = 7,
         .rule_count = 1,
     },
     {
-        .source_op_kind = LOOM_OP_INDEX_ADD,
+        .source_op_kind = LOOM_OP_VECTOR_MAXSI,
         .rule_start = 8,
         .rule_count = 1,
     },
     {
-        .source_op_kind = LOOM_OP_INDEX_MUL,
+        .source_op_kind = LOOM_OP_VECTOR_MINUI,
         .rule_start = 9,
         .rule_count = 1,
     },
     {
-        .source_op_kind = LOOM_OP_INDEX_MADD,
+        .source_op_kind = LOOM_OP_VECTOR_MAXUI,
         .rule_start = 10,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ANDI,
+        .rule_start = 11,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_ORI,
+        .rule_start = 12,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_XORI,
+        .rule_start = 13,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SHLI,
+        .rule_start = 14,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SHRSI,
+        .rule_start = 15,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SHRUI,
+        .rule_start = 16,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_INDEX_CONSTANT,
+        .rule_start = 17,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_INDEX_ADD,
+        .rule_start = 18,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_INDEX_MUL,
+        .rule_start = 19,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_INDEX_MADD,
+        .rule_start = 20,
         .rule_count = 1,
     },
 };

@@ -13,3 +13,37 @@ low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : re
   vpaddd zmm0, zmm1, zmm0
   vmovdqu32 [rax + 64], zmm0
   ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>) asm<x86.avx512.core> {
+  %min_s = vpminsd %lhs, %rhs
+  %max_s = vpmaxsd %lhs, %rhs
+  %min_u = vpminud %lhs, %rhs
+  %max_u = vpmaxud %lhs, %rhs
+  %mask = vpandd %min_s, %max_s
+  %mixed = vpxord %mask, %min_u
+  %logic = vpord %mixed, %max_u
+  %left = vpsllvd %logic, %rhs
+  %signed = vpsravd %left, %rhs
+  %result = vpsrlvd %signed, %rhs
+  vmovdqu32.store %result, %base {disp32 = 128}
+  return
+}
+
+// ----
+.Lbb0:
+  vpminsd zmm2, zmm0, zmm1
+  vpmaxsd zmm3, zmm0, zmm1
+  vpminud zmm4, zmm0, zmm1
+  vpmaxud zmm0, zmm0, zmm1
+  vpandd zmm2, zmm2, zmm3
+  vpxord zmm2, zmm2, zmm4
+  vpord zmm0, zmm2, zmm0
+  vpsllvd zmm0, zmm0, zmm1
+  vpsravd zmm0, zmm0, zmm1
+  vpsrlvd zmm0, zmm0, zmm1
+  vmovdqu32 [rax + 128], zmm0
+  ret

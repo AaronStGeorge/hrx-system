@@ -16,6 +16,48 @@ low.func.def target(@target) abi(object_function) @i32x16_arith(%lhs: reg<x86.zm
 
 // ====
 
+func.def @i32x16_minmax_logic(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
+  %min_s = vector.minsi %lhs, %rhs : vector<16xi32>
+  %max_s = vector.maxsi %lhs, %rhs : vector<16xi32>
+  %min_u = vector.minui %lhs, %rhs : vector<16xi32>
+  %max_u = vector.maxui %lhs, %rhs : vector<16xi32>
+  %mask = vector.andi %min_s, %max_s : vector<16xi32>
+  %mixed = vector.xori %mask, %min_u : vector<16xi32>
+  %result = vector.ori %mixed, %max_u : vector<16xi32>
+  func.return %result : vector<16xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32x16_minmax_logic(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>) -> (reg<x86.zmm>) asm<x86.avx512.core> {
+  %min_s = vpminsd %lhs, %rhs
+  %max_s = vpmaxsd %lhs, %rhs
+  %min_u = vpminud %lhs, %rhs
+  %max_u = vpmaxud %lhs, %rhs
+  %mask = vpandd %min_s, %max_s
+  %mixed = vpxord %mask, %min_u
+  %result = vpord %mixed, %max_u
+  return %result
+}
+
+// ====
+
+func.def @i32x16_variable_shift(%value: vector<16xi32>, %amount: vector<16xi32>) -> (vector<16xi32>) {
+  %left = vector.shli %value, %amount : vector<16xi32>
+  %signed = vector.shrsi %left, %amount : vector<16xi32>
+  %result = vector.shrui %signed, %amount : vector<16xi32>
+  func.return %result : vector<16xi32>
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i32x16_variable_shift(%value: reg<x86.zmm>, %amount: reg<x86.zmm>) -> (reg<x86.zmm>) asm<x86.avx512.core> {
+  %left = vpsllvd %value, %amount
+  %signed = vpsravd %left, %amount
+  %result = vpsrlvd %signed, %amount
+  return %result
+}
+
+// ====
+
 func.def @f32x16_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<16xf32>
   %difference = vector.subf %sum, %lhs : vector<16xf32>

@@ -281,6 +281,23 @@ def _packed_dot_descriptor(descriptor: PackedDotDescriptor) -> Descriptor:
     )
 
 
+def _zmm_i32_binary_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> Descriptor:
+    return Descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        operands=(_zmm_result(), _zmm_operand("lhs"), _zmm_operand("rhs")),
+        asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+        schedule_class=_SCHEDULE_VECTOR_I32_ZMM,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="x86.avx512.core",
     target_key="x86",
@@ -445,32 +462,70 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
     ),
     descriptors=(
-        Descriptor(
+        _zmm_i32_binary_descriptor(
             key="x86.avx512.vpaddd.zmm",
             mnemonic="vpaddd",
             semantic_tag="integer.add.i32x16",
-            operands=(_zmm_result(), _zmm_operand("lhs"), _zmm_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_VECTOR_I32_ZMM,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        Descriptor(
+        _zmm_i32_binary_descriptor(
             key="x86.avx512.vpsubd.zmm",
             mnemonic="vpsubd",
             semantic_tag="integer.sub.i32x16",
-            operands=(_zmm_result(), _zmm_operand("lhs"), _zmm_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_VECTOR_I32_ZMM,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        Descriptor(
+        _zmm_i32_binary_descriptor(
             key="x86.avx512.vpmulld.zmm",
             mnemonic="vpmulld",
             semantic_tag="integer.mul.i32x16",
-            operands=(_zmm_result(), _zmm_operand("lhs"), _zmm_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_VECTOR_I32_ZMM,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        _zmm_i32_binary_descriptor(
+            key="x86.avx512.vpminsd.zmm",
+            mnemonic="vpminsd",
+            semantic_tag="integer.mins.i32x16",
+        ),
+        _zmm_i32_binary_descriptor(
+            key="x86.avx512.vpmaxsd.zmm",
+            mnemonic="vpmaxsd",
+            semantic_tag="integer.maxs.i32x16",
+        ),
+        _zmm_i32_binary_descriptor(
+            key="x86.avx512.vpminud.zmm",
+            mnemonic="vpminud",
+            semantic_tag="integer.minu.i32x16",
+        ),
+        _zmm_i32_binary_descriptor(
+            key="x86.avx512.vpmaxud.zmm",
+            mnemonic="vpmaxud",
+            semantic_tag="integer.maxu.i32x16",
+        ),
+        _zmm_i32_binary_descriptor(
+            key="x86.avx512.vpandd.zmm",
+            mnemonic="vpandd",
+            semantic_tag="integer.and.i32x16",
+        ),
+        _zmm_i32_binary_descriptor(
+            key="x86.avx512.vpord.zmm",
+            mnemonic="vpord",
+            semantic_tag="integer.or.i32x16",
+        ),
+        _zmm_i32_binary_descriptor(
+            key="x86.avx512.vpxord.zmm",
+            mnemonic="vpxord",
+            semantic_tag="integer.xor.i32x16",
+        ),
+        _zmm_i32_binary_descriptor(
+            key="x86.avx512.vpsllvd.zmm",
+            mnemonic="vpsllvd",
+            semantic_tag="integer.shl.i32x16",
+        ),
+        _zmm_i32_binary_descriptor(
+            key="x86.avx512.vpsravd.zmm",
+            mnemonic="vpsravd",
+            semantic_tag="integer.shrs.i32x16",
+        ),
+        _zmm_i32_binary_descriptor(
+            key="x86.avx512.vpsrlvd.zmm",
+            mnemonic="vpsrlvd",
+            semantic_tag="integer.shru.i32x16",
         ),
         Descriptor(
             key="x86.avx512.vaddps.zmm",
