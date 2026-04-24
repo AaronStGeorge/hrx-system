@@ -236,7 +236,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::testing::context
+    loom::src::loom::ops::target
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm
@@ -260,9 +260,11 @@ loom_cc_test(
     loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
+    loom::src::loom::ops::cfg
     loom::src::loom::ops::func
     loom::src::loom::ops::low
-    loom::src::loom::testing::context
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::target
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm
