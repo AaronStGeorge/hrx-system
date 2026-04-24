@@ -351,7 +351,8 @@ TEST_F(ExecuteTest, RoundtripActualOutputPopulated) {
                    "func.def @f() {\n"
                    "}\n",
                    &result));
-  EXPECT_FALSE(ActualOutputString(result).empty());
+  EXPECT_NE(ActualOutputString(result).find("func.def @f()"),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
