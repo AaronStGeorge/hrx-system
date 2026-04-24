@@ -14,6 +14,8 @@
 // File format:
 //
 //   // RUN: roundtrip
+//   // TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test
+//   // ====
 //   <input IR>
 //   // ----
 //   <expected output>
@@ -49,6 +51,9 @@
 //                           Skip the case when external tools or target
 //                           backends are unavailable.
 //   // XFAIL: <reason>      Mark case as expected failure.
+//   // TEMPLATE: <path>      Declare that this file is synchronized from a
+//                           root-relative corpus template. File-level only;
+//                           ignored by ordinary execution.
 //
 // Separators:
 //   // ====                 Case separator (purely structural).
@@ -64,6 +69,13 @@
 //   A // REQUIRES: directive in the preamble sets file-level default
 //   environment requirements. Every case receives the file defaults,
 //   plus any case-local requirements it declares.
+//
+// TEMPLATE:
+//   A // TEMPLATE: directive in the preamble declares a source corpus template
+//   for generated target-specific expectation files. It is metadata for update
+//   tooling, not a linking mechanism and not a case namespace. Individual case
+//   names are the function symbols inside the case IR; // CASE directives are
+//   intentionally unsupported.
 //
 // Annotations (for verify mode — uppercase to distinguish from comments):
 //   // ERROR: DOMAIN/CODE "substring"
@@ -265,6 +277,12 @@ typedef struct loom_check_file_t {
   loom_check_case_t* cases;
   // Number of test cases.
   iree_host_size_t case_count;
+  // Whether the file declares a corpus template source.
+  bool has_template_directive;
+  // Source range of the // TEMPLATE: directive line. Empty when absent.
+  loom_check_source_range_t template_directive_range;
+  // Root-relative corpus template path from // TEMPLATE:.
+  iree_string_view_t template_path;
 
   // File-level default mode from the preamble (text before the first
   // // ==== separator). Cases without their own // RUN: directive
