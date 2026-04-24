@@ -77,19 +77,6 @@ class SourceLoweringBenchmark {
   loom_low_lower_policy_registry_t policy_registry_ = {};
 };
 
-static uint64_t SourceOpCount(
-    const loom_low_source_workload_pipeline_counters_t& counters) {
-  return counters.source_counts.scalar_integer_op_count +
-         counters.source_counts.scalar_constant_count +
-         counters.source_counts.vector_integer_op_count +
-         counters.source_counts.vector_reduce_op_count +
-         counters.source_counts.vector_extract_op_count +
-         counters.source_counts.vector_shuffle_op_count +
-         counters.source_counts.vector_load_op_count +
-         counters.source_counts.vector_store_op_count +
-         counters.source_counts.index_madd_op_count;
-}
-
 static double Average(uint64_t total, int64_t iterations) {
   return iterations == 0
              ? 0.0
@@ -115,7 +102,8 @@ static void BM_SourceLowPipeline(benchmark::State& state) {
     if (!iree_status_is_ok(status)) {
       iree_status_abort(status);
     }
-    total_source_ops += SourceOpCount(counters);
+    total_source_ops +=
+        loom_low_source_workload_counts_total(&counters.source_counts);
     total_low_packets += counters.low_descriptor_op_count;
     total_schedule_nodes += counters.schedule_node_count;
     total_dependencies += counters.schedule_dependency_count;

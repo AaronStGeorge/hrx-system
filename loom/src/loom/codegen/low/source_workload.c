@@ -644,6 +644,37 @@ void loom_low_source_workload_count_func_ops(
   }
 }
 
+void loom_low_source_workload_counts_accumulate(
+    loom_low_source_workload_counts_t* target_counts,
+    const loom_low_source_workload_counts_t* source_counts) {
+  IREE_ASSERT_ARGUMENT(target_counts);
+  IREE_ASSERT_ARGUMENT(source_counts);
+  target_counts->scalar_integer_op_count +=
+      source_counts->scalar_integer_op_count;
+  target_counts->scalar_constant_count += source_counts->scalar_constant_count;
+  target_counts->vector_integer_op_count +=
+      source_counts->vector_integer_op_count;
+  target_counts->vector_reduce_op_count +=
+      source_counts->vector_reduce_op_count;
+  target_counts->vector_extract_op_count +=
+      source_counts->vector_extract_op_count;
+  target_counts->vector_shuffle_op_count +=
+      source_counts->vector_shuffle_op_count;
+  target_counts->vector_load_op_count += source_counts->vector_load_op_count;
+  target_counts->vector_store_op_count += source_counts->vector_store_op_count;
+  target_counts->index_madd_op_count += source_counts->index_madd_op_count;
+}
+
+uint64_t loom_low_source_workload_counts_total(
+    const loom_low_source_workload_counts_t* counts) {
+  IREE_ASSERT_ARGUMENT(counts);
+  return counts->scalar_integer_op_count + counts->scalar_constant_count +
+         counts->vector_integer_op_count + counts->vector_reduce_op_count +
+         counts->vector_extract_op_count + counts->vector_shuffle_op_count +
+         counts->vector_load_op_count + counts->vector_store_op_count +
+         counts->index_madd_op_count;
+}
+
 //===----------------------------------------------------------------------===//
 // Pipeline
 //===----------------------------------------------------------------------===//
@@ -673,15 +704,7 @@ static void loom_low_source_workload_count_module_source_ops(
     }
     loom_low_source_workload_counts_t func_counts;
     loom_low_source_workload_count_func_ops(op, &func_counts);
-    out_counts->scalar_integer_op_count += func_counts.scalar_integer_op_count;
-    out_counts->scalar_constant_count += func_counts.scalar_constant_count;
-    out_counts->vector_integer_op_count += func_counts.vector_integer_op_count;
-    out_counts->vector_reduce_op_count += func_counts.vector_reduce_op_count;
-    out_counts->vector_extract_op_count += func_counts.vector_extract_op_count;
-    out_counts->vector_shuffle_op_count += func_counts.vector_shuffle_op_count;
-    out_counts->vector_load_op_count += func_counts.vector_load_op_count;
-    out_counts->vector_store_op_count += func_counts.vector_store_op_count;
-    out_counts->index_madd_op_count += func_counts.index_madd_op_count;
+    loom_low_source_workload_counts_accumulate(out_counts, &func_counts);
   }
 }
 

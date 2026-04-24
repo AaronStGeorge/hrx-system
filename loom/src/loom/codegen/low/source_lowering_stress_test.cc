@@ -70,24 +70,8 @@ TEST_F(SourceLoweringStressTest, GeneratedSupportedSourceLowersAndPacketizes) {
     IREE_ASSERT_OK(loom_low_source_workload_run_pipeline(
         module.get(), &pipeline_options, &block_pool_, &counters));
     EXPECT_EQ(counters.lower_error_count, 0u);
-    aggregate.source_counts.scalar_integer_op_count +=
-        counters.source_counts.scalar_integer_op_count;
-    aggregate.source_counts.scalar_constant_count +=
-        counters.source_counts.scalar_constant_count;
-    aggregate.source_counts.vector_integer_op_count +=
-        counters.source_counts.vector_integer_op_count;
-    aggregate.source_counts.vector_reduce_op_count +=
-        counters.source_counts.vector_reduce_op_count;
-    aggregate.source_counts.vector_extract_op_count +=
-        counters.source_counts.vector_extract_op_count;
-    aggregate.source_counts.vector_shuffle_op_count +=
-        counters.source_counts.vector_shuffle_op_count;
-    aggregate.source_counts.vector_load_op_count +=
-        counters.source_counts.vector_load_op_count;
-    aggregate.source_counts.vector_store_op_count +=
-        counters.source_counts.vector_store_op_count;
-    aggregate.source_counts.index_madd_op_count +=
-        counters.source_counts.index_madd_op_count;
+    loom_low_source_workload_counts_accumulate(&aggregate.source_counts,
+                                               &counters.source_counts);
     aggregate.low_descriptor_op_count += counters.low_descriptor_op_count;
     aggregate.schedule_node_count += counters.schedule_node_count;
     aggregate.allocation_assignment_count +=

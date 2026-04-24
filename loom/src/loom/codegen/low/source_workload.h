@@ -142,6 +142,15 @@ iree_status_t loom_low_source_workload_generate_seeded_module(
 void loom_low_source_workload_count_func_ops(
     const loom_op_t* func_op, loom_low_source_workload_counts_t* out_counts);
 
+// Adds |source_counts| into |target_counts|.
+void loom_low_source_workload_counts_accumulate(
+    loom_low_source_workload_counts_t* target_counts,
+    const loom_low_source_workload_counts_t* source_counts);
+
+// Returns the total number of counted source ops.
+uint64_t loom_low_source_workload_counts_total(
+    const loom_low_source_workload_counts_t* counts);
+
 // Runs the generated workload through source verification, source-to-low
 // lowering, low verification, packetization, scheduling, and allocation.
 iree_status_t loom_low_source_workload_run_pipeline(
