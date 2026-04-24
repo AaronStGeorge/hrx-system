@@ -195,6 +195,8 @@ static iree_status_t loom_movement_endpoint_for_view(
       .begin_byte_offset = region->begin_byte_offset,
       .byte_length = region->byte_length,
       .end_byte_offset = region->end_byte_offset,
+      .minimum_alignment = region->minimum_alignment,
+      .root_minimum_alignment = region->root_minimum_alignment,
       .precision_flags = region->precision_flags,
   };
   if (loom_movement_exact_i64(region->begin_byte_offset,
@@ -788,6 +790,25 @@ iree_status_t loom_movement_analysis_analyze_function(
 
 bool loom_movement_op_kind_is_async(loom_op_kind_t op_kind) {
   return loom_movement_async_descriptor_for(op_kind) != NULL;
+}
+
+uint64_t loom_movement_endpoint_minimum_byte_alignment(
+    const loom_movement_endpoint_t* endpoint) {
+  IREE_ASSERT_ARGUMENT(endpoint);
+  if (endpoint->kind != LOOM_MOVEMENT_ENDPOINT_VIEW ||
+      endpoint->root_minimum_alignment == 0) {
+    return 0;
+  }
+  if (iree_any_bit_set(endpoint->flags, LOOM_MOVEMENT_ENDPOINT_STATIC_BEGIN) &&
+      endpoint->static_begin_byte_offset == 0) {
+    return endpoint->root_minimum_alignment;
+  }
+  if (endpoint->minimum_alignment == 0) {
+    return 0;
+  }
+  return endpoint->root_minimum_alignment < endpoint->minimum_alignment
+             ? endpoint->root_minimum_alignment
+             : endpoint->minimum_alignment;
 }
 
 iree_status_t loom_movement_request_describe_op(

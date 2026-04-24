@@ -159,6 +159,12 @@ typedef struct loom_movement_endpoint_t {
   // Symbolic byte offset one past the endpoint footprint.
   loom_symbolic_expr_t end_byte_offset;
 
+  // Minimum provable alignment of begin_byte_offset relative to root_value_id.
+  uint64_t minimum_alignment;
+
+  // Minimum provable byte alignment of the root storage base.
+  uint64_t root_minimum_alignment;
+
   // Exact begin byte offset when LOOM_MOVEMENT_ENDPOINT_STATIC_BEGIN is set.
   int64_t static_begin_byte_offset;
 
@@ -256,6 +262,13 @@ iree_status_t loom_movement_request_describe_op(
     loom_movement_analysis_t* analysis, const loom_op_t* op,
     loom_movement_request_t* out_request,
     loom_movement_diagnostic_t* out_diagnostic, bool* out_described);
+
+// Returns the minimum provable byte alignment for a memory endpoint address.
+//
+// The result combines root storage alignment with the endpoint begin offset.
+// Non-memory endpoints or unknown alignment facts return 0.
+uint64_t loom_movement_endpoint_minimum_byte_alignment(
+    const loom_movement_endpoint_t* endpoint);
 
 // Returns a diagnostic detail string for movement request rejection flags.
 iree_string_view_t loom_movement_rejection_detail(

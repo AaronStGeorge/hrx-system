@@ -94,6 +94,18 @@ class MovementTest : public ::testing::Test {
 
   loom_value_id_t DefineBufferArg() { return DefineArg(loom_type_buffer()); }
 
+  loom_value_id_t BuildAllocaBuffer(int64_t byte_length,
+                                    int64_t base_alignment) {
+    loom_value_id_t byte_length_value =
+        loom_index_constant_result(BuildOffsetConstant(byte_length));
+    loom_op_t* op = nullptr;
+    IREE_CHECK_OK(loom_buffer_alloca_build(
+        &builder_, byte_length_value, base_alignment,
+        LOOM_BUFFER_MEMORY_SPACE_WORKGROUP, loom_type_buffer(),
+        LOOM_LOCATION_UNKNOWN, &op));
+    return loom_buffer_alloca_result(op);
+  }
+
   loom_value_id_t DefineVectorArg(loom_type_t type) { return DefineArg(type); }
 
   loom_value_id_t DefinePredicateArg() {
@@ -247,6 +259,43 @@ TEST_F(MovementTest, ClassifiesStaticDenseVectorLoadFootprint) {
   EXPECT_EQ(request.source.static_byte_length, 16);
   EXPECT_EQ(request.dest.kind, LOOM_MOVEMENT_ENDPOINT_REGISTER);
   EXPECT_EQ(diagnostic.rejection_bits, 0u);
+}
+
+TEST_F(MovementTest, CarriesViewAlignmentFacts) {
+  loom_value_id_t buffer = BuildAllocaBuffer(256, 64);
+  loom_value_id_t layout = BuildDenseLayout();
+  loom_value_id_t aligned_view =
+      BuildBufferView(buffer, 0, ViewType1D(LOOM_SCALAR_TYPE_F32, 32, layout));
+  loom_value_id_t misaligned_view =
+      BuildBufferView(buffer, 28, ViewType1D(LOOM_SCALAR_TYPE_F32, 32, layout));
+  int64_t static_indices[] = {0};
+
+  loom_op_t* aligned_op = nullptr;
+  IREE_ASSERT_OK(loom_vector_load_build(&builder_, 0, aligned_view, nullptr, 0,
+                                        static_indices,
+                                        IREE_ARRAYSIZE(static_indices), 0, 0,
+                                        VectorType1D(LOOM_SCALAR_TYPE_F32, 4),
+                                        LOOM_LOCATION_UNKNOWN, &aligned_op));
+  loom_op_t* misaligned_op = nullptr;
+  IREE_ASSERT_OK(loom_vector_load_build(&builder_, 0, misaligned_view, nullptr,
+                                        0, static_indices,
+                                        IREE_ARRAYSIZE(static_indices), 0, 0,
+                                        VectorType1D(LOOM_SCALAR_TYPE_F32, 4),
+                                        LOOM_LOCATION_UNKNOWN, &misaligned_op));
+
+  loom_movement_analysis_t analysis = {};
+  InitializeAnalysis(&analysis);
+  loom_movement_request_t request = {};
+  loom_movement_diagnostic_t diagnostic = {};
+  ASSERT_TRUE(Describe(&analysis, aligned_op, &request, &diagnostic));
+  EXPECT_EQ(request.source.root_minimum_alignment, 64u);
+  EXPECT_EQ(loom_movement_endpoint_minimum_byte_alignment(&request.source),
+            64u);
+
+  ASSERT_TRUE(Describe(&analysis, misaligned_op, &request, &diagnostic));
+  EXPECT_EQ(request.source.root_minimum_alignment, 64u);
+  EXPECT_EQ(request.source.minimum_alignment, 4u);
+  EXPECT_EQ(loom_movement_endpoint_minimum_byte_alignment(&request.source), 4u);
 }
 
 TEST_F(MovementTest, ClassifiesStaticStridedVectorStore) {

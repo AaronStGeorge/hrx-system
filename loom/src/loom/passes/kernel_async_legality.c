@@ -267,6 +267,8 @@ static void loom_kernel_async_legality_endpoint_region(
       .begin_byte_offset = endpoint->begin_byte_offset,
       .byte_length = endpoint->byte_length,
       .end_byte_offset = endpoint->end_byte_offset,
+      .minimum_alignment = endpoint->minimum_alignment,
+      .root_minimum_alignment = endpoint->root_minimum_alignment,
       .memory_space = endpoint->memory_space,
       .precision_flags = endpoint->precision_flags,
   };
@@ -567,7 +569,9 @@ static iree_status_t loom_kernel_async_legality_check_uncompleted_groups(
     loom_kernel_async_legality_state_t* state,
     const loom_kernel_async_legality_stream_t* stream) {
   for (iree_host_size_t i = 0; i < stream->count; ++i) {
-    if (stream->groups[i].completed) continue;
+    if (stream->groups[i].completed) {
+      continue;
+    }
     return loom_kernel_async_legality_fail(
         state, stream->groups[i].group_op,
         IREE_SV("async group is not waited before leaving its block"));
