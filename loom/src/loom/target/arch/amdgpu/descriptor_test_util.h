@@ -146,8 +146,6 @@ inline void ExpectAmdgpuGlobalMemoryDescriptor(
   EXPECT_EQ(descriptor->immediate_count, 1u + expected_cache_immediate_count);
   EXPECT_EQ(descriptor->effect_count, 1u);
   EXPECT_EQ(descriptor->encoding_format_id, expected_encoding_format_id);
-  EXPECT_EQ(descriptor->canonical_asm_form_ordinal,
-            LOOM_LOW_ASM_FORM_ORDINAL_NONE);
 
   const loom_low_operand_t* operands =
       &descriptor_set->operands[descriptor->operand_start];
@@ -178,6 +176,21 @@ inline void ExpectAmdgpuGlobalMemoryDescriptor(
               0u);
     ExpectAmdgpuOperandRegisterClassForTest(
         descriptor_set, &operands[next_operand], IREE_SV("amdgpu.m0"));
+  }
+
+  if (descriptor->canonical_asm_form_ordinal !=
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
+    ASSERT_LT(descriptor->canonical_asm_form_ordinal,
+              descriptor_set->asm_form_count);
+    const loom_low_asm_form_t* asm_form =
+        &descriptor_set->asm_forms[descriptor->canonical_asm_form_ordinal];
+    EXPECT_EQ(asm_form->descriptor_ordinal,
+              static_cast<uint32_t>(descriptor - descriptor_set->descriptors));
+    EXPECT_EQ(asm_form->result_operand_index_count, is_read ? 1u : 0u);
+    EXPECT_EQ(asm_form->operand_index_count,
+              descriptor->operand_count - descriptor->result_count -
+                  (expected_implicit_m0 ? 1u : 0u));
+    EXPECT_EQ(asm_form->immediate_count, descriptor->immediate_count);
   }
 
   const loom_low_immediate_t* immediate =

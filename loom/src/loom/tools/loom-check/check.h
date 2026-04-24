@@ -58,7 +58,8 @@
 //                           ignored by ordinary execution.
 //
 // Separators:
-//   // ====                 Case separator (purely structural).
+//   // ====                 Case separator. The first separator must appear
+//                           after the first case body.
 //   // ----                 Input/expected separator within a case.
 //
 // RUN inheritance:

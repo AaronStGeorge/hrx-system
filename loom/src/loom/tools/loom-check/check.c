@@ -1286,51 +1286,25 @@ iree_status_t loom_check_parse(iree_string_view_t source,
   boundaries[case_index].length =
       (iree_host_size_t)(source_end - boundaries[case_index].start);
 
-  // Legacy files may still have a separator after a pure leading preamble.
-  // Boundary 0 is the text before that first // ====. If it has no IR body
-  // (only directives and comments), it is dropped from the case list and its
-  // RUN directive (if any) becomes the file-level default. If the preamble has
-  // IR body content, it becomes case 0 and also provides the file default.
-  //
-  // New template-synchronized files use a real leading file preamble without a
-  // separator, handled above by slicing |case_source| past that preamble.
-  iree_host_size_t first_case = 0;
-  if (case_count > 1 &&
-      loom_check_source_range_is_empty(template_preamble_range)) {
-    // Parse boundary 0 to determine whether it is a pure preamble
-    // (directives only, no IR body) or a real case with content.
-    iree_string_view_t preamble_text = {
+  // The first separator must come after the first real case. A leading
+  // separator creates an empty case 0 and hides the actual file default.
+  // Template-synchronized files use a real file preamble without a separator,
+  // handled above by slicing |case_source| past that preamble.
+  if (case_count > 1) {
+    iree_string_view_t first_boundary_text = {
         .data = boundaries[0].start,
         .size = boundaries[0].length,
     };
-    IREE_RETURN_IF_ERROR(loom_check_parse_template_directive_from_preamble(
-        source.data, preamble_text, out_file));
-
-    loom_check_case_t preamble_case;
+    loom_check_case_t first_boundary_case;
     IREE_RETURN_IF_ERROR(loom_check_parse_case_sections(
-        source.data, preamble_text, boundaries[0].separator_range,
-        &preamble_case, /*allow_file_directives=*/true, arena));
+        source.data, first_boundary_text, boundaries[0].separator_range,
+        &first_boundary_case, /*allow_file_directives=*/false, arena));
 
-    if (iree_string_view_is_empty(iree_string_view_trim(preamble_case.input))) {
-      // Pure preamble — no IR body. Extract its RUN directive as the
-      // file default and drop it from the case list.
-      first_case = 1;
-      case_count -= 1;
-      if (preamble_case.has_run_directive) {
-        out_file->default_mode = preamble_case.mode;
-        out_file->default_pipeline = preamble_case.pipeline;
-        out_file->default_format_target = preamble_case.format_target;
-        out_file->default_emit_target = preamble_case.emit_target;
-      }
-      if (preamble_case.has_requires_directive) {
-        out_file->default_requirements = preamble_case.requirements;
-        out_file->default_requirement_count = preamble_case.requirement_count;
-      }
-    } else if (out_file->has_template_directive) {
+    if (iree_string_view_is_empty(
+            iree_string_view_trim(first_boundary_case.input))) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "TEMPLATE directive must be in a pure file preamble before the first "
-          "// ==== separator");
+          "the first // ==== separator must appear after the first case body");
     }
   }
 
@@ -1340,7 +1314,7 @@ iree_status_t loom_check_parse(iree_string_view_t source,
 
   // Parse each case's directives, input/expected split, and annotations.
   for (iree_host_size_t i = 0; i < case_count; ++i) {
-    iree_host_size_t boundary_index = first_case + i;
+    iree_host_size_t boundary_index = i;
     iree_string_view_t case_text = {
         .data = boundaries[boundary_index].start,
         .size = boundaries[boundary_index].length,
@@ -1350,18 +1324,15 @@ iree_status_t loom_check_parse(iree_string_view_t source,
         &out_file->cases[i], /*allow_file_directives=*/false, arena));
   }
 
-  // When the preamble was not dropped (first_case == 0) and the first
-  // case has a RUN directive, use its mode as the file default for
-  // inheritance by later cases.
-  if (first_case == 0 && case_count > 0 &&
-      out_file->cases[0].has_run_directive) {
+  // The first case's RUN directive becomes the file default for inheritance by
+  // later cases.
+  if (case_count > 0 && out_file->cases[0].has_run_directive) {
     out_file->default_mode = out_file->cases[0].mode;
     out_file->default_pipeline = out_file->cases[0].pipeline;
     out_file->default_format_target = out_file->cases[0].format_target;
     out_file->default_emit_target = out_file->cases[0].emit_target;
   }
-  if (first_case == 0 && case_count > 0 &&
-      out_file->cases[0].has_requires_directive) {
+  if (case_count > 0 && out_file->cases[0].has_requires_directive) {
     out_file->default_requirements = out_file->cases[0].requirements;
     out_file->default_requirement_count = out_file->cases[0].requirement_count;
   }

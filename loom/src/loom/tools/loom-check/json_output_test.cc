@@ -405,19 +405,23 @@ TEST_F(JsonOutputTest, VerifyMode) {
 TEST_F(JsonOutputTest, EmitsInheritedRunMetadata) {
   auto file = Parse(
       "// RUN: pass dce,cse\n"
+      "func.def @default_owner() {\n"
+      "}\n"
       "// ====\n"
       "func.def @f() {\n"
       "}\n");
 
-  ASSERT_EQ(file.case_count, 1u);
-  ASSERT_FALSE(file.cases[0].has_run_directive);
+  ASSERT_EQ(file.case_count, 2u);
+  ASSERT_TRUE(file.cases[0].has_run_directive);
+  ASSERT_FALSE(file.cases[1].has_run_directive);
 
-  loom_check_result_t results[1] = {
+  loom_check_result_t results[2] = {
+      MakeResult(LOOM_CHECK_PASS, LOOM_CHECK_PASS),
       MakeResult(LOOM_CHECK_PASS, LOOM_CHECK_PASS),
   };
 
   std::string json = WriteJson(iree_make_cstring_view("inherited.loom-test"),
-                               file, results, 1, 0, 0);
+                               file, results, 2, 0, 0);
 
   EXPECT_NE(json.find("\"default_mode\": \"pass\""), std::string::npos);
   EXPECT_NE(json.find("\"default_pipeline\": \"dce,cse\""), std::string::npos);
@@ -427,24 +431,29 @@ TEST_F(JsonOutputTest, EmitsInheritedRunMetadata) {
   EXPECT_NE(json.find("\"run_directive_range\": null"), std::string::npos);
 
   loom_check_result_deinitialize(&results[0]);
+  loom_check_result_deinitialize(&results[1]);
 }
 
 TEST_F(JsonOutputTest, EmitsInheritedRequiresMetadata) {
   auto file = Parse(
       "// REQUIRES: tool-dis\n"
+      "func.def @default_owner() {\n"
+      "}\n"
       "// ====\n"
       "func.def @f() {\n"
       "}\n");
 
-  ASSERT_EQ(file.case_count, 1u);
-  ASSERT_FALSE(file.cases[0].has_requires_directive);
+  ASSERT_EQ(file.case_count, 2u);
+  ASSERT_TRUE(file.cases[0].has_requires_directive);
+  ASSERT_FALSE(file.cases[1].has_requires_directive);
 
-  loom_check_result_t results[1] = {
+  loom_check_result_t results[2] = {
+      MakeResult(LOOM_CHECK_PASS, LOOM_CHECK_PASS),
       MakeResult(LOOM_CHECK_PASS, LOOM_CHECK_PASS),
   };
 
   std::string json = WriteJson(iree_make_cstring_view("requires.loom-test"),
-                               file, results, 1, 0, 0);
+                               file, results, 2, 0, 0);
 
   EXPECT_NE(json.find("\"default_requirements\": [\"tool-dis\"]"),
             std::string::npos);
@@ -453,6 +462,7 @@ TEST_F(JsonOutputTest, EmitsInheritedRequiresMetadata) {
   EXPECT_NE(json.find("\"requires_directive_range\": null"), std::string::npos);
 
   loom_check_result_deinitialize(&results[0]);
+  loom_check_result_deinitialize(&results[1]);
 }
 
 TEST_F(JsonOutputTest, MultipleCases) {

@@ -501,7 +501,7 @@ TEST_F(UpdateTest, EnsuresTrailingNewline) {
 TEST_F(UpdateTest, PreservesDirectivesAndSeparators) {
   auto file = Parse(
       "// RUN: roundtrip\n"
-      "\n"
+      "func.def @unchanged() {}\n"
       "// ====\n"
       "\n"
       "func.def @f() {\n"
@@ -510,14 +510,14 @@ TEST_F(UpdateTest, PreservesDirectivesAndSeparators) {
       "// ----\n"
       "old\n");
 
-  ASSERT_EQ(file.case_count, 1u);
+  ASSERT_EQ(file.case_count, 2u);
 
-  loom_check_case_update_t updates[1] = {};
-  updates[0].needs_update = true;
-  updates[0].actual_output = iree_make_cstring_view("new\n");
-  updates[0].expected_start = file.cases[0].expected.data;
-  updates[0].expected_end =
-      file.cases[0].expected.data + file.cases[0].expected.size;
+  loom_check_case_update_t updates[2] = {};
+  updates[1].needs_update = true;
+  updates[1].actual_output = iree_make_cstring_view("new\n");
+  updates[1].expected_start = file.cases[1].expected.data;
+  updates[1].expected_end =
+      file.cases[1].expected.data + file.cases[1].expected.size;
 
   iree_host_size_t update_count = 0;
   std::string result = Apply(file, updates, &update_count);

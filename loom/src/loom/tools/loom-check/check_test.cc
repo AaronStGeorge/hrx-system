@@ -229,6 +229,16 @@ TEST_F(CheckParseTest, TemplateDirectiveDoesNotRequireCaseSeparator) {
   EXPECT_TRUE(file_.has_template_directive);
 }
 
+TEST_F(CheckParseTest, TemplateDirectiveRejectsSeparatorBeforeFirstCase) {
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      Parse("// TEMPLATE: "
+            "loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
+            "\n"
+            "// ====\n"
+            "func.def @f() {}\n"));
+}
+
 TEST_F(CheckParseTest, TemplateDirectiveInCaseErrors) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
@@ -857,27 +867,17 @@ TEST_F(CheckParseTest, PerCaseDirectives) {
   EXPECT_EQ(file_.cases[1].mode, LOOM_CHECK_MODE_VERIFY);
 }
 
-TEST_F(CheckParseTest, CaseSeparatorAsFirstLineGhostDropped) {
-  // When the file starts with "// ====", the implicit first case has
-  // zero length. It should be dropped — the user's intent is that the
-  // case after the separator IS the first case.
-  IREE_ASSERT_OK(
-      Parse("// ====\n"
-            "func.def @f() {}\n"));
-  ASSERT_EQ(file_.case_count, 1);
-  EXPECT_TRUE(iree_string_view_find(file_.cases[0].input,
-                                    iree_make_cstring_view("func.def"),
-                                    0) != IREE_STRING_VIEW_NPOS);
+TEST_F(CheckParseTest, CaseSeparatorAsFirstLineErrors) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("// ====\n"
+                              "func.def @f() {}\n"));
 }
 
-TEST_F(CheckParseTest, CaseSeparatorAsFirstLineMultipleCases) {
-  // Ghost boundary 0 is dropped, remaining cases are renumbered.
-  IREE_ASSERT_OK(
-      Parse("// ====\n"
-            "func.def @a() {}\n"
-            "// ====\n"
-            "func.def @b() {}\n"));
-  ASSERT_EQ(file_.case_count, 2);
+TEST_F(CheckParseTest, CaseSeparatorAfterEmptyDirectivePreambleErrors) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("// RUN: verify\n"
+                              "// ====\n"
+                              "func.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, CaseSeparatorAsLastLine) {
@@ -996,14 +996,15 @@ TEST_F(CheckParseTest, SourceRangesForSingleCaseSections) {
 TEST_F(CheckParseTest, SourceRangesForSeparatorsAndAnnotations) {
   const char* source =
       "// RUN: verify\n"
+      "func.def @first() {}\n"
       "// ====\n"
       "  // ERROR@+1: PARSE/006 \"bogus\"\n"
       "  bogus.nonexistent\n";
   IREE_ASSERT_OK(Parse(source));
-  ASSERT_EQ(file_.case_count, 1);
-  ASSERT_EQ(file_.cases[0].annotation_count, 1);
+  ASSERT_EQ(file_.case_count, 2);
+  ASSERT_EQ(file_.cases[1].annotation_count, 1);
 
-  const loom_check_case_t& test_case = file_.cases[0];
+  const loom_check_case_t& test_case = file_.cases[1];
   ExpectRangeForFragment(test_case.separator_range, "// ====");
   EXPECT_TRUE(loom_check_source_range_is_empty(test_case.run_directive_range));
   ExpectRange(test_case.source_range, OffsetOf("  // ERROR"), strlen(source));
@@ -1516,12 +1517,11 @@ TEST_F(CheckParseTest, ExpectedSeparatorNotConsumedByHeader) {
 // RUN inheritance
 // ===----------------------------------------------------------------------===
 
-TEST_F(CheckParseTest, PreambleRunInherited) {
-  // A // RUN: directive before the first // ==== sets the file default.
-  // Cases without their own // RUN: inherit from it.
+TEST_F(CheckParseTest, FirstCaseRunInherited) {
+  // The first case's // RUN: directive sets the file default. Cases without
+  // their own // RUN: inherit from it.
   IREE_ASSERT_OK(
       Parse("// RUN: verify\n"
-            "// ====\n"
             "// ERROR@+1: PARSE/006\n"
             "bogus.nonexistent\n"
             "// ====\n"
@@ -1529,16 +1529,15 @@ TEST_F(CheckParseTest, PreambleRunInherited) {
   ASSERT_EQ(file_.case_count, 2);
   EXPECT_EQ(file_.default_mode, LOOM_CHECK_MODE_VERIFY);
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_VERIFY);
-  EXPECT_FALSE(file_.cases[0].has_run_directive);
+  EXPECT_TRUE(file_.cases[0].has_run_directive);
   EXPECT_EQ(file_.cases[1].mode, LOOM_CHECK_MODE_VERIFY);
   EXPECT_FALSE(file_.cases[1].has_run_directive);
 }
 
-TEST_F(CheckParseTest, PreambleRunOverriddenByCase) {
+TEST_F(CheckParseTest, FirstCaseRunOverriddenByCase) {
   // A case with its own // RUN: overrides the file default.
   IREE_ASSERT_OK(
       Parse("// RUN: verify\n"
-            "// ====\n"
             "// ERROR@+1: PARSE/006\n"
             "bogus.nonexistent\n"
             "// ====\n"
@@ -1547,16 +1546,15 @@ TEST_F(CheckParseTest, PreambleRunOverriddenByCase) {
   ASSERT_EQ(file_.case_count, 2);
   EXPECT_EQ(file_.default_mode, LOOM_CHECK_MODE_VERIFY);
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_VERIFY);
-  EXPECT_FALSE(file_.cases[0].has_run_directive);
+  EXPECT_TRUE(file_.cases[0].has_run_directive);
   EXPECT_EQ(file_.cases[1].mode, LOOM_CHECK_MODE_ROUNDTRIP);
   EXPECT_TRUE(file_.cases[1].has_run_directive);
 }
 
-TEST_F(CheckParseTest, PreamblePassModeInherited) {
+TEST_F(CheckParseTest, FirstCasePassModeInherited) {
   // File default can be pass mode with a pipeline.
   IREE_ASSERT_OK(
       Parse("// RUN: pass dce\n"
-            "// ====\n"
             "func.def @a() {}\n"
             "// ====\n"
             "func.def @b() {}\n"));
@@ -1572,10 +1570,9 @@ TEST_F(CheckParseTest, PreamblePassModeInherited) {
                                      iree_make_cstring_view("dce")));
 }
 
-TEST_F(CheckParseTest, PreambleEmitModeInherited) {
+TEST_F(CheckParseTest, FirstCaseEmitModeInherited) {
   IREE_ASSERT_OK(
       Parse("// RUN: emit target-form target-profile\n"
-            "// ====\n"
             "func.def @a() {}\n"
             "// ====\n"
             "func.def @b() {}\n"));
@@ -1594,10 +1591,9 @@ TEST_F(CheckParseTest, PreambleEmitModeInherited) {
       iree_make_cstring_view("target-form target-profile")));
 }
 
-TEST_F(CheckParseTest, PreambleRequiresInheritedAndCombined) {
+TEST_F(CheckParseTest, FirstCaseRequiresInheritedAndCombined) {
   IREE_ASSERT_OK(
       Parse("// REQUIRES: tool-dis\n"
-            "// ====\n"
             "func.def @a() {}\n"
             "// ====\n"
             "// REQUIRES: tool-backend, tool-dis\n"
@@ -1606,7 +1602,7 @@ TEST_F(CheckParseTest, PreambleRequiresInheritedAndCombined) {
   ASSERT_EQ(file_.default_requirement_count, 1);
   EXPECT_TRUE(iree_string_view_equal(file_.default_requirements[0],
                                      iree_make_cstring_view("tool-dis")));
-  EXPECT_FALSE(file_.cases[0].has_requires_directive);
+  EXPECT_TRUE(file_.cases[0].has_requires_directive);
   ASSERT_EQ(file_.cases[0].requirement_count, 1);
   ExpectRequirementName(file_.cases[0], 0, "tool-dis");
   EXPECT_TRUE(file_.cases[1].has_requires_directive);
@@ -1677,20 +1673,6 @@ TEST_F(CheckParseTest, SingleCaseNoRunDefaultsToRoundtrip) {
   EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_ROUNDTRIP);
   EXPECT_FALSE(file_.cases[0].has_run_directive);
   EXPECT_EQ(file_.default_mode, LOOM_CHECK_MODE_ROUNDTRIP);
-}
-
-TEST_F(CheckParseTest, GhostPreambleRunInherited) {
-  // Ghost case (empty boundary 0) with a RUN directive before // ====
-  // sets the file default and is dropped from the case list.
-  IREE_ASSERT_OK(
-      Parse("// RUN: verify\n"
-            "// ====\n"
-            "// ERROR@+1: PARSE/006\n"
-            "bogus.nonexistent\n"));
-  ASSERT_EQ(file_.case_count, 1);
-  EXPECT_EQ(file_.default_mode, LOOM_CHECK_MODE_VERIFY);
-  EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_VERIFY);
-  EXPECT_FALSE(file_.cases[0].has_run_directive);
 }
 
 }  // namespace
