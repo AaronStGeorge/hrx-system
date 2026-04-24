@@ -12,6 +12,17 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
+    "index_addressing"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/index_addressing.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "numeric_conversion"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/numeric_conversion.loom-test"

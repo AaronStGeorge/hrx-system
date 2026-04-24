@@ -1,7 +1,9 @@
-// RUN: emit source-low output=low
-target.profile @gfx11_index_madd_global_b32_target preset("amdgpu-gfx11")
+// TEMPLATE: loom/src/loom/test/corpus/source_low/index_addressing.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-func.def target(@gfx11_index_madd_global_b32_target) @index_madd_global_b32(%input: buffer, %output: buffer) {
+// ====
+
+func.def @index_madd_global_b32(%input: buffer, %output: buffer) {
   %x = kernel.workitem.id<x> : index
   %y = kernel.workitem.id<y> : index
   %zero = index.constant 0 : offset
@@ -15,7 +17,7 @@ func.def target(@gfx11_index_madd_global_b32_target) @index_madd_global_b32(%inp
 }
 
 // ----
-low.func.def target(@gfx11_index_madd_global_b32_target) abi(hal_kernel) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @index_madd_global_b32() asm<amdgpu.gfx11.core> {
   %x = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %y = live_in<amdgpu.workitem_id.y> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x4>
@@ -37,10 +39,8 @@ low.func.def target(@gfx11_index_madd_global_b32_target) abi(hal_kernel) @index_
 }
 
 // ====
-// RUN: emit source-low output=low
-target.profile @gfx11_workitem_y_lds_uses_explicit_vaddr_target preset("amdgpu-gfx11")
 
-func.def target(@gfx11_workitem_y_lds_uses_explicit_vaddr_target) @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
+func.def @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
   %y = kernel.workitem.id<y> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -55,7 +55,7 @@ func.def target(@gfx11_workitem_y_lds_uses_explicit_vaddr_target) @workitem_y_ld
 }
 
 // ----
-low.func.def target(@gfx11_workitem_y_lds_uses_explicit_vaddr_target) abi(hal_kernel) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.gfx11.core> {
   %y = live_in<amdgpu.workitem_id.y> : reg<amdgpu.vgpr>
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
