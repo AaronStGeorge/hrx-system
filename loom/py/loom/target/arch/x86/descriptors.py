@@ -1041,6 +1041,21 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_VECTOR_F32_XMM,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
+        Descriptor(
+            key="x86.avx512.vextractf32x4.xmm.zmm",
+            mnemonic="vextractf32x4",
+            semantic_tag="float.extract.f32x16.quarter",
+            operands=(_xmm_result(), _zmm_operand("source")),
+            immediates=(_LANE_I32X4_IMMEDIATE,),
+            asm_forms=_asm(
+                mnemonic="vextractf32x4.xmm",
+                results=("dst",),
+                operands=("source",),
+                immediates=("lane",),
+            ),
+            schedule_class=_SCHEDULE_VECTOR_F32_ZMM,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
         _vector_i32_binary_descriptor(
             vector_bit_width=128,
             key="x86.avx512.vpaddd.xmm",

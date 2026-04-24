@@ -209,6 +209,41 @@ static bool loom_low_lower_rule_type_matches(
   return true;
 }
 
+static loom_scalar_type_t loom_low_lower_rule_type_pattern_element(
+    const loom_low_lower_type_pattern_t* pattern) {
+  IREE_ASSERT(iree_any_bit_set(pattern->flags,
+                               LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT));
+  const uint64_t element_type_mask = pattern->element_type_mask;
+  IREE_ASSERT_NE(element_type_mask, 0u);
+  IREE_ASSERT_EQ(element_type_mask & (element_type_mask - 1), 0u);
+  uint32_t element_type = 0;
+  uint64_t shifted_mask = element_type_mask;
+  while ((shifted_mask & 1u) == 0u) {
+    ++element_type;
+    shifted_mask >>= 1;
+  }
+  return (loom_scalar_type_t)element_type;
+}
+
+static loom_type_t loom_low_lower_rule_type_pattern_exact_type(
+    const loom_low_lower_type_pattern_t* pattern) {
+  IREE_ASSERT(iree_all_bits_set(pattern->flags,
+                                LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                                    LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT));
+  const loom_scalar_type_t element_type =
+      loom_low_lower_rule_type_pattern_element(pattern);
+  if (pattern->type_kind == LOOM_TYPE_SCALAR) {
+    return loom_type_scalar(element_type);
+  }
+  IREE_ASSERT(iree_all_bits_set(
+      pattern->flags, LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
+                          LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0));
+  IREE_ASSERT_EQ(pattern->rank, 1);
+  IREE_ASSERT_GE(pattern->static_dim0, 0);
+  return loom_type_shaped_1d(pattern->type_kind, element_type,
+                             loom_dim_pack_static(pattern->static_dim0), 0);
+}
+
 static iree_status_t loom_low_lower_rule_mapped_value(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -807,10 +842,23 @@ static iree_status_t loom_low_lower_rule_build_result_types(
       context, emit->result_ref_count, sizeof(*result_types),
       (void**)&result_types));
   for (uint16_t i = 0; i < emit->result_ref_count; ++i) {
-    loom_value_id_t source_value_id = loom_low_lower_rule_source_value(
-        rule_set, source_op, (uint16_t)(emit->result_ref_start + i));
-    IREE_RETURN_IF_ERROR(loom_low_lower_rule_map_result_type(
-        context, source_op, source_value_id, &result_types[i]));
+    if (iree_any_bit_set(emit->flags,
+                         LOOM_LOW_LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN)) {
+      const uint16_t type_pattern_index =
+          (uint16_t)(emit->result_type_pattern_start + i);
+      IREE_ASSERT_LT(type_pattern_index, rule_set->type_pattern_count);
+      const loom_type_t exact_type =
+          loom_low_lower_rule_type_pattern_exact_type(
+              &rule_set->type_patterns[type_pattern_index]);
+      IREE_RETURN_IF_ERROR(loom_low_lower_map_type(
+          context, source_op, exact_type, &result_types[i]));
+      IREE_ASSERT(loom_type_is_register(result_types[i]));
+    } else {
+      loom_value_id_t source_value_id = loom_low_lower_rule_source_value(
+          rule_set, source_op, (uint16_t)(emit->result_ref_start + i));
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_map_result_type(
+          context, source_op, source_value_id, &result_types[i]));
+    }
   }
   *out_result_types = result_types;
   return iree_ok_status();

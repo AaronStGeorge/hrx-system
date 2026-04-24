@@ -78,6 +78,13 @@ func.def @f32x16_splat_add(%value: f32, %rhs: vector<16xf32>) -> (vector<16xf32>
 
 // ====
 
+func.def @f32x16_reduce_add(%v: vector<16xf32>, %init: f32) -> (f32) {
+  %sum = vector.reduce<addf> %v, %init : vector<16xf32>, f32
+  func.return %sum : f32
+}
+
+// ====
+
 func.def @f32x16_compare_select(%lhs: vector<16xf32>, %rhs: vector<16xf32>, %fallback: vector<16xf32>) -> (vector<16xf32>) {
   %ordered_lt = vector.cmpf olt, %lhs, %rhs : vector<16xf32> -> vector<16xi1>
   %unordered_ne = vector.cmpf une, %lhs, %rhs : vector<16xf32> -> vector<16xi1>

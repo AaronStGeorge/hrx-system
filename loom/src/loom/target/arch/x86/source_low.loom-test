@@ -150,6 +150,30 @@ low.func.def target(@target) abi(object_function) @f32x16_splat_add(%value: reg<
 
 // ====
 
+func.def @f32x16_reduce_add(%v: vector<16xf32>, %init: f32) -> (f32) {
+  %sum = vector.reduce<addf> %v, %init : vector<16xf32>, f32
+  func.return %sum : f32
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @f32x16_reduce_add(%v: reg<x86.zmm>, %init: reg<x86.xmm>) -> (reg<x86.xmm>) asm<x86.avx512.core> {
+  %7 = vextractf32x4.xmm %v, 0
+  %8 = vextractf32x4.xmm %v, 1
+  %9 = vextractf32x4.xmm %v, 2
+  %10 = vextractf32x4.xmm %v, 3
+  %11 = vaddps.xmm %7, %8
+  %12 = vaddps.xmm %9, %10
+  %13 = vaddps.xmm %11, %12
+  %14 = vpermilps.xmm %13, 78
+  %15 = vaddps.xmm %13, %14
+  %16 = vpermilps.xmm %15, 177
+  %17 = vaddps.xmm %15, %16
+  %sum = vaddss.xmm %init, %17
+  return %sum
+}
+
+// ====
+
 func.def @f32x16_compare_select(%lhs: vector<16xf32>, %rhs: vector<16xf32>, %fallback: vector<16xf32>) -> (vector<16xf32>) {
   %ordered_lt = vector.cmpf olt, %lhs, %rhs : vector<16xf32> -> vector<16xi1>
   %unordered_ne = vector.cmpf une, %lhs, %rhs : vector<16xf32> -> vector<16xi1>

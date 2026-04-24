@@ -311,6 +311,9 @@ typedef uint16_t loom_low_lower_emit_flags_t;
 // Binds emitted low results to result_bind_ref_start instead of
 // result_ref_start.
 #define LOOM_LOW_LOWER_EMIT_FLAG_BIND_RESULTS_TO_REFS ((uint16_t)1u << 1)
+// Maps emitted low result types from exact type-pattern rows instead of
+// result_ref_start source value refs.
+#define LOOM_LOW_LOWER_EMIT_FLAG_RESULT_TYPE_PATTERN ((uint16_t)1u << 2)
 
 typedef struct loom_low_lower_emit_t {
   // Emit action to perform.
@@ -336,7 +339,10 @@ typedef struct loom_low_lower_emit_t {
   // BIND_RESULTS_TO_REFS is set, result_bind_ref_start controls where the
   // emitted low results are bound.
   uint16_t result_ref_start;
-  // Number of low results to map from value-ref rows.
+  // First exact type-pattern table row mapped as a low result type when
+  // RESULT_TYPE_PATTERN is set.
+  uint16_t result_type_pattern_start;
+  // Number of low results to map and bind.
   uint16_t result_ref_count;
   // First value-ref table row receiving emitted low results when
   // BIND_RESULTS_TO_REFS is set.

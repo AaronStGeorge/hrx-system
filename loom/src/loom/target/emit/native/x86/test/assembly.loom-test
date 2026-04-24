@@ -193,6 +193,22 @@ low.func.def target(@x86_target) @x86_fragment(%input : reg<x86.gpr64>, %output 
 
 target.profile @x86_target preset("x86-avx512")
 
+low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %v : reg<x86.zmm>) asm<x86.avx512.core> {
+  %quarter = vextractf32x4.xmm %v, 2
+  vmovdqu32.store.xmm %quarter, %base {disp32 = 112}
+  return
+}
+
+// ----
+.Lbb0:
+  vextractf32x4 xmm0, zmm0, 2
+  vmovdqu32 [rax + 112], xmm0
+  ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
 low.func.def target(@x86_target) @x86_fragment(%base : reg<x86.gpr64>, %v : reg<x86.xmm>, %init : reg<x86.gpr32>) asm<x86.avx512.core> {
   %reversed = vpshufd.xmm %v, 27
   %lane0 = vpextrd.xmm %reversed, 0
