@@ -96,14 +96,16 @@ static iree_status_t TestSelectCallbackOp(void* user_data,
                                           loom_low_lower_plan_t* out_plan) {
   (void)user_data;
   *out_plan = loom_low_lower_plan_empty();
-  if (source_op->kind != LOOM_OP_SCALAR_MULI) {
+  if (source_op->kind != LOOM_OP_SCALAR_DIVSI) {
     return iree_ok_status();
   }
   const loom_module_t* module = loom_low_lower_context_module(context);
-  if (!IsI32(loom_module_value_type(module, loom_scalar_muli_lhs(source_op))) ||
-      !IsI32(loom_module_value_type(module, loom_scalar_muli_rhs(source_op))) ||
+  if (!IsI32(
+          loom_module_value_type(module, loom_scalar_divsi_lhs(source_op))) ||
       !IsI32(
-          loom_module_value_type(module, loom_scalar_muli_result(source_op)))) {
+          loom_module_value_type(module, loom_scalar_divsi_rhs(source_op))) ||
+      !IsI32(loom_module_value_type(module,
+                                    loom_scalar_divsi_result(source_op)))) {
     return iree_ok_status();
   }
   TestCallbackPlan* plan_data = nullptr;
@@ -119,7 +121,7 @@ static iree_status_t TestEmitCallbackOp(void* user_data,
                                         const loom_op_t* source_op,
                                         loom_low_lower_plan_t plan) {
   (void)user_data;
-  IREE_ASSERT_EQ(plan.id, LOOM_OP_SCALAR_MULI);
+  IREE_ASSERT_EQ(plan.id, LOOM_OP_SCALAR_DIVSI);
   const auto* plan_data =
       static_cast<const TestCallbackPlan*>(plan.target_data);
   IREE_ASSERT_NE(plan_data, nullptr);
@@ -128,19 +130,19 @@ static iree_status_t TestEmitCallbackOp(void* user_data,
       LOOM_VALUE_ID_INVALID,
   };
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_scalar_muli_lhs(source_op), &operands[0]));
+      context, loom_scalar_divsi_lhs(source_op), &operands[0]));
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_scalar_muli_rhs(source_op), &operands[1]));
+      context, loom_scalar_divsi_rhs(source_op), &operands[1]));
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
-      context, source_op, loom_scalar_muli_result(source_op), &result_type));
+      context, source_op, loom_scalar_divsi_result(source_op), &result_type));
   loom_op_t* low_op = nullptr;
   IREE_RETURN_IF_ERROR(loom_low_lower_emit_descriptor_op(
       context, plan_data->descriptor_id, operands, IREE_ARRAYSIZE(operands),
       loom_make_named_attr_slice(NULL, 0), &result_type, 1, nullptr, 0,
       source_op->location, &low_op));
   return loom_low_lower_bind_value(
-      context, loom_scalar_muli_result(source_op),
+      context, loom_scalar_divsi_result(source_op),
       loom_value_slice_get(loom_low_op_results(low_op), 0));
 }
 
@@ -554,9 +556,9 @@ TEST_F(SourceLoweringRuleEmissionTest, HybridPolicyUsesCallbackForUncoveredOp) {
   loom_low_lower_result_t lower_result = {};
   ModulePtr module = ParseAndLowerTargetedSource(
       "target.profile @test_target preset(\"test-low\")\n"
-      "func.def target(@test_target) @mul(%lhs: i32, %rhs: i32) -> (i32) {\n"
-      "  %product = scalar.muli %lhs, %rhs : i32\n"
-      "  func.return %product : i32\n"
+      "func.def target(@test_target) @div(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %quotient = scalar.divsi %lhs, %rhs : i32\n"
+      "  func.return %quotient : i32\n"
       "}\n",
       &lower_collector, &lower_result);
 
@@ -574,8 +576,8 @@ TEST_F(SourceLoweringRuleEmissionTest, HybridPolicyUsesCallbackForUncoveredOp) {
 
   std::string text;
   IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("@mul"), std::string::npos);
-  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @mul"),
+  EXPECT_NE(text.find("@div"), std::string::npos);
+  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @div"),
             std::string::npos);
   EXPECT_NE(text.find("low.op<test.add.i32>"), std::string::npos);
 }
@@ -613,9 +615,9 @@ TEST_F(SourceLoweringRuleEmissionTest,
   loom_low_lower_result_t lower_result = {};
   ModulePtr module = ParseAndLowerTargetedSource(
       "target.profile @test_target preset(\"test-low\")\n"
-      "func.def target(@test_target) @mul(%lhs: i32, %rhs: i32) -> (i32) {\n"
-      "  %product = scalar.muli %lhs, %rhs : i32\n"
-      "  func.return %product : i32\n"
+      "func.def target(@test_target) @div(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %quotient = scalar.divsi %lhs, %rhs : i32\n"
+      "  func.return %quotient : i32\n"
       "}\n",
       &lower_collector, &lower_result);
 
@@ -629,15 +631,15 @@ TEST_F(SourceLoweringRuleEmissionTest,
             loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1));
   ASSERT_EQ(emission.string_params.size(), 7u);
   EXPECT_EQ(emission.string_params[0], "test_target");
-  EXPECT_EQ(emission.string_params[3], "mul");
+  EXPECT_EQ(emission.string_params[3], "div");
   EXPECT_EQ(emission.string_params[4], "op");
-  EXPECT_EQ(emission.string_params[5], "scalar.muli");
+  EXPECT_EQ(emission.string_params[5], "scalar.divsi");
   EXPECT_NE(emission.string_params[6].find("descriptor mapping"),
             std::string::npos);
 
   std::string text;
   IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("func.def target(@test_target) @mul"), std::string::npos);
+  EXPECT_NE(text.find("func.def target(@test_target) @div"), std::string::npos);
   EXPECT_EQ(text.find("low.func.def"), std::string::npos);
 }
 

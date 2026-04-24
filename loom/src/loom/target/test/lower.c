@@ -48,6 +48,13 @@ static bool loom_test_low_is_vector_4xi32(loom_type_t type) {
          loom_type_dim_static_size_at(type, 0) == 4;
 }
 
+static bool loom_test_low_is_vector_4xi1(loom_type_t type) {
+  return loom_type_is_vector(type) && loom_type_rank(type) == 1 &&
+         loom_type_is_all_static(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1 &&
+         loom_type_dim_static_size_at(type, 0) == 4;
+}
+
 static bool loom_test_low_is_vector_16xi8(loom_type_t type) {
   return loom_type_is_vector(type) && loom_type_rank(type) == 1 &&
          loom_type_is_all_static(type) &&
@@ -87,6 +94,10 @@ iree_status_t loom_test_low_lower_map_type(void* user_data,
     return loom_test_low_make_register_type(context, IREE_SV("test.i32"), 4,
                                             out_low_type);
   }
+  if (loom_test_low_is_vector_4xi1(source_type)) {
+    return loom_test_low_make_register_type(context, IREE_SV("test.i32"), 4,
+                                            out_low_type);
+  }
   if (loom_test_low_is_vector_16xi8(source_type)) {
     return loom_test_low_make_register_type(context, IREE_SV("test.i8"), 16,
                                             out_low_type);
@@ -94,7 +105,7 @@ iree_status_t loom_test_low_lower_map_type(void* user_data,
   return loom_low_lower_emit_reject(
       context, source_op, IREE_SV("type"), IREE_SV("source"),
       IREE_SV("test lowering only maps i1, i8, i32, index, offset, "
-              "vector<4xi32>, and vector<16xi8>"));
+              "vector<4xi1>, vector<4xi32>, and vector<16xi8>"));
 }
 
 iree_status_t loom_test_low_lower_map_argument(
@@ -147,6 +158,9 @@ iree_status_t loom_test_low_lower_rule_match_map_value(
     *out_mapped_value = loom_low_lower_rule_mapped_value_register(
         TEST_LOW_CORE_REG_CLASS_ID_TEST_I8, 1);
   } else if (loom_test_low_is_vector_4xi32(source_type)) {
+    *out_mapped_value = loom_low_lower_rule_mapped_value_register(
+        TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 4);
+  } else if (loom_test_low_is_vector_4xi1(source_type)) {
     *out_mapped_value = loom_low_lower_rule_mapped_value_register(
         TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 4);
   } else if (loom_test_low_is_vector_16xi8(source_type)) {
@@ -215,6 +229,7 @@ enum {
   LOOM_TEST_LOW_TYPE_I32,
   LOOM_TEST_LOW_TYPE_V16I8,
   LOOM_TEST_LOW_TYPE_V4I32,
+  LOOM_TEST_LOW_TYPE_V4I1,
   LOOM_TEST_LOW_TYPE_INDEX,
 };
 
@@ -246,6 +261,18 @@ static const loom_low_lower_type_pattern_t kTestLowTypePatterns[] = {
         .type_kind = LOOM_TYPE_VECTOR,
         .element_type_mask =
             LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I32),
+        .rank = 1,
+        .static_dim0_min = 4,
+        .static_dim0_max = 4,
+    },
+    {
+        .flags = LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_KIND |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_ELEMENT |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_RANK |
+                 LOOM_LOW_LOWER_TYPE_PATTERN_FLAG_STATIC_DIM0_RANGE,
+        .type_kind = LOOM_TYPE_VECTOR,
+        .element_type_mask =
+            LOOM_LOW_LOWER_SCALAR_TYPE_BIT(LOOM_SCALAR_TYPE_I1),
         .rank = 1,
         .static_dim0_min = 4,
         .static_dim0_max = 4,
@@ -331,6 +358,7 @@ enum {
   LOOM_TEST_LOW_DIAGNOSTIC_I32,
   LOOM_TEST_LOW_DIAGNOSTIC_V16I8,
   LOOM_TEST_LOW_DIAGNOSTIC_V4I32,
+  LOOM_TEST_LOW_DIAGNOSTIC_V4I1,
   LOOM_TEST_LOW_DIAGNOSTIC_I64_ATTR,
   LOOM_TEST_LOW_DIAGNOSTIC_INDEX,
   LOOM_TEST_LOW_DIAGNOSTIC_MATERIALIZED,
@@ -338,6 +366,7 @@ enum {
   LOOM_TEST_LOW_DIAGNOSTIC_SHUFFLE_LANES,
   LOOM_TEST_LOW_DIAGNOSTIC_REDUCE_KIND,
   LOOM_TEST_LOW_DIAGNOSTIC_DOT4I_KIND,
+  LOOM_TEST_LOW_DIAGNOSTIC_CMPI_KIND,
 };
 
 static const loom_low_lower_diagnostic_t kTestLowDiagnostics[] = {
@@ -357,6 +386,11 @@ static const loom_low_lower_diagnostic_t kTestLowDiagnostics[] = {
         .subject_name = IREE_SVL("vector<4xi32>"),
         .reason =
             IREE_SVL("test lowering requires vector<4xi32> vector values"),
+    },
+    {
+        .subject_kind = IREE_SVL("type"),
+        .subject_name = IREE_SVL("vector<4xi1>"),
+        .reason = IREE_SVL("test lowering requires vector<4xi1> vector masks"),
     },
     {
         .subject_kind = IREE_SVL("attr"),
@@ -394,6 +428,11 @@ static const loom_low_lower_diagnostic_t kTestLowDiagnostics[] = {
         .subject_name = IREE_SVL("kind"),
         .reason = IREE_SVL("test lowering requires s8s8 dot4i"),
     },
+    {
+        .subject_kind = IREE_SVL("attr"),
+        .subject_name = IREE_SVL("predicate"),
+        .reason = IREE_SVL("test lowering requires eq integer comparison"),
+    },
 };
 
 enum {
@@ -412,6 +451,14 @@ enum {
   LOOM_TEST_LOW_VECTOR_SHUFFLE_SOURCE_LANES_RANGE_GUARD,
   LOOM_TEST_LOW_VECTOR_SHUFFLE_SOURCE_GUARD,
   LOOM_TEST_LOW_VECTOR_SHUFFLE_RESULT_GUARD,
+  LOOM_TEST_LOW_VECTOR_SELECT_CONDITION_GUARD,
+  LOOM_TEST_LOW_VECTOR_SELECT_TRUE_VALUE_GUARD,
+  LOOM_TEST_LOW_VECTOR_SELECT_FALSE_VALUE_GUARD,
+  LOOM_TEST_LOW_VECTOR_SELECT_RESULT_GUARD,
+  LOOM_TEST_LOW_VECTOR_CMPI_KIND_GUARD,
+  LOOM_TEST_LOW_VECTOR_CMPI_LHS_GUARD,
+  LOOM_TEST_LOW_VECTOR_CMPI_RHS_GUARD,
+  LOOM_TEST_LOW_VECTOR_CMPI_RESULT_GUARD,
   LOOM_TEST_LOW_VECTOR_LHS_GUARD,
   LOOM_TEST_LOW_VECTOR_LHS_DIM0_MULTIPLE_GUARD,
   LOOM_TEST_LOW_VECTOR_RHS_GUARD,
@@ -529,6 +576,54 @@ static const loom_low_lower_guard_t kTestLowGuards[] = {
         .value_ref_index = LOOM_TEST_LOW_RESULT0,
         .type_pattern_index = LOOM_TEST_LOW_TYPE_V4I32,
         .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_OPERAND0,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_V4I1,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_OPERAND1,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_V4I32,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_OPERAND2,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_V4I32,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_RESULT0,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_V4I32,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_ATTR_ENUM_EQ,
+        .attr_index = 0,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_CMPI_KIND,
+        .u64 = LOOM_VECTOR_CMPI_PREDICATE_EQ,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_OPERAND0,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_V4I32,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_OPERAND1,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_V4I32,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I32,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
+        .value_ref_index = LOOM_TEST_LOW_RESULT0,
+        .type_pattern_index = LOOM_TEST_LOW_TYPE_V4I1,
+        .diagnostic_index = LOOM_TEST_LOW_DIAGNOSTIC_V4I1,
     },
     {
         .kind = LOOM_LOW_LOWER_GUARD_VALUE_TYPE,
@@ -670,6 +765,8 @@ enum {
   LOOM_TEST_LOW_EMIT_TIED_I32,
   LOOM_TEST_LOW_EMIT_PROJECT_LANE_I32,
   LOOM_TEST_LOW_EMIT_SHUFFLE_V4I32,
+  LOOM_TEST_LOW_EMIT_SELECT_V4I32,
+  LOOM_TEST_LOW_EMIT_CMP_EQ_V4I32,
   LOOM_TEST_LOW_EMIT_ADD_V4I32,
   LOOM_TEST_LOW_EMIT_MUL_V4I32,
   LOOM_TEST_LOW_EMIT_SWAPPED_ADD_V4I32,
@@ -743,6 +840,22 @@ static const loom_low_lower_emit_t kTestLowEmits[] = {
     },
     {
         .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_SELECT_I32,
+        .operand_ref_start = LOOM_TEST_LOW_OPERAND0,
+        .operand_ref_count = 3,
+        .result_ref_start = LOOM_TEST_LOW_RESULT0,
+        .result_ref_count = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_CMP_EQ_I32,
+        .operand_ref_start = LOOM_TEST_LOW_OPERAND0,
+        .operand_ref_count = 2,
+        .result_ref_start = LOOM_TEST_LOW_RESULT0,
+        .result_ref_count = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
         .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
         .operand_ref_start = LOOM_TEST_LOW_OPERAND0,
         .operand_ref_count = 2,
@@ -811,6 +924,8 @@ enum {
   LOOM_TEST_LOW_RULE_INDEX_CONSTANT,
   LOOM_TEST_LOW_RULE_VECTOR_EXTRACT,
   LOOM_TEST_LOW_RULE_VECTOR_SHUFFLE,
+  LOOM_TEST_LOW_RULE_VECTOR_SELECT,
+  LOOM_TEST_LOW_RULE_VECTOR_CMPI_EQ,
   LOOM_TEST_LOW_RULE_VECTOR_ADDI,
   LOOM_TEST_LOW_RULE_VECTOR_SUBI,
   LOOM_TEST_LOW_RULE_VECTOR_MULI,
@@ -875,6 +990,22 @@ static const loom_low_lower_rule_t kTestLowRules[] = {
             .guard_start = LOOM_TEST_LOW_VECTOR_SHUFFLE_SOURCE_LANES_KIND_GUARD,
             .guard_count = 5,
             .emit_start = LOOM_TEST_LOW_EMIT_SHUFFLE_V4I32,
+            .emit_count = 1,
+        },
+    [LOOM_TEST_LOW_RULE_VECTOR_SELECT] =
+        {
+            .source_op_kind = LOOM_OP_VECTOR_SELECT,
+            .guard_start = LOOM_TEST_LOW_VECTOR_SELECT_CONDITION_GUARD,
+            .guard_count = 4,
+            .emit_start = LOOM_TEST_LOW_EMIT_SELECT_V4I32,
+            .emit_count = 1,
+        },
+    [LOOM_TEST_LOW_RULE_VECTOR_CMPI_EQ] =
+        {
+            .source_op_kind = LOOM_OP_VECTOR_CMPI,
+            .guard_start = LOOM_TEST_LOW_VECTOR_CMPI_KIND_GUARD,
+            .guard_count = 4,
+            .emit_start = LOOM_TEST_LOW_EMIT_CMP_EQ_V4I32,
             .emit_count = 1,
         },
     [LOOM_TEST_LOW_RULE_VECTOR_ADDI] =
@@ -957,6 +1088,16 @@ static const loom_low_lower_rule_span_t kTestLowSpans[] = {
     {
         .source_op_kind = LOOM_OP_VECTOR_SHUFFLE,
         .rule_start = LOOM_TEST_LOW_RULE_VECTOR_SHUFFLE,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_SELECT,
+        .rule_start = LOOM_TEST_LOW_RULE_VECTOR_SELECT,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_CMPI,
+        .rule_start = LOOM_TEST_LOW_RULE_VECTOR_CMPI_EQ,
         .rule_count = 1,
     },
     {

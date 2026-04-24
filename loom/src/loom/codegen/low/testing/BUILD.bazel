@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
 )
 
@@ -13,6 +14,12 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+loom_assert_no_dependencies(
+    name = "source_workload_no_test_dialect_dep",
+    dependencies = ["//loom/src/loom/ops/test:test"],
+    targets = [":source_workload"],
 )
 
 loom_cc_library(
@@ -34,10 +41,10 @@ loom_cc_library(
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/ops/vector",
-        "//loom/src/loom/testing:gen",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/internal:prng",
     ],
 )
 

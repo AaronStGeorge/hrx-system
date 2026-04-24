@@ -85,6 +85,8 @@ TEST_F(SourceLoweringStressTest, GeneratedSupportedSourceLowersAndPacketizes) {
   EXPECT_GT(aggregate.source_counts.vector_dot_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.vector_extract_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.vector_shuffle_op_count, 0u);
+  EXPECT_GT(aggregate.source_counts.vector_cmpi_op_count, 0u);
+  EXPECT_GT(aggregate.source_counts.vector_select_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.vector_load_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.vector_store_op_count, 0u);
   EXPECT_GT(aggregate.source_counts.index_madd_op_count, 0u);

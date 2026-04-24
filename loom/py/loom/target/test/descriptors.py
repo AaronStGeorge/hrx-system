@@ -427,6 +427,23 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
+            key="test.select.i32",
+            mnemonic="test.select.i32",
+            semantic_tag="integer.select.i32",
+            operands=(
+                _i32_result(),
+                _i32_predicate("condition"),
+                _i32_operand("true_value"),
+                _i32_operand("false_value"),
+            ),
+            asm_forms=_asm(
+                results=("dst",),
+                operands=("condition", "true_value", "false_value"),
+            ),
+            schedule_class=_SCHEDULE_SCALAR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
             key="test.add.v4i32",
             mnemonic="test.add.v4i32",
             semantic_tag="vector.add.i32x4",

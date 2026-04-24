@@ -64,14 +64,12 @@ static iree_status_t fuzz_one_input(const uint8_t* data, size_t size) {
   iree_arena_block_pool_t block_pool;
   iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
 
-  loom_test_gen_t gen;
-  loom_test_gen_initialize_fuzz(data, size, &gen);
   loom_low_source_workload_config_t workload_config =
       loom_low_source_workload_config_make(IREE_SV("test-low"), scale);
 
   loom_module_t* module = NULL;
-  iree_status_t status = loom_low_source_workload_generate_module(
-      &gen, &workload_config, &g_context, &block_pool, &module);
+  iree_status_t status = loom_low_source_workload_generate_fuzz_module(
+      data, size, &workload_config, &g_context, &block_pool, &module);
   if (iree_status_is_ok(status)) {
     const loom_low_source_workload_pipeline_options_t pipeline_options = {
         .descriptor_registry = &g_descriptor_registry.registry,

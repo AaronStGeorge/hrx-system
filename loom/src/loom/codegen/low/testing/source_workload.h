@@ -19,7 +19,6 @@
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packetization.h"
 #include "loom/ir/ir.h"
-#include "loom/testing/gen.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,6 +57,10 @@ typedef struct loom_low_source_workload_counts_t {
   uint32_t vector_extract_op_count;
   // Number of generated vector.shuffle ops.
   uint32_t vector_shuffle_op_count;
+  // Number of generated vector.cmpi ops.
+  uint32_t vector_cmpi_op_count;
+  // Number of generated vector.select ops.
+  uint32_t vector_select_op_count;
   // Number of generated vector.load ops.
   uint32_t vector_load_op_count;
   // Number of generated vector.store ops.
@@ -124,23 +127,19 @@ loom_low_source_workload_config_t loom_low_source_workload_config_make(
 iree_status_t loom_low_source_workload_register_dialects(
     loom_context_t* context);
 
-// Generates one targeted source function suitable for source-to-low lowering.
-//
-// The generated function has buffer, i32, vector<4xi32>, vector<16xi8>, and
-// index arguments/results and emits only source ops intentionally supported by
-// the foundation lowering path.
-iree_status_t loom_low_source_workload_generate_module(
-    loom_test_gen_t* gen, const loom_low_source_workload_config_t* config,
-    loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    loom_module_t** out_module);
-
 // Generates one targeted source function using a deterministic PRNG seed.
 iree_status_t loom_low_source_workload_generate_seeded_module(
     uint64_t seed, const loom_low_source_workload_config_t* config,
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
     loom_module_t** out_module);
 
-// Counts source ops emitted by loom_low_source_workload_generate_module().
+// Generates one targeted source function using fuzzer-provided bytes.
+iree_status_t loom_low_source_workload_generate_fuzz_module(
+    const uint8_t* data, iree_host_size_t data_length,
+    const loom_low_source_workload_config_t* config, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, loom_module_t** out_module);
+
+// Counts source ops emitted by generated source workloads.
 void loom_low_source_workload_count_func_ops(
     const loom_op_t* func_op, loom_low_source_workload_counts_t* out_counts);
 

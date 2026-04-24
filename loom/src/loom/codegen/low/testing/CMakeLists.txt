@@ -20,6 +20,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    iree::base::internal::prng
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::source_selection
@@ -33,7 +34,6 @@ loom_cc_library(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target
     loom::src::loom::ops::vector
-    loom::src::loom::testing::gen
     loom::src::loom::verify
   TESTONLY
   PUBLIC
