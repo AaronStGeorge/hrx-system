@@ -167,6 +167,11 @@ iree_status_t loom_amdgpu_map_argument(
 bool loom_amdgpu_module_value_as_exact_index_constant(
     const loom_module_t* module, loom_value_id_t value_id, int64_t* out_value);
 
+// Extracts an exact scalar i32 constant from a module value.
+bool loom_amdgpu_module_value_as_i32_constant(const loom_module_t* module,
+                                              loom_value_id_t value_id,
+                                              int64_t* out_value);
+
 // Extracts an exact non-negative signed 64-bit integer from value facts.
 bool loom_amdgpu_value_facts_as_exact_non_negative_i64(loom_value_facts_t facts,
                                                        int64_t* out_value);
@@ -507,6 +512,16 @@ iree_status_t loom_amdgpu_lower_vector_store(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_plan_t* plan);
 
+// Selects an AMDGPU LDS atomic packet plan.
+bool loom_amdgpu_select_view_atomic_plan(loom_low_lower_context_t* context,
+                                         const loom_op_t* source_op,
+                                         loom_amdgpu_atomic_plan_t* out_plan);
+
+// Lowers a source view.atomic.* op to an AMDGPU LDS atomic packet.
+iree_status_t loom_amdgpu_lower_view_atomic(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_atomic_plan_t* plan);
+
 // Selects an AMDGPU scalar-buffer data prefetch plan.
 bool loom_amdgpu_select_view_prefetch_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
@@ -520,6 +535,12 @@ iree_status_t loom_amdgpu_lower_view_prefetch(
 
 // Verifies source vector memory legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_vector_memory(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Verifies source view atomic legality for AMDGPU target-low selection.
+iree_status_t loom_amdgpu_low_legality_verify_view_atomic(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);

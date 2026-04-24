@@ -12,6 +12,7 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
 
@@ -306,6 +307,8 @@ bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,
     case LOOM_OP_VECTOR_REDUCE:
       return loom_amdgpu_type_is_vector_32bit_lane_range(loom_module_value_type(
           module, loom_vector_reduce_input(defining_op)));
+    case LOOM_OP_VIEW_ATOMIC_RMW:
+      return true;
     case LOOM_OP_SCALAR_ADDI:
       return loom_amdgpu_module_value_prefers_vgpr(
                  module, loom_scalar_addi_lhs(defining_op)) ||
@@ -449,6 +452,30 @@ bool loom_amdgpu_module_value_as_exact_index_constant(
   return true;
 }
 
+bool loom_amdgpu_module_value_as_i32_constant(const loom_module_t* module,
+                                              loom_value_id_t value_id,
+                                              int64_t* out_value) {
+  IREE_ASSERT_ARGUMENT(out_value);
+  *out_value = 0;
+  if (!loom_amdgpu_type_is_i32(loom_module_value_type(module, value_id))) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return false;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op || !loom_scalar_constant_isa(defining_op)) {
+    return false;
+  }
+  loom_attribute_t attr = loom_scalar_constant_value(defining_op);
+  if (!loom_amdgpu_attr_is_i32_immediate(attr)) {
+    return false;
+  }
+  *out_value = attr.i64;
+  return true;
+}
+
 bool loom_amdgpu_value_facts_as_exact_non_negative_i64(loom_value_facts_t facts,
                                                        int64_t* out_value) {
   IREE_ASSERT_ARGUMENT(out_value);
@@ -484,26 +511,8 @@ uint32_t loom_amdgpu_attr_f32_bit_pattern(loom_attribute_t value) {
 bool loom_amdgpu_value_as_i32_constant(loom_low_lower_context_t* context,
                                        loom_value_id_t value_id,
                                        int64_t* out_value) {
-  IREE_ASSERT_ARGUMENT(out_value);
-  *out_value = 0;
-  if (!loom_amdgpu_value_is_i32(context, value_id)) {
-    return false;
-  }
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value)) {
-    return false;
-  }
-  const loom_op_t* defining_op = loom_value_def_op(value);
-  if (!defining_op || !loom_scalar_constant_isa(defining_op)) {
-    return false;
-  }
-  loom_attribute_t attr = loom_scalar_constant_value(defining_op);
-  if (!loom_amdgpu_attr_is_i32_immediate(attr)) {
-    return false;
-  }
-  *out_value = attr.i64;
-  return true;
+  return loom_amdgpu_module_value_as_i32_constant(
+      loom_low_lower_context_module(context), value_id, out_value);
 }
 
 bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,
@@ -521,8 +530,10 @@ bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,
 bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
     loom_low_lower_context_t* context, loom_value_id_t value_id) {
   int64_t unused_value = 0;
-  return loom_amdgpu_value_prefers_vgpr(context, value_id) ||
-         loom_amdgpu_value_as_i32_constant(context, value_id, &unused_value);
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  return loom_amdgpu_module_value_prefers_vgpr(module, value_id) ||
+         loom_amdgpu_module_value_as_i32_constant(module, value_id,
+                                                  &unused_value);
 }
 
 bool loom_amdgpu_value_can_materialize_as_vgpr_address(

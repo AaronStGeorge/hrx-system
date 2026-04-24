@@ -214,6 +214,24 @@ typedef struct loom_amdgpu_memory_access_plan_t {
   uint64_t descriptor_id;
 } loom_amdgpu_memory_access_plan_t;
 
+typedef enum loom_amdgpu_atomic_operation_kind_e {
+  LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE = 0,
+  LOOM_AMDGPU_ATOMIC_OPERATION_RMW = 1,
+} loom_amdgpu_atomic_operation_kind_t;
+
+typedef struct loom_amdgpu_atomic_plan_t {
+  // Target-independent source memory access plan being wrapped.
+  loom_low_source_memory_access_plan_t source;
+  // Source atomic operation form being lowered.
+  loom_amdgpu_atomic_operation_kind_t operation_kind;
+  // Target operand path used for the dynamic index.
+  loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
+  // Static offset value encoded in the descriptor offset immediate.
+  int64_t immediate_offset;
+  // Stable descriptor ID selected for the active descriptor set.
+  uint64_t descriptor_id;
+} loom_amdgpu_atomic_plan_t;
+
 typedef struct loom_amdgpu_prefetch_plan_t {
   // Target-independent source memory access plan being wrapped.
   loom_low_source_memory_access_plan_t source;

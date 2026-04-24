@@ -114,6 +114,23 @@ bool loom_amdgpu_memory_access_select(
     loom_low_source_memory_access_diagnostic_t* out_source_diagnostic,
     loom_amdgpu_memory_access_diagnostic_t* out_diagnostic);
 
+// Selects the target operand path used for a dynamic source memory index.
+bool loom_amdgpu_memory_access_select_dynamic_index_kind(
+    const loom_module_t* module, loom_amdgpu_memory_access_plan_t* access,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic);
+
+// Emits the VGPR address operand for a selected memory access.
+iree_status_t loom_amdgpu_emit_memory_vaddr(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_plan_t* access,
+    loom_value_id_t low_base_addr, loom_value_id_t* out_low_vaddr);
+
+// Builds descriptor offset and cache-policy attrs for a memory packet.
+iree_status_t loom_amdgpu_make_memory_attrs(
+    loom_low_lower_context_t* context,
+    const loom_amdgpu_memory_access_plan_t* access, loom_named_attr_t* attrs,
+    iree_host_size_t attr_capacity, iree_host_size_t* out_attr_count);
+
 // Returns true when an access carries an explicit cache policy.
 bool loom_amdgpu_memory_cache_policy_is_present(
     const loom_vector_memory_cache_policy_t* policy);

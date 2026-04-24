@@ -456,6 +456,7 @@ loom_cc_library(
     "lower.c"
     "lower_abi.c"
     "lower_arithmetic_rules.c"
+    "lower_atomic.c"
     "lower_bitfield.c"
     "lower_bitpack.c"
     "lower_buffer.c"
@@ -487,6 +488,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::source_memory_plan
     loom::src::loom::ir
     loom::src::loom::ir::facts
+    loom::src::loom::ops::atomic
     loom::src::loom::ops::buffer
     loom::src::loom::ops::cache
     loom::src::loom::ops::encoding
@@ -869,6 +871,17 @@ iree_executable_test(
     "source_low_memory_global"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_memory_workgroup_atomic"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_workgroup_atomic.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

@@ -86,9 +86,10 @@ bool loom_vector_memory_access_describe(
   return true;
 }
 
-static bool loom_vector_memory_cache_policy_from_attrs(
+bool loom_vector_memory_cache_policy_from_attrs(
     loom_attribute_t cache_scope_attr, loom_attribute_t cache_temporal_attr,
     loom_vector_memory_cache_policy_t* out_policy) {
+  IREE_ASSERT_ARGUMENT(out_policy);
   *out_policy = (loom_vector_memory_cache_policy_t){0};
   if (!loom_attr_is_absent(cache_scope_attr)) {
     if (cache_scope_attr.kind != LOOM_ATTR_ENUM) return false;
@@ -106,9 +107,11 @@ static bool loom_vector_memory_cache_policy_from_attrs(
 
 bool loom_vector_memory_cache_policy_from_op(
     const loom_op_t* op, loom_vector_memory_cache_policy_t* out_policy) {
-  if (!out_policy) return false;
+  IREE_ASSERT_ARGUMENT(out_policy);
   *out_policy = (loom_vector_memory_cache_policy_t){0};
-  if (!op) return false;
+  if (!op) {
+    return false;
+  }
   switch (op->kind) {
     case LOOM_OP_VECTOR_LOAD:
     case LOOM_OP_VECTOR_STORE:
@@ -120,14 +123,18 @@ bool loom_vector_memory_cache_policy_from_op(
     case LOOM_OP_VECTOR_SCATTER:
     case LOOM_OP_VECTOR_GATHER_MASK:
     case LOOM_OP_VECTOR_SCATTER_MASK:
-      if (op->attribute_count < 2) return false;
+      if (op->attribute_count < 2) {
+        return false;
+      }
       return loom_vector_memory_cache_policy_from_attrs(
           loom_op_attrs(op)[0], loom_op_attrs(op)[1], out_policy);
     case LOOM_OP_VECTOR_ATOMIC_REDUCE:
     case LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK:
     case LOOM_OP_VECTOR_ATOMIC_RMW:
     case LOOM_OP_VECTOR_ATOMIC_RMW_MASK:
-      if (op->attribute_count < 5) return false;
+      if (op->attribute_count < 5) {
+        return false;
+      }
       return loom_vector_memory_cache_policy_from_attrs(
           loom_op_attrs(op)[3], loom_op_attrs(op)[4], out_policy);
     default:

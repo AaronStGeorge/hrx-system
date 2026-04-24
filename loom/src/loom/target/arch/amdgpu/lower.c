@@ -85,6 +85,10 @@ static iree_status_t loom_amdgpu_select_plan_id(
     case LOOM_OP_VECTOR_STORE:
       LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_memory_access_plan_t,
                               loom_amdgpu_select_vector_store_plan);
+    case LOOM_OP_VIEW_ATOMIC_REDUCE:
+    case LOOM_OP_VIEW_ATOMIC_RMW:
+      LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_atomic_plan_t,
+                              loom_amdgpu_select_view_atomic_plan);
     case LOOM_OP_VIEW_PREFETCH:
       LOOM_AMDGPU_SELECT_DATA(loom_amdgpu_prefetch_plan_t,
                               loom_amdgpu_select_view_prefetch_plan);
@@ -176,6 +180,11 @@ static iree_status_t loom_amdgpu_emit_op(void* user_data,
       return loom_amdgpu_lower_vector_store(
           context, source_op,
           (const loom_amdgpu_memory_access_plan_t*)plan.target_data);
+    case LOOM_OP_VIEW_ATOMIC_REDUCE:
+    case LOOM_OP_VIEW_ATOMIC_RMW:
+      return loom_amdgpu_lower_view_atomic(
+          context, source_op,
+          (const loom_amdgpu_atomic_plan_t*)plan.target_data);
     case LOOM_OP_VIEW_PREFETCH:
       return loom_amdgpu_lower_view_prefetch(
           context, source_op,
@@ -214,6 +223,10 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
     case LOOM_OP_VECTOR_STORE:
       return loom_amdgpu_low_legality_verify_vector_memory(provider, context,
                                                            op, out_handled);
+    case LOOM_OP_VIEW_ATOMIC_REDUCE:
+    case LOOM_OP_VIEW_ATOMIC_RMW:
+      return loom_amdgpu_low_legality_verify_view_atomic(provider, context, op,
+                                                         out_handled);
     default:
       if (loom_amdgpu_op_is_vector_dot(op->kind)) {
         return loom_amdgpu_low_legality_verify_vector_dot(provider, context, op,

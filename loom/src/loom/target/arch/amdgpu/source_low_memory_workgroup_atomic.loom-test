@@ -1,0 +1,70 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/memory_workgroup_atomic.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+
+func.def @lds_atomic_add_i32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %one = scalar.constant 1 : i32
+  view.atomic.reduce<addi> %one, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
+  %old = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @lds_atomic_add_i32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %zero = s_mov_b32 0
+  %bytes = s_mov_b32 256
+  %scratch_view = frame_index @lds_atomic_add_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %one = s_mov_b32 1
+  %12 = v_mov_b32 1
+  %13 = v_mov_b32 2
+  %14 = v_lshlrev_b32 %13, %tid
+  %15 = v_add_u32 %scratch_view, %14
+  ds_add_u32 %15, %12 {offset = 0}
+  %16 = v_mov_b32 1
+  %17 = v_mov_b32 2
+  %18 = v_lshlrev_b32 %17, %tid
+  %19 = v_add_u32 %scratch_view, %18
+  %old = ds_add_rtn_u32 %19, %16 {offset = 0}
+  return
+}
+
+low.slot @lds_atomic_add_i32__lds3 {align = 4, function = @lds_atomic_add_i32, size = 256, space = lds}
+
+// ====
+
+func.def @lds_atomic_add_f32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xf32, #dense>
+  %one = scalar.constant 1.0 : f32
+  view.atomic.reduce<addf> %one, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense>
+  %old = view.atomic.rmw<addf> %one, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense> -> f32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @lds_atomic_add_f32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %zero = s_mov_b32 0
+  %bytes = s_mov_b32 256
+  %scratch_view = frame_index @lds_atomic_add_f32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %one = v_mov_b32 1065353216
+  %12 = v_mov_b32 2
+  %13 = v_lshlrev_b32 %12, %tid
+  %14 = v_add_u32 %scratch_view, %13
+  ds_add_f32 %14, %one {offset = 0}
+  %15 = v_mov_b32 2
+  %16 = v_lshlrev_b32 %15, %tid
+  %17 = v_add_u32 %scratch_view, %16
+  %old = ds_add_rtn_f32 %17, %one {offset = 0}
+  return
+}
+
+low.slot @lds_atomic_add_f32__lds3 {align = 4, function = @lds_atomic_add_f32, size = 256, space = lds}

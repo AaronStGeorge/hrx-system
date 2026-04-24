@@ -103,7 +103,7 @@ static const loom_amdgpu_dynamic_index_source_rule_t
         },
 };
 
-static bool loom_amdgpu_memory_access_select_dynamic_index_kind(
+bool loom_amdgpu_memory_access_select_dynamic_index_kind(
     const loom_module_t* module, loom_amdgpu_memory_access_plan_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
   if (access->source.dynamic_index == LOOM_VALUE_ID_INVALID) {
@@ -1216,6 +1216,8 @@ loom_amdgpu_memory_operation_kind_from_source(
       return LOOM_AMDGPU_MEMORY_OPERATION_LOAD;
     case LOOM_LOW_SOURCE_MEMORY_OPERATION_STORE:
       return LOOM_AMDGPU_MEMORY_OPERATION_STORE;
+    case LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_REDUCE:
+    case LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_RMW:
     case LOOM_LOW_SOURCE_MEMORY_OPERATION_PREFETCH:
       IREE_ASSERT_UNREACHABLE();
       return LOOM_AMDGPU_MEMORY_OPERATION_LOAD;

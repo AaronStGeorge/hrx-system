@@ -34,6 +34,8 @@ typedef enum loom_low_source_memory_operation_kind_e {
   LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD = 0,
   LOOM_LOW_SOURCE_MEMORY_OPERATION_STORE = 1,
   LOOM_LOW_SOURCE_MEMORY_OPERATION_PREFETCH = 2,
+  LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_REDUCE = 3,
+  LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_RMW = 4,
 } loom_low_source_memory_operation_kind_t;
 
 typedef enum loom_low_source_memory_dynamic_index_source_e {

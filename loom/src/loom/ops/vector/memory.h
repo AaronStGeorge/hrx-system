@@ -102,6 +102,12 @@ bool loom_vector_memory_access_describe(
 bool loom_vector_memory_cache_policy_from_op(
     const loom_op_t* op, loom_vector_memory_cache_policy_t* out_policy);
 
+// Extracts an optional cache policy from the two generated optional cache
+// attributes shared by vector and view memory ops.
+bool loom_vector_memory_cache_policy_from_attrs(
+    loom_attribute_t cache_scope_attr, loom_attribute_t cache_temporal_attr,
+    loom_vector_memory_cache_policy_t* out_policy);
+
 // Returns the static element extent touched along a view axis. Leading view
 // axes not covered by the vector have extent 1. Trailing axes use the
 // corresponding vector dimension and return false when that dimension is
