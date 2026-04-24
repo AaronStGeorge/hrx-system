@@ -1,4 +1,4 @@
-// RUN: emit source-low @index_madd_global_b32 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_index_madd_global_b32_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_index_madd_global_b32_target) @index_madd_global_b32(%input: buffer, %output: buffer) {
@@ -37,7 +37,7 @@ low.func.def target(@gfx11_index_madd_global_b32_target) abi(hal_kernel) @index_
 }
 
 // ====
-// RUN: emit source-low @workitem_y_lds_uses_explicit_vaddr output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_workitem_y_lds_uses_explicit_vaddr_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_workitem_y_lds_uses_explicit_vaddr_target) @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {

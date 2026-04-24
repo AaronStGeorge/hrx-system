@@ -1,4 +1,4 @@
-// RUN: emit source-low @lds_b32_diagnostics diagnostics=memory output=none
+// RUN: emit source-low diagnostics=memory output=none
 target.profile @gfx11_lds_b32_diagnostics_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_lds_b32_diagnostics_target) @lds_b32_diagnostics(%output: buffer) {
@@ -18,7 +18,7 @@ func.def target(@gfx11_lds_b32_diagnostics_target) @lds_b32_diagnostics(%output:
 }
 
 // ====
-// RUN: emit source-low @lds_padded_diagnostics diagnostics=memory output=none
+// RUN: emit source-low diagnostics=memory output=none
 target.profile @gfx11_lds_padded_diagnostics_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_lds_padded_diagnostics_target) @lds_padded_diagnostics(%output: buffer) {
@@ -39,7 +39,7 @@ func.def target(@gfx11_lds_padded_diagnostics_target) @lds_padded_diagnostics(%o
 }
 
 // ====
-// RUN: emit source-low @lds_read2_write2_diagnostics diagnostics=memory output=none
+// RUN: emit source-low diagnostics=memory output=none
 target.profile @gfx11_lds_read2_write2_diagnostics_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_lds_read2_write2_diagnostics_target) @lds_read2_write2_diagnostics(%output: buffer) {
@@ -60,7 +60,7 @@ func.def target(@gfx11_lds_read2_write2_diagnostics_target) @lds_read2_write2_di
 }
 
 // ====
-// RUN: emit source-low @lds_conflict_risk_diagnostics diagnostics=memory output=none
+// RUN: emit source-low diagnostics=memory output=none
 target.profile @gfx11_lds_conflict_risk_diagnostics_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_lds_conflict_risk_diagnostics_target) @lds_conflict_risk_diagnostics(%output: buffer) {
@@ -80,7 +80,7 @@ func.def target(@gfx11_lds_conflict_risk_diagnostics_target) @lds_conflict_risk_
 }
 
 // ====
-// RUN: emit source-low @i8x2_load_rejected output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_i8x2_load_rejected_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_i8x2_load_rejected_target) @i8x2_load_rejected(%input: buffer) -> (vector<2xi8>) {
@@ -92,7 +92,7 @@ func.def target(@gfx11_i8x2_load_rejected_target) @i8x2_load_rejected(%input: bu
 }
 
 // ====
-// RUN: emit source-low @lds_i8x8_strided_load_rejected output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_lds_i8x8_strided_load_rejected_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_lds_i8x8_strided_load_rejected_target) @lds_i8x8_strided_load_rejected() -> (vector<8xi8>) {

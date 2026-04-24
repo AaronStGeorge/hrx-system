@@ -1,4 +1,4 @@
-// RUN: emit source-low @i32x4_slice_middle output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_slice_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_slice_target) @i32x4_slice_middle(%values: vector<4xi32>) -> (vector<2xi32>) {
@@ -15,7 +15,7 @@ low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i32x4_slice_middle(%va
 }
 
 // ====
-// RUN: emit source-low @i8x4_slice_low_half output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_slice_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_slice_target) @i8x4_slice_low_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
@@ -29,7 +29,7 @@ low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i8x4_slice_low_half(%l
 }
 
 // ====
-// RUN: emit source-low @i8x4_slice_high_half output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_slice_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_slice_target) @i8x4_slice_high_half(%bytes: vector<4xi8>) -> (vector<2xi8>) {
@@ -45,7 +45,7 @@ low.func.def target(@gfx11_slice_target) abi(hal_kernel) @i8x4_slice_high_half(%
 }
 
 // ====
-// RUN: emit source-low @dynamic_slice_rejected output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_slice_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_slice_target) @dynamic_slice_rejected(%offset: index, %values: vector<4xi32>) -> (vector<2xi32>) {
@@ -55,7 +55,7 @@ func.def target(@gfx11_slice_target) @dynamic_slice_rejected(%offset: index, %va
 }
 
 // ====
-// RUN: emit source-low @i8_cross_register_slice_rejected output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_slice_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_slice_target) @i8_cross_register_slice_rejected(%bytes: vector<8xi8>) -> (vector<4xi8>) {

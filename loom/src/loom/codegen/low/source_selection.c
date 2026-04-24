@@ -23,42 +23,6 @@ static iree_string_view_t loom_low_source_selection_kind(
   return options->lowering_kind;
 }
 
-static iree_string_view_t loom_low_source_selection_trim_symbol_name(
-    iree_string_view_t symbol_name) {
-  symbol_name = iree_string_view_trim(symbol_name);
-  if (iree_string_view_starts_with_char(symbol_name, '@')) {
-    symbol_name = iree_string_view_remove_prefix(symbol_name, 1);
-  }
-  return symbol_name;
-}
-
-static iree_status_t loom_low_source_selection_find_symbol_by_name(
-    const loom_module_t* module, iree_string_view_t symbol_name,
-    loom_symbol_id_t* out_symbol_id) {
-  IREE_ASSERT_ARGUMENT(out_symbol_id);
-  *out_symbol_id = LOOM_SYMBOL_ID_INVALID;
-  symbol_name = loom_low_source_selection_trim_symbol_name(symbol_name);
-  if (iree_string_view_is_empty(symbol_name)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "source func symbol name must not be empty");
-  }
-  const loom_string_id_t name_id =
-      loom_module_lookup_string(module, symbol_name);
-  if (name_id == LOOM_STRING_ID_INVALID) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "source func @%.*s was not found",
-                            (int)symbol_name.size, symbol_name.data);
-  }
-  const loom_symbol_id_t symbol_id = loom_module_find_symbol(module, name_id);
-  if (symbol_id == LOOM_SYMBOL_ID_INVALID) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "source func @%.*s was not found",
-                            (int)symbol_name.size, symbol_name.data);
-  }
-  *out_symbol_id = symbol_id;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_source_selection_initialize_fact_table(
     const loom_low_descriptor_registry_t* descriptor_registry,
     iree_arena_allocator_t* arena, loom_symbol_fact_table_t* out_fact_table) {
@@ -155,21 +119,6 @@ static void loom_low_source_selection_assign(
   out_selection->target_bundle = &out_selection->target_bundle_storage.bundle;
 }
 
-static iree_status_t loom_low_source_selection_select_named(
-    const loom_module_t* module,
-    const loom_low_source_selection_options_t* options,
-    loom_symbol_fact_table_t* fact_table, iree_string_view_t symbol_name,
-    loom_low_source_selection_t* out_selection) {
-  loom_symbol_id_t symbol_id = LOOM_SYMBOL_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_source_selection_find_symbol_by_name(
-      module, symbol_name, &symbol_id));
-  bool compatible = false;
-  IREE_RETURN_IF_ERROR(loom_low_source_selection_try_func(
-      module, options, fact_table, symbol_id, /*require_compatible=*/true,
-      &compatible, out_selection));
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_source_selection_select_single(
     const loom_module_t* module,
     const loom_low_source_selection_options_t* options,
@@ -205,10 +154,63 @@ static iree_status_t loom_low_source_selection_select_single(
   if (compatible_count > 1) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "module contains %" PRIhsz
-                            " %.*s-compatible funcs; select one by symbol",
+                            " %.*s-compatible funcs; expected exactly one",
                             compatible_count, (int)lowering_kind.size,
                             lowering_kind.data);
   }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_select_source_funcs(
+    const loom_module_t* module,
+    const loom_low_source_selection_options_t* options,
+    iree_arena_allocator_t* arena,
+    loom_low_source_selection_list_t* out_selection_list) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_selection_list);
+  *out_selection_list = (loom_low_source_selection_list_t){0};
+  if (options->descriptor_registry == NULL ||
+      options->policy_registry == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "source-to-low func selection requires descriptor and policy "
+        "registries");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_policy_registry_verify(options->policy_registry));
+
+  loom_symbol_fact_table_t fact_table = {0};
+  IREE_RETURN_IF_ERROR(loom_low_source_selection_initialize_fact_table(
+      options->descriptor_registry, arena, &fact_table));
+  if (module->symbols.count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_low_source_selection_t* selections = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, module->symbols.count, sizeof(*selections), (void**)&selections));
+  iree_host_size_t selection_count = 0;
+  for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
+    if (i > UINT16_MAX) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "symbol index exceeds source selection range");
+    }
+    bool compatible = false;
+    loom_low_source_selection_t candidate = {0};
+    IREE_RETURN_IF_ERROR(loom_low_source_selection_try_func(
+        module, options, &fact_table, (loom_symbol_id_t)i,
+        /*require_compatible=*/false, &compatible, &candidate));
+    if (!compatible) {
+      continue;
+    }
+    loom_low_source_selection_assign(&candidate, &selections[selection_count]);
+    ++selection_count;
+  }
+
+  out_selection_list->values = selections;
+  out_selection_list->count = selection_count;
   return iree_ok_status();
 }
 
@@ -234,12 +236,6 @@ iree_status_t loom_low_select_source_func(
   loom_symbol_fact_table_t fact_table = {0};
   IREE_RETURN_IF_ERROR(loom_low_source_selection_initialize_fact_table(
       options->descriptor_registry, arena, &fact_table));
-  iree_string_view_t func_symbol_name =
-      loom_low_source_selection_trim_symbol_name(options->func_symbol_name);
-  if (!iree_string_view_is_empty(func_symbol_name)) {
-    return loom_low_source_selection_select_named(
-        module, options, &fact_table, func_symbol_name, out_selection);
-  }
   return loom_low_source_selection_select_single(module, options, &fact_table,
                                                  out_selection);
 }

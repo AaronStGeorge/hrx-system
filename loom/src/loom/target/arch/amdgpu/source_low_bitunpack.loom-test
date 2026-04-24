@@ -1,4 +1,4 @@
-// RUN: emit source-low @i32_to_u8x4_bitunpack output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitunpack_target) @i32_to_u8x4_bitunpack(%packed: vector<1xi32>) -> (vector<4xi32>) {
@@ -24,7 +24,7 @@ low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i32_to_u8x4_bitunp
 }
 
 // ====
-// RUN: emit source-low @i32_to_s8x4_bitunpack output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitunpack_target) @i32_to_s8x4_bitunpack(%packed: vector<1xi32>) -> (vector<4xi32>) {
@@ -53,7 +53,7 @@ low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i32_to_s8x4_bitunp
 }
 
 // ====
-// RUN: emit source-low @i32_to_u4x8_bitunpack output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitunpack_target) @i32_to_u4x8_bitunpack(%packed: vector<1xi32>) -> (vector<8xi32>) {
@@ -91,7 +91,7 @@ low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i32_to_u4x8_bitunp
 }
 
 // ====
-// RUN: emit source-low @i8x2_to_u2x8_bitunpack output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitunpack_target) @i8x2_to_u2x8_bitunpack(%packed: vector<2xi8>) -> (vector<8xi32>) {
@@ -129,7 +129,7 @@ low.func.def target(@gfx11_bitunpack_target) abi(hal_kernel) @i8x2_to_u2x8_bitun
 }
 
 // ====
-// RUN: emit source-low @q3_width_rejected output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitunpack_target) @q3_width_rejected(%packed: vector<3xi8>) -> (vector<8xi32>) {
@@ -139,7 +139,7 @@ func.def target(@gfx11_bitunpack_target) @q3_width_rejected(%packed: vector<3xi8
 }
 
 // ====
-// RUN: emit source-low @bitunpack_lane_count_rejected output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitunpack_target) @bitunpack_lane_count_rejected(%packed: vector<16xi8>) -> (vector<32xi32>) {
@@ -149,7 +149,7 @@ func.def target(@gfx11_bitunpack_target) @bitunpack_lane_count_rejected(%packed:
 }
 
 // ====
-// RUN: emit source-low @bitunpack_result_type_rejected output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitunpack_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitunpack_target) @bitunpack_result_type_rejected(%packed: vector<1xi32>) -> (vector<4xi8>) {

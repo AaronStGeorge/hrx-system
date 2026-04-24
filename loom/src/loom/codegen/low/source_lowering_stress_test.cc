@@ -59,17 +59,15 @@ TEST_F(SourceLoweringStressTest, GeneratedSupportedSourceLowersAndPacketizes) {
   for (uint64_t seed = 0; seed < 16; ++seed) {
     SCOPED_TRACE(::testing::Message() << "seed=" << seed);
     loom_module_t* module_raw = nullptr;
-    loom_symbol_ref_t func_ref = loom_symbol_ref_null();
     loom_low_source_workload_config_t workload_config =
         loom_low_source_workload_config_make(IREE_SV("test-low"), 1);
     IREE_ASSERT_OK(loom_low_source_workload_generate_seeded_module(
-        seed, &workload_config, &context_, &block_pool_, &module_raw,
-        &func_ref));
+        seed, &workload_config, &context_, &block_pool_, &module_raw));
     ModulePtr module(module_raw);
 
     loom_low_source_workload_pipeline_counters_t counters = {};
     IREE_ASSERT_OK(loom_low_source_workload_run_pipeline(
-        module.get(), func_ref, &pipeline_options, &block_pool_, &counters));
+        module.get(), &pipeline_options, &block_pool_, &counters));
     EXPECT_EQ(counters.lower_error_count, 0u);
     aggregate.source_counts.scalar_integer_op_count +=
         counters.source_counts.scalar_integer_op_count;

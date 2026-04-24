@@ -1,4 +1,4 @@
-// RUN: emit source-low @global_saddr_fallback output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_global_saddr_fallback_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_global_saddr_fallback_target) @global_saddr_fallback(%input: buffer, %output: buffer) {
@@ -25,7 +25,7 @@ low.func.def target(@gfx11_global_saddr_fallback_target) abi(hal_kernel) @global
 }
 
 // ====
-// RUN: emit source-low @i32_b128 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_i32_b128_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_i32_b128_target) @i32_b128(%input: buffer, %output: buffer) {
@@ -96,7 +96,7 @@ low.func.def target(@gfx11_i32_b128_target) abi(hal_kernel) @i32_b128() asm<amdg
 }
 
 // ====
-// RUN: emit source-low @i32_bitwise output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_i32_bitwise_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_i32_bitwise_target) @i32_bitwise(%input: buffer, %output: buffer) {
@@ -137,7 +137,7 @@ low.func.def target(@gfx11_i32_bitwise_target) abi(hal_kernel) @i32_bitwise() as
 }
 
 // ====
-// RUN: emit source-low @i32_shift output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_i32_shift_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_i32_shift_target) @i32_shift(%input: buffer, %output: buffer) {
@@ -180,7 +180,7 @@ low.func.def target(@gfx11_i32_shift_target) abi(hal_kernel) @i32_shift() asm<am
 }
 
 // ====
-// RUN: emit source-low @i32_scalarized output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_i32_scalarized_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_i32_scalarized_target) @i32_scalarized(%input: buffer, %output: buffer) {
@@ -236,7 +236,7 @@ low.func.def target(@gfx11_i32_scalarized_target) abi(hal_kernel) @i32_scalarize
 }
 
 // ====
-// RUN: emit source-low @f32_arith output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_f32_arith_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_f32_arith_target) @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
@@ -278,7 +278,7 @@ low.func.def target(@gfx11_f32_arith_target) abi(hal_kernel) @f32_arith() asm<am
 }
 
 // ====
-// RUN: emit source-low @f32_fma output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_f32_fma_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_f32_fma_target) @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
@@ -322,7 +322,7 @@ low.func.def target(@gfx11_f32_fma_target) abi(hal_kernel) @f32_fma() asm<amdgpu
 }
 
 // ====
-// RUN: emit source-low @f32_scalarized output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_f32_scalarized_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_f32_scalarized_target) @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
@@ -388,7 +388,7 @@ low.func.def target(@gfx11_f32_scalarized_target) abi(hal_kernel) @f32_scalarize
 }
 
 // ====
-// RUN: emit source-low @lds_b128_roundtrip output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_lds_b128_roundtrip_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_lds_b128_roundtrip_target) @lds_b128_roundtrip(%input: buffer, %output: buffer) {
@@ -436,7 +436,7 @@ low.func.def target(@gfx11_lds_b128_roundtrip_target) abi(hal_kernel) @lds_b128_
 low.slot @lds_b128_roundtrip__lds5 {align = 16, function = @lds_b128_roundtrip, size = 1024, space = lds}
 
 // ====
-// RUN: emit source-low @dot4i_s8s8 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_dot4i_s8s8_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_dot4i_s8s8_target) @dot4i_s8s8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
@@ -452,7 +452,7 @@ low.func.def target(@gfx11_dot4i_s8s8_target) abi(hal_kernel) @dot4i_s8s8(%lhs: 
 }
 
 // ====
-// RUN: emit source-low @dot4i_u8u8 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_dot4i_u8u8_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_dot4i_u8u8_target) @dot4i_u8u8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
@@ -468,7 +468,7 @@ low.func.def target(@gfx11_dot4i_u8u8_target) abi(hal_kernel) @dot4i_u8u8(%lhs: 
 }
 
 // ====
-// RUN: emit source-low @dot8i4_u4u4 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_dot8i4_u4u4_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_dot8i4_u4u4_target) @dot8i4_u4u4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
@@ -484,7 +484,7 @@ low.func.def target(@gfx11_dot8i4_u4u4_target) abi(hal_kernel) @dot8i4_u4u4(%lhs
 }
 
 // ====
-// RUN: emit source-low @dot4i_u8s8 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_dot4i_u8s8_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_dot4i_u8s8_target) @dot4i_u8s8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
@@ -500,7 +500,7 @@ low.func.def target(@gfx11_dot4i_u8s8_target) abi(hal_kernel) @dot4i_u8s8(%lhs: 
 }
 
 // ====
-// RUN: emit source-low @dot4i_s8u8 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_dot4i_s8u8_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_dot4i_s8u8_target) @dot4i_s8u8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
@@ -516,7 +516,7 @@ low.func.def target(@gfx11_dot4i_s8u8_target) abi(hal_kernel) @dot4i_s8u8(%lhs: 
 }
 
 // ====
-// RUN: emit source-low @dot8i4_s4s4 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_dot8i4_signed_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_dot8i4_signed_target) @dot8i4_s4s4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
@@ -532,7 +532,7 @@ low.func.def target(@gfx11_dot8i4_signed_target) abi(hal_kernel) @dot8i4_s4s4(%l
 }
 
 // ====
-// RUN: emit source-low @dot8i4_u4s4 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_dot8i4_u4s4_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_dot8i4_u4s4_target) @dot8i4_u4s4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
@@ -548,7 +548,7 @@ low.func.def target(@gfx11_dot8i4_u4s4_target) abi(hal_kernel) @dot8i4_u4s4(%lhs
 }
 
 // ====
-// RUN: emit source-low @dot8i4_s4u4 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_dot8i4_s4u4_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_dot8i4_s4u4_target) @dot8i4_s4u4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {
@@ -564,7 +564,7 @@ low.func.def target(@gfx11_dot8i4_s4u4_target) abi(hal_kernel) @dot8i4_s4u4(%lhs
 }
 
 // ====
-// RUN: emit source-low @dot8i4_u4s4_gfx950_rejected output=low
+// RUN: emit source-low output=low
 target.profile @gfx950_dot8i4_u4s4_target preset("amdgpu-gfx950")
 
 func.def target(@gfx950_dot8i4_u4s4_target) @dot8i4_u4s4_gfx950_rejected(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi32>) -> (vector<1xi32>) {

@@ -1,4 +1,4 @@
-// RUN: emit source-low @gfx12_cache_policy output=low
+// RUN: emit source-low output=low
 target.profile @gfx12_cache_policy_target preset("amdgpu-gfx12")
 
 func.def target(@gfx12_cache_policy_target) @gfx12_cache_policy(%input: buffer, %output: buffer) {
@@ -29,7 +29,7 @@ low.func.def target(@gfx12_cache_policy_target) abi(hal_kernel) @gfx12_cache_pol
 }
 
 // ====
-// RUN: emit source-low @gfx950_non_temporal output=low
+// RUN: emit source-low output=low
 target.profile @gfx950_non_temporal_target preset("amdgpu-gfx950")
 
 func.def target(@gfx950_non_temporal_target) @gfx950_non_temporal(%input: buffer, %output: buffer) {

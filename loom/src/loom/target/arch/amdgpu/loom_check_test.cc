@@ -123,7 +123,7 @@ const AmdgpuTargetCase kAmdgpuCurrentTargets[] = {
 
 static std::string AmdgpuB128CopySource(iree_string_view_t target_symbol,
                                         iree_string_view_t target_key) {
-  std::string source = "// RUN: emit source-low @copy_b128 output=low\n";
+  std::string source = "// RUN: emit source-low output=low\n";
   source += "target.profile @";
   source.append(target_symbol.data, target_symbol.size);
   source += " preset(\"";
@@ -155,7 +155,7 @@ static std::string AmdgpuSourceLowCase(iree_string_view_t target_symbol,
                                        iree_string_view_t target_key,
                                        const char* emit_options,
                                        const char* body) {
-  std::string source = "// RUN: emit source-low @case ";
+  std::string source = "// RUN: emit source-low ";
   source += emit_options;
   source += "\n";
   source += "target.profile @";

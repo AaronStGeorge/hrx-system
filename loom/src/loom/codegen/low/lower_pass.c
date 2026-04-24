@@ -15,14 +15,10 @@
 #include "loom/pass/registry.h"
 
 typedef struct loom_low_source_to_low_pass_state_t {
-  // Optional module-local source func symbol selected by the pass.
-  iree_string_view_t function_symbol;
   // Maximum number of lowering diagnostics emitted before stopping.
   uint32_t max_errors;
   // True when max_errors was explicitly provided.
   bool has_max_errors_option;
-  // True when function_symbol was explicitly provided.
-  bool has_function_option;
 } loom_low_source_to_low_pass_state_t;
 
 typedef struct loom_low_source_to_low_parse_context_t {
@@ -31,8 +27,6 @@ typedef struct loom_low_source_to_low_parse_context_t {
 } loom_low_source_to_low_parse_context_t;
 
 static const loom_pass_option_def_t kLowSourceToLowOptions[] = {
-    {IREE_SVL("function"),
-     IREE_SVL("Optional source func symbol to lower, with or without '@'.")},
     {IREE_SVL("max-errors"),
      IREE_SVL("Maximum number of source-to-low diagnostics to emit; zero "
               "means no limit.")},
@@ -53,7 +47,7 @@ static const loom_pass_statistic_def_t kLowSourceToLowStatistics[] = {
 static const loom_pass_info_t loom_low_source_to_low_pass_info_storage = {
     .name = IREE_SVL("source-to-low"),
     .description =
-        IREE_SVL("Lower one target-profiled source func to target-low IR."),
+        IREE_SVL("Lower target-profiled source funcs to target-low IR."),
     .kind = LOOM_PASS_MODULE,
     .option_defs = kLowSourceToLowOptions,
     .option_count = IREE_ARRAYSIZE(kLowSourceToLowOptions),
@@ -94,25 +88,6 @@ static iree_status_t loom_low_source_to_low_parse_max_errors(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_source_to_low_parse_function(
-    iree_string_view_t function,
-    loom_low_source_to_low_parse_context_t* context) {
-  if (context->state->has_function_option) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "duplicate option 'function' for pass "
-                            "'source-to-low'");
-  }
-  function = iree_string_view_trim(function);
-  if (iree_string_view_is_empty(function)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "pass 'source-to-low' option 'function' must not be empty");
-  }
-  context->state->function_symbol = function;
-  context->state->has_function_option = true;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_source_to_low_parse_option(
     void* user_data, iree_string_view_t name, iree_string_view_t value) {
   loom_low_source_to_low_parse_context_t* context =
@@ -122,9 +97,6 @@ static iree_status_t loom_low_source_to_low_parse_option(
     IREE_RETURN_IF_ERROR(loom_pass_option_parse_uint32(
         IREE_SV("source-to-low"), name, value, &max_errors));
     return loom_low_source_to_low_parse_max_errors(max_errors, context);
-  }
-  if (iree_string_view_equal(name, IREE_SV("function"))) {
-    return loom_low_source_to_low_parse_function(value, context);
   }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                           "unknown option '%.*s' for pass 'source-to-low'",
@@ -152,11 +124,6 @@ iree_status_t loom_low_source_to_low_create(loom_pass_t* pass,
       if (iree_string_view_equal(option->schema->name, IREE_SV("max-errors"))) {
         IREE_RETURN_IF_ERROR(loom_low_source_to_low_parse_max_errors(
             option->uint32_value, &context));
-        continue;
-      }
-      if (iree_string_view_equal(option->schema->name, IREE_SV("function"))) {
-        IREE_RETURN_IF_ERROR(loom_low_source_to_low_parse_function(
-            option->string_value, &context));
         continue;
       }
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -195,47 +162,54 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
 
   iree_arena_allocator_t selection_arena;
   iree_arena_initialize(module->arena.block_pool, &selection_arena);
-  loom_low_source_selection_t selection = {0};
+  loom_low_source_selection_list_t selection_list = {0};
   const loom_low_source_selection_options_t selection_options = {
-      .func_symbol_name =
-          state ? state->function_symbol : iree_string_view_empty(),
       .descriptor_registry = config->descriptor_registry,
       .policy_registry = config->policy_registry,
       .lowering_kind = IREE_SV("source-to-low"),
   };
-  loom_low_lower_result_t lower_result = {0};
-  iree_status_t status = loom_low_select_source_func(
-      module, &selection_options, &selection_arena, &selection);
-  if (iree_status_is_ok(status)) {
+  iree_status_t status = loom_low_select_source_funcs(
+      module, &selection_options, &selection_arena, &selection_list);
+  uint32_t function_count = 0;
+  for (iree_host_size_t i = 0;
+       i < selection_list.count && iree_status_is_ok(status); ++i) {
+    const loom_low_source_selection_t* selection = &selection_list.values[i];
     const loom_low_lower_options_t lower_options = {
-        .target_ref = selection.target_ref,
-        .bundle = selection.target_bundle,
+        .target_ref = selection->target_ref,
+        .bundle = selection->target_bundle,
         .descriptor_registry = config->descriptor_registry,
         .descriptor_requirements =
             LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
         .legality_provider_list = config->legality_provider_list,
-        .policy = selection.policy,
+        .policy = selection->policy,
         .emitter = pass->diagnostic_emitter,
         .max_errors = state ? state->max_errors : 20,
     };
-    status = loom_low_lower_function(module, selection.func, &lower_options,
+    loom_low_lower_result_t lower_result = {0};
+    status = loom_low_lower_function(module, selection->func, &lower_options,
                                      &lower_result);
+    loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_ERRORS,
+                            lower_result.error_count);
+    loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_REMARKS,
+                            lower_result.remark_count);
+    if (iree_status_is_ok(status) &&
+        (lower_result.error_count > 0 || lower_result.low_func_op == NULL)) {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "source-to-low lowering failed with %" PRIu32 " error%s",
+          lower_result.error_count, lower_result.error_count == 1 ? "" : "s");
+    }
+    if (iree_status_is_ok(status)) {
+      ++function_count;
+    }
   }
   iree_arena_deinitialize(&selection_arena);
   IREE_RETURN_IF_ERROR(status);
 
-  loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_ERRORS,
-                          lower_result.error_count);
-  loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_REMARKS,
-                          lower_result.remark_count);
-  if (lower_result.error_count > 0 || lower_result.low_func_op == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "source-to-low lowering failed with %" PRIu32 " error%s",
-        lower_result.error_count, lower_result.error_count == 1 ? "" : "s");
+  loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_FUNCTIONS,
+                          function_count);
+  if (function_count > 0) {
+    loom_pass_mark_changed(pass);
   }
-
-  loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_FUNCTIONS, 1);
-  loom_pass_mark_changed(pass);
   return iree_ok_status();
 }

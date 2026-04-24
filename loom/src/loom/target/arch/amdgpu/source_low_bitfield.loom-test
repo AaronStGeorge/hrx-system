@@ -1,4 +1,4 @@
-// RUN: emit source-low @i32_bitfield_extractu output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitfield_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitfield_target) @i32_bitfield_extractu(%input: buffer, %output: buffer) {
@@ -26,7 +26,7 @@ low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_extrac
 }
 
 // ====
-// RUN: emit source-low @i32_bitfield_extracts output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitfield_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitfield_target) @i32_bitfield_extracts(%input: buffer, %output: buffer) {
@@ -54,7 +54,7 @@ low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_extrac
 }
 
 // ====
-// RUN: emit source-low @i32_bitfield_insert output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitfield_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitfield_target) @i32_bitfield_insert(%field_buffer: buffer, %base_buffer: buffer, %output: buffer) {
@@ -89,7 +89,7 @@ low.func.def target(@gfx11_bitfield_target) abi(hal_kernel) @i32_bitfield_insert
 }
 
 // ====
-// RUN: emit source-low @i32_bitfield_b128_shape output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitfield_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitfield_target) @i32_bitfield_b128_shape(%input: buffer, %output: buffer) {

@@ -148,6 +148,7 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::target::low_descriptor_registry_core_test
+    loom::src::loom::target::test::lower
     loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main

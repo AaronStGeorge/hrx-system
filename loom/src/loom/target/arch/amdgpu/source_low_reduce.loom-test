@@ -1,4 +1,4 @@
-// RUN: emit source-low @i32_reduce_add output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_reduce_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_reduce_target) @i32_reduce_add(%input: buffer, %output: buffer) {
@@ -36,7 +36,7 @@ low.func.def target(@gfx11_reduce_target) abi(hal_kernel) @i32_reduce_add() {
 }
 
 // ====
-// RUN: emit source-low @f32_reduce_add output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_reduce_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_reduce_target) @f32_reduce_add(%input: buffer, %output: buffer) {

@@ -48,11 +48,10 @@ class SourceLoweringBenchmark {
   iree_status_t Run(uint64_t seed, uint32_t scale,
                     loom_low_source_workload_pipeline_counters_t* counters) {
     loom_module_t* module = nullptr;
-    loom_symbol_ref_t func_ref = loom_symbol_ref_null();
     loom_low_source_workload_config_t workload_config =
         loom_low_source_workload_config_make(IREE_SV("test-low"), scale);
     iree_status_t status = loom_low_source_workload_generate_seeded_module(
-        seed, &workload_config, &context_, &block_pool_, &module, &func_ref);
+        seed, &workload_config, &context_, &block_pool_, &module);
     if (iree_status_is_ok(status)) {
       const loom_low_source_workload_pipeline_options_t pipeline_options = {
           .descriptor_registry = &descriptor_registry_.registry,
@@ -61,8 +60,8 @@ class SourceLoweringBenchmark {
               LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
           .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE,
       };
-      status = loom_low_source_workload_run_pipeline(
-          module, func_ref, &pipeline_options, &block_pool_, counters);
+      status = loom_low_source_workload_run_pipeline(module, &pipeline_options,
+                                                     &block_pool_, counters);
     }
     if (module) {
       loom_module_free(module);

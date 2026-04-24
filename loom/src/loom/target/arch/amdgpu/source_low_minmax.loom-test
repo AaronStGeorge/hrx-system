@@ -1,4 +1,4 @@
-// RUN: emit source-low @scalar_f32_minnum_maxnum output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_minmax_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_minmax_target) @scalar_f32_minnum_maxnum(%lhs: f32, %rhs: f32) -> (f32) {
@@ -17,7 +17,7 @@ low.func.def target(@gfx11_minmax_target) abi(hal_kernel) @scalar_f32_minnum_max
 }
 
 // ====
-// RUN: emit source-low @vector_f32_minnum_maxnum output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_minmax_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_minmax_target) @vector_f32_minnum_maxnum(%lhs: vector<2xf32>, %rhs: vector<2xf32>) -> (vector<2xf32>) {
@@ -54,7 +54,7 @@ low.func.def target(@gfx11_minmax_target) abi(hal_kernel) @vector_f32_minnum_max
 }
 
 // ====
-// RUN: emit source-low @f32_reduce_minnum_maxnum output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_minmax_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_minmax_target) @f32_reduce_minnum_maxnum(%input: buffer, %output: buffer) {
@@ -105,7 +105,7 @@ low.func.def target(@gfx11_minmax_target) abi(hal_kernel) @f32_reduce_minnum_max
 }
 
 // ====
-// RUN: emit source-low @scalar_ieee_minimum_rejected output=none
+// RUN: emit source-low output=none
 target.profile @gfx11_minmax_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_minmax_target) @scalar_ieee_minimum_rejected(%lhs: f32, %rhs: f32) -> (f32) {
@@ -115,7 +115,7 @@ func.def target(@gfx11_minmax_target) @scalar_ieee_minimum_rejected(%lhs: f32, %
 }
 
 // ====
-// RUN: emit source-low @vector_ieee_maximum_rejected output=none
+// RUN: emit source-low output=none
 target.profile @gfx11_minmax_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_minmax_target) @vector_ieee_maximum_rejected(%lhs: vector<2xf32>, %rhs: vector<2xf32>) -> (vector<2xf32>) {

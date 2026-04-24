@@ -109,18 +109,17 @@ loom_low_source_workload_config_t loom_low_source_workload_config_make(
 //
 // The generated function has i32, vector<4xi32>, and index arguments/results
 // and emits only source ops intentionally supported by the foundation lowering
-// path. |out_func_ref| receives the source function symbol so callers can lower
-// that exact function without text lookups.
+// path.
 iree_status_t loom_low_source_workload_generate_module(
     loom_test_gen_t* gen, const loom_low_source_workload_config_t* config,
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    loom_module_t** out_module, loom_symbol_ref_t* out_func_ref);
+    loom_module_t** out_module);
 
 // Generates one targeted source function using a deterministic PRNG seed.
 iree_status_t loom_low_source_workload_generate_seeded_module(
     uint64_t seed, const loom_low_source_workload_config_t* config,
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
-    loom_module_t** out_module, loom_symbol_ref_t* out_func_ref);
+    loom_module_t** out_module);
 
 // Counts source ops emitted by loom_low_source_workload_generate_module().
 void loom_low_source_workload_count_func_ops(
@@ -129,7 +128,7 @@ void loom_low_source_workload_count_func_ops(
 // Runs the generated workload through source verification, source-to-low
 // lowering, low verification, packetization, scheduling, and allocation.
 iree_status_t loom_low_source_workload_run_pipeline(
-    loom_module_t* module, loom_symbol_ref_t func_ref,
+    loom_module_t* module,
     const loom_low_source_workload_pipeline_options_t* options,
     iree_arena_block_pool_t* block_pool,
     loom_low_source_workload_pipeline_counters_t* out_counters);

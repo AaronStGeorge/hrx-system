@@ -1,4 +1,4 @@
-// RUN: emit source-low @i32_to_i8x4_bitcast output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitcast_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitcast_target) @i32_to_i8x4_bitcast(%word: vector<1xi32>) -> (vector<4xi8>) {
@@ -12,7 +12,7 @@ low.func.def target(@gfx11_bitcast_target) abi(hal_kernel) @i32_to_i8x4_bitcast(
 }
 
 // ====
-// RUN: emit source-low @i32x2_to_i8x8_bitcast output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitcast_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitcast_target) @i32x2_to_i8x8_bitcast(%words: vector<2xi32>) -> (vector<8xi8>) {
@@ -26,7 +26,7 @@ low.func.def target(@gfx11_bitcast_target) abi(hal_kernel) @i32x2_to_i8x8_bitcas
 }
 
 // ====
-// RUN: emit source-low @f32x2_to_i32x2_bitcast output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitcast_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitcast_target) @f32x2_to_i32x2_bitcast(%floats: vector<2xf32>) -> (vector<2xi32>) {

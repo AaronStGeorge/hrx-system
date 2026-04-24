@@ -120,7 +120,6 @@ class X86AssemblyTest : public ::testing::Test {
     iree_arena_allocator_t selection_arena;
     iree_arena_initialize(&block_pool_, &selection_arena);
     const loom_low_source_selection_options_t selection_options = {
-        .func_symbol_name = IREE_SV("x86_source"),
         .descriptor_registry = &target_registry_.registry,
         .policy_registry = &policy_registry,
         .lowering_kind = IREE_SV("x86 source-to-low"),

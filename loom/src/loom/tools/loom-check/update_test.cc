@@ -244,7 +244,7 @@ TEST_F(UpdateTest, BuildEditOmitsExpectedSeparatorForEmptyInsertedOutput) {
 
 TEST_F(UpdateTest, DeletesEmptyExpectedSectionForEmptyOutputMode) {
   auto file = Parse(
-      "// RUN: emit source-low @f diagnostics=memory output=none\n"
+      "// RUN: emit source-low diagnostics=memory output=none\n"
       "func.def @f() {\n"
       "}\n"
       "\n"
@@ -270,7 +270,7 @@ TEST_F(UpdateTest, DeletesEmptyExpectedSectionForEmptyOutputMode) {
 
 TEST_F(UpdateTest, BuildEditDeletesEmptyExpectedSectionForEmptyOutputMode) {
   auto file = Parse(
-      "// RUN: emit source-low @f diagnostics=memory output=none\n"
+      "// RUN: emit source-low diagnostics=memory output=none\n"
       "func.def @f() {\n"
       "}\n"
       "\n"
@@ -294,7 +294,7 @@ TEST_F(UpdateTest, BuildEditDeletesEmptyExpectedSectionForEmptyOutputMode) {
 
 TEST_F(UpdateTest, DeletesEmptyExpectedSectionBeforeFollowingCase) {
   auto file = Parse(
-      "// RUN: emit source-low @a diagnostics=memory output=none\n"
+      "// RUN: emit source-low diagnostics=memory output=none\n"
       "func.def @a() {\n"
       "}\n"
       "\n"

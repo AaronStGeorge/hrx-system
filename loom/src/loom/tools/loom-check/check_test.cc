@@ -312,27 +312,27 @@ TEST_F(CheckParseTest, EmitWithoutTargetErrors) {
 
 TEST_F(CheckParseTest, EmitOutputNoneWithoutDiagnosticsErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        Parse("// RUN: emit source-low @f output=none\n"
+                        Parse("// RUN: emit source-low output=none\n"
                               "func.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, EmitOutputNoneWithDiagnosticsNoneErrors) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      Parse("// RUN: emit source-low @f diagnostics=none output=none\n"
+      Parse("// RUN: emit source-low diagnostics=none output=none\n"
             "func.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, EmitOutputNoneWithDiagnosticsPasses) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit source-low @f diagnostics=memory "
+      Parse("// RUN: emit source-low diagnostics=memory "
             "output=none\n"
             "func.def @f() {}\n"));
 }
 
 TEST_F(CheckParseTest, EmitOutputNoneWithDiagnosticAnnotationPasses) {
   IREE_ASSERT_OK(
-      Parse("// RUN: emit source-low @f output=none\n"
+      Parse("// RUN: emit source-low output=none\n"
             "func.def @f() {\n"
             "  // ERROR@+1: BACKEND/001\n"
             "  test.bad\n"

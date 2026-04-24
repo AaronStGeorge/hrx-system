@@ -1,4 +1,4 @@
-// RUN: pass source-to-low{function=@vm_add}
+// RUN: pass source-to-low
 target.profile @vm_target preset("iree-vm")
 
 func.def target(@vm_target) @vm_add(%lhs: i32, %rhs: i32) -> (i32) {

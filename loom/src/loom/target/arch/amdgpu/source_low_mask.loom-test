@@ -1,4 +1,4 @@
-// RUN: emit source-low @i32_cmpi_select output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_mask_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_mask_target) @i32_cmpi_select(%lhs: vector<2xi32>, %rhs: vector<2xi32>, %true_value: vector<2xi32>, %false_value: vector<2xi32>) -> (vector<2xi32>) {
@@ -29,7 +29,7 @@ low.func.def target(@gfx11_mask_target) abi(hal_kernel) @i32_cmpi_select(%lhs: r
 }
 
 // ====
-// RUN: emit source-low @f32_cmpf_select output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_mask_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_mask_target) @f32_cmpf_select(%lhs: vector<1xf32>, %rhs: vector<1xf32>, %true_value: vector<1xf32>, %false_value: vector<1xf32>) -> (vector<1xf32>) {

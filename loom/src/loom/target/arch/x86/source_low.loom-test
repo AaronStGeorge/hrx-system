@@ -1,4 +1,4 @@
-// RUN: emit source-low @x86_arith output=low
+// RUN: emit source-low output=low
 target.profile @x86_target preset("x86-avx512")
 
 func.def target(@x86_target) @x86_arith(%lhs: vector<16xi32>, %rhs: vector<16xi32>) -> (vector<16xi32>) {
@@ -14,7 +14,7 @@ low.func.def target(@x86_target) abi(object_function) @x86_arith(%lhs: reg<x86.z
 }
 
 // ====
-// RUN: emit source-low @x86_f32_arith output=low
+// RUN: emit source-low output=low
 target.profile @x86_f32_target preset("x86-avx512")
 
 func.def target(@x86_f32_target) @x86_f32_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
@@ -36,7 +36,7 @@ low.func.def target(@x86_f32_target) abi(object_function) @x86_f32_arith(%lhs: r
 }
 
 // ====
-// RUN: emit source-low @x86_static_memory output=low
+// RUN: emit source-low output=low
 target.profile @x86_static_memory_target preset("x86-avx512")
 
 func.def target(@x86_static_memory_target) @x86_static_memory(%input: buffer, %output: buffer) {
@@ -59,7 +59,7 @@ low.func.def target(@x86_static_memory_target) abi(object_function) @x86_static_
 }
 
 // ====
-// RUN: emit source-low @x86_dynamic_memory output=low
+// RUN: emit source-low output=low
 target.profile @x86_dynamic_memory_target preset("x86-avx512")
 
 func.def target(@x86_dynamic_memory_target) @x86_dynamic_memory(%input: buffer, %output: buffer, %i: index) {
@@ -82,7 +82,7 @@ low.func.def target(@x86_dynamic_memory_target) abi(object_function) @x86_dynami
 }
 
 // ====
-// RUN: emit source-low @x86_index_add_memory output=low
+// RUN: emit source-low output=low
 target.profile @x86_index_add_memory_target preset("x86-avx512")
 
 func.def target(@x86_index_add_memory_target) @x86_index_add_memory(%input: buffer, %output: buffer, %i: index, %j: index) {
@@ -105,7 +105,7 @@ low.func.def target(@x86_index_add_memory_target) abi(object_function) @x86_inde
 }
 
 // ====
-// RUN: emit source-low @x86_index_madd_memory output=low
+// RUN: emit source-low output=low
 target.profile @x86_index_madd_memory_target preset("x86-avx512")
 
 func.def target(@x86_index_madd_memory_target) @x86_index_madd_memory(%input: buffer, %output: buffer, %row: index, %stride: index, %col: index) {

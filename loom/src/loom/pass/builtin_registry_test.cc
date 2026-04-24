@@ -113,7 +113,7 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
       iree_string_view_equal(source_to_low->requirement_defs[1].key,
                              IREE_SV("target.low-lower-policy-registry")));
   IREE_ASSERT_OK(loom_pass_descriptor_validate_options(
-      source_to_low, IREE_SV("max-errors=0,function=@vm_func")));
+      source_to_low, IREE_SV("max-errors=0")));
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_pass_descriptor_validate_options(
                             source_to_low, IREE_SV("max-errors=-1")));

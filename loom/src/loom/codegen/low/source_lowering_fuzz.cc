@@ -63,9 +63,8 @@ static iree_status_t fuzz_one_input(const uint8_t* data, size_t size) {
       loom_low_source_workload_config_make(IREE_SV("test-low"), scale);
 
   loom_module_t* module = NULL;
-  loom_symbol_ref_t func_ref = loom_symbol_ref_null();
   iree_status_t status = loom_low_source_workload_generate_module(
-      &gen, &workload_config, &g_context, &block_pool, &module, &func_ref);
+      &gen, &workload_config, &g_context, &block_pool, &module);
   if (iree_status_is_ok(status)) {
     const loom_low_source_workload_pipeline_options_t pipeline_options = {
         .descriptor_registry = &g_descriptor_registry.registry,
@@ -75,8 +74,8 @@ static iree_status_t fuzz_one_input(const uint8_t* data, size_t size) {
         .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE,
     };
     loom_low_source_workload_pipeline_counters_t counters = {};
-    status = loom_low_source_workload_run_pipeline(
-        module, func_ref, &pipeline_options, &block_pool, &counters);
+    status = loom_low_source_workload_run_pipeline(module, &pipeline_options,
+                                                   &block_pool, &counters);
   }
   if (module) {
     loom_module_free(module);

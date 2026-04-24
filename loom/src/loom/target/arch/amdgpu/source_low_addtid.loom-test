@@ -1,4 +1,4 @@
-// RUN: emit source-low @lds_addtid_b32 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_lds_addtid_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_lds_addtid_target) @lds_addtid_b32() {

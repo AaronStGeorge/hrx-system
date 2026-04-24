@@ -1,4 +1,4 @@
-// RUN: emit source-low @f32_dotf output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_dotf_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_dotf_target) @f32_dotf(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: f32) -> (f32) {

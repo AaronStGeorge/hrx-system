@@ -1,4 +1,4 @@
-// RUN: emit source-low @wasm_arith output=low
+// RUN: emit source-low output=low
 target.profile @wasm_target preset("wasm-simd128")
 
 func.def target(@wasm_target) @wasm_arith(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> (vector<4xi32>) {
@@ -14,7 +14,7 @@ low.func.def target(@wasm_target) abi(wasm_function) @wasm_arith(%lhs: reg<wasm.
 }
 
 // ====
-// RUN: emit source-low @wasm_f32_arith output=low
+// RUN: emit source-low output=low
 target.profile @wasm_f32_target preset("wasm-simd128")
 
 func.def target(@wasm_f32_target) @wasm_f32_arith(%lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4xf32>) {
@@ -31,7 +31,7 @@ low.func.def target(@wasm_f32_target) abi(wasm_function) @wasm_f32_arith(%lhs: r
 }
 
 // ====
-// RUN: emit source-low @wasm_splat output=low
+// RUN: emit source-low output=low
 target.profile @wasm_splat_target preset("wasm-simd128")
 
 func.def target(@wasm_splat_target) @wasm_splat(%value: i32, %rhs: vector<4xi32>) -> (vector<4xi32>) {
@@ -48,7 +48,7 @@ low.func.def target(@wasm_splat_target) abi(wasm_function) @wasm_splat(%value: r
 }
 
 // ====
-// RUN: emit source-low @wasm_i32_select output=low
+// RUN: emit source-low output=low
 target.profile @wasm_i32_select_target preset("wasm-simd128")
 
 func.def target(@wasm_i32_select_target) @wasm_i32_select(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %true_value: vector<4xi32>, %false_value: vector<4xi32>) -> (vector<4xi32>) {
@@ -65,7 +65,7 @@ low.func.def target(@wasm_i32_select_target) abi(wasm_function) @wasm_i32_select
 }
 
 // ====
-// RUN: emit source-low @wasm_f32_select output=low
+// RUN: emit source-low output=low
 target.profile @wasm_f32_select_target preset("wasm-simd128")
 
 func.def target(@wasm_f32_select_target) @wasm_f32_select(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %true_value: vector<4xf32>, %false_value: vector<4xf32>) -> (vector<4xf32>) {
@@ -82,7 +82,7 @@ low.func.def target(@wasm_f32_select_target) abi(wasm_function) @wasm_f32_select
 }
 
 // ====
-// RUN: emit source-low @wasm_memory_copy output=low
+// RUN: emit source-low output=low
 target.profile @wasm_memory_target preset("wasm-simd128")
 
 func.def target(@wasm_memory_target) @wasm_memory_copy(%input: buffer, %output: buffer) {
@@ -103,7 +103,7 @@ low.func.def target(@wasm_memory_target) abi(wasm_function) @wasm_memory_copy(%i
 }
 
 // ====
-// RUN: emit source-low @wasm_memory_indexed output=low
+// RUN: emit source-low output=low
 target.profile @wasm_memory_indexed_target preset("wasm-simd128")
 
 func.def target(@wasm_memory_indexed_target) @wasm_memory_indexed(%input: buffer, %output: buffer, %i: index) {

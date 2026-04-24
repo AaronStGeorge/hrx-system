@@ -1,4 +1,4 @@
-// RUN: emit source-low @f32_table_lookup_i8_codes output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_table_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_table_target) @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
@@ -89,7 +89,7 @@ low.func.def target(@gfx11_table_target) abi(hal_kernel) @f32_table_lookup_i8_co
 }
 
 // ====
-// RUN: emit source-low @f32_table_lookup_i32_codes output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_table_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_table_target) @f32_table_lookup_i32_codes(%codes: vector<2xi32>) -> (vector<2xf32>) {
@@ -127,7 +127,7 @@ low.func.def target(@gfx11_table_target) abi(hal_kernel) @f32_table_lookup_i32_c
 }
 
 // ====
-// RUN: emit source-low @i16_table_lookup_rejected output=none
+// RUN: emit source-low output=none
 target.profile @gfx11_table_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_table_target) @i16_table_lookup_rejected(%codes: vector<4xi16>) -> (vector<4xf32>) {

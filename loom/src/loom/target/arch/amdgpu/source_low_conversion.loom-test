@@ -1,4 +1,4 @@
-// RUN: emit source-low @vector_sitofp_i32x2 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_conversion_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_conversion_target) @vector_sitofp_i32x2(%input: vector<2xi32>, %scale: vector<2xf32>) -> (vector<2xf32>) {
@@ -25,7 +25,7 @@ low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @vector_sitofp_i32
 }
 
 // ====
-// RUN: emit source-low @scalar_uitofp_i32 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_conversion_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_conversion_target) @scalar_uitofp_i32(%input: i32) -> (f32) {
@@ -40,7 +40,7 @@ low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @scalar_uitofp_i32
 }
 
 // ====
-// RUN: emit source-low @scalar_sitofp_i32 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_conversion_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_conversion_target) @scalar_sitofp_i32(%input: i32) -> (f32) {
@@ -55,7 +55,7 @@ low.func.def target(@gfx11_conversion_target) abi(hal_kernel) @scalar_sitofp_i32
 }
 
 // ====
-// RUN: emit source-low @vector_uitofp_i32x2 output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_conversion_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_conversion_target) @vector_uitofp_i32x2(%input: vector<2xi32>) -> (vector<2xf32>) {

@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
+#include "loom/target/test/lower.h"
 #include "loom/testing/context.h"
 #include "loom/tools/loom-check/check.h"
 
@@ -28,6 +29,13 @@ iree_status_t InitializeTestLowDescriptorRegistry(
     void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
   (void)user_data;
   loom_target_core_test_low_descriptor_registry_initialize(out_registry);
+  return iree_ok_status();
+}
+
+iree_status_t InitializeTestLowLowerPolicyRegistry(
+    void* user_data, loom_low_lower_policy_registry_t* out_registry) {
+  (void)user_data;
+  loom_test_low_lower_policy_registry_initialize(out_registry);
   return iree_ok_status();
 }
 
@@ -114,6 +122,11 @@ const loom_check_environment_t kExecuteTestEnvironment = {
     .initialize_low_descriptor_registry =
         {
             .fn = InitializeTestLowDescriptorRegistry,
+            .user_data = nullptr,
+        },
+    .initialize_low_lower_policy_registry =
+        {
+            .fn = InitializeTestLowLowerPolicyRegistry,
             .user_data = nullptr,
         },
 };
@@ -1077,6 +1090,55 @@ TEST_F(ExecuteTest, EmitTargetLowRegistryManifestUsesRegistryPackage) {
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   const std::string actual_output = ActualOutputString(result);
   EXPECT_FALSE(actual_output.empty());
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitSourceLowRejectsFunctionSelector) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit source-low @f output=module\n"
+                   "func.def @f() {\n"
+                   "  func.return\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("does not accept a function symbol"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitSourceLowLowersEveryTargetedFunction) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit source-low output=module\n"
+                   "target.profile @test_target preset(\"test-low\")\n"
+                   "\n"
+                   "func.def target(@test_target) @first(%lhs: i32, %rhs: "
+                   "i32) -> (i32) {\n"
+                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n"
+                   "\n"
+                   "func.def target(@test_target) @second(%lhs: i32, %rhs: "
+                   "i32) -> (i32) {\n"
+                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string actual_output = ActualOutputString(result);
+  EXPECT_NE(actual_output.find("low.func.def target(@test_target) "
+                               "abi(object_function) @first"),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("low.func.def target(@test_target) "
+                               "abi(object_function) @second"),
+            std::string::npos);
+  EXPECT_EQ(actual_output.find("func.def target(@test_target) @first"),
+            std::string::npos);
+  EXPECT_EQ(actual_output.find("func.def target(@test_target) @second"),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

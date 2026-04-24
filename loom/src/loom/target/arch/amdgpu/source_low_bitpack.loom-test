@@ -1,4 +1,4 @@
-// RUN: emit source-low @i32x4_to_i8x4_bitpack output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitpack_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitpack_target) @i32x4_to_i8x4_bitpack(%codes: vector<4xi32>) -> (vector<4xi8>) {
@@ -30,7 +30,7 @@ low.func.def target(@gfx11_bitpack_target) abi(hal_kernel) @i32x4_to_i8x4_bitpac
 }
 
 // ====
-// RUN: emit source-low @bitpack_width_rejected output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitpack_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitpack_target) @bitpack_width_rejected(%codes: vector<8xi32>) -> (vector<4xi8>) {
@@ -40,7 +40,7 @@ func.def target(@gfx11_bitpack_target) @bitpack_width_rejected(%codes: vector<8x
 }
 
 // ====
-// RUN: emit source-low @bitpack_source_type_rejected output=low
+// RUN: emit source-low output=low
 target.profile @gfx11_bitpack_target preset("amdgpu-gfx11")
 
 func.def target(@gfx11_bitpack_target) @bitpack_source_type_rejected(%codes: vector<4xi8>) -> (vector<4xi8>) {

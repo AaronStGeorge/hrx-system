@@ -1,4 +1,4 @@
-// RUN: emit source-low @vm_add output=low
+// RUN: emit source-low output=low
 target.profile @vm_target preset("iree-vm")
 
 func.def target(@vm_target) @vm_add(%lhs: i32, %rhs: i32) -> (i32) {
