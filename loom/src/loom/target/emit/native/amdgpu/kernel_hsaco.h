@@ -20,6 +20,7 @@
 #include "loom/codegen/low/schedule.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
+#include "loom/target/emit/native/amdgpu/hsaco.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,6 +47,40 @@ typedef struct loom_amdgpu_kernel_hsaco_options_t {
   // Optional target-owned emission summary populated after successful emission.
   loom_amdgpu_kernel_hsaco_summary_t* summary;
 } loom_amdgpu_kernel_hsaco_options_t;
+
+typedef struct loom_amdgpu_kernel_hsaco_contribution_t {
+  // Full AMDHSA target id such as `amdgcn-amd-amdhsa--gfx1100`.
+  iree_string_view_t target;
+  // Target CPU such as `gfx1100`, used for ELF flags and descriptor packing.
+  iree_string_view_t target_cpu;
+  // Kernel entry metadata, descriptor flags, and encoded native text.
+  loom_amdgpu_hsaco_kernel_t kernel;
+  // Emission summary for this kernel contribution.
+  loom_amdgpu_kernel_hsaco_summary_t summary;
+} loom_amdgpu_kernel_hsaco_contribution_t;
+
+// Builds one arena-owned AMDGPU kernel contribution from a scheduled low func.
+//
+// The returned contribution points into the input IR and |scratch_arena|. It
+// can be written by loom_amdgpu_write_kernel_hsaco_contributions() after all
+// worker-local contributions for the code object are complete.
+iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
+    const loom_low_schedule_sidecar_t* schedule,
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_amdgpu_kernel_hsaco_options_t* options,
+    loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
+    iree_arena_allocator_t* scratch_arena);
+
+// Writes one code object containing all |contributions|.
+//
+// Contributions must all target the same AMDHSA target id and CPU. The writer
+// uses |scratch_arena| only for final layout tables and can run after kernel
+// contributions were produced independently, provided their backing storage
+// remains live for the duration of this call.
+iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
+    const loom_amdgpu_kernel_hsaco_contribution_t* contributions,
+    iree_host_size_t contribution_count, iree_io_stream_t* stream,
+    iree_arena_allocator_t* scratch_arena);
 
 // Emits complete AMDGPU HSACO for one ABI-lowered HAL kernel low.func.def.
 //

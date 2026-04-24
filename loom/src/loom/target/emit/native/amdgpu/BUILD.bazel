@@ -424,6 +424,20 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "kernel_hsaco_test",
+    srcs = ["kernel_hsaco_test.cc"],
+    deps = [
+        ":kernel_hsaco",
+        "//loom/src/loom/target/emit/native:elf",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "hal_executable_test",
     srcs = ["hal_executable_test.cc"],
     deps = [

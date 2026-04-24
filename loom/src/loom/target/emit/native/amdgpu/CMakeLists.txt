@@ -387,6 +387,21 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    kernel_hsaco_test
+  SRCS
+    "kernel_hsaco_test.cc"
+  DEPS
+    ::kernel_hsaco
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::target::emit::native::elf
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     hal_executable_test
   SRCS
     "hal_executable_test.cc"

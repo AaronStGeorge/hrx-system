@@ -6,23 +6,29 @@
 
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
 
+#include <inttypes.h>
+
 #include "loom/target/emit/native/amdgpu/encoding.h"
 #include "loom/target/emit/native/amdgpu/hsaco.h"
 #include "loom/target/emit/native/amdgpu/kernel_record.h"
 
-static iree_status_t loom_amdgpu_emit_kernel_hsaco_internal(
+iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,
-    const loom_amdgpu_kernel_hsaco_options_t* options, iree_io_stream_t* stream,
+    const loom_amdgpu_kernel_hsaco_options_t* options,
+    loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
     iree_arena_allocator_t* scratch_arena) {
+  IREE_ASSERT_ARGUMENT(out_contribution);
+  *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){0};
   if (options != NULL && options->summary != NULL) {
     *options->summary = (loom_amdgpu_kernel_hsaco_summary_t){0};
   }
-  if (stream == NULL || scratch_arena == NULL) {
+  if (scratch_arena == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU kernel HSACO output stream and scratch arena are required");
+        "AMDGPU kernel HSACO contribution scratch arena is required");
   }
+
   loom_amdgpu_kernel_record_t record = {0};
   const loom_amdgpu_kernel_record_options_t record_options = {
       .abi_layout = options ? options->abi_layout : NULL,
@@ -49,28 +55,80 @@ static iree_status_t loom_amdgpu_emit_kernel_hsaco_internal(
   };
   const loom_target_snapshot_t* snapshot =
       &schedule->target.bundle_storage.snapshot;
-  const loom_amdgpu_hsaco_file_t file = {
+  const uint64_t wait_packet_count =
+      wait_packets ? wait_packets->packet_count : 0;
+  *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){
       .target = record.target_id,
       .target_cpu = snapshot->target_cpu,
-      .kernels = &kernel,
-      .kernel_count = 1,
+      .kernel = kernel,
+      .summary =
+          {
+              .instruction_count =
+                  schedule->scheduled_node_count + wait_packet_count,
+              .text_byte_count = text.data_length,
+              .text_storage_byte_count = text.data_length,
+              .private_segment_fixed_size =
+                  record.metadata.private_segment_fixed_size,
+              .group_segment_fixed_size =
+                  record.metadata.group_segment_fixed_size,
+          },
   };
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_hsaco_write_file(&file, stream, scratch_arena));
 
   if (options != NULL && options->summary != NULL) {
-    const uint64_t wait_packet_count =
-        wait_packets ? wait_packets->packet_count : 0;
-    *options->summary = (loom_amdgpu_kernel_hsaco_summary_t){
-        .instruction_count = schedule->scheduled_node_count + wait_packet_count,
-        .text_byte_count = text.data_length,
-        .text_storage_byte_count = text.data_length,
-        .private_segment_fixed_size =
-            record.metadata.private_segment_fixed_size,
-        .group_segment_fixed_size = record.metadata.group_segment_fixed_size,
-    };
+    *options->summary = out_contribution->summary;
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
+    const loom_amdgpu_kernel_hsaco_contribution_t* contributions,
+    iree_host_size_t contribution_count, iree_io_stream_t* stream,
+    iree_arena_allocator_t* scratch_arena) {
+  if (stream == NULL || scratch_arena == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU kernel HSACO output stream and scratch arena are required");
+  }
+  if (contribution_count == 0 || contributions == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU kernel HSACO requires at least one contribution");
+  }
+
+  const iree_string_view_t target = contributions[0].target;
+  const iree_string_view_t target_cpu = contributions[0].target_cpu;
+  loom_amdgpu_hsaco_kernel_t* kernels = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      scratch_arena, contribution_count, sizeof(kernels[0]), (void**)&kernels));
+  for (iree_host_size_t i = 0; i < contribution_count; ++i) {
+    const loom_amdgpu_kernel_hsaco_contribution_t* contribution =
+        &contributions[i];
+    if (!iree_string_view_equal(contribution->target, target)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU kernel contribution %" PRIhsz
+          " target '%.*s' does not match batch target '%.*s'",
+          i, (int)contribution->target.size, contribution->target.data,
+          (int)target.size, target.data);
+    }
+    if (!iree_string_view_equal(contribution->target_cpu, target_cpu)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU kernel contribution %" PRIhsz
+          " target CPU '%.*s' does not match batch target CPU '%.*s'",
+          i, (int)contribution->target_cpu.size, contribution->target_cpu.data,
+          (int)target_cpu.size, target_cpu.data);
+    }
+    kernels[i] = contribution->kernel;
+  }
+
+  const loom_amdgpu_hsaco_file_t file = {
+      .target = target,
+      .target_cpu = target_cpu,
+      .kernels = kernels,
+      .kernel_count = contribution_count,
+  };
+  return loom_amdgpu_hsaco_write_file(&file, stream, scratch_arena);
 }
 
 iree_status_t loom_amdgpu_emit_kernel_hsaco(
@@ -78,6 +136,21 @@ iree_status_t loom_amdgpu_emit_kernel_hsaco(
     const loom_low_allocation_sidecar_t* allocation,
     const loom_amdgpu_kernel_hsaco_options_t* options, iree_io_stream_t* stream,
     iree_arena_allocator_t* scratch_arena) {
-  return loom_amdgpu_emit_kernel_hsaco_internal(schedule, allocation, options,
-                                                stream, scratch_arena);
+  loom_amdgpu_kernel_hsaco_options_t contribution_options =
+      options ? *options : (loom_amdgpu_kernel_hsaco_options_t){0};
+  contribution_options.summary = NULL;
+  if (options != NULL && options->summary != NULL) {
+    *options->summary = (loom_amdgpu_kernel_hsaco_summary_t){0};
+  }
+
+  loom_amdgpu_kernel_hsaco_contribution_t contribution = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_build_kernel_hsaco_contribution(
+      schedule, allocation, &contribution_options, &contribution,
+      scratch_arena));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_write_kernel_hsaco_contributions(
+      &contribution, 1, stream, scratch_arena));
+  if (options != NULL && options->summary != NULL) {
+    *options->summary = contribution.summary;
+  }
+  return iree_ok_status();
 }
