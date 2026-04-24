@@ -54,6 +54,19 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    object
+  HDRS
+    "object.h"
+  SRCS
+    "object.c"
+  DEPS
+    ::contribution
+    iree::base
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     elf_test
@@ -64,6 +77,20 @@ loom_cc_test(
     iree::base
     iree::base::internal::arena
     iree::io::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    object_test
+  SRCS
+    "object_test.cc"
+  DEPS
+    ::contribution
+    ::object
+    iree::base
+    iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
 )

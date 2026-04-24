@@ -35,6 +35,7 @@ loom_assert_no_dependencies(
         ":assembly",
         ":contribution",
         ":elf",
+        ":object",
     ],
 )
 
@@ -77,6 +78,16 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "object",
+    srcs = ["object.c"],
+    hdrs = ["object.h"],
+    deps = [
+        ":contribution",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_cc_test(
     name = "elf_test",
     srcs = ["elf_test.cc"],
@@ -85,6 +96,19 @@ loom_cc_test(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "object_test",
+    srcs = ["object_test.cc"],
+    deps = [
+        ":contribution",
+        ":object",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
