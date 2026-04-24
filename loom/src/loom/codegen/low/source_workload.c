@@ -179,14 +179,25 @@ static iree_status_t loom_low_source_workload_gen_scalar_i32_binary(
   }
 
   loom_op_t* op = NULL;
-  if (loom_test_gen_next_bool(context->gen)) {
-    IREE_RETURN_IF_ERROR(loom_scalar_addi_build(
-        context->builder, 0, lhs, rhs, loom_low_source_workload_i32_type(),
-        LOOM_LOCATION_UNKNOWN, &op));
-  } else {
-    IREE_RETURN_IF_ERROR(loom_scalar_subi_build(
-        context->builder, 0, lhs, rhs, loom_low_source_workload_i32_type(),
-        LOOM_LOCATION_UNKNOWN, &op));
+  switch (loom_test_gen_next_range(context->gen, 3)) {
+    case 0: {
+      IREE_RETURN_IF_ERROR(loom_scalar_addi_build(
+          context->builder, 0, lhs, rhs, loom_low_source_workload_i32_type(),
+          LOOM_LOCATION_UNKNOWN, &op));
+      break;
+    }
+    case 1: {
+      IREE_RETURN_IF_ERROR(loom_scalar_subi_build(
+          context->builder, 0, lhs, rhs, loom_low_source_workload_i32_type(),
+          LOOM_LOCATION_UNKNOWN, &op));
+      break;
+    }
+    default: {
+      IREE_RETURN_IF_ERROR(loom_scalar_muli_build(
+          context->builder, 0, lhs, rhs, loom_low_source_workload_i32_type(),
+          LOOM_LOCATION_UNKNOWN, &op));
+      break;
+    }
   }
   loom_test_gen_values_add(context->values, loom_op_results(op)[0],
                            loom_low_source_workload_i32_type());
@@ -209,14 +220,25 @@ static iree_status_t loom_low_source_workload_gen_vector4xi32_binary(
   }
 
   loom_op_t* op = NULL;
-  if (loom_test_gen_next_bool(context->gen)) {
-    IREE_RETURN_IF_ERROR(loom_vector_addi_build(context->builder, 0, lhs, rhs,
-                                                vector_type,
-                                                LOOM_LOCATION_UNKNOWN, &op));
-  } else {
-    IREE_RETURN_IF_ERROR(loom_vector_subi_build(context->builder, 0, lhs, rhs,
-                                                vector_type,
-                                                LOOM_LOCATION_UNKNOWN, &op));
+  switch (loom_test_gen_next_range(context->gen, 3)) {
+    case 0: {
+      IREE_RETURN_IF_ERROR(loom_vector_addi_build(context->builder, 0, lhs, rhs,
+                                                  vector_type,
+                                                  LOOM_LOCATION_UNKNOWN, &op));
+      break;
+    }
+    case 1: {
+      IREE_RETURN_IF_ERROR(loom_vector_subi_build(context->builder, 0, lhs, rhs,
+                                                  vector_type,
+                                                  LOOM_LOCATION_UNKNOWN, &op));
+      break;
+    }
+    default: {
+      IREE_RETURN_IF_ERROR(loom_vector_muli_build(context->builder, 0, lhs, rhs,
+                                                  vector_type,
+                                                  LOOM_LOCATION_UNKNOWN, &op));
+      break;
+    }
   }
   loom_test_gen_values_add(context->values, loom_op_results(op)[0],
                            vector_type);
@@ -596,6 +618,7 @@ static void loom_low_source_workload_count_op(
   switch (op->kind) {
     case LOOM_OP_SCALAR_ADDI:
     case LOOM_OP_SCALAR_SUBI:
+    case LOOM_OP_SCALAR_MULI:
       ++counts->scalar_integer_op_count;
       break;
     case LOOM_OP_SCALAR_CONSTANT:
@@ -603,6 +626,7 @@ static void loom_low_source_workload_count_op(
       break;
     case LOOM_OP_VECTOR_ADDI:
     case LOOM_OP_VECTOR_SUBI:
+    case LOOM_OP_VECTOR_MULI:
       ++counts->vector_integer_op_count;
       break;
     case LOOM_OP_VECTOR_REDUCE:

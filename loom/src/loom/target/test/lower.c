@@ -579,10 +579,12 @@ static const loom_low_lower_guard_t kTestLowGuards[] = {
 enum {
   LOOM_TEST_LOW_EMIT_CONST_I32,
   LOOM_TEST_LOW_EMIT_ADD_I32,
+  LOOM_TEST_LOW_EMIT_MUL_I32,
   LOOM_TEST_LOW_EMIT_TIED_I32,
   LOOM_TEST_LOW_EMIT_PROJECT_LANE_I32,
   LOOM_TEST_LOW_EMIT_SHUFFLE_V4I32,
   LOOM_TEST_LOW_EMIT_ADD_V4I32,
+  LOOM_TEST_LOW_EMIT_MUL_V4I32,
   LOOM_TEST_LOW_EMIT_SWAPPED_ADD_V4I32,
   LOOM_TEST_LOW_EMIT_REDUCE_ADD_V4I32,
   LOOM_TEST_LOW_EMIT_INDEX_PRODUCT,
@@ -609,6 +611,14 @@ static const loom_low_lower_emit_t kTestLowEmits[] = {
     {
         .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
         .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
+        .operand_ref_start = LOOM_TEST_LOW_OPERAND0,
+        .operand_ref_count = 2,
+        .result_ref_start = LOOM_TEST_LOW_RESULT0,
+        .result_ref_count = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_MUL_I32,
         .operand_ref_start = LOOM_TEST_LOW_OPERAND0,
         .operand_ref_count = 2,
         .result_ref_start = LOOM_TEST_LOW_RESULT0,
@@ -646,6 +656,14 @@ static const loom_low_lower_emit_t kTestLowEmits[] = {
     {
         .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
         .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32,
+        .operand_ref_start = LOOM_TEST_LOW_OPERAND0,
+        .operand_ref_count = 2,
+        .result_ref_start = LOOM_TEST_LOW_RESULT0,
+        .result_ref_count = 1,
+    },
+    {
+        .kind = LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_PER_LANE,
+        .descriptor_id = TEST_LOW_CORE_DESCRIPTOR_ID_TEST_MUL_I32,
         .operand_ref_start = LOOM_TEST_LOW_OPERAND0,
         .operand_ref_count = 2,
         .result_ref_start = LOOM_TEST_LOW_RESULT0,
@@ -692,12 +710,14 @@ static const loom_low_lower_emit_t kTestLowEmits[] = {
 enum {
   LOOM_TEST_LOW_RULE_SCALAR_ADDI,
   LOOM_TEST_LOW_RULE_SCALAR_SUBI,
+  LOOM_TEST_LOW_RULE_SCALAR_MULI,
   LOOM_TEST_LOW_RULE_SCALAR_CONSTANT,
   LOOM_TEST_LOW_RULE_INDEX_CONSTANT,
   LOOM_TEST_LOW_RULE_VECTOR_EXTRACT,
   LOOM_TEST_LOW_RULE_VECTOR_SHUFFLE,
   LOOM_TEST_LOW_RULE_VECTOR_ADDI,
   LOOM_TEST_LOW_RULE_VECTOR_SUBI,
+  LOOM_TEST_LOW_RULE_VECTOR_MULI,
   LOOM_TEST_LOW_RULE_VECTOR_REDUCE_ADDI,
   LOOM_TEST_LOW_RULE_INDEX_MADD,
 };
@@ -717,6 +737,14 @@ static const loom_low_lower_rule_t kTestLowRules[] = {
             .guard_start = LOOM_TEST_LOW_SCALAR_LHS_GUARD,
             .guard_count = 3,
             .emit_start = LOOM_TEST_LOW_EMIT_TIED_I32,
+            .emit_count = 1,
+        },
+    [LOOM_TEST_LOW_RULE_SCALAR_MULI] =
+        {
+            .source_op_kind = LOOM_OP_SCALAR_MULI,
+            .guard_start = LOOM_TEST_LOW_SCALAR_LHS_GUARD,
+            .guard_count = 3,
+            .emit_start = LOOM_TEST_LOW_EMIT_MUL_I32,
             .emit_count = 1,
         },
     [LOOM_TEST_LOW_RULE_SCALAR_CONSTANT] =
@@ -768,6 +796,14 @@ static const loom_low_lower_rule_t kTestLowRules[] = {
             .emit_start = LOOM_TEST_LOW_EMIT_SWAPPED_ADD_V4I32,
             .emit_count = 1,
         },
+    [LOOM_TEST_LOW_RULE_VECTOR_MULI] =
+        {
+            .source_op_kind = LOOM_OP_VECTOR_MULI,
+            .guard_start = LOOM_TEST_LOW_VECTOR_LHS_GUARD,
+            .guard_count = 6,
+            .emit_start = LOOM_TEST_LOW_EMIT_MUL_V4I32,
+            .emit_count = 1,
+        },
     [LOOM_TEST_LOW_RULE_VECTOR_REDUCE_ADDI] =
         {
             .source_op_kind = LOOM_OP_VECTOR_REDUCE,
@@ -799,6 +835,11 @@ static const loom_low_lower_rule_span_t kTestLowSpans[] = {
         .rule_count = 1,
     },
     {
+        .source_op_kind = LOOM_OP_SCALAR_MULI,
+        .rule_start = LOOM_TEST_LOW_RULE_SCALAR_MULI,
+        .rule_count = 1,
+    },
+    {
         .source_op_kind = LOOM_OP_SCALAR_CONSTANT,
         .rule_start = LOOM_TEST_LOW_RULE_SCALAR_CONSTANT,
         .rule_count = 1,
@@ -821,6 +862,11 @@ static const loom_low_lower_rule_span_t kTestLowSpans[] = {
     {
         .source_op_kind = LOOM_OP_VECTOR_SUBI,
         .rule_start = LOOM_TEST_LOW_RULE_VECTOR_SUBI,
+        .rule_count = 1,
+    },
+    {
+        .source_op_kind = LOOM_OP_VECTOR_MULI,
+        .rule_start = LOOM_TEST_LOW_RULE_VECTOR_MULI,
         .rule_count = 1,
     },
     {
