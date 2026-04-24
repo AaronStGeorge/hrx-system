@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 func.def @index_arithmetic(%i: index, %j: index, %cond: i1) -> (index, index, i1, i64) {
   %c4 = index.constant 4 : index
   %add = index.add %i, %c4 : index

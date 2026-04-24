@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 // Floating-point lanewise ops require floating-point vector elements.
 func.def @addf_integer(%a: vector<4xi32>, %b: vector<4xi32>) {
   // ERROR@+1: TYPE/004 "float_element"

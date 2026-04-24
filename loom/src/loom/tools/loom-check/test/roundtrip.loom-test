@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 // Top-level parser/printer smoke: standalone ops and a variadic terminator.
 %a = test.constant 1 : i32
 %b = test.constant 2 : i32

@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 // Dynamic encoding parameters are named SSA operands on encoding.define.
 func.def @dynamic_encoding_params(%group_size: index, %scale: f32) {
   %enc = encoding.define #q8_0<block=32> {group_size = %group_size : index, scale = %scale : f32} : encoding<schema>

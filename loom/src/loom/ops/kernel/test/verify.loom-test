@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 func.def @barrier_rejects_global_memory_space() {
   // ERROR@+1: STRUCTURE/014 "memory_space" "1" "workgroup memory space"
   kernel.barrier {memory_space = global, ordering = acq_rel, scope = workgroup}

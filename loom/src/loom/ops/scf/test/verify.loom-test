@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 // scf.for with fewer iter_args than results: count check fires and
 // emits a single STRUCTURE/013, then short-circuits per-position
 // type checks so no cascading TYPE/001s appear. The diagnostic must

@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 // Valid IR with no annotations — no diagnostics expected.
 func.def @clean(%x: f32) -> (f32) {
   func.return %x : f32

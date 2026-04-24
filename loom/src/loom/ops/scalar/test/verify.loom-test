@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 // Dead poison computations are valid until their value reaches an observation
 // boundary.
 func.def @dead_poison_not_observed(%x: i32) {

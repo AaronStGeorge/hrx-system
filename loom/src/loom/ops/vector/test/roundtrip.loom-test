@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 // Construction ops keep scalar/vector interop explicit.
 func.def @construction(%x: f32, %i: i32, %n: index) {
   %c0 = index.constant 0 : index

@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 func.def @constant_rejects_integer_result() -> (i64) {
   // ERROR@+1: TYPE/004 "expected address"
   %c = index.constant 4 : i64

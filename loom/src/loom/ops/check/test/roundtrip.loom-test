@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 // A correctness case is a program: it materializes inputs, calls the function
 // under test, obtains expected values, and checks ordinary SSA results.
 func.decl @scale(%input: tensor<4xf32>) -> (tensor<4xf32>)

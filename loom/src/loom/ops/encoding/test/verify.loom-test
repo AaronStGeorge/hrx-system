@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 // Static encoding attrs and dynamic encoding operands are two views of one
 // parameter namespace; a name can appear in only one place.
 func.def @static_dynamic_duplicate(%block: index) {

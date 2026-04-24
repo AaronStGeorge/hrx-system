@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 func.def @buffer_alloca_rejects_index_size(%size: index) {
   // ERROR@+1: TYPE/003 "byte_length" "index" "offset"
   %scratch = buffer.alloca %size {base_alignment = 64, memory_space = workgroup} : buffer

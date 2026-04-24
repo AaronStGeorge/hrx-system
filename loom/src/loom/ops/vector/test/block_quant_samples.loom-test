@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 // Q4_0 stores one f16 scale plus 16 bytes of nibble-packed weights for a
 // 32-element block. This is one four-byte chunk of the qs field.
 //

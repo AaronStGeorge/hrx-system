@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @add(%lhs : reg<test.i32>, %rhs : reg<test.i32>) -> (reg<test.i32>) {
   %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>

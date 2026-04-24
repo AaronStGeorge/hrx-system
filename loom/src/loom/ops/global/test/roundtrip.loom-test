@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 // Scalar constant.
 global.constant @pi : f32 = 3.14159265358979
 

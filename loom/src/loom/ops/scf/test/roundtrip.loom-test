@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 // scf.for: minimal counted loop, no iter_args, no results.
 func.def @simple_loop(%lo: index, %hi: index, %step: index) {
   scf.for %iv = [%lo to %hi step %step] {

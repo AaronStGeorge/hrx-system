@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 // Undefined global reference.
 func.def @undefined_load() {
   // ERROR@+1: SYMBOL/002 "missing"

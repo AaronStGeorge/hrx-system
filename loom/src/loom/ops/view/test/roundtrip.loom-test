@@ -1,7 +1,5 @@
 // RUN: roundtrip
 
-// ====
-
 // Dense view over an opaque buffer root with a dynamic logical extent.
 func.def @dense_view(%buffer: buffer, %offset: offset, %m: index) {
   %layout = encoding.layout.dense : encoding<layout>

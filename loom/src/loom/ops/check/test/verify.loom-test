@@ -1,7 +1,5 @@
 // RUN: verify
 
-// ====
-
 // Minimal valid check case.
 check.case @empty {
   check.return
