@@ -2305,6 +2305,13 @@ def _ds_atomic_overlays(
         ("ds_and_rtn_b32", "DS_AND_RTN_B32", "and.return.b32", "FMT_NUM_B32", True),
         ("ds_or_rtn_b32", "DS_OR_RTN_B32", "or.return.b32", "FMT_NUM_B32", True),
         ("ds_xor_rtn_b32", "DS_XOR_RTN_B32", "xor.return.b32", "FMT_NUM_B32", True),
+        (
+            "ds_wrxchg_rtn_b32",
+            "DS_WRXCHG_RTN_B32",
+            "exchange.return.b32",
+            "FMT_NUM_B32",
+            True,
+        ),
         ("ds_add_rtn_f32", "DS_ADD_RTN_F32", "add.return.f32", "FMT_NUM_F32", True),
     )
     return tuple(

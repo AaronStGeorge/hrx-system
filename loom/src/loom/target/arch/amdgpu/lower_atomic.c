@@ -148,6 +148,10 @@ static const loom_amdgpu_atomic_descriptor_candidate_t
             LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
             LOOM_AMDGPU_DESCRIPTOR_ID_DS_XOR_RTN_B32),
         LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
+            LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_XCHGI,
+            LOOM_AMDGPU_ATOMIC_VALUE_KIND_I32,
+            LOOM_AMDGPU_DESCRIPTOR_ID_DS_WRXCHG_RTN_B32),
+        LOOM_AMDGPU_ATOMIC_DESCRIPTOR_CANDIDATE(
             LOOM_AMDGPU_ATOMIC_OPERATION_RMW, LOOM_ATOMIC_KIND_ADDF,
             LOOM_AMDGPU_ATOMIC_VALUE_KIND_F32,
             LOOM_AMDGPU_DESCRIPTOR_ID_DS_ADD_RTN_F32),
@@ -184,7 +188,8 @@ static const loom_amdgpu_atomic_rejection_detail_t
         {
             .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_ATOMIC_KIND,
             .detail = IREE_SVL("AMDGPU LDS atomic lowering currently supports "
-                               "32-bit add/sub/min/max/and/or/xor and f32 add"),
+                               "32-bit add/sub/min/max/and/or/xor/exchange and "
+                               "f32 add"),
         },
         {
             .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_VALUE_TYPE,
