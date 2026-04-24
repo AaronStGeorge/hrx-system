@@ -30,12 +30,32 @@ func.def @i32x16_variable_shift(%value: vector<16xi32>, %amount: vector<16xi32>)
 
 // ====
 
+func.def @i32x16_compare_select(%lhs: vector<16xi32>, %rhs: vector<16xi32>, %fallback: vector<16xi32>) -> (vector<16xi32>) {
+  %signed = vector.cmpi sgt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
+  %unsigned = vector.cmpi ugt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
+  %selected = vector.select %signed, %lhs, %rhs : vector<16xi32>
+  %result = vector.select %unsigned, %selected, %fallback : vector<16xi32>
+  func.return %result : vector<16xi32>
+}
+
+// ====
+
 func.def @f32x16_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<16xf32>
   %difference = vector.subf %sum, %lhs : vector<16xf32>
   %product = vector.mulf %difference, %rhs : vector<16xf32>
   %fma = vector.fmaf %lhs, %rhs, %product : vector<16xf32>
   func.return %fma : vector<16xf32>
+}
+
+// ====
+
+func.def @f32x16_compare_select(%lhs: vector<16xf32>, %rhs: vector<16xf32>, %fallback: vector<16xf32>) -> (vector<16xf32>) {
+  %ordered_lt = vector.cmpf olt, %lhs, %rhs : vector<16xf32> -> vector<16xi1>
+  %unordered_ne = vector.cmpf une, %lhs, %rhs : vector<16xf32> -> vector<16xi1>
+  %selected = vector.select %ordered_lt, %lhs, %rhs : vector<16xf32>
+  %result = vector.select %unordered_ne, %selected, %fallback : vector<16xf32>
+  func.return %result : vector<16xf32>
 }
 
 // ====

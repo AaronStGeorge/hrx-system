@@ -337,6 +337,24 @@ static iree_status_t loom_x86_append_tied_ternary_packet(
   return loom_x86_append_operand(state, context, 2);
 }
 
+static iree_status_t loom_x86_append_ternary_packet(
+    const loom_x86_assembly_state_t* state,
+    const loom_native_assembly_packet_context_t* context) {
+  IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  IREE_RETURN_IF_ERROR(loom_x86_append_result(state, context, 0));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, ", "));
+  IREE_RETURN_IF_ERROR(loom_x86_append_operand(state, context, 0));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, ", "));
+  IREE_RETURN_IF_ERROR(loom_x86_append_operand(state, context, 1));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, ", "));
+  return loom_x86_append_operand(state, context, 2);
+}
+
 static iree_status_t loom_x86_append_tied_binary_packet(
     const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context) {
@@ -738,6 +756,10 @@ static iree_status_t loom_x86_append_descriptor_packet(
   if (descriptor->result_count == 1 && descriptor->operand_count == 3 &&
       op->result_count == 1 && op->operand_count == 2) {
     return loom_x86_append_binary_vector_packet(state, context);
+  }
+  if (descriptor->result_count == 1 && descriptor->operand_count == 4 &&
+      op->result_count == 1 && op->operand_count == 3) {
+    return loom_x86_append_ternary_packet(state, context);
   }
   if (descriptor->result_count == 1 && descriptor->operand_count == 2 &&
       op->result_count == 1 && op->operand_count == 1) {
