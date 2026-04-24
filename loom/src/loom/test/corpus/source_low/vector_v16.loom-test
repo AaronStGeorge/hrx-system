@@ -48,6 +48,16 @@ func.def @i32x16_compare_select(%lhs: vector<16xi32>, %rhs: vector<16xi32>, %fal
 
 // ====
 
+func.def @i32x16_mask_and_select(%lhs: vector<16xi32>, %rhs: vector<16xi32>, %fallback: vector<16xi32>) -> (vector<16xi32>) {
+  %greater = vector.cmpi sgt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
+  %less = vector.cmpi slt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
+  %condition = vector.andi %greater, %less : vector<16xi1>
+  %result = vector.select %condition, %lhs, %fallback : vector<16xi32>
+  func.return %result : vector<16xi32>
+}
+
+// ====
+
 func.def @f32x16_arith(%lhs: vector<16xf32>, %rhs: vector<16xf32>) -> (vector<16xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<16xf32>
   %difference = vector.subf %sum, %lhs : vector<16xf32>
