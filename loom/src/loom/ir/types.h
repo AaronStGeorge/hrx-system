@@ -413,10 +413,12 @@ static inline uint32_t loom_type_make_header(loom_type_kind_t kind,
 
 // --- Dim accessors ---
 
-// Returns the packed dim at the given index.
+// Returns the packed dim at the given index. |index| must be less than the
+// type rank.
 // For inline types (rank <= 2): reads from dims[index].
 // For overflow types: reads from the overflow array.
 static inline uint64_t loom_type_dim(loom_type_t type, iree_host_size_t index) {
+  IREE_ASSERT(index < loom_type_rank(type));
   if (IREE_LIKELY(loom_type_has_inline_dims(type))) {
     return type.dims[index];
   }

@@ -759,7 +759,9 @@ loom_region_branch_t loom_region_branch_cast(const loom_module_t* module,
 
 loom_value_id_t loom_region_branch_selector(loom_region_branch_t branch) {
   if (!branch.vtable) return LOOM_VALUE_ID_INVALID;
-  return loom_op_operands(branch.op)[branch.vtable->selector_operand_index];
+  uint8_t selector_index = branch.vtable->selector_operand_index;
+  IREE_ASSERT(selector_index < branch.op->operand_count);
+  return loom_op_operands(branch.op)[selector_index];
 }
 
 loom_region_t* loom_region_branch_region(const loom_module_t* module,

@@ -63,15 +63,19 @@ typedef struct loom_successor_slice_t {
   uint8_t count;
 } loom_successor_slice_t;
 
-// Returns the value ID at |index| in the slice.
+// Returns the value ID at |index| in the slice. |index| must be less than
+// |slice.count|.
 static inline loom_value_id_t loom_value_slice_get(loom_value_slice_t slice,
                                                    uint16_t index) {
+  IREE_ASSERT(index < slice.count);
   return slice.values[index];
 }
 
-// Sets the value ID at |index| in the slice.
+// Sets the value ID at |index| in the slice. |index| must be less than
+// |slice.count|.
 static inline void loom_value_slice_set(loom_value_slice_t slice,
                                         uint16_t index, loom_value_id_t value) {
+  IREE_ASSERT(index < slice.count);
   slice.values[index] = value;
 }
 
@@ -820,7 +824,10 @@ typedef enum loom_binding_kind_e {
 static inline loom_value_t* loom_op_operand_value(const loom_module_t* module,
                                                   const loom_op_t* op,
                                                   uint16_t index) {
-  return &module->values.entries[loom_op_operands(op)[index]];
+  IREE_ASSERT(index < op->operand_count);
+  loom_value_id_t value_id = loom_op_operands(op)[index];
+  IREE_ASSERT(value_id < module->values.count);
+  return &module->values.entries[value_id];
 }
 
 // Resolves an op's result value ID to the value struct in the module's
@@ -832,7 +839,10 @@ static inline loom_value_t* loom_op_operand_value(const loom_module_t* module,
 static inline loom_value_t* loom_op_result_value(const loom_module_t* module,
                                                  const loom_op_t* op,
                                                  uint16_t index) {
-  return &module->values.entries[loom_op_results(op)[index]];
+  IREE_ASSERT(index < op->result_count);
+  loom_value_id_t value_id = loom_op_results(op)[index];
+  IREE_ASSERT(value_id < module->values.count);
+  return &module->values.entries[value_id];
 }
 
 // Returns a pointer to the single use entry if the value has exactly

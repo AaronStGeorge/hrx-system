@@ -113,12 +113,14 @@ static bool loom_verify_tied_table_claim_result(
     uint16_t* out_current_occurrence, uint16_t* out_first_occurrence) {
   *out_current_occurrence =
       tied_table->result_field_occurrences[result_index]++;
-  if (loom_bitset_test(tied_table->result_index_bits, result_index)) {
+  if (loom_bitset_test(tied_table->result_index_bits,
+                       tied_table->result_index_word_capacity, result_index)) {
     *out_first_occurrence =
         tied_table->first_result_field_occurrences[result_index];
     return true;
   }
-  loom_bitset_set(tied_table->result_index_bits, result_index);
+  loom_bitset_set(tied_table->result_index_bits,
+                  tied_table->result_index_word_capacity, result_index);
   tied_table->first_result_field_occurrences[result_index] =
       *out_current_occurrence;
   return false;
@@ -133,12 +135,15 @@ static bool loom_verify_tied_table_claim_operand(
     uint16_t* out_current_occurrence, uint16_t* out_first_occurrence) {
   *out_current_occurrence =
       tied_table->operand_field_occurrences[operand_index]++;
-  if (loom_bitset_test(tied_table->operand_index_bits, operand_index)) {
+  if (loom_bitset_test(tied_table->operand_index_bits,
+                       tied_table->operand_index_word_capacity,
+                       operand_index)) {
     *out_first_occurrence =
         tied_table->first_operand_field_occurrences[operand_index];
     return true;
   }
-  loom_bitset_set(tied_table->operand_index_bits, operand_index);
+  loom_bitset_set(tied_table->operand_index_bits,
+                  tied_table->operand_index_word_capacity, operand_index);
   tied_table->first_operand_field_occurrences[operand_index] =
       *out_current_occurrence;
   return false;
@@ -185,7 +190,8 @@ void loom_verify_operand_dominance(loom_verify_state_t* state,
           params, IREE_ARRAYSIZE(params));
       continue;
     }
-    if (!loom_bitset_test(state->defined_bits, value_id)) {
+    if (!loom_bitset_test(state->defined_bits, state->defined_bits_length,
+                          value_id)) {
       iree_string_view_t value_name = loom_verify_value_name(state, value_id);
       loom_diagnostic_field_ref_t operand_ref =
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, i);
@@ -196,7 +202,8 @@ void loom_verify_operand_dominance(loom_verify_state_t* state,
           state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 1),
           params, IREE_ARRAYSIZE(params));
     }
-    if (loom_bitset_test(state->consumed_bits, value_id)) {
+    if (loom_bitset_test(state->consumed_bits, state->defined_bits_length,
+                         value_id)) {
       const loom_op_t* consuming_op = state->consuming_ops[value_id];
       const loom_op_vtable_t* consuming_vtable =
           consuming_op ? loom_verify_lookup_vtable(state, consuming_op->kind)
@@ -261,7 +268,10 @@ void loom_verify_poison_boundaries(loom_verify_state_t* state,
     loom_value_id_t value_id = operands[i];
     if (value_id == LOOM_VALUE_ID_INVALID) continue;
     if (value_id >= state->module->values.count) continue;
-    if (!loom_bitset_test(state->defined_bits, value_id)) continue;
+    if (!loom_bitset_test(state->defined_bits, state->defined_bits_length,
+                          value_id)) {
+      continue;
+    }
     if (!loom_value_is_poison(state->module, value_id)) continue;
 
     const loom_value_t* value = loom_module_value(state->module, value_id);

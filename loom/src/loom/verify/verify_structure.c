@@ -928,7 +928,8 @@ static void loom_verify_encoding_ref(
         IREE_ARRAYSIZE(params));
     return;
   }
-  if (!loom_bitset_test(state->defined_bits, encoding_value_id)) {
+  if (!loom_bitset_test(state->defined_bits, state->defined_bits_length,
+                        encoding_value_id)) {
     bool allowed_current_result =
         allow_current_op_results &&
         loom_verify_op_result_contains_value(op, encoding_value_id);

@@ -102,6 +102,7 @@ static inline bool loom_bstring_table_contains(
 // Returns the B-string at |offset|. The offset must be valid in |table|.
 static inline loom_bstring_t loom_bstring_table_get(
     const loom_bstring_table_t* table, loom_bstring_table_offset_t offset) {
+  IREE_ASSERT(loom_bstring_table_contains(table, offset));
   return table->data + offset;
 }
 

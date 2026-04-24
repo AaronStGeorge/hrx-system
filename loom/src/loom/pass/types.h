@@ -105,10 +105,12 @@ struct loom_pass_t {
   void* user_data;
 };
 
-// Increments a statistic counter by |delta|.
+// Increments a statistic counter by |delta|. |statistic_index| must be less
+// than pass->info->statistic_count.
 static inline void loom_pass_statistic_add(loom_pass_t* pass,
                                            uint16_t statistic_index,
                                            int64_t delta) {
+  IREE_ASSERT(statistic_index < pass->info->statistic_count);
   pass->statistics[statistic_index] += delta;
 }
 

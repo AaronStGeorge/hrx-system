@@ -112,16 +112,27 @@ typedef struct loom_verify_state_t {
   uint32_t scope_depth;
 } loom_verify_state_t;
 
-static inline void loom_bitset_set(uint64_t* bits, uint32_t index) {
-  bits[index / 64] |= ((uint64_t)1 << (index % 64));
+static inline void loom_bitset_set(uint64_t* bits, iree_host_size_t word_count,
+                                   uint32_t index) {
+  iree_host_size_t word_index = index / 64;
+  IREE_ASSERT(word_index < word_count);
+  bits[word_index] |= ((uint64_t)1 << (index % 64));
 }
 
-static inline void loom_bitset_clear(uint64_t* bits, uint32_t index) {
-  bits[index / 64] &= ~((uint64_t)1 << (index % 64));
+static inline void loom_bitset_clear(uint64_t* bits,
+                                     iree_host_size_t word_count,
+                                     uint32_t index) {
+  iree_host_size_t word_index = index / 64;
+  IREE_ASSERT(word_index < word_count);
+  bits[word_index] &= ~((uint64_t)1 << (index % 64));
 }
 
-static inline bool loom_bitset_test(const uint64_t* bits, uint32_t index) {
-  return (bits[index / 64] & ((uint64_t)1 << (index % 64))) != 0;
+static inline bool loom_bitset_test(const uint64_t* bits,
+                                    iree_host_size_t word_count,
+                                    uint32_t index) {
+  iree_host_size_t word_index = index / 64;
+  IREE_ASSERT(word_index < word_count);
+  return (bits[word_index] & ((uint64_t)1 << (index % 64))) != 0;
 }
 
 static inline iree_host_size_t loom_bitset_word_count(
