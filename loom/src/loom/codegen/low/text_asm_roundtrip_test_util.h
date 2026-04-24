@@ -68,10 +68,9 @@ class LowFuncAsmRoundTripHarness {
 
   ~LowFuncAsmRoundTripHarness();
 
-  // Initializes a production parser/printer context using one descriptor-set
-  // provider and matching preset bundle so low.func.def inputs can carry
-  // target profiles without every
-  // target test re-registering dialects by hand.
+  // Initializes a parser/printer context using one descriptor-set provider and
+  // matching preset bundle so low.func.def inputs can carry target profiles
+  // without every target test re-registering dialects by hand.
   iree_status_t Initialize(
       loom_low_descriptor_set_provider_t descriptor_set_provider,
       const loom_target_bundle_t* target_bundle);
@@ -102,7 +101,7 @@ class LowFuncAsmRoundTripHarness {
 
   // Arena block pool backing parsed modules and bytecode scratch state.
   iree_arena_block_pool_t block_pool_ = {};
-  // Parser/printer context with the production op registry registered.
+  // Parser/printer context with target and low dialects registered.
   loom_context_t context_ = {};
   // Single descriptor-set provider borrowed from the target package.
   loom_low_descriptor_set_provider_t descriptor_set_provider_ = nullptr;

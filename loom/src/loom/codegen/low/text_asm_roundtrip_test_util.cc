@@ -15,10 +15,19 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/ops/op_registry.h"
+#include "loom/ops/target/ops.h"
 #include "loom/ops/test/registry.h"
 
 namespace loom::testing {
+
+static iree_status_t RegisterDialect(
+    loom_context_t* context, uint8_t dialect_id,
+    const loom_op_vtable_t* const* (*dialect_vtables_fn)(iree_host_size_t*)) {
+  iree_host_size_t count = 0;
+  const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+  return loom_context_register_dialect(context, dialect_id, vtables,
+                                       (uint16_t)count);
+}
 
 LowTextAsmRoundTripHarness::~LowTextAsmRoundTripHarness() { Deinitialize(); }
 
@@ -46,10 +55,8 @@ iree_status_t LowTextAsmRoundTripHarness::Initialize(
 
   iree_status_t status = loom_test_dialect_register(&context_);
   if (iree_status_is_ok(status)) {
-    iree_host_size_t count = 0;
-    const loom_op_vtable_t* const* vtables = loom_low_dialect_vtables(&count);
-    status = loom_context_register_dialect(&context_, LOOM_DIALECT_LOW, vtables,
-                                           (uint16_t)count);
+    status =
+        RegisterDialect(&context_, LOOM_DIALECT_LOW, loom_low_dialect_vtables);
   }
   if (iree_status_is_ok(status)) {
     status = loom_context_finalize(&context_);
@@ -160,9 +167,17 @@ iree_status_t LowFuncAsmRoundTripHarness::Initialize(
 
   iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool_);
   block_pool_initialized_ = true;
-  iree_status_t status =
-      loom_op_registry_initialize_context(iree_allocator_system(), &context_);
-  context_initialized_ = iree_status_is_ok(status);
+  loom_context_initialize(iree_allocator_system(), &context_);
+  context_initialized_ = true;
+  iree_status_t status = RegisterDialect(&context_, LOOM_DIALECT_TARGET,
+                                         loom_target_dialect_vtables);
+  if (iree_status_is_ok(status)) {
+    status =
+        RegisterDialect(&context_, LOOM_DIALECT_LOW, loom_low_dialect_vtables);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_context_finalize(&context_);
+  }
   if (iree_status_is_ok(status)) {
     loom_low_descriptor_text_asm_environment_initialize(&descriptor_registry_,
                                                         &environment_);
