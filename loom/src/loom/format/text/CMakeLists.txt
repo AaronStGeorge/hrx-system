@@ -34,6 +34,7 @@ loom_cc_library(
     "parser_format.c"
     "parser_low_asm.c"
     "parser_pipeline.c"
+    "parser_scope.c"
     "parser_types.c"
   DEPS
     ::low_asm
