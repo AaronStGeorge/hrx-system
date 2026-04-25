@@ -157,6 +157,18 @@ iree_status_t loom_print_func_args(loom_print_context_t* ctx,
                                    const loom_op_t* op,
                                    const loom_op_vtable_t* vtable);
 
+// Prints a generated-format region element.
+iree_status_t loom_print_region_element(loom_print_context_t* ctx,
+                                        const loom_op_t* op,
+                                        const loom_op_vtable_t* vtable,
+                                        const loom_format_element_t* element);
+
+// Prints an attribute-keyed region table.
+iree_status_t loom_print_region_table(loom_print_context_t* ctx,
+                                      const loom_op_t* op,
+                                      const loom_op_vtable_t* vtable,
+                                      const loom_format_element_t* element);
+
 // Prints the body of |region| using canonical block/op traversal.
 iree_status_t loom_print_region_body(
     loom_print_context_t* ctx, const loom_region_t* region,
