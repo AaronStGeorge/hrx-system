@@ -70,6 +70,7 @@ from loom.dsl import (
     EnumDef,
     FuncLikeInterface,
     LoopLikeInterface,
+    MemoryAccessInterface,
     Op,
     Operand,
     RegionBranchInterface,
@@ -789,6 +790,30 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
         vtable_field="region_branch",
         fields=(InterfaceFieldSpec("selector", "selector_operand_index", "operand"),),
     ),
+    InterfaceSpec(
+        python_class=MemoryAccessInterface,
+        name="MemoryAccessInterface",
+        c_struct="loom_memory_access_vtable_t",
+        vtable_field="memory_access",
+        fields=(
+            InterfaceFieldSpec("view", "view_operand_index", "operand"),
+            InterfaceFieldSpec("value", "value_operand_index", "operand"),
+            InterfaceFieldSpec("expected", "expected_operand_index", "operand"),
+            InterfaceFieldSpec("replacement", "replacement_operand_index", "operand"),
+            InterfaceFieldSpec("mask", "mask_operand_index", "operand"),
+            InterfaceFieldSpec("passthrough", "passthrough_operand_index", "operand"),
+            InterfaceFieldSpec("offsets", "offsets_operand_index", "operand"),
+            InterfaceFieldSpec("indices", "indices_operand_offset", "operand"),
+            InterfaceFieldSpec("static_indices", "static_indices_attr_index", "attr"),
+            InterfaceFieldSpec("cache_scope", "cache_scope_attr_index", "attr"),
+            InterfaceFieldSpec("cache_temporal", "cache_temporal_attr_index", "attr"),
+            InterfaceFieldSpec("atomic_kind", "atomic_kind_attr_index", "attr"),
+            InterfaceFieldSpec("atomic_ordering", "atomic_ordering_attr_index", "attr"),
+            InterfaceFieldSpec("atomic_success_ordering", "atomic_success_ordering_attr_index", "attr"),
+            InterfaceFieldSpec("atomic_failure_ordering", "atomic_failure_ordering_attr_index", "attr"),
+            InterfaceFieldSpec("atomic_scope", "atomic_scope_attr_index", "attr"),
+        ),
+    ),
 )
 
 
@@ -844,6 +869,24 @@ def _validate_call_like_interface(op: Op, iface: CallLikeInterface, interface_na
         raise ValueError(f"{interface_name} on {op.name!r}: result {iface.results!r} must be the trailing result field")
 
 
+def _validate_memory_access_interface(op: Op, iface: MemoryAccessInterface, interface_name: str) -> None:
+    """Validates MemoryAccessInterface's optional role coherence."""
+    _resolve_operand_index(op, iface.view, interface_name)
+    if iface.indices is not None:
+        indices_index = _resolve_operand_index(op, iface.indices, interface_name)
+        indices_operand = op.operands[indices_index]
+        if not indices_operand.variadic:
+            raise ValueError(f"{interface_name} on {op.name!r}: operand {iface.indices!r} must be variadic")
+        if indices_index + 1 != len(op.operands):
+            raise ValueError(f"{interface_name} on {op.name!r}: operand {iface.indices!r} must be the trailing operand field")
+    if (iface.cache_scope is None) != (iface.cache_temporal is None):
+        raise ValueError(f"{interface_name} on {op.name!r}: cache_scope and cache_temporal must be declared together")
+    if (iface.atomic_success_ordering is None) != (iface.atomic_failure_ordering is None):
+        raise ValueError(f"{interface_name} on {op.name!r}: atomic_success_ordering and atomic_failure_ordering must be declared together")
+    if iface.atomic_ordering is not None and iface.atomic_success_ordering is not None:
+        raise ValueError(f"{interface_name} on {op.name!r}: use either atomic_ordering or success/failure orderings, not both")
+
+
 def _emit_interface_vtable(op: Op, spec: InterfaceSpec, lines: list[str]) -> None:
     """Appends the .rodata struct declaration for |op|'s |spec| interface.
 
@@ -856,6 +899,8 @@ def _emit_interface_vtable(op: Op, spec: InterfaceSpec, lines: list[str]) -> Non
         return
     if isinstance(iface, CallLikeInterface):
         _validate_call_like_interface(op, iface, spec.name)
+    if isinstance(iface, MemoryAccessInterface):
+        _validate_memory_access_interface(op, iface, spec.name)
     prefix = _c_prefix(op)
     lines.append(f"static const {spec.c_struct} {prefix}_{spec.vtable_field} = {{")
     for field_spec in spec.fields:
@@ -3128,10 +3173,17 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             lines.append(f"    .format_element_count = {len(elements)},")
             lines.append("    .instance_flags_case_count = 0,")
 
-        # Cache line 3: interface pointers.
-        lines.extend(f"    .{spec.vtable_field} = {interface_ptrs[spec.vtable_field]}," for spec in _INTERFACES)
-        lines.append(f"    .symbol_def = {symbol_def_ptr},")
-        lines.append(f"    .placement = {placement_ptr},")
+        # Cache line 3: interface pointers. NULL pointer fields are omitted
+        # and rely on static zero-initialization; this keeps generated tables
+        # sparse as the interface set grows.
+        for spec in _INTERFACES:
+            interface_ptr = interface_ptrs[spec.vtable_field]
+            if interface_ptr != "NULL":
+                lines.append(f"    .{spec.vtable_field} = {interface_ptr},")
+        if symbol_def_ptr != "NULL":
+            lines.append(f"    .symbol_def = {symbol_def_ptr},")
+        if placement_ptr != "NULL":
+            lines.append(f"    .placement = {placement_ptr},")
 
         lines.append("};")
         lines.append("")

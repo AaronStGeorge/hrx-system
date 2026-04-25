@@ -485,7 +485,8 @@ static iree_status_t loom_movement_describe_vector(
     request->offsets_value_id = operands[descriptor->offsets_operand_index];
   }
 
-  if (!loom_vector_memory_cache_policy_from_op(op, &request->cache_policy)) {
+  if (!loom_vector_memory_cache_policy_from_op(analysis->module, op,
+                                               &request->cache_policy)) {
     diagnostic->rejection_bits |= LOOM_MOVEMENT_REJECTION_CACHE_POLICY;
     return loom_movement_describe_result(false, out_described);
   }

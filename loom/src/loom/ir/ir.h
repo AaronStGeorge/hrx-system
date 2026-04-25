@@ -125,6 +125,7 @@ typedef struct loom_call_like_vtable_t loom_call_like_vtable_t;
 typedef struct loom_func_like_vtable_t loom_func_like_vtable_t;
 typedef struct loom_loop_like_vtable_t loom_loop_like_vtable_t;
 typedef struct loom_region_branch_vtable_t loom_region_branch_vtable_t;
+typedef struct loom_memory_access_vtable_t loom_memory_access_vtable_t;
 typedef struct loom_type_transfer_context_t loom_type_transfer_context_t;
 
 //===----------------------------------------------------------------------===//
@@ -994,6 +995,73 @@ typedef struct loom_region_branch_t {
 } loom_region_branch_t;
 
 //===----------------------------------------------------------------------===//
+// MemoryAccess interface vtable
+//===----------------------------------------------------------------------===//
+
+// Interface descriptor for ops that access memory through a view-like operand.
+// Every field is an operand or attr index resolved from MemoryAccessInterface
+// declarations in the Python DSL. LOOM_*_INDEX_NONE marks roles that are not
+// part of a particular op shape.
+typedef struct loom_memory_access_vtable_t {
+  // Index of the view or memory-object operand being accessed.
+  uint8_t view_operand_index;
+
+  // Index of the written value or atomic update contribution operand.
+  uint8_t value_operand_index;
+
+  // Index of the compare-exchange expected-value operand.
+  uint8_t expected_operand_index;
+
+  // Index of the compare-exchange replacement-value operand.
+  uint8_t replacement_operand_index;
+
+  // Index of the lane/activity mask operand.
+  uint8_t mask_operand_index;
+
+  // Index of the passthrough operand for inactive result lanes.
+  uint8_t passthrough_operand_index;
+
+  // Index of the per-lane offsets operand.
+  uint8_t offsets_operand_index;
+
+  // Operand offset of the variadic dynamic logical-origin index slice.
+  uint8_t indices_operand_offset;
+
+  // Index of the static logical-origin indices attr.
+  uint8_t static_indices_attr_index;
+
+  // Index of the optional cache/coherency-scope attr.
+  uint8_t cache_scope_attr_index;
+
+  // Index of the optional temporal cache-policy attr.
+  uint8_t cache_temporal_attr_index;
+
+  // Index of the atomic update-kind attr.
+  uint8_t atomic_kind_attr_index;
+
+  // Index of the single atomic memory-ordering attr.
+  uint8_t atomic_ordering_attr_index;
+
+  // Index of the compare-exchange success memory-ordering attr.
+  uint8_t atomic_success_ordering_attr_index;
+
+  // Index of the compare-exchange failure memory-ordering attr.
+  uint8_t atomic_failure_ordering_attr_index;
+
+  // Index of the atomic synchronization-scope attr.
+  uint8_t atomic_scope_attr_index;
+} loom_memory_access_vtable_t;
+
+// Fat reference to a memory-access op. 16 bytes, passed by value.
+typedef struct loom_memory_access_t {
+  // Operation implementing the MemoryAccess interface.
+  const loom_op_t* op;
+
+  // Interface vtable for |op|.
+  const loom_memory_access_vtable_t* vtable;
+} loom_memory_access_t;
+
+//===----------------------------------------------------------------------===//
 // Op vtable
 //===----------------------------------------------------------------------===//
 
@@ -1075,12 +1143,14 @@ struct loom_op_vtable_t {
   const loom_func_like_vtable_t* func_like;
   const loom_loop_like_vtable_t* loop_like;
   const loom_region_branch_vtable_t* region_branch;
+  // Generated semantic contract for memory-access op roles.
+  const loom_memory_access_vtable_t* memory_access;
   // Generated symbol-definition contract for SYMBOL_DEFINE ops.
   const loom_symbol_definition_descriptor_t* symbol_def;
   // Generated structural placement contract for ancestor constraints.
   const loom_op_placement_descriptor_t* placement;
-  // 16 bytes padding to fill cache line 3.
-  const void* _padding_iface[2];
+  // 8 bytes padding to fill cache line 3.
+  const void* _padding_iface[1];
 };
 
 // Returns the full dotted name as a string view (e.g., "test.addi").

@@ -106,41 +106,20 @@ bool loom_vector_memory_cache_policy_from_attrs(
 }
 
 bool loom_vector_memory_cache_policy_from_op(
-    const loom_op_t* op, loom_vector_memory_cache_policy_t* out_policy) {
+    const loom_module_t* module, const loom_op_t* op,
+    loom_vector_memory_cache_policy_t* out_policy) {
   IREE_ASSERT_ARGUMENT(out_policy);
   *out_policy = (loom_vector_memory_cache_policy_t){0};
-  if (!op) {
+  if (!module || !op) {
     return false;
   }
-  switch (op->kind) {
-    case LOOM_OP_VECTOR_LOAD:
-    case LOOM_OP_VECTOR_STORE:
-    case LOOM_OP_VECTOR_LOAD_MASK:
-    case LOOM_OP_VECTOR_STORE_MASK:
-    case LOOM_OP_VECTOR_LOAD_EXPAND:
-    case LOOM_OP_VECTOR_STORE_COMPRESS:
-    case LOOM_OP_VECTOR_GATHER:
-    case LOOM_OP_VECTOR_SCATTER:
-    case LOOM_OP_VECTOR_GATHER_MASK:
-    case LOOM_OP_VECTOR_SCATTER_MASK:
-      if (op->attribute_count < 2) {
-        return false;
-      }
-      return loom_vector_memory_cache_policy_from_attrs(
-          loom_op_attrs(op)[0], loom_op_attrs(op)[1], out_policy);
-    case LOOM_OP_VECTOR_ATOMIC_REDUCE:
-    case LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK:
-    case LOOM_OP_VECTOR_ATOMIC_RMW:
-    case LOOM_OP_VECTOR_ATOMIC_RMW_MASK:
-    case LOOM_OP_VECTOR_ATOMIC_CMPXCHG:
-      if (op->attribute_count < 5) {
-        return false;
-      }
-      return loom_vector_memory_cache_policy_from_attrs(
-          loom_op_attrs(op)[3], loom_op_attrs(op)[4], out_policy);
-    default:
-      return false;
+  loom_memory_access_t access = loom_memory_access_cast(module, op);
+  if (!loom_memory_access_isa(access)) {
+    return false;
   }
+  return loom_vector_memory_cache_policy_from_attrs(
+      loom_memory_access_cache_scope(access),
+      loom_memory_access_cache_temporal(access), out_policy);
 }
 
 bool loom_vector_memory_access_static_axis_extent(

@@ -687,7 +687,8 @@ static iree_status_t loom_vector_canonicalize_all_true_masked_memory(
   loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
   loom_op_t* new_op = NULL;
   loom_vector_memory_cache_policy_t cache_policy = {0};
-  if (!loom_vector_memory_cache_policy_from_op(op, &cache_policy)) {
+  if (!loom_vector_memory_cache_policy_from_op(rewriter->module, op,
+                                               &cache_policy)) {
     return iree_ok_status();
   }
   switch (op->kind) {
@@ -930,7 +931,8 @@ static iree_status_t loom_vector_canonicalize_contiguous_gather_scatter(
   loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
   loom_op_t* new_op = NULL;
   loom_vector_memory_cache_policy_t cache_policy = {0};
-  if (!loom_vector_memory_cache_policy_from_op(op, &cache_policy)) {
+  if (!loom_vector_memory_cache_policy_from_op(rewriter->module, op,
+                                               &cache_policy)) {
     return iree_ok_status();
   }
   switch (op->kind) {

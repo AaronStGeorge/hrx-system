@@ -100,7 +100,8 @@ bool loom_vector_memory_access_describe(
 // for non-memory ops or malformed cache attrs so callers do not rewrite away
 // verifier-owned diagnostics.
 bool loom_vector_memory_cache_policy_from_op(
-    const loom_op_t* op, loom_vector_memory_cache_policy_t* out_policy);
+    const loom_module_t* module, const loom_op_t* op,
+    loom_vector_memory_cache_policy_t* out_policy);
 
 // Extracts an optional cache policy from the two generated optional cache
 // attributes shared by vector and view memory ops.

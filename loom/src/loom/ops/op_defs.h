@@ -1126,6 +1126,75 @@ bool loom_region_branch_region_yield_only_operands(
     loom_value_slice_t* out_values);
 
 //===----------------------------------------------------------------------===//
+// MemoryAccess interface
+//===----------------------------------------------------------------------===//
+
+// Returns true if |access| refers to a valid memory-access op. All accessor
+// helpers below tolerate a NULL vtable and return safe defaults.
+static inline bool loom_memory_access_isa(loom_memory_access_t access) {
+  return access.op != NULL;
+}
+
+// Casts |op| to loom_memory_access_t if it implements the MemoryAccess
+// interface. Returns {NULL, NULL} if |op| is NULL or does not implement it.
+// Safe to call unconditionally; callers check the result with
+// loom_memory_access_isa().
+loom_memory_access_t loom_memory_access_cast(const loom_module_t* module,
+                                             const loom_op_t* op);
+
+// Returns the accessed view or memory-object operand.
+loom_value_id_t loom_memory_access_view(loom_memory_access_t access);
+
+// Returns the written value or atomic update contribution operand.
+loom_value_id_t loom_memory_access_value(loom_memory_access_t access);
+
+// Returns the compare-exchange expected-value operand.
+loom_value_id_t loom_memory_access_expected(loom_memory_access_t access);
+
+// Returns the compare-exchange replacement-value operand.
+loom_value_id_t loom_memory_access_replacement(loom_memory_access_t access);
+
+// Returns the lane/activity mask operand.
+loom_value_id_t loom_memory_access_mask(loom_memory_access_t access);
+
+// Returns the passthrough operand for inactive result lanes.
+loom_value_id_t loom_memory_access_passthrough(loom_memory_access_t access);
+
+// Returns the per-lane offsets operand.
+loom_value_id_t loom_memory_access_offsets(loom_memory_access_t access);
+
+// Returns the dynamic logical-origin index operand slice.
+loom_value_slice_t loom_memory_access_dynamic_indices(
+    loom_memory_access_t access);
+
+// Returns the static logical-origin indices attr.
+loom_attribute_t loom_memory_access_static_indices(loom_memory_access_t access);
+
+// Returns the optional cache/coherency-scope attr.
+loom_attribute_t loom_memory_access_cache_scope(loom_memory_access_t access);
+
+// Returns the optional temporal cache-policy attr.
+loom_attribute_t loom_memory_access_cache_temporal(loom_memory_access_t access);
+
+// Returns the atomic update-kind attr.
+loom_attribute_t loom_memory_access_atomic_kind(loom_memory_access_t access);
+
+// Returns the single atomic memory-ordering attr.
+loom_attribute_t loom_memory_access_atomic_ordering(
+    loom_memory_access_t access);
+
+// Returns the compare-exchange success memory-ordering attr.
+loom_attribute_t loom_memory_access_atomic_success_ordering(
+    loom_memory_access_t access);
+
+// Returns the compare-exchange failure memory-ordering attr.
+loom_attribute_t loom_memory_access_atomic_failure_ordering(
+    loom_memory_access_t access);
+
+// Returns the atomic synchronization-scope attr.
+loom_attribute_t loom_memory_access_atomic_scope(loom_memory_access_t access);
+
+//===----------------------------------------------------------------------===//
 // Op definition macros
 //===----------------------------------------------------------------------===//
 //

@@ -2726,6 +2726,50 @@ class RegionBranchInterface(NamedTuple):
     selector: str
 
 
+class MemoryAccessInterface(NamedTuple):
+    """Interface for ops that access memory through a view-like operand.
+
+    Each field names an operand or attr role on the op, or None when the
+    role is not part of that op shape. The generator resolves names to
+    compact indices in a loom_memory_access_vtable_t so passes can query
+    load/store/gather/scatter/atomic shapes without switching on every
+    concrete op kind.
+    """
+
+    # Operand naming the accessed view or memory object.
+    view: str
+    # Operand naming the value written or atomic update contribution.
+    value: str | None = None
+    # Operand naming the expected compare-exchange value.
+    expected: str | None = None
+    # Operand naming the replacement compare-exchange value.
+    replacement: str | None = None
+    # Operand naming the lane/activity mask.
+    mask: str | None = None
+    # Operand naming the value used for inactive result lanes.
+    passthrough: str | None = None
+    # Operand naming per-lane offsets from the logical origin.
+    offsets: str | None = None
+    # Variadic operand field naming dynamic logical origin indices.
+    indices: str | None = None
+    # Attr naming the full-rank static logical origin indices.
+    static_indices: str | None = None
+    # Optional cache/coherency scope attr.
+    cache_scope: str | None = None
+    # Optional temporal cache-policy attr.
+    cache_temporal: str | None = None
+    # Atomic update kind attr.
+    atomic_kind: str | None = None
+    # Single atomic memory-ordering attr.
+    atomic_ordering: str | None = None
+    # Compare-exchange success memory-ordering attr.
+    atomic_success_ordering: str | None = None
+    # Compare-exchange failure memory-ordering attr.
+    atomic_failure_ordering: str | None = None
+    # Atomic synchronization scope attr.
+    atomic_scope: str | None = None
+
+
 # ============================================================================
 # Op declaration
 # ============================================================================
