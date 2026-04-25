@@ -30,6 +30,7 @@ loom_cc_library(
     "parser_internal.h"
   SRCS
     "parser.c"
+    "parser_accumulator.c"
     "parser_attrs.c"
     "parser_format.c"
     "parser_low_asm.c"
