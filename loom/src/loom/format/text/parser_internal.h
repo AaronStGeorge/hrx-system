@@ -495,6 +495,12 @@ iree_status_t loom_parser_append_implicit_terminator(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_block_t* block);
 
+// Parses an optional `loc(...)` annotation. Leaves |fallback_location| in place
+// when no explicit annotation is present.
+iree_status_t loom_parse_optional_op_location(
+    loom_parser_t* parser, loom_location_id_t fallback_location,
+    loom_location_id_t* out_location);
+
 //===----------------------------------------------------------------------===//
 // Op accumulator
 //===----------------------------------------------------------------------===//
@@ -717,6 +723,24 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
 iree_status_t loom_parse_attr_dict(loom_parser_t* parser,
                                    loom_attribute_t* out_attr);
 
+typedef struct loom_parsed_attr_dict_entry_t {
+  // Parsed attribute payload in canonical module storage form.
+  loom_named_attr_t attr;
+  // Source token for duplicate-key diagnostics.
+  loom_token_t key_token;
+} loom_parsed_attr_dict_entry_t;
+
+// Emits ERR_PARSE_020 for duplicate attribute dictionary keys, with a related
+// location pointing at the first key.
+iree_status_t loom_parser_emit_duplicate_attr_dict_key(
+    loom_parser_t* parser, loom_token_t key_token,
+    loom_token_t previous_key_token);
+
+// Sorts parsed attribute dictionary entries by canonical string spelling.
+void loom_parser_sort_attr_dict_entries(const loom_module_t* module,
+                                        loom_parsed_attr_dict_entry_t* entries,
+                                        uint16_t count);
+
 // Returns the token kind a keyword would produce as a standalone token.
 // LOOM_TOKEN_BARE_IDENT for text keywords (import, where, etc.),
 // LOOM_TOKEN_COMMA for ',', LOOM_TOKEN_ARROW for '->', etc.
@@ -732,6 +756,25 @@ iree_status_t loom_parse_region(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_region_t** out_region);
 
+typedef iree_status_t (*loom_parse_region_body_fn_t)(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_t* region, const void* user_data,
+    bool* out_region_end_consumed);
+
+typedef struct loom_parse_region_body_callback_t {
+  // Parses the already-opened region body and consumes the closing brace.
+  loom_parse_region_body_fn_t fn;
+  // Opaque parser-internal state passed to |fn|.
+  const void* user_data;
+} loom_parse_region_body_callback_t;
+
+// Parses a braced region using |body| for syntax-specific body parsing. The
+// generic shell owns region allocation, lexical scope lifetime, insertion-point
+// restore, pending successor resolution, and error recovery.
+iree_status_t loom_parse_braced_region_with_body(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_parse_region_body_callback_t body, loom_region_t** out_region);
+
 // Parses a region with the requested surface syntax. All syntaxes produce an
 // ordinary loom_region_t.
 iree_status_t loom_parse_region_with_syntax(
@@ -741,6 +784,12 @@ iree_status_t loom_parse_region_with_syntax(
 // Parses the pass pipeline friendly region syntax:
 // `pipeline { canonicalize(options...) ... }`.
 iree_status_t loom_parse_pipeline_prefixed_region(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_t** out_region);
+
+// Parses the target-low asm prefixed region syntax:
+// `asm<descriptor-set> { packet... }`.
+iree_status_t loom_parse_low_asm_prefixed_region(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_region_t** out_region);
 

@@ -1267,9 +1267,8 @@ TEST(LowDescriptorsTest, AcceptsAsmFormsAndLookup) {
   EXPECT_EQ(asm_form_ordinal, 1u);
 
   asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
-  iree_status_t status = loom_low_descriptor_set_lookup_asm_form(
-      &tables.set, IREE_SV("missing"), &asm_form_ordinal);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
+      &tables.set, IREE_SV("missing"), &asm_form_ordinal));
   EXPECT_EQ(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
 }
 

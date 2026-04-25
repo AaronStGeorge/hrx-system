@@ -139,8 +139,7 @@ static iree_status_t loom_low_descriptor_text_asm_lookup_descriptor_set(
   IREE_RETURN_IF_ERROR(
       loom_low_descriptor_registry_lookup(registry, key, &descriptor_set));
   if (descriptor_set == NULL) {
-    return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "low descriptor set was not found");
+    return iree_ok_status();
   }
   *out_descriptor_set =
       loom_low_descriptor_text_asm_descriptor_set_handle(descriptor_set);
@@ -233,6 +232,9 @@ static iree_status_t loom_low_descriptor_text_asm_lookup_packet(
   uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
   IREE_RETURN_IF_ERROR(loom_low_descriptor_set_lookup_asm_form(
       descriptor_set, mnemonic, &asm_form_ordinal));
+  if (asm_form_ordinal == LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
+    return iree_ok_status();
+  }
   const loom_low_asm_form_t* asm_form =
       loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
   if (asm_form == NULL) {

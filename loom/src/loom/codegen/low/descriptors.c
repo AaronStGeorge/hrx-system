@@ -2979,9 +2979,7 @@ iree_status_t loom_low_descriptor_set_lookup_asm_form(
       high = mid;
     }
   }
-  return iree_make_status(IREE_STATUS_NOT_FOUND,
-                          "low asm mnemonic '%.*s' was not found",
-                          (int)mnemonic.size, mnemonic.data);
+  return iree_ok_status();
 }
 
 iree_status_t loom_low_descriptor_set_format_manifest_json(

@@ -140,10 +140,14 @@ typedef struct loom_text_low_asm_statement_t {
   loom_location_id_t location;
 } loom_text_low_asm_statement_t;
 
+// Resolves an `asm<...>` descriptor-set key to an environment-owned handle.
+// Returns OK with NULL when no descriptor set matches.
 typedef iree_status_t (*loom_text_low_asm_lookup_descriptor_set_fn_t)(
     const loom_text_low_asm_environment_state_t* state, iree_string_view_t key,
     const loom_text_low_asm_descriptor_set_t** out_descriptor_set);
 
+// Resolves a mnemonic within a descriptor set to a packet descriptor. Returns
+// OK with |out_packet->descriptor| NULL when no packet matches.
 typedef iree_status_t (*loom_text_low_asm_lookup_packet_fn_t)(
     const loom_text_low_asm_environment_state_t* state,
     const loom_text_low_asm_descriptor_set_t* descriptor_set,

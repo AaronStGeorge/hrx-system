@@ -857,7 +857,8 @@ uint32_t loom_low_descriptor_set_lookup_descriptor_by_id(
     const loom_low_descriptor_set_t* descriptor_set, uint64_t stable_id);
 
 // Resolves an unqualified asm mnemonic to an asm form ordinal in
-// |descriptor_set|. Descriptor sets verify that asm mnemonics are sorted and
+// |descriptor_set|. Returns OK with LOOM_LOW_ASM_FORM_ORDINAL_NONE when no
+// mnemonic matches. Descriptor sets verify that asm mnemonics are sorted and
 // unambiguous.
 iree_status_t loom_low_descriptor_set_lookup_asm_form(
     const loom_low_descriptor_set_t* descriptor_set,
