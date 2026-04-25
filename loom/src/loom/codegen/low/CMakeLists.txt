@@ -17,6 +17,7 @@ loom_cc_library(
     "descriptors.h"
   SRCS
     "descriptors.c"
+    "descriptors_enums.c"
     "descriptors_manifest.c"
   DEPS
     iree::base

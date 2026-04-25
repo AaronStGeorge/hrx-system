@@ -81,6 +81,7 @@ loom_cc_library(
     name = "descriptors",
     srcs = [
         "descriptors.c",
+        "descriptors_enums.c",
         "descriptors_manifest.c",
     ],
     hdrs = ["descriptors.h"],
