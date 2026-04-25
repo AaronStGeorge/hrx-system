@@ -341,10 +341,10 @@ TEST_F(SourceLoweringFunctionTest, LowersVectorCfgFunction) {
       "  cfg.cond_br %cond, ^then, ^else : i1\n"
       "^then:\n"
       "  %sum = vector.addi %a, %b : vector<4xi32>\n"
-      "  cfg.br ^join(%sum : vector<4xi32>)\n"
+      "  cfg.br ^join(%sum: vector<4xi32>)\n"
       "^else:\n"
       "  %sum2 = vector.addi %b, %a : vector<4xi32>\n"
-      "  cfg.br ^join(%sum2 : vector<4xi32>)\n"
+      "  cfg.br ^join(%sum2: vector<4xi32>)\n"
       "^join(%result: vector<4xi32>):\n"
       "  func.return %result : vector<4xi32>\n"
       "}\n",

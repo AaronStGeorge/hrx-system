@@ -281,7 +281,7 @@ TEST_F(IreeVmFunctionBytecodeTest, EmitsBranchRemapList) {
   BuildSidecars(
       "low.func.def target(@vm_target) @branch(%arg: reg<vm.i32>) -> "
       "(reg<vm.i32>) {\n"
-      "  low.br ^join(%arg : reg<vm.i32>)\n"
+      "  low.br ^join(%arg: reg<vm.i32>)\n"
       "^join(%result: reg<vm.i32>):\n"
       "  low.return %result : reg<vm.i32>\n"
       "}\n",

@@ -213,10 +213,10 @@ TEST_F(TargetLowLegalityTest, AcceptsVectorCfgSourceFunction) {
       "  cfg.cond_br %cond, ^then, ^else : i1\n"
       "^then:\n"
       "  %sum = vector.addi %a, %b : vector<4xi32>\n"
-      "  cfg.br ^join(%sum : vector<4xi32>)\n"
+      "  cfg.br ^join(%sum: vector<4xi32>)\n"
       "^else:\n"
       "  %diff = vector.subi %a, %b : vector<4xi32>\n"
-      "  cfg.br ^join(%diff : vector<4xi32>)\n"
+      "  cfg.br ^join(%diff: vector<4xi32>)\n"
       "^join(%result: vector<4xi32>):\n"
       "  func.return %result : vector<4xi32>\n"
       "}\n");
