@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Internal types and declarations shared across the parser implementation.
-// Not a public API — do not include from outside this library.
+// Not a public API; do not include from outside this library.
 
 #ifndef LOOM_FORMAT_TEXT_PARSER_INTERNAL_H_
 #define LOOM_FORMAT_TEXT_PARSER_INTERNAL_H_
@@ -420,10 +420,14 @@ iree_status_t loom_parser_emit_token_text_error(loom_parser_t* parser,
                                                 const loom_error_def_t* error,
                                                 loom_token_t token);
 
+// Emits the tokenizer-owned structured diagnostic for |token|.
+iree_status_t loom_parser_emit_tokenizer_error(loom_parser_t* parser,
+                                               loom_token_t token);
+
 // Consumes the next token and verifies it matches |kind|. On match,
 // sets |*out_token| (if non-NULL) and returns iree_ok_status(). On
 // mismatch, emits ERR_PARSE_003 ("unexpected token") through the
-// diagnostic sink and returns iree_ok_status() — the diagnostic IS
+// diagnostic sink and returns iree_ok_status(); the diagnostic IS
 // the error. Callers detect the mismatch by checking error_count.
 // Returns non-ok status only on infrastructure failures (pending scan
 // error in the tokenizer, OOM in the diagnostic sink).
@@ -438,7 +442,9 @@ iree_status_t loom_parser_expect(loom_parser_t* parser, loom_token_kind_t kind,
   do {                                                                       \
     uint32_t _expect_errors = (parser)->error_count;                         \
     IREE_RETURN_IF_ERROR(loom_parser_expect((parser), (kind), (out_token))); \
-    if ((parser)->error_count > _expect_errors) return iree_ok_status();     \
+    if ((parser)->error_count > _expect_errors) {                            \
+      return iree_ok_status();                                               \
+    }                                                                        \
   } while (0)
 
 // Resolves an SSA value token and bails out of the enclosing function when
@@ -451,7 +457,9 @@ iree_status_t loom_parser_expect(loom_parser_t* parser, loom_token_kind_t kind,
     uint32_t _resolve_errors = (parser)->error_count;                       \
     IREE_RETURN_IF_ERROR(                                                   \
         loom_parser_resolve_value((parser), (name_token), (out_value_id))); \
-    if ((parser)->error_count > _resolve_errors) return iree_ok_status();   \
+    if ((parser)->error_count > _resolve_errors) {                          \
+      return iree_ok_status();                                              \
+    }                                                                       \
   } while (0)
 
 // Defines an SSA value name in the current scope and bails out of the
@@ -465,7 +473,9 @@ iree_status_t loom_parser_expect(loom_parser_t* parser, loom_token_kind_t kind,
     uint32_t _define_errors = (parser)->error_count;                        \
     IREE_RETURN_IF_ERROR(                                                   \
         loom_parser_define_value_name((parser), (name_token), (value_id))); \
-    if ((parser)->error_count > _define_errors) return iree_ok_status();    \
+    if ((parser)->error_count > _define_errors) {                           \
+      return iree_ok_status();                                              \
+    }                                                                       \
   } while (0)
 
 // Returns true if the parser has exceeded its error limit.

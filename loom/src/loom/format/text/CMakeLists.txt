@@ -32,6 +32,7 @@ loom_cc_library(
     "parser.c"
     "parser_accumulator.c"
     "parser_attrs.c"
+    "parser_diagnostics.c"
     "parser_format.c"
     "parser_low_asm.c"
     "parser_pipeline.c"
