@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
+#include "loom/analysis/kernel_async_legality.h"
 #include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/error/error_defs.h"
@@ -1352,6 +1353,26 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
   if (iree_status_is_ok(status)) {
     status = loom_value_fact_table_compute(&context.fact_table, module,
                                            source_function);
+  }
+
+  loom_kernel_async_legality_result_t async_legality_result = {0};
+  if (iree_status_is_ok(status)) {
+    loom_kernel_async_legality_options_t async_legality_options = {
+        .arena = &context.arena,
+        .fact_table = &context.fact_table,
+        .emitter = options->emitter,
+        .phase_name = IREE_SV("source-low"),
+    };
+    status = loom_kernel_async_legality_verify_function(module, source_function,
+                                                        &async_legality_options,
+                                                        &async_legality_result);
+  }
+  if (iree_status_is_ok(status)) {
+    out_result->error_count += async_legality_result.error_count;
+  }
+  if (iree_status_is_ok(status) && out_result->error_count != 0) {
+    iree_arena_deinitialize(&context.arena);
+    return iree_ok_status();
   }
 
   loom_target_low_legality_result_t legality_result = {};

@@ -190,13 +190,9 @@ loom_cc_library(
     "kernel_async_legality.c"
   DEPS
     iree::base
-    loom::src::loom::analysis::movement
-    loom::src::loom::error::error_defs
+    loom::src::loom::analysis::kernel_async_legality
     loom::src::loom::ir
-    loom::src::loom::ops::kernel
-    loom::src::loom::ops::op_defs
     loom::src::loom::pass::types
-    loom::src::loom::util::fact_table
   PUBLIC
 )
 

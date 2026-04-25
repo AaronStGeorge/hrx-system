@@ -69,6 +69,23 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "kernel_async_legality",
+    srcs = ["kernel_async_legality.c"],
+    hdrs = ["kernel_async_legality.h"],
+    deps = [
+        ":movement",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "policy",
     hdrs = ["policy.h"],
 )
