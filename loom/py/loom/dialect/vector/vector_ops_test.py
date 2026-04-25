@@ -82,6 +82,8 @@ def _assert_optional_cache_policy_attrs(op: Op) -> None:
     assert cache_temporal.optional
     assert cache_scope.enum_def is CacheScope
     assert cache_temporal.enum_def is CacheTemporal
+    assert CacheScope.c_type == "loom_cache_scope_t"
+    assert CacheTemporal.c_type == "loom_cache_temporal_t"
 
 
 def _op_suffix(op: Op) -> str:
@@ -415,7 +417,10 @@ def test_vector_wave2_predicate_ops_preserve_shape_and_return_masks() -> None:
     assert ("SameType", ("input", "result")) in constraints
 
 
-def test_vector_atomic_attrs_are_explicit_enums() -> None:
+def test_vector_atomic_attrs_are_shared_c_enum_aliases() -> None:
+    assert AtomicOrdering.c_type == "loom_atomic_ordering_t"
+    assert AtomicScope.c_type == "loom_atomic_scope_t"
+    assert AtomicKind.c_type == "loom_atomic_kind_t"
     assert [case.keyword for case in AtomicOrdering.cases] == [
         "relaxed",
         "acquire",

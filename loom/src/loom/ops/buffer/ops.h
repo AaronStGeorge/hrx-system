@@ -44,12 +44,12 @@ LOOM_DEFINE_ISA(loom_buffer_alloca_isa, LOOM_OP_BUFFER_ALLOCA)
 LOOM_DEFINE_OPERAND(loom_buffer_alloca_byte_length, 0)
 LOOM_DEFINE_RESULT(loom_buffer_alloca_result, 0)
 LOOM_DEFINE_ATTR_I64(loom_buffer_alloca_base_alignment, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_buffer_alloca_memory_space, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_buffer_alloca_memory_space, 1, loom_buffer_memory_space_t)
 iree_status_t loom_buffer_alloca_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t byte_length,
     int64_t base_alignment,
-    uint8_t memory_space,
+    loom_buffer_memory_space_t memory_space,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -67,11 +67,11 @@ iree_status_t loom_buffer_alloca_verify(
 LOOM_DEFINE_ISA(loom_buffer_assume_memory_space_isa, LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE)
 LOOM_DEFINE_OPERAND(loom_buffer_assume_memory_space_buffer, 0)
 LOOM_DEFINE_RESULT(loom_buffer_assume_memory_space_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_buffer_assume_memory_space_memory_space, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_buffer_assume_memory_space_memory_space, 0, loom_buffer_memory_space_t)
 iree_status_t loom_buffer_assume_memory_space_build(
     loom_builder_t* builder,
     loom_value_id_t buffer,
-    uint8_t memory_space,
+    loom_buffer_memory_space_t memory_space,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

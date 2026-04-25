@@ -124,15 +124,15 @@ LOOM_DEFINE_ISA(loom_low_func_def_isa, LOOM_OP_LOW_FUNC_DEF)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_func_def_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_def_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_def_target, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_abi, 2)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_abi, 2, loom_low_abi_t)
 LOOM_DEFINE_ATTR_DICT(loom_low_func_def_abi_attrs, 3)
 LOOM_DEFINE_ATTR_STRING(loom_low_func_def_export_symbol, 4)
 LOOM_DEFINE_ATTR_DICT(loom_low_func_def_export_attrs, 5)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_visibility, 6)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_cc, 7)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_purity, 8)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_allocation, 9)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_def_schedule, 10)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_visibility, 6, loom_low_visibility_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_cc, 7, loom_low_cc_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_purity, 8, loom_low_purity_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_allocation, 9, loom_low_allocation_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_schedule, 10, loom_low_schedule_t)
 LOOM_DEFINE_REGION(loom_low_func_def_body, 0)
 enum loom_low_func_def_build_flag_bits_e {
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
@@ -179,16 +179,16 @@ LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_func_decl_args, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_func_decl_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_decl_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_decl_target, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_abi, 2)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_abi, 2, loom_low_abi_t)
 LOOM_DEFINE_ATTR_DICT(loom_low_func_decl_abi_attrs, 3)
 LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_export_symbol, 4)
 LOOM_DEFINE_ATTR_DICT(loom_low_func_decl_export_attrs, 5)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_visibility, 6)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_cc, 7)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_purity, 8)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_allocation, 9)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_schedule, 10)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_decl_import_kind, 12)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_visibility, 6, loom_low_visibility_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_cc, 7, loom_low_cc_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_purity, 8, loom_low_purity_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_allocation, 9, loom_low_allocation_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_schedule, 10, loom_low_schedule_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_import_kind, 12, loom_low_func_decl_import_kind_t)
 LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_code_symbol, 13)
 enum loom_low_func_decl_build_flag_bits_e {
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
@@ -249,7 +249,7 @@ LOOM_DEFINE_ISA(loom_low_func_call_isa, LOOM_OP_LOW_FUNC_CALL)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_func_call_operands, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_func_call_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_call_callee, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_low_func_call_purity, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_call_purity, 1, loom_low_purity_t)
 enum loom_low_func_call_build_flag_bits_e {
   LOOM_LOW_FUNC_CALL_BUILD_FLAG_HAS_PURITY = 1u << 0,
 };
@@ -365,7 +365,7 @@ LOOM_DEFINE_ISA(loom_low_invoke_isa, LOOM_OP_LOW_INVOKE)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_invoke_operands, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_invoke_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_invoke_callee, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_low_invoke_purity, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_invoke_purity, 1, loom_low_purity_t)
 enum loom_low_invoke_build_flag_bits_e {
   LOOM_LOW_INVOKE_BUILD_FLAG_HAS_PURITY = 1u << 0,
 };
@@ -393,14 +393,14 @@ iree_status_t loom_low_invoke_verify(
 LOOM_DEFINE_ISA(loom_low_slot_isa, LOOM_OP_LOW_SLOT)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_slot_symbol, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_slot_function, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_low_slot_space, 2)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_slot_space, 2, loom_low_slot_space_t)
 LOOM_DEFINE_ATTR_I64(loom_low_slot_size, 3)
 LOOM_DEFINE_ATTR_I64(loom_low_slot_align, 4)
 iree_status_t loom_low_slot_build(
     loom_builder_t* builder,
     loom_symbol_ref_t symbol,
     loom_symbol_ref_t function,
-    uint8_t space,
+    loom_low_slot_space_t space,
     int64_t size,
     int64_t align,
     loom_location_id_t location,
@@ -497,7 +497,7 @@ iree_status_t loom_low_cond_br_verify(
 // %state = low.resource<vm_state> {index = 0, semantic_type = i64} : reg<vm.i64>
 LOOM_DEFINE_ISA(loom_low_resource_isa, LOOM_OP_LOW_RESOURCE)
 LOOM_DEFINE_RESULT(loom_low_resource_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_low_resource_import_kind, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_resource_import_kind, 0, loom_low_resource_import_kind_t)
 LOOM_DEFINE_ATTR_I64(loom_low_resource_index, 1)
 LOOM_DEFINE_ATTR_TYPE(loom_low_resource_semantic_type, 2)
 LOOM_DEFINE_ATTR_I64(loom_low_resource_valid_byte_count, 3)
@@ -510,7 +510,7 @@ typedef uint32_t loom_low_resource_build_flags_t;
 iree_status_t loom_low_resource_build(
     loom_builder_t* builder,
     loom_low_resource_build_flags_t build_flags,
-    uint8_t import_kind,
+    loom_low_resource_import_kind_t import_kind,
     int64_t index,
     uint32_t semantic_type,
     loom_optional int64_t valid_byte_count,

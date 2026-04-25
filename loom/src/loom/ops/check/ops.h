@@ -75,7 +75,7 @@ typedef enum loom_check_expect_close_nan_e {
 // }
 LOOM_DEFINE_ISA(loom_check_case_isa, LOOM_OP_CHECK_CASE)
 LOOM_DEFINE_ATTR_SYMBOL(loom_check_case_case_symbol, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_check_case_visibility, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_check_case_visibility, 1, loom_check_case_visibility_t)
 LOOM_DEFINE_REGION(loom_check_case_body, 0)
 enum loom_check_case_build_flag_bits_e {
   LOOM_CHECK_CASE_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
@@ -132,13 +132,13 @@ iree_status_t loom_check_skip_if_build(
 // %m = check.param.range po2 bounds(1 to 64) : index
 LOOM_DEFINE_ISA(loom_check_param_range_isa, LOOM_OP_CHECK_PARAM_RANGE)
 LOOM_DEFINE_RESULT(loom_check_param_range_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_check_param_range_policy, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_check_param_range_policy, 0, loom_check_param_range_policy_t)
 LOOM_DEFINE_ATTR_ANY(loom_check_param_range_lower, 1)
 LOOM_DEFINE_ATTR_ANY(loom_check_param_range_upper, 2)
 LOOM_DEFINE_ATTR_ANY(loom_check_param_range_step, 3)
 iree_status_t loom_check_param_range_build(
     loom_builder_t* builder,
-    uint8_t policy,
+    loom_check_param_range_policy_t policy,
     loom_attribute_t lower,
     loom_attribute_t upper,
     loom_optional loom_attribute_t step,
@@ -244,7 +244,7 @@ iree_status_t loom_check_file_read_npy_build(
 LOOM_DEFINE_ISA(loom_check_file_write_npy_isa, LOOM_OP_CHECK_FILE_WRITE_NPY)
 LOOM_DEFINE_OPERAND(loom_check_file_write_npy_value, 0)
 LOOM_DEFINE_ATTR_STRING(loom_check_file_write_npy_path, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_check_file_write_npy_mode, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_check_file_write_npy_mode, 1, loom_check_file_write_npy_mode_t)
 enum loom_check_file_write_npy_build_flag_bits_e {
   LOOM_CHECK_FILE_WRITE_NPY_BUILD_FLAG_HAS_MODE = 1u << 0,
 };
@@ -309,14 +309,14 @@ LOOM_DEFINE_OPERAND(loom_check_expect_close_actual, 0)
 LOOM_DEFINE_OPERAND(loom_check_expect_close_expected, 1)
 LOOM_DEFINE_ATTR_F64(loom_check_expect_close_atol, 0)
 LOOM_DEFINE_ATTR_F64(loom_check_expect_close_rtol, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_check_expect_close_nan, 2)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_check_expect_close_nan, 2, loom_check_expect_close_nan_t)
 iree_status_t loom_check_expect_close_build(
     loom_builder_t* builder,
     loom_value_id_t actual,
     loom_value_id_t expected,
     double atol,
     double rtol,
-    uint8_t nan,
+    loom_check_expect_close_nan_t nan,
     loom_location_id_t location,
     loom_op_t** out_op);
 

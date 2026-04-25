@@ -661,22 +661,42 @@ class EnumDef:
     name: Enum type name (e.g., "CmpIPredicate", "BroadcastDir").
     cases: The valid cases.
     doc: Human-readable description.
+    c_type: Optional externally defined C enum typedef used by generated
+        accessors and builders instead of emitting a dialect-local enum.
+    c_const_prefix: Optional prefix for cases in the external C enum.
+    c_include: Optional header containing c_type.
     """
 
     name: str
     cases: tuple[EnumCase, ...]
     doc: str = ""
+    c_type: str | None = None
+    c_const_prefix: str | None = None
+    c_include: str | None = None
 
     def __init__(
         self,
         name: str,
         cases: list[EnumCase] | tuple[EnumCase, ...],
         doc: str = "",
+        *,
+        c_type: str | None = None,
+        c_const_prefix: str | None = None,
+        c_include: str | None = None,
     ) -> None:
         object.__setattr__(self, "name", name)
         frozen_cases = tuple(cases)
         object.__setattr__(self, "cases", frozen_cases)
         object.__setattr__(self, "doc", doc)
+        object.__setattr__(self, "c_type", c_type)
+        object.__setattr__(self, "c_const_prefix", c_const_prefix)
+        object.__setattr__(self, "c_include", c_include)
+        if (c_type is None) != (c_const_prefix is None):
+            raise ValueError(
+                f"EnumDef '{name}': c_type and c_const_prefix must be provided together"
+            )
+        if c_include is not None and c_type is None:
+            raise ValueError(f"EnumDef '{name}': c_include requires c_type")
         # Validate no duplicate keywords or values.
         seen_keywords: set[str] = set()
         seen_values: set[int] = set()
@@ -688,6 +708,7 @@ class EnumDef:
             if case.value in seen_values:
                 raise ValueError(f"EnumDef '{name}': duplicate value {case.value}")
             seen_keywords.add(case.keyword)
+            seen_values.add(case.value)
             seen_values.add(case.value)
 
     @property

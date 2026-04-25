@@ -1200,7 +1200,7 @@ LOOM_DEFINE_ISA(loom_scalar_cmpi_isa, LOOM_OP_SCALAR_CMPI)
 LOOM_DEFINE_OPERAND(loom_scalar_cmpi_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_scalar_cmpi_rhs, 1)
 LOOM_DEFINE_RESULT(loom_scalar_cmpi_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_scalar_cmpi_predicate, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_scalar_cmpi_predicate, 0, loom_scalar_cmpi_predicate_t)
 iree_status_t loom_scalar_cmpi_build(
     loom_builder_t* builder, uint8_t predicate,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1219,7 +1219,7 @@ LOOM_DEFINE_ISA(loom_scalar_cmpf_isa, LOOM_OP_SCALAR_CMPF)
 LOOM_DEFINE_OPERAND(loom_scalar_cmpf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_scalar_cmpf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_scalar_cmpf_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_scalar_cmpf_predicate, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_scalar_cmpf_predicate, 0, loom_scalar_cmpf_predicate_t)
 LOOM_DEFINE_INSTANCE_FLAGS(loom_scalar_cmpf_fastmath)
 iree_status_t loom_scalar_cmpf_build(
     loom_builder_t* builder, uint8_t instance_flags,

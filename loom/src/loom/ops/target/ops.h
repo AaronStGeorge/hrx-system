@@ -52,8 +52,8 @@ typedef enum loom_target_artifact_abi_e {
 LOOM_DEFINE_ISA(loom_target_artifact_isa, LOOM_OP_TARGET_ARTIFACT)
 LOOM_DEFINE_ATTR_SYMBOL(loom_target_artifact_symbol, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_target_artifact_target, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_target_artifact_artifact_format, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_target_artifact_abi, 3)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_target_artifact_artifact_format, 2, loom_target_artifact_artifact_format_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_target_artifact_abi, 3, loom_target_artifact_abi_t)
 enum loom_target_artifact_build_flag_bits_e {
   LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ARTIFACT_FORMAT = 1u << 0,
   LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ABI = 1u << 1,

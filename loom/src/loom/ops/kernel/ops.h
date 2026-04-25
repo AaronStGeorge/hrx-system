@@ -13,6 +13,7 @@
 #define LOOM_OPS_KERNEL_OPS_H_
 
 #include "loom/ops/op_defs.h"
+#include "loom/ops/cache.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,30 +36,6 @@ enum {
   LOOM_OP_KERNEL_WORKGROUP_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 13),
   LOOM_OP_KERNEL_COUNT_ = 14,
 };
-
-// Target-independent cache scope for memory operations.
-typedef enum loom_kernel_cache_scope_e {
-  LOOM_KERNEL_CACHE_SCOPE_CU = 0,
-  LOOM_KERNEL_CACHE_SCOPE_SE = 1,
-  LOOM_KERNEL_CACHE_SCOPE_DEVICE = 2,
-  LOOM_KERNEL_CACHE_SCOPE_SYSTEM = 3,
-  LOOM_KERNEL_CACHE_SCOPE_COUNT_ = 4,
-} loom_kernel_cache_scope_t;
-
-// Target-independent temporal cache policy for memory operations.
-typedef enum loom_kernel_cache_temporal_e {
-  LOOM_KERNEL_CACHE_TEMPORAL_REGULAR = 0,
-  LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL = 1,
-  LOOM_KERNEL_CACHE_TEMPORAL_HIGH_TEMPORAL = 2,
-  LOOM_KERNEL_CACHE_TEMPORAL_LAST_USE = 3,
-  LOOM_KERNEL_CACHE_TEMPORAL_WRITEBACK = 4,
-  LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR = 5,
-  LOOM_KERNEL_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL = 6,
-  LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL = 7,
-  LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK = 8,
-  LOOM_KERNEL_CACHE_TEMPORAL_BYPASS = 9,
-  LOOM_KERNEL_CACHE_TEMPORAL_COUNT_ = 10,
-} loom_kernel_cache_temporal_t;
 
 // Required async copy direction.
 typedef enum loom_kernel_direction_e {
@@ -111,14 +88,14 @@ typedef enum loom_kernel_barrier_scope_e {
 // LOOM_OP_KERNEL_BARRIER: Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The supported kernel barrier is a workgroup execution barrier over workgroup memory with acquire-release ordering. Async-copy completion is modeled by kernel.async.wait; use kernel.barrier only when invocations must rendezvous before consuming shared memory.
 // kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
 LOOM_DEFINE_ISA(loom_kernel_barrier_isa, LOOM_OP_KERNEL_BARRIER)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_barrier_memory_space, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_barrier_ordering, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_barrier_scope, 2)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_memory_space, 0, loom_kernel_barrier_memory_space_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_ordering, 1, loom_kernel_barrier_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_scope, 2, loom_kernel_barrier_scope_t)
 iree_status_t loom_kernel_barrier_build(
     loom_builder_t* builder,
-    uint8_t memory_space,
-    uint8_t ordering,
-    uint8_t scope,
+    loom_kernel_barrier_memory_space_t memory_space,
+    loom_kernel_barrier_ordering_t ordering,
+    loom_kernel_barrier_scope_t scope,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_kernel_barrier_verify(
@@ -131,16 +108,16 @@ LOOM_DEFINE_ISA(loom_kernel_async_copy_isa, LOOM_OP_KERNEL_ASYNC_COPY)
 LOOM_DEFINE_OPERAND(loom_kernel_async_copy_source, 0)
 LOOM_DEFINE_OPERAND(loom_kernel_async_copy_dest, 1)
 LOOM_DEFINE_RESULT(loom_kernel_async_copy_token, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_cache_temporal, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_direction, 2)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_copy_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_copy_cache_temporal, 1, loom_cache_temporal_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_copy_direction, 2, loom_kernel_direction_t)
 iree_status_t loom_kernel_async_copy_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t source,
     loom_may_consume loom_value_id_t dest,
-    uint8_t cache_scope,
-    uint8_t cache_temporal,
-    uint8_t direction,
+    loom_cache_scope_t cache_scope,
+    loom_cache_temporal_t cache_temporal,
+    loom_kernel_direction_t direction,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -155,17 +132,17 @@ LOOM_DEFINE_OPERAND(loom_kernel_async_copy_mask_source, 0)
 LOOM_DEFINE_OPERAND(loom_kernel_async_copy_mask_dest, 1)
 LOOM_DEFINE_OPERAND(loom_kernel_async_copy_mask_predicate, 2)
 LOOM_DEFINE_RESULT(loom_kernel_async_copy_mask_token, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_mask_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_mask_cache_temporal, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_mask_direction, 2)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_copy_mask_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_copy_mask_cache_temporal, 1, loom_cache_temporal_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_copy_mask_direction, 2, loom_kernel_direction_t)
 iree_status_t loom_kernel_async_copy_mask_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t source,
     loom_may_consume loom_value_id_t dest,
     loom_may_consume loom_value_id_t predicate,
-    uint8_t cache_scope,
-    uint8_t cache_temporal,
-    uint8_t direction,
+    loom_cache_scope_t cache_scope,
+    loom_cache_temporal_t cache_temporal,
+    loom_kernel_direction_t direction,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -179,14 +156,14 @@ LOOM_DEFINE_ISA(loom_kernel_async_gather_isa, LOOM_OP_KERNEL_ASYNC_GATHER)
 LOOM_DEFINE_OPERAND(loom_kernel_async_gather_source, 0)
 LOOM_DEFINE_OPERAND(loom_kernel_async_gather_dest, 1)
 LOOM_DEFINE_RESULT(loom_kernel_async_gather_token, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_gather_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_gather_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_gather_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_gather_cache_temporal, 1, loom_cache_temporal_t)
 iree_status_t loom_kernel_async_gather_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t source,
     loom_may_consume loom_value_id_t dest,
-    uint8_t cache_scope,
-    uint8_t cache_temporal,
+    loom_cache_scope_t cache_scope,
+    loom_cache_temporal_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -201,15 +178,15 @@ LOOM_DEFINE_OPERAND(loom_kernel_async_gather_mask_source, 0)
 LOOM_DEFINE_OPERAND(loom_kernel_async_gather_mask_dest, 1)
 LOOM_DEFINE_OPERAND(loom_kernel_async_gather_mask_predicate, 2)
 LOOM_DEFINE_RESULT(loom_kernel_async_gather_mask_token, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_gather_mask_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_gather_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_gather_mask_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_gather_mask_cache_temporal, 1, loom_cache_temporal_t)
 iree_status_t loom_kernel_async_gather_mask_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t source,
     loom_may_consume loom_value_id_t dest,
     loom_may_consume loom_value_id_t predicate,
-    uint8_t cache_scope,
-    uint8_t cache_temporal,
+    loom_cache_scope_t cache_scope,
+    loom_cache_temporal_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -271,15 +248,15 @@ LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_load_to_lds_source, 0)
 LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_load_to_lds_dest, 1)
 LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_load_to_lds_descriptor, 2)
 LOOM_DEFINE_RESULT(loom_kernel_async_tensor_load_to_lds_token, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_tensor_load_to_lds_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_tensor_load_to_lds_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_tensor_load_to_lds_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_tensor_load_to_lds_cache_temporal, 1, loom_cache_temporal_t)
 iree_status_t loom_kernel_async_tensor_load_to_lds_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t source,
     loom_may_consume loom_value_id_t dest,
     loom_may_consume loom_value_id_t descriptor,
-    uint8_t cache_scope,
-    uint8_t cache_temporal,
+    loom_cache_scope_t cache_scope,
+    loom_cache_temporal_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -294,15 +271,15 @@ LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_store_from_lds_source, 0)
 LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_store_from_lds_dest, 1)
 LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_store_from_lds_descriptor, 2)
 LOOM_DEFINE_RESULT(loom_kernel_async_tensor_store_from_lds_token, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_tensor_store_from_lds_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_tensor_store_from_lds_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_tensor_store_from_lds_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_tensor_store_from_lds_cache_temporal, 1, loom_cache_temporal_t)
 iree_status_t loom_kernel_async_tensor_store_from_lds_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t source,
     loom_may_consume loom_value_id_t dest,
     loom_may_consume loom_value_id_t descriptor,
-    uint8_t cache_scope,
-    uint8_t cache_temporal,
+    loom_cache_scope_t cache_scope,
+    loom_cache_temporal_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -317,15 +294,15 @@ LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_source, 0)
 LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_dest, 1)
 LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_cluster_mask, 2)
 LOOM_DEFINE_RESULT(loom_kernel_async_cluster_gather_token, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_cluster_gather_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_cluster_gather_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_cluster_gather_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_cluster_gather_cache_temporal, 1, loom_cache_temporal_t)
 iree_status_t loom_kernel_async_cluster_gather_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t source,
     loom_may_consume loom_value_id_t dest,
     loom_may_consume loom_value_id_t cluster_mask,
-    uint8_t cache_scope,
-    uint8_t cache_temporal,
+    loom_cache_scope_t cache_scope,
+    loom_cache_temporal_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -341,16 +318,16 @@ LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_mask_dest, 1)
 LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_mask_cluster_mask, 2)
 LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_mask_predicate, 3)
 LOOM_DEFINE_RESULT(loom_kernel_async_cluster_gather_mask_token, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_cluster_gather_mask_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_cluster_gather_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_cluster_gather_mask_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_async_cluster_gather_mask_cache_temporal, 1, loom_cache_temporal_t)
 iree_status_t loom_kernel_async_cluster_gather_mask_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t source,
     loom_may_consume loom_value_id_t dest,
     loom_may_consume loom_value_id_t cluster_mask,
     loom_may_consume loom_value_id_t predicate,
-    uint8_t cache_scope,
-    uint8_t cache_temporal,
+    loom_cache_scope_t cache_scope,
+    loom_cache_temporal_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -362,10 +339,10 @@ iree_status_t loom_kernel_async_cluster_gather_mask_verify(
 // %tid = kernel.workitem.id<x> : index
 LOOM_DEFINE_ISA(loom_kernel_workitem_id_isa, LOOM_OP_KERNEL_WORKITEM_ID)
 LOOM_DEFINE_RESULT(loom_kernel_workitem_id_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_workitem_id_dimension, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_workitem_id_dimension, 0, loom_kernel_dimension_t)
 iree_status_t loom_kernel_workitem_id_build(
     loom_builder_t* builder,
-    uint8_t dimension,
+    loom_kernel_dimension_t dimension,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -374,10 +351,10 @@ iree_status_t loom_kernel_workitem_id_build(
 // %bid = kernel.workgroup.id<x> : index
 LOOM_DEFINE_ISA(loom_kernel_workgroup_id_isa, LOOM_OP_KERNEL_WORKGROUP_ID)
 LOOM_DEFINE_RESULT(loom_kernel_workgroup_id_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_kernel_workgroup_id_dimension, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_workgroup_id_dimension, 0, loom_kernel_dimension_t)
 iree_status_t loom_kernel_workgroup_id_build(
     loom_builder_t* builder,
-    uint8_t dimension,
+    loom_kernel_dimension_t dimension,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

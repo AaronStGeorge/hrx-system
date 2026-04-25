@@ -5,9 +5,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Shared atomic operation vocabulary used by scalar view atomics and vector
-// atomics. Dialects still generate their own enum names for parser/printer and
-// builder APIs, but the numeric values are intentionally identical to these
-// shared constants so verification and lowering can use one semantic table.
+// atomics. Generated dialect APIs alias these enum types directly so
+// verification, lowering, and builders use one semantic domain.
 
 #ifndef LOOM_OPS_ATOMIC_H_
 #define LOOM_OPS_ATOMIC_H_
@@ -70,6 +69,21 @@ typedef enum loom_atomic_ordering_e {
   LOOM_ATOMIC_ORDERING_COUNT_,
 } loom_atomic_ordering_t;
 
+// Synchronization scope for atomic memory effects.
+typedef enum loom_atomic_scope_e {
+  // Current invocation or thread.
+  LOOM_ATOMIC_SCOPE_THREAD = 0,
+  // Current SIMD subgroup or wave.
+  LOOM_ATOMIC_SCOPE_SUBGROUP = 1,
+  // Current workgroup or block.
+  LOOM_ATOMIC_SCOPE_WORKGROUP = 2,
+  // Current device.
+  LOOM_ATOMIC_SCOPE_DEVICE = 3,
+  // Whole system.
+  LOOM_ATOMIC_SCOPE_SYSTEM = 4,
+  LOOM_ATOMIC_SCOPE_COUNT_,
+} loom_atomic_scope_t;
+
 // Compare-exchange ordering validation error.
 typedef enum loom_atomic_cmpxchg_ordering_error_e {
   // The success/failure ordering pair is valid.
@@ -85,6 +99,9 @@ bool loom_atomic_kind_is_valid(uint8_t kind);
 
 // Returns true when |ordering| is a known loom_atomic_ordering_t value.
 bool loom_atomic_ordering_is_valid(uint8_t ordering);
+
+// Returns true when |scope| is a known loom_atomic_scope_t value.
+bool loom_atomic_scope_is_valid(uint8_t scope);
 
 // Validates the success/failure ordering pair for compare-exchange atomics.
 loom_atomic_cmpxchg_ordering_error_t loom_atomic_cmpxchg_ordering_validate(

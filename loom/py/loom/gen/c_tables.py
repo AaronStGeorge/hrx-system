@@ -941,6 +941,8 @@ def _collect_shared_enums(
     for op in ops:
         for attr_def in op.attrs:
             if attr_def.attr_type == "enum" and attr_def.enum_def is not None:
+                if attr_def.enum_def.c_type is not None:
+                    continue
                 usage[id(attr_def.enum_def)].append((op, attr_def))
 
     shared: dict[int, tuple[str, str, EnumDef]] = {}
@@ -964,6 +966,13 @@ def _collect_shared_enums(
     return shared
 
 
+def _enum_c_prefix_from_type(c_type: str) -> str:
+    """Returns the C prefix for an enum typedef name."""
+    if c_type.endswith("_t"):
+        return c_type[:-2]
+    return c_type
+
+
 def _enum_c_prefix(
     op: Op,
     attr_def: AttrDef,
@@ -974,11 +983,44 @@ def _enum_c_prefix(
     Uses the shared dialect-level name if the EnumDef is shared across
     multiple ops, otherwise falls back to the per-op prefix.
     """
+    if attr_def.enum_def is not None and attr_def.enum_def.c_type is not None:
+        assert attr_def.enum_def.c_const_prefix is not None
+        return (
+            _enum_c_prefix_from_type(attr_def.enum_def.c_type),
+            attr_def.enum_def.c_const_prefix,
+        )
     if attr_def.enum_def is not None and id(attr_def.enum_def) in shared_enums:
         c_prefix, const_prefix, _ = shared_enums[id(attr_def.enum_def)]
         return c_prefix, const_prefix
     c_prefix = _c_prefix(op) + "_" + attr_def.name
     return c_prefix, c_prefix.upper()
+
+
+def _enum_c_type(
+    op: Op,
+    attr_def: AttrDef,
+    shared_enums: dict[int, tuple[str, str, EnumDef]],
+) -> str:
+    """Returns the C type exposed for an enum attribute."""
+    if attr_def.enum_def is not None and attr_def.enum_def.c_type is not None:
+        return attr_def.enum_def.c_type
+    c_prefix, _ = _enum_c_prefix(op, attr_def, shared_enums)
+    return f"{c_prefix}_t"
+
+
+def _enum_names_array_name(
+    op: Op,
+    attr_def: AttrDef,
+    shared_enums: dict[int, tuple[str, str, EnumDef]],
+) -> str:
+    """Returns the enum keyword table symbol for an enum attribute."""
+    if attr_def.enum_def is not None and attr_def.enum_def.c_type is not None:
+        c_prefix, _ = _enum_c_prefix(op, attr_def, shared_enums)
+        return f"{c_prefix}_names"
+    shared = shared_enums.get(id(attr_def.enum_def)) if attr_def.enum_def is not None else None
+    if shared:
+        return f"{shared[0]}_names"
+    return f"{_c_prefix(op)}_{attr_def.name}_names"
 
 
 def _enum_case_c_ident(keyword: str) -> str:
@@ -1557,7 +1599,18 @@ def _static_tied_results(op: Op) -> list[tuple[int, int]]:
     return ties
 
 
-def _extract_c_params(op: Op) -> list[dict[str, Any]]:
+def _c_attr_param_type(
+    op: Op,
+    attr_def: AttrDef,
+    shared_enums: dict[int, tuple[str, str, EnumDef]],
+) -> str:
+    """Returns the C builder parameter type for an attribute."""
+    if attr_def.attr_type == "enum" and attr_def.enum_def is not None and not attr_def.optional:
+        return _enum_c_type(op, attr_def, shared_enums)
+    return _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t")
+
+
+def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]]) -> list[dict[str, Any]]:
     """Extracts builder parameters for a C function from format specs.
 
     Mirrors the Python _extract_params but produces C-oriented descriptors.
@@ -1572,7 +1625,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
         attr_def = op.attr(name)
         if attr_def is None:
             return
-        c_type = _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t")
+        c_type = _c_attr_param_type(op, attr_def, shared_enums)
         params.append(
             {
                 "name": name,
@@ -1882,7 +1935,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                         {
                             "name": name,
                             "kind": "descriptor_ref",
-                            "c_type": _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t"),
+                            "c_type": _c_attr_param_type(op, attr_def, shared_enums),
                             "attr_type": attr_def.attr_type,
                             "attr_index": _resolve_attr_index(op, name, "builder"),
                             "stable_id_attr_index": _resolve_attr_index(op, stable_id, "builder"),
@@ -2022,9 +2075,9 @@ def _build_c_param_list(params: list[dict[str, object]], layout: FieldLayout, pr
     return c_params
 
 
-def _generate_builder_declaration(op: Op, prefix: str) -> list[str]:
+def _generate_builder_declaration(op: Op, prefix: str, shared_enums: dict[int, tuple[str, str, EnumDef]]) -> list[str]:
     """Generates the C builder function declaration for a complex op."""
-    params = _extract_c_params(op)
+    params = _extract_c_params(op, shared_enums)
     layout = compute_layout(op)
     lines: list[str] = []
     c_params = _build_c_param_list(params, layout, prefix)
@@ -2052,9 +2105,14 @@ def _emit_builder_count_check(
     lines.append("  }")
 
 
-def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> list[str]:
+def _generate_builder_implementation(
+    op: Op,
+    prefix: str,
+    enum_name: str,
+    shared_enums: dict[int, tuple[str, str, EnumDef]],
+) -> list[str]:
     """Generates the C builder function implementation for a complex op."""
-    params = _extract_c_params(op)
+    params = _extract_c_params(op, shared_enums)
     layout = compute_layout(op)
     func_args_are_operands = _func_args_are_operands(op)
     lines: list[str] = []
@@ -2489,6 +2547,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
     lines: list[str] = []
     guard = _guard_name(dialect_name)
     dialect_enum = _c_dialect_enum(dialect_name)
+    shared_enums = _collect_shared_enums(dialect_name, ops)
 
     lines.append(COPYRIGHT)
     lines.extend(
@@ -2504,6 +2563,10 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
     lines.append(f"#define {guard}")
     lines.append("")
     lines.append('#include "loom/ops/op_defs.h"')
+    enum_includes = sorted(
+        {attr_def.enum_def.c_include for op in ops for attr_def in op.attrs if attr_def.attr_type == "enum" and attr_def.enum_def is not None and attr_def.enum_def.c_include is not None}
+    )
+    lines.extend(f'#include "{include}"' for include in enum_includes)
     lines.append("")
     lines.append("#ifdef __cplusplus")
     lines.append('extern "C" {')
@@ -2539,8 +2602,6 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
     # multiple ops (e.g., CallingConv used by func.def, func.decl,
     # func.template, func.ukernel), emit it once with a dialect-level
     # name (loom_func_cc_t) instead of duplicating per-op.
-    shared_enums = _collect_shared_enums(dialect_name, ops)
-
     # Emit shared enums first.
     for c_prefix, const_prefix, enum_def in shared_enums.values():
         if enum_def.doc:
@@ -2557,6 +2618,8 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
     for op in ops:
         for attr_def in op.attrs:
             if attr_def.attr_type != "enum" or attr_def.enum_def is None:
+                continue
+            if attr_def.enum_def.c_type is not None:
                 continue
             if id(attr_def.enum_def) in shared_enums:
                 continue
@@ -2641,7 +2704,10 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
                 "any": "LOOM_DEFINE_ATTR_ANY",
             }
             macro = macro_map.get(attr_def.attr_type)
-            if macro:
+            if attr_def.attr_type == "enum" and attr_def.enum_def:
+                enum_type = _enum_c_type(op, attr_def, shared_enums)
+                lines.append(f"LOOM_DEFINE_ATTR_ENUM_TYPED({prefix}_{attr_def.name}, {desc_index}, {enum_type})")
+            elif macro:
                 lines.append(f"{macro}({prefix}_{attr_def.name}, {desc_index})")
 
         for region_def in op.regions:
@@ -2652,7 +2718,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
                 lines.append(f"LOOM_DEFINE_REGION({prefix}_{region_def.name}, {desc.index})")
 
         # Builder declaration.
-        build_params = _extract_c_params(op)
+        build_params = _extract_c_params(op, shared_enums)
         build_flags_declaration = _generate_build_flags_declaration(prefix, build_params)
         if build_flags_declaration:
             lines.extend(build_flags_declaration)
@@ -2697,7 +2763,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             lines.append("    loom_type_t result_type, loom_location_id_t location,")
             lines.append("    loom_op_t** out_op);")
         else:
-            lines.extend(_generate_builder_declaration(op, prefix))
+            lines.extend(_generate_builder_declaration(op, prefix, shared_enums))
 
         # Canonicalize function declaration (hand-written, linked in).
         if op.canonicalize and op.canonicalize not in emitted_canonicalize_declarations:
@@ -2877,18 +2943,18 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
                 lines.append("    NULL,")
         lines.append("};")
 
-    # Shared enum case name arrays (one per shared EnumDef).
-    for c_prefix, _, enum_def in shared_enums.values():
-        _emit_enum_case_names(lines, f"{c_prefix}_names", enum_def)
-
-    # Per-op enum case name arrays (non-shared only).
+    # Enum case name arrays. Generated C may expose an external enum alias,
+    # a dialect-level shared enum, or a per-op enum typedef, but all three
+    # still need one parser/printer keyword table per C symbol name.
+    emitted_enum_case_name_arrays: set[str] = set()
     for op in ops:
-        prefix = _c_prefix(op)
         for attr_def in op.attrs:
             if attr_def.attr_type == "enum" and attr_def.enum_def:
-                if id(attr_def.enum_def) in shared_enums:
+                array_name = _enum_names_array_name(op, attr_def, shared_enums)
+                if array_name in emitted_enum_case_name_arrays:
                     continue
-                _emit_enum_case_names(lines, f"{prefix}_{attr_def.name}_names", attr_def.enum_def)
+                _emit_enum_case_names(lines, array_name, attr_def.enum_def)
+                emitted_enum_case_name_arrays.add(array_name)
 
     # Instance flags case name B-string arrays (for ops with Flags
     # format element). Each entry is a loom_bstring_t.
@@ -2953,11 +3019,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
                 flag_names.append("LOOM_ATTR_OPEN_ENUM")
             flags = " | ".join(flag_names) if flag_names else "0"
             if attr_def.attr_type == "enum" and attr_def.enum_def:
-                shared = shared_enums.get(id(attr_def.enum_def))
-                if shared:
-                    enum_names = f"{shared[0]}_names"
-                else:
-                    enum_names = f"{prefix}_{attr_def.name}_names"
+                enum_names = _enum_names_array_name(op, attr_def, shared_enums)
                 max_value = max(c.value for c in attr_def.enum_def.cases)
                 enum_case_count = max_value + 1
             else:
@@ -3219,6 +3281,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
 def generate_builders_c(dialect_name: str, ops: Sequence[Op]) -> str:
     """Generates the builders.c file for a dialect."""
     lines: list[str] = []
+    shared_enums = _collect_shared_enums(dialect_name, ops)
 
     lines.append(COPYRIGHT)
     lines.extend(line_comment_header("//", generator="loom.gen.c_tables"))
@@ -3254,7 +3317,7 @@ def generate_builders_c(dialect_name: str, ops: Sequence[Op]) -> str:
         elif pattern == "COMPARISON_WITH_FLAGS":
             lines.append(f"LOOM_DEFINE_COMPARISON_OP_WITH_FLAGS_BUILDER({prefix}_build, {enum_name})")
         else:
-            lines.extend(_generate_builder_implementation(op, prefix, enum_name))
+            lines.extend(_generate_builder_implementation(op, prefix, enum_name, shared_enums))
 
         lines.append("")
 

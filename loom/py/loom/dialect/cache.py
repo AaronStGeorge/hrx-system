@@ -59,6 +59,9 @@ CacheTemporal = EnumDef(
         ),
     ],
     doc="Target-independent temporal cache policy for memory operations.",
+    c_type="loom_cache_temporal_t",
+    c_const_prefix="LOOM_CACHE_TEMPORAL",
+    c_include="loom/ops/cache.h",
 )
 
 CacheScope = EnumDef(
@@ -70,4 +73,7 @@ CacheScope = EnumDef(
         EnumCase("system", 3, doc="Cache/coherency scope is the full system."),
     ],
     doc="Target-independent cache scope for memory operations.",
+    c_type="loom_cache_scope_t",
+    c_const_prefix="LOOM_CACHE_SCOPE",
+    c_include="loom/ops/cache.h",
 )

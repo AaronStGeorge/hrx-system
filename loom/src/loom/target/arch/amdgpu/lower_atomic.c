@@ -1386,8 +1386,8 @@ static bool loom_amdgpu_atomic_select(
   }
   const uint8_t expected_scope =
       out_plan->source.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP
-          ? LOOM_VIEW_SCOPE_WORKGROUP
-          : LOOM_VIEW_SCOPE_DEVICE;
+          ? LOOM_ATOMIC_SCOPE_WORKGROUP
+          : LOOM_ATOMIC_SCOPE_DEVICE;
   if (loom_amdgpu_atomic_scope(source_op) != expected_scope) {
     diagnostic->rejection_bits |= LOOM_AMDGPU_ATOMIC_REJECTION_SCOPE;
     return false;

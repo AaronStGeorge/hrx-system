@@ -13,6 +13,8 @@
 #define LOOM_OPS_VECTOR_OPS_H_
 
 #include "loom/ops/op_defs.h"
+#include "loom/ops/atomic.h"
+#include "loom/ops/cache.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -167,61 +169,6 @@ enum {
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NSW ((uint8_t)1)
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NUW ((uint8_t)2)
 
-// Target-independent cache scope for memory operations.
-typedef enum loom_vector_cache_scope_e {
-  LOOM_VECTOR_CACHE_SCOPE_CU = 0,
-  LOOM_VECTOR_CACHE_SCOPE_SE = 1,
-  LOOM_VECTOR_CACHE_SCOPE_DEVICE = 2,
-  LOOM_VECTOR_CACHE_SCOPE_SYSTEM = 3,
-  LOOM_VECTOR_CACHE_SCOPE_COUNT_ = 4,
-} loom_vector_cache_scope_t;
-
-// Target-independent temporal cache policy for memory operations.
-typedef enum loom_vector_cache_temporal_e {
-  LOOM_VECTOR_CACHE_TEMPORAL_REGULAR = 0,
-  LOOM_VECTOR_CACHE_TEMPORAL_NON_TEMPORAL = 1,
-  LOOM_VECTOR_CACHE_TEMPORAL_HIGH_TEMPORAL = 2,
-  LOOM_VECTOR_CACHE_TEMPORAL_LAST_USE = 3,
-  LOOM_VECTOR_CACHE_TEMPORAL_WRITEBACK = 4,
-  LOOM_VECTOR_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR = 5,
-  LOOM_VECTOR_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL = 6,
-  LOOM_VECTOR_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL = 7,
-  LOOM_VECTOR_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK = 8,
-  LOOM_VECTOR_CACHE_TEMPORAL_BYPASS = 9,
-  LOOM_VECTOR_CACHE_TEMPORAL_COUNT_ = 10,
-} loom_vector_cache_temporal_t;
-
-// Read-modify-write operation kind supported by view and vector atomics.
-typedef enum loom_vector_kind_e {
-  LOOM_VECTOR_KIND_XCHGI = 0,
-  LOOM_VECTOR_KIND_XCHGF = 1,
-  LOOM_VECTOR_KIND_ADDI = 2,
-  LOOM_VECTOR_KIND_ADDF = 3,
-  LOOM_VECTOR_KIND_SUBI = 4,
-  LOOM_VECTOR_KIND_ANDI = 5,
-  LOOM_VECTOR_KIND_ORI = 6,
-  LOOM_VECTOR_KIND_XORI = 7,
-  LOOM_VECTOR_KIND_MINSI = 8,
-  LOOM_VECTOR_KIND_MAXSI = 9,
-  LOOM_VECTOR_KIND_MINUI = 10,
-  LOOM_VECTOR_KIND_MAXUI = 11,
-  LOOM_VECTOR_KIND_MINIMUMF = 12,
-  LOOM_VECTOR_KIND_MAXIMUMF = 13,
-  LOOM_VECTOR_KIND_MINNUMF = 14,
-  LOOM_VECTOR_KIND_MAXNUMF = 15,
-  LOOM_VECTOR_KIND_COUNT_ = 16,
-} loom_vector_kind_t;
-
-// Synchronization scope for atomic memory effects.
-typedef enum loom_vector_scope_e {
-  LOOM_VECTOR_SCOPE_THREAD = 0,
-  LOOM_VECTOR_SCOPE_SUBGROUP = 1,
-  LOOM_VECTOR_SCOPE_WORKGROUP = 2,
-  LOOM_VECTOR_SCOPE_DEVICE = 3,
-  LOOM_VECTOR_SCOPE_SYSTEM = 4,
-  LOOM_VECTOR_SCOPE_COUNT_ = 5,
-} loom_vector_scope_t;
-
 // NaN handling policy for table-based scalar quantization.
 typedef enum loom_vector_table_quantize_nan_e {
   LOOM_VECTOR_TABLE_QUANTIZE_NAN_ZERO = 0,
@@ -235,66 +182,6 @@ typedef enum loom_vector_table_quantize_tie_e {
   LOOM_VECTOR_TABLE_QUANTIZE_TIE_UPPER = 1,
   LOOM_VECTOR_TABLE_QUANTIZE_TIE_COUNT_ = 2,
 } loom_vector_table_quantize_tie_t;
-
-// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
-typedef enum loom_vector_atomic_reduce_ordering_e {
-  LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_RELAXED = 0,
-  LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_ACQUIRE = 1,
-  LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_RELEASE = 2,
-  LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_ACQ_REL = 3,
-  LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_SEQ_CST = 4,
-  LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_COUNT_ = 5,
-} loom_vector_atomic_reduce_ordering_t;
-
-// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
-typedef enum loom_vector_atomic_reduce_mask_ordering_e {
-  LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_RELAXED = 0,
-  LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_ACQUIRE = 1,
-  LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_RELEASE = 2,
-  LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_ACQ_REL = 3,
-  LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_SEQ_CST = 4,
-  LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_COUNT_ = 5,
-} loom_vector_atomic_reduce_mask_ordering_t;
-
-// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
-typedef enum loom_vector_atomic_rmw_ordering_e {
-  LOOM_VECTOR_ATOMIC_RMW_ORDERING_RELAXED = 0,
-  LOOM_VECTOR_ATOMIC_RMW_ORDERING_ACQUIRE = 1,
-  LOOM_VECTOR_ATOMIC_RMW_ORDERING_RELEASE = 2,
-  LOOM_VECTOR_ATOMIC_RMW_ORDERING_ACQ_REL = 3,
-  LOOM_VECTOR_ATOMIC_RMW_ORDERING_SEQ_CST = 4,
-  LOOM_VECTOR_ATOMIC_RMW_ORDERING_COUNT_ = 5,
-} loom_vector_atomic_rmw_ordering_t;
-
-// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
-typedef enum loom_vector_atomic_rmw_mask_ordering_e {
-  LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_RELAXED = 0,
-  LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_ACQUIRE = 1,
-  LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_RELEASE = 2,
-  LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_ACQ_REL = 3,
-  LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_SEQ_CST = 4,
-  LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_COUNT_ = 5,
-} loom_vector_atomic_rmw_mask_ordering_t;
-
-// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
-typedef enum loom_vector_atomic_cmpxchg_success_ordering_e {
-  LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_RELAXED = 0,
-  LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_ACQUIRE = 1,
-  LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_RELEASE = 2,
-  LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_ACQ_REL = 3,
-  LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_SEQ_CST = 4,
-  LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_COUNT_ = 5,
-} loom_vector_atomic_cmpxchg_success_ordering_t;
-
-// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
-typedef enum loom_vector_atomic_cmpxchg_failure_ordering_e {
-  LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_RELAXED = 0,
-  LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_ACQUIRE = 1,
-  LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_RELEASE = 2,
-  LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_ACQ_REL = 3,
-  LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_SEQ_CST = 4,
-  LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_COUNT_ = 5,
-} loom_vector_atomic_cmpxchg_failure_ordering_t;
 
 // Integer comparison predicates.
 typedef enum loom_vector_cmpi_predicate_e {
@@ -748,14 +635,14 @@ LOOM_DEFINE_ISA(loom_vector_table_quantize_isa, LOOM_OP_VECTOR_TABLE_QUANTIZE)
 LOOM_DEFINE_OPERAND(loom_vector_table_quantize_input, 0)
 LOOM_DEFINE_OPERAND(loom_vector_table_quantize_thresholds, 1)
 LOOM_DEFINE_RESULT(loom_vector_table_quantize_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_table_quantize_nan, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_table_quantize_tie, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_table_quantize_nan, 0, loom_vector_table_quantize_nan_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_table_quantize_tie, 1, loom_vector_table_quantize_tie_t)
 iree_status_t loom_vector_table_quantize_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t input,
     loom_may_consume loom_value_id_t thresholds,
-    uint8_t nan,
-    uint8_t tie,
+    loom_vector_table_quantize_nan_t nan,
+    loom_vector_table_quantize_tie_t tie,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -796,8 +683,8 @@ LOOM_DEFINE_ISA(loom_vector_load_isa, LOOM_OP_VECTOR_LOAD)
 LOOM_DEFINE_OPERAND(loom_vector_load_view, 0)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_load_indices, 1)
 LOOM_DEFINE_RESULT(loom_vector_load_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_load_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_load_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_load_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_load_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_load_static_indices, 2)
 enum loom_vector_load_build_flag_bits_e {
   LOOM_VECTOR_LOAD_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -827,8 +714,8 @@ LOOM_DEFINE_ISA(loom_vector_store_isa, LOOM_OP_VECTOR_STORE)
 LOOM_DEFINE_OPERAND(loom_vector_store_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_store_view, 1)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_store_indices, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_store_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_store_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_store_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_store_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_store_static_indices, 2)
 enum loom_vector_store_build_flag_bits_e {
   LOOM_VECTOR_STORE_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -860,8 +747,8 @@ LOOM_DEFINE_OPERAND(loom_vector_load_mask_mask, 1)
 LOOM_DEFINE_OPERAND(loom_vector_load_mask_passthrough, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_load_mask_indices, 3)
 LOOM_DEFINE_RESULT(loom_vector_load_mask_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_load_mask_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_load_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_load_mask_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_load_mask_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_load_mask_static_indices, 2)
 enum loom_vector_load_mask_build_flag_bits_e {
   LOOM_VECTOR_LOAD_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -895,8 +782,8 @@ LOOM_DEFINE_OPERAND(loom_vector_store_mask_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_store_mask_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_store_mask_mask, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_store_mask_indices, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_store_mask_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_store_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_store_mask_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_store_mask_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_store_mask_static_indices, 2)
 enum loom_vector_store_mask_build_flag_bits_e {
   LOOM_VECTOR_STORE_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -929,8 +816,8 @@ LOOM_DEFINE_OPERAND(loom_vector_load_expand_mask, 1)
 LOOM_DEFINE_OPERAND(loom_vector_load_expand_passthrough, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_load_expand_indices, 3)
 LOOM_DEFINE_RESULT(loom_vector_load_expand_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_load_expand_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_load_expand_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_load_expand_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_load_expand_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_load_expand_static_indices, 2)
 enum loom_vector_load_expand_build_flag_bits_e {
   LOOM_VECTOR_LOAD_EXPAND_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -963,8 +850,8 @@ LOOM_DEFINE_OPERAND(loom_vector_store_compress_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_store_compress_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_store_compress_mask, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_store_compress_indices, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_store_compress_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_store_compress_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_store_compress_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_store_compress_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_store_compress_static_indices, 2)
 enum loom_vector_store_compress_build_flag_bits_e {
   LOOM_VECTOR_STORE_COMPRESS_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -996,8 +883,8 @@ LOOM_DEFINE_OPERAND(loom_vector_gather_view, 0)
 LOOM_DEFINE_OPERAND(loom_vector_gather_offsets, 1)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_gather_indices, 2)
 LOOM_DEFINE_RESULT(loom_vector_gather_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_gather_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_gather_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_gather_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_gather_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_gather_static_indices, 2)
 enum loom_vector_gather_build_flag_bits_e {
   LOOM_VECTOR_GATHER_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -1030,8 +917,8 @@ LOOM_DEFINE_OPERAND(loom_vector_scatter_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_offsets, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_scatter_indices, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_scatter_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_scatter_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_scatter_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_scatter_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_scatter_static_indices, 2)
 enum loom_vector_scatter_build_flag_bits_e {
   LOOM_VECTOR_SCATTER_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -1065,8 +952,8 @@ LOOM_DEFINE_OPERAND(loom_vector_gather_mask_mask, 2)
 LOOM_DEFINE_OPERAND(loom_vector_gather_mask_passthrough, 3)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_gather_mask_indices, 4)
 LOOM_DEFINE_RESULT(loom_vector_gather_mask_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_gather_mask_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_gather_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_gather_mask_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_gather_mask_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_gather_mask_static_indices, 2)
 enum loom_vector_gather_mask_build_flag_bits_e {
   LOOM_VECTOR_GATHER_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -1101,8 +988,8 @@ LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_offsets, 2)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_mask, 3)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_scatter_mask_indices, 4)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_scatter_mask_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_scatter_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_scatter_mask_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_scatter_mask_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_scatter_mask_static_indices, 2)
 enum loom_vector_scatter_mask_build_flag_bits_e {
   LOOM_VECTOR_SCATTER_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -1135,11 +1022,11 @@ LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_offsets, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_reduce_indices, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_kind, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_ordering, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_scope, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_cache_scope, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_cache_temporal, 4)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_reduce_kind, 0, loom_atomic_kind_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_reduce_ordering, 1, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_reduce_scope, 2, loom_atomic_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_reduce_cache_scope, 3, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_reduce_cache_temporal, 4, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_reduce_static_indices, 5)
 enum loom_vector_atomic_reduce_build_flag_bits_e {
   LOOM_VECTOR_ATOMIC_REDUCE_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -1149,7 +1036,7 @@ typedef uint32_t loom_vector_atomic_reduce_build_flags_t;
 iree_status_t loom_vector_atomic_reduce_build(
     loom_builder_t* builder,
     loom_vector_atomic_reduce_build_flags_t build_flags,
-    uint8_t kind,
+    loom_atomic_kind_t kind,
     loom_value_id_t value,
     loom_value_id_t view,
     const loom_value_id_t* indices,
@@ -1157,8 +1044,8 @@ iree_status_t loom_vector_atomic_reduce_build(
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
     loom_value_id_t offsets,
-    uint8_t ordering,
-    uint8_t scope,
+    loom_atomic_ordering_t ordering,
+    loom_atomic_scope_t scope,
     loom_optional uint8_t cache_scope,
     loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
@@ -1175,11 +1062,11 @@ LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_mask_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_mask_offsets, 2)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_mask_mask, 3)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_reduce_mask_indices, 4)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_kind, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_ordering, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_scope, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_cache_scope, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_cache_temporal, 4)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_reduce_mask_kind, 0, loom_atomic_kind_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_reduce_mask_ordering, 1, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_reduce_mask_scope, 2, loom_atomic_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_reduce_mask_cache_scope, 3, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_reduce_mask_cache_temporal, 4, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_reduce_mask_static_indices, 5)
 enum loom_vector_atomic_reduce_mask_build_flag_bits_e {
   LOOM_VECTOR_ATOMIC_REDUCE_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -1189,7 +1076,7 @@ typedef uint32_t loom_vector_atomic_reduce_mask_build_flags_t;
 iree_status_t loom_vector_atomic_reduce_mask_build(
     loom_builder_t* builder,
     loom_vector_atomic_reduce_mask_build_flags_t build_flags,
-    uint8_t kind,
+    loom_atomic_kind_t kind,
     loom_value_id_t value,
     loom_value_id_t view,
     const loom_value_id_t* indices,
@@ -1198,8 +1085,8 @@ iree_status_t loom_vector_atomic_reduce_mask_build(
     iree_host_size_t static_indices_count,
     loom_value_id_t offsets,
     loom_value_id_t mask,
-    uint8_t ordering,
-    uint8_t scope,
+    loom_atomic_ordering_t ordering,
+    loom_atomic_scope_t scope,
     loom_optional uint8_t cache_scope,
     loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
@@ -1216,11 +1103,11 @@ LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_offsets, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_rmw_indices, 3)
 LOOM_DEFINE_RESULT(loom_vector_atomic_rmw_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_kind, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_ordering, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_scope, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_cache_scope, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_cache_temporal, 4)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_rmw_kind, 0, loom_atomic_kind_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_rmw_ordering, 1, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_rmw_scope, 2, loom_atomic_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_rmw_cache_scope, 3, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_rmw_cache_temporal, 4, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_rmw_static_indices, 5)
 enum loom_vector_atomic_rmw_build_flag_bits_e {
   LOOM_VECTOR_ATOMIC_RMW_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -1230,7 +1117,7 @@ typedef uint32_t loom_vector_atomic_rmw_build_flags_t;
 iree_status_t loom_vector_atomic_rmw_build(
     loom_builder_t* builder,
     loom_vector_atomic_rmw_build_flags_t build_flags,
-    uint8_t kind,
+    loom_atomic_kind_t kind,
     loom_may_consume loom_value_id_t value,
     loom_may_consume loom_value_id_t view,
     const loom_value_id_t* indices,
@@ -1238,8 +1125,8 @@ iree_status_t loom_vector_atomic_rmw_build(
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
     loom_may_consume loom_value_id_t offsets,
-    uint8_t ordering,
-    uint8_t scope,
+    loom_atomic_ordering_t ordering,
+    loom_atomic_scope_t scope,
     loom_optional uint8_t cache_scope,
     loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
@@ -1259,11 +1146,11 @@ LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_mask_mask, 3)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_mask_passthrough, 4)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_rmw_mask_indices, 5)
 LOOM_DEFINE_RESULT(loom_vector_atomic_rmw_mask_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_kind, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_ordering, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_scope, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_cache_scope, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_cache_temporal, 4)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_rmw_mask_kind, 0, loom_atomic_kind_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_rmw_mask_ordering, 1, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_rmw_mask_scope, 2, loom_atomic_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_rmw_mask_cache_scope, 3, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_rmw_mask_cache_temporal, 4, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_rmw_mask_static_indices, 5)
 enum loom_vector_atomic_rmw_mask_build_flag_bits_e {
   LOOM_VECTOR_ATOMIC_RMW_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -1273,7 +1160,7 @@ typedef uint32_t loom_vector_atomic_rmw_mask_build_flags_t;
 iree_status_t loom_vector_atomic_rmw_mask_build(
     loom_builder_t* builder,
     loom_vector_atomic_rmw_mask_build_flags_t build_flags,
-    uint8_t kind,
+    loom_atomic_kind_t kind,
     loom_may_consume loom_value_id_t value,
     loom_may_consume loom_value_id_t view,
     const loom_value_id_t* indices,
@@ -1283,8 +1170,8 @@ iree_status_t loom_vector_atomic_rmw_mask_build(
     loom_may_consume loom_value_id_t offsets,
     loom_may_consume loom_value_id_t mask,
     loom_may_consume loom_value_id_t passthrough,
-    uint8_t ordering,
-    uint8_t scope,
+    loom_atomic_ordering_t ordering,
+    loom_atomic_scope_t scope,
     loom_optional uint8_t cache_scope,
     loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
@@ -1303,11 +1190,11 @@ LOOM_DEFINE_OPERAND(loom_vector_atomic_cmpxchg_view, 2)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_cmpxchg_offsets, 3)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_cmpxchg_indices, 4)
 LOOM_DEFINE_RESULT(loom_vector_atomic_cmpxchg_old, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_cmpxchg_success_ordering, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_cmpxchg_failure_ordering, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_cmpxchg_scope, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_cmpxchg_cache_scope, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_cmpxchg_cache_temporal, 4)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_cmpxchg_success_ordering, 0, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_cmpxchg_failure_ordering, 1, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_cmpxchg_scope, 2, loom_atomic_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_cmpxchg_cache_scope, 3, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_atomic_cmpxchg_cache_temporal, 4, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_cmpxchg_static_indices, 5)
 enum loom_vector_atomic_cmpxchg_build_flag_bits_e {
   LOOM_VECTOR_ATOMIC_CMPXCHG_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -1325,9 +1212,9 @@ iree_status_t loom_vector_atomic_cmpxchg_build(
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
     loom_may_consume loom_value_id_t offsets,
-    uint8_t success_ordering,
-    uint8_t failure_ordering,
-    uint8_t scope,
+    loom_atomic_ordering_t success_ordering,
+    loom_atomic_ordering_t failure_ordering,
+    loom_atomic_scope_t scope,
     loom_optional uint8_t cache_scope,
     loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
@@ -1365,7 +1252,7 @@ LOOM_DEFINE_ISA(loom_vector_cmpi_isa, LOOM_OP_VECTOR_CMPI)
 LOOM_DEFINE_OPERAND(loom_vector_cmpi_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_cmpi_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_cmpi_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_cmpi_predicate, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_cmpi_predicate, 0, loom_vector_cmpi_predicate_t)
 iree_status_t loom_vector_cmpi_build(
     loom_builder_t* builder, uint8_t predicate,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -1384,7 +1271,7 @@ LOOM_DEFINE_ISA(loom_vector_cmpf_isa, LOOM_OP_VECTOR_CMPF)
 LOOM_DEFINE_OPERAND(loom_vector_cmpf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_cmpf_rhs, 1)
 LOOM_DEFINE_RESULT(loom_vector_cmpf_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_cmpf_predicate, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_cmpf_predicate, 0, loom_vector_cmpf_predicate_t)
 iree_status_t loom_vector_cmpf_build(
     loom_builder_t* builder, uint8_t predicate,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -2931,10 +2818,10 @@ LOOM_DEFINE_OPERAND(loom_vector_dot4i_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_dot4i_rhs, 1)
 LOOM_DEFINE_OPERAND(loom_vector_dot4i_acc, 2)
 LOOM_DEFINE_RESULT(loom_vector_dot4i_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_dot4i_kind, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_dot4i_kind, 0, loom_vector_dot4i_kind_t)
 iree_status_t loom_vector_dot4i_build(
     loom_builder_t* builder,
-    uint8_t kind,
+    loom_vector_dot4i_kind_t kind,
     loom_value_id_t lhs,
     loom_value_id_t rhs,
     loom_value_id_t acc,
@@ -2954,10 +2841,10 @@ LOOM_DEFINE_OPERAND(loom_vector_dot8i4_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_dot8i4_rhs, 1)
 LOOM_DEFINE_OPERAND(loom_vector_dot8i4_acc, 2)
 LOOM_DEFINE_RESULT(loom_vector_dot8i4_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_dot8i4_kind, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_dot8i4_kind, 0, loom_vector_dot8i4_kind_t)
 iree_status_t loom_vector_dot8i4_build(
     loom_builder_t* builder,
-    uint8_t kind,
+    loom_vector_dot8i4_kind_t kind,
     loom_value_id_t lhs,
     loom_value_id_t rhs,
     loom_value_id_t acc,
@@ -2977,10 +2864,10 @@ LOOM_DEFINE_OPERAND(loom_vector_dot4f8_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_dot4f8_rhs, 1)
 LOOM_DEFINE_OPERAND(loom_vector_dot4f8_acc, 2)
 LOOM_DEFINE_RESULT(loom_vector_dot4f8_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_dot4f8_kind, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_dot4f8_kind, 0, loom_vector_dot4f8_kind_t)
 iree_status_t loom_vector_dot4f8_build(
     loom_builder_t* builder,
-    uint8_t kind,
+    loom_vector_dot4f8_kind_t kind,
     loom_value_id_t lhs,
     loom_value_id_t rhs,
     loom_value_id_t acc,
@@ -2999,10 +2886,10 @@ LOOM_DEFINE_ISA(loom_vector_reduce_isa, LOOM_OP_VECTOR_REDUCE)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_input, 0)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_init, 1)
 LOOM_DEFINE_RESULT(loom_vector_reduce_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_vector_reduce_kind, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_vector_reduce_kind, 0, loom_vector_reduce_kind_t)
 iree_status_t loom_vector_reduce_build(
     loom_builder_t* builder,
-    uint8_t kind,
+    loom_vector_reduce_kind_t kind,
     loom_value_id_t input,
     loom_value_id_t init,
     loom_type_t result_type,

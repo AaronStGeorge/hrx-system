@@ -194,7 +194,7 @@ LOOM_DEFINE_ISA(loom_test_cmp_isa, LOOM_OP_TEST_CMP)
 LOOM_DEFINE_OPERAND(loom_test_cmp_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_test_cmp_rhs, 1)
 LOOM_DEFINE_RESULT(loom_test_cmp_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_test_cmp_predicate, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_cmp_predicate, 0, loom_test_cmp_predicate_t)
 iree_status_t loom_test_cmp_build(
     loom_builder_t* builder, uint8_t predicate,
     loom_value_id_t lhs, loom_value_id_t rhs,
@@ -420,8 +420,8 @@ iree_status_t loom_test_br_build(
 LOOM_DEFINE_ISA(loom_test_func_isa, LOOM_OP_TEST_FUNC)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_test_func_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_test_func_callee, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_test_func_visibility, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_test_func_cc, 2)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_func_visibility, 1, loom_test_visibility_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_func_cc, 2, loom_test_cc_t)
 LOOM_DEFINE_REGION(loom_test_func_body, 0)
 enum loom_test_func_build_flag_bits_e {
   LOOM_TEST_FUNC_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
@@ -450,8 +450,8 @@ iree_status_t loom_test_func_build(
 LOOM_DEFINE_ISA(loom_test_decl_isa, LOOM_OP_TEST_DECL)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_test_decl_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_test_decl_callee, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_test_decl_visibility, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_test_decl_cc, 2)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_decl_visibility, 1, loom_test_visibility_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_decl_cc, 2, loom_test_cc_t)
 enum loom_test_decl_build_flag_bits_e {
   LOOM_TEST_DECL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
   LOOM_TEST_DECL_BUILD_FLAG_HAS_CC = 1u << 1,
@@ -476,7 +476,7 @@ iree_status_t loom_test_decl_build(
 // test.record target @target {arch = "gfx1100", lanes = 64}
 LOOM_DEFINE_ISA(loom_test_record_isa, LOOM_OP_TEST_RECORD)
 LOOM_DEFINE_ATTR_SYMBOL(loom_test_record_symbol, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_test_record_kind, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_record_kind, 1, loom_test_record_kind_t)
 LOOM_DEFINE_ATTR_DICT(loom_test_record_dict, 2)
 enum loom_test_record_build_flag_bits_e {
   LOOM_TEST_RECORD_BUILD_FLAG_HAS_KIND = 1u << 0,

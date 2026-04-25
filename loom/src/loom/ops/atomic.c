@@ -14,6 +14,10 @@ bool loom_atomic_ordering_is_valid(uint8_t ordering) {
   return ordering < LOOM_ATOMIC_ORDERING_COUNT_;
 }
 
+bool loom_atomic_scope_is_valid(uint8_t scope) {
+  return scope < LOOM_ATOMIC_SCOPE_COUNT_;
+}
+
 static bool loom_atomic_cmpxchg_failure_no_stronger_than_success(
     uint8_t success_ordering, uint8_t failure_ordering) {
   switch (success_ordering) {

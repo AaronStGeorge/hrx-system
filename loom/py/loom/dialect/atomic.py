@@ -29,6 +29,9 @@ AtomicKind = EnumDef(
         EnumCase("maxnumf", 15, doc="C99 fmax-style floating-point maximum."),
     ],
     doc="Read-modify-write operation kind supported by view and vector atomics.",
+    c_type="loom_atomic_kind_t",
+    c_const_prefix="LOOM_ATOMIC_KIND",
+    c_include="loom/ops/atomic.h",
 )
 
 AtomicOrdering = EnumDef(
@@ -41,6 +44,9 @@ AtomicOrdering = EnumDef(
         EnumCase("seq_cst", 4, doc="Sequentially consistent ordering."),
     ],
     doc="Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.",
+    c_type="loom_atomic_ordering_t",
+    c_const_prefix="LOOM_ATOMIC_ORDERING",
+    c_include="loom/ops/atomic.h",
 )
 
 AtomicScope = EnumDef(
@@ -53,4 +59,7 @@ AtomicScope = EnumDef(
         EnumCase("system", 4, doc="Whole system."),
     ],
     doc="Synchronization scope for atomic memory effects.",
+    c_type="loom_atomic_scope_t",
+    c_const_prefix="LOOM_ATOMIC_SCOPE",
+    c_include="loom/ops/atomic.h",
 )

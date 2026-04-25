@@ -307,6 +307,37 @@ class TestEnumDef:
         with pytest.raises(ValueError, match="duplicate value 0"):
             EnumDef("Bad", [EnumCase("a", 0), EnumCase("b", 0)])
 
+    def test_external_c_enum_alias_metadata(self) -> None:
+        e = EnumDef(
+            "Mode",
+            [EnumCase("fast", 0)],
+            c_type="loom_shared_mode_t",
+            c_const_prefix="LOOM_SHARED_MODE",
+            c_include="loom/shared/mode.h",
+        )
+
+        assert e.c_type == "loom_shared_mode_t"
+        assert e.c_const_prefix == "LOOM_SHARED_MODE"
+        assert e.c_include == "loom/shared/mode.h"
+
+    def test_external_c_enum_alias_requires_type_and_prefix(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match="c_type and c_const_prefix must be provided together",
+        ):
+            EnumDef(
+                "Mode",
+                [EnumCase("fast", 0)],
+                c_type="loom_shared_mode_t",
+            )
+
+        with pytest.raises(ValueError, match="c_include requires c_type"):
+            EnumDef(
+                "Mode",
+                [EnumCase("fast", 0)],
+                c_include="loom/shared/mode.h",
+            )
+
 
 class TestEnumCase:
     def test_basic(self) -> None:

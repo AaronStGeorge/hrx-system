@@ -13,6 +13,8 @@
 #define LOOM_OPS_VIEW_OPS_H_
 
 #include "loom/ops/op_defs.h"
+#include "loom/ops/atomic.h"
+#include "loom/ops/cache.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,101 +31,6 @@ enum {
   LOOM_OP_VIEW_PREFETCH = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 7),
   LOOM_OP_VIEW_COUNT_ = 8,
 };
-
-// Target-independent cache scope for memory operations.
-typedef enum loom_view_cache_scope_e {
-  LOOM_VIEW_CACHE_SCOPE_CU = 0,
-  LOOM_VIEW_CACHE_SCOPE_SE = 1,
-  LOOM_VIEW_CACHE_SCOPE_DEVICE = 2,
-  LOOM_VIEW_CACHE_SCOPE_SYSTEM = 3,
-  LOOM_VIEW_CACHE_SCOPE_COUNT_ = 4,
-} loom_view_cache_scope_t;
-
-// Target-independent temporal cache policy for memory operations.
-typedef enum loom_view_cache_temporal_e {
-  LOOM_VIEW_CACHE_TEMPORAL_REGULAR = 0,
-  LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL = 1,
-  LOOM_VIEW_CACHE_TEMPORAL_HIGH_TEMPORAL = 2,
-  LOOM_VIEW_CACHE_TEMPORAL_LAST_USE = 3,
-  LOOM_VIEW_CACHE_TEMPORAL_WRITEBACK = 4,
-  LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR = 5,
-  LOOM_VIEW_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL = 6,
-  LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL = 7,
-  LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK = 8,
-  LOOM_VIEW_CACHE_TEMPORAL_BYPASS = 9,
-  LOOM_VIEW_CACHE_TEMPORAL_COUNT_ = 10,
-} loom_view_cache_temporal_t;
-
-// Read-modify-write operation kind supported by view and vector atomics.
-typedef enum loom_view_kind_e {
-  LOOM_VIEW_KIND_XCHGI = 0,
-  LOOM_VIEW_KIND_XCHGF = 1,
-  LOOM_VIEW_KIND_ADDI = 2,
-  LOOM_VIEW_KIND_ADDF = 3,
-  LOOM_VIEW_KIND_SUBI = 4,
-  LOOM_VIEW_KIND_ANDI = 5,
-  LOOM_VIEW_KIND_ORI = 6,
-  LOOM_VIEW_KIND_XORI = 7,
-  LOOM_VIEW_KIND_MINSI = 8,
-  LOOM_VIEW_KIND_MAXSI = 9,
-  LOOM_VIEW_KIND_MINUI = 10,
-  LOOM_VIEW_KIND_MAXUI = 11,
-  LOOM_VIEW_KIND_MINIMUMF = 12,
-  LOOM_VIEW_KIND_MAXIMUMF = 13,
-  LOOM_VIEW_KIND_MINNUMF = 14,
-  LOOM_VIEW_KIND_MAXNUMF = 15,
-  LOOM_VIEW_KIND_COUNT_ = 16,
-} loom_view_kind_t;
-
-// Synchronization scope for atomic memory effects.
-typedef enum loom_view_scope_e {
-  LOOM_VIEW_SCOPE_THREAD = 0,
-  LOOM_VIEW_SCOPE_SUBGROUP = 1,
-  LOOM_VIEW_SCOPE_WORKGROUP = 2,
-  LOOM_VIEW_SCOPE_DEVICE = 3,
-  LOOM_VIEW_SCOPE_SYSTEM = 4,
-  LOOM_VIEW_SCOPE_COUNT_ = 5,
-} loom_view_scope_t;
-
-// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
-typedef enum loom_view_atomic_reduce_ordering_e {
-  LOOM_VIEW_ATOMIC_REDUCE_ORDERING_RELAXED = 0,
-  LOOM_VIEW_ATOMIC_REDUCE_ORDERING_ACQUIRE = 1,
-  LOOM_VIEW_ATOMIC_REDUCE_ORDERING_RELEASE = 2,
-  LOOM_VIEW_ATOMIC_REDUCE_ORDERING_ACQ_REL = 3,
-  LOOM_VIEW_ATOMIC_REDUCE_ORDERING_SEQ_CST = 4,
-  LOOM_VIEW_ATOMIC_REDUCE_ORDERING_COUNT_ = 5,
-} loom_view_atomic_reduce_ordering_t;
-
-// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
-typedef enum loom_view_atomic_rmw_ordering_e {
-  LOOM_VIEW_ATOMIC_RMW_ORDERING_RELAXED = 0,
-  LOOM_VIEW_ATOMIC_RMW_ORDERING_ACQUIRE = 1,
-  LOOM_VIEW_ATOMIC_RMW_ORDERING_RELEASE = 2,
-  LOOM_VIEW_ATOMIC_RMW_ORDERING_ACQ_REL = 3,
-  LOOM_VIEW_ATOMIC_RMW_ORDERING_SEQ_CST = 4,
-  LOOM_VIEW_ATOMIC_RMW_ORDERING_COUNT_ = 5,
-} loom_view_atomic_rmw_ordering_t;
-
-// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
-typedef enum loom_view_atomic_cmpxchg_success_ordering_e {
-  LOOM_VIEW_ATOMIC_CMPXCHG_SUCCESS_ORDERING_RELAXED = 0,
-  LOOM_VIEW_ATOMIC_CMPXCHG_SUCCESS_ORDERING_ACQUIRE = 1,
-  LOOM_VIEW_ATOMIC_CMPXCHG_SUCCESS_ORDERING_RELEASE = 2,
-  LOOM_VIEW_ATOMIC_CMPXCHG_SUCCESS_ORDERING_ACQ_REL = 3,
-  LOOM_VIEW_ATOMIC_CMPXCHG_SUCCESS_ORDERING_SEQ_CST = 4,
-  LOOM_VIEW_ATOMIC_CMPXCHG_SUCCESS_ORDERING_COUNT_ = 5,
-} loom_view_atomic_cmpxchg_success_ordering_t;
-
-// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
-typedef enum loom_view_atomic_cmpxchg_failure_ordering_e {
-  LOOM_VIEW_ATOMIC_CMPXCHG_FAILURE_ORDERING_RELAXED = 0,
-  LOOM_VIEW_ATOMIC_CMPXCHG_FAILURE_ORDERING_ACQUIRE = 1,
-  LOOM_VIEW_ATOMIC_CMPXCHG_FAILURE_ORDERING_RELEASE = 2,
-  LOOM_VIEW_ATOMIC_CMPXCHG_FAILURE_ORDERING_ACQ_REL = 3,
-  LOOM_VIEW_ATOMIC_CMPXCHG_FAILURE_ORDERING_SEQ_CST = 4,
-  LOOM_VIEW_ATOMIC_CMPXCHG_FAILURE_ORDERING_COUNT_ = 5,
-} loom_view_atomic_cmpxchg_failure_ordering_t;
 
 // Intended future access kind for a prefetch hint.
 typedef enum loom_view_prefetch_intent_e {
@@ -196,8 +103,8 @@ LOOM_DEFINE_ISA(loom_view_load_isa, LOOM_OP_VIEW_LOAD)
 LOOM_DEFINE_OPERAND(loom_view_load_view, 0)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_load_indices, 1)
 LOOM_DEFINE_RESULT(loom_view_load_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_view_load_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_view_load_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_load_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_load_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_load_static_indices, 2)
 enum loom_view_load_build_flag_bits_e {
   LOOM_VIEW_LOAD_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -227,8 +134,8 @@ LOOM_DEFINE_ISA(loom_view_store_isa, LOOM_OP_VIEW_STORE)
 LOOM_DEFINE_OPERAND(loom_view_store_value, 0)
 LOOM_DEFINE_OPERAND(loom_view_store_view, 1)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_store_indices, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_view_store_cache_scope, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_view_store_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_store_cache_scope, 0, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_store_cache_temporal, 1, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_store_static_indices, 2)
 enum loom_view_store_build_flag_bits_e {
   LOOM_VIEW_STORE_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -258,11 +165,11 @@ LOOM_DEFINE_ISA(loom_view_atomic_reduce_isa, LOOM_OP_VIEW_ATOMIC_REDUCE)
 LOOM_DEFINE_OPERAND(loom_view_atomic_reduce_value, 0)
 LOOM_DEFINE_OPERAND(loom_view_atomic_reduce_view, 1)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_atomic_reduce_indices, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_kind, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_ordering, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_scope, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_cache_scope, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_cache_temporal, 4)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_reduce_kind, 0, loom_atomic_kind_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_reduce_ordering, 1, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_reduce_scope, 2, loom_atomic_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_reduce_cache_scope, 3, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_reduce_cache_temporal, 4, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_atomic_reduce_static_indices, 5)
 enum loom_view_atomic_reduce_build_flag_bits_e {
   LOOM_VIEW_ATOMIC_REDUCE_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -272,15 +179,15 @@ typedef uint32_t loom_view_atomic_reduce_build_flags_t;
 iree_status_t loom_view_atomic_reduce_build(
     loom_builder_t* builder,
     loom_view_atomic_reduce_build_flags_t build_flags,
-    uint8_t kind,
+    loom_atomic_kind_t kind,
     loom_value_id_t value,
     loom_value_id_t view,
     const loom_value_id_t* indices,
     iree_host_size_t indices_count,
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
-    uint8_t ordering,
-    uint8_t scope,
+    loom_atomic_ordering_t ordering,
+    loom_atomic_scope_t scope,
     loom_optional uint8_t cache_scope,
     loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
@@ -296,11 +203,11 @@ LOOM_DEFINE_OPERAND(loom_view_atomic_rmw_value, 0)
 LOOM_DEFINE_OPERAND(loom_view_atomic_rmw_view, 1)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_atomic_rmw_indices, 2)
 LOOM_DEFINE_RESULT(loom_view_atomic_rmw_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_kind, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_ordering, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_scope, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_cache_scope, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_cache_temporal, 4)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_rmw_kind, 0, loom_atomic_kind_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_rmw_ordering, 1, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_rmw_scope, 2, loom_atomic_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_rmw_cache_scope, 3, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_rmw_cache_temporal, 4, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_atomic_rmw_static_indices, 5)
 enum loom_view_atomic_rmw_build_flag_bits_e {
   LOOM_VIEW_ATOMIC_RMW_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -310,15 +217,15 @@ typedef uint32_t loom_view_atomic_rmw_build_flags_t;
 iree_status_t loom_view_atomic_rmw_build(
     loom_builder_t* builder,
     loom_view_atomic_rmw_build_flags_t build_flags,
-    uint8_t kind,
+    loom_atomic_kind_t kind,
     loom_may_consume loom_value_id_t value,
     loom_may_consume loom_value_id_t view,
     const loom_value_id_t* indices,
     iree_host_size_t indices_count,
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
-    uint8_t ordering,
-    uint8_t scope,
+    loom_atomic_ordering_t ordering,
+    loom_atomic_scope_t scope,
     loom_optional uint8_t cache_scope,
     loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
@@ -336,11 +243,11 @@ LOOM_DEFINE_OPERAND(loom_view_atomic_cmpxchg_replacement, 1)
 LOOM_DEFINE_OPERAND(loom_view_atomic_cmpxchg_view, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_atomic_cmpxchg_indices, 3)
 LOOM_DEFINE_RESULT(loom_view_atomic_cmpxchg_old, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_cmpxchg_success_ordering, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_cmpxchg_failure_ordering, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_cmpxchg_scope, 2)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_cmpxchg_cache_scope, 3)
-LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_cmpxchg_cache_temporal, 4)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_cmpxchg_success_ordering, 0, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_cmpxchg_failure_ordering, 1, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_cmpxchg_scope, 2, loom_atomic_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_cmpxchg_cache_scope, 3, loom_cache_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_atomic_cmpxchg_cache_temporal, 4, loom_cache_temporal_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_atomic_cmpxchg_static_indices, 5)
 enum loom_view_atomic_cmpxchg_build_flag_bits_e {
   LOOM_VIEW_ATOMIC_CMPXCHG_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
@@ -357,9 +264,9 @@ iree_status_t loom_view_atomic_cmpxchg_build(
     iree_host_size_t indices_count,
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
-    uint8_t success_ordering,
-    uint8_t failure_ordering,
-    uint8_t scope,
+    loom_atomic_ordering_t success_ordering,
+    loom_atomic_ordering_t failure_ordering,
+    loom_atomic_scope_t scope,
     loom_optional uint8_t cache_scope,
     loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
@@ -374,8 +281,8 @@ iree_status_t loom_view_atomic_cmpxchg_verify(
 LOOM_DEFINE_ISA(loom_view_prefetch_isa, LOOM_OP_VIEW_PREFETCH)
 LOOM_DEFINE_OPERAND(loom_view_prefetch_view, 0)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_prefetch_indices, 1)
-LOOM_DEFINE_ATTR_ENUM(loom_view_prefetch_intent, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_view_prefetch_locality, 1)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_prefetch_intent, 0, loom_view_prefetch_intent_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_view_prefetch_locality, 1, loom_view_prefetch_locality_t)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_prefetch_static_indices, 2)
 iree_status_t loom_view_prefetch_build(
     loom_builder_t* builder,
@@ -384,8 +291,8 @@ iree_status_t loom_view_prefetch_build(
     iree_host_size_t indices_count,
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
-    uint8_t intent,
-    uint8_t locality,
+    loom_view_prefetch_intent_t intent,
+    loom_view_prefetch_locality_t locality,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_view_prefetch_verify(

@@ -5,10 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Shared cache-policy vocabulary used by kernel async copies, view scalar
-// memory operations, and vector memory operations. Dialects still generate
-// their own enum names for parser/printer and builder APIs, but the numeric
-// values are intentionally identical to these shared constants so verification
-// and lowering can use one semantic table.
+// memory operations, and vector memory operations. Generated dialect APIs alias
+// these enum types directly so verification, lowering, and builders use one
+// semantic domain.
 
 #ifndef LOOM_OPS_CACHE_H_
 #define LOOM_OPS_CACHE_H_

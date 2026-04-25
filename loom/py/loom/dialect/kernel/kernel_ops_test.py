@@ -150,6 +150,8 @@ class TestKernelDialect:
         assert op.attrs[0].enum_def is CacheScope
         assert op.attrs[1].enum_def is CacheTemporal
         assert op.attrs[2].enum_def is KernelAsyncDirection
+        assert CacheScope.c_type == "loom_cache_scope_t"
+        assert CacheTemporal.c_type == "loom_cache_temporal_t"
         assert op.constraints == ()
         assert [(effect.operand, effect.kind.value) for effect in op.effects] == [
             ("source", "read"),

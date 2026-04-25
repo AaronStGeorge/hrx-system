@@ -220,7 +220,7 @@ LOOM_DEFINE_ISA(loom_index_cmp_isa, LOOM_OP_INDEX_CMP)
 LOOM_DEFINE_OPERAND(loom_index_cmp_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_index_cmp_rhs, 1)
 LOOM_DEFINE_RESULT(loom_index_cmp_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_index_cmp_predicate, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_index_cmp_predicate, 0, loom_index_cmp_predicate_t)
 iree_status_t loom_index_cmp_build(
     loom_builder_t* builder, uint8_t predicate,
     loom_value_id_t lhs, loom_value_id_t rhs,

@@ -50,12 +50,12 @@ typedef enum loom_pass_repeat_mode_e {
 //   canonicalize
 // }
 LOOM_DEFINE_ISA(loom_pass_pipeline_isa, LOOM_OP_PASS_PIPELINE)
-LOOM_DEFINE_ATTR_ENUM(loom_pass_pipeline_anchor, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_pass_pipeline_anchor, 0, loom_pass_anchor_t)
 LOOM_DEFINE_ATTR_SYMBOL(loom_pass_pipeline_symbol, 1)
 LOOM_DEFINE_REGION(loom_pass_pipeline_body, 0)
 iree_status_t loom_pass_pipeline_build(
     loom_builder_t* builder,
-    uint8_t anchor,
+    loom_pass_anchor_t anchor,
     loom_symbol_ref_t symbol,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -65,11 +65,11 @@ iree_status_t loom_pass_pipeline_build(
 //   cse
 // }
 LOOM_DEFINE_ISA(loom_pass_for_isa, LOOM_OP_PASS_FOR)
-LOOM_DEFINE_ATTR_ENUM(loom_pass_for_anchor, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_pass_for_anchor, 0, loom_pass_anchor_t)
 LOOM_DEFINE_REGION(loom_pass_for_body, 0)
 iree_status_t loom_pass_for_build(
     loom_builder_t* builder,
-    uint8_t anchor,
+    loom_pass_anchor_t anchor,
     loom_location_id_t location,
     loom_op_t** out_op);
 
@@ -93,7 +93,7 @@ iree_status_t loom_pass_where_build(
 //   canonicalize
 // }
 LOOM_DEFINE_ISA(loom_pass_repeat_isa, LOOM_OP_PASS_REPEAT)
-LOOM_DEFINE_ATTR_ENUM(loom_pass_repeat_mode, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_pass_repeat_mode, 0, loom_pass_repeat_mode_t)
 LOOM_DEFINE_ATTR_I64(loom_pass_repeat_count, 1)
 LOOM_DEFINE_ATTR_I64(loom_pass_repeat_max_iterations, 2)
 LOOM_DEFINE_REGION(loom_pass_repeat_body, 0)
@@ -105,7 +105,7 @@ typedef uint32_t loom_pass_repeat_build_flags_t;
 iree_status_t loom_pass_repeat_build(
     loom_builder_t* builder,
     loom_pass_repeat_build_flags_t build_flags,
-    uint8_t mode,
+    loom_pass_repeat_mode_t mode,
     loom_optional int64_t count,
     loom_optional int64_t max_iterations,
     loom_location_id_t location,

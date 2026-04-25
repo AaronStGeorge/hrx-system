@@ -494,10 +494,48 @@ def test_inline_attr_dict_uses_declared_attrs() -> None:
     tables_c = generate_tables_c("test", 0, [op])
 
     assert "LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS" in tables_c
-    assert "uint8_t ordering" in ops_h
-    assert "uint8_t scope" in ops_h
+    assert "loom_test_atomic_ordering_t ordering" in ops_h
+    assert "loom_test_atomic_scope_t scope" in ops_h
     assert "loom_op_attrs(*out_op)[0] = loom_attr_enum(ordering);" in builders_c
     assert "loom_op_attrs(*out_op)[1] = loom_attr_enum(scope);" in builders_c
+
+
+def test_external_enum_alias_uses_shared_c_type_without_typedef() -> None:
+    mode = EnumDef(
+        "Mode",
+        [EnumCase("fast", 0), EnumCase("slow", 1)],
+        c_type="loom_shared_mode_t",
+        c_const_prefix="LOOM_SHARED_MODE",
+        c_include="loom/shared/mode.h",
+    )
+    first = Op(
+        "test.first",
+        group=Dialect("test"),
+        attrs=[AttrDef("mode", "enum", enum_def=mode)],
+        format=[Attr("mode")],
+    )
+    second = Op(
+        "test.second",
+        group=Dialect("test"),
+        attrs=[AttrDef("secondary_mode", "enum", enum_def=mode)],
+        format=[Attr("secondary_mode")],
+    )
+
+    ops_h = generate_ops_h("test", 0, [first, second])
+    builders_c = generate_builders_c("test", [first, second])
+    tables_c = generate_tables_c("test", 0, [first, second])
+
+    assert '#include "loom/shared/mode.h"' in ops_h
+    assert "typedef enum loom_shared_mode_e" not in ops_h
+    assert "LOOM_SHARED_MODE_FAST" not in ops_h
+    assert ("LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_first_mode, 0, loom_shared_mode_t)") in ops_h
+    assert ("LOOM_DEFINE_ATTR_ENUM_TYPED(loom_test_second_secondary_mode, 0, loom_shared_mode_t)") in ops_h
+    assert "loom_shared_mode_t mode" in ops_h
+    assert "loom_shared_mode_t secondary_mode" in ops_h
+    assert "loom_shared_mode_t mode" in builders_c
+    assert "loom_shared_mode_t secondary_mode" in builders_c
+    assert tables_c.count("static const loom_bstring_t loom_shared_mode_names[]") == 1
+    assert tables_c.count("loom_shared_mode_names") == 3
 
 
 def test_flags_attrs_do_not_shift_regular_attr_indices() -> None:
