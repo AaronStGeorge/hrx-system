@@ -42,6 +42,9 @@ typedef struct loom_print_context_t {
   loom_print_field_callback_t field_callback;
 } loom_print_context_t;
 
+// Stack buffer size for formatting auto-generated value names (%0, %1, ...).
+#define LOOM_VALUE_NAME_BUFFER_SIZE 32
+
 // Emits text through the token spacing model.
 iree_status_t loom_print_emit(loom_print_context_t* ctx,
                               iree_string_view_t text, bool glue);
@@ -67,6 +70,17 @@ iree_status_t loom_print_indent(loom_print_context_t* ctx);
 // Prints comments attached to |op| at the current indentation.
 iree_status_t loom_print_op_comments(loom_print_context_t* ctx,
                                      const loom_op_t* op);
+
+// Resolves an SSA value name into |buffer|, including the leading percent sign.
+iree_string_view_t loom_print_resolve_value_name(const loom_module_t* module,
+                                                 loom_value_id_t value_id,
+                                                 char* buffer,
+                                                 iree_host_size_t buffer_size);
+
+// Prints an SSA value reference without token spacing.
+iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
+                                   const loom_module_t* module,
+                                   loom_value_id_t value_id);
 
 // Returns true when |block| has an explicit printable label in the module.
 bool loom_print_block_has_label(const loom_print_context_t* ctx,
@@ -96,6 +110,10 @@ iree_status_t loom_print_value_name_with_field(
 iree_status_t loom_print_location(loom_output_stream_t* stream,
                                   const loom_module_t* module,
                                   loom_location_id_t location_id);
+
+// Prints all encoding aliases declared in |module|.
+iree_status_t loom_print_encoding_aliases(loom_print_context_t* ctx,
+                                          const loom_module_t* module);
 
 // Returns true when low asm region syntax was requested by print options.
 bool loom_print_low_asm_is_requested(loom_print_context_t* ctx);

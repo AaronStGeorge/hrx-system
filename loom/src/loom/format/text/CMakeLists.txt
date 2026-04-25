@@ -145,6 +145,7 @@ loom_cc_library(
     "printer_internal.h"
   SRCS
     "printer.c"
+    "printer_atoms.c"
     "printer_low_asm.c"
     "printer_pipeline.c"
   DEPS
