@@ -23,25 +23,55 @@ extern "C" {
 #endif
 
 // Visits one successor node ordinal.
-typedef iree_status_t (*loom_scc_successor_visitor_t)(
-    iree_host_size_t successor_node, void* user_data);
+typedef iree_status_t (*loom_scc_successor_fn_t)(
+    void* user_data, iree_host_size_t successor_node);
+
+typedef struct loom_scc_successor_callback_t {
+  // Callback invoked once for each outgoing successor node ordinal.
+  loom_scc_successor_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_scc_successor_callback_t;
+
+// Returns a successor callback wrapping |fn| and |user_data|.
+static inline loom_scc_successor_callback_t loom_scc_successor_callback_make(
+    loom_scc_successor_fn_t fn, void* user_data) {
+  return (loom_scc_successor_callback_t){
+      .fn = fn,
+      .user_data = user_data,
+  };
+}
 
 // Iterates the outgoing successors of one node. The callback must invoke
-// |visitor| once for each successor and return the first visitor failure.
+// |successor| once for each successor and return the first successor failure.
 typedef iree_status_t (*loom_scc_visit_successors_fn_t)(
-    iree_host_size_t node, void* graph_user_data,
-    loom_scc_successor_visitor_t visitor, void* visitor_user_data);
+    void* user_data, iree_host_size_t node,
+    loom_scc_successor_callback_t successor);
+
+typedef struct loom_scc_visit_successors_callback_t {
+  // Callback used to enumerate outgoing edges from one node.
+  loom_scc_visit_successors_fn_t fn;
+  // Caller-owned graph adapter payload passed to |fn|.
+  void* user_data;
+} loom_scc_visit_successors_callback_t;
+
+// Returns a graph successor-iteration callback wrapping |fn| and |user_data|.
+static inline loom_scc_visit_successors_callback_t
+loom_scc_visit_successors_callback_make(loom_scc_visit_successors_fn_t fn,
+                                        void* user_data) {
+  return (loom_scc_visit_successors_callback_t){
+      .fn = fn,
+      .user_data = user_data,
+  };
+}
 
 // Graph adapter consumed by the SCC utility.
 typedef struct loom_scc_graph_t {
   // Number of dense node ordinals in the graph.
   iree_host_size_t node_count;
 
-  // Callback used to enumerate outgoing edges from a node.
-  loom_scc_visit_successors_fn_t visit_successors;
-
-  // Opaque caller data passed to visit_successors.
-  void* user_data;
+  // Callback used to enumerate outgoing edges from each node.
+  loom_scc_visit_successors_callback_t visit_successors;
 } loom_scc_graph_t;
 
 // Optional root filter for SCC computation.

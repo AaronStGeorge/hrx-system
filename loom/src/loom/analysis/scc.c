@@ -57,8 +57,8 @@ typedef struct loom_scc_successor_context_t {
 static iree_status_t loom_scc_visit_node(loom_scc_state_t* state,
                                          iree_host_size_t node);
 
-static iree_status_t loom_scc_visit_successor(iree_host_size_t successor_node,
-                                              void* user_data) {
+static iree_status_t loom_scc_visit_successor(void* user_data,
+                                              iree_host_size_t successor_node) {
   loom_scc_successor_context_t* context =
       (loom_scc_successor_context_t*)user_data;
   loom_scc_state_t* state = context->state;
@@ -121,9 +121,10 @@ static iree_status_t loom_scc_visit_node(loom_scc_state_t* state,
       .state = state,
       .node = node,
   };
-  IREE_RETURN_IF_ERROR(state->graph->visit_successors(
-      node, state->graph->user_data, loom_scc_visit_successor,
-      &successor_context));
+  IREE_RETURN_IF_ERROR(state->graph->visit_successors.fn(
+      state->graph->visit_successors.user_data, node,
+      loom_scc_successor_callback_make(loom_scc_visit_successor,
+                                       &successor_context)));
 
   if (state->lowlinks[node] == state->indexes[node]) {
     IREE_RETURN_IF_ERROR(loom_scc_emit_component(state, node));
@@ -193,7 +194,7 @@ iree_status_t loom_scc_compute(const loom_scc_graph_t* graph,
         "SCC computation requires graph, arena, and output");
   }
   *out_sccs = (loom_scc_list_t){0};
-  if (graph->node_count > 0 && !graph->visit_successors) {
+  if (graph->node_count > 0 && !graph->visit_successors.fn) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "non-empty SCC graph requires successor iterator");
   }

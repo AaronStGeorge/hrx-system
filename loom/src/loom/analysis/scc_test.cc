@@ -22,12 +22,12 @@ struct TestGraph {
 };
 
 static iree_status_t VisitTestGraphSuccessors(
-    iree_host_size_t node, void* graph_user_data,
-    loom_scc_successor_visitor_t visitor, void* visitor_user_data) {
-  const TestGraph* graph = (const TestGraph*)graph_user_data;
+    void* user_data, iree_host_size_t node,
+    loom_scc_successor_callback_t successor) {
+  const TestGraph* graph = (const TestGraph*)user_data;
   for (iree_host_size_t i = 0; i < graph->successor_counts[node]; ++i) {
     IREE_RETURN_IF_ERROR(
-        visitor(graph->successors[node][i], visitor_user_data));
+        successor.fn(successor.user_data, graph->successors[node][i]));
   }
   return iree_ok_status();
 }
@@ -49,8 +49,8 @@ class SccTest : public ::testing::Test {
                              const TestGraph* graph) {
     return {
         .node_count = node_count,
-        .visit_successors = VisitTestGraphSuccessors,
-        .user_data = const_cast<TestGraph*>(graph),
+        .visit_successors = loom_scc_visit_successors_callback_make(
+            VisitTestGraphSuccessors, const_cast<TestGraph*>(graph)),
     };
   }
 

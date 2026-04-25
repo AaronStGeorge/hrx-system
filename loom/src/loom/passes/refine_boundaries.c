@@ -467,10 +467,7 @@ typedef struct loom_refine_boundaries_successor_walk_t {
   const loom_refine_boundaries_graph_t* graph;
 
   // SCC successor visitor.
-  loom_scc_successor_visitor_t visitor;
-
-  // Opaque visitor state.
-  void* visitor_user_data;
+  loom_scc_successor_callback_t visitor;
 } loom_refine_boundaries_successor_walk_t;
 
 static iree_status_t loom_refine_boundaries_visit_successor_call(
@@ -492,14 +489,14 @@ static iree_status_t loom_refine_boundaries_visit_successor_call(
   if (!loom_refine_boundaries_callee_node(walk->graph, callee, &callee_node)) {
     return iree_ok_status();
   }
-  return walk->visitor(callee_node, walk->visitor_user_data);
+  return walk->visitor.fn(walk->visitor.user_data, callee_node);
 }
 
 static iree_status_t loom_refine_boundaries_visit_successors(
-    iree_host_size_t node, void* graph_user_data,
-    loom_scc_successor_visitor_t visitor, void* visitor_user_data) {
+    void* user_data, iree_host_size_t node,
+    loom_scc_successor_callback_t visitor) {
   const loom_refine_boundaries_graph_t* graph =
-      (const loom_refine_boundaries_graph_t*)graph_user_data;
+      (const loom_refine_boundaries_graph_t*)user_data;
   if (node >= graph->function_count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "function graph node %" PRIhsz
@@ -510,7 +507,6 @@ static iree_status_t loom_refine_boundaries_visit_successors(
   loom_refine_boundaries_successor_walk_t walk = {
       .graph = graph,
       .visitor = visitor,
-      .visitor_user_data = visitor_user_data,
   };
   loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
   iree_arena_reset(graph->walk_arena);
@@ -613,8 +609,8 @@ static iree_status_t loom_refine_boundaries_build_graph(
 
   loom_scc_graph_t scc_graph = {
       .node_count = function_count,
-      .visit_successors = loom_refine_boundaries_visit_successors,
-      .user_data = out_graph,
+      .visit_successors = loom_scc_visit_successors_callback_make(
+          loom_refine_boundaries_visit_successors, out_graph),
   };
   return loom_scc_compute(&scc_graph, NULL, arena, out_sccs);
 }
