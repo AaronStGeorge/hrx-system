@@ -284,6 +284,8 @@ typedef enum loom_value_fact_memory_space_e {
   LOOM_VALUE_FACT_MEMORY_SPACE_HOST = 5,
   // Descriptor-backed storage identity.
   LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR = 6,
+  // Target-generic device storage.
+  LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC = 7,
 } loom_value_fact_memory_space_t;
 
 // Known reference nullability for storage-like values.

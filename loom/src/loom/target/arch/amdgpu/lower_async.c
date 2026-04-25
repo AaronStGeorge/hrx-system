@@ -102,6 +102,7 @@ static bool loom_amdgpu_async_gather_source_memory_space_is_global_like(
     case LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT:
     case LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR:
       return true;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
     default:
       return false;
   }

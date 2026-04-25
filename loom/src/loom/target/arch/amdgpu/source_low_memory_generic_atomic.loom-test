@@ -1,0 +1,48 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/memory_generic_atomic.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
+
+func.def @generic_atomic_i32_static(%input: buffer) {
+  %zero = index.constant 0 : offset
+  %generic = buffer.assume.memory_space %input {memory_space = generic} : buffer
+  %view = buffer.view %generic[%zero] : buffer -> view<1xi32, #dense>
+  %one = scalar.constant 1 : i32
+  %expected = scalar.constant 7 : i32
+  %replacement = scalar.constant 9 : i32
+  view.atomic.reduce<addi> %one, %view[0] {ordering = relaxed, scope = device} : i32, view<1xi32, #dense>
+  %old_add = view.atomic.rmw<addi> %one, %view[0] {ordering = relaxed, scope = device} : i32, view<1xi32, #dense> -> i32
+  %old_cmpxchg = view.atomic.cmpxchg %expected, %replacement, %view[0] {failure_ordering = relaxed, scope = device, success_ordering = relaxed} : i32, view<1xi32, #dense> -> i32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @generic_atomic_i32_static() {
+  %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %one = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
+  %expected = low.const<amdgpu.s_mov_b32> {imm32 = 7} : reg<amdgpu.sgpr>
+  %replacement = low.const<amdgpu.s_mov_b32> {imm32 = 9} : reg<amdgpu.sgpr>
+  %14 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %15 = low.slice %view[1] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %16 = low.op<amdgpu.v_mov_b32_copy>(%14) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_mov_b32_copy>(%15) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %18 = low.concat(%16, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %19 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  low.op<amdgpu.flat_atomic_add_u32>(%18, %19) {offset = 0} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr>)
+  %20 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %21 = low.slice %view[1] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %22 = low.op<amdgpu.v_mov_b32_copy>(%20) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %23 = low.op<amdgpu.v_mov_b32_copy>(%21) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %24 = low.concat(%22, %23) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %25 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %old_add = low.op<amdgpu.flat_atomic_add_u32_rtn>(%24, %25) {offset = 0} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %27 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %28 = low.slice %view[1] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %29 = low.op<amdgpu.v_mov_b32_copy>(%27) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %30 = low.op<amdgpu.v_mov_b32_copy>(%28) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
+  %31 = low.concat(%29, %30) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %32 = low.const<amdgpu.v_mov_b32> {imm32 = 7} : reg<amdgpu.vgpr>
+  %33 = low.const<amdgpu.v_mov_b32> {imm32 = 9} : reg<amdgpu.vgpr>
+  %34 = low.concat(%32, %33) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %old_cmpxchg = low.op<amdgpu.flat_atomic_cmpswap_b32_rtn>(%31, %34) {offset = 0} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>) -> reg<amdgpu.vgpr>
+  low.return
+}

@@ -1651,7 +1651,7 @@ def _v_mov_b32_copy_overlay() -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SRC0", _vgpr_operand("src")),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("src")),
         ),
         asm_forms=(),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),

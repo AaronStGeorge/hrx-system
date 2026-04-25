@@ -108,6 +108,11 @@ KernelMemorySpace = EnumDef(
         EnumCase("constant", 4, doc="Read-only constant storage."),
         EnumCase("host", 5, doc="Host-visible storage."),
         EnumCase("descriptor", 6, doc="Descriptor-backed storage identity."),
+        EnumCase(
+            "generic",
+            7,
+            doc="Target-generic device storage fenced by a synchronization op.",
+        ),
     ],
     doc="Target-independent memory space fenced by a kernel synchronization op.",
 )

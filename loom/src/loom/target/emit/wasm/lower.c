@@ -966,6 +966,7 @@ static bool loom_wasm_memory_space_is_linear(
     loom_value_fact_memory_space_t memory_space) {
   switch (memory_space) {
     case LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
     case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
       return true;
     default:

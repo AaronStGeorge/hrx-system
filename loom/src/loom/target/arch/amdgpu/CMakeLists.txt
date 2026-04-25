@@ -943,6 +943,50 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_memory_generic_atomic"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_generic_atomic.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_memory_generic_atomic_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_generic_atomic_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_memory_generic_atomic_gfx12"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_generic_atomic_gfx12.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_memory_generic_atomic_gfx950"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_generic_atomic_gfx950.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_memory_global"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global.loom-test"

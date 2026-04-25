@@ -44,6 +44,8 @@ static loom_value_fact_memory_space_t loom_buffer_memory_space_from_attr(
       return LOOM_VALUE_FACT_MEMORY_SPACE_HOST;
     case LOOM_BUFFER_MEMORY_SPACE_DESCRIPTOR:
       return LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR;
+    case LOOM_BUFFER_MEMORY_SPACE_GENERIC:
+      return LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC;
     case LOOM_BUFFER_MEMORY_SPACE_UNKNOWN:
     default:
       return LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;

@@ -33,7 +33,8 @@ typedef enum loom_buffer_memory_space_e {
   LOOM_BUFFER_MEMORY_SPACE_CONSTANT = 4,
   LOOM_BUFFER_MEMORY_SPACE_HOST = 5,
   LOOM_BUFFER_MEMORY_SPACE_DESCRIPTOR = 6,
-  LOOM_BUFFER_MEMORY_SPACE_COUNT_ = 7,
+  LOOM_BUFFER_MEMORY_SPACE_GENERIC = 7,
+  LOOM_BUFFER_MEMORY_SPACE_COUNT_ = 8,
 } loom_buffer_memory_space_t;
 
 // LOOM_OP_BUFFER_ALLOCA: Create a fixed-frame scratch buffer root in workgroup or private memory. Each execution produces a distinct storage identity; identical allocas must not be commoned. The byte length is a physical byte count, and base_alignment is the minimum byte alignment of the root storage base.

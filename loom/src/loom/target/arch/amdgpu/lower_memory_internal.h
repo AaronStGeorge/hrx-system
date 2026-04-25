@@ -59,6 +59,8 @@ typedef uint32_t loom_amdgpu_memory_access_rejection_flags_t;
   ((uint32_t)1u << 16)
 #define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_PACKED_REGISTER_FOOTPRINT \
   ((uint32_t)1u << 17)
+#define LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_FLAT_DYNAMIC_ADDRESS \
+  ((uint32_t)1u << 18)
 
 typedef struct loom_amdgpu_memory_access_diagnostic_t {
   // Rejection bits explaining why an access is not legal for this target.
@@ -130,6 +132,11 @@ iree_status_t loom_amdgpu_emit_memory_saddr(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op,
                                             loom_value_id_t low_resource,
                                             loom_value_id_t* out_low_saddr);
+
+// Emits the 64-bit flat VGPR address sliced from a low buffer resource.
+iree_status_t loom_amdgpu_emit_memory_flat_vaddr(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_resource, loom_value_id_t* out_low_vaddr);
 
 // Builds descriptor offset and cache-policy attrs for a memory packet.
 iree_status_t loom_amdgpu_make_memory_attrs(

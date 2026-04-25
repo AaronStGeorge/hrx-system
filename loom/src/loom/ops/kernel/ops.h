@@ -83,7 +83,8 @@ typedef enum loom_kernel_barrier_memory_space_e {
   LOOM_KERNEL_BARRIER_MEMORY_SPACE_CONSTANT = 4,
   LOOM_KERNEL_BARRIER_MEMORY_SPACE_HOST = 5,
   LOOM_KERNEL_BARRIER_MEMORY_SPACE_DESCRIPTOR = 6,
-  LOOM_KERNEL_BARRIER_MEMORY_SPACE_COUNT_ = 7,
+  LOOM_KERNEL_BARRIER_MEMORY_SPACE_GENERIC = 7,
+  LOOM_KERNEL_BARRIER_MEMORY_SPACE_COUNT_ = 8,
 } loom_kernel_barrier_memory_space_t;
 
 // Target-independent memory ordering for kernel synchronization ops.

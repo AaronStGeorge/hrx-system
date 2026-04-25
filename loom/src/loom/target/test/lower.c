@@ -1496,6 +1496,7 @@ static bool loom_test_low_source_memory_access_is_supported(
     const loom_low_source_memory_access_plan_t* plan) {
   const bool supported_memory_space =
       plan->memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN ||
+      plan->memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC ||
       plan->memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL;
   if (!supported_memory_space || plan->root_value_id == LOOM_VALUE_ID_INVALID ||
       plan->element_byte_count != 4 || plan->vector_lane_count != 4 ||

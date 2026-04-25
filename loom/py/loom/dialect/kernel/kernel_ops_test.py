@@ -379,6 +379,7 @@ class TestKernelDialect:
             ("constant", 4),
             ("host", 5),
             ("descriptor", 6),
+            ("generic", 7),
         ]
 
     def test_scope_values_match_atomic_scope_conventions(self) -> None:

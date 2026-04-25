@@ -48,6 +48,8 @@ static iree_string_view_t loom_amdgpu_memory_space_name(
       return IREE_SV("host");
     case LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR:
       return IREE_SV("descriptor");
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
+      return IREE_SV("generic");
   }
   return IREE_SV("invalid");
 }
@@ -141,6 +143,13 @@ static const loom_amdgpu_memory_access_rejection_detail_t
             .detail = IREE_SVL(
                 "AMDGPU packed integer memory lowering requires the vector "
                 "footprint to exactly fill complete 32-bit memory registers"),
+        },
+        {
+            .rejection_bit =
+                LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_FLAT_DYNAMIC_ADDRESS,
+            .detail = IREE_SVL(
+                "AMDGPU flat memory lowering currently requires a static "
+                "source address"),
         },
         {
             .rejection_bit =

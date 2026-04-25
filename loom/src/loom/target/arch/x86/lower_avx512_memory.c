@@ -20,6 +20,7 @@ static bool loom_x86_memory_space_is_object_memory(
     loom_value_fact_memory_space_t memory_space) {
   switch (memory_space) {
     case LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
     case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
       return true;
     default:

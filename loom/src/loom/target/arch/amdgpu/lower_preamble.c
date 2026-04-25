@@ -7,6 +7,7 @@
 #include "loom/ir/context.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/lower_internal.h"
 
@@ -213,6 +214,23 @@ iree_status_t loom_amdgpu_emit_preamble(void* user_data,
         }
         first_m0_op = source_op;
         m0_descriptor_id = access->descriptor_id;
+        break;
+      }
+      case LOOM_OP_VIEW_ATOMIC_REDUCE:
+      case LOOM_OP_VIEW_ATOMIC_RMW:
+      case LOOM_OP_VIEW_ATOMIC_CMPXCHG: {
+        if (first_m0_op != NULL) {
+          continue;
+        }
+        const loom_amdgpu_atomic_plan_t* atomic =
+            (const loom_amdgpu_atomic_plan_t*)plan.target_data;
+        IREE_ASSERT(atomic != NULL);
+        if (!iree_any_bit_set(atomic->flags,
+                              LOOM_AMDGPU_ATOMIC_PLAN_REQUIRES_M0)) {
+          continue;
+        }
+        first_m0_op = source_op;
+        m0_descriptor_id = atomic->descriptor_id;
         break;
       }
       case LOOM_OP_KERNEL_WORKITEM_ID: {

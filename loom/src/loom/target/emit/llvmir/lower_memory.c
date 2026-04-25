@@ -30,6 +30,8 @@ loom_llvmir_lowering_memory_space_from_buffer_attr(uint8_t value) {
       return LOOM_VALUE_FACT_MEMORY_SPACE_HOST;
     case LOOM_BUFFER_MEMORY_SPACE_DESCRIPTOR:
       return LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR;
+    case LOOM_BUFFER_MEMORY_SPACE_GENERIC:
+      return LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC;
     case LOOM_BUFFER_MEMORY_SPACE_UNKNOWN:
     case LOOM_BUFFER_MEMORY_SPACE_COUNT_:
       return LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
@@ -44,6 +46,7 @@ static iree_status_t loom_llvmir_lowering_address_space_from_memory_space(
       &state->target_profile->target_env->address_spaces;
   switch (memory_space) {
     case LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
       *out_address_space = address_spaces->generic;
       return iree_ok_status();
     case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:

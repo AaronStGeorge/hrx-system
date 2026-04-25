@@ -95,6 +95,7 @@ static bool loom_amdgpu_prefetch_memory_space_is_buffer_backed(
     case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
     case LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE:
     case LOOM_VALUE_FACT_MEMORY_SPACE_HOST:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
       return false;
   }
   return false;

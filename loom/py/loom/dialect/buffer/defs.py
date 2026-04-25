@@ -58,6 +58,11 @@ MemorySpace = EnumDef(
         EnumCase("constant", 4, doc="Read-only constant storage."),
         EnumCase("host", 5, doc="Host-visible storage."),
         EnumCase("descriptor", 6, doc="Descriptor-backed storage identity."),
+        EnumCase(
+            "generic",
+            7,
+            doc=("Target-generic device storage. Targets may lower this to a generic address space such as AMDGPU flat memory."),
+        ),
     ],
     doc="Target-independent memory space for buffer roots and derived views.",
 )
