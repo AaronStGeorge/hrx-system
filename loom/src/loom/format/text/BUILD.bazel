@@ -156,8 +156,14 @@ loom_cc_benchmark(
 
 loom_cc_library(
     name = "printer",
-    srcs = ["printer.c"],
-    hdrs = ["printer.h"],
+    srcs = [
+        "printer.c",
+        "printer_low_asm.c",
+    ],
+    hdrs = [
+        "printer.h",
+        "printer_internal.h",
+    ],
     deps = [
         ":low_asm",
         "//loom/src/loom/ir",

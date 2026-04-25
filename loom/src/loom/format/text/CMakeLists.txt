@@ -141,8 +141,10 @@ loom_cc_library(
     printer
   HDRS
     "printer.h"
+    "printer_internal.h"
   SRCS
     "printer.c"
+    "printer_low_asm.c"
   DEPS
     ::low_asm
     iree::base
