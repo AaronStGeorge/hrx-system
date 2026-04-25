@@ -30,6 +30,8 @@ GENERATED_SOURCE_GLOBS = (
     "loom/src/loom/ops/op_registry.h",
     "loom/src/loom/ops/type_registry.c",
     "loom/src/loom/ops/type_registry.h",
+    "loom/src/loom/target/low_legality_table.c",
+    "loom/src/loom/target/low_legality_table.h",
     "loom/src/loom/target/arch/x86/packed_dot_contract_data.c",
     "loom/src/loom/target/arch/x86/packed_dot_contract_data.h",
 )

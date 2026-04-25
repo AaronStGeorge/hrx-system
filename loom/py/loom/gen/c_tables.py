@@ -81,6 +81,7 @@ from loom.dsl import (
 from loom.fields import FieldKind, FieldLayout, compute_layout
 from loom.gen import bootstrap as _bootstrap
 from loom.gen.generated_file import line_comment_header
+from loom.gen.target_low_legality import generate_target_low_legality_table
 
 # ============================================================================
 # Constants
@@ -4007,6 +4008,17 @@ def main() -> None:
         ("keyword_table.inc", keyword_table),
     ]:
         path = output_root / filename
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+    # Generate target-owned policy tables that still depend on op kinds.
+    target_low_legality = generate_target_low_legality_table(production_dialects)
+    target_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "target"
+    for filename, content in [
+        ("low_legality_table.h", target_low_legality.header),
+        ("low_legality_table.c", target_low_legality.source),
+    ]:
+        path = target_root / filename
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 

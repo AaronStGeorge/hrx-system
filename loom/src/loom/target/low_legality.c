@@ -12,18 +12,10 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/buffer/ops.h"
-#include "loom/ops/cfg/ops.h"
-#include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
-#include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
-#include "loom/ops/low/ops.h"
-#include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
-#include "loom/ops/target/ops.h"
-#include "loom/ops/vector/ops.h"
-#include "loom/ops/view/ops.h"
+#include "loom/target/low_legality_table.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/walk.h"
 
@@ -495,152 +487,69 @@ static iree_status_t loom_target_low_legality_try_provider_op(
   return iree_ok_status();
 }
 
-static bool loom_target_low_legality_op_is_supported_core(loom_op_kind_t kind) {
-  switch (kind) {
-    case LOOM_OP_BUFFER_ALLOCA:
-    case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
-    case LOOM_OP_BUFFER_VIEW:
-    case LOOM_OP_CFG_BR:
-    case LOOM_OP_CFG_COND_BR:
-    case LOOM_OP_ENCODING_ASSUME_SPEC:
-    case LOOM_OP_ENCODING_DEFINE:
-    case LOOM_OP_ENCODING_LAYOUT_ASSUME_DENSE:
-    case LOOM_OP_ENCODING_LAYOUT_ASSUME_STRIDED:
-    case LOOM_OP_ENCODING_LAYOUT_DENSE:
-    case LOOM_OP_ENCODING_LAYOUT_STRIDED:
-    case LOOM_OP_FUNC_CALL:
-    case LOOM_OP_FUNC_RETURN:
-    case LOOM_OP_INDEX_ADD:
-    case LOOM_OP_INDEX_CAST:
-    case LOOM_OP_INDEX_CMP:
-    case LOOM_OP_INDEX_CONSTANT:
-    case LOOM_OP_INDEX_DIV:
-    case LOOM_OP_INDEX_MADD:
-    case LOOM_OP_INDEX_MUL:
-    case LOOM_OP_INDEX_REM:
-    case LOOM_OP_INDEX_SUB:
-    case LOOM_OP_KERNEL_WORKGROUP_ID:
-    case LOOM_OP_KERNEL_WORKITEM_ID:
-    case LOOM_OP_LOW_BR:
-    case LOOM_OP_LOW_COND_BR:
-    case LOOM_OP_LOW_CONCAT:
-    case LOOM_OP_LOW_CONST:
-    case LOOM_OP_LOW_COPY:
-    case LOOM_OP_LOW_FRAME_INDEX:
-    case LOOM_OP_LOW_FUNC_DECL:
-    case LOOM_OP_LOW_FUNC_DEF:
-    case LOOM_OP_LOW_INVOKE:
-    case LOOM_OP_LOW_OP:
-    case LOOM_OP_LOW_RELOAD:
-    case LOOM_OP_LOW_RESOURCE:
-    case LOOM_OP_LOW_RETURN:
-    case LOOM_OP_LOW_SLOT:
-    case LOOM_OP_LOW_SPILL:
-    case LOOM_OP_SCALAR_ADDF:
-    case LOOM_OP_SCALAR_ADDI:
-    case LOOM_OP_SCALAR_ANDI:
-    case LOOM_OP_SCALAR_BITCAST:
-    case LOOM_OP_SCALAR_CMPF:
-    case LOOM_OP_SCALAR_CMPI:
-    case LOOM_OP_SCALAR_CONSTANT:
-    case LOOM_OP_SCALAR_DIVF:
-    case LOOM_OP_SCALAR_DIVSI:
-    case LOOM_OP_SCALAR_DIVUI:
-    case LOOM_OP_SCALAR_EXTF:
-    case LOOM_OP_SCALAR_EXTSI:
-    case LOOM_OP_SCALAR_EXTUI:
-    case LOOM_OP_SCALAR_FMAF:
-    case LOOM_OP_SCALAR_FMAI:
-    case LOOM_OP_SCALAR_FPTOUI:
-    case LOOM_OP_SCALAR_FPTOSI:
-    case LOOM_OP_SCALAR_FPTRUNC:
-    case LOOM_OP_SCALAR_MAXNUMF:
-    case LOOM_OP_SCALAR_MINNUMF:
-    case LOOM_OP_SCALAR_MULF:
-    case LOOM_OP_SCALAR_MULI:
-    case LOOM_OP_SCALAR_NEGF:
-    case LOOM_OP_SCALAR_ORI:
-    case LOOM_OP_SCALAR_REMF:
-    case LOOM_OP_SCALAR_REMSI:
-    case LOOM_OP_SCALAR_REMUI:
-    case LOOM_OP_SCALAR_SHLI:
-    case LOOM_OP_SCALAR_SHRSI:
-    case LOOM_OP_SCALAR_SHRUI:
-    case LOOM_OP_SCALAR_SITOFP:
-    case LOOM_OP_SCALAR_SUBF:
-    case LOOM_OP_SCALAR_SUBI:
-    case LOOM_OP_SCALAR_TRUNCI:
-    case LOOM_OP_SCALAR_UITOFP:
-    case LOOM_OP_SCALAR_XORI:
-    case LOOM_OP_SCF_SELECT:
-    case LOOM_OP_VECTOR_ADDF:
-    case LOOM_OP_VECTOR_ADDI:
-    case LOOM_OP_VECTOR_ANDI:
-    case LOOM_OP_VECTOR_BITCAST:
-    case LOOM_OP_VECTOR_BITFIELD_EXTRACTS:
-    case LOOM_OP_VECTOR_BITFIELD_EXTRACTU:
-    case LOOM_OP_VECTOR_BITFIELD_INSERT:
-    case LOOM_OP_VECTOR_BITPACK:
-    case LOOM_OP_VECTOR_BITUNPACKS:
-    case LOOM_OP_VECTOR_BITUNPACKU:
-    case LOOM_OP_VECTOR_CMPF:
-    case LOOM_OP_VECTOR_CMPI:
-    case LOOM_OP_VECTOR_CONSTANT:
-    case LOOM_OP_VECTOR_DIVF:
-    case LOOM_OP_VECTOR_DIVSI:
-    case LOOM_OP_VECTOR_DIVUI:
-    case LOOM_OP_VECTOR_DOT2F:
-    case LOOM_OP_VECTOR_DOT4F8:
-    case LOOM_OP_VECTOR_DOT4I:
-    case LOOM_OP_VECTOR_DOT8I4:
-    case LOOM_OP_VECTOR_EXTF:
-    case LOOM_OP_VECTOR_EXTRACT:
-    case LOOM_OP_VECTOR_EXTSI:
-    case LOOM_OP_VECTOR_EXTUI:
-    case LOOM_OP_VECTOR_FPTOUI:
-    case LOOM_OP_VECTOR_FPTOSI:
-    case LOOM_OP_VECTOR_FPTRUNC:
-    case LOOM_OP_VECTOR_FROM_ELEMENTS:
-    case LOOM_OP_VECTOR_FMAF:
-    case LOOM_OP_VECTOR_FMAI:
-    case LOOM_OP_VECTOR_INSERT:
-    case LOOM_OP_VECTOR_LOAD:
-    case LOOM_OP_VECTOR_MAXSI:
-    case LOOM_OP_VECTOR_MAXUI:
-    case LOOM_OP_VECTOR_MAXNUMF:
-    case LOOM_OP_VECTOR_MINSI:
-    case LOOM_OP_VECTOR_MINUI:
-    case LOOM_OP_VECTOR_MINNUMF:
-    case LOOM_OP_VECTOR_MULF:
-    case LOOM_OP_VECTOR_MULI:
-    case LOOM_OP_VECTOR_NEGF:
-    case LOOM_OP_VECTOR_ORI:
-    case LOOM_OP_VECTOR_POISON:
-    case LOOM_OP_VECTOR_REDUCE:
-    case LOOM_OP_VECTOR_REMF:
-    case LOOM_OP_VECTOR_REMSI:
-    case LOOM_OP_VECTOR_REMUI:
-    case LOOM_OP_VECTOR_SELECT:
-    case LOOM_OP_VECTOR_SHLI:
-    case LOOM_OP_VECTOR_SHRSI:
-    case LOOM_OP_VECTOR_SHRUI:
-    case LOOM_OP_VECTOR_SHUFFLE:
-    case LOOM_OP_VECTOR_SITOFP:
-    case LOOM_OP_VECTOR_SPLAT:
-    case LOOM_OP_VECTOR_STORE:
-    case LOOM_OP_VECTOR_SUBF:
-    case LOOM_OP_VECTOR_SUBI:
-    case LOOM_OP_VECTOR_TRUNCI:
-    case LOOM_OP_VECTOR_UITOFP:
-    case LOOM_OP_VECTOR_XORI:
-    case LOOM_OP_VIEW_LOAD:
-    case LOOM_OP_VIEW_PREFETCH:
-    case LOOM_OP_VIEW_REFINE:
-    case LOOM_OP_VIEW_STORE:
-    case LOOM_OP_VIEW_SUBVIEW:
-      return true;
+static iree_status_t loom_target_low_legality_reject_op(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    iree_string_view_t reason) {
+  return loom_target_low_legality_reject(context, NULL, op, IREE_SV("op"),
+                                         loom_op_name(context->module, op),
+                                         reason);
+}
+
+static iree_status_t loom_target_low_legality_reject_source_only_op(
+    loom_target_low_legality_context_t* context, const loom_op_t* op) {
+  switch (op->kind) {
+    case LOOM_OP_SCF_IF:
+    case LOOM_OP_SCF_FOR:
+    case LOOM_OP_SCF_WHILE:
+    case LOOM_OP_SCF_SWITCH:
+      return loom_target_low_legality_reject_op(
+          context, op,
+          IREE_SV("structured SCF control flow must be lowered to CFG before "
+                  "target-low lowering"));
+    case LOOM_OP_SCF_CONDITION:
+    case LOOM_OP_SCF_YIELD:
+      return loom_target_low_legality_reject_op(
+          context, op,
+          IREE_SV("SCF terminators must be lowered with their parent "
+                  "structured control-flow op before target-low lowering"));
     default:
-      return false;
+      return loom_target_low_legality_reject_op(
+          context, op,
+          IREE_SV("source-only op must be lowered before target-low legality"));
+  }
+}
+
+static iree_status_t loom_target_low_legality_verify_op_class(
+    loom_target_low_legality_context_t* context, const loom_op_t* op) {
+  loom_target_low_legality_t legality =
+      loom_target_low_legality_class(op->kind);
+  switch (legality) {
+    case LOOM_TARGET_LOW_LEGALITY_CORE:
+      return iree_ok_status();
+    case LOOM_TARGET_LOW_LEGALITY_PROVIDER:
+      return loom_target_low_legality_reject_op(
+          context, op,
+          IREE_SV("target-low legality requires a target provider for this "
+                  "op"));
+    case LOOM_TARGET_LOW_LEGALITY_SOURCE_ONLY:
+      return loom_target_low_legality_reject_source_only_op(context, op);
+    case LOOM_TARGET_LOW_LEGALITY_MODULE_METADATA:
+      return loom_target_low_legality_reject_op(
+          context, op,
+          IREE_SV("target record ops are module metadata and cannot appear "
+                  "inside executable regions"));
+    case LOOM_TARGET_LOW_LEGALITY_UNSUPPORTED:
+      return loom_target_low_legality_reject_op(
+          context, op,
+          IREE_SV("no target-low lowering rule or legality provider is "
+                  "registered"));
+    default: {
+      iree_string_view_t op_name = loom_op_name(context->module, op);
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "op '%.*s' has unknown target-low legality class %u",
+          (int)op_name.size, op_name.data, (unsigned)legality);
+    }
   }
 }
 
@@ -656,41 +565,7 @@ static iree_status_t loom_target_low_legality_verify_op(
     return iree_ok_status();
   }
 
-  switch (op->kind) {
-    case LOOM_OP_FUNC_DEF:
-    case LOOM_OP_FUNC_DECL:
-      return iree_ok_status();
-    case LOOM_OP_TARGET_ARTIFACT:
-    case LOOM_OP_TARGET_PROFILE:
-      return loom_target_low_legality_reject(
-          context, NULL, op, IREE_SV("op"), loom_op_name(context->module, op),
-          IREE_SV("target record ops are module metadata and cannot appear "
-                  "inside executable regions"));
-    case LOOM_OP_SCF_IF:
-    case LOOM_OP_SCF_FOR:
-    case LOOM_OP_SCF_WHILE:
-    case LOOM_OP_SCF_SWITCH:
-      return loom_target_low_legality_reject(
-          context, NULL, op, IREE_SV("op"), loom_op_name(context->module, op),
-          IREE_SV("structured SCF control flow must be lowered to CFG before "
-                  "target-low lowering"));
-    case LOOM_OP_SCF_CONDITION:
-    case LOOM_OP_SCF_YIELD:
-      return loom_target_low_legality_reject(
-          context, NULL, op, IREE_SV("op"), loom_op_name(context->module, op),
-          IREE_SV("SCF terminators must be lowered with their parent "
-                  "structured control-flow op before target-low lowering"));
-    default:
-      break;
-  }
-
-  if (loom_target_low_legality_op_is_supported_core(op->kind)) {
-    return iree_ok_status();
-  }
-  return loom_target_low_legality_reject(
-      context, NULL, op, IREE_SV("op"), loom_op_name(context->module, op),
-      IREE_SV(
-          "no target-low lowering rule or legality provider is registered"));
+  return loom_target_low_legality_verify_op_class(context, op);
 }
 
 static bool loom_target_low_legality_skip_children_after_rejection(

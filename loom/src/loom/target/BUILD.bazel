@@ -130,7 +130,11 @@ loom_cc_library(
 
 loom_cc_library(
     name = "low_legality",
-    srcs = ["low_legality.c"],
+    srcs = [
+        "low_legality.c",
+        "low_legality_table.c",
+        "low_legality_table.h",
+    ],
     hdrs = ["low_legality.h"],
     deps = [
         ":low_descriptor_registry",

@@ -153,6 +153,8 @@ loom_cc_library(
     "low_legality.h"
   SRCS
     "low_legality.c"
+    "low_legality_table.c"
+    "low_legality_table.h"
   DEPS
     ::low_descriptor_registry
     ::types

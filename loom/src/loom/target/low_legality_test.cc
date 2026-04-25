@@ -254,6 +254,76 @@ TEST_F(TargetLowLegalityTest, AcceptsDotSourceFunctionWithoutProvider) {
   EXPECT_TRUE(collector.emissions.empty());
 }
 
+TEST_F(TargetLowLegalityTest, RejectsProviderRequiredOpWithoutProvider) {
+  ModulePtr module = ParseSource(
+      "func.def @iota(%base: i32, %step: i32) -> (vector<4xi32>) {\n"
+      "  %lanes = vector.iota %base step %step : vector<4xi32>\n"
+      "  func.return %lanes : vector<4xi32>\n"
+      "}\n");
+
+  EmissionCollector collector;
+  loom_target_low_legality_result_t result = {};
+  IREE_ASSERT_OK(Verify(module.get(), &collector, &result));
+
+  ASSERT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  const CollectedEmission& emission = collector.emissions[0];
+  EXPECT_EQ(emission.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 1));
+  ASSERT_EQ(emission.string_params.size(), 7u);
+  EXPECT_EQ(emission.string_params[3], "iota");
+  EXPECT_EQ(emission.string_params[4], "op");
+  EXPECT_EQ(emission.string_params[5], "vector.iota");
+  EXPECT_NE(emission.string_params[6].find("provider"), std::string::npos);
+}
+
+static iree_status_t AcceptVectorIotaContract(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  (void)provider;
+  (void)context;
+  if (!loom_vector_iota_isa(op)) {
+    *out_handled = false;
+    return iree_ok_status();
+  }
+  *out_handled = true;
+  return iree_ok_status();
+}
+
+TEST_F(TargetLowLegalityTest, ProviderMayClaimProviderRequiredOp) {
+  ModulePtr module = ParseSource(
+      "func.def @iota(%base: i32, %step: i32) -> (vector<4xi32>) {\n"
+      "  %lanes = vector.iota %base step %step : vector<4xi32>\n"
+      "  func.return %lanes : vector<4xi32>\n"
+      "}\n");
+
+  const loom_target_low_legality_provider_t provider = {
+      .name = IREE_SVL("test-provider"),
+      .try_verify_op = AcceptVectorIotaContract,
+  };
+  const loom_target_low_legality_provider_t* providers[] = {&provider};
+  const loom_target_low_legality_provider_list_t provider_list =
+      loom_target_low_legality_provider_list_make(providers,
+                                                  IREE_ARRAYSIZE(providers));
+  EmissionCollector collector;
+  const loom_target_low_legality_options_t options = {
+      .bundle = bundle_,
+      .descriptor_registry = &registry_.registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .provider_list = provider_list,
+      .emitter = collector.emitter(),
+  };
+  loom_target_low_legality_result_t result = {};
+  IREE_ASSERT_OK(loom_target_low_verify_function_legality(
+      module.get(), FirstFunction(module.get()), &options, &result));
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_EQ(result.remark_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
+}
+
 static iree_status_t RejectScalarAddiContract(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
