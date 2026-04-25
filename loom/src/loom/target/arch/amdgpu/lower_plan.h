@@ -257,6 +257,7 @@ typedef struct loom_amdgpu_atomic_ordering_plan_t {
 typedef enum loom_amdgpu_atomic_operation_kind_e {
   LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE = 0,
   LOOM_AMDGPU_ATOMIC_OPERATION_RMW = 1,
+  LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG = 2,
 } loom_amdgpu_atomic_operation_kind_t;
 
 typedef struct loom_amdgpu_atomic_plan_t {

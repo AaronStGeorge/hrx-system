@@ -118,6 +118,11 @@ iree_status_t loom_amdgpu_make_sgpr_range_type(
 iree_status_t loom_amdgpu_make_vgpr_type(loom_low_lower_context_t* context,
                                          loom_type_t* out_type);
 
+// Builds a multi-unit VGPR register type in the current lowering context.
+iree_status_t loom_amdgpu_make_vgpr_range_type(
+    loom_low_lower_context_t* context, uint32_t unit_count,
+    loom_type_t* out_type);
+
 // Builds the register type for a descriptor's implicit resource operand.
 iree_status_t loom_amdgpu_make_descriptor_implicit_resource_type(
     loom_low_lower_context_t* context, uint64_t descriptor_id,

@@ -2298,6 +2298,61 @@ def _global_atomic_overlay(
     )
 
 
+def _global_atomic_cmpswap_overlay(
+    *,
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    return_field_name: str,
+    return_field_value: int,
+    cache_field_names: tuple[str, ...],
+    saddr_off: int | None,
+    address_units: int,
+    descriptor_key_suffix: str,
+) -> AmdgpuDescriptorOverlay:
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = tuple(
+        (
+            field_name,
+            return_field_value if field_name == return_field_name else 0,
+        )
+        for field_name in cache_field_names
+    )
+    operands: tuple[AmdgpuOperandOverlay, ...] = (
+        AmdgpuOperandOverlay("VDST", _vgpr_result()),
+        AmdgpuOperandOverlay(
+            address_field_name, _vgpr_operand("addr", units=address_units)
+        ),
+        AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value", units=2)),
+    )
+    if saddr_off is None:
+        operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
+    else:
+        fixed_encoding_fields += (("SADDR", saddr_off),)
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=(f"amdgpu.global_atomic_cmpswap_b32_rtn{descriptor_key_suffix}"),
+        instruction_name="GLOBAL_ATOMIC_CMPSWAP",
+        mnemonic="global_atomic_cmpswap_b32",
+        encoding_name=encoding_name,
+        semantic_tag="memory.global.atomic.compare_exchange.b32.return",
+        schedule_class=_SCHEDULE_VMEM_ATOMIC_RETURN,
+        operands=operands,
+        implicit_operands=(
+            _ignore_global_atomic_memory(
+                data_format_name="FMT_NUM_U32", is_input=False
+            ),
+            _ignore_global_atomic_memory(data_format_name="FMT_NUM_U32", is_input=True),
+        ),
+        immediate_fields=(offset_field_name,),
+        immediates=(_signed_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=_global_atomic_effects(32, counter_id=_COUNTER_VMEM_LOAD),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=(),
+    )
+
+
 def _global_atomic_overlays(
     *,
     encoding_name: str,
@@ -2385,6 +2440,21 @@ def _global_atomic_overlays(
                 address_units=address_units,
             )
         )
+    overlays.append(
+        _global_atomic_cmpswap_overlay(
+            encoding_name=encoding_name,
+            address_field_name=address_field_name,
+            data_field_name=data_field_name,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            return_field_name=return_field_name,
+            return_field_value=return_field_value,
+            cache_field_names=cache_field_names,
+            saddr_off=saddr_off,
+            address_units=address_units,
+            descriptor_key_suffix=descriptor_key_suffix,
+        )
+    )
     return tuple(overlays)
 
 
@@ -2471,6 +2541,59 @@ def _buffer_atomic_overlay(
     )
 
 
+def _buffer_atomic_cmpswap_overlay(
+    *,
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    return_field_name: str,
+    return_field_value: int,
+    cache_field_names: tuple[str, ...],
+) -> AmdgpuDescriptorOverlay:
+    fixed_encoding_fields = tuple(
+        (
+            field_name,
+            return_field_value if field_name == return_field_name else 0,
+        )
+        for field_name in cache_field_names
+    )
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.buffer_atomic_cmpswap_b32_rtn",
+        instruction_name="BUFFER_ATOMIC_CMPSWAP",
+        mnemonic="buffer_atomic_cmpswap_b32",
+        encoding_name=encoding_name,
+        semantic_tag="memory.global.atomic.compare_exchange.b32.return",
+        schedule_class=_SCHEDULE_VMEM_ATOMIC_RETURN,
+        operands=(
+            AmdgpuOperandOverlay("VDATA", _vgpr_result(units=2)),
+            AmdgpuOperandOverlay(
+                "VDATA",
+                _vgpr_operand("value", units=2),
+                role_exception_reason=_BUFFER_ATOMIC_VDATA_INPUT_REASON,
+            ),
+            AmdgpuOperandOverlay(
+                resource_field_name, _sgpr_resource("resource", units=4)
+            ),
+            AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        ),
+        implicit_operands=(
+            _ignore_global_atomic_memory(
+                data_format_name="FMT_NUM_U32", is_input=False
+            ),
+            _ignore_global_atomic_memory(data_format_name="FMT_NUM_U32", is_input=True),
+        ),
+        immediate_fields=(offset_field_name,),
+        immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=(("OFFEN", 1), *fixed_encoding_fields),
+        effects=_global_atomic_effects(32, counter_id=_COUNTER_VMEM_LOAD),
+        constraints=_DESTRUCTIVE_BUFFER_ATOMIC_CONSTRAINTS,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=(),
+    )
+
+
 def _buffer_atomic_overlays(
     *,
     encoding_name: str,
@@ -2544,6 +2667,17 @@ def _buffer_atomic_overlays(
                 cache_field_names=cache_field_names,
             )
         )
+    overlays.append(
+        _buffer_atomic_cmpswap_overlay(
+            encoding_name=encoding_name,
+            resource_field_name=resource_field_name,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            return_field_name=return_field_name,
+            return_field_value=return_field_value,
+            cache_field_names=cache_field_names,
+        )
+    )
     return tuple(overlays)
 
 
@@ -2738,6 +2872,43 @@ def _ds_atomic_overlay(
     )
 
 
+def _ds_atomic_cmpstore_overlay(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.ds_cmpst_rtn_b32",
+        instruction_name="DS_CMPST_RTN_B32",
+        mnemonic="ds_cmpst_rtn_b32",
+        encoding_name=encoding_name,
+        semantic_tag="memory.workgroup.atomic.compare_exchange.b32.return",
+        schedule_class=_SCHEDULE_LDS_ATOMIC,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+            AmdgpuOperandOverlay("DATA0", _vgpr_operand("expected")),
+            AmdgpuOperandOverlay("DATA1", _vgpr_operand("replacement")),
+        ),
+        implicit_operands=(
+            _ignore_workgroup_memory(
+                width_bits=32, is_input=False, data_format_name="FMT_NUM_B32"
+            ),
+            _ignore_workgroup_memory(
+                width_bits=32, is_input=True, data_format_name="FMT_NUM_B32"
+            ),
+        ),
+        immediate_fields=("OFFSET0",),
+        immediates=(_offset_immediate(8),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(
+            _workgroup_memory_effect(EffectKind.READ, 32),
+            _workgroup_memory_effect(EffectKind.WRITE, 32),
+        ),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _ds_atomic_overlays(
     *,
     encoding_name: str = "ENC_DS",
@@ -2772,7 +2943,7 @@ def _ds_atomic_overlays(
         ),
         ("ds_add_rtn_f32", "DS_ADD_RTN_F32", "add.return.f32", "FMT_NUM_F32", True),
     )
-    return tuple(
+    overlays = [
         _ds_atomic_overlay(
             descriptor_key=f"amdgpu.{mnemonic}",
             instruction_name=instruction_name,
@@ -2790,7 +2961,14 @@ def _ds_atomic_overlays(
             data_format_name,
             returns_old_value,
         ) in rows
+    ]
+    overlays.append(
+        _ds_atomic_cmpstore_overlay(
+            encoding_name=encoding_name,
+            fixed_encoding_fields=fixed_encoding_fields,
+        )
     )
+    return tuple(overlays)
 
 
 def _ds_stride64_read2_overlay(

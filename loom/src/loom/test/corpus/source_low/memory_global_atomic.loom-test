@@ -68,6 +68,19 @@ func.def @global_atomic_exchange_i32(%input: buffer) {
 
 // ====
 
+func.def @global_atomic_cmpxchg_i32(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
+  %expected = scalar.constant 7 : i32
+  %replacement = scalar.constant 9 : i32
+  %old = view.atomic.cmpxchg %expected, %replacement, %view[%tid] {failure_ordering = relaxed, scope = device, success_ordering = relaxed} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ====
+
 func.def @global_atomic_minmax_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

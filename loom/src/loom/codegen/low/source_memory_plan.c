@@ -408,6 +408,7 @@ bool loom_low_source_memory_access_plan_build(
       source_op->kind != LOOM_OP_VECTOR_STORE &&
       source_op->kind != LOOM_OP_VIEW_ATOMIC_REDUCE &&
       source_op->kind != LOOM_OP_VIEW_ATOMIC_RMW &&
+      source_op->kind != LOOM_OP_VIEW_ATOMIC_CMPXCHG &&
       source_op->kind != LOOM_OP_VIEW_PREFETCH) {
     out_diagnostic->rejection_bits |=
         LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_UNSUPPORTED_OP;
@@ -489,6 +490,29 @@ bool loom_low_source_memory_access_plan_build(
           module, fact_table, LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_RMW,
           view_value_id, loom_view_atomic_rmw_indices(source_op),
           loom_view_atomic_rmw_static_indices(source_op), view_type,
+          element_vector_type, cache_policy, out_plan, out_diagnostic);
+    }
+    case LOOM_OP_VIEW_ATOMIC_CMPXCHG: {
+      loom_vector_memory_cache_policy_t cache_policy = {0};
+      if (source_op->attribute_count < 5 ||
+          !loom_vector_memory_cache_policy_from_attrs(
+              loom_op_attrs(source_op)[3], loom_op_attrs(source_op)[4],
+              &cache_policy)) {
+        out_diagnostic->rejection_bits |=
+            LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_CACHE_POLICY;
+        return false;
+      }
+      const loom_value_id_t view_value_id =
+          loom_view_atomic_cmpxchg_view(source_op);
+      const loom_type_t view_type =
+          loom_module_value_type(module, view_value_id);
+      const loom_type_t element_vector_type = loom_type_shaped_1d(
+          LOOM_TYPE_VECTOR, loom_type_element_type(view_type),
+          loom_dim_pack_static(1), /*encoding_id=*/0);
+      return loom_low_source_memory_access_plan_from_components(
+          module, fact_table, LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_CMPXCHG,
+          view_value_id, loom_view_atomic_cmpxchg_indices(source_op),
+          loom_view_atomic_cmpxchg_static_indices(source_op), view_type,
           element_vector_type, cache_policy, out_plan, out_diagnostic);
     }
     case LOOM_OP_VIEW_PREFETCH: {

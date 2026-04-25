@@ -177,6 +177,36 @@ low.func.def target(@target) abi(hal_kernel) @global_atomic_exchange_i32() {
 
 // ====
 
+func.def @global_atomic_cmpxchg_i32(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
+  %expected = scalar.constant 7 : i32
+  %replacement = scalar.constant 9 : i32
+  %old = view.atomic.cmpxchg %expected, %replacement, %view[%tid] {failure_ordering = relaxed, scope = device, success_ordering = relaxed} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_atomic_cmpxchg_i32() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %expected = low.const<amdgpu.s_mov_b32> {imm32 = 7} : reg<amdgpu.sgpr>
+  %replacement = low.const<amdgpu.s_mov_b32> {imm32 = 9} : reg<amdgpu.sgpr>
+  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %14 = low.op<amdgpu.v_lshlrev_b32>(%13, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %15 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 7} : reg<amdgpu.vgpr>
+  %17 = low.const<amdgpu.v_mov_b32> {imm32 = 9} : reg<amdgpu.vgpr>
+  %18 = low.concat(%16, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %old = low.op<amdgpu.global_atomic_cmpswap_b32_rtn_saddr>(%14, %18, %15) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.return
+}
+
+// ====
+
 func.def @global_atomic_minmax_i32(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

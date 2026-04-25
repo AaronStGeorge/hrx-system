@@ -181,6 +181,13 @@ iree_status_t loom_amdgpu_make_vgpr_type(loom_low_lower_context_t* context,
                                         1, out_type);
 }
 
+iree_status_t loom_amdgpu_make_vgpr_range_type(
+    loom_low_lower_context_t* context, uint32_t unit_count,
+    loom_type_t* out_type) {
+  return loom_amdgpu_make_register_type(context, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                                        unit_count, out_type);
+}
+
 iree_status_t loom_amdgpu_make_descriptor_implicit_resource_type(
     loom_low_lower_context_t* context, uint64_t descriptor_id,
     loom_type_t* out_type) {
@@ -307,6 +314,7 @@ bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,
     case LOOM_OP_VECTOR_REDUCE:
       return loom_amdgpu_type_is_vector_32bit_lane_range(loom_module_value_type(
           module, loom_vector_reduce_input(defining_op)));
+    case LOOM_OP_VIEW_ATOMIC_CMPXCHG:
     case LOOM_OP_VIEW_ATOMIC_RMW:
       return true;
     case LOOM_OP_SCALAR_ADDI:

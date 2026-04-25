@@ -90,6 +90,20 @@ func.def @lds_atomic_exchange_i32() {
 
 // ====
 
+func.def @lds_atomic_cmpxchg_i32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %expected = scalar.constant 7 : i32
+  %replacement = scalar.constant 9 : i32
+  %old = view.atomic.cmpxchg %expected, %replacement, %scratch_view[%tid] {failure_ordering = relaxed, scope = workgroup, success_ordering = relaxed} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ====
+
 func.def @lds_atomic_minmax_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

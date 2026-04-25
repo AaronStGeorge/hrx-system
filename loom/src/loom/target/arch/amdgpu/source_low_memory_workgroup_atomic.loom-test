@@ -251,6 +251,39 @@ low.slot @lds_atomic_exchange_i32__lds3 {align = 4, function = @lds_atomic_excha
 
 // ====
 
+func.def @lds_atomic_cmpxchg_i32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %expected = scalar.constant 7 : i32
+  %replacement = scalar.constant 9 : i32
+  %old = view.atomic.cmpxchg %expected, %replacement, %scratch_view[%tid] {failure_ordering = relaxed, scope = workgroup, success_ordering = relaxed} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @lds_atomic_cmpxchg_i32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %zero = s_mov_b32 0
+  %bytes = s_mov_b32 256
+  %scratch_view = frame_index @lds_atomic_cmpxchg_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %expected = s_mov_b32 7
+  %replacement = s_mov_b32 9
+  %14 = v_mov_b32 2
+  %15 = v_lshlrev_b32 %14, %tid
+  %16 = v_add_u32 %scratch_view, %15
+  %17 = v_mov_b32 7
+  %18 = v_mov_b32 9
+  %old = ds_cmpst_rtn_b32 %16, %17, %18 {offset = 0}
+  return
+}
+
+low.slot @lds_atomic_cmpxchg_i32__lds3 {align = 4, function = @lds_atomic_cmpxchg_i32, size = 256, space = lds}
+
+// ====
+
 func.def @lds_atomic_minmax_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
