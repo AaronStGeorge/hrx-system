@@ -331,8 +331,7 @@ static iree_status_t loom_low_verify_descriptor_id_refs(
   return iree_ok_status();
 }
 
-static bool loom_low_operand_role_is_packet_operand(
-    loom_low_operand_role_t role) {
+bool loom_low_operand_role_is_packet_operand(loom_low_operand_role_t role) {
   return role == LOOM_LOW_OPERAND_ROLE_OPERAND ||
          role == LOOM_LOW_OPERAND_ROLE_PREDICATE ||
          role == LOOM_LOW_OPERAND_ROLE_RESOURCE;
@@ -851,6 +850,89 @@ static iree_status_t loom_low_verify_descriptor_encoding_contract(
   return iree_ok_status();
 }
 
+static bool loom_low_descriptor_constraint_ties_operands(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t result_operand_index,
+    uint16_t packet_operand_index) {
+  for (uint16_t i = 0; i < descriptor->constraint_count; ++i) {
+    const loom_low_constraint_t* constraint =
+        &descriptor_set->constraints[descriptor->constraint_start + i];
+    if (constraint->kind == LOOM_LOW_CONSTRAINT_KIND_TIED &&
+        constraint->lhs_operand_index == result_operand_index &&
+        constraint->rhs_operand_index == packet_operand_index) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool loom_low_descriptor_operands_are_tied(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t lhs_operand_index,
+    uint16_t rhs_operand_index) {
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[descriptor->operand_start];
+  const loom_low_operand_t* lhs = &operands[lhs_operand_index];
+  const loom_low_operand_t* rhs = &operands[rhs_operand_index];
+  if (lhs->role == LOOM_LOW_OPERAND_ROLE_RESULT &&
+      loom_low_operand_role_is_packet_operand(rhs->role)) {
+    return loom_low_descriptor_constraint_ties_operands(
+        descriptor_set, descriptor, lhs_operand_index, rhs_operand_index);
+  }
+  if (rhs->role == LOOM_LOW_OPERAND_ROLE_RESULT &&
+      loom_low_operand_role_is_packet_operand(lhs->role)) {
+    return loom_low_descriptor_constraint_ties_operands(
+        descriptor_set, descriptor, rhs_operand_index, lhs_operand_index);
+  }
+  return false;
+}
+
+static iree_status_t loom_low_verify_descriptor_operand_encoding_fields(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[descriptor->operand_start];
+  for (uint16_t operand_index = 0; operand_index < descriptor->operand_count;
+       ++operand_index) {
+    const loom_low_operand_t* operand = &operands[operand_index];
+    if (operand->encoding_field_id == 0) {
+      continue;
+    }
+    for (uint16_t field_index = 0;
+         field_index < descriptor->encoding_field_value_count; ++field_index) {
+      const loom_low_encoding_field_value_t* field_value =
+          &descriptor_set
+               ->encoding_field_values[descriptor->encoding_field_value_start +
+                                       field_index];
+      if (field_value->encoding_field_id == operand->encoding_field_id) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low descriptor %" PRIu32 " operand row %" PRIu16
+            " shares fixed encoding field id %" PRIu16,
+            descriptor_index, operand_index, operand->encoding_field_id);
+      }
+    }
+    for (uint16_t previous_index = 0; previous_index < operand_index;
+         ++previous_index) {
+      const loom_low_operand_t* previous = &operands[previous_index];
+      if (previous->encoding_field_id != operand->encoding_field_id) {
+        continue;
+      }
+      if (loom_low_descriptor_operands_are_tied(
+              descriptor_set, descriptor, previous_index, operand_index)) {
+        continue;
+      }
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low descriptor %" PRIu32 " operand rows %" PRIu16 " and %" PRIu16
+          " share encoding field id %" PRIu16 " without a tied constraint",
+          descriptor_index, previous_index, operand_index,
+          operand->encoding_field_id);
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor_effect_contract(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
@@ -1097,6 +1179,8 @@ static iree_status_t loom_low_verify_descriptor(
       descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(
       loom_low_verify_descriptor_constraints(descriptor_set, descriptor));
+  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_encoding_fields(
+      descriptor_set, descriptor, descriptor_index));
   return loom_low_verify_descriptor_canonical_asm_form(
       descriptor_set, descriptor, descriptor_index);
 }

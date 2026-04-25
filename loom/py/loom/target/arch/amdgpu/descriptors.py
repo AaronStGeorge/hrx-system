@@ -743,6 +743,11 @@ _DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS = (
     Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
     Constraint(ConstraintKind.EARLY_CLOBBER, 0),
 )
+_BUFFER_ATOMIC_VDATA_INPUT_REASON = "xml-models-buffer-atomic-vdata-as-output-only"
+_DESTRUCTIVE_BUFFER_ATOMIC_CONSTRAINTS = (
+    Constraint(ConstraintKind.TIED, 0, 1),
+    Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+)
 _PSEUDO_DEAD_REMOVABLE_FLAGS = (DescriptorFlag.DEAD_REMOVABLE, DescriptorFlag.PSEUDO)
 
 
@@ -2372,6 +2377,156 @@ def _global_atomic_overlays(
     return tuple(overlays)
 
 
+def _buffer_atomic_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    data_format_name: str,
+    returns_old_value: bool,
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    return_field_name: str,
+    cache_field_names: tuple[str, ...],
+) -> AmdgpuDescriptorOverlay:
+    schedule_class = (
+        _SCHEDULE_VMEM_ATOMIC_RETURN
+        if returns_old_value
+        else _SCHEDULE_VMEM_ATOMIC_NO_RETURN
+    )
+    counter_id = _COUNTER_VMEM_LOAD if returns_old_value else _COUNTER_VMEM_STORE
+    constraints: tuple[Constraint, ...]
+    if returns_old_value:
+        operands: tuple[AmdgpuOperandOverlay, ...] = (
+            AmdgpuOperandOverlay("VDATA", _vgpr_result()),
+            AmdgpuOperandOverlay(
+                "VDATA",
+                _vgpr_operand("value"),
+                role_exception_reason=_BUFFER_ATOMIC_VDATA_INPUT_REASON,
+            ),
+        )
+        constraints = _DESTRUCTIVE_BUFFER_ATOMIC_CONSTRAINTS
+    else:
+        operands = (
+            AmdgpuOperandOverlay(
+                "VDATA",
+                _vgpr_operand("value"),
+                role_exception_reason=_BUFFER_ATOMIC_VDATA_INPUT_REASON,
+            ),
+        )
+        constraints = ()
+
+    operands += (
+        AmdgpuOperandOverlay(resource_field_name, _sgpr_resource("resource", units=4)),
+        AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+        AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+    )
+    fixed_encoding_fields = tuple(
+        (field_name, int(returns_old_value and field_name == return_field_name))
+        for field_name in cache_field_names
+    )
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=semantic_tag,
+        schedule_class=schedule_class,
+        operands=operands,
+        implicit_operands=(
+            _ignore_global_atomic_memory(
+                data_format_name=data_format_name, is_input=False
+            ),
+            _ignore_global_atomic_memory(
+                data_format_name=data_format_name, is_input=True
+            ),
+        ),
+        immediate_fields=(offset_field_name,),
+        immediates=(_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=(("OFFEN", 1), *fixed_encoding_fields),
+        effects=_global_atomic_effects(32, counter_id=counter_id),
+        constraints=constraints,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=(),
+    )
+
+
+def _buffer_atomic_overlays(
+    *,
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    return_field_name: str,
+    cache_fields: tuple[tuple[str, int], ...],
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    rows = (
+        ("add_u32", "BUFFER_ATOMIC_ADD_U32", "add.u32", "FMT_NUM_U32", True),
+        ("sub_u32", "BUFFER_ATOMIC_SUB_U32", "sub.u32", "FMT_NUM_U32", True),
+        ("min_i32", "BUFFER_ATOMIC_MIN_I32", "min.i32", "FMT_NUM_I32", True),
+        ("max_i32", "BUFFER_ATOMIC_MAX_I32", "max.i32", "FMT_NUM_I32", True),
+        ("min_u32", "BUFFER_ATOMIC_MIN_U32", "min.u32", "FMT_NUM_U32", True),
+        ("max_u32", "BUFFER_ATOMIC_MAX_U32", "max.u32", "FMT_NUM_U32", True),
+        ("and_b32", "BUFFER_ATOMIC_AND_B32", "and.b32", "FMT_NUM_B32", True),
+        ("or_b32", "BUFFER_ATOMIC_OR_B32", "or.b32", "FMT_NUM_B32", True),
+        ("xor_b32", "BUFFER_ATOMIC_XOR_B32", "xor.b32", "FMT_NUM_B32", True),
+        (
+            "swap_b32",
+            "BUFFER_ATOMIC_SWAP_B32",
+            "exchange.b32",
+            "FMT_NUM_B32",
+            False,
+        ),
+        ("add_f32", "BUFFER_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
+    )
+    cache_field_names = tuple(field_name for field_name, _ in cache_fields)
+    overlays: list[AmdgpuDescriptorOverlay] = []
+    for (
+        mnemonic_suffix,
+        instruction_name,
+        semantic_suffix,
+        data_format_name,
+        has_no_return_form,
+    ) in rows:
+        if has_no_return_form:
+            overlays.append(
+                _buffer_atomic_overlay(
+                    descriptor_key=f"amdgpu.buffer_atomic_{mnemonic_suffix}",
+                    instruction_name=instruction_name,
+                    mnemonic=f"buffer_atomic_{mnemonic_suffix}",
+                    semantic_tag=f"memory.global.atomic.{semantic_suffix}",
+                    data_format_name=data_format_name,
+                    returns_old_value=False,
+                    encoding_name=encoding_name,
+                    resource_field_name=resource_field_name,
+                    offset_field_name=offset_field_name,
+                    offset_bit_width=offset_bit_width,
+                    return_field_name=return_field_name,
+                    cache_field_names=cache_field_names,
+                )
+            )
+        overlays.append(
+            _buffer_atomic_overlay(
+                descriptor_key=f"amdgpu.buffer_atomic_{mnemonic_suffix}_rtn",
+                instruction_name=instruction_name,
+                mnemonic=f"buffer_atomic_{mnemonic_suffix}",
+                semantic_tag=f"memory.global.atomic.{semantic_suffix}.return",
+                data_format_name=data_format_name,
+                returns_old_value=True,
+                encoding_name=encoding_name,
+                resource_field_name=resource_field_name,
+                offset_field_name=offset_field_name,
+                offset_bit_width=offset_bit_width,
+                return_field_name=return_field_name,
+                cache_field_names=cache_field_names,
+            )
+        )
+    return tuple(overlays)
+
+
 def _ds_read_overlay(
     *,
     width_bits: int,
@@ -3914,6 +4069,14 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _buffer_store_128_overlay(
             encoding_name="ENC_MUBUF",
             resource_field_name="SRSRC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
+        ),
+        *_buffer_atomic_overlays(
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            offset_field_name="OFFSET",
+            offset_bit_width=12,
+            return_field_name="GLC",
             cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(

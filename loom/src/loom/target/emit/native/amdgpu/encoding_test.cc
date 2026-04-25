@@ -347,6 +347,33 @@ TEST_F(AmdgpuEncodingTest, EncodesLiteralVectorConstantAndReturn) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest, EncodesTiedBufferAtomicReturn) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel(%value: "
+      "reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %vaddr: "
+      "reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) {\n"
+      "  %old = low.op<amdgpu.buffer_atomic_add_u32_rtn>(%value, "
+      "%resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, "
+      "reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> "
+      "%value as reg<amdgpu.vgpr>\n"
+      "  low.return\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_EQ(text.data_length, 12u);
+  EXPECT_NE(ReadU32LE(text.data), UINT32_C(0));
+  EXPECT_NE(ReadU32LE(text.data + 4), UINT32_C(0));
+  EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(AmdgpuEncodingTest, PacksGeneratedVectorRegisterMove) {
   const loom_amdgpu_encoding_table_t* table =
       loom_amdgpu_encoding_table_for_descriptor_set_id(

@@ -28,6 +28,8 @@ from loom.target.arch.amdgpu.isa_xml_test import SAMPLE_XML
 from loom.target.low_descriptors import (
     AsmForm,
     AsmImmediate,
+    Constraint,
+    ConstraintKind,
     DescriptorFlag,
     Immediate,
     ImmediateKind,
@@ -66,6 +68,81 @@ _IGNORE_GLOBAL_READ_MEMORY = AmdgpuImplicitOperandOverlay(
     is_input=True,
     is_output=False,
     ignore_reason="modeled-by-global-read-effect",
+)
+
+_IGNORE_GLOBAL_WRITE_MEMORY = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B32",
+    size_bits=32,
+    is_input=False,
+    is_output=True,
+    ignore_reason="modeled-by-global-write-effect",
+)
+
+_BUFFER_ATOMIC_XML = SAMPLE_XML.replace(
+    "    </Instructions>",
+    """
+      <Instruction>
+        <InstructionFlags>
+          <IsBranch>FALSE</IsBranch>
+          <IsConditionalBranch>FALSE</IsConditionalBranch>
+          <IsIndirectBranch>FALSE</IsIndirectBranch>
+          <IsProgramTerminator>FALSE</IsProgramTerminator>
+          <IsImmediatelyExecuted>FALSE</IsImmediatelyExecuted>
+        </InstructionFlags>
+        <InstructionName>BUFFER_ATOMIC_ADD_U32</InstructionName>
+        <InstructionEncodings>
+          <InstructionEncoding>
+            <EncodingName>ENC_VBUFFER</EncodingName>
+            <EncodingCondition>default</EncodingCondition>
+            <Opcode Radix="10">53</Opcode>
+            <Operands>
+              <Operand Input="false" Output="true" IsImplicit="false" IsBinaryMicrocodeRequired="true" Order="1">
+                <FieldName>VDATA</FieldName>
+                <DataFormatName>FMT_NUM_U32</DataFormatName>
+                <OperandType>OPR_VGPR</OperandType>
+                <OperandSize>32</OperandSize>
+              </Operand>
+              <Operand Input="true" Output="false" IsImplicit="false" IsBinaryMicrocodeRequired="true" Order="2">
+                <FieldName>VADDR</FieldName>
+                <DataFormatName>FMT_ANY</DataFormatName>
+                <OperandType>OPR_VGPR</OperandType>
+                <OperandSize>32</OperandSize>
+              </Operand>
+              <Operand Input="true" Output="false" IsImplicit="false" IsBinaryMicrocodeRequired="true" Order="3">
+                <FieldName>RSRC</FieldName>
+                <DataFormatName>FMT_RSRC</DataFormatName>
+                <OperandType>OPR_SREG</OperandType>
+                <OperandSize>128</OperandSize>
+              </Operand>
+              <Operand Input="true" Output="false" IsImplicit="false" IsBinaryMicrocodeRequired="true" Order="4">
+                <FieldName>SOFFSET</FieldName>
+                <DataFormatName>FMT_ANY</DataFormatName>
+                <OperandType>OPR_SREG_M0</OperandType>
+                <OperandSize>32</OperandSize>
+              </Operand>
+              <Operand Input="false" Output="true" IsImplicit="true" IsBinaryMicrocodeRequired="true" Order="5">
+                <DataFormatName>FMT_NUM_B32</DataFormatName>
+                <OperandType>OPR_GPUMEM</OperandType>
+                <OperandSize>32</OperandSize>
+              </Operand>
+              <Operand Input="true" Output="false" IsImplicit="true" IsBinaryMicrocodeRequired="true" Order="6">
+                <DataFormatName>FMT_NUM_B32</DataFormatName>
+                <OperandType>OPR_GPUMEM</OperandType>
+                <OperandSize>32</OperandSize>
+              </Operand>
+            </Operands>
+          </InstructionEncoding>
+        </InstructionEncodings>
+        <FunctionalGroup>
+          <Name>VMEM</Name>
+          <FunctionalSubgroups>
+            <Subgroup>BUFFER</Subgroup>
+            <Subgroup>ATOMIC</Subgroup>
+          </FunctionalSubgroups>
+        </FunctionalGroup>
+      </Instruction>
+    </Instructions>""",
 )
 
 
@@ -415,6 +492,112 @@ def test_materialize_rejects_repeated_overlay_xml_field() -> None:
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
         match="repeats XML field 'LITERAL' across operands and immediates",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_accepts_tied_buffer_atomic_vdata_overlay() -> None:
+    spec = parse_amdgpu_isa_xml_text(_BUFFER_ATOMIC_XML, source_name="sample.xml")
+    descriptor = materialize_amdgpu_descriptor_overlay(
+        spec,
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.buffer_atomic_add_u32_rtn",
+            instruction_name="BUFFER_ATOMIC_ADD_U32",
+            mnemonic="buffer_atomic_add_u32",
+            encoding_name="ENC_VBUFFER",
+            semantic_tag="memory.global.atomic.add.u32.return",
+            schedule_class="amdgpu.vmem.atomic.return",
+            operands=(
+                AmdgpuOperandOverlay("VDATA", _result("dst", _VGPR_ALT)),
+                AmdgpuOperandOverlay(
+                    "VDATA",
+                    _operand("value", _VGPR_ALT),
+                    role_exception_reason="xml-models-buffer-atomic-vdata-as-output-only",
+                ),
+                AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+                AmdgpuOperandOverlay("VADDR", _operand("vaddr", _VGPR_ALT)),
+                AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
+            ),
+            constraints=(Constraint(ConstraintKind.TIED, 0, 1),),
+            implicit_operands=(
+                _IGNORE_GLOBAL_WRITE_MEMORY,
+                _IGNORE_GLOBAL_READ_MEMORY,
+            ),
+        ),
+    )
+
+    assert [operand.field_name for operand in descriptor.operands] == [
+        "dst",
+        "value",
+        "resource",
+        "vaddr",
+        "soffset",
+    ]
+    assert (
+        descriptor.operands[0].encoding_field_id
+        == descriptor.operands[1].encoding_field_id
+    )
+    assert descriptor.operands[0].encoding_field_id != 0
+    assert descriptor.constraints == (Constraint(ConstraintKind.TIED, 0, 1),)
+
+
+def test_materialize_rejects_repeated_buffer_atomic_vdata_without_tie() -> None:
+    spec = parse_amdgpu_isa_xml_text(_BUFFER_ATOMIC_XML, source_name="sample.xml")
+    overlay = AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.buffer_atomic_add_u32_rtn",
+        instruction_name="BUFFER_ATOMIC_ADD_U32",
+        mnemonic="buffer_atomic_add_u32",
+        encoding_name="ENC_VBUFFER",
+        semantic_tag="memory.global.atomic.add.u32.return",
+        schedule_class="amdgpu.vmem.atomic.return",
+        operands=(
+            AmdgpuOperandOverlay("VDATA", _result("dst", _VGPR_ALT)),
+            AmdgpuOperandOverlay(
+                "VDATA",
+                _operand("value", _VGPR_ALT),
+                role_exception_reason="xml-models-buffer-atomic-vdata-as-output-only",
+            ),
+            AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+            AmdgpuOperandOverlay("VADDR", _operand("vaddr", _VGPR_ALT)),
+            AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
+        ),
+        implicit_operands=(
+            _IGNORE_GLOBAL_WRITE_MEMORY,
+            _IGNORE_GLOBAL_READ_MEMORY,
+        ),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="repeats XML field 'VDATA' without a tied result/input pair",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_rejects_output_only_buffer_atomic_input_without_reason() -> None:
+    spec = parse_amdgpu_isa_xml_text(_BUFFER_ATOMIC_XML, source_name="sample.xml")
+    overlay = AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.buffer_atomic_add_u32",
+        instruction_name="BUFFER_ATOMIC_ADD_U32",
+        mnemonic="buffer_atomic_add_u32",
+        encoding_name="ENC_VBUFFER",
+        semantic_tag="memory.global.atomic.add.u32",
+        schedule_class="amdgpu.vmem.atomic.no_return",
+        operands=(
+            AmdgpuOperandOverlay("VDATA", _operand("value", _VGPR_ALT)),
+            AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+            AmdgpuOperandOverlay("VADDR", _operand("vaddr", _VGPR_ALT)),
+            AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
+        ),
+        implicit_operands=(
+            _IGNORE_GLOBAL_WRITE_MEMORY,
+            _IGNORE_GLOBAL_READ_MEMORY,
+        ),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="maps XML field 'VDATA' to low operand 'value' as input",
     ):
         materialize_amdgpu_descriptor_overlay(spec, overlay)
 

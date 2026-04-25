@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/move_sequence.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ir/context.h"
@@ -424,6 +425,51 @@ static iree_status_t loom_amdgpu_push_encoding_field_value(
       .value = value,
   };
   ++*field_value_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_descriptor_operand_field_already_encoded(
+    const loom_amdgpu_encode_state_t* state,
+    const loom_low_packet_view_t* packet, uint16_t operand_index,
+    const loom_low_operand_t* operand, uint64_t value,
+    bool* out_already_encoded) {
+  IREE_ASSERT_ARGUMENT(out_already_encoded);
+  *out_already_encoded = false;
+  const loom_low_descriptor_set_t* descriptor_set =
+      state->schedule->target.descriptor_set;
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[packet->descriptor->operand_start];
+  for (uint16_t previous_index = 0; previous_index < operand_index;
+       ++previous_index) {
+    const loom_low_operand_t* previous = &operands[previous_index];
+    if (previous->encoding_field_id != operand->encoding_field_id) {
+      continue;
+    }
+    if (!loom_low_descriptor_operands_are_tied(descriptor_set,
+                                               packet->descriptor,
+                                               previous_index, operand_index)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU native encoding descriptor has repeated field id %" PRIu16
+          " without a tied constraint",
+          operand->encoding_field_id);
+    }
+    const loom_low_allocation_assignment_t* previous_assignment = NULL;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_packet_descriptor_operand_assignment(
+        state, packet, previous_index, &previous_assignment));
+    uint64_t previous_value = 0;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_assignment_field_value(
+        state, previous_assignment, previous, &previous_value));
+    if (previous_value != value) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU native encoding tied descriptor operands for field id "
+          "%" PRIu16 " were assigned different registers",
+          operand->encoding_field_id);
+    }
+    *out_already_encoded = true;
+    return iree_ok_status();
+  }
   return iree_ok_status();
 }
 
@@ -966,6 +1012,12 @@ static iree_status_t loom_amdgpu_encode_generic_descriptor_packet(
     uint64_t value = 0;
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_assignment_field_value(state, assignment, operand, &value));
+    bool already_encoded = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_operand_field_already_encoded(
+        state, packet, i, operand, value, &already_encoded));
+    if (already_encoded) {
+      continue;
+    }
     IREE_RETURN_IF_ERROR(loom_amdgpu_push_encoding_field_value(
         field_values, &field_value_count, operand->encoding_field_id, value));
   }

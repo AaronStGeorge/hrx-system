@@ -97,6 +97,7 @@ struct TestTables {
   loom_low_hazard_t hazards[1];
   loom_low_pressure_delta_t pressure_deltas[1];
   uint64_t feature_mask_words[1];
+  loom_low_encoding_field_value_t encoding_field_values[1];
   loom_low_descriptor_set_t set;
 };
 
@@ -277,6 +278,7 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.feature_mask_words = tables->feature_mask_words;
   tables->set.feature_mask_word_count =
       IREE_ARRAYSIZE(tables->feature_mask_words);
+  tables->set.encoding_field_values = tables->encoding_field_values;
 }
 
 void AddAsmForms(TestTables* tables) {
@@ -720,6 +722,39 @@ TEST(LowDescriptorsTest, AcceptsTiedResultOperandConstraint) {
   AddAddDescriptorConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 0, 1);
 
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, AcceptsTiedDuplicateOperandEncodingField) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[1].encoding_field_id = 7;
+  tables.operands[2].encoding_field_id = 7;
+  AddAddDescriptorConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 0, 1);
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsUntiedDuplicateOperandEncodingField) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[1].encoding_field_id = 7;
+  tables.operands[2].encoding_field_id = 7;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsOperandFixedEncodingFieldOverlap) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[1].encoding_field_id = 7;
+  tables.encoding_field_values[0].encoding_field_id = 7;
+  tables.descriptors[1].encoding_field_value_start = 0;
+  tables.descriptors[1].encoding_field_value_count = 1;
+  tables.set.encoding_field_value_count = 1;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
 }
 
 TEST(LowDescriptorsTest, AcceptsCommutableOperandConstraint) {

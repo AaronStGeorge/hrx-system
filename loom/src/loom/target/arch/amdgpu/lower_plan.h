@@ -230,6 +230,8 @@ typedef struct loom_amdgpu_atomic_plan_t {
   loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
   // Static offset value encoded in the descriptor offset immediate.
   int64_t immediate_offset;
+  // Static byte offset materialized through the scalar SOFFSET operand.
+  uint32_t scalar_byte_offset;
   // Stable descriptor ID selected for the active descriptor set.
   uint64_t descriptor_id;
 } loom_amdgpu_atomic_plan_t;

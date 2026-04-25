@@ -179,6 +179,7 @@ loom_cc_library(
     deps = [
         ":slot_layout",
         "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:move_sequence",
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/codegen/low:schedule",

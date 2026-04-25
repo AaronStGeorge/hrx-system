@@ -25,7 +25,10 @@ from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_SET_ABI_VERSION,
     AsmForm,
     AsmImmediate,
+    Constraint,
+    ConstraintKind,
     DescriptorFlag,
+    EncodingFieldValue,
     EnumDomain,
     EnumValue,
     Hazard,
@@ -679,6 +682,62 @@ def test_generator_rejects_implicit_operand_without_implicit_flag() -> None:
     with pytest.raises(
         ValueError,
         match=("descriptor 'iree.vm.add.i32' implicit operand 'lhs' must set the implicit flag"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_accepts_tied_duplicate_operand_encoding_field() -> None:
+    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[1]
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            replace(base_descriptor.operands[0], encoding_field_id=7),
+            replace(base_descriptor.operands[1], encoding_field_id=7),
+            *base_descriptor.operands[2:],
+        ),
+        constraints=(Constraint(ConstraintKind.TIED, 0, 1),),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    generated = generate_descriptor_set(descriptor_set)
+
+    assert "iree.vm.add.i32" in generated.source
+
+
+def test_generator_rejects_untied_duplicate_operand_encoding_field() -> None:
+    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[1]
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            replace(base_descriptor.operands[0], encoding_field_id=7),
+            replace(base_descriptor.operands[1], encoding_field_id=7),
+            *base_descriptor.operands[2:],
+        ),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' operands 'dst' and 'lhs' share encoding field id 7 without a tied constraint"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_operand_fixed_encoding_field_overlap() -> None:
+    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[1]
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            replace(base_descriptor.operands[0], encoding_field_id=7),
+            *base_descriptor.operands[1:],
+        ),
+        encoding_field_values=(EncodingFieldValue(7, 0),),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' operand 'dst' shares fixed encoding field id 7"),
     ):
         generate_descriptor_set(descriptor_set)
 

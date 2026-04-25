@@ -28,6 +28,7 @@ from loom.target.low_descriptors import (
     AsmForm,
     CEnum,
     Constraint,
+    ConstraintKind,
     Descriptor,
     DescriptorFlag,
     DescriptorSet,
@@ -343,6 +344,68 @@ def _validate_descriptor_operands(descriptor: Descriptor) -> int:
     return result_count
 
 
+def _descriptor_has_tied_constraint(
+    descriptor: Descriptor,
+    result_index: int,
+    operand_index: int,
+) -> bool:
+    for constraint in descriptor.constraints:
+        if constraint.kind is not ConstraintKind.TIED:
+            continue
+        if constraint.lhs_operand_index != result_index:
+            continue
+        if constraint.rhs_operand_index != operand_index:
+            continue
+        return True
+    return False
+
+
+def _operand_role_is_packet_input(role: OperandRole) -> bool:
+    return role in (
+        OperandRole.OPERAND,
+        OperandRole.PREDICATE,
+        OperandRole.RESOURCE,
+    )
+
+
+def _operands_may_share_encoding_field(
+    descriptor: Descriptor,
+    lhs_index: int,
+    rhs_index: int,
+) -> bool:
+    lhs = descriptor.operands[lhs_index]
+    rhs = descriptor.operands[rhs_index]
+    if lhs.role is OperandRole.RESULT and _operand_role_is_packet_input(rhs.role):
+        return _descriptor_has_tied_constraint(descriptor, lhs_index, rhs_index)
+    if rhs.role is OperandRole.RESULT and _operand_role_is_packet_input(lhs.role):
+        return _descriptor_has_tied_constraint(descriptor, rhs_index, lhs_index)
+    return False
+
+
+def _validate_descriptor_encoding_fields(descriptor: Descriptor) -> None:
+    fixed_fields: set[int] = set()
+    for field_value in descriptor.encoding_field_values:
+        if field_value.encoding_field_id != 0:
+            fixed_fields.add(field_value.encoding_field_id)
+    for operand_index, operand in enumerate(descriptor.operands):
+        if operand.encoding_field_id == 0:
+            continue
+        if operand.encoding_field_id in fixed_fields:
+            raise ValueError(f"descriptor '{descriptor.key}' operand '{operand.field_name}' shares fixed encoding field id {operand.encoding_field_id}")
+        for previous_index, previous_operand in enumerate(descriptor.operands[:operand_index]):
+            if previous_operand.encoding_field_id != operand.encoding_field_id:
+                continue
+            if _operands_may_share_encoding_field(
+                descriptor,
+                previous_index,
+                operand_index,
+            ):
+                continue
+            raise ValueError(
+                f"descriptor '{descriptor.key}' operands '{previous_operand.field_name}' and '{operand.field_name}' share encoding field id {operand.encoding_field_id} without a tied constraint"
+            )
+
+
 def _validate_enum_domain(domain: EnumDomain) -> tuple[EnumValue, ...]:
     if not domain.values:
         raise ValueError(f"enum domain '{domain.name}' has no values")
@@ -530,6 +593,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
 
     for descriptor in selected_descriptors:
         _validate_descriptor_operands(descriptor)
+        _validate_descriptor_encoding_fields(descriptor)
         if descriptor.encoding_id < 0 or descriptor.encoding_id > LOW_DESCRIPTOR_ENCODING_ID_NONE:
             raise ValueError(f"descriptor '{descriptor.key}' encoding id does not fit u16")
         if descriptor.encoding_id == LOW_DESCRIPTOR_ENCODING_ID_NONE and DescriptorFlag.PSEUDO not in descriptor.flags:

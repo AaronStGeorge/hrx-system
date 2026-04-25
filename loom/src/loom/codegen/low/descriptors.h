@@ -779,6 +779,14 @@ const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(
 // Returns the durable descriptor identity derived from a descriptor key.
 uint64_t loom_low_descriptor_stable_id_from_key(iree_string_view_t key);
 
+// Returns true if |lhs_operand_index| and |rhs_operand_index| form a tied
+// result/packet-operand pair in |descriptor|. Callers must pass a verified
+// descriptor row and descriptor-local operand indices.
+bool loom_low_descriptor_operands_are_tied(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t lhs_operand_index,
+    uint16_t rhs_operand_index);
+
 // Returns an asm form row by ordinal, or NULL when |asm_form_ordinal| is out of
 // bounds.
 const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(
@@ -793,6 +801,10 @@ iree_status_t loom_low_descriptor_set_lookup_canonical_asm_form(
 
 // Returns the stable diagnostic spelling for an operand role.
 iree_string_view_t loom_low_operand_role_name(loom_low_operand_role_t role);
+
+// Returns true if |role| names an explicit packet operand consumed by a low
+// descriptor. Result and implicit rows are not packet operands.
+bool loom_low_operand_role_is_packet_operand(loom_low_operand_role_t role);
 
 // Returns the stable diagnostic spelling for an immediate kind.
 iree_string_view_t loom_low_immediate_kind_name(loom_low_immediate_kind_t kind);

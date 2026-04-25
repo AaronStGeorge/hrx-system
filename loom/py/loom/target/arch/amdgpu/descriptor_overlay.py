@@ -32,6 +32,7 @@ from loom.target.low_descriptors import (
     AsmForm,
     AsmImmediate,
     Constraint,
+    ConstraintKind,
     Descriptor,
     DescriptorFlag,
     Effect,
@@ -51,6 +52,7 @@ class AmdgpuDescriptorOverlayError(ValueError):
 class AmdgpuOperandOverlay:
     xml_field_name: str
     descriptor_operand: Operand
+    role_exception_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -529,13 +531,20 @@ def _format_implicit_xml_operand(xml_operand: AmdgpuIsaOperand) -> str:
 
 def _validate_unique_overlay_fields(overlay: AmdgpuDescriptorOverlay) -> None:
     covered_fields: set[str] = set()
-    for operand_overlay in overlay.operands:
-        if operand_overlay.xml_field_name in covered_fields:
+    operand_fields: dict[str, list[int]] = {}
+    for operand_index, operand_overlay in enumerate(overlay.operands):
+        operand_fields.setdefault(operand_overlay.xml_field_name, []).append(
+            operand_index
+        )
+        covered_fields.add(operand_overlay.xml_field_name)
+    for field_name, operand_indices in operand_fields.items():
+        if len(operand_indices) == 1:
+            continue
+        if not _is_tied_repeated_operand_field(overlay, operand_indices):
             raise AmdgpuDescriptorOverlayError(
                 f"descriptor overlay '{overlay.descriptor_key}' repeats XML field "
-                f"'{operand_overlay.xml_field_name}'"
+                f"'{field_name}' without a tied result/input pair"
             )
-        covered_fields.add(operand_overlay.xml_field_name)
     for ignored_operand in overlay.ignored_operands:
         if ignored_operand.xml_field_name in covered_fields:
             raise AmdgpuDescriptorOverlayError(
@@ -582,6 +591,40 @@ def _explicit_xml_operands_by_field_name(
     return operands
 
 
+def _operand_role_is_packet_input(role: OperandRole) -> bool:
+    return role in (
+        OperandRole.OPERAND,
+        OperandRole.PREDICATE,
+        OperandRole.RESOURCE,
+    )
+
+
+def _has_tied_constraint(
+    overlay: AmdgpuDescriptorOverlay, result_index: int, operand_index: int
+) -> bool:
+    return any(
+        constraint.kind is ConstraintKind.TIED
+        and constraint.lhs_operand_index == result_index
+        and constraint.rhs_operand_index == operand_index
+        for constraint in overlay.constraints
+    )
+
+
+def _is_tied_repeated_operand_field(
+    overlay: AmdgpuDescriptorOverlay, operand_indices: list[int]
+) -> bool:
+    if len(operand_indices) != 2:
+        return False
+    lhs_index, rhs_index = operand_indices
+    lhs = overlay.operands[lhs_index].descriptor_operand
+    rhs = overlay.operands[rhs_index].descriptor_operand
+    if lhs.role is OperandRole.RESULT and _operand_role_is_packet_input(rhs.role):
+        return _has_tied_constraint(overlay, lhs_index, rhs_index)
+    if rhs.role is OperandRole.RESULT and _operand_role_is_packet_input(lhs.role):
+        return _has_tied_constraint(overlay, rhs_index, lhs_index)
+    return False
+
+
 def _validate_operand_role(
     overlay: AmdgpuDescriptorOverlay,
     operand_overlay: AmdgpuOperandOverlay,
@@ -592,17 +635,61 @@ def _validate_operand_role(
         case OperandRole.RESULT:
             if not xml_operand.is_output or xml_operand.is_input:
                 _raise_role_mismatch(overlay, operand_overlay, xml_operand, "output")
+            _reject_unnecessary_role_exception(overlay, operand_overlay)
         case OperandRole.OPERAND | OperandRole.RESOURCE | OperandRole.PREDICATE:
             if not xml_operand.is_input or xml_operand.is_output:
+                if _operand_role_mismatch_is_explicitly_allowed(
+                    operand_overlay, xml_operand
+                ):
+                    return
                 _raise_role_mismatch(overlay, operand_overlay, xml_operand, "input")
+            _reject_unnecessary_role_exception(overlay, operand_overlay)
         case OperandRole.IMPLICIT:
             if not xml_operand.is_implicit:
                 _raise_role_mismatch(overlay, operand_overlay, xml_operand, "implicit")
+            _reject_unnecessary_role_exception(overlay, operand_overlay)
         case OperandRole.OPERAND_RESULT:
             if not xml_operand.is_input or not xml_operand.is_output:
                 _raise_role_mismatch(
                     overlay, operand_overlay, xml_operand, "input/output"
                 )
+            _reject_unnecessary_role_exception(overlay, operand_overlay)
+
+
+def _operand_role_mismatch_is_explicitly_allowed(
+    operand_overlay: AmdgpuOperandOverlay,
+    xml_operand: AmdgpuIsaOperand,
+) -> bool:
+    reason = operand_overlay.role_exception_reason
+    return bool(
+        reason
+        and reason.strip()
+        and xml_operand.is_output
+        and not xml_operand.is_input
+        and not xml_operand.is_implicit
+    )
+
+
+def _reject_unnecessary_role_exception(
+    overlay: AmdgpuDescriptorOverlay,
+    operand_overlay: AmdgpuOperandOverlay,
+) -> None:
+    reason = operand_overlay.role_exception_reason
+    if reason is None:
+        return
+    if reason.strip():
+        raise AmdgpuDescriptorOverlayError(
+            f"descriptor overlay '{overlay.descriptor_key}' maps XML field "
+            f"'{operand_overlay.xml_field_name}' to low operand "
+            f"'{operand_overlay.descriptor_operand.field_name}' with an "
+            "unnecessary role exception"
+        )
+    raise AmdgpuDescriptorOverlayError(
+        f"descriptor overlay '{overlay.descriptor_key}' maps XML field "
+        f"'{operand_overlay.xml_field_name}' to low operand "
+        f"'{operand_overlay.descriptor_operand.field_name}' with an empty role "
+        "exception reason"
+    )
 
 
 def _raise_role_mismatch(
