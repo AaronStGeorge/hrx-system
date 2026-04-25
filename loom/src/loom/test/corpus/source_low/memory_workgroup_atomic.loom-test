@@ -14,6 +14,23 @@ func.def @lds_atomic_add_i32() {
 
 // ====
 
+func.def @lds_atomic_ordering_i32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %one = scalar.constant 1 : i32
+  view.atomic.reduce<addi> %one, %scratch_view[%tid] {ordering = release, scope = workgroup} : i32, view<64xi32, #dense>
+  %old_acquire = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = acquire, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_release = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = release, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_acq_rel = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = acq_rel, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_seq_cst = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = seq_cst, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ====
+
 func.def @lds_atomic_add_f32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

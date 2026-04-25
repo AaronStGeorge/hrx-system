@@ -37,6 +37,60 @@ low.slot @lds_atomic_add_i32__lds3 {align = 4, function = @lds_atomic_add_i32, s
 
 // ====
 
+func.def @lds_atomic_ordering_i32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
+  %one = scalar.constant 1 : i32
+  view.atomic.reduce<addi> %one, %scratch_view[%tid] {ordering = release, scope = workgroup} : i32, view<64xi32, #dense>
+  %old_acquire = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = acquire, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_release = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = release, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_acq_rel = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = acq_rel, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  %old_seq_cst = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = seq_cst, scope = workgroup} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @lds_atomic_ordering_i32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %zero = s_mov_b32 0
+  %bytes = s_mov_b32 256
+  %scratch_view = frame_index @lds_atomic_ordering_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %one = s_mov_b32 1
+  %15 = v_mov_b32 1
+  %16 = v_mov_b32 2
+  %17 = v_lshlrev_b32 %16, %tid
+  %18 = v_add_u32 %scratch_view, %17
+  ds_add_u32 %18, %15 {offset = 0}
+  %19 = v_mov_b32 1
+  %20 = v_mov_b32 2
+  %21 = v_lshlrev_b32 %20, %tid
+  %22 = v_add_u32 %scratch_view, %21
+  %old_acquire = ds_add_rtn_u32 %22, %19 {offset = 0}
+  %24 = v_mov_b32 1
+  %25 = v_mov_b32 2
+  %26 = v_lshlrev_b32 %25, %tid
+  %27 = v_add_u32 %scratch_view, %26
+  %old_release = ds_add_rtn_u32 %27, %24 {offset = 0}
+  %29 = v_mov_b32 1
+  %30 = v_mov_b32 2
+  %31 = v_lshlrev_b32 %30, %tid
+  %32 = v_add_u32 %scratch_view, %31
+  %old_acq_rel = ds_add_rtn_u32 %32, %29 {offset = 0}
+  %34 = v_mov_b32 1
+  %35 = v_mov_b32 2
+  %36 = v_lshlrev_b32 %35, %tid
+  %37 = v_add_u32 %scratch_view, %36
+  %old_seq_cst = ds_add_rtn_u32 %37, %34 {offset = 0}
+  return
+}
+
+low.slot @lds_atomic_ordering_i32__lds3 {align = 4, function = @lds_atomic_ordering_i32, size = 256, space = lds}
+
+// ====
+
 func.def @lds_atomic_add_f32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

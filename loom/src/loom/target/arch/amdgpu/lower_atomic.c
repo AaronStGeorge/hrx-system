@@ -403,8 +403,9 @@ static const loom_amdgpu_atomic_rejection_detail_t
         },
         {
             .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_ORDERING,
-            .detail = IREE_SVL("AMDGPU atomic lowering currently supports "
-                               "relaxed ordering"),
+            .detail = IREE_SVL(
+                "AMDGPU atomic lowering currently supports relaxed global "
+                "atomics and workgroup-scope LDS atomics"),
         },
         {
             .rejection_bit = LOOM_AMDGPU_ATOMIC_REJECTION_SCOPE,
@@ -463,6 +464,25 @@ static uint8_t loom_amdgpu_atomic_scope(const loom_op_t* op) {
     return loom_view_atomic_reduce_scope(op);
   }
   return loom_view_atomic_rmw_scope(op);
+}
+
+static bool loom_amdgpu_atomic_ordering_supported(
+    loom_value_fact_memory_space_t memory_space, uint8_t ordering) {
+  if (ordering == LOOM_VIEW_ORDERING_RELAXED) {
+    return true;
+  }
+  if (memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    return false;
+  }
+  switch (ordering) {
+    case LOOM_VIEW_ORDERING_ACQUIRE:
+    case LOOM_VIEW_ORDERING_RELEASE:
+    case LOOM_VIEW_ORDERING_ACQ_REL:
+    case LOOM_VIEW_ORDERING_SEQ_CST:
+      return true;
+    default:
+      return false;
+  }
 }
 
 static bool loom_amdgpu_atomic_value_kind_matches(
@@ -700,7 +720,9 @@ static bool loom_amdgpu_atomic_select(
     diagnostic->rejection_bits |= LOOM_AMDGPU_ATOMIC_REJECTION_CACHE_POLICY;
     return false;
   }
-  if (loom_amdgpu_atomic_ordering(source_op) != LOOM_VIEW_ORDERING_RELAXED) {
+  if (!loom_amdgpu_atomic_ordering_supported(
+          out_plan->source.memory_space,
+          loom_amdgpu_atomic_ordering(source_op))) {
     diagnostic->rejection_bits |= LOOM_AMDGPU_ATOMIC_REJECTION_ORDERING;
     return false;
   }

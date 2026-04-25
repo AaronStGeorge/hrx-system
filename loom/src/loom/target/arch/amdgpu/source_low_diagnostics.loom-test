@@ -227,3 +227,16 @@ func.def @cache_policy_workgroup_store_rejected() {
   vector.store %one, %scratch_view[%tid, 0] {cache_scope = device, cache_temporal = non_temporal} : vector<4xi32>, view<64x4xi32, #dense>
   func.return
 }
+
+// ====
+
+func.def @global_atomic_release_ordering_rejected(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
+  %one = scalar.constant 1 : i32
+  // ERROR@+1: BACKEND/001 "supports relaxed global atomics and workgroup-scope LDS atomics"
+  view.atomic.reduce<addi> %one, %view[%tid] {ordering = release, scope = device} : i32, view<64xi32, #dense>
+  func.return
+}
