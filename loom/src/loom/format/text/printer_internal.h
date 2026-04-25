@@ -135,6 +135,28 @@ iree_status_t loom_print_attr_table(loom_print_context_t* ctx,
                                     const loom_op_t* op,
                                     const loom_format_element_t* element);
 
+// Prints a result type list, including tied result and named symbol result
+// spelling.
+iree_status_t loom_print_result_type_list(loom_print_context_t* ctx,
+                                          const loom_op_t* op,
+                                          const loom_op_vtable_t* vtable,
+                                          const loom_format_element_t* element);
+
+// Prints a region binding list.
+iree_status_t loom_print_binding_list(loom_print_context_t* ctx,
+                                      const loom_op_t* op,
+                                      const loom_format_element_t* element);
+
+// Prints explicit region block arguments.
+iree_status_t loom_print_block_args(loom_print_context_t* ctx,
+                                    const loom_op_t* op,
+                                    const loom_format_element_t* element);
+
+// Prints func-like signature arguments.
+iree_status_t loom_print_func_args(loom_print_context_t* ctx,
+                                   const loom_op_t* op,
+                                   const loom_op_vtable_t* vtable);
+
 // Prints the body of |region| using canonical block/op traversal.
 iree_status_t loom_print_region_body(
     loom_print_context_t* ctx, const loom_region_t* region,
