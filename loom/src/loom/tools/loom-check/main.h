@@ -8,8 +8,8 @@
 //
 // Tool binaries provide a loom_check_environment_t that selects the dialects,
 // target-low descriptor package, and source-to-low lowering policies linked
-// into that binary. The shared entry point owns flag parsing, file IO, test
-// update handling, JSON output, and result reporting.
+// into that binary. The shared entry point owns flag parsing, context setup,
+// and process exit behavior.
 
 #ifndef LOOM_TOOLS_LOOM_CHECK_MAIN_H_
 #define LOOM_TOOLS_LOOM_CHECK_MAIN_H_

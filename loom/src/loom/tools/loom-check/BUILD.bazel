@@ -53,7 +53,9 @@ loom_assert_no_dependencies(
     ],
     targets = [
         ":execute",
+        ":file",
         ":main",
+        ":output",
         ":provider",
     ],
 )
@@ -351,22 +353,50 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "main",
-    srcs = ["main.c"],
-    hdrs = ["main.h"],
+    name = "output",
+    srcs = ["output.c"],
+    hdrs = ["output.h"],
+    deps = [
+        ":check",
+        ":execute",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base:core_headers",
+    ],
+)
+
+loom_cc_library(
+    name = "file",
+    srcs = ["file.c"],
+    hdrs = ["file.h"],
     deps = [
         ":check",
         ":execute",
         ":json_output",
+        ":output",
         ":report",
         ":template_sync",
         ":update",
-        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ir",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/io:file_handle",
+    ],
+)
+
+loom_cc_library(
+    name = "main",
+    srcs = ["main.c"],
+    hdrs = ["main.h"],
+    deps = [
+        ":execute",
+        ":file",
+        ":json_output",
+        ":output",
+        "//loom/src/loom/ops:op_registry",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/tooling:flags",
     ],
 )
 

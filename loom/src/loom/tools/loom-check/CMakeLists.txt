@@ -239,24 +239,58 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    output
+  HDRS
+    "output.h"
+  SRCS
+    "output.c"
+  DEPS
+    ::check
+    ::execute
+    iree::base
+    iree::base::core_headers
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    file
+  HDRS
+    "file.h"
+  SRCS
+    "file.c"
+  DEPS
+    ::check
+    ::execute
+    ::json_output
+    ::output
+    ::report
+    ::template_sync
+    ::update
+    iree::base
+    iree::base::internal::arena
+    iree::io::file_handle
+    loom::src::loom::ir
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     main
   HDRS
     "main.h"
   SRCS
     "main.c"
   DEPS
-    ::check
     ::execute
+    ::file
     ::json_output
-    ::report
-    ::template_sync
-    ::update
+    ::output
     iree::base
     iree::base::internal::arena
     iree::base::tooling::flags
-    iree::io::file_handle
     loom::src::loom::ops::op_registry
-    loom::src::loom::util::stream
   PUBLIC
 )
 
