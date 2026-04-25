@@ -110,9 +110,10 @@ static iree_status_t loom_amdgpu_emit_memory_soffset(
       out_low_soffset);
 }
 
-static iree_status_t loom_amdgpu_emit_memory_saddr(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t low_resource, loom_value_id_t* out_low_saddr) {
+iree_status_t loom_amdgpu_emit_memory_saddr(loom_low_lower_context_t* context,
+                                            const loom_op_t* source_op,
+                                            loom_value_id_t low_resource,
+                                            loom_value_id_t* out_low_saddr) {
   IREE_ASSERT_ARGUMENT(out_low_saddr);
   *out_low_saddr = LOOM_VALUE_ID_INVALID;
   loom_type_t sgpr_x2_type = loom_type_none();

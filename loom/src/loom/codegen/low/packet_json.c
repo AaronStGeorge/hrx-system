@@ -117,6 +117,16 @@ static iree_status_t loom_low_packet_json_write_string_view_or_null(
   return loom_json_write_escaped_string(stream, value);
 }
 
+static iree_status_t loom_low_packet_json_write_hazard_reference(
+    loom_output_stream_t* stream, loom_low_hazard_reference_kind_t kind,
+    uint16_t reference_id, iree_string_view_t resource_name) {
+  if (kind == LOOM_LOW_HAZARD_REFERENCE_KIND_RESOURCE) {
+    return loom_low_packet_json_write_string_view_or_null(resource_name,
+                                                          stream);
+  }
+  return loom_output_stream_write_format(stream, "%" PRIu16, reference_id);
+}
+
 static iree_status_t loom_low_packet_json_write_nullable_u16(
     uint16_t value, uint16_t absent_value, loom_output_stream_t* stream) {
   if (value == absent_value) {
@@ -241,8 +251,7 @@ static iree_status_t loom_low_packet_json_write_hazard_gaps(
         ",\"producer_hazard_ordinal\":%" PRIu16
         ",\"consumer_hazard_ordinal\":%" PRIu16
         ",\"kind\":%u,\"kind_name\":\"%.*s\",\"reference_kind\":%u"
-        ",\"reference_kind_name\":\"%.*s\",\"reference\":%" PRIu16
-        ",\"resource_name\":",
+        ",\"reference_kind_name\":\"%.*s\",\"reference\":",
         hazard_gap->producer_node, hazard_gap->consumer_node,
         hazard_gap->block_index, hazard_gap->producer_scheduled_ordinal,
         hazard_gap->consumer_scheduled_ordinal,
@@ -250,9 +259,10 @@ static iree_status_t loom_low_packet_json_write_hazard_gaps(
         hazard_gap->consumer_hazard_ordinal, (unsigned)hazard_gap->kind,
         (int)hazard_kind_name.size, hazard_kind_name.data,
         (unsigned)hazard_gap->reference_kind, (int)reference_kind_name.size,
-        reference_kind_name.data, hazard_gap->reference_id));
-    IREE_RETURN_IF_ERROR(loom_low_packet_json_write_string_view_or_null(
-        hazard_gap->resource_name, stream));
+        reference_kind_name.data));
+    IREE_RETURN_IF_ERROR(loom_low_packet_json_write_hazard_reference(
+        stream, hazard_gap->reference_kind, hazard_gap->reference_id,
+        hazard_gap->resource_name));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         stream,
         ",\"producer_stage\":%" PRIu16 ",\"consumer_stage\":%" PRIu16
@@ -670,10 +680,6 @@ static iree_status_t loom_low_packet_json_write_packet(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
   }
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"descriptor_ordinal\":"));
-  IREE_RETURN_IF_ERROR(loom_low_packet_json_write_nullable_u32(
-      node->descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE, stream));
-  IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"mnemonic\":"));
   if (descriptor) {
     IREE_RETURN_IF_ERROR(loom_low_packet_json_write_descriptor_string_or_null(
@@ -701,10 +707,6 @@ static iree_status_t loom_low_packet_json_write_packet(
       loom_output_stream_write_cstring(stream, ",\"schedule_class\":"));
   IREE_RETURN_IF_ERROR(loom_low_packet_json_write_string_view_or_null(
       node->schedule_class_name, stream));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"schedule_class_id\":"));
-  IREE_RETURN_IF_ERROR(loom_low_packet_json_write_nullable_u16(
-      node->schedule_class_id, LOOM_LOW_SCHEDULE_CLASS_NONE, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, ",\"latency_cycles\":%" PRIu16 ",\"latency_kind\":",
       node->latency_cycles));

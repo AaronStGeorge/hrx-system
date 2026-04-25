@@ -781,11 +781,11 @@ iree_status_t loom_amdgpu_wait_packet_plan_format_json(
         loom_json_write_escaped_string(&stream, packet->descriptor_key));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         &stream,
-        ",\"descriptor_ordinal\":%" PRIu32 ",\"block\":%" PRIu32
-        ",\"node\":%" PRIu32 ",\"scheduled_ordinal\":%" PRIu32
-        ",\"counter_mask\":%" PRIu32 ",\"counters\":",
-        packet->descriptor_ordinal, packet->block_index, packet->node_index,
-        packet->scheduled_ordinal, packet->counter_mask));
+        ",\"block\":%" PRIu32 ",\"node\":%" PRIu32
+        ",\"scheduled_ordinal\":%" PRIu32 ",\"counter_mask\":%" PRIu32
+        ",\"counters\":",
+        packet->block_index, packet->node_index, packet->scheduled_ordinal,
+        packet->counter_mask));
     IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_json_write_counters(
         &stream, packet->counter_mask));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(

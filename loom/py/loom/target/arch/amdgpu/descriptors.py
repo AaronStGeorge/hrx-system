@@ -86,6 +86,8 @@ _SCHEDULE_SMEM_LOAD = "amdgpu.smem.load"
 _SCHEDULE_VMEM_LOAD = "amdgpu.vmem.load"
 _SCHEDULE_VMEM_LOAD_LDS = "amdgpu.vmem.load.lds"
 _SCHEDULE_VMEM_STORE = "amdgpu.vmem.store"
+_SCHEDULE_VMEM_ATOMIC_RETURN = "amdgpu.vmem.atomic.return"
+_SCHEDULE_VMEM_ATOMIC_NO_RETURN = "amdgpu.vmem.atomic.no_return"
 _SCHEDULE_LDS_LOAD = "amdgpu.lds.load"
 _SCHEDULE_LDS_STORE = "amdgpu.lds.store"
 _SCHEDULE_LDS_ATOMIC = "amdgpu.lds.atomic"
@@ -268,6 +270,30 @@ def _common_scalar_vector_memory_schedule_classes(
             issue_uses=(IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),),
             hazards=vmem_store_hazards,
             flags=(ScheduleClassFlag.MAY_STORE,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_VMEM_ATOMIC_RETURN,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=16,
+            issue_uses=(
+                IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),
+                IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),
+            ),
+            hazards=vmem_load_hazards,
+            flags=(ScheduleClassFlag.MAY_LOAD, ScheduleClassFlag.MAY_STORE),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_VMEM_ATOMIC_NO_RETURN,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=16,
+            issue_uses=(
+                IssueUse(_RESOURCE_VMEM_LOAD, cycles=1, units=1),
+                IssueUse(_RESOURCE_VMEM_STORE, cycles=1, units=1),
+            ),
+            hazards=vmem_store_hazards,
+            flags=(ScheduleClassFlag.MAY_LOAD, ScheduleClassFlag.MAY_STORE),
             model_quality=ModelQuality.FALLBACK,
         ),
         ScheduleClass(
@@ -909,6 +935,44 @@ def _global_write_effect(width_bits: int) -> Effect:
             return _GLOBAL_STORE_B128_EFFECT
         case _:
             raise ValueError(f"unsupported global write width {width_bits}")
+
+
+def _ignore_global_atomic_memory(
+    *, data_format_name: str, is_input: bool
+) -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_GPUMEM",
+        data_format_name=data_format_name,
+        size_bits=32,
+        is_input=is_input,
+        is_output=not is_input,
+        ignore_reason=(
+            "modeled-by-global-atomic-read-effect"
+            if is_input
+            else "modeled-by-global-atomic-write-effect"
+        ),
+    )
+
+
+def _global_atomic_effects(
+    width_bits: int, *, counter_id: int
+) -> tuple[Effect, Effect]:
+    return (
+        Effect(
+            EffectKind.READ,
+            memory_space=MemorySpace.GLOBAL,
+            flags=(EffectFlag.DEPENDENCY,),
+            counter_id=counter_id,
+            width_bits=width_bits,
+        ),
+        Effect(
+            EffectKind.WRITE,
+            memory_space=MemorySpace.GLOBAL,
+            flags=(EffectFlag.DEPENDENCY,),
+            counter_id=counter_id,
+            width_bits=width_bits,
+        ),
+    )
 
 
 def _global_to_lds_effects(width_bits: int) -> tuple[Effect, Effect]:
@@ -2137,6 +2201,175 @@ def _global_memory_overlays(
             )
         ),
     )
+
+
+def _global_atomic_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    data_format_name: str,
+    returns_old_value: bool,
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    return_field_name: str,
+    cache_field_names: tuple[str, ...],
+    saddr_off: int | None,
+    address_units: int,
+) -> AmdgpuDescriptorOverlay:
+    schedule_class = (
+        _SCHEDULE_VMEM_ATOMIC_RETURN
+        if returns_old_value
+        else _SCHEDULE_VMEM_ATOMIC_NO_RETURN
+    )
+    counter_id = _COUNTER_VMEM_LOAD if returns_old_value else _COUNTER_VMEM_STORE
+    ignored_operands: tuple[AmdgpuIgnoredOperandOverlay, ...] = ()
+    if returns_old_value:
+        operands: tuple[AmdgpuOperandOverlay, ...] = (
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay(
+                address_field_name, _vgpr_operand("addr", units=address_units)
+            ),
+            AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value")),
+        )
+    else:
+        operands = (
+            AmdgpuOperandOverlay(
+                address_field_name, _vgpr_operand("addr", units=address_units)
+            ),
+            AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value")),
+        )
+        ignored_operands = (
+            AmdgpuIgnoredOperandOverlay(
+                "VDST",
+                ignore_reason="no-return-global-atomic-has-no-vgpr-result",
+                fixed_encoding_value=0,
+            ),
+        )
+
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = tuple(
+        (field_name, int(returns_old_value and field_name == return_field_name))
+        for field_name in cache_field_names
+    )
+    if saddr_off is None:
+        operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
+    else:
+        fixed_encoding_fields += (("SADDR", saddr_off),)
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=semantic_tag,
+        schedule_class=schedule_class,
+        operands=operands,
+        ignored_operands=ignored_operands,
+        implicit_operands=(
+            _ignore_global_atomic_memory(
+                data_format_name=data_format_name, is_input=False
+            ),
+            _ignore_global_atomic_memory(
+                data_format_name=data_format_name, is_input=True
+            ),
+        ),
+        immediate_fields=(offset_field_name,),
+        immediates=(_signed_offset_immediate(offset_bit_width),),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=_global_atomic_effects(32, counter_id=counter_id),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=(),
+    )
+
+
+def _global_atomic_overlays(
+    *,
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    return_field_name: str,
+    cache_fields: tuple[tuple[str, int], ...],
+    saddr_off: int | None,
+    address_units: int,
+    descriptor_key_suffix: str = "",
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    rows = (
+        ("add_u32", "GLOBAL_ATOMIC_ADD_U32", "add.u32", "FMT_NUM_U32", True),
+        ("sub_u32", "GLOBAL_ATOMIC_SUB_U32", "sub.u32", "FMT_NUM_U32", True),
+        ("min_i32", "GLOBAL_ATOMIC_MIN_I32", "min.i32", "FMT_NUM_I32", True),
+        ("max_i32", "GLOBAL_ATOMIC_MAX_I32", "max.i32", "FMT_NUM_I32", True),
+        ("min_u32", "GLOBAL_ATOMIC_MIN_U32", "min.u32", "FMT_NUM_U32", True),
+        ("max_u32", "GLOBAL_ATOMIC_MAX_U32", "max.u32", "FMT_NUM_U32", True),
+        ("and_b32", "GLOBAL_ATOMIC_AND_B32", "and.b32", "FMT_NUM_B32", True),
+        ("or_b32", "GLOBAL_ATOMIC_OR_B32", "or.b32", "FMT_NUM_B32", True),
+        ("xor_b32", "GLOBAL_ATOMIC_XOR_B32", "xor.b32", "FMT_NUM_B32", True),
+        (
+            "swap_b32",
+            "GLOBAL_ATOMIC_SWAP_B32",
+            "exchange.b32",
+            "FMT_NUM_B32",
+            False,
+        ),
+        ("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
+    )
+    cache_field_names = tuple(field_name for field_name, _ in cache_fields)
+    overlays: list[AmdgpuDescriptorOverlay] = []
+    for (
+        mnemonic_suffix,
+        instruction_name,
+        semantic_suffix,
+        data_format_name,
+        has_no_return_form,
+    ) in rows:
+        if has_no_return_form:
+            overlays.append(
+                _global_atomic_overlay(
+                    descriptor_key=(
+                        f"amdgpu.global_atomic_{mnemonic_suffix}{descriptor_key_suffix}"
+                    ),
+                    instruction_name=instruction_name,
+                    mnemonic=f"global_atomic_{mnemonic_suffix}",
+                    semantic_tag=f"memory.global.atomic.{semantic_suffix}",
+                    data_format_name=data_format_name,
+                    returns_old_value=False,
+                    encoding_name=encoding_name,
+                    address_field_name=address_field_name,
+                    data_field_name=data_field_name,
+                    offset_field_name=offset_field_name,
+                    offset_bit_width=offset_bit_width,
+                    return_field_name=return_field_name,
+                    cache_field_names=cache_field_names,
+                    saddr_off=saddr_off,
+                    address_units=address_units,
+                )
+            )
+        overlays.append(
+            _global_atomic_overlay(
+                descriptor_key=(
+                    f"amdgpu.global_atomic_{mnemonic_suffix}_rtn{descriptor_key_suffix}"
+                ),
+                instruction_name=instruction_name,
+                mnemonic=f"global_atomic_{mnemonic_suffix}",
+                semantic_tag=f"memory.global.atomic.{semantic_suffix}.return",
+                data_format_name=data_format_name,
+                returns_old_value=True,
+                encoding_name=encoding_name,
+                address_field_name=address_field_name,
+                data_field_name=data_field_name,
+                offset_field_name=offset_field_name,
+                offset_bit_width=offset_bit_width,
+                return_field_name=return_field_name,
+                cache_field_names=cache_field_names,
+                saddr_off=saddr_off,
+                address_units=address_units,
+            )
+        )
+    return tuple(overlays)
 
 
 def _ds_read_overlay(
@@ -3709,6 +3942,18 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             address_units=1,
             descriptor_key_suffix="_saddr",
             cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
+        ),
+        *_global_atomic_overlays(
+            encoding_name="ENC_FLAT_GLOBAL",
+            address_field_name="ADDR",
+            data_field_name="DATA",
+            offset_field_name="OFFSET",
+            offset_bit_width=13,
+            return_field_name="GLC",
+            cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
+            saddr_off=None,
+            address_units=1,
+            descriptor_key_suffix="_saddr",
         ),
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),

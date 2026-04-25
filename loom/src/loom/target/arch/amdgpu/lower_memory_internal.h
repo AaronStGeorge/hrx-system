@@ -125,6 +125,12 @@ iree_status_t loom_amdgpu_emit_memory_vaddr(
     const loom_amdgpu_memory_access_plan_t* access,
     loom_value_id_t low_base_addr, loom_value_id_t* out_low_vaddr);
 
+// Emits the SGPR SADDR operand sliced from a low buffer resource.
+iree_status_t loom_amdgpu_emit_memory_saddr(loom_low_lower_context_t* context,
+                                            const loom_op_t* source_op,
+                                            loom_value_id_t low_resource,
+                                            loom_value_id_t* out_low_saddr);
+
 // Builds descriptor offset and cache-policy attrs for a memory packet.
 iree_status_t loom_amdgpu_make_memory_attrs(
     loom_low_lower_context_t* context,

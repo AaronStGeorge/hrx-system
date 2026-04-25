@@ -224,6 +224,8 @@ typedef struct loom_amdgpu_atomic_plan_t {
   loom_low_source_memory_access_plan_t source;
   // Source atomic operation form being lowered.
   loom_amdgpu_atomic_operation_kind_t operation_kind;
+  // Selected target addressing form for the atomic packet.
+  loom_amdgpu_memory_address_form_t address_form;
   // Target operand path used for the dynamic index.
   loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
   // Static offset value encoded in the descriptor offset immediate.

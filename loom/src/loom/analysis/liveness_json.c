@@ -124,15 +124,6 @@ static iree_status_t loom_liveness_json_write_value_class(
   IREE_RETURN_IF_ERROR(loom_liveness_json_write_scalar_name_or_null(
       value_class.element_type, stream));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"register_class_id\":"));
-  if (value_class.register_class_id == LOOM_STRING_ID_INVALID ||
-      value_class.register_class_id >= analysis->module->strings.count) {
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
-  } else {
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, "%u", (unsigned)value_class.register_class_id));
-  }
-  IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"register_class\":"));
   IREE_RETURN_IF_ERROR(loom_liveness_json_write_string_or_null(
       analysis->module, value_class.register_class_id, stream));
