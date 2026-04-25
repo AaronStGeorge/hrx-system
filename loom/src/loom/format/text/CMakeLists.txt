@@ -28,6 +28,7 @@ loom_cc_library(
   HDRS
     "parser.h"
     "parser_internal.h"
+    "parser_low_asm_internal.h"
   SRCS
     "parser.c"
     "parser_accumulator.c"
@@ -38,6 +39,7 @@ loom_cc_library(
     "parser_format_tables.c"
     "parser_locations.c"
     "parser_low_asm.c"
+    "parser_low_asm_structural.c"
     "parser_pipeline.c"
     "parser_scope.c"
     "parser_types.c"
