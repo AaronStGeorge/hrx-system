@@ -71,21 +71,27 @@ def _immediate_default(immediates: tuple[Immediate, ...], name: str) -> int:
 
 def test_gfx12_global_atomic_return_uses_temporal_hint_return_bit() -> None:
     for overlays in (_gfx12_core_overlays(), _gfx1250_core_overlays()):
-        no_return = next(
-            overlay
-            for overlay in overlays
-            if overlay.descriptor_key == "amdgpu.global_atomic_add_u32_saddr"
-        )
-        with_return = next(
-            overlay
-            for overlay in overlays
-            if overlay.descriptor_key == "amdgpu.global_atomic_add_u32_rtn_saddr"
-        )
+        for descriptor_prefix, descriptor_suffix in (
+            ("amdgpu.global_atomic", "_saddr"),
+            ("amdgpu.flat_atomic", ""),
+        ):
+            no_return = next(
+                overlay
+                for overlay in overlays
+                if overlay.descriptor_key
+                == f"{descriptor_prefix}_add_u32{descriptor_suffix}"
+            )
+            with_return = next(
+                overlay
+                for overlay in overlays
+                if overlay.descriptor_key
+                == f"{descriptor_prefix}_add_u32_rtn{descriptor_suffix}"
+            )
 
-        assert _immediate_default(no_return.immediates, "th") == 0
-        assert _immediate_default(with_return.immediates, "th") == (
-            _GFX12_TH_ATOMIC_RETURN_VALUE
-        )
+            assert _immediate_default(no_return.immediates, "th") == 0
+            assert _immediate_default(with_return.immediates, "th") == (
+                _GFX12_TH_ATOMIC_RETURN_VALUE
+            )
 
 
 def test_gfx12_global_cache_controls_expose_scope_immediate() -> None:

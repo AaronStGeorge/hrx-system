@@ -24,6 +24,7 @@ using ::loom::testing::ExpectAmdgpuDs2AddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsAddtidMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuDsCrosslaneDescriptors;
 using ::loom::testing::ExpectAmdgpuDsMemoryDescriptor;
+using ::loom::testing::ExpectAmdgpuFlatAtomicDescriptors;
 using ::loom::testing::ExpectAmdgpuGfx950DsTransposeReadDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalLoadLdsDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalMemoryDescriptors;
@@ -195,6 +196,10 @@ TEST(AmdgpuDescriptorsTest, Gfx950CoreDescriptorLookupUsesStableKeys) {
       descriptor_set, LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLBL, 13u,
       /*expected_implicit_m0=*/true);
   ExpectAmdgpuGlobalLoadLdsDescriptors(descriptor_set);
+  ExpectAmdgpuFlatAtomicDescriptors(
+      descriptor_set, LOOM_AMDGPU_ENCODING_FORMAT_FLAT, 12u,
+      /*expected_offset_signed=*/false, /*expected_cache_immediate_count=*/0u,
+      /*expected_implicit_m0=*/true, /*expected_f32_minmax=*/false);
   ExpectAmdgpuDsMemoryDescriptor(descriptor_set, IREE_SV("amdgpu.ds_read_b64"),
                                  LOOM_LOW_EFFECT_KIND_READ, 2u, 64u,
                                  LOOM_AMDGPU_ENCODING_FORMAT_DS);

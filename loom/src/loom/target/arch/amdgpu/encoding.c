@@ -170,6 +170,8 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("vbuffer");
     case LOOM_AMDGPU_ENCODING_FORMAT_DS:
       return IREE_SV("ds");
+    case LOOM_AMDGPU_ENCODING_FORMAT_FLAT:
+      return IREE_SV("flat");
     case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLBL:
       return IREE_SV("flat_glbl");
     case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLOBAL:
@@ -178,6 +180,8 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("sopk");
     case LOOM_AMDGPU_ENCODING_FORMAT_VDS:
       return IREE_SV("vds");
+    case LOOM_AMDGPU_ENCODING_FORMAT_VFLAT:
+      return IREE_SV("vflat");
     case LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL:
       return IREE_SV("vglobal");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1:

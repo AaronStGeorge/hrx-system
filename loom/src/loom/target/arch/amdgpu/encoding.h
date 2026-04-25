@@ -50,6 +50,8 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER = 10,
   // Local data share instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_DS = 11,
+  // Flat generic-address memory instruction format.
+  LOOM_AMDGPU_ENCODING_FORMAT_FLAT = 13,
   // CDNA global/flat memory instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLBL = 14,
   // RDNA3 global/flat memory instruction format.
@@ -58,6 +60,8 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_SOPK = 21,
   // RDNA4 local data share instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_VDS = 22,
+  // RDNA4 flat generic-address memory instruction format.
+  LOOM_AMDGPU_ENCODING_FORMAT_VFLAT = 25,
   // RDNA4 global memory instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL = 26,
   // Vector one-source 32-bit instruction format.
