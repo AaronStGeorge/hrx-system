@@ -255,9 +255,25 @@ loom_cc_library(
     iree::base::internal::arena
     iree::base::tooling::flags
     iree::io::file_handle
-    loom::src::loom::codegen::low::lower
     loom::src::loom::ops::op_registry
     loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    provider
+  HDRS
+    "provider.h"
+  SRCS
+    "provider.c"
+  DEPS
+    ::main
+    iree::base
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::target::low_legality
+    loom::src::loom::target::low_packet_diagnostics
   PUBLIC
 )
 
@@ -286,7 +302,7 @@ loom_cc_binary(
   COPTS
 
   DEPS
-    ::main
+    ::provider
 )
 
 loom_cc_binary(

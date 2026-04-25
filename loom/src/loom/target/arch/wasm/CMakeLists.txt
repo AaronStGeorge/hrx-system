@@ -57,7 +57,7 @@ loom_cc_library(
     ::low_registry
     iree::base
     loom::src::loom::target::emit::wasm::lower
-    loom::src::loom::tools::loom-check::main
+    loom::src::loom::tools::loom-check::provider
   PUBLIC
 )
 

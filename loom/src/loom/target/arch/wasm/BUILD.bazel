@@ -60,6 +60,7 @@ loom_assert_no_dependencies(
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:loom-check-test",
         "//loom/src/loom/tools/loom-check:main",
+        "//loom/src/loom/tools/loom-check:provider",
     ],
 )
 
@@ -103,7 +104,7 @@ loom_cc_library(
     deps = [
         ":low_registry",
         "//loom/src/loom/target/emit/wasm:lower",
-        "//loom/src/loom/tools/loom-check:main",
+        "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
 )

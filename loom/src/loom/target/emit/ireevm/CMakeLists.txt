@@ -154,7 +154,7 @@ loom_cc_library(
     ::low_registry
     ::lower
     iree::base
-    loom::src::loom::tools::loom-check::main
+    loom::src::loom::tools::loom-check::provider
   PUBLIC
 )
 

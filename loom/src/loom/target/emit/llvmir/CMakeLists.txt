@@ -252,7 +252,7 @@ loom_cc_library(
   DEPS
     ::loom_check
     iree::base
-    loom::src::loom::tools::loom-check::main
+    loom::src::loom::tools::loom-check::provider
   PUBLIC
 )
 

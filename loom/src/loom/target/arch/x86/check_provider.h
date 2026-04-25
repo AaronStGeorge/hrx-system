@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_ARCH_X86_CHECK_PROVIDER_H_
 #define LOOM_TARGET_ARCH_X86_CHECK_PROVIDER_H_
 
-#include "loom/tools/loom-check/main.h"
+#include "loom/tools/loom-check/provider.h"
 
 #ifdef __cplusplus
 extern "C" {

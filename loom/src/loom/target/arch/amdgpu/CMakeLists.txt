@@ -565,7 +565,7 @@ loom_cc_library(
     ::packet_diagnostics
     iree::base
     loom::src::loom::target::emit::native::amdgpu::loom_check
-    loom::src::loom::tools::loom-check::main
+    loom::src::loom::tools::loom-check::provider
   PUBLIC
 )
 

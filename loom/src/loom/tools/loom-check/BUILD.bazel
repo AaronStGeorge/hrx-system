@@ -54,6 +54,7 @@ loom_assert_no_dependencies(
     targets = [
         ":execute",
         ":main",
+        ":provider",
     ],
 )
 
@@ -360,13 +361,26 @@ loom_cc_library(
         ":report",
         ":template_sync",
         ":update",
-        "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/io:file_handle",
+    ],
+)
+
+loom_cc_library(
+    name = "provider",
+    srcs = ["provider.c"],
+    hdrs = ["provider.h"],
+    deps = [
+        ":main",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target:low_packet_diagnostics",
+        "//runtime/src/iree/base",
     ],
 )
 
@@ -391,7 +405,7 @@ loom_cc_binary(
     srcs = ["loom-check.c"],
     copts = _LOOM_CHECK_PROVIDER_COPTS,
     deps = [
-        ":main",
+        ":provider",
     ] + _LOOM_CHECK_PROVIDER_DEPS,
 )
 

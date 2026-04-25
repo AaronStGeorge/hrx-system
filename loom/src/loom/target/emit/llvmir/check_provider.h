@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_EMIT_LLVMIR_CHECK_PROVIDER_H_
 #define LOOM_TARGET_EMIT_LLVMIR_CHECK_PROVIDER_H_
 
-#include "loom/tools/loom-check/main.h"
+#include "loom/tools/loom-check/provider.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -173,6 +173,7 @@ loom_assert_no_dependencies(
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:loom-check-test",
         "//loom/src/loom/tools/loom-check:main",
+        "//loom/src/loom/tools/loom-check:provider",
     ],
 )
 
@@ -678,7 +679,7 @@ loom_cc_library(
         ":lower",
         ":packet_diagnostics",
         "//loom/src/loom/target/emit/native/amdgpu:loom_check",
-        "//loom/src/loom/tools/loom-check:main",
+        "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
 )

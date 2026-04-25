@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-#include "loom/tools/loom-check/main.h"
+#include "loom/tools/loom-check/provider.h"
 
 #ifndef LOOM_CHECK_HAVE_AMDGPU
 #define LOOM_CHECK_HAVE_AMDGPU 0
