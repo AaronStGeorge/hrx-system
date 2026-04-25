@@ -79,7 +79,10 @@ loom_assert_no_dependencies(
 
 loom_cc_library(
     name = "descriptors",
-    srcs = ["descriptors.c"],
+    srcs = [
+        "descriptors.c",
+        "descriptors_manifest.c",
+    ],
     hdrs = ["descriptors.h"],
     deps = [
         "//loom/src/loom/target:types",

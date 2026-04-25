@@ -17,6 +17,7 @@ loom_cc_library(
     "descriptors.h"
   SRCS
     "descriptors.c"
+    "descriptors_manifest.c"
   DEPS
     iree::base
     loom::src::loom::target::types
