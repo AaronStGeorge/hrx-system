@@ -271,12 +271,18 @@ uint32_t loom_low_packet_block_index(
   if (!schedule || !block) {
     return LOOM_LOW_PACKET_INDEX_NONE;
   }
-  for (iree_host_size_t i = 0; i < schedule->block_count; ++i) {
-    if (schedule->blocks[i].block == block) {
-      return (uint32_t)i;
-    }
+  if (!block->parent_region ||
+      block->region_index >= block->parent_region->block_count ||
+      block->region_index >= schedule->block_count) {
+    return LOOM_LOW_PACKET_INDEX_NONE;
   }
-  return LOOM_LOW_PACKET_INDEX_NONE;
+  const uint16_t block_index = block->region_index;
+  if (block->parent_region->blocks[block_index] != block) {
+    return LOOM_LOW_PACKET_INDEX_NONE;
+  }
+  return schedule->blocks[block_index].block == block
+             ? block_index
+             : LOOM_LOW_PACKET_INDEX_NONE;
 }
 
 uint32_t loom_low_packet_hazard_gap_packet_index(

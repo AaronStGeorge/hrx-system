@@ -18,7 +18,9 @@ struct PacketTestState {
   loom_low_descriptor_set_t descriptor_set = {};
   loom_module_t module = {};
   loom_op_t function_op = {};
+  loom_region_t region = {};
   loom_block_t block = {};
+  loom_block_t* region_blocks[1] = {};
   loom_low_schedule_block_t blocks[1] = {};
   loom_low_schedule_node_t nodes[2] = {};
   uint32_t scheduled_node_indices[2] = {};
@@ -41,6 +43,13 @@ void InitializePacketTestState(PacketTestState* state) {
   state->descriptor_set.descriptor_count = IREE_ARRAYSIZE(state->descriptors);
   state->descriptor_set.asm_forms = state->asm_forms;
   state->descriptor_set.asm_form_count = IREE_ARRAYSIZE(state->asm_forms);
+
+  state->region_blocks[0] = &state->block;
+  state->region.block_count = IREE_ARRAYSIZE(state->region_blocks);
+  state->region.block_capacity = IREE_ARRAYSIZE(state->region_blocks);
+  state->region.blocks = state->region_blocks;
+  state->block.parent_region = &state->region;
+  state->block.region_index = 0;
 
   state->blocks[0].block = &state->block;
   state->blocks[0].node_start = 0;
