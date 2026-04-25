@@ -134,8 +134,14 @@ loom_cc_library(
 
 loom_cc_library(
     name = "text_asm",
-    srcs = ["text_asm.c"],
-    hdrs = ["text_asm.h"],
+    srcs = [
+        "text_asm.c",
+        "text_asm_structural.c",
+    ],
+    hdrs = [
+        "text_asm.h",
+        "text_asm_internal.h",
+    ],
     deps = [
         ":descriptors",
         "//loom/src/loom/format/text:low_asm",

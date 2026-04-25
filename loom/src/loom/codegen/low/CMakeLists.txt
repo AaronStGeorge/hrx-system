@@ -85,8 +85,10 @@ loom_cc_library(
     text_asm
   HDRS
     "text_asm.h"
+    "text_asm_internal.h"
   SRCS
     "text_asm.c"
+    "text_asm_structural.c"
   DEPS
     ::descriptors
     iree::base
