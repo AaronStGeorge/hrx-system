@@ -18,12 +18,24 @@ loom_cc_library(
   SRCS
     "descriptors.c"
     "descriptors_enums.c"
-    "descriptors_manifest.c"
   DEPS
     iree::base
     loom::src::loom::target::types
     loom::src::loom::util::bstring
     loom::src::loom::util::stable_id
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    descriptors_manifest
+  HDRS
+    "descriptors_manifest.h"
+  SRCS
+    "descriptors_manifest.c"
+  DEPS
+    ::descriptors
+    iree::base
   PUBLIC
 )
 
@@ -714,6 +726,7 @@ loom_cc_test(
     "descriptors_test.cc"
   DEPS
     ::descriptors
+    ::descriptors_manifest
     iree::testing::gtest
     iree::testing::gtest_main
 )

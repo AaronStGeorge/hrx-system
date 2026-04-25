@@ -4,9 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <inttypes.h>
+#include "loom/codegen/low/descriptors_manifest.h"
 
-#include "loom/codegen/low/descriptors.h"
+#include <inttypes.h>
 
 static iree_status_t loom_low_append_json_string(iree_string_builder_t* builder,
                                                  iree_string_view_t value) {

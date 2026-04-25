@@ -9,6 +9,7 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_json.h"
 #include "loom/codegen/low/cleanup.h"
+#include "loom/codegen/low/descriptors_manifest.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packet_json.h"
 #include "loom/codegen/low/packetization.h"

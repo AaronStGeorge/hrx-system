@@ -54,6 +54,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation_json
     loom::src::loom::codegen::low::allocation_pass
     loom::src::loom::codegen::low::cleanup
+    loom::src::loom::codegen::low::descriptors_manifest
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::lower_pass
     loom::src::loom::codegen::low::packet_json

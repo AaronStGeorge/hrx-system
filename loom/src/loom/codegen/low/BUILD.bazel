@@ -38,6 +38,7 @@ loom_assert_no_dependencies(
         ":allocation_pass",
         ":cleanup",
         ":descriptors",
+        ":descriptors_manifest",
         ":diagnostics",
         ":lower",
         ":lower_pass",
@@ -82,13 +83,22 @@ loom_cc_library(
     srcs = [
         "descriptors.c",
         "descriptors_enums.c",
-        "descriptors_manifest.c",
     ],
     hdrs = ["descriptors.h"],
     deps = [
         "//loom/src/loom/target:types",
         "//loom/src/loom/util:bstring",
         "//loom/src/loom/util:stable_id",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "descriptors_manifest",
+    srcs = ["descriptors_manifest.c"],
+    hdrs = ["descriptors_manifest.h"],
+    deps = [
+        ":descriptors",
         "//runtime/src/iree/base",
     ],
 )
@@ -701,6 +711,7 @@ loom_cc_test(
     srcs = ["descriptors_test.cc"],
     deps = [
         ":descriptors",
+        ":descriptors_manifest",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

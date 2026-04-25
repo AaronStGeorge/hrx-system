@@ -864,12 +864,6 @@ iree_status_t loom_low_descriptor_set_lookup_asm_form(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_view_t mnemonic, uint32_t* out_asm_form_ordinal);
 
-// Appends a compact JSON manifest for |descriptor_set| to |builder|. The JSON
-// is a diagnostic and test format, not the runtime representation.
-iree_status_t loom_low_descriptor_set_format_manifest_json(
-    const loom_low_descriptor_set_t* descriptor_set,
-    iree_string_builder_t* builder);
-
 #ifdef __cplusplus
 }
 #endif
