@@ -33,6 +33,7 @@ from loom.dsl import (
     EnumCase,
     EnumDef,
     HasIndexOrNonI1IntegerScalar,
+    MemoryAccessInterface,
     Op,
     Operand,
     RanksMatch,
@@ -104,6 +105,44 @@ def _indexed_memory_attrs() -> list[AttrDef]:
             doc="Static logical element indices with INT64_MIN sentinels for dynamics.",
         ),
     ]
+
+
+def _memory_access_interface(
+    *,
+    value: str | None = None,
+    expected: str | None = None,
+    replacement: str | None = None,
+    cache: bool = True,
+    atomic_kind: str | None = None,
+    atomic_ordering: str | None = None,
+    atomic_success_ordering: str | None = None,
+    atomic_failure_ordering: str | None = None,
+    atomic_scope: str | None = None,
+) -> MemoryAccessInterface:
+    return MemoryAccessInterface(
+        view="view",
+        value=value,
+        expected=expected,
+        replacement=replacement,
+        indices="indices",
+        static_indices="static_indices",
+        cache_scope="cache_scope" if cache else None,
+        cache_temporal="cache_temporal" if cache else None,
+        atomic_kind=atomic_kind,
+        atomic_ordering=atomic_ordering,
+        atomic_success_ordering=atomic_success_ordering,
+        atomic_failure_ordering=atomic_failure_ordering,
+        atomic_scope=atomic_scope,
+    )
+
+
+def _atomic_memory_access_interface(*, value: str) -> MemoryAccessInterface:
+    return _memory_access_interface(
+        value=value,
+        atomic_kind="kind",
+        atomic_ordering="ordering",
+        atomic_scope="scope",
+    )
 
 
 # ============================================================================
@@ -198,6 +237,7 @@ view_load = Op(
     attrs=_indexed_memory_attrs(),
     constraints=[SameElementType("view", "result")],
     effects=[Reads("view")],
+    interfaces=[_memory_access_interface()],
     verify="loom_view_load_verify",
     format=[
         Ref("view"),
@@ -225,6 +265,7 @@ view_store = Op(
     attrs=_indexed_memory_attrs(),
     constraints=[SameElementType("value", "view")],
     effects=[Writes("view")],
+    interfaces=[_memory_access_interface(value="value")],
     verify="loom_view_store_verify",
     format=[
         Ref("value"),
@@ -317,6 +358,7 @@ view_atomic_reduce = Op(
     attrs=_atomic_memory_attrs(),
     constraints=[SameElementType("value", "view")],
     effects=[ReadWrites("view")],
+    interfaces=[_atomic_memory_access_interface(value="value")],
     verify="loom_view_atomic_reduce_verify",
     format=[
         TemplateParam("kind"),
@@ -351,6 +393,7 @@ view_atomic_rmw = Op(
         SameType("value", "result"),
     ],
     effects=[ReadWrites("view")],
+    interfaces=[_atomic_memory_access_interface(value="value")],
     verify="loom_view_atomic_rmw_verify",
     format=[
         TemplateParam("kind"),
@@ -391,6 +434,15 @@ view_atomic_cmpxchg = Op(
         SameType("expected", "replacement", "old"),
     ],
     effects=[ReadWrites("view")],
+    interfaces=[
+        _memory_access_interface(
+            expected="expected",
+            replacement="replacement",
+            atomic_success_ordering="success_ordering",
+            atomic_failure_ordering="failure_ordering",
+            atomic_scope="scope",
+        )
+    ],
     verify="loom_view_atomic_cmpxchg_verify",
     format=[
         Ref("expected"),
@@ -439,6 +491,7 @@ view_prefetch = Op(
         ),
     ],
     traits=[HINT],
+    interfaces=[_memory_access_interface(cache=False)],
     verify="loom_view_prefetch_verify",
     format=[
         Ref("view"),

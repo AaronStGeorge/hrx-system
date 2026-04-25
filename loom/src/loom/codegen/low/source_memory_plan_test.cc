@@ -210,6 +210,47 @@ TEST_F(SourceMemoryPlanTest, StaticDenseLoadIncludesViewBase) {
             LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_NONE);
 }
 
+TEST_F(SourceMemoryPlanTest, StaticDenseScalarLoadUsesMemoryAccessFacet) {
+  loom_value_id_t buffer = DefineBufferArg();
+  loom_value_id_t layout = BuildDenseLayout();
+  loom_value_id_t base_offset =
+      loom_index_constant_result(BuildOffsetConstant(16));
+
+  loom_op_t* view_op = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(&builder_, buffer, base_offset,
+                                        ViewType1D(32, layout),
+                                        LOOM_LOCATION_UNKNOWN, &view_op));
+  int64_t static_indices[] = {3};
+  loom_op_t* load_op = nullptr;
+  IREE_ASSERT_OK(loom_view_load_build(
+      &builder_,
+      LOOM_VIEW_LOAD_BUILD_FLAG_HAS_CACHE_SCOPE |
+          LOOM_VIEW_LOAD_BUILD_FLAG_HAS_CACHE_TEMPORAL,
+      loom_buffer_view_result(view_op), nullptr, 0, static_indices,
+      IREE_ARRAYSIZE(static_indices), LOOM_VIEW_CACHE_SCOPE_DEVICE,
+      LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL,
+      loom_type_scalar(LOOM_SCALAR_TYPE_F32), LOOM_LOCATION_UNKNOWN, &load_op));
+
+  loom_value_fact_table_t facts = {0};
+  ComputeFacts(&facts);
+  loom_low_source_memory_access_plan_t plan = {};
+  loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+  ASSERT_TRUE(BuildPlan(&facts, load_op, &plan, &diagnostic));
+  EXPECT_EQ(plan.operation_kind, LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD);
+  EXPECT_EQ(plan.view_value_id, loom_buffer_view_result(view_op));
+  EXPECT_EQ(plan.root_value_id, buffer);
+  EXPECT_EQ(plan.element_byte_count, 4u);
+  EXPECT_EQ(plan.vector_lane_count, 1u);
+  EXPECT_EQ(plan.vector_lane_byte_stride, 4);
+  EXPECT_EQ(plan.static_byte_offset, 28);
+  EXPECT_EQ(plan.cache_policy.build_flags,
+            LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_SCOPE |
+                LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_TEMPORAL);
+  EXPECT_EQ(plan.cache_policy.cache_scope, LOOM_VIEW_CACHE_SCOPE_DEVICE);
+  EXPECT_EQ(plan.cache_policy.cache_temporal,
+            LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL);
+}
+
 TEST_F(SourceMemoryPlanTest, DynamicDenseLoadClassifiesWorkitemIndex) {
   loom_value_id_t buffer = DefineBufferArg();
   loom_value_id_t layout = BuildDenseLayout();

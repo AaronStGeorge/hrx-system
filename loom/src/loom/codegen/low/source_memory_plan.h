@@ -124,7 +124,7 @@ static inline bool loom_low_source_memory_access_is_dynamic(
   return plan->dynamic_index != LOOM_VALUE_ID_INVALID;
 }
 
-// Builds a target-independent source memory plan for vector memory access ops.
+// Builds a target-independent source memory plan for indexed source memory ops.
 //
 // Returns false when the source op cannot be decomposed into a complete source
 // plan. Targets are responsible for checking their own memory spaces, address
