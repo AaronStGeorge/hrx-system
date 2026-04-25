@@ -1081,7 +1081,7 @@ int main(int argc, char** argv) {
   bool had_error = !iree_status_is_ok(status);
   if (had_error) {
     iree_status_fprint(stderr, status);
-    iree_status_ignore(status);
+    iree_status_free(status);
   }
 
   if (pass_report_initialized) {

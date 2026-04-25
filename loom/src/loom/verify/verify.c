@@ -316,7 +316,6 @@ static iree_status_t loom_verify_state_initialize(
 
 static void loom_verify_state_deinitialize(loom_verify_state_t* state) {
   IREE_ASSERT(iree_status_is_ok(state->diagnostic_status));
-  iree_status_ignore(state->diagnostic_status);
   iree_arena_deinitialize(&state->arena);
 }
 

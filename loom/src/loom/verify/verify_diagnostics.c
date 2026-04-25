@@ -455,7 +455,7 @@ void loom_verify_emit_diagnostic(loom_verify_state_t* state,
     if (!iree_status_is_ok(print_status)) {
       // Printing failed (OOM, etc.). Use a static fallback so the
       // diagnostic still has something to display with carets.
-      iree_status_ignore(print_status);
+      iree_status_free(print_status);
       iree_string_builder_deinitialize(&op_text_builder);
       static const char kFallback[] = "<failed to print op>";
       loom_source_range_t fallback_range = {

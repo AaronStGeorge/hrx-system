@@ -330,7 +330,7 @@ static iree_status_t loom_bytecode_reader_read_uvarint(
   if (iree_status_is_ok(status)) return iree_ok_status();
 
   bool reached_end = iree_status_is_out_of_range(status);
-  iree_status_ignore(status);
+  iree_status_free(status);
   iree_string_view_t reason =
       reached_end
           ? IREE_SV("continuation bit reached the end of the byte range")

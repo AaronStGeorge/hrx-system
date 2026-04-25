@@ -14,7 +14,7 @@ void loom_verify_record_diagnostic_status(loom_verify_state_t* state,
   if (iree_status_is_ok(state->diagnostic_status)) {
     state->diagnostic_status = status;
   } else {
-    iree_status_ignore(status);
+    iree_status_free(status);
   }
 }
 

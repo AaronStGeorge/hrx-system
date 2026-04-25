@@ -213,7 +213,7 @@ void loom_tokenizer_initialize(iree_string_view_t source,
 }
 
 void loom_tokenizer_deinitialize(loom_tokenizer_t* tokenizer) {
-  iree_status_ignore(tokenizer->status);
+  iree_status_free(tokenizer->status);
   tokenizer->status = iree_ok_status();
 }
 
