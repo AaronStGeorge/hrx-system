@@ -118,6 +118,23 @@ iree_status_t loom_print_value_name_with_field(
     loom_print_context_t* ctx, loom_value_id_t value_id,
     loom_print_field_ref_t field_ref);
 
+// Prints an inline attribute dictionary from attributes not covered elsewhere
+// by the generated format.
+iree_status_t loom_print_inline_attr_dict(
+    loom_print_context_t* ctx, const loom_op_t* op,
+    const loom_op_vtable_t* vtable,
+    const loom_format_element_t* inline_element);
+
+// Prints a named operand dictionary.
+iree_status_t loom_print_operand_dict(loom_print_context_t* ctx,
+                                      const loom_op_t* op,
+                                      const loom_format_element_t* element);
+
+// Prints an attribute-keyed operand row table.
+iree_status_t loom_print_attr_table(loom_print_context_t* ctx,
+                                    const loom_op_t* op,
+                                    const loom_format_element_t* element);
+
 // Prints the body of |region| using canonical block/op traversal.
 iree_status_t loom_print_region_body(
     loom_print_context_t* ctx, const loom_region_t* region,

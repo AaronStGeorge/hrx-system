@@ -167,6 +167,7 @@ loom_cc_library(
         "printer.c",
         "printer_atoms.c",
         "printer_format.c",
+        "printer_format_tables.c",
         "printer_low_asm.c",
         "printer_pipeline.c",
     ],
