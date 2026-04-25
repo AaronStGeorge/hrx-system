@@ -6,7 +6,6 @@
 
 #include "loom/target/low_legality.h"
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -26,18 +25,14 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/testing/diagnostic_matchers.h"
+#include "loom/testing/module_ptr.h"
 
 namespace loom {
 namespace {
 
 using CollectedEmission = ::loom::testing::CapturedDiagnosticEmission;
 using EmissionCollector = ::loom::testing::DiagnosticEmissionCapture;
-
-struct ModuleDeleter {
-  void operator()(loom_module_t* module) const { loom_module_free(module); }
-};
-
-using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
+using ModulePtr = ::loom::testing::ModulePtr;
 
 static iree_status_t IgnoreProviderOp(
     const loom_target_low_legality_provider_t* provider,

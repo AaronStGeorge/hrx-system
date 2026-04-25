@@ -6,8 +6,6 @@
 
 #include "loom/analysis/contract_vector.h"
 
-#include <memory>
-
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -15,15 +13,12 @@
 #include "loom/ir/context.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/testing/module_ptr.h"
 #include "loom/verify/verify.h"
 
 namespace {
 
-struct ModuleDeleter {
-  void operator()(loom_module_t* module) const { loom_module_free(module); }
-};
-
-using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
+using ModulePtr = ::loom::testing::ModulePtr;
 
 class ContractVectorTest : public ::testing::Test {
  protected:

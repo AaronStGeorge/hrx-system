@@ -207,6 +207,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::vector
+    loom::src::loom::testing::module_ptr
     loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
@@ -262,6 +263,7 @@ loom_cc_test(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::ops::test
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -431,6 +433,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::test
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )

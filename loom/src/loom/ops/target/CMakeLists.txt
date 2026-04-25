@@ -47,6 +47,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::target::preset_registry
     loom::src::loom::target::types
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )

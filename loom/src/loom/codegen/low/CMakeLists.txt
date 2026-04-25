@@ -496,6 +496,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -605,6 +606,7 @@ loom_cc_test(
     loom::src::loom::ops::vector
     loom::src::loom::target::test::descriptors_ids
     loom::src::loom::target::test::lower
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -633,6 +635,7 @@ loom_cc_test(
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     loom::src::loom::testing::diagnostic_matchers
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -661,6 +664,7 @@ loom_cc_test(
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     loom::src::loom::testing::diagnostic_matchers
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -684,7 +688,7 @@ loom_cc_test(
     loom::src::loom::target::test::descriptors_ids
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
-    loom::src::loom::testing::diagnostic_matchers
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -709,6 +713,7 @@ loom_cc_test(
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     loom::src::loom::testing::diagnostic_matchers
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )

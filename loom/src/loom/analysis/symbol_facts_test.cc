@@ -6,8 +6,6 @@
 
 #include "loom/analysis/symbol_facts.h"
 
-#include <memory>
-
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -16,14 +14,12 @@
 #include "loom/ir/module.h"
 #include "loom/ops/test/facts.h"
 #include "loom/ops/test/ops.h"
+#include "loom/testing/module_ptr.h"
 
 namespace loom {
 namespace {
 
-struct ModuleDeleter {
-  void operator()(loom_module_t* module) const { loom_module_free(module); }
-};
-using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
+using ModulePtr = ::loom::testing::ModulePtr;
 
 class SymbolFactsTest : public ::testing::Test {
  protected:

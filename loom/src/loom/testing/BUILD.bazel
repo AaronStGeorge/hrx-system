@@ -47,6 +47,15 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "module_ptr",
+    testonly = True,
+    hdrs = ["module_ptr.h"],
+    deps = [
+        "//loom/src/loom/ir",
+    ],
+)
+
 loom_cc_test(
     name = "diff_test",
     srcs = ["diff_test.cc"],

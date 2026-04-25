@@ -4,8 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <memory>
-
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -23,15 +21,12 @@
 #include "loom/target/test/descriptors.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
+#include "loom/testing/module_ptr.h"
 
 namespace loom {
 namespace {
 
-struct ModuleDeleter {
-  void operator()(loom_module_t* module) const { loom_module_free(module); }
-};
-
-using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
+using ModulePtr = ::loom::testing::ModulePtr;
 
 enum TestRejectedScalarAddValueRef : uint16_t {
   kTestRejectedScalarAddOperand0,

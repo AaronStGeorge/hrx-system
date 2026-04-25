@@ -4,7 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -29,18 +28,14 @@
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
 #include "loom/testing/diagnostic_matchers.h"
+#include "loom/testing/module_ptr.h"
 
 namespace loom {
 namespace {
 
 using CollectedEmission = ::loom::testing::CapturedDiagnosticEmission;
 using EmissionCollector = ::loom::testing::DiagnosticEmissionCapture;
-
-struct ModuleDeleter {
-  void operator()(loom_module_t* module) const { loom_module_free(module); }
-};
-
-using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
+using ModulePtr = ::loom::testing::ModulePtr;
 
 static bool IsI32(loom_type_t type) {
   return loom_type_is_scalar(type) &&

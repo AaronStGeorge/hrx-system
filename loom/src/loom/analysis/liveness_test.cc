@@ -6,7 +6,6 @@
 
 #include "loom/analysis/liveness.h"
 
-#include <memory>
 #include <string>
 
 #include "iree/base/internal/arena.h"
@@ -22,14 +21,12 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/testing/module_ptr.h"
 
 namespace loom {
 namespace {
 
-struct ModuleDeleter {
-  void operator()(loom_module_t* module) const { loom_module_free(module); }
-};
-using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
+using ModulePtr = ::loom::testing::ModulePtr;
 
 class LivenessTest : public ::testing::Test {
  protected:

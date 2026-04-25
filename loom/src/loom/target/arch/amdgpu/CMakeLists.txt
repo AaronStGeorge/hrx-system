@@ -1253,6 +1253,7 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_registry
     loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::testing::module_ptr
     loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
@@ -1275,6 +1276,7 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_registry
     loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::testing::module_ptr
     loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main
@@ -1298,6 +1300,7 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_registry
     loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::testing::module_ptr
     loom::src::loom::verify
     iree::testing::gtest
     iree::testing::gtest_main

@@ -53,6 +53,17 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    module_ptr
+  HDRS
+    "module_ptr.h"
+  DEPS
+    loom::src::loom::ir
+  TESTONLY
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     diff_test

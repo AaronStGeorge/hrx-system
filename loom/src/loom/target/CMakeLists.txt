@@ -253,6 +253,7 @@ loom_cc_test(
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::low
     loom::src::loom::ops::target
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -272,6 +273,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::target
+    loom::src::loom::testing::module_ptr
     loom::src::loom::util::call_graph
     iree::testing::gtest
     iree::testing::gtest_main
@@ -344,6 +346,7 @@ loom_cc_test(
     loom::src::loom::ops::vector
     loom::src::loom::target::test::low_registry
     loom::src::loom::testing::diagnostic_matchers
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )

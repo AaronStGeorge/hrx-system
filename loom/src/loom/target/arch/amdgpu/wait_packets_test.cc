@@ -6,7 +6,6 @@
 
 #include "loom/target/arch/amdgpu/wait_packets.h"
 
-#include <memory>
 #include <string>
 
 #include "iree/testing/gtest.h"
@@ -20,19 +19,12 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_registry.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
+#include "loom/testing/module_ptr.h"
 #include "loom/verify/verify.h"
 
 namespace {
 
-struct ModuleDeleter {
-  void operator()(loom_module_t* module) const {
-    if (module) {
-      loom_module_free(module);
-    }
-  }
-};
-
-using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
+using ModulePtr = ::loom::testing::ModulePtr;
 
 std::string ToString(iree_string_view_t value) {
   return std::string(value.data, value.size);

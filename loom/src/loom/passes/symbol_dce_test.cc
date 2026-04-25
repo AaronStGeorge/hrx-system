@@ -6,7 +6,6 @@
 
 #include "loom/passes/symbol_dce.h"
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,15 +23,12 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/testing/module_ptr.h"
 
 namespace loom {
 namespace {
 
-struct ModuleDeleter {
-  void operator()(loom_module_t* module) const { loom_module_free(module); }
-};
-
-using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
+using ModulePtr = ::loom::testing::ModulePtr;
 
 class SymbolDCETest : public ::testing::Test {
  protected:

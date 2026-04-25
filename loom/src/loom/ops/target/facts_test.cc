@@ -6,7 +6,6 @@
 
 #include "loom/ops/target/facts.h"
 
-#include <memory>
 #include <string>
 
 #include "iree/base/internal/arena.h"
@@ -18,14 +17,12 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/target/ops.h"
+#include "loom/testing/module_ptr.h"
 
 namespace loom {
 namespace {
 
-struct ModuleDeleter {
-  void operator()(loom_module_t* module) const { loom_module_free(module); }
-};
-using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
+using ModulePtr = ::loom::testing::ModulePtr;
 
 static const loom_target_snapshot_t kPresetSnapshot = {
     .name = IREE_SVL("test.profile"),

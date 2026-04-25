@@ -76,6 +76,7 @@ loom_cc_test(
     loom::src::loom::ops::func
     loom::src::loom::ops::test
     loom::src::loom::target::types
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )
