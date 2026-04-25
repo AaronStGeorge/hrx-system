@@ -126,15 +126,15 @@ iree_status_t loom_amdgpu_emit_low_op(
       source_op->location, out_op);
 }
 
-iree_status_t loom_amdgpu_emit_explicit_wait_plan(
+iree_status_t loom_amdgpu_emit_explicit_packet_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_explicit_wait_plan_t* plan) {
+    const loom_amdgpu_explicit_packet_plan_t* plan) {
   IREE_ASSERT_ARGUMENT(plan);
   if (plan->descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
     return iree_ok_status();
   }
 
-  loom_named_attr_t attrs[LOOM_AMDGPU_EXPLICIT_WAIT_IMMEDIATE_CAPACITY] = {0};
+  loom_named_attr_t attrs[LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY] = {0};
   for (iree_host_size_t i = 0; i < plan->immediate_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_intern(context, plan->immediates[i].name,
                                             &attrs[i].name_id));

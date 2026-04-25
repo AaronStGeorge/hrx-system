@@ -572,7 +572,7 @@ iree_status_t loom_amdgpu_lower_kernel_async_wait(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_async_wait_plan_t* plan) {
   IREE_ASSERT_ARGUMENT(plan);
-  return loom_amdgpu_emit_explicit_wait_plan(context, source_op, &plan->wait);
+  return loom_amdgpu_emit_explicit_packet_plan(context, source_op, &plan->wait);
 }
 
 static iree_string_view_t loom_amdgpu_async_gather_rejection_detail(

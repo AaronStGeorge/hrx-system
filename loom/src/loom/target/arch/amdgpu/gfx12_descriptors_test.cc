@@ -219,13 +219,16 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorLookupUsesStableKeys) {
 
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.global_inv"),
-                                     LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 43u);
+                                     LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 43u,
+                                     /*expected_immediate_count=*/1u);
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.global_wb"),
-                                     LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 44u);
+                                     LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 44u,
+                                     /*expected_immediate_count=*/1u);
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.global_wbinv"),
-                                     LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 79u);
+                                     LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL, 79u,
+                                     /*expected_immediate_count=*/1u);
   ExpectAmdgpuCacheControlDescriptor(descriptor_set,
                                      IREE_SV("amdgpu.s_dcache_inv"),
                                      LOOM_AMDGPU_ENCODING_FORMAT_SMEM, 33u);

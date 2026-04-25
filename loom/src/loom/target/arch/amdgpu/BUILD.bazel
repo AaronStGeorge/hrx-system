@@ -856,7 +856,7 @@ loom_check_test_suite(
         "source_low_memory_global_atomic.loom-test",
         "source_low_memory_global_atomic_gfx12.loom-test",
         "source_low_memory_global_atomic_ordering.loom-test",
-        "source_low_memory_global_atomic_ordering_gfx12_diagnostics.loom-test",
+        "source_low_memory_global_atomic_ordering_gfx12.loom-test",
         "source_low_memory_workgroup_atomic.loom-test",
         "source_low_memory_workgroup_b128.loom-test",
         "source_low_minmax.loom-test",

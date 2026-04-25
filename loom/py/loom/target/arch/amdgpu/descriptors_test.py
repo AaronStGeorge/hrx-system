@@ -62,13 +62,11 @@ def _memory_descriptor(*, immediates: tuple[Immediate, ...]) -> Descriptor:
     )
 
 
-def _fixed_field_value(
-    fixed_encoding_fields: tuple[tuple[str, int], ...], field_name: str
-) -> int:
-    for actual_field_name, value in fixed_encoding_fields:
-        if actual_field_name == field_name:
-            return value
-    raise AssertionError(f"missing fixed encoding field '{field_name}'")
+def _immediate_default(immediates: tuple[Immediate, ...], name: str) -> int:
+    for immediate in immediates:
+        if immediate.field_name == name:
+            return immediate.default_value
+    raise AssertionError(f"missing immediate '{name}'")
 
 
 def test_gfx12_global_atomic_return_uses_temporal_hint_return_bit() -> None:
@@ -84,11 +82,25 @@ def test_gfx12_global_atomic_return_uses_temporal_hint_return_bit() -> None:
             if overlay.descriptor_key == "amdgpu.global_atomic_add_u32_rtn_saddr"
         )
 
-        assert _fixed_field_value(no_return.fixed_encoding_fields, "TH") == 0
-        assert (
-            _fixed_field_value(with_return.fixed_encoding_fields, "TH")
-            == _GFX12_TH_ATOMIC_RETURN_VALUE
+        assert _immediate_default(no_return.immediates, "th") == 0
+        assert _immediate_default(with_return.immediates, "th") == (
+            _GFX12_TH_ATOMIC_RETURN_VALUE
         )
+
+
+def test_gfx12_global_cache_controls_expose_scope_immediate() -> None:
+    for overlays in (_gfx12_core_overlays(), _gfx1250_core_overlays()):
+        for descriptor_key in (
+            "amdgpu.global_inv",
+            "amdgpu.global_wb",
+            "amdgpu.global_wbinv",
+        ):
+            descriptor = next(
+                overlay
+                for overlay in overlays
+                if overlay.descriptor_key == descriptor_key
+            )
+            assert _immediate_default(descriptor.immediates, "scope") == 0
 
 
 def test_address_immediate_validation_rejects_missing_unit_metadata() -> None:

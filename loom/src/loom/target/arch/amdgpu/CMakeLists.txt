@@ -987,9 +987,9 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
-    "source_low_memory_global_atomic_ordering_gfx12_diagnostics"
+    "source_low_memory_global_atomic_ordering_gfx12"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global_atomic_ordering_gfx12_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global_atomic_ordering_gfx12.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

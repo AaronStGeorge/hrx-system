@@ -214,42 +214,53 @@ typedef struct loom_amdgpu_memory_access_plan_t {
   uint64_t descriptor_id;
 } loom_amdgpu_memory_access_plan_t;
 
-#define LOOM_AMDGPU_EXPLICIT_WAIT_IMMEDIATE_CAPACITY 4
+#define LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY 4
 
-typedef struct loom_amdgpu_explicit_wait_immediate_t {
-  // Borrowed immediate field name from the selected descriptor set.
+typedef struct loom_amdgpu_explicit_packet_immediate_t {
+  // Borrowed immediate field name from the selected descriptor.
   iree_string_view_t name;
-  // Concrete immediate value emitted for the wait packet.
+  // Concrete immediate value emitted for the packet.
   uint16_t value;
-} loom_amdgpu_explicit_wait_immediate_t;
+} loom_amdgpu_explicit_packet_immediate_t;
 
-typedef struct loom_amdgpu_explicit_wait_plan_t {
-  // Stable descriptor ID selected for the explicit wait packet.
+typedef struct loom_amdgpu_explicit_packet_plan_t {
+  // Stable descriptor ID selected for the explicit packet.
   uint64_t descriptor_id;
-  // Immediate rows emitted on the wait descriptor.
-  loom_amdgpu_explicit_wait_immediate_t
-      immediates[LOOM_AMDGPU_EXPLICIT_WAIT_IMMEDIATE_CAPACITY];
+  // Immediate rows emitted on the descriptor.
+  loom_amdgpu_explicit_packet_immediate_t
+      immediates[LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY];
   // Number of populated immediate rows.
   iree_host_size_t immediate_count;
-} loom_amdgpu_explicit_wait_plan_t;
+} loom_amdgpu_explicit_packet_plan_t;
 
 #define LOOM_AMDGPU_ATOMIC_WAIT_CAPACITY 2
 #define LOOM_AMDGPU_ATOMIC_CACHE_CONTROL_CAPACITY 2
 
+typedef uint32_t loom_amdgpu_atomic_packet_attr_flags_t;
+
+#define LOOM_AMDGPU_ATOMIC_PACKET_ATTR_SCOPE ((uint32_t)1u << 0)
+
+typedef struct loom_amdgpu_atomic_packet_attrs_t {
+  // Attribute bits populated for the selected atomic packet.
+  loom_amdgpu_atomic_packet_attr_flags_t flags;
+  // VGLOBAL SCOPE immediate value encoded on GFX12 atomic packets.
+  int64_t scope;
+} loom_amdgpu_atomic_packet_attrs_t;
+
 typedef struct loom_amdgpu_atomic_ordering_plan_t {
   // Explicit waits emitted before the atomic packet.
-  loom_amdgpu_explicit_wait_plan_t
+  loom_amdgpu_explicit_packet_plan_t
       pre_atomic_waits[LOOM_AMDGPU_ATOMIC_WAIT_CAPACITY];
   // Number of populated pre-atomic wait packets.
   iree_host_size_t pre_atomic_wait_count;
   // Explicit waits emitted after the atomic packet.
-  loom_amdgpu_explicit_wait_plan_t
+  loom_amdgpu_explicit_packet_plan_t
       post_atomic_waits[LOOM_AMDGPU_ATOMIC_WAIT_CAPACITY];
   // Number of populated post-atomic wait packets.
   iree_host_size_t post_atomic_wait_count;
-  // Stable descriptor IDs for post-atomic cache-control packets.
-  uint64_t post_atomic_cache_control_descriptor_ids
-      [LOOM_AMDGPU_ATOMIC_CACHE_CONTROL_CAPACITY];
+  // Explicit cache controls emitted after the atomic packet.
+  loom_amdgpu_explicit_packet_plan_t
+      post_atomic_cache_controls[LOOM_AMDGPU_ATOMIC_CACHE_CONTROL_CAPACITY];
   // Number of populated post-atomic cache-control packets.
   iree_host_size_t post_atomic_cache_control_descriptor_count;
 } loom_amdgpu_atomic_ordering_plan_t;
@@ -275,6 +286,8 @@ typedef struct loom_amdgpu_atomic_plan_t {
   uint32_t scalar_byte_offset;
   // Stable descriptor ID selected for the active descriptor set.
   uint64_t descriptor_id;
+  // Descriptor attrs emitted directly on the selected atomic packet.
+  loom_amdgpu_atomic_packet_attrs_t packet_attrs;
   // Explicit packets required to implement source atomic ordering.
   loom_amdgpu_atomic_ordering_plan_t ordering;
 } loom_amdgpu_atomic_plan_t;
@@ -314,14 +327,14 @@ typedef struct loom_amdgpu_async_gather_plan_t {
 } loom_amdgpu_async_gather_plan_t;
 
 #define LOOM_AMDGPU_ASYNC_WAIT_IMMEDIATE_CAPACITY \
-  LOOM_AMDGPU_EXPLICIT_WAIT_IMMEDIATE_CAPACITY
+  LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY
 
-typedef loom_amdgpu_explicit_wait_immediate_t
+typedef loom_amdgpu_explicit_packet_immediate_t
     loom_amdgpu_async_wait_immediate_t;
 
 typedef struct loom_amdgpu_async_wait_plan_t {
   // Explicit wait packet selected for the async stream wait.
-  loom_amdgpu_explicit_wait_plan_t wait;
+  loom_amdgpu_explicit_packet_plan_t wait;
 } loom_amdgpu_async_wait_plan_t;
 
 #ifdef __cplusplus

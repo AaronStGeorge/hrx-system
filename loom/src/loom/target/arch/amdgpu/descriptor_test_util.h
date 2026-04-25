@@ -391,13 +391,14 @@ inline void ExpectAmdgpuGlobalLoadLdsDescriptors(
 
 inline void ExpectAmdgpuCacheControlDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
-    uint16_t expected_encoding_format_id, uint16_t expected_encoding_id) {
+    uint16_t expected_encoding_format_id, uint16_t expected_encoding_id,
+    uint32_t expected_immediate_count = 0) {
   const loom_low_descriptor_t* descriptor =
       LookupAmdgpuDescriptorForTest(descriptor_set, key);
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(descriptor->operand_count, 0u);
   EXPECT_EQ(descriptor->result_count, 0u);
-  EXPECT_EQ(descriptor->immediate_count, 0u);
+  EXPECT_EQ(descriptor->immediate_count, expected_immediate_count);
   EXPECT_EQ(descriptor->effect_count, 1u);
   EXPECT_EQ(descriptor->encoding_format_id, expected_encoding_format_id);
   EXPECT_EQ(descriptor->encoding_id, expected_encoding_id);

@@ -163,6 +163,7 @@ _WAIT_COUNTER_ALU_ENCODING_ID = 22
 _GFX9_11_VECTOR_CACHE_FIELDS = (("GLC", 1), ("SLC", 1), ("DLC", 1))
 _GFX950_VECTOR_CACHE_FIELDS = (("NT", 1), ("SC0", 1), ("SC1", 1))
 _GFX12_VECTOR_CACHE_FIELDS = (("NV", 1), ("SCOPE", 2), ("TH", 3))
+_GFX12_ATOMIC_CACHE_IMMEDIATE_FIELDS = ("SCOPE", "TH")
 # VGLOBAL atomic instructions use TH bit 0 to request returning the old value.
 _GFX12_TH_ATOMIC_RETURN_VALUE = 0x1
 _ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS = frozenset(
@@ -791,14 +792,16 @@ def _signed_offset_immediate(
     )
 
 
-def _cache_immediate(field_name: str, bit_width: int) -> Immediate:
+def _cache_immediate(
+    field_name: str, bit_width: int, *, default_value: int = 0
+) -> Immediate:
     return Immediate(
         field_name.lower(),
         ImmediateKind.UNSIGNED,
         flags=(ImmediateFlag.DEFAULT_VALUE,),
         bit_width=bit_width,
         unsigned_max=(2**bit_width) - 1,
-        default_value=0,
+        default_value=default_value,
     )
 
 
@@ -811,6 +814,18 @@ def _cache_immediates(
 ) -> tuple[Immediate, ...]:
     return tuple(
         _cache_immediate(field_name, bit_width)
+        for field_name, bit_width in cache_fields
+    )
+
+
+def _cache_immediates_with_defaults(
+    cache_fields: tuple[tuple[str, int], ...],
+    defaults: dict[str, int],
+) -> tuple[Immediate, ...]:
+    return tuple(
+        _cache_immediate(
+            field_name, bit_width, default_value=defaults.get(field_name, 0)
+        )
         for field_name, bit_width in cache_fields
     )
 
@@ -2225,7 +2240,8 @@ def _global_atomic_overlay(
     offset_bit_width: int,
     return_field_name: str,
     return_field_value: int,
-    cache_field_names: tuple[str, ...],
+    cache_fields: tuple[tuple[str, int], ...],
+    cache_immediate_field_names: tuple[str, ...],
     saddr_off: int | None,
     address_units: int,
 ) -> AmdgpuDescriptorOverlay:
@@ -2259,6 +2275,14 @@ def _global_atomic_overlay(
             ),
         )
 
+    cache_immediate_fields = tuple(
+        (field_name, bit_width)
+        for field_name, bit_width in cache_fields
+        if field_name in cache_immediate_field_names
+    )
+    cache_immediate_defaults = {
+        return_field_name: return_field_value if returns_old_value else 0
+    }
     fixed_encoding_fields: tuple[tuple[str, int], ...] = tuple(
         (
             field_name,
@@ -2266,7 +2290,8 @@ def _global_atomic_overlay(
             if returns_old_value and field_name == return_field_name
             else 0,
         )
-        for field_name in cache_field_names
+        for field_name, _bit_width in cache_fields
+        if field_name not in cache_immediate_field_names
     )
     if saddr_off is None:
         operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
@@ -2289,8 +2314,16 @@ def _global_atomic_overlay(
                 data_format_name=data_format_name, is_input=True
             ),
         ),
-        immediate_fields=(offset_field_name,),
-        immediates=(_signed_offset_immediate(offset_bit_width),),
+        immediate_fields=(
+            offset_field_name,
+            *_cache_field_names(cache_immediate_fields),
+        ),
+        immediates=(
+            _signed_offset_immediate(offset_bit_width),
+            *_cache_immediates_with_defaults(
+                cache_immediate_fields, cache_immediate_defaults
+            ),
+        ),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=_global_atomic_effects(32, counter_id=counter_id),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -2307,17 +2340,25 @@ def _global_atomic_cmpswap_overlay(
     offset_bit_width: int,
     return_field_name: str,
     return_field_value: int,
-    cache_field_names: tuple[str, ...],
+    cache_fields: tuple[tuple[str, int], ...],
+    cache_immediate_field_names: tuple[str, ...],
     saddr_off: int | None,
     address_units: int,
     descriptor_key_suffix: str,
 ) -> AmdgpuDescriptorOverlay:
+    cache_immediate_fields = tuple(
+        (field_name, bit_width)
+        for field_name, bit_width in cache_fields
+        if field_name in cache_immediate_field_names
+    )
+    cache_immediate_defaults = {return_field_name: return_field_value}
     fixed_encoding_fields: tuple[tuple[str, int], ...] = tuple(
         (
             field_name,
             return_field_value if field_name == return_field_name else 0,
         )
-        for field_name in cache_field_names
+        for field_name, _bit_width in cache_fields
+        if field_name not in cache_immediate_field_names
     )
     operands: tuple[AmdgpuOperandOverlay, ...] = (
         AmdgpuOperandOverlay("VDST", _vgpr_result()),
@@ -2344,8 +2385,16 @@ def _global_atomic_cmpswap_overlay(
             ),
             _ignore_global_atomic_memory(data_format_name="FMT_NUM_U32", is_input=True),
         ),
-        immediate_fields=(offset_field_name,),
-        immediates=(_signed_offset_immediate(offset_bit_width),),
+        immediate_fields=(
+            offset_field_name,
+            *_cache_field_names(cache_immediate_fields),
+        ),
+        immediates=(
+            _signed_offset_immediate(offset_bit_width),
+            *_cache_immediates_with_defaults(
+                cache_immediate_fields, cache_immediate_defaults
+            ),
+        ),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=_global_atomic_effects(32, counter_id=_COUNTER_VMEM_LOAD),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -2363,6 +2412,7 @@ def _global_atomic_overlays(
     return_field_name: str,
     return_field_value: int,
     cache_fields: tuple[tuple[str, int], ...],
+    cache_immediate_field_names: tuple[str, ...] = (),
     saddr_off: int | None,
     address_units: int,
     descriptor_key_suffix: str = "",
@@ -2386,7 +2436,6 @@ def _global_atomic_overlays(
         ),
         ("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
     )
-    cache_field_names = tuple(field_name for field_name, _ in cache_fields)
     overlays: list[AmdgpuDescriptorOverlay] = []
     for (
         mnemonic_suffix,
@@ -2413,7 +2462,8 @@ def _global_atomic_overlays(
                     offset_bit_width=offset_bit_width,
                     return_field_name=return_field_name,
                     return_field_value=return_field_value,
-                    cache_field_names=cache_field_names,
+                    cache_fields=cache_fields,
+                    cache_immediate_field_names=cache_immediate_field_names,
                     saddr_off=saddr_off,
                     address_units=address_units,
                 )
@@ -2435,7 +2485,8 @@ def _global_atomic_overlays(
                 offset_bit_width=offset_bit_width,
                 return_field_name=return_field_name,
                 return_field_value=return_field_value,
-                cache_field_names=cache_field_names,
+                cache_fields=cache_fields,
+                cache_immediate_field_names=cache_immediate_field_names,
                 saddr_off=saddr_off,
                 address_units=address_units,
             )
@@ -2449,7 +2500,8 @@ def _global_atomic_overlays(
             offset_bit_width=offset_bit_width,
             return_field_name=return_field_name,
             return_field_value=return_field_value,
-            cache_field_names=cache_field_names,
+            cache_fields=cache_fields,
+            cache_immediate_field_names=cache_immediate_field_names,
             saddr_off=saddr_off,
             address_units=address_units,
             descriptor_key_suffix=descriptor_key_suffix,
@@ -3786,6 +3838,7 @@ def _cache_control_overlay(
     mnemonic: str,
     encoding_name: str,
     semantic_tag: str,
+    cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -3795,6 +3848,8 @@ def _cache_control_overlay(
         semantic_tag=semantic_tag,
         schedule_class=_SCHEDULE_CACHE_CONTROL,
         operands=(),
+        immediate_fields=_cache_field_names(cache_fields),
+        immediates=_cache_immediates(cache_fields),
         effects=(_CACHE_CONTROL_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -4030,6 +4085,7 @@ def _gfx12_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="global_inv",
             encoding_name="ENC_VGLOBAL",
             semantic_tag="memory.cache.invalidate.global",
+            cache_fields=(("SCOPE", 2),),
         ),
         _cache_control_overlay(
             descriptor_key="amdgpu.global_wb",
@@ -4037,6 +4093,7 @@ def _gfx12_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="global_wb",
             encoding_name="ENC_VGLOBAL",
             semantic_tag="memory.cache.writeback.global",
+            cache_fields=(("SCOPE", 2),),
         ),
         _cache_control_overlay(
             descriptor_key="amdgpu.global_wbinv",
@@ -4044,6 +4101,7 @@ def _gfx12_cache_control_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             mnemonic="global_wbinv",
             encoding_name="ENC_VGLOBAL",
             semantic_tag="memory.cache.writeback_invalidate.global",
+            cache_fields=(("SCOPE", 2),),
         ),
         _cache_control_overlay(
             descriptor_key="amdgpu.s_dcache_inv",
@@ -4452,6 +4510,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             return_field_name="TH",
             return_field_value=_GFX12_TH_ATOMIC_RETURN_VALUE,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            cache_immediate_field_names=_GFX12_ATOMIC_CACHE_IMMEDIATE_FIELDS,
             saddr_off=None,
             address_units=1,
             descriptor_key_suffix="_saddr",
@@ -4601,6 +4660,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             return_field_name="TH",
             return_field_value=_GFX12_TH_ATOMIC_RETURN_VALUE,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            cache_immediate_field_names=_GFX12_ATOMIC_CACHE_IMMEDIATE_FIELDS,
             saddr_off=None,
             address_units=1,
             descriptor_key_suffix="_saddr",
