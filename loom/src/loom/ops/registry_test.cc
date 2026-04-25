@@ -457,12 +457,12 @@ TEST(TypeRegistry, ConfiguresFactContextResolver) {
 
   loom_value_fact_table_t table = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena, 8));
-  ASSERT_EQ(table.context.resolve_type_domain, nullptr);
+  ASSERT_EQ(table.context.resolve_type_domain.fn, nullptr);
 
   loom_type_registry_configure_fact_context(&table.context);
-  EXPECT_EQ(table.context.resolve_type_domain,
+  EXPECT_EQ(table.context.resolve_type_domain.fn,
             loom_type_registry_resolve_fact_domain);
-  EXPECT_EQ(table.context.resolve_type_domain_user_data, nullptr);
+  EXPECT_EQ(table.context.resolve_type_domain.user_data, nullptr);
 
   loom_type_registry_configure_fact_context(nullptr);
 

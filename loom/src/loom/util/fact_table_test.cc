@@ -36,12 +36,12 @@ class FactTableTest : public ::testing::Test {
 static constexpr uint8_t kTestRawPayloadTag = 42;
 
 static const loom_value_fact_domain_t* FactTableTestResolveDomain(
-    const loom_fact_context_t* context, const loom_module_t* module,
-    loom_type_t type) {
+    void* user_data, const loom_fact_context_t* context,
+    const loom_module_t* module, loom_type_t type) {
+  (void)context;
   (void)module;
   (void)type;
-  return static_cast<const loom_value_fact_domain_t*>(
-      context->resolve_type_domain_user_data);
+  return static_cast<const loom_value_fact_domain_t*>(user_data);
 }
 
 static bool FactTableTestRawExtensionsEqual(
@@ -591,9 +591,10 @@ TEST_F(FactTableTest, CrossTableFactsDifferentExtensionsDoNotCompareEqual) {
 TEST_F(FactTableTest, TypeOwnedRawPayloadClonesAndMeetsThroughDomain) {
   loom_value_fact_table_t source = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&source, &arena_, 0));
-  source.context.resolve_type_domain = FactTableTestResolveDomain;
-  source.context.resolve_type_domain_user_data =
-      const_cast<loom_value_fact_domain_t*>(&kTestRawFactDomain);
+  source.context.resolve_type_domain =
+      loom_value_fact_type_domain_resolver_callback_make(
+          FactTableTestResolveDomain,
+          const_cast<loom_value_fact_domain_t*>(&kTestRawFactDomain));
 
   const uint8_t payload[] = {1, 3, 5, 7};
   loom_value_facts_t extension = loom_value_facts_unknown();
@@ -612,9 +613,10 @@ TEST_F(FactTableTest, TypeOwnedRawPayloadClonesAndMeetsThroughDomain) {
   iree_arena_initialize(&block_pool_, &target_arena);
   loom_value_fact_table_t target = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&target, &target_arena, 0));
-  target.context.resolve_type_domain = FactTableTestResolveDomain;
-  target.context.resolve_type_domain_user_data =
-      const_cast<loom_value_fact_domain_t*>(&kTestRawFactDomain);
+  target.context.resolve_type_domain =
+      loom_value_fact_type_domain_resolver_callback_make(
+          FactTableTestResolveDomain,
+          const_cast<loom_value_fact_domain_t*>(&kTestRawFactDomain));
 
   loom_type_t type = loom_type_none();
   loom_value_facts_t cloned = loom_value_facts_unknown();
@@ -650,9 +652,10 @@ TEST_F(FactTableTest, TypeOwnedRawPayloadClonesAndMeetsThroughDomain) {
 TEST_F(FactTableTest, TypeOwnedRawPayloadRejectsTagMismatch) {
   loom_value_fact_table_t table = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
-  table.context.resolve_type_domain = FactTableTestResolveDomain;
-  table.context.resolve_type_domain_user_data =
-      const_cast<loom_value_fact_domain_t*>(&kTestRawFactDomain);
+  table.context.resolve_type_domain =
+      loom_value_fact_type_domain_resolver_callback_make(
+          FactTableTestResolveDomain,
+          const_cast<loom_value_fact_domain_t*>(&kTestRawFactDomain));
 
   const uint8_t payload[] = {2, 4, 6, 8};
   loom_value_facts_t expected = loom_value_facts_unknown();

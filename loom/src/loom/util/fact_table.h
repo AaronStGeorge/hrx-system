@@ -49,6 +49,36 @@ typedef struct loom_value_fact_extension_entry_t
     loom_value_fact_extension_entry_t;
 typedef struct loom_value_fact_domain_t loom_value_fact_domain_t;
 
+typedef const loom_value_fact_domain_t* (
+    *loom_value_fact_type_domain_resolver_fn_t)(
+    void* user_data, const loom_fact_context_t* context,
+    const loom_module_t* module, loom_type_t type);
+
+typedef struct loom_value_fact_type_domain_resolver_callback_t {
+  // Function that maps |type| to its type-owned fact domain.
+  loom_value_fact_type_domain_resolver_fn_t fn;
+
+  // Opaque callback payload passed to |fn|.
+  void* user_data;
+} loom_value_fact_type_domain_resolver_callback_t;
+
+static inline loom_value_fact_type_domain_resolver_callback_t
+loom_value_fact_type_domain_resolver_callback_empty(void) {
+  return (loom_value_fact_type_domain_resolver_callback_t){
+      .fn = NULL,
+      .user_data = NULL,
+  };
+}
+
+static inline loom_value_fact_type_domain_resolver_callback_t
+loom_value_fact_type_domain_resolver_callback_make(
+    loom_value_fact_type_domain_resolver_fn_t fn, void* user_data) {
+  return (loom_value_fact_type_domain_resolver_callback_t){
+      .fn = fn,
+      .user_data = user_data,
+  };
+}
+
 // Maximum lane facts stored in a small static vector extension. Larger static
 // vectors degrade to unknown facts instead of allocating per-lane analysis
 // payloads.
@@ -323,12 +353,7 @@ struct loom_fact_context_t {
   // descriptors. The fact table itself intentionally does not depend on the
   // generated type registry; callers that can map |type| to a descriptor can
   // return descriptor->fact_domain here.
-  const loom_value_fact_domain_t* (*resolve_type_domain)(
-      const loom_fact_context_t* context, const loom_module_t* module,
-      loom_type_t type);
-
-  // Caller-owned data for resolve_type_domain.
-  void* resolve_type_domain_user_data;
+  loom_value_fact_type_domain_resolver_callback_t resolve_type_domain;
 };
 
 // Type-owned operations for the optional extension slot in

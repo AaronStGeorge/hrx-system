@@ -73,8 +73,10 @@ def test_generate_type_registry_emits_fact_domain_pointer() -> None:
     type_registry_h, type_registry_c = generate_type_registry([type_def])
 
     assert "loom_type_registry_configure_fact_context" in type_registry_h
+    assert "void* user_data, const loom_fact_context_t* context," in type_registry_h
     assert "extern const loom_value_fact_domain_t loom_test_handle_fact_domain;" in type_registry_c
     assert ".fact_domain = &loom_test_handle_fact_domain," in type_registry_c
+    assert "loom_value_fact_type_domain_resolver_callback_make(\n          loom_type_registry_resolve_fact_domain, NULL)" in type_registry_c
 
 
 def test_generate_type_registry_rejects_invalid_fact_domain_symbol() -> None:

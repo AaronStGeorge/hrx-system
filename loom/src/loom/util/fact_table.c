@@ -599,8 +599,12 @@ static bool loom_value_fact_table_scalar_fields_equal(loom_value_facts_t lhs,
 static const loom_value_fact_domain_t* loom_value_fact_domain_for_type(
     const loom_value_fact_table_t* table, const loom_module_t* module,
     loom_type_t type) {
-  if (!table || !table->context.resolve_type_domain) return NULL;
-  return table->context.resolve_type_domain(&table->context, module, type);
+  if (!table || !table->context.resolve_type_domain.fn) {
+    return NULL;
+  }
+  return table->context.resolve_type_domain.fn(
+      table->context.resolve_type_domain.user_data, &table->context, module,
+      type);
 }
 
 static bool loom_value_fact_table_fact_array_equal(
