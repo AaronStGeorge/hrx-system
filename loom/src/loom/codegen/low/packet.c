@@ -271,13 +271,9 @@ uint32_t loom_low_packet_block_index(
   if (!schedule || !block) {
     return LOOM_LOW_PACKET_INDEX_NONE;
   }
-  if (!block->parent_region ||
-      block->region_index >= block->parent_region->block_count ||
-      block->region_index >= schedule->block_count) {
-    return LOOM_LOW_PACKET_INDEX_NONE;
-  }
-  const uint16_t block_index = block->region_index;
-  if (block->parent_region->blocks[block_index] != block) {
+  uint16_t block_index = 0;
+  if (!loom_region_try_block_index(block->parent_region, block, &block_index) ||
+      block_index >= schedule->block_count) {
     return LOOM_LOW_PACKET_INDEX_NONE;
   }
   return schedule->blocks[block_index].block == block

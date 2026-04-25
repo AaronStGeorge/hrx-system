@@ -1380,11 +1380,26 @@ typedef struct loom_region_t {
 
 static_assert(sizeof(loom_region_t) == 80, "loom_region_t must be 80 bytes");
 
+// Returns true and writes |out_block_index| when |block| is owned by |region|.
+static inline bool loom_region_try_block_index(const loom_region_t* region,
+                                               const loom_block_t* block,
+                                               uint16_t* out_block_index) {
+  if (!region || !region->blocks || !block || block->parent_region != region ||
+      block->region_index >= region->block_count ||
+      region->blocks[block->region_index] != block) {
+    return false;
+  }
+  if (out_block_index) {
+    *out_block_index = block->region_index;
+  }
+  return true;
+}
+
 // Returns |block|'s current ordinal in its parent region's block table.
 static inline uint16_t loom_block_region_index(const loom_block_t* block) {
-  IREE_ASSERT(block->parent_region != NULL);
-  IREE_ASSERT(block->region_index < block->parent_region->block_count);
-  IREE_ASSERT(block->parent_region->blocks[block->region_index] == block);
+  IREE_ASSERT(block != NULL);
+  IREE_ASSERT(block != NULL &&
+              loom_region_try_block_index(block->parent_region, block, NULL));
   return block->region_index;
 }
 

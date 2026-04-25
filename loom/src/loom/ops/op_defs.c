@@ -1428,15 +1428,11 @@ iree_status_t loom_op_erase(loom_module_t* module, loom_op_t* op) {
 
 static iree_host_size_t loom_region_find_block_index(
     const loom_region_t* region, const loom_block_t* block) {
-  if (!region || !block) {
+  uint16_t block_index = 0;
+  if (!loom_region_try_block_index(region, block, &block_index)) {
     return IREE_HOST_SIZE_MAX;
   }
-  if (block->parent_region != region ||
-      block->region_index >= region->block_count ||
-      region->blocks[block->region_index] != block) {
-    return IREE_HOST_SIZE_MAX;
-  }
-  return block->region_index;
+  return block_index;
 }
 
 static bool loom_region_remove_index_selected(const bool* remove_blocks,

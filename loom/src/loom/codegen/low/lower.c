@@ -738,11 +738,11 @@ static iree_status_t loom_low_lower_lookup_block(
   IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_ARGUMENT(out_low_block);
   *out_low_block = NULL;
-  if (!source_block || source_block->parent_region != source_body) {
+  uint16_t source_index = 0;
+  if (!loom_region_try_block_index(source_body, source_block, &source_index)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "branch target block is outside the source region");
   }
-  const uint16_t source_index = loom_block_region_index(source_block);
   IREE_ASSERT(context->block_map[source_index] != NULL);
   *out_low_block = context->block_map[source_index];
   return iree_ok_status();

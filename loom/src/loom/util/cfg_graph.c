@@ -8,20 +8,6 @@
 
 #include <string.h>
 
-static bool loom_cfg_graph_try_block_index(const loom_region_t* region,
-                                           const loom_block_t* block,
-                                           uint16_t* out_block_index) {
-  if (!region || !region->blocks || !block || block->parent_region != region ||
-      block->region_index >= region->block_count ||
-      region->blocks[block->region_index] != block) {
-    return false;
-  }
-  if (out_block_index) {
-    *out_block_index = block->region_index;
-  }
-  return true;
-}
-
 static iree_status_t loom_cfg_graph_count_edges(const loom_region_t* region,
                                                 loom_cfg_graph_t* graph) {
   for (uint16_t block_index = 0; block_index < region->block_count;
@@ -40,8 +26,8 @@ static iree_status_t loom_cfg_graph_count_edges(const loom_region_t* region,
         loom_block_t* const* successors = loom_op_const_successors(op);
         for (uint8_t i = 0; i < op->successor_count; ++i) {
           uint16_t target_index = 0;
-          if (!loom_cfg_graph_try_block_index(region, successors[i],
-                                              &target_index)) {
+          if (!loom_region_try_block_index(region, successors[i],
+                                           &target_index)) {
             graph->malformed = true;
             continue;
           }
@@ -115,8 +101,8 @@ static void loom_cfg_graph_write_edges(
         loom_block_t* const* successors = loom_op_const_successors(op);
         for (uint8_t i = 0; i < op->successor_count; ++i) {
           uint16_t target_index = 0;
-          if (!loom_cfg_graph_try_block_index(region, successors[i],
-                                              &target_index)) {
+          if (!loom_region_try_block_index(region, successors[i],
+                                           &target_index)) {
             continue;
           }
           graph->successor_indices[successor_write_positions[block_index]++] =
@@ -177,7 +163,7 @@ iree_status_t loom_cfg_graph_build(const loom_region_t* region,
       out_graph->blocks[block_index].block =
           loom_region_const_block(region, block_index);
       const loom_block_t* block = out_graph->blocks[block_index].block;
-      if (!loom_cfg_graph_try_block_index(region, block, NULL) ||
+      if (!loom_region_try_block_index(region, block, NULL) ||
           block->region_index != block_index) {
         out_graph->malformed = true;
       }
@@ -202,7 +188,7 @@ iree_host_size_t loom_cfg_graph_block_index(const loom_cfg_graph_t* graph,
     return IREE_HOST_SIZE_MAX;
   }
   uint16_t block_index = 0;
-  if (!loom_cfg_graph_try_block_index(graph->region, block, &block_index) ||
+  if (!loom_region_try_block_index(graph->region, block, &block_index) ||
       block_index >= graph->block_count ||
       graph->blocks[block_index].block != block) {
     return IREE_HOST_SIZE_MAX;
