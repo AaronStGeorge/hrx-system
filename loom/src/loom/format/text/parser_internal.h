@@ -821,6 +821,32 @@ iree_status_t loom_parser_emit_result_count_mismatch(
 // Format walker
 //===----------------------------------------------------------------------===//
 
+// Parses one result type element, either assigning an existing LHS result for
+// body ops or appending a symbol-definition result for func-like signatures.
+iree_status_t loom_parse_format_result_type(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    loom_token_t op_name_token, const loom_format_element_t* element,
+    loom_parsed_op_t* parsed, bool is_symbol_definition);
+
+// Parses a result type list, either into existing LHS results for body ops or
+// into appended symbol-definition results for func-like signatures.
+iree_status_t loom_parse_format_result_type_list(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    loom_token_t op_name_token, const loom_format_element_t* element,
+    loom_parsed_op_t* parsed, bool is_symbol_definition);
+
+// Parses a region binding list and queues entry block arguments.
+iree_status_t loom_parse_format_binding_list(
+    loom_parser_t* parser, const loom_format_element_t* element,
+    loom_parsed_op_t* parsed);
+
+// Parses explicit region block arguments and queues them for the next region.
+iree_status_t loom_parse_format_block_args(loom_parser_t* parser);
+
+// Parses func-like signature arguments and queues them for the body region.
+iree_status_t loom_parse_format_func_args(loom_parser_t* parser,
+                                          loom_parsed_op_t* parsed);
+
 // Parses an inline attribute dictionary where keys are op attribute names.
 iree_status_t loom_parse_format_inline_attr_dict(loom_parser_t* parser,
                                                  const loom_op_vtable_t* vtable,
