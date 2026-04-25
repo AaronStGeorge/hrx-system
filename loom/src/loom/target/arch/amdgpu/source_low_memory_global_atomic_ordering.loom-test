@@ -17,13 +17,13 @@ low.func.def target(@target) abi(hal_kernel) @global_atomic_release_reduce_i32()
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %one = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
-  %10 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
-  %12 = low.op<amdgpu.v_lshlrev_b32>(%11, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %13 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %10 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %11 = low.op<amdgpu.v_lshlrev_b32>(%10, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %12 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
-  low.op<amdgpu.buffer_atomic_add_u32>(%10, %view, %12, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_atomic_add_u32>(%13, %view, %11, %12) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.return
 }
 
@@ -45,11 +45,11 @@ low.func.def target(@target) abi(hal_kernel) @global_atomic_acquire_rmw_i32() {
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %one = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
-  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %12 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
-  %13 = low.op<amdgpu.v_lshlrev_b32>(%12, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %14 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %old = low.op<amdgpu.buffer_atomic_add_u32_rtn>(%11, %view, %13, %14) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %11 as reg<amdgpu.vgpr>
+  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %12 = low.op<amdgpu.v_lshlrev_b32>(%11, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %13 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %old = low.op<amdgpu.buffer_atomic_add_u32_rtn>(%14, %view, %12, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %14 as reg<amdgpu.vgpr>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.buffer_gl1_inv>() : ()
   low.op<amdgpu.buffer_gl0_inv>() : ()
@@ -74,13 +74,13 @@ low.func.def target(@target) abi(hal_kernel) @global_atomic_acq_rel_rmw_i32() {
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %one = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
-  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %12 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
-  %13 = low.op<amdgpu.v_lshlrev_b32>(%12, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %14 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %12 = low.op<amdgpu.v_lshlrev_b32>(%11, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %13 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
-  %old = low.op<amdgpu.buffer_atomic_add_u32_rtn>(%11, %view, %13, %14) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %11 as reg<amdgpu.vgpr>
+  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %old = low.op<amdgpu.buffer_atomic_add_u32_rtn>(%14, %view, %12, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %14 as reg<amdgpu.vgpr>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.buffer_gl1_inv>() : ()
   low.op<amdgpu.buffer_gl0_inv>() : ()
@@ -141,13 +141,13 @@ low.func.def target(@target) abi(hal_kernel) @global_atomic_seq_cst_reduce_i32()
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %one = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
-  %10 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
-  %12 = low.op<amdgpu.v_lshlrev_b32>(%11, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %13 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %10 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %11 = low.op<amdgpu.v_lshlrev_b32>(%10, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %12 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   low.op<amdgpu.s_waitcnt>() {lgkmcnt = 15, vmcnt = 0} : ()
   low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
-  low.op<amdgpu.buffer_atomic_add_u32>(%10, %view, %12, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_atomic_add_u32>(%13, %view, %11, %12) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
   low.op<amdgpu.s_waitcnt_vscnt>() {vscnt = 0} : ()
   low.op<amdgpu.buffer_gl1_inv>() : ()
   low.op<amdgpu.buffer_gl0_inv>() : ()

@@ -1602,6 +1602,23 @@ def _v_mov_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_mov_b32_copy_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mov_b32_copy",
+        instruction_name="V_MOV_B32",
+        mnemonic="v_mov_b32",
+        encoding_name="ENC_VOP1",
+        semantic_tag="register.copy.b32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("src")),
+        ),
+        asm_forms=(),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _s_buffer_load_dword_overlay(
     offset_field_name: str = "OFFSET", offset_bit_width: int = 21
 ) -> AmdgpuDescriptorOverlay:
@@ -2435,6 +2452,8 @@ def _global_atomic_overlays(
             False,
         ),
         ("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
+        ("min_f32", "GLOBAL_ATOMIC_MIN_F32", "minnum.f32", "FMT_NUM_F32", True),
+        ("max_f32", "GLOBAL_ATOMIC_MAX_F32", "maxnum.f32", "FMT_NUM_F32", True),
     )
     overlays: list[AmdgpuDescriptorOverlay] = []
     for (
@@ -2674,6 +2693,8 @@ def _buffer_atomic_overlays(
             False,
         ),
         ("add_f32", "BUFFER_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
+        ("min_f32", "BUFFER_ATOMIC_MIN_F32", "minnum.f32", "FMT_NUM_F32", True),
+        ("max_f32", "BUFFER_ATOMIC_MAX_F32", "maxnum.f32", "FMT_NUM_F32", True),
     )
     cache_field_names = tuple(field_name for field_name, _ in cache_fields)
     overlays: list[AmdgpuDescriptorOverlay] = []
@@ -2977,6 +2998,8 @@ def _ds_atomic_overlays(
         ("ds_or_b32", "DS_OR_B32", "or.b32", "FMT_NUM_B32", False),
         ("ds_xor_b32", "DS_XOR_B32", "xor.b32", "FMT_NUM_B32", False),
         ("ds_add_f32", "DS_ADD_F32", "add.f32", "FMT_NUM_F32", False),
+        ("ds_min_f32", "DS_MIN_F32", "minnum.f32", "FMT_NUM_F32", False),
+        ("ds_max_f32", "DS_MAX_F32", "maxnum.f32", "FMT_NUM_F32", False),
         ("ds_add_rtn_u32", "DS_ADD_RTN_U32", "add.return.u32", "FMT_NUM_U32", True),
         ("ds_sub_rtn_u32", "DS_SUB_RTN_U32", "sub.return.u32", "FMT_NUM_U32", True),
         ("ds_min_rtn_i32", "DS_MIN_RTN_I32", "min.return.i32", "FMT_NUM_I32", True),
@@ -2994,6 +3017,20 @@ def _ds_atomic_overlays(
             True,
         ),
         ("ds_add_rtn_f32", "DS_ADD_RTN_F32", "add.return.f32", "FMT_NUM_F32", True),
+        (
+            "ds_min_rtn_f32",
+            "DS_MIN_RTN_F32",
+            "minnum.return.f32",
+            "FMT_NUM_F32",
+            True,
+        ),
+        (
+            "ds_max_rtn_f32",
+            "DS_MAX_RTN_F32",
+            "maxnum.return.f32",
+            "FMT_NUM_F32",
+            True,
+        ),
     )
     overlays = [
         _ds_atomic_overlay(
@@ -4127,6 +4164,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_add_u32_overlay("V_ADD_U32"),
         _v_sub_u32_overlay("V_SUB_U32", "v_sub_u32"),
         _v_mov_b32_literal_overlay(),
+        _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
@@ -4272,6 +4310,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
+        _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
@@ -4417,6 +4456,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
+        _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),
@@ -4567,6 +4607,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
+        _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
         *_i32_bitwise_shift_overlays(),
         _v_add_f32_overlay(),

@@ -20,16 +20,16 @@ low.func.def target(@target) abi(hal_kernel) @lds_atomic_add_i32() asm<amdgpu.gf
   %bytes = s_mov_b32 256
   %scratch_view = frame_index @lds_atomic_add_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
   %one = s_mov_b32 1
-  %12 = v_mov_b32 1
-  %13 = v_mov_b32 2
-  %14 = v_lshlrev_b32 %13, %tid
-  %15 = v_add_u32 %scratch_view, %14
-  ds_add_u32 %15, %12 {offset = 0}
-  %16 = v_mov_b32 1
-  %17 = v_mov_b32 2
-  %18 = v_lshlrev_b32 %17, %tid
-  %19 = v_add_u32 %scratch_view, %18
-  %old = ds_add_rtn_u32 %19, %16 {offset = 0}
+  %12 = v_mov_b32 2
+  %13 = v_lshlrev_b32 %12, %tid
+  %14 = v_add_u32 %scratch_view, %13
+  %15 = v_mov_b32 1
+  ds_add_u32 %14, %15 {offset = 0}
+  %16 = v_mov_b32 2
+  %17 = v_lshlrev_b32 %16, %tid
+  %18 = v_add_u32 %scratch_view, %17
+  %19 = v_mov_b32 1
+  %old = ds_add_rtn_u32 %18, %19 {offset = 0}
   return
 }
 
@@ -59,31 +59,31 @@ low.func.def target(@target) abi(hal_kernel) @lds_atomic_ordering_i32() asm<amdg
   %bytes = s_mov_b32 256
   %scratch_view = frame_index @lds_atomic_ordering_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
   %one = s_mov_b32 1
-  %15 = v_mov_b32 1
-  %16 = v_mov_b32 2
-  %17 = v_lshlrev_b32 %16, %tid
-  %18 = v_add_u32 %scratch_view, %17
-  ds_add_u32 %18, %15 {offset = 0}
-  %19 = v_mov_b32 1
-  %20 = v_mov_b32 2
-  %21 = v_lshlrev_b32 %20, %tid
-  %22 = v_add_u32 %scratch_view, %21
-  %old_acquire = ds_add_rtn_u32 %22, %19 {offset = 0}
-  %24 = v_mov_b32 1
-  %25 = v_mov_b32 2
-  %26 = v_lshlrev_b32 %25, %tid
-  %27 = v_add_u32 %scratch_view, %26
-  %old_release = ds_add_rtn_u32 %27, %24 {offset = 0}
-  %29 = v_mov_b32 1
-  %30 = v_mov_b32 2
-  %31 = v_lshlrev_b32 %30, %tid
-  %32 = v_add_u32 %scratch_view, %31
-  %old_acq_rel = ds_add_rtn_u32 %32, %29 {offset = 0}
-  %34 = v_mov_b32 1
-  %35 = v_mov_b32 2
-  %36 = v_lshlrev_b32 %35, %tid
-  %37 = v_add_u32 %scratch_view, %36
-  %old_seq_cst = ds_add_rtn_u32 %37, %34 {offset = 0}
+  %15 = v_mov_b32 2
+  %16 = v_lshlrev_b32 %15, %tid
+  %17 = v_add_u32 %scratch_view, %16
+  %18 = v_mov_b32 1
+  ds_add_u32 %17, %18 {offset = 0}
+  %19 = v_mov_b32 2
+  %20 = v_lshlrev_b32 %19, %tid
+  %21 = v_add_u32 %scratch_view, %20
+  %22 = v_mov_b32 1
+  %old_acquire = ds_add_rtn_u32 %21, %22 {offset = 0}
+  %24 = v_mov_b32 2
+  %25 = v_lshlrev_b32 %24, %tid
+  %26 = v_add_u32 %scratch_view, %25
+  %27 = v_mov_b32 1
+  %old_release = ds_add_rtn_u32 %26, %27 {offset = 0}
+  %29 = v_mov_b32 2
+  %30 = v_lshlrev_b32 %29, %tid
+  %31 = v_add_u32 %scratch_view, %30
+  %32 = v_mov_b32 1
+  %old_acq_rel = ds_add_rtn_u32 %31, %32 {offset = 0}
+  %34 = v_mov_b32 2
+  %35 = v_lshlrev_b32 %34, %tid
+  %36 = v_add_u32 %scratch_view, %35
+  %37 = v_mov_b32 1
+  %old_seq_cst = ds_add_rtn_u32 %36, %37 {offset = 0}
   return
 }
 
@@ -125,6 +125,50 @@ low.slot @lds_atomic_add_f32__lds3 {align = 4, function = @lds_atomic_add_f32, s
 
 // ====
 
+func.def @lds_atomic_minnum_maxnum_f32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xf32, #dense>
+  %limit = scalar.constant 1.0 : f32
+  view.atomic.reduce<minnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense>
+  view.atomic.reduce<maxnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense>
+  %old_min = view.atomic.rmw<minnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense> -> f32
+  %old_max = view.atomic.rmw<maxnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense> -> f32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @lds_atomic_minnum_maxnum_f32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %zero = s_mov_b32 0
+  %bytes = s_mov_b32 256
+  %scratch_view = frame_index @lds_atomic_minnum_maxnum_f32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %limit = v_mov_b32 1065353216
+  %13 = v_mov_b32 2
+  %14 = v_lshlrev_b32 %13, %tid
+  %15 = v_add_u32 %scratch_view, %14
+  ds_min_f32 %15, %limit {offset = 0}
+  %16 = v_mov_b32 2
+  %17 = v_lshlrev_b32 %16, %tid
+  %18 = v_add_u32 %scratch_view, %17
+  ds_max_f32 %18, %limit {offset = 0}
+  %19 = v_mov_b32 2
+  %20 = v_lshlrev_b32 %19, %tid
+  %21 = v_add_u32 %scratch_view, %20
+  %old_min = ds_min_rtn_f32 %21, %limit {offset = 0}
+  %23 = v_mov_b32 2
+  %24 = v_lshlrev_b32 %23, %tid
+  %25 = v_add_u32 %scratch_view, %24
+  %old_max = ds_max_rtn_f32 %25, %limit {offset = 0}
+  return
+}
+
+low.slot @lds_atomic_minnum_maxnum_f32__lds3 {align = 4, function = @lds_atomic_minnum_maxnum_f32, size = 256, space = lds}
+
+// ====
+
 func.def @lds_atomic_bitwise_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
@@ -148,36 +192,36 @@ low.func.def target(@target) abi(hal_kernel) @lds_atomic_bitwise_i32() asm<amdgp
   %bytes = s_mov_b32 256
   %scratch_view = frame_index @lds_atomic_bitwise_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
   %mask = s_mov_b32 255
-  %14 = v_mov_b32 255
-  %15 = v_mov_b32 2
-  %16 = v_lshlrev_b32 %15, %tid
-  %17 = v_add_u32 %scratch_view, %16
-  ds_and_b32 %17, %14 {offset = 0}
-  %18 = v_mov_b32 255
-  %19 = v_mov_b32 2
-  %20 = v_lshlrev_b32 %19, %tid
-  %21 = v_add_u32 %scratch_view, %20
-  ds_or_b32 %21, %18 {offset = 0}
-  %22 = v_mov_b32 255
-  %23 = v_mov_b32 2
-  %24 = v_lshlrev_b32 %23, %tid
-  %25 = v_add_u32 %scratch_view, %24
-  ds_xor_b32 %25, %22 {offset = 0}
-  %26 = v_mov_b32 255
-  %27 = v_mov_b32 2
-  %28 = v_lshlrev_b32 %27, %tid
-  %29 = v_add_u32 %scratch_view, %28
-  %old_and = ds_and_rtn_b32 %29, %26 {offset = 0}
-  %31 = v_mov_b32 255
-  %32 = v_mov_b32 2
-  %33 = v_lshlrev_b32 %32, %tid
-  %34 = v_add_u32 %scratch_view, %33
-  %old_or = ds_or_rtn_b32 %34, %31 {offset = 0}
-  %36 = v_mov_b32 255
-  %37 = v_mov_b32 2
-  %38 = v_lshlrev_b32 %37, %tid
-  %39 = v_add_u32 %scratch_view, %38
-  %old_xor = ds_xor_rtn_b32 %39, %36 {offset = 0}
+  %14 = v_mov_b32 2
+  %15 = v_lshlrev_b32 %14, %tid
+  %16 = v_add_u32 %scratch_view, %15
+  %17 = v_mov_b32 255
+  ds_and_b32 %16, %17 {offset = 0}
+  %18 = v_mov_b32 2
+  %19 = v_lshlrev_b32 %18, %tid
+  %20 = v_add_u32 %scratch_view, %19
+  %21 = v_mov_b32 255
+  ds_or_b32 %20, %21 {offset = 0}
+  %22 = v_mov_b32 2
+  %23 = v_lshlrev_b32 %22, %tid
+  %24 = v_add_u32 %scratch_view, %23
+  %25 = v_mov_b32 255
+  ds_xor_b32 %24, %25 {offset = 0}
+  %26 = v_mov_b32 2
+  %27 = v_lshlrev_b32 %26, %tid
+  %28 = v_add_u32 %scratch_view, %27
+  %29 = v_mov_b32 255
+  %old_and = ds_and_rtn_b32 %28, %29 {offset = 0}
+  %31 = v_mov_b32 2
+  %32 = v_lshlrev_b32 %31, %tid
+  %33 = v_add_u32 %scratch_view, %32
+  %34 = v_mov_b32 255
+  %old_or = ds_or_rtn_b32 %33, %34 {offset = 0}
+  %36 = v_mov_b32 2
+  %37 = v_lshlrev_b32 %36, %tid
+  %38 = v_add_u32 %scratch_view, %37
+  %39 = v_mov_b32 255
+  %old_xor = ds_xor_rtn_b32 %38, %39 {offset = 0}
   return
 }
 
@@ -204,16 +248,16 @@ low.func.def target(@target) abi(hal_kernel) @lds_atomic_sub_i32() asm<amdgpu.gf
   %bytes = s_mov_b32 256
   %scratch_view = frame_index @lds_atomic_sub_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
   %delta = s_mov_b32 1
-  %12 = v_mov_b32 1
-  %13 = v_mov_b32 2
-  %14 = v_lshlrev_b32 %13, %tid
-  %15 = v_add_u32 %scratch_view, %14
-  ds_sub_u32 %15, %12 {offset = 0}
-  %16 = v_mov_b32 1
-  %17 = v_mov_b32 2
-  %18 = v_lshlrev_b32 %17, %tid
-  %19 = v_add_u32 %scratch_view, %18
-  %old_sub = ds_sub_rtn_u32 %19, %16 {offset = 0}
+  %12 = v_mov_b32 2
+  %13 = v_lshlrev_b32 %12, %tid
+  %14 = v_add_u32 %scratch_view, %13
+  %15 = v_mov_b32 1
+  ds_sub_u32 %14, %15 {offset = 0}
+  %16 = v_mov_b32 2
+  %17 = v_lshlrev_b32 %16, %tid
+  %18 = v_add_u32 %scratch_view, %17
+  %19 = v_mov_b32 1
+  %old_sub = ds_sub_rtn_u32 %18, %19 {offset = 0}
   return
 }
 
@@ -239,11 +283,11 @@ low.func.def target(@target) abi(hal_kernel) @lds_atomic_exchange_i32() asm<amdg
   %bytes = s_mov_b32 256
   %scratch_view = frame_index @lds_atomic_exchange_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
   %value = s_mov_b32 7
-  %12 = v_mov_b32 7
-  %13 = v_mov_b32 2
-  %14 = v_lshlrev_b32 %13, %tid
-  %15 = v_add_u32 %scratch_view, %14
-  %old = ds_wrxchg_rtn_b32 %15, %12 {offset = 0}
+  %12 = v_mov_b32 2
+  %13 = v_lshlrev_b32 %12, %tid
+  %14 = v_add_u32 %scratch_view, %13
+  %15 = v_mov_b32 7
+  %old = ds_wrxchg_rtn_b32 %14, %15 {offset = 0}
   return
 }
 
@@ -309,46 +353,46 @@ low.func.def target(@target) abi(hal_kernel) @lds_atomic_minmax_i32() asm<amdgpu
   %bytes = s_mov_b32 256
   %scratch_view = frame_index @lds_atomic_minmax_i32__lds3 {offset = 0} : reg<amdgpu.vgpr>
   %limit = s_mov_b32 1
-  %15 = v_mov_b32 1
-  %16 = v_mov_b32 2
-  %17 = v_lshlrev_b32 %16, %tid
-  %18 = v_add_u32 %scratch_view, %17
-  ds_min_i32 %18, %15 {offset = 0}
-  %19 = v_mov_b32 1
-  %20 = v_mov_b32 2
-  %21 = v_lshlrev_b32 %20, %tid
-  %22 = v_add_u32 %scratch_view, %21
-  ds_max_i32 %22, %19 {offset = 0}
-  %23 = v_mov_b32 1
-  %24 = v_mov_b32 2
-  %25 = v_lshlrev_b32 %24, %tid
-  %26 = v_add_u32 %scratch_view, %25
-  ds_min_u32 %26, %23 {offset = 0}
-  %27 = v_mov_b32 1
-  %28 = v_mov_b32 2
-  %29 = v_lshlrev_b32 %28, %tid
-  %30 = v_add_u32 %scratch_view, %29
-  ds_max_u32 %30, %27 {offset = 0}
-  %31 = v_mov_b32 1
-  %32 = v_mov_b32 2
-  %33 = v_lshlrev_b32 %32, %tid
-  %34 = v_add_u32 %scratch_view, %33
-  %old_minsi = ds_min_rtn_i32 %34, %31 {offset = 0}
-  %36 = v_mov_b32 1
-  %37 = v_mov_b32 2
-  %38 = v_lshlrev_b32 %37, %tid
-  %39 = v_add_u32 %scratch_view, %38
-  %old_maxsi = ds_max_rtn_i32 %39, %36 {offset = 0}
-  %41 = v_mov_b32 1
-  %42 = v_mov_b32 2
-  %43 = v_lshlrev_b32 %42, %tid
-  %44 = v_add_u32 %scratch_view, %43
-  %old_minui = ds_min_rtn_u32 %44, %41 {offset = 0}
-  %46 = v_mov_b32 1
-  %47 = v_mov_b32 2
-  %48 = v_lshlrev_b32 %47, %tid
-  %49 = v_add_u32 %scratch_view, %48
-  %old_maxui = ds_max_rtn_u32 %49, %46 {offset = 0}
+  %15 = v_mov_b32 2
+  %16 = v_lshlrev_b32 %15, %tid
+  %17 = v_add_u32 %scratch_view, %16
+  %18 = v_mov_b32 1
+  ds_min_i32 %17, %18 {offset = 0}
+  %19 = v_mov_b32 2
+  %20 = v_lshlrev_b32 %19, %tid
+  %21 = v_add_u32 %scratch_view, %20
+  %22 = v_mov_b32 1
+  ds_max_i32 %21, %22 {offset = 0}
+  %23 = v_mov_b32 2
+  %24 = v_lshlrev_b32 %23, %tid
+  %25 = v_add_u32 %scratch_view, %24
+  %26 = v_mov_b32 1
+  ds_min_u32 %25, %26 {offset = 0}
+  %27 = v_mov_b32 2
+  %28 = v_lshlrev_b32 %27, %tid
+  %29 = v_add_u32 %scratch_view, %28
+  %30 = v_mov_b32 1
+  ds_max_u32 %29, %30 {offset = 0}
+  %31 = v_mov_b32 2
+  %32 = v_lshlrev_b32 %31, %tid
+  %33 = v_add_u32 %scratch_view, %32
+  %34 = v_mov_b32 1
+  %old_minsi = ds_min_rtn_i32 %33, %34 {offset = 0}
+  %36 = v_mov_b32 2
+  %37 = v_lshlrev_b32 %36, %tid
+  %38 = v_add_u32 %scratch_view, %37
+  %39 = v_mov_b32 1
+  %old_maxsi = ds_max_rtn_i32 %38, %39 {offset = 0}
+  %41 = v_mov_b32 2
+  %42 = v_lshlrev_b32 %41, %tid
+  %43 = v_add_u32 %scratch_view, %42
+  %44 = v_mov_b32 1
+  %old_minui = ds_min_rtn_u32 %43, %44 {offset = 0}
+  %46 = v_mov_b32 2
+  %47 = v_lshlrev_b32 %46, %tid
+  %48 = v_add_u32 %scratch_view, %47
+  %49 = v_mov_b32 1
+  %old_maxui = ds_max_rtn_u32 %48, %49 {offset = 0}
   return
 }
 

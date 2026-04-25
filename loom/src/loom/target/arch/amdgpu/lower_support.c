@@ -484,6 +484,30 @@ bool loom_amdgpu_module_value_as_i32_constant(const loom_module_t* module,
   return true;
 }
 
+bool loom_amdgpu_module_value_as_f32_constant(const loom_module_t* module,
+                                              loom_value_id_t value_id,
+                                              uint32_t* out_bit_pattern) {
+  IREE_ASSERT_ARGUMENT(out_bit_pattern);
+  *out_bit_pattern = 0;
+  if (!loom_amdgpu_type_is_f32(loom_module_value_type(module, value_id))) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return false;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op || !loom_scalar_constant_isa(defining_op)) {
+    return false;
+  }
+  loom_attribute_t attr = loom_scalar_constant_value(defining_op);
+  if (!loom_amdgpu_attr_is_f32_immediate(attr)) {
+    return false;
+  }
+  *out_bit_pattern = loom_amdgpu_attr_f32_bit_pattern(attr);
+  return true;
+}
+
 bool loom_amdgpu_value_facts_as_exact_non_negative_i64(loom_value_facts_t facts,
                                                        int64_t* out_value) {
   IREE_ASSERT_ARGUMENT(out_value);
@@ -521,6 +545,13 @@ bool loom_amdgpu_value_as_i32_constant(loom_low_lower_context_t* context,
                                        int64_t* out_value) {
   return loom_amdgpu_module_value_as_i32_constant(
       loom_low_lower_context_module(context), value_id, out_value);
+}
+
+bool loom_amdgpu_value_as_f32_constant(loom_low_lower_context_t* context,
+                                       loom_value_id_t value_id,
+                                       uint32_t* out_bit_pattern) {
+  return loom_amdgpu_module_value_as_f32_constant(
+      loom_low_lower_context_module(context), value_id, out_bit_pattern);
 }
 
 bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,

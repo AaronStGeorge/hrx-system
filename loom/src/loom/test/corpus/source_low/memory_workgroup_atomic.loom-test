@@ -45,6 +45,22 @@ func.def @lds_atomic_add_f32() {
 
 // ====
 
+func.def @lds_atomic_minnum_maxnum_f32() {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 256 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xf32, #dense>
+  %limit = scalar.constant 1.0 : f32
+  view.atomic.reduce<minnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense>
+  view.atomic.reduce<maxnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense>
+  %old_min = view.atomic.rmw<minnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense> -> f32
+  %old_max = view.atomic.rmw<maxnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense> -> f32
+  func.return
+}
+
+// ====
+
 func.def @lds_atomic_bitwise_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

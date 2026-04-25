@@ -177,6 +177,11 @@ bool loom_amdgpu_module_value_as_i32_constant(const loom_module_t* module,
                                               loom_value_id_t value_id,
                                               int64_t* out_value);
 
+// Extracts an exact scalar f32 constant as a raw IEEE bit pattern.
+bool loom_amdgpu_module_value_as_f32_constant(const loom_module_t* module,
+                                              loom_value_id_t value_id,
+                                              uint32_t* out_bit_pattern);
+
 // Extracts an exact non-negative signed 64-bit integer from value facts.
 bool loom_amdgpu_value_facts_as_exact_non_negative_i64(loom_value_facts_t facts,
                                                        int64_t* out_value);
@@ -200,6 +205,11 @@ uint32_t loom_amdgpu_attr_f32_bit_pattern(loom_attribute_t value);
 bool loom_amdgpu_value_as_i32_constant(loom_low_lower_context_t* context,
                                        loom_value_id_t value_id,
                                        int64_t* out_value);
+
+// Extracts a source scalar f32 constant as a raw IEEE bit pattern.
+bool loom_amdgpu_value_as_f32_constant(loom_low_lower_context_t* context,
+                                       loom_value_id_t value_id,
+                                       uint32_t* out_bit_pattern);
 
 // Extracts a source address scalar constant.
 bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,
@@ -385,6 +395,12 @@ iree_status_t loom_amdgpu_emit_const_u32(loom_low_lower_context_t* context,
                                          uint64_t descriptor_id, uint32_t value,
                                          loom_type_t result_type,
                                          loom_value_id_t* out_value_id);
+
+// Emits a fresh VGPR carrying the same 32-bit bit payload as |low_source|.
+iree_status_t loom_amdgpu_emit_vgpr_b32_copy(loom_low_lower_context_t* context,
+                                             const loom_op_t* source_op,
+                                             loom_value_id_t low_source,
+                                             loom_value_id_t* out_value);
 
 // Emits one binary VGPR descriptor op.
 iree_status_t loom_amdgpu_emit_vgpr_binary(
