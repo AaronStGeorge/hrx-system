@@ -8,17 +8,21 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
     "iree_cmake_extra_content",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_low_descriptor_cc_library",
-    "loom_low_descriptor_data_archive",
-    "loom_low_descriptor_exclude_from_cmake_all",
-    "loom_target_table_cc_library",
 )
 load(
     "//loom/build_tools/bazel:loom_check.bzl",
     "loom_check_test_suite",
+)
+load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_assert_no_dependencies",
+    "loom_low_descriptor_cc_library",
+    "loom_low_descriptor_data_archive",
+    "loom_low_descriptor_exclude_from_cmake_all",
+    "loom_target_table_cc_library",
 )
 load(":archives.bzl", "AMDGPU_ISA_XML_ARCHIVE")
 
@@ -692,6 +696,19 @@ loom_cc_library(
     ],
 )
 
+iree_c_embed_data(
+    name = "amdgpu_hal_testdata",
+    testonly = True,
+    srcs = [
+        "testdata/b128_vector_add.loom",
+        "testdata/gfx11_wmma_zero.loom",
+    ],
+    c_file_output = "amdgpu_hal_testdata.c",
+    flatten = True,
+    h_file_output = "amdgpu_hal_testdata.h",
+    identifier = "loom_amdgpu_amdgpu_hal_testdata",
+)
+
 loom_cc_test(
     name = "hal_execution_test",
     srcs = ["hal_execution_test.cc"],
@@ -703,10 +720,14 @@ loom_cc_test(
     ],
     deps = [
         ":execution_provider",
+        ":amdgpu_hal_testdata",
+        ":amdgpu_hal_backend",
+        ":target_info_defs",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/tooling/execution:compile_options",
         "//loom/src/loom/tooling/execution:execution_backend",
         "//loom/src/loom/tooling/execution:execution_provider",
+        "//loom/src/loom/tooling/execution:hal_runtime",
         "//loom/src/loom/tooling/execution:one_shot",
         "//loom/src/loom/tooling/execution:session",
         "//runtime/src/iree/base",

@@ -585,6 +585,23 @@ loom_cc_library(
   PUBLIC
 )
 
+iree_c_embed_data(
+  NAME
+    amdgpu_hal_testdata
+  SRCS
+    "testdata/b128_vector_add.loom"
+    "testdata/gfx11_wmma_zero.loom"
+  C_FILE_OUTPUT
+    "amdgpu_hal_testdata.c"
+  H_FILE_OUTPUT
+    "amdgpu_hal_testdata.h"
+  IDENTIFIER
+    "loom_amdgpu_amdgpu_hal_testdata"
+  TESTONLY
+  FLATTEN
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     hal_execution_test
@@ -592,11 +609,15 @@ loom_cc_test(
     "hal_execution_test.cc"
   DEPS
     ::execution_provider
+    ::amdgpu_hal_testdata
+    ::amdgpu_hal_backend
+    ::target_info_defs
     iree::base
     loom::src::loom::ops::op_registry
     loom::src::loom::tooling::execution::compile_options
     loom::src::loom::tooling::execution::execution_backend
     loom::src::loom::tooling::execution::execution_provider
+    loom::src::loom::tooling::execution::hal_runtime
     loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::session
     iree::testing::gtest
