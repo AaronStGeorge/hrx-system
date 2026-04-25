@@ -68,6 +68,10 @@ iree_status_t loom_print_indent(loom_print_context_t* ctx);
 iree_status_t loom_print_op_comments(loom_print_context_t* ctx,
                                      const loom_op_t* op);
 
+// Returns true when |block| has an explicit printable label in the module.
+bool loom_print_block_has_label(const loom_print_context_t* ctx,
+                                const loom_block_t* block);
+
 // Prints a canonical attribute payload.
 iree_status_t loom_print_attr(loom_output_stream_t* stream,
                               const loom_attribute_t* attr,
@@ -108,6 +112,19 @@ iree_status_t loom_print_low_asm_optional_region(
     loom_print_context_t* ctx, const loom_region_t* region,
     const loom_region_descriptor_t* region_descriptor,
     bool allow_entry_block_args, bool* out_printed);
+
+// Returns true when |region| has a lossless pass.pipeline friendly spelling.
+bool loom_print_pipeline_region_is_friendly(
+    const loom_print_context_t* ctx, const loom_region_t* region,
+    const loom_region_descriptor_t* region_descriptor);
+
+// Prints a region using mandatory pass.pipeline friendly syntax.
+iree_status_t loom_print_pipeline_region(
+    loom_print_context_t* ctx, const loom_region_t* region,
+    const loom_region_descriptor_t* region_descriptor);
+
+// Prints a skipped pass.pipeline friendly region body.
+iree_status_t loom_print_pipeline_skipped_region(loom_print_context_t* ctx);
 
 #ifdef __cplusplus
 }  // extern "C"

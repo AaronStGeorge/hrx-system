@@ -160,6 +160,7 @@ loom_cc_library(
     srcs = [
         "printer.c",
         "printer_low_asm.c",
+        "printer_pipeline.c",
     ],
     hdrs = [
         "printer.h",

@@ -146,6 +146,7 @@ loom_cc_library(
   SRCS
     "printer.c"
     "printer_low_asm.c"
+    "printer_pipeline.c"
   DEPS
     ::low_asm
     iree::base
