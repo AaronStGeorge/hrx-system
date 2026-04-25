@@ -18,7 +18,16 @@ std::string ToString(iree_string_view_t value) {
 }
 
 const loom_x86_packed_dot_descriptor_t* FindDescriptor(const char* name) {
-  return loom_x86_packed_dot_find_by_name(iree_make_cstring_view(name));
+  iree_string_view_t expected_name = iree_make_cstring_view(name);
+  const iree_host_size_t count = loom_x86_packed_dot_descriptor_count();
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    const loom_x86_packed_dot_descriptor_t* descriptor =
+        loom_x86_packed_dot_descriptor_at(i);
+    if (iree_string_view_equal(descriptor->name, expected_name)) {
+      return descriptor;
+    }
+  }
+  return nullptr;
 }
 
 loom_x86_packed_dot_feature_bits_t FeatureBits(const char* name) {
@@ -72,10 +81,6 @@ TEST(PackedDotContractTest, DescriptorNamesAreUnique) {
     }
   }
   EXPECT_EQ(loom_x86_packed_dot_descriptor_at(count), nullptr);
-}
-
-TEST(PackedDotContractTest, LookupRejectsMissingDescriptor) {
-  EXPECT_EQ(FindDescriptor("x86.avx512_vnni.vpdpimaginary.zmm"), nullptr);
 }
 
 TEST(PackedDotContractTest, NamesExposeStableDisplayStrings) {

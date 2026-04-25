@@ -1686,26 +1686,19 @@ loom_amdgpu_matrix_contract_descriptor_at(iree_host_size_t index) {
   return &kMatrixContractDescriptors[index];
 }
 
-const loom_amdgpu_matrix_contract_descriptor_t*
-loom_amdgpu_matrix_contract_find_by_name(iree_string_view_t name) {
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kMatrixContractDescriptors);
-       ++i) {
-    const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
-        &kMatrixContractDescriptors[i];
-    if (iree_string_view_equal(name, descriptor->name)) return descriptor;
-  }
-  return NULL;
-}
-
 bool loom_amdgpu_matrix_contract_is_available(
     const loom_amdgpu_matrix_contract_descriptor_t* descriptor,
     loom_amdgpu_matrix_feature_bits_t feature_bits, uint32_t wave_size) {
-  if (descriptor == NULL) return false;
+  if (descriptor == NULL) {
+    return false;
+  }
   if ((feature_bits & descriptor->required_feature_bits) !=
       descriptor->required_feature_bits) {
     return false;
   }
-  if (wave_size == 0) return true;
+  if (wave_size == 0) {
+    return true;
+  }
   loom_amdgpu_matrix_wave_size_bits_t wave_size_bits = 0;
   if (wave_size == 32) {
     wave_size_bits = LOOM_AMDGPU_MATRIX_WAVE_SIZE_32;

@@ -195,10 +195,6 @@ iree_host_size_t loom_x86_packed_dot_descriptor_count(void);
 const loom_x86_packed_dot_descriptor_t* loom_x86_packed_dot_descriptor_at(
     iree_host_size_t index);
 
-// Finds a built-in descriptor by stable descriptor name.
-const loom_x86_packed_dot_descriptor_t* loom_x86_packed_dot_find_by_name(
-    iree_string_view_t name);
-
 // Returns whether a descriptor is legal for an x86 feature set.
 bool loom_x86_packed_dot_is_available(
     const loom_x86_packed_dot_descriptor_t* descriptor,

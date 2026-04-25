@@ -114,21 +114,12 @@ const loom_x86_packed_dot_descriptor_t* loom_x86_packed_dot_descriptor_at(
   return &loom_x86_packed_dot_builtin_descriptors[index];
 }
 
-const loom_x86_packed_dot_descriptor_t* loom_x86_packed_dot_find_by_name(
-    iree_string_view_t name) {
-  for (iree_host_size_t i = 0; i < loom_x86_packed_dot_builtin_descriptor_count;
-       ++i) {
-    const loom_x86_packed_dot_descriptor_t* descriptor =
-        &loom_x86_packed_dot_builtin_descriptors[i];
-    if (iree_string_view_equal(name, descriptor->name)) return descriptor;
-  }
-  return NULL;
-}
-
 bool loom_x86_packed_dot_is_available(
     const loom_x86_packed_dot_descriptor_t* descriptor,
     loom_x86_packed_dot_feature_bits_t feature_bits) {
-  if (descriptor == NULL) return false;
+  if (descriptor == NULL) {
+    return false;
+  }
   return (feature_bits & descriptor->required_feature_bits) ==
          descriptor->required_feature_bits;
 }

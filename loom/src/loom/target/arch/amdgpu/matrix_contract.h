@@ -345,10 +345,6 @@ iree_host_size_t loom_amdgpu_matrix_contract_descriptor_count(void);
 const loom_amdgpu_matrix_contract_descriptor_t*
 loom_amdgpu_matrix_contract_descriptor_at(iree_host_size_t index);
 
-// Finds a built-in descriptor by stable descriptor name.
-const loom_amdgpu_matrix_contract_descriptor_t*
-loom_amdgpu_matrix_contract_find_by_name(iree_string_view_t name);
-
 // Returns whether a descriptor is legal for a processor feature set and wave
 // size. Pass wave_size=0 to ignore wave-size filtering.
 bool loom_amdgpu_matrix_contract_is_available(

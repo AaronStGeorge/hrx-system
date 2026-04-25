@@ -20,7 +20,16 @@ std::string ToString(iree_string_view_t value) {
 
 const loom_amdgpu_matrix_contract_descriptor_t* FindDescriptor(
     const char* name) {
-  return loom_amdgpu_matrix_contract_find_by_name(iree_make_cstring_view(name));
+  iree_string_view_t expected_name = iree_make_cstring_view(name);
+  const iree_host_size_t count = loom_amdgpu_matrix_contract_descriptor_count();
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+        loom_amdgpu_matrix_contract_descriptor_at(i);
+    if (iree_string_view_equal(descriptor->name, expected_name)) {
+      return descriptor;
+    }
+  }
+  return nullptr;
 }
 
 loom_amdgpu_matrix_payload_shape_t PayloadShape(
@@ -76,10 +85,6 @@ TEST(MatrixContractTest, DescriptorNamesAreUnique) {
     }
   }
   EXPECT_EQ(loom_amdgpu_matrix_contract_descriptor_at(count), nullptr);
-}
-
-TEST(MatrixContractTest, LookupRejectsMissingDescriptor) {
-  EXPECT_EQ(FindDescriptor("mfma.f32.4x4x4.imaginary"), nullptr);
 }
 
 TEST(MatrixContractTest, Gfx942Fp8MfmaDescriptor) {
