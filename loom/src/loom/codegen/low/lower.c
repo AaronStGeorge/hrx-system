@@ -732,17 +732,20 @@ static iree_status_t loom_low_lower_emit_preamble(
   return status;
 }
 
-static iree_status_t loom_low_lower_find_block_index(loom_region_t* region,
-                                                     const loom_block_t* block,
-                                                     uint16_t* out_index) {
-  for (uint16_t i = 0; i < region->block_count; ++i) {
-    if (loom_region_block(region, i) == block) {
-      *out_index = i;
-      return iree_ok_status();
-    }
+static iree_status_t loom_low_lower_lookup_block(
+    loom_low_lower_context_t* context, loom_region_t* source_body,
+    const loom_block_t* source_block, loom_block_t** out_low_block) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(out_low_block);
+  *out_low_block = NULL;
+  if (!source_block || source_block->parent_region != source_body) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "branch target block is outside the source region");
   }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "branch target block is outside the source region");
+  const uint16_t source_index = loom_block_region_index(source_block);
+  IREE_ASSERT(context->block_map[source_index] != NULL);
+  *out_low_block = context->block_map[source_index];
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_lower_remap_values(
@@ -778,34 +781,32 @@ static iree_status_t loom_low_lower_structural_op(
                                    source_op->location, &low_return_op);
     }
     case LOOM_OP_CFG_BR: {
-      uint16_t source_dest_index = 0;
-      IREE_RETURN_IF_ERROR(loom_low_lower_find_block_index(
-          source_body, loom_cfg_br_dest(source_op), &source_dest_index));
+      loom_block_t* low_dest = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(
+          context, source_body, loom_cfg_br_dest(source_op), &low_dest));
       loom_value_slice_t args = loom_cfg_br_args(source_op);
       loom_value_id_t* low_args = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(context, args.values,
                                                        args.count, &low_args));
       loom_op_t* low_br_op = NULL;
-      return loom_low_br_build(&context->builder,
-                               context->block_map[source_dest_index], low_args,
+      return loom_low_br_build(&context->builder, low_dest, low_args,
                                args.count, source_op->location, &low_br_op);
     }
     case LOOM_OP_CFG_COND_BR: {
-      uint16_t source_true_index = 0;
-      IREE_RETURN_IF_ERROR(loom_low_lower_find_block_index(
-          source_body, loom_cfg_cond_br_true_dest(source_op),
-          &source_true_index));
-      uint16_t source_false_index = 0;
-      IREE_RETURN_IF_ERROR(loom_low_lower_find_block_index(
-          source_body, loom_cfg_cond_br_false_dest(source_op),
-          &source_false_index));
+      loom_block_t* low_true_dest = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(
+          context, source_body, loom_cfg_cond_br_true_dest(source_op),
+          &low_true_dest));
+      loom_block_t* low_false_dest = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(
+          context, source_body, loom_cfg_cond_br_false_dest(source_op),
+          &low_false_dest));
       loom_value_id_t low_condition = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
           context, loom_cfg_cond_br_condition(source_op), &low_condition));
       loom_op_t* low_cond_br_op = NULL;
       return loom_low_cond_br_build(&context->builder, low_condition,
-                                    context->block_map[source_true_index],
-                                    context->block_map[source_false_index],
+                                    low_true_dest, low_false_dest,
                                     source_op->location, &low_cond_br_op);
     }
     default:

@@ -316,6 +316,7 @@ static iree_status_t loom_module_initialize_block(loom_module_t* module,
   (void)module;
   memset(block, 0, sizeof(*block));
   block->label_id = LOOM_STRING_ID_INVALID;
+  block->region_index = LOOM_BLOCK_REGION_INDEX_INVALID;
   return iree_ok_status();
 }
 
@@ -2758,6 +2759,9 @@ iree_status_t loom_module_allocate_region(loom_module_t* module,
     region->block_capacity = 1;
     status = loom_module_initialize_block(module, &region->entry_block);
     region->entry_block.parent_region = region;
+    if (block_count > 0) {
+      region->entry_block.region_index = 0;
+    }
   }
   if (iree_status_is_ok(status) && block_count > 1) {
     region->block_capacity = block_count;
@@ -2773,6 +2777,7 @@ iree_status_t loom_module_allocate_region(loom_module_t* module,
       status = loom_module_allocate_block(module, &region->blocks[i]);
       if (iree_status_is_ok(status)) {
         region->blocks[i]->parent_region = region;
+        region->blocks[i]->region_index = i;
       }
     }
   }
@@ -2793,6 +2798,7 @@ iree_status_t loom_region_append_block(loom_module_t* module,
     IREE_RETURN_IF_ERROR(loom_module_allocate_block(module, &block));
   }
   block->parent_region = region;
+  block->region_index = region->block_count;
   region->blocks[region->block_count] = block;
   ++region->block_count;
   *out_block = block;

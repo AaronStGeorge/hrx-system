@@ -171,6 +171,7 @@ TEST_F(ModuleTest, RegionAppendBlockGrowthKeepsBlockReferencesStable) {
   ASSERT_EQ(body->block_capacity, 1u);
 
   loom_block_t* old_entry = loom_region_entry_block(body);
+  EXPECT_EQ(loom_block_region_index(old_entry), 0u);
 
   loom_value_id_t arg_id = LOOM_VALUE_ID_INVALID;
   IREE_ASSERT_OK(loom_module_define_value(
@@ -191,7 +192,9 @@ TEST_F(ModuleTest, RegionAppendBlockGrowthKeepsBlockReferencesStable) {
   ASSERT_EQ(body->block_count, 2u);
   EXPECT_GE(body->block_capacity, body->block_count);
   EXPECT_EQ(appended, loom_region_block(body, 1));
+  EXPECT_EQ(loom_block_region_index(appended), 1u);
   EXPECT_EQ(loom_region_entry_block(body), old_entry);
+  EXPECT_EQ(loom_block_region_index(old_entry), 0u);
   EXPECT_EQ(appended->label_id, LOOM_STRING_ID_INVALID);
   EXPECT_EQ(appended->arg_count, 0u);
   EXPECT_EQ(appended->op_count, 0u);
@@ -259,8 +262,11 @@ TEST_F(ModuleTest, RegionRemoveBlocksCompactsAndDropsClosedUses) {
   EXPECT_EQ(removed_count, 1u);
   EXPECT_EQ(body->block_count, 2u);
   EXPECT_EQ(loom_region_block(body, 0), &body->entry_block);
+  EXPECT_EQ(loom_block_region_index(&body->entry_block), 0u);
   EXPECT_EQ(loom_region_block(body, 1), kept_block);
+  EXPECT_EQ(loom_block_region_index(kept_block), 1u);
   EXPECT_EQ(dead_block->parent_region, nullptr);
+  EXPECT_EQ(dead_block->region_index, LOOM_BLOCK_REGION_INDEX_INVALID);
   EXPECT_EQ(dead_block->arg_count, 0u);
   EXPECT_EQ(dead_block->op_count, 0u);
   EXPECT_NE(constant->flags & LOOM_OP_FLAG_DEAD, 0u);

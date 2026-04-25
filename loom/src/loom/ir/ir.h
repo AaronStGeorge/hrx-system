@@ -1258,6 +1258,9 @@ static inline const loom_attribute_t* loom_op_const_attrs(const loom_op_t* op) {
 // Block
 //===----------------------------------------------------------------------===//
 
+// Sentinel region_index value for blocks not attached to a region.
+#define LOOM_BLOCK_REGION_INDEX_INVALID UINT16_MAX
+
 // A basic block: a linear sequence of operations with optional
 // block arguments.
 //
@@ -1275,8 +1278,8 @@ typedef struct loom_block_t {
   uint32_t op_count;
   // Per-block instance flags.
   uint16_t flags;
-  // Reserved for future flags while keeping pointer fields aligned.
-  uint16_t reserved;
+  // Position in parent_region->blocks, or LOOM_BLOCK_REGION_INDEX_INVALID.
+  uint16_t region_index;
   // Block argument value IDs.
   loom_value_id_t* arg_ids;
   // First live operation in block order.
@@ -1376,6 +1379,14 @@ typedef struct loom_region_t {
 } loom_region_t;
 
 static_assert(sizeof(loom_region_t) == 80, "loom_region_t must be 80 bytes");
+
+// Returns |block|'s current ordinal in its parent region's block table.
+static inline uint16_t loom_block_region_index(const loom_block_t* block) {
+  IREE_ASSERT(block->parent_region != NULL);
+  IREE_ASSERT(block->region_index < block->parent_region->block_count);
+  IREE_ASSERT(block->parent_region->blocks[block->region_index] == block);
+  return block->region_index;
+}
 
 // Returns the block at |block_index| in |region|.
 static inline loom_block_t* loom_region_block(loom_region_t* region,

@@ -1428,11 +1428,15 @@ iree_status_t loom_op_erase(loom_module_t* module, loom_op_t* op) {
 
 static iree_host_size_t loom_region_find_block_index(
     const loom_region_t* region, const loom_block_t* block) {
-  if (!region || !block) return IREE_HOST_SIZE_MAX;
-  for (uint16_t i = 0; i < region->block_count; ++i) {
-    if (region->blocks[i] == block) return i;
+  if (!region || !block) {
+    return IREE_HOST_SIZE_MAX;
   }
-  return IREE_HOST_SIZE_MAX;
+  if (block->parent_region != region ||
+      block->region_index >= region->block_count ||
+      region->blocks[block->region_index] != block) {
+    return IREE_HOST_SIZE_MAX;
+  }
+  return block->region_index;
 }
 
 static bool loom_region_remove_index_selected(const bool* remove_blocks,
@@ -1701,6 +1705,7 @@ iree_status_t loom_region_remove_blocks(loom_module_t* module,
     }
     loom_block_drop_arg_type_uses(module, block);
     block->parent_region = NULL;
+    block->region_index = LOOM_BLOCK_REGION_INDEX_INVALID;
   }
 
   uint16_t write_index = 0;
@@ -1708,6 +1713,7 @@ iree_status_t loom_region_remove_blocks(loom_module_t* module,
        ++read_index) {
     loom_block_t* block = region->blocks[read_index];
     if (remove_blocks[read_index]) continue;
+    block->region_index = write_index;
     region->blocks[write_index++] = block;
   }
   for (uint16_t block_index = write_index; block_index < region->block_count;
