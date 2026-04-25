@@ -483,6 +483,10 @@ iree_status_t loom_amdgpu_compile_hal_executable(
   loom_target_module_compile_diagnostic_emitter_t diagnostic_emitter = {0};
   loom_target_module_compile_diagnostic_emitter_initialize(
       module, &target_options, LOOM_EMITTER_VERIFIER, &diagnostic_emitter);
+  const loom_target_module_compile_entry_predicate_t entry_predicate = {
+      .fn = loom_amdgpu_module_compile_bundle_is_compatible,
+      .user_data = NULL,
+  };
 
   iree_arena_block_pool_t block_pool;
   iree_arena_block_pool_initialize(32 * 1024, allocator, &block_pool);
@@ -508,13 +512,11 @@ iree_status_t loom_amdgpu_compile_hal_executable(
   if (iree_status_is_ok(status)) {
     if (!iree_string_view_is_empty(artifact_symbol)) {
       status = loom_target_module_compile_select_artifact_entries(
-          module, artifact_symbol, &low_registry,
-          loom_amdgpu_module_compile_bundle_is_compatible, NULL,
+          module, artifact_symbol, &low_registry, entry_predicate,
           IREE_SV("AMDGPU HAL-native"), &sidecar_arena, &entries);
     } else {
       status = loom_target_module_compile_select_entry(
-          module, &target_options, &low_registry,
-          loom_amdgpu_module_compile_bundle_is_compatible, NULL,
+          module, &target_options, &low_registry, entry_predicate,
           IREE_SV("AMDGPU HAL-native"), &sidecar_arena, &single_entry);
       if (iree_status_is_ok(status)) {
         entries = (loom_target_module_compile_entry_list_t){

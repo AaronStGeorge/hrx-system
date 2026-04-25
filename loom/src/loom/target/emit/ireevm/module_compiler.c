@@ -199,6 +199,10 @@ iree_status_t loom_ireevm_compile_module_archive(
   loom_target_module_compile_diagnostic_emitter_t diagnostic_emitter = {0};
   loom_target_module_compile_diagnostic_emitter_initialize(
       module, &target_options, LOOM_EMITTER_VERIFIER, &diagnostic_emitter);
+  const loom_target_module_compile_entry_predicate_t entry_predicate = {
+      .fn = loom_ireevm_module_compile_bundle_is_compatible,
+      .user_data = NULL,
+  };
 
   loom_target_module_compile_entry_t entry = {0};
   loom_func_like_t source_function = {0};
@@ -216,8 +220,7 @@ iree_status_t loom_ireevm_compile_module_archive(
       module, &target_options, LOOM_IREEVM_MODULE_COMPILE_DEFAULT_MAX_ERRORS);
   if (iree_status_is_ok(status)) {
     status = loom_target_module_compile_select_entry(
-        module, &target_options, &low_registry,
-        loom_ireevm_module_compile_bundle_is_compatible, NULL,
+        module, &target_options, &low_registry, entry_predicate,
         IREE_SV("IREE VM"), &sidecar_arena, &entry);
   }
   if (iree_status_is_ok(status) && report != NULL) {

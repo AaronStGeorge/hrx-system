@@ -282,10 +282,9 @@ static void loom_target_module_compile_assign_entry(
 static iree_status_t loom_target_module_compile_try_entry(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
     loom_symbol_id_t symbol_id,
-    loom_target_module_compile_entry_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t entry_kind,
-    bool require_compatible, bool* out_compatible,
-    loom_target_module_compile_entry_t* out_entry) {
+    loom_target_module_compile_entry_predicate_t predicate,
+    iree_string_view_t entry_kind, bool require_compatible,
+    bool* out_compatible, loom_target_module_compile_entry_t* out_entry) {
   *out_compatible = false;
   const loom_func_symbol_facts_t* func_facts = NULL;
   IREE_RETURN_IF_ERROR(loom_target_module_compile_lookup_func_facts(
@@ -311,7 +310,7 @@ static iree_status_t loom_target_module_compile_try_entry(
                                               &entry);
   IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve(
       module, fact_table, func_facts, &entry.bundle_storage));
-  if (!predicate(predicate_user_data, &entry)) {
+  if (!predicate.fn(predicate.user_data, &entry)) {
     if (!require_compatible) {
       return iree_ok_status();
     }
@@ -329,22 +328,22 @@ static iree_status_t loom_target_module_compile_try_entry(
 static iree_status_t loom_target_module_compile_select_named_entry(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
     iree_string_view_t entry_symbol,
-    loom_target_module_compile_entry_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t entry_kind,
+    loom_target_module_compile_entry_predicate_t predicate,
+    iree_string_view_t entry_kind,
     loom_target_module_compile_entry_t* out_entry) {
   uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_target_module_compile_find_symbol_by_name(
       module, entry_symbol, &symbol_id));
   bool compatible = false;
   return loom_target_module_compile_try_entry(
-      module, fact_table, symbol_id, predicate, predicate_user_data, entry_kind,
+      module, fact_table, symbol_id, predicate, entry_kind,
       /*require_compatible=*/true, &compatible, out_entry);
 }
 
 static iree_status_t loom_target_module_compile_select_single_entry(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
-    loom_target_module_compile_entry_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t entry_kind,
+    loom_target_module_compile_entry_predicate_t predicate,
+    iree_string_view_t entry_kind,
     loom_target_module_compile_entry_t* out_entry) {
   iree_host_size_t candidate_count = 0;
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
@@ -355,8 +354,8 @@ static iree_status_t loom_target_module_compile_select_single_entry(
     bool compatible = false;
     loom_target_module_compile_entry_t candidate = {0};
     IREE_RETURN_IF_ERROR(loom_target_module_compile_try_entry(
-        module, fact_table, (loom_symbol_id_t)i, predicate, predicate_user_data,
-        entry_kind, /*require_compatible=*/false, &compatible, &candidate));
+        module, fact_table, (loom_symbol_id_t)i, predicate, entry_kind,
+        /*require_compatible=*/false, &compatible, &candidate));
     if (!compatible) {
       continue;
     }
@@ -386,12 +385,11 @@ iree_status_t loom_target_module_compile_select_entry(
     const loom_module_t* module,
     const loom_target_module_compile_options_t* options,
     const loom_target_low_descriptor_registry_t* low_registry,
-    loom_target_module_compile_entry_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t entry_kind,
-    iree_arena_allocator_t* arena,
+    loom_target_module_compile_entry_predicate_t predicate,
+    iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
     loom_target_module_compile_entry_t* out_entry) {
   IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(predicate);
+  IREE_ASSERT_ARGUMENT(predicate.fn);
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_entry);
   *out_entry = (loom_target_module_compile_entry_t){0};
@@ -404,23 +402,20 @@ iree_status_t loom_target_module_compile_select_entry(
       loom_target_module_compile_entry_symbol_name(options);
   if (!iree_string_view_is_empty(entry_symbol)) {
     return loom_target_module_compile_select_named_entry(
-        module, &fact_table, entry_symbol, predicate, predicate_user_data,
-        entry_kind, out_entry);
+        module, &fact_table, entry_symbol, predicate, entry_kind, out_entry);
   }
   return loom_target_module_compile_select_single_entry(
-      module, &fact_table, predicate, predicate_user_data, entry_kind,
-      out_entry);
+      module, &fact_table, predicate, entry_kind, out_entry);
 }
 
 iree_status_t loom_target_module_compile_select_artifact_entries(
     const loom_module_t* module, iree_string_view_t artifact_symbol,
     const loom_target_low_descriptor_registry_t* low_registry,
-    loom_target_module_compile_entry_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t entry_kind,
-    iree_arena_allocator_t* arena,
+    loom_target_module_compile_entry_predicate_t predicate,
+    iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
     loom_target_module_compile_entry_list_t* out_entries) {
   IREE_ASSERT_ARGUMENT(module);
-  IREE_ASSERT_ARGUMENT(predicate);
+  IREE_ASSERT_ARGUMENT(predicate.fn);
   IREE_ASSERT_ARGUMENT(arena);
   IREE_ASSERT_ARGUMENT(out_entries);
   *out_entries = (loom_target_module_compile_entry_list_t){0};
@@ -462,8 +457,7 @@ iree_status_t loom_target_module_compile_select_artifact_entries(
     bool compatible = false;
     IREE_RETURN_IF_ERROR(loom_target_module_compile_try_entry(
         module, &fact_table, artifact_plan.entry_symbol_ids[i], predicate,
-        predicate_user_data, entry_kind, /*require_compatible=*/true,
-        &compatible, &entries[i]));
+        entry_kind, /*require_compatible=*/true, &compatible, &entries[i]));
   }
 
   *out_entries = (loom_target_module_compile_entry_list_t){

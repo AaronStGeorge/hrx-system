@@ -75,6 +75,14 @@ typedef struct loom_target_module_compile_diagnostic_emitter_t {
 typedef bool(IREE_API_PTR* loom_target_module_compile_entry_predicate_fn_t)(
     void* user_data, const loom_target_module_compile_entry_t* entry);
 
+typedef struct loom_target_module_compile_entry_predicate_t {
+  // Callback invoked to test whether one target-resolved entry is compatible
+  // with the concrete backend compile path.
+  loom_target_module_compile_entry_predicate_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_target_module_compile_entry_predicate_t;
+
 // Returns |options->max_errors| when present, otherwise |default_max_errors|.
 uint32_t loom_target_module_compile_max_errors(
     const loom_target_module_compile_options_t* options,
@@ -125,9 +133,8 @@ iree_status_t loom_target_module_compile_select_entry(
     const loom_module_t* module,
     const loom_target_module_compile_options_t* options,
     const loom_target_low_descriptor_registry_t* low_registry,
-    loom_target_module_compile_entry_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t entry_kind,
-    iree_arena_allocator_t* arena,
+    loom_target_module_compile_entry_predicate_t predicate,
+    iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
     loom_target_module_compile_entry_t* out_entry);
 
 // Selects exported artifact entries in target.artifact plan order.
@@ -140,9 +147,8 @@ iree_status_t loom_target_module_compile_select_entry(
 iree_status_t loom_target_module_compile_select_artifact_entries(
     const loom_module_t* module, iree_string_view_t artifact_symbol,
     const loom_target_low_descriptor_registry_t* low_registry,
-    loom_target_module_compile_entry_predicate_fn_t predicate,
-    void* predicate_user_data, iree_string_view_t entry_kind,
-    iree_arena_allocator_t* arena,
+    loom_target_module_compile_entry_predicate_t predicate,
+    iree_string_view_t entry_kind, iree_arena_allocator_t* arena,
     loom_target_module_compile_entry_list_t* out_entries);
 
 #ifdef __cplusplus
