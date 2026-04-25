@@ -10,6 +10,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/testing/source_workload.h"
+#include "loom/codegen/low/testing/source_workload_pipeline.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/target/test/low_registry.h"

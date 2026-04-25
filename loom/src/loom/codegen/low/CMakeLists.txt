@@ -473,28 +473,12 @@ loom_cc_test(
   DEPS
     iree::base::internal::arena
     loom::src::loom::codegen::low::testing::source_workload
+    loom::src::loom::codegen::low::testing::source_workload_pipeline
     loom::src::loom::ir
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     iree::testing::gtest
     iree::testing::gtest_main
-)
-
-loom_cc_benchmark(
-  NAME
-    source_lowering_benchmark
-  SRCS
-    "source_lowering_benchmark.cc"
-  DEPS
-    benchmark
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::testing::source_workload
-    loom::src::loom::ir
-    loom::src::loom::target::test::low_registry
-    loom::src::loom::target::test::lower
-    iree::testing::benchmark_main
-  TESTONLY
 )
 
 loom_cc_fuzz(
@@ -506,6 +490,7 @@ loom_cc_fuzz(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::testing::source_workload
+    loom::src::loom::codegen::low::testing::source_workload_pipeline
     loom::src::loom::ir
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower

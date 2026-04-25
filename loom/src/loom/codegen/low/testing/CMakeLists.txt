@@ -21,10 +21,6 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::base::internal::prng
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::codegen::low::packetization
-    loom::src::loom::codegen::low::source_selection
-    loom::src::loom::codegen::low::verify
     loom::src::loom::ir
     loom::src::loom::ops::buffer
     loom::src::loom::ops::cfg
@@ -35,6 +31,28 @@ loom_cc_library(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target
     loom::src::loom::ops::vector
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    source_workload_pipeline
+  HDRS
+    "source_workload_pipeline.h"
+  SRCS
+    "source_workload_pipeline.c"
+  DEPS
+    ::source_workload
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::codegen::low::packetization
+    loom::src::loom::codegen::low::source_selection
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::low
     loom::src::loom::verify
   TESTONLY
   PUBLIC
