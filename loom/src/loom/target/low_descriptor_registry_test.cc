@@ -10,6 +10,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/requirements.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
+#include "loom/target/low_descriptor_registry_manifest.h"
 
 namespace loom {
 namespace {

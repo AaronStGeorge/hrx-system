@@ -126,6 +126,21 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::requirements
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    low_descriptor_registry_manifest
+  HDRS
+    "low_descriptor_registry_manifest.h"
+  SRCS
+    "low_descriptor_registry_manifest.c"
+  DEPS
+    ::low_descriptor_registry
+    ::types
+    iree::base
+    loom::src::loom::codegen::low::descriptors
     loom::src::loom::util::json
     loom::src::loom::util::stream
   PUBLIC
@@ -303,6 +318,7 @@ loom_cc_test(
     "low_descriptor_registry_test.cc"
   DEPS
     ::low_descriptor_registry_core_test
+    ::low_descriptor_registry_manifest
     loom::src::loom::codegen::low::requirements
     iree::testing::gtest
     iree::testing::gtest_main

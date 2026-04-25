@@ -25,6 +25,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/target/ops.h"
+#include "loom/target/low_descriptor_registry_manifest.h"
 #include "loom/target/low_packet_diagnostics.h"
 #include "loom/target/module_compiler.h"
 #include "loom/tools/loom-check/diagnostics.h"
