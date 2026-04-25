@@ -46,6 +46,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::error::diagnostic
+    loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     iree::testing::gtest
   TESTONLY

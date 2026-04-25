@@ -25,15 +25,13 @@
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/test/low_registry.h"
+#include "loom/testing/diagnostic_matchers.h"
 
 namespace loom {
 namespace {
 
-struct CollectedEmission {
-  const loom_error_def_t* error = nullptr;
-  const loom_op_t* op = nullptr;
-  std::vector<std::string> string_params;
-};
+using CollectedEmission = ::loom::testing::CapturedDiagnosticEmission;
+using EmissionCollector = ::loom::testing::DiagnosticEmissionCapture;
 
 struct ModuleDeleter {
   void operator()(loom_module_t* module) const { loom_module_free(module); }
@@ -51,38 +49,6 @@ static iree_status_t IgnoreProviderOp(
   *out_handled = false;
   return iree_ok_status();
 }
-
-struct EmissionCollector {
-  std::vector<CollectedEmission> emissions;
-
-  iree_diagnostic_emitter_t emitter() {
-    return iree_diagnostic_emitter_t{
-        .fn = Collect,
-        .user_data = this,
-    };
-  }
-
- private:
-  static std::string CopyString(iree_string_view_t value) {
-    return std::string(value.data, value.size);
-  }
-
-  static iree_status_t Collect(void* user_data,
-                               const loom_diagnostic_emission_t* emission) {
-    auto* collector = static_cast<EmissionCollector*>(user_data);
-    CollectedEmission entry;
-    entry.error = emission->error;
-    entry.op = emission->op;
-    for (iree_host_size_t i = 0; i < emission->param_count; ++i) {
-      const loom_diagnostic_param_t* param = &emission->params[i];
-      if (param->kind == LOOM_PARAM_STRING) {
-        entry.string_params.push_back(CopyString(param->string));
-      }
-    }
-    collector->emissions.push_back(std::move(entry));
-    return iree_ok_status();
-  }
-};
 
 TEST(TargetLowLegalityProviderListTest, Empty) {
   const loom_target_low_legality_provider_list_t list =

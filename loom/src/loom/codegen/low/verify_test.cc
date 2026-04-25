@@ -27,61 +27,12 @@
 #include "loom/ops/test/ops.h"
 #include "loom/target/emit/ireevm/low_registry.h"
 #include "loom/target/types.h"
+#include "loom/testing/diagnostic_matchers.h"
 
 namespace loom {
 namespace {
 
-struct CollectedEmission {
-  const loom_error_def_t* error = nullptr;
-  const loom_op_t* op = nullptr;
-  std::vector<std::string> string_params;
-  std::vector<loom_type_t> type_params;
-  std::vector<int64_t> i64_params;
-  std::vector<uint32_t> u32_params;
-  std::vector<uint64_t> u64_params;
-  std::vector<loom_diagnostic_field_ref_t> field_refs;
-};
-
-struct EmissionCollector {
-  std::vector<CollectedEmission> emissions;
-
-  iree_diagnostic_emitter_t emitter() {
-    return iree_diagnostic_emitter_t{
-        .fn = Collect,
-        .user_data = this,
-    };
-  }
-
- private:
-  static std::string CopyString(iree_string_view_t value) {
-    return std::string(value.data, value.size);
-  }
-
-  static iree_status_t Collect(void* user_data,
-                               const loom_diagnostic_emission_t* emission) {
-    auto* collector = static_cast<EmissionCollector*>(user_data);
-    CollectedEmission entry;
-    entry.error = emission->error;
-    entry.op = emission->op;
-    for (iree_host_size_t i = 0; i < emission->param_count; ++i) {
-      const loom_diagnostic_param_t* param = &emission->params[i];
-      entry.field_refs.push_back(param->field_ref);
-      if (param->kind == LOOM_PARAM_STRING) {
-        entry.string_params.push_back(CopyString(param->string));
-      } else if (param->kind == LOOM_PARAM_I64) {
-        entry.i64_params.push_back(param->i64);
-      } else if (param->kind == LOOM_PARAM_TYPE) {
-        entry.type_params.push_back(param->type);
-      } else if (param->kind == LOOM_PARAM_U32) {
-        entry.u32_params.push_back(param->u32);
-      } else if (param->kind == LOOM_PARAM_U64) {
-        entry.u64_params.push_back(param->u64);
-      }
-    }
-    collector->emissions.push_back(std::move(entry));
-    return iree_ok_status();
-  }
-};
+using EmissionCollector = ::loom::testing::DiagnosticEmissionCapture;
 
 class LowDescriptorVerifyTest : public ::testing::Test {
  protected:

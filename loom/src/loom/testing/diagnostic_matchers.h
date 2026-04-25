@@ -12,9 +12,89 @@
 
 #include "iree/testing/gtest.h"
 #include "loom/error/diagnostic.h"
+#include "loom/error/emitter.h"
 #include "loom/error/error_defs.h"
 
 namespace loom::testing {
+
+// A deep-copied lightweight diagnostic emission payload for exact verifier and
+// lowering tests.
+struct CapturedDiagnosticEmission {
+  // Structured error definition emitted by the producer.
+  const loom_error_def_t* error = nullptr;
+  // Operation associated with the diagnostic emission.
+  const loom_op_t* op = nullptr;
+  // String parameters copied in parameter order.
+  std::vector<std::string> string_params;
+  // Type parameters copied in parameter order.
+  std::vector<loom_type_t> type_params;
+  // I64 parameters copied in parameter order.
+  std::vector<int64_t> i64_params;
+  // U32 parameters copied in parameter order.
+  std::vector<uint32_t> u32_params;
+  // U64 parameters copied in parameter order.
+  std::vector<uint64_t> u64_params;
+  // Field references copied for all parameters in full parameter order.
+  std::vector<loom_diagnostic_field_ref_t> field_refs;
+  // Number of related ops carried by the emission.
+  iree_host_size_t related_count = 0;
+  // Deep-copied parameters in full parameter order.
+  std::vector<loom_diagnostic_param_t> params;
+};
+
+struct DiagnosticEmissionCapture {
+  // Deep-copied emissions captured in emission order.
+  std::vector<CapturedDiagnosticEmission> emissions;
+
+  void Reset() { emissions.clear(); }
+
+  iree_diagnostic_emitter_t emitter() {
+    return iree_diagnostic_emitter_t{
+        .fn = CaptureEmission,
+        .user_data = this,
+    };
+  }
+
+ private:
+  static std::string CopyStringView(iree_string_view_t value) {
+    if (!value.data) {
+      EXPECT_EQ(value.size, 0u);
+      return "";
+    }
+    return std::string(value.data, value.size);
+  }
+
+  static iree_status_t CaptureEmission(
+      void* user_data, const loom_diagnostic_emission_t* emission) {
+    auto* capture = static_cast<DiagnosticEmissionCapture*>(user_data);
+    CapturedDiagnosticEmission entry;
+    entry.error = emission->error;
+    entry.op = emission->op;
+    entry.related_count = emission->related_op_count;
+    entry.params.reserve(emission->param_count);
+    entry.string_params.reserve(emission->param_count);
+    for (iree_host_size_t i = 0; i < emission->param_count; ++i) {
+      loom_diagnostic_param_t param = emission->params[i];
+      entry.field_refs.push_back(param.field_ref);
+      if (param.kind == LOOM_PARAM_STRING) {
+        entry.string_params.emplace_back(CopyStringView(param.string));
+        const std::string& copy = entry.string_params.back();
+        param.string = iree_make_string_view(copy.data(), copy.size());
+      } else if (param.kind == LOOM_PARAM_I64) {
+        entry.i64_params.push_back(param.i64);
+      } else if (param.kind == LOOM_PARAM_TYPE) {
+        entry.type_params.push_back(param.type);
+      } else if (param.kind == LOOM_PARAM_U32) {
+        entry.u32_params.push_back(param.u32);
+      } else if (param.kind == LOOM_PARAM_U64) {
+        entry.u64_params.push_back(param.u64);
+      }
+      entry.params.push_back(param);
+    }
+    capture->emissions.push_back(std::move(entry));
+    return iree_ok_status();
+  }
+};
 
 struct CapturedRelatedLocation {
   std::string label;

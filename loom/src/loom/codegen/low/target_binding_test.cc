@@ -22,6 +22,7 @@
 #include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/target/emit/ireevm/descriptors.h"
+#include "loom/testing/diagnostic_matchers.h"
 
 namespace loom {
 namespace {
@@ -30,46 +31,7 @@ static std::string ToString(iree_string_view_t value) {
   return std::string(value.data, value.size);
 }
 
-struct CollectedEmission {
-  const loom_error_def_t* error = nullptr;
-  const loom_op_t* op = nullptr;
-  std::vector<std::string> string_params;
-  std::vector<loom_diagnostic_field_ref_t> field_refs;
-  iree_host_size_t related_count = 0;
-};
-
-struct EmissionCollector {
-  std::vector<CollectedEmission> emissions;
-
-  iree_diagnostic_emitter_t emitter() {
-    return iree_diagnostic_emitter_t{
-        .fn = Collect,
-        .user_data = this,
-    };
-  }
-
- private:
-  static std::string CopyString(iree_string_view_t value) {
-    return std::string(value.data, value.size);
-  }
-
-  static iree_status_t Collect(void* user_data,
-                               const loom_diagnostic_emission_t* emission) {
-    auto* collector = static_cast<EmissionCollector*>(user_data);
-    CollectedEmission entry;
-    entry.error = emission->error;
-    entry.op = emission->op;
-    entry.related_count = emission->related_op_count;
-    for (iree_host_size_t i = 0; i < emission->param_count; ++i) {
-      entry.field_refs.push_back(emission->params[i].field_ref);
-      if (emission->params[i].kind == LOOM_PARAM_STRING) {
-        entry.string_params.push_back(CopyString(emission->params[i].string));
-      }
-    }
-    collector->emissions.push_back(std::move(entry));
-    return iree_ok_status();
-  }
-};
+using EmissionCollector = ::loom::testing::DiagnosticEmissionCapture;
 
 class LowTargetBindingTest : public ::testing::Test {
  protected:

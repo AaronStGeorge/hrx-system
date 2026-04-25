@@ -343,6 +343,7 @@ loom_cc_test(
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::target::test::low_registry
+    loom::src::loom::testing::diagnostic_matchers
     iree::testing::gtest
     iree::testing::gtest_main
 )

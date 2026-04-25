@@ -40,6 +40,7 @@ loom_cc_library(
     hdrs = ["diagnostic_matchers.h"],
     deps = [
         "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
