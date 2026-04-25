@@ -1043,6 +1043,16 @@ static bool loom_vector_memory_footprint_describe_op(
       out_access->offsets = loom_vector_atomic_rmw_mask_offsets(op);
       out_access->has_offsets = true;
       return true;
+    case LOOM_OP_VECTOR_ATOMIC_CMPXCHG:
+      out_access->view = loom_vector_atomic_cmpxchg_view(op);
+      out_access->vector_type = loom_module_value_type(
+          state->module, loom_vector_atomic_cmpxchg_old(op));
+      out_access->static_indices =
+          loom_vector_atomic_cmpxchg_static_indices(op);
+      out_access->dynamic_indices = loom_vector_atomic_cmpxchg_indices(op);
+      out_access->offsets = loom_vector_atomic_cmpxchg_offsets(op);
+      out_access->has_offsets = true;
+      return true;
     default:
       return false;
   }

@@ -372,6 +372,16 @@ static iree_status_t loom_canonicalize_try_elide_empty_memory_effect(
           loom_canonicalize_empty_value(
               rewriter->module, loom_vector_atomic_rmw_mask_passthrough(op));
       break;
+    case LOOM_OP_VECTOR_ATOMIC_CMPXCHG:
+      replace_result_with_empty =
+          loom_canonicalize_single_empty_result(rewriter->module, op) &&
+          loom_canonicalize_empty_value(
+              rewriter->module, loom_vector_atomic_cmpxchg_expected(op)) &&
+          loom_canonicalize_empty_value(
+              rewriter->module, loom_vector_atomic_cmpxchg_replacement(op)) &&
+          loom_canonicalize_empty_value(rewriter->module,
+                                        loom_vector_atomic_cmpxchg_offsets(op));
+      break;
     case LOOM_OP_VECTOR_STORE:
       erase_op = loom_canonicalize_empty_value(rewriter->module,
                                                loom_vector_store_value(op));

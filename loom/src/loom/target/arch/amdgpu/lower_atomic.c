@@ -516,9 +516,9 @@ static bool loom_amdgpu_atomic_descriptor_available(
 
 static bool loom_amdgpu_atomic_ordering_has_acquire(uint8_t ordering) {
   switch (ordering) {
-    case LOOM_VIEW_ORDERING_ACQUIRE:
-    case LOOM_VIEW_ORDERING_ACQ_REL:
-    case LOOM_VIEW_ORDERING_SEQ_CST:
+    case LOOM_ATOMIC_ORDERING_ACQUIRE:
+    case LOOM_ATOMIC_ORDERING_ACQ_REL:
+    case LOOM_ATOMIC_ORDERING_SEQ_CST:
       return true;
     default:
       return false;
@@ -527,9 +527,9 @@ static bool loom_amdgpu_atomic_ordering_has_acquire(uint8_t ordering) {
 
 static bool loom_amdgpu_atomic_ordering_has_release(uint8_t ordering) {
   switch (ordering) {
-    case LOOM_VIEW_ORDERING_RELEASE:
-    case LOOM_VIEW_ORDERING_ACQ_REL:
-    case LOOM_VIEW_ORDERING_SEQ_CST:
+    case LOOM_ATOMIC_ORDERING_RELEASE:
+    case LOOM_ATOMIC_ORDERING_ACQ_REL:
+    case LOOM_ATOMIC_ORDERING_SEQ_CST:
       return true;
     default:
       return false;
@@ -538,10 +538,10 @@ static bool loom_amdgpu_atomic_ordering_has_release(uint8_t ordering) {
 
 static bool loom_amdgpu_atomic_global_ordering_supported(
     const loom_low_descriptor_set_t* descriptor_set, uint8_t ordering) {
-  if (ordering != LOOM_VIEW_ORDERING_ACQUIRE &&
-      ordering != LOOM_VIEW_ORDERING_RELEASE &&
-      ordering != LOOM_VIEW_ORDERING_ACQ_REL &&
-      ordering != LOOM_VIEW_ORDERING_SEQ_CST) {
+  if (ordering != LOOM_ATOMIC_ORDERING_ACQUIRE &&
+      ordering != LOOM_ATOMIC_ORDERING_RELEASE &&
+      ordering != LOOM_ATOMIC_ORDERING_ACQ_REL &&
+      ordering != LOOM_ATOMIC_ORDERING_SEQ_CST) {
     return false;
   }
   const loom_amdgpu_descriptor_set_info_t* descriptor_set_info =
@@ -554,7 +554,7 @@ static bool loom_amdgpu_atomic_global_ordering_supported(
 static bool loom_amdgpu_atomic_ordering_supported(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_value_fact_memory_space_t memory_space, uint8_t ordering) {
-  if (ordering == LOOM_VIEW_ORDERING_RELAXED) {
+  if (ordering == LOOM_ATOMIC_ORDERING_RELAXED) {
     return true;
   }
   if (memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL) {
@@ -564,10 +564,10 @@ static bool loom_amdgpu_atomic_ordering_supported(
   if (memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     return false;
   }
-  return ordering == LOOM_VIEW_ORDERING_ACQUIRE ||
-         ordering == LOOM_VIEW_ORDERING_RELEASE ||
-         ordering == LOOM_VIEW_ORDERING_ACQ_REL ||
-         ordering == LOOM_VIEW_ORDERING_SEQ_CST;
+  return ordering == LOOM_ATOMIC_ORDERING_ACQUIRE ||
+         ordering == LOOM_ATOMIC_ORDERING_RELEASE ||
+         ordering == LOOM_ATOMIC_ORDERING_ACQ_REL ||
+         ordering == LOOM_ATOMIC_ORDERING_SEQ_CST;
 }
 
 static bool loom_amdgpu_atomic_value_kind_matches(
@@ -800,7 +800,7 @@ static bool loom_amdgpu_atomic_select_global_ordering(
   const uint8_t ordering = loom_amdgpu_atomic_ordering(source_op);
   plan->ordering = (loom_amdgpu_atomic_ordering_plan_t){0};
   if (plan->source.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL ||
-      ordering == LOOM_VIEW_ORDERING_RELAXED) {
+      ordering == LOOM_ATOMIC_ORDERING_RELAXED) {
     return true;
   }
 

@@ -254,6 +254,29 @@ static iree_status_t loom_vector_to_scalar_lower_atomic_rmw_op(
   return loom_vector_to_scalar_replace_one_result(&state, replacement);
 }
 
+static iree_status_t loom_vector_to_scalar_lower_atomic_cmpxchg_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
+  loom_type_t vector_type =
+      loom_module_value_type(rewriter->module, loom_op_results(op)[0]);
+  if (!loom_type_is_vector(vector_type)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected vector result for vector.atomic.cmpxchg");
+  }
+  loom_vector_to_scalar_state_t state = {
+      .pass = pass,
+      .rewriter = rewriter,
+      .op = op,
+      .value_checkpoint = loom_rewriter_value_checkpoint(rewriter),
+      .vector_type = vector_type,
+      .result_scalar_type = loom_vector_to_scalar_lane_type(vector_type),
+      .location = op->location,
+  };
+  loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_lower_memory_atomic_cmpxchg(&state, &replacement));
+  return loom_vector_to_scalar_replace_one_result(&state, replacement);
+}
+
 static iree_status_t loom_vector_to_scalar_lower_scalar_extract(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
   loom_value_id_t result = loom_vector_extract_result(op);
@@ -417,6 +440,10 @@ static iree_status_t loom_vector_to_scalar_lower_op(loom_pass_t* pass,
 
   if (loom_vector_to_scalar_atomic_rmw_isa(op)) {
     return loom_vector_to_scalar_lower_atomic_rmw_op(pass, rewriter, op);
+  }
+
+  if (loom_vector_atomic_cmpxchg_isa(op)) {
+    return loom_vector_to_scalar_lower_atomic_cmpxchg_op(pass, rewriter, op);
   }
 
   if (op->result_count != 1) return iree_ok_status();

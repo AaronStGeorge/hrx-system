@@ -249,3 +249,60 @@ func.def @atomic_rmw_mask_dynamic(%n: index, %buffer: buffer, %byte_offset: offs
   }
   func.return %old : vector<[%n]xf32>
 }
+
+// ====
+
+func.def @atomic_cmpxchg_static(%buffer: buffer, %byte_offset: offset, %expected: vector<2xi32>, %replacement: vector<2xi32>, %offsets: vector<2xindex>) -> (vector<2xi32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xi32, %layout>
+  %old = vector.atomic.cmpxchg %expected, %replacement, %view[3][%offsets] {cache_scope = device, cache_temporal = non_temporal, failure_ordering = acquire, scope = workgroup, success_ordering = acq_rel} : vector<2xi32>, view<8xi32, %layout>, vector<2xindex> -> vector<2xi32>
+  func.return %old : vector<2xi32>
+}
+
+// ----
+func.def @atomic_cmpxchg_static(%buffer: buffer, %byte_offset: offset, %expected: vector<2xi32>, %replacement: vector<2xi32>, %offsets: vector<2xindex>) -> (vector<2xi32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xi32, %layout>
+  %9 = vector.extract %expected[0] : vector<2xi32> -> i32
+  %10 = vector.extract %replacement[0] : vector<2xi32> -> i32
+  %11 = vector.extract %offsets[0] : vector<2xindex> -> index
+  %12 = index.constant 3 : index
+  %13 = index.add %12, %11 : index
+  %14 = view.atomic.cmpxchg %9, %10, %view[%13] {cache_scope = device, cache_temporal = non_temporal, failure_ordering = acquire, scope = workgroup, success_ordering = acq_rel} : i32, view<8xi32, %layout> -> i32
+  %15 = vector.extract %expected[1] : vector<2xi32> -> i32
+  %16 = vector.extract %replacement[1] : vector<2xi32> -> i32
+  %17 = vector.extract %offsets[1] : vector<2xindex> -> index
+  %18 = index.constant 3 : index
+  %19 = index.add %18, %17 : index
+  %20 = view.atomic.cmpxchg %15, %16, %view[%19] {cache_scope = device, cache_temporal = non_temporal, failure_ordering = acquire, scope = workgroup, success_ordering = acq_rel} : i32, view<8xi32, %layout> -> i32
+  %old = vector.from_elements %14, %20 : vector<2xi32>
+  func.return %old : vector<2xi32>
+}
+
+// ====
+
+func.def @atomic_cmpxchg_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %origin: index, %expected: vector<[%n]xi32>, %replacement: vector<[%n]xi32>, %offsets: vector<[%n]xindex>) -> (vector<[%n]xi32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<[%n]xi32, %layout>
+  %old = vector.atomic.cmpxchg %expected, %replacement, %view[%origin][%offsets] {failure_ordering = seq_cst, scope = device, success_ordering = seq_cst} : vector<[%n]xi32>, view<[%n]xi32, %layout>, vector<[%n]xindex> -> vector<[%n]xi32>
+  func.return %old : vector<[%n]xi32>
+}
+
+// ----
+func.def @atomic_cmpxchg_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %origin: index, %expected: vector<[%n]xi32>, %replacement: vector<[%n]xi32>, %offsets: vector<[%n]xindex>) -> (vector<[%n]xi32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<[%n]xi32, %layout>
+  %11 = vector.constant 0 : vector<[%n]xi32>
+  %12 = index.constant 0 : index
+  %13 = index.constant 1 : index
+  %old = scf.for %14 = [%12 to %n step %13](%15 = %11 : vector<[%n]xi32>) -> (vector<[%n]xi32>) {
+    %17 = vector.extract %expected[%14] : vector<[%n]xi32> -> i32
+    %18 = vector.extract %replacement[%14] : vector<[%n]xi32> -> i32
+    %19 = vector.extract %offsets[%14] : vector<[%n]xindex> -> index
+    %20 = index.add %origin, %19 : index
+    %21 = view.atomic.cmpxchg %17, %18, %view[%20] {failure_ordering = seq_cst, scope = device, success_ordering = seq_cst} : i32, view<[%n]xi32, %layout> -> i32
+    %22 = vector.insert %21 into %15[%14] : i32, vector<[%n]xi32>
+    scf.yield %22 : vector<[%n]xi32>
+  }
+  func.return %old : vector<[%n]xi32>
+}

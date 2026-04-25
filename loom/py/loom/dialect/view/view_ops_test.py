@@ -12,6 +12,7 @@ from loom.dialect.view import (
     AtomicKind,
     AtomicOrdering,
     AtomicScope,
+    view_atomic_cmpxchg,
     view_atomic_reduce,
     view_atomic_rmw,
     view_load,
@@ -48,6 +49,7 @@ class TestViewDialect:
             "view.store",
             "view.atomic.reduce",
             "view.atomic.rmw",
+            "view.atomic.cmpxchg",
             "view.prefetch",
         ]
 
@@ -58,6 +60,7 @@ class TestViewDialect:
         assert view_store in ALL_VIEW_OPS
         assert view_atomic_reduce in ALL_VIEW_OPS
         assert view_atomic_rmw in ALL_VIEW_OPS
+        assert view_atomic_cmpxchg in ALL_VIEW_OPS
         assert view_prefetch in ALL_VIEW_OPS
 
     def test_all_in_view_namespace(self) -> None:
@@ -168,6 +171,29 @@ class TestViewAtomics:
         assert op.attr("kind") is not None
         assert op.attr("ordering") is not None
         assert op.attr("scope") is not None
+        _assert_optional_cache_policy_attrs(op)
+        static_indices = op.attr("static_indices")
+        assert static_indices is not None
+        assert static_indices.attr_type == ATTR_TYPE_I64_ARRAY
+        assert len(op.effects) == 1
+        assert op.effects[0].operand == "view"
+        assert op.effects[0].kind is EffectKind.READWRITE
+
+    def test_cmpxchg_shape(self) -> None:
+        op = _ops()["view.atomic.cmpxchg"]
+        constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+        assert [operand.type_constraint for operand in op.operands] == [
+            SCALAR,
+            SCALAR,
+            VIEW,
+            INDEX,
+        ]
+        assert op.operands[3].variadic
+        assert [result.type_constraint for result in op.results] == [SCALAR]
+        assert op.attr("success_ordering") is not None
+        assert op.attr("failure_ordering") is not None
+        assert op.attr("scope") is not None
+        assert ("HasIndexOrNonI1IntegerScalar", ("expected",)) in constraints
         _assert_optional_cache_policy_attrs(op)
         static_indices = op.attr("static_indices")
         assert static_indices is not None

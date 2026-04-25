@@ -48,6 +48,103 @@ LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_MAXNUMF,
 
 #undef LOOM_ASSERT_ATOMIC_KIND_VALUE
 
+#define LOOM_ASSERT_ATOMIC_ORDERING_VALUE(dialect_value, shared_value) \
+  static_assert((int)(dialect_value) == (int)(shared_value),           \
+                #dialect_value " must match " #shared_value)
+
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_COUNT_,
+                                  LOOM_ATOMIC_ORDERING_COUNT_);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_RELAXED,
+                                  LOOM_ATOMIC_ORDERING_RELAXED);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_ACQUIRE,
+                                  LOOM_ATOMIC_ORDERING_ACQUIRE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_RELEASE,
+                                  LOOM_ATOMIC_ORDERING_RELEASE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_ACQ_REL,
+                                  LOOM_ATOMIC_ORDERING_ACQ_REL);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_REDUCE_ORDERING_SEQ_CST,
+                                  LOOM_ATOMIC_ORDERING_SEQ_CST);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_COUNT_,
+    LOOM_ATOMIC_ORDERING_COUNT_);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_RELAXED,
+    LOOM_ATOMIC_ORDERING_RELAXED);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_ACQUIRE,
+    LOOM_ATOMIC_ORDERING_ACQUIRE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_RELEASE,
+    LOOM_ATOMIC_ORDERING_RELEASE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_ACQ_REL,
+    LOOM_ATOMIC_ORDERING_ACQ_REL);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_REDUCE_MASK_ORDERING_SEQ_CST,
+    LOOM_ATOMIC_ORDERING_SEQ_CST);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_ORDERING_COUNT_,
+                                  LOOM_ATOMIC_ORDERING_COUNT_);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_ORDERING_RELAXED,
+                                  LOOM_ATOMIC_ORDERING_RELAXED);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_ORDERING_ACQUIRE,
+                                  LOOM_ATOMIC_ORDERING_ACQUIRE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_ORDERING_RELEASE,
+                                  LOOM_ATOMIC_ORDERING_RELEASE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_ORDERING_ACQ_REL,
+                                  LOOM_ATOMIC_ORDERING_ACQ_REL);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_ORDERING_SEQ_CST,
+                                  LOOM_ATOMIC_ORDERING_SEQ_CST);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_COUNT_,
+                                  LOOM_ATOMIC_ORDERING_COUNT_);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_RELAXED,
+                                  LOOM_ATOMIC_ORDERING_RELAXED);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_ACQUIRE,
+                                  LOOM_ATOMIC_ORDERING_ACQUIRE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_RELEASE,
+                                  LOOM_ATOMIC_ORDERING_RELEASE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_ACQ_REL,
+                                  LOOM_ATOMIC_ORDERING_ACQ_REL);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(LOOM_VECTOR_ATOMIC_RMW_MASK_ORDERING_SEQ_CST,
+                                  LOOM_ATOMIC_ORDERING_SEQ_CST);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_COUNT_,
+    LOOM_ATOMIC_ORDERING_COUNT_);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_RELAXED,
+    LOOM_ATOMIC_ORDERING_RELAXED);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_ACQUIRE,
+    LOOM_ATOMIC_ORDERING_ACQUIRE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_RELEASE,
+    LOOM_ATOMIC_ORDERING_RELEASE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_ACQ_REL,
+    LOOM_ATOMIC_ORDERING_ACQ_REL);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_SUCCESS_ORDERING_SEQ_CST,
+    LOOM_ATOMIC_ORDERING_SEQ_CST);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_COUNT_,
+    LOOM_ATOMIC_ORDERING_COUNT_);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_RELAXED,
+    LOOM_ATOMIC_ORDERING_RELAXED);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_ACQUIRE,
+    LOOM_ATOMIC_ORDERING_ACQUIRE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_RELEASE,
+    LOOM_ATOMIC_ORDERING_RELEASE);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_ACQ_REL,
+    LOOM_ATOMIC_ORDERING_ACQ_REL);
+LOOM_ASSERT_ATOMIC_ORDERING_VALUE(
+    LOOM_VECTOR_ATOMIC_CMPXCHG_FAILURE_ORDERING_SEQ_CST,
+    LOOM_ATOMIC_ORDERING_SEQ_CST);
+
+#undef LOOM_ASSERT_ATOMIC_ORDERING_VALUE
+
 #define LOOM_ASSERT_CACHE_SCOPE_VALUE(dialect_value, shared_value) \
   static_assert((int)(dialect_value) == (int)(shared_value),       \
                 #dialect_value " must match " #shared_value)
@@ -427,6 +524,21 @@ static iree_status_t loom_vector_verify_atomic_kind(
           : IREE_SV("floating-point element type for atomic kind");
   return loom_vector_emit_operand_constraint(emitter, op, value_name,
                                              value_type, expected_constraint);
+}
+
+static iree_status_t loom_vector_verify_atomic_cmpxchg_ordering(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    uint8_t success_ordering, uint8_t failure_ordering) {
+  loom_atomic_cmpxchg_ordering_error_t error =
+      loom_atomic_cmpxchg_ordering_validate(success_ordering, failure_ordering);
+  if (error == LOOM_ATOMIC_CMPXCHG_ORDERING_ERROR_NONE) {
+    return iree_ok_status();
+  }
+  iree_string_view_t attr_name =
+      loom_atomic_cmpxchg_ordering_error_attr_name(error);
+  return loom_vector_emit_attribute_value_constraint(
+      emitter, op, attr_name, failure_ordering,
+      loom_atomic_cmpxchg_ordering_error_expected_constraint(error));
 }
 
 static iree_status_t loom_vector_emit_offset_count_mismatch(
@@ -1024,6 +1136,26 @@ iree_status_t loom_vector_atomic_rmw_mask_verify(
   return loom_vector_verify_optional_cache_policy(
       emitter, op, loom_vector_atomic_rmw_mask_cache_scope_ATTR_INDEX,
       loom_vector_atomic_rmw_mask_cache_temporal_ATTR_INDEX,
+      LOOM_CACHE_POLICY_ACCESS_ATOMIC);
+}
+
+iree_status_t loom_vector_atomic_cmpxchg_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_vector_atomic_cmpxchg_view(op));
+  loom_type_t offsets_type =
+      loom_module_value_type(module, loom_vector_atomic_cmpxchg_offsets(op));
+  IREE_RETURN_IF_ERROR(loom_vector_verify_gather_scatter_access(
+      emitter, op, view_type, offsets_type,
+      loom_vector_atomic_cmpxchg_static_indices(op),
+      loom_vector_atomic_cmpxchg_indices(op).count));
+  IREE_RETURN_IF_ERROR(loom_vector_verify_atomic_cmpxchg_ordering(
+      emitter, op, loom_vector_atomic_cmpxchg_success_ordering(op),
+      loom_vector_atomic_cmpxchg_failure_ordering(op)));
+  return loom_vector_verify_optional_cache_policy(
+      emitter, op, loom_vector_atomic_cmpxchg_cache_scope_ATTR_INDEX,
+      loom_vector_atomic_cmpxchg_cache_temporal_ATTR_INDEX,
       LOOM_CACHE_POLICY_ACCESS_ATOMIC);
 }
 

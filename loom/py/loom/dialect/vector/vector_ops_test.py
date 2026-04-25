@@ -478,6 +478,7 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
         "vector.atomic.reduce.mask",
         "vector.atomic.rmw",
         "vector.atomic.rmw.mask",
+        "vector.atomic.cmpxchg",
     )
     for name in offset_indexed_ops:
         constraints = {(constraint.name, constraint.args) for constraint in ops[name].constraints}
@@ -498,6 +499,11 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
     assert ops["vector.atomic.rmw"].effects[0].kind == EffectKind.READWRITE
     assert ops["vector.atomic.rmw.mask"].effects[0].operand == "view"
     assert ops["vector.atomic.rmw.mask"].effects[0].kind == EffectKind.READWRITE
+    assert ops["vector.atomic.cmpxchg"].effects[0].operand == "view"
+    assert ops["vector.atomic.cmpxchg"].effects[0].kind == EffectKind.READWRITE
+    cmpxchg_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.atomic.cmpxchg"].constraints}
+    assert ("HasIndexOrNonI1IntegerElement", ("expected",)) in cmpxchg_constraints
+    assert ("SameShape", ("offsets", "expected", "replacement", "old")) in cmpxchg_constraints
 
     for name in (
         "vector.load",
@@ -514,6 +520,7 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
         "vector.atomic.reduce.mask",
         "vector.atomic.rmw",
         "vector.atomic.rmw.mask",
+        "vector.atomic.cmpxchg",
     ):
         assert "Pure" not in {trait.name for trait in ops[name].traits}
         _assert_optional_cache_policy_attrs(ops[name])

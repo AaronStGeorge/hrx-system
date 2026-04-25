@@ -1412,6 +1412,28 @@ func.def @atomic_invalid_ordering(%buffer: buffer, %base: offset, %row: index, %
 
 // ====
 
+// Compare-exchange failure ordering cannot include release semantics.
+func.def @atomic_cmpxchg_failure_rejects_release(%buffer: buffer, %base: offset, %row: index, %col: index, %offsets: vector<4xindex>, %v: vector<4xi32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%base] : buffer -> view<8x8xi32, %layout>
+  // ERROR@+1: STRUCTURE/014 "failure_ordering" "2" "relaxed, acquire, or seq_cst failure ordering"
+  %old = vector.atomic.cmpxchg %v, %v, %view[%row, %col][%offsets] {success_ordering = acq_rel, failure_ordering = release, scope = workgroup} : vector<4xi32>, view<8x8xi32, %layout>, vector<4xindex> -> vector<4xi32>
+  func.return
+}
+
+// ====
+
+// Compare-exchange failure ordering must not be stronger than success.
+func.def @atomic_cmpxchg_failure_not_stronger_than_success(%buffer: buffer, %base: offset, %row: index, %col: index, %offsets: vector<4xindex>, %v: vector<4xi32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%base] : buffer -> view<8x8xi32, %layout>
+  // ERROR@+1: STRUCTURE/014 "failure_ordering" "1" "failure ordering no stronger than success ordering"
+  %old = vector.atomic.cmpxchg %v, %v, %view[%row, %col][%offsets] {success_ordering = relaxed, failure_ordering = acquire, scope = workgroup} : vector<4xi32>, view<8x8xi32, %layout>, vector<4xindex> -> vector<4xi32>
+  func.return
+}
+
+// ====
+
 // Atomic kind spelling is tied to the vector element family.
 func.def @atomic_kind_mismatch(%buffer: buffer, %base: offset, %row: index, %col: index, %offsets: vector<4xindex>, %v: vector<4xi32>) {
   %layout = encoding.layout.dense : encoding<layout>

@@ -766,6 +766,51 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         return cast(ValueRef, self._b.build("vector.atomic.rmw.mask", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def cmpxchg(
+        self,
+        *,
+        expected: ValueRef,
+        replacement: ValueRef,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        offsets: ValueRef,
+        success_ordering: str,
+        failure_ordering: str,
+        scope: str,
+        cache_scope: str | None = None,
+        cache_temporal: str | None = None,
+        results: list[Type | TiedResultSpec],
+    ) -> ValueRef:
+        """Atomic compare-exchange at per-lane signed element offsets. Each lane compares origin + offsets[lane] with expected[lane], writes replacement[lane] on success, and returns the old memory value. Success lanes are derived by comparing old == expected.
+
+        Example::
+            %old = vector.atomic.cmpxchg %expected, %replacement, %view[%row, %col][%offsets] {success_ordering = acq_rel, failure_ordering = acquire, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["success_ordering"] = success_ordering
+        _attributes["failure_ordering"] = failure_ordering
+        _attributes["scope"] = scope
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
+        _operands.append(expected)
+        _operands.append(replacement)
+        _operands.append(view)
+        _operands.append(offsets)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        return cast(ValueRef, self._b.build("vector.atomic.cmpxchg", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def select(self, *, condition: ValueRef, true_value: ValueRef, false_value: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise select from two same-typed vector values using an i1 mask vector. True condition lanes choose true_value; false lanes choose false_value.
 

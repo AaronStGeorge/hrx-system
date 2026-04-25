@@ -175,6 +175,49 @@ class ViewBuilders:
         _attributes["static_indices"] = _static
         return cast(ValueRef, self._b.build("view.atomic.rmw", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def cmpxchg(
+        self,
+        *,
+        expected: ValueRef,
+        replacement: ValueRef,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        success_ordering: str,
+        failure_ordering: str,
+        scope: str,
+        cache_scope: str | None = None,
+        cache_temporal: str | None = None,
+        results: list[Type | TiedResultSpec],
+    ) -> ValueRef:
+        """Atomically compare one scalar view element with an expected value, write a replacement value when they match, and return the old observed value. Success is derived by comparing old == expected.
+
+        Example::
+            %old = view.atomic.cmpxchg %expected, %replacement, %view[%row, %col] {success_ordering = acq_rel, failure_ordering = acquire, scope = workgroup} : i32, view<[%M]x[%N]xi32, %layout> -> i32
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["success_ordering"] = success_ordering
+        _attributes["failure_ordering"] = failure_ordering
+        _attributes["scope"] = scope
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
+        _operands.append(expected)
+        _operands.append(replacement)
+        _operands.append(view)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        return cast(ValueRef, self._b.build("view.atomic.cmpxchg", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def prefetch(self, *, view: ValueRef, indices: list[int | ValueRef], intent: str, locality: str) -> None:
         """Compiler hint for a future access to a logical view origin. Prefetch has no semantic memory effects and may not fault semantically, but it is intentionally preserved by ordinary canonicalization/DCE until an explicit hint-stripping pass removes it.
 

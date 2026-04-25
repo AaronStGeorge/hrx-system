@@ -58,6 +58,8 @@ static loom_value_id_t loom_vector_to_scalar_memory_view(loom_op_t* op) {
       return loom_vector_atomic_rmw_view(op);
     case LOOM_OP_VECTOR_ATOMIC_RMW_MASK:
       return loom_vector_atomic_rmw_mask_view(op);
+    case LOOM_OP_VECTOR_ATOMIC_CMPXCHG:
+      return loom_vector_atomic_cmpxchg_view(op);
     default:
       return LOOM_VALUE_ID_INVALID;
   }
@@ -94,6 +96,8 @@ static loom_value_slice_t loom_vector_to_scalar_memory_dynamic_indices(
       return loom_vector_atomic_rmw_indices(op);
     case LOOM_OP_VECTOR_ATOMIC_RMW_MASK:
       return loom_vector_atomic_rmw_mask_indices(op);
+    case LOOM_OP_VECTOR_ATOMIC_CMPXCHG:
+      return loom_vector_atomic_cmpxchg_indices(op);
     default:
       return (loom_value_slice_t){0};
   }
@@ -130,6 +134,8 @@ static loom_attribute_t loom_vector_to_scalar_memory_static_indices(
       return loom_vector_atomic_rmw_static_indices(op);
     case LOOM_OP_VECTOR_ATOMIC_RMW_MASK:
       return loom_vector_atomic_rmw_mask_static_indices(op);
+    case LOOM_OP_VECTOR_ATOMIC_CMPXCHG:
+      return loom_vector_atomic_cmpxchg_static_indices(op);
     default:
       return (loom_attribute_t){0};
   }
@@ -1406,4 +1412,166 @@ iree_status_t loom_vector_to_scalar_lower_memory_atomic_rmw(
                                                          out_replacement);
   }
   return loom_vector_to_scalar_lower_dynamic_atomic_rmw(state, out_replacement);
+}
+
+//===----------------------------------------------------------------------===//
+// Atomic compare-exchange lanes
+//===----------------------------------------------------------------------===//
+
+static iree_status_t loom_vector_to_scalar_build_view_atomic_cmpxchg_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t lane_indices,
+    loom_value_id_t* out_lane) {
+  loom_value_id_t expected_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, loom_vector_atomic_cmpxchg_expected(state->op), lane_indices,
+      &expected_lane));
+  loom_value_id_t replacement_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, loom_vector_atomic_cmpxchg_replacement(state->op), lane_indices,
+      &replacement_lane));
+  loom_vector_to_scalar_view_indices_t view_indices = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_view_indices(
+      state, lane_indices, /*add_lane_indices=*/false,
+      loom_vector_atomic_cmpxchg_offsets(state->op),
+      /*add_last_axis_offset=*/false, (loom_vector_to_scalar_index_term_t){0},
+      &view_indices));
+  loom_op_t* atomic_op = NULL;
+  loom_vector_memory_cache_policy_t cache_policy = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_memory_cache_policy(state, &cache_policy));
+  IREE_RETURN_IF_ERROR(loom_view_atomic_cmpxchg_build(
+      &state->rewriter->builder, cache_policy.build_flags, expected_lane,
+      replacement_lane, loom_vector_to_scalar_memory_view(state->op),
+      view_indices.dynamic_indices, view_indices.dynamic_index_count,
+      view_indices.static_indices, view_indices.static_index_count,
+      loom_vector_atomic_cmpxchg_success_ordering(state->op),
+      loom_vector_atomic_cmpxchg_failure_ordering(state->op),
+      loom_vector_atomic_cmpxchg_scope(state->op), cache_policy.cache_scope,
+      cache_policy.cache_temporal, state->result_scalar_type, state->location,
+      &atomic_op));
+  *out_lane = loom_view_atomic_cmpxchg_old(atomic_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_to_scalar_lower_static_atomic_cmpxchg(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
+  iree_host_size_t element_count = 0;
+  if (!loom_type_static_element_count(state->vector_type, &element_count)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected all-static vector.atomic.cmpxchg type");
+  }
+
+  loom_value_id_t* elements = NULL;
+  if (element_count > 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(state->rewriter->arena, element_count,
+                                  sizeof(loom_value_id_t), (void**)&elements));
+  }
+  uint8_t rank = loom_type_rank(state->vector_type);
+  int64_t* indices = NULL;
+  if (rank > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->rewriter->arena, rank, sizeof(int64_t), (void**)&indices));
+  }
+  for (iree_host_size_t ordinal = 0; ordinal < element_count; ++ordinal) {
+    loom_vector_to_scalar_indices_from_ordinal(state->vector_type, ordinal,
+                                               indices);
+    loom_vector_to_scalar_index_list_t index_list = {
+        .static_indices = indices,
+        .rank = rank,
+    };
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_view_atomic_cmpxchg_lane(
+        state, index_list, &elements[ordinal]));
+  }
+
+  loom_op_t* from_elements_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_from_elements_build(
+      &state->rewriter->builder, elements, element_count, state->vector_type,
+      state->location, &from_elements_op));
+  *out_replacement = loom_vector_from_elements_result(from_elements_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_to_scalar_atomic_cmpxchg_loop_axis(
+    loom_vector_to_scalar_state_t* state, uint8_t axis,
+    loom_value_id_t current_aggregate, loom_value_id_t* dynamic_indices,
+    loom_value_id_t* out_aggregate) {
+  loom_value_id_t lower_bound = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t step = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t upper_bound = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, 0, &lower_bound));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, 1, &step));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_dim_bound(
+      state, state->vector_type, axis, &upper_bound));
+
+  loom_op_t* loop = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_scf_for_build(&state->rewriter->builder, lower_bound, upper_bound,
+                         step, &current_aggregate, 1, &state->vector_type, 1,
+                         NULL, 0, state->location, &loop));
+  if (state->pass->statistics) {
+    loom_pass_statistic_add(state->pass,
+                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
+  }
+
+  loom_builder_ip_t saved = loom_builder_enter_region(
+      &state->rewriter->builder, loop, loom_scf_for_body(loop));
+  dynamic_indices[axis] = loom_region_entry_arg_id(loom_scf_for_body(loop), 0);
+  loom_value_id_t aggregate_arg =
+      loom_region_entry_arg_id(loom_scf_for_body(loop), 1);
+  loom_value_id_t yielded_aggregate = LOOM_VALUE_ID_INVALID;
+  if (axis + 1 == loom_type_rank(state->vector_type)) {
+    loom_vector_to_scalar_index_list_t index_list = {
+        .dynamic_indices = dynamic_indices,
+        .rank = loom_type_rank(state->vector_type),
+    };
+    loom_value_id_t lane = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_view_atomic_cmpxchg_lane(
+        state, index_list, &lane));
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_insert_lane(
+        state, lane, aggregate_arg, state->vector_type, index_list,
+        &yielded_aggregate));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_atomic_cmpxchg_loop_axis(
+        state, (uint8_t)(axis + 1), aggregate_arg, dynamic_indices,
+        &yielded_aggregate));
+  }
+  loom_op_t* yield_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(&state->rewriter->builder,
+                                            &yielded_aggregate, 1,
+                                            state->location, &yield_op));
+  loom_builder_restore(&state->rewriter->builder, saved);
+
+  *out_aggregate = loom_scf_for_results(loop).values[0];
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_to_scalar_lower_dynamic_atomic_cmpxchg(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
+  loom_value_id_t seed = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_vector_zero(
+      state, state->vector_type, &seed));
+
+  uint8_t rank = loom_type_rank(state->vector_type);
+  loom_value_id_t* dynamic_indices = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(state->rewriter->arena, rank,
+                                                 sizeof(loom_value_id_t),
+                                                 (void**)&dynamic_indices));
+  return loom_vector_to_scalar_atomic_cmpxchg_loop_axis(
+      state, 0, seed, dynamic_indices, out_replacement);
+}
+
+iree_status_t loom_vector_to_scalar_lower_memory_atomic_cmpxchg(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
+  if (loom_type_is_all_static(state->vector_type)) {
+    return loom_vector_to_scalar_lower_static_atomic_cmpxchg(state,
+                                                             out_replacement);
+  }
+  return loom_vector_to_scalar_lower_dynamic_atomic_cmpxchg(state,
+                                                            out_replacement);
 }

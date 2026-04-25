@@ -132,6 +132,7 @@ bool loom_vector_memory_cache_policy_from_op(
     case LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK:
     case LOOM_OP_VECTOR_ATOMIC_RMW:
     case LOOM_OP_VECTOR_ATOMIC_RMW_MASK:
+    case LOOM_OP_VECTOR_ATOMIC_CMPXCHG:
       if (op->attribute_count < 5) {
         return false;
       }

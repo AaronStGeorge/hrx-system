@@ -1527,6 +1527,35 @@ def _atomic_memory_attrs() -> list[AttrDef]:
     ]
 
 
+def _atomic_cmpxchg_memory_attrs() -> list[AttrDef]:
+    return [
+        AttrDef(
+            "success_ordering",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicOrdering,
+            doc="Memory ordering used when a lane compare-exchange succeeds.",
+        ),
+        AttrDef(
+            "failure_ordering",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicOrdering,
+            doc="Memory ordering used when a lane compare-exchange fails.",
+        ),
+        AttrDef(
+            "scope",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicScope,
+            doc="Required atomic synchronization scope.",
+        ),
+        *_cache_policy_attrs(),
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ]
+
+
 vector_atomic_reduce = Op(
     "vector.atomic.reduce",
     group=vector_ops,
@@ -1721,6 +1750,59 @@ vector_atomic_rmw_mask = Op(
     ],
     examples=[
         "%old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32>",
+    ],
+)
+
+vector_atomic_cmpxchg = Op(
+    "vector.atomic.cmpxchg",
+    group=vector_ops,
+    doc=(
+        "Atomic compare-exchange at per-lane signed element offsets. Each "
+        "lane compares origin + offsets[lane] with expected[lane], writes "
+        "replacement[lane] on success, and returns the old memory value. "
+        "Success lanes are derived by comparing old == expected."
+    ),
+    operands=[
+        Operand("expected", VECTOR, doc="Expected memory value for each lane."),
+        Operand("replacement", VECTOR, doc="Replacement value written for each successful lane."),
+        Operand("view", VIEW, doc="Typed destination view."),
+        Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    results=[Result("old", VECTOR, doc="Old memory values read by the atomic operations.")],
+    attrs=_atomic_cmpxchg_memory_attrs(),
+    constraints=[
+        HasIndexOrNonI1IntegerElement("expected"),
+        HasIndexOrNonI1IntegerElement("offsets"),
+        SameElementType("expected", "replacement", "view", "old"),
+        SameShape("offsets", "expected", "replacement", "old"),
+        SameType("expected", "replacement", "old"),
+    ],
+    effects=[ReadWrites("view")],
+    verify="loom_vector_atomic_cmpxchg_verify",
+    format=[
+        Ref("expected"),
+        COMMA,
+        Ref("replacement"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        GLUE,
+        LBRACKET,
+        Ref("offsets"),
+        RBRACKET,
+        AttrDict(),
+        COLON,
+        TypeOf("expected"),
+        COMMA,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("offsets"),
+        ARROW,
+        ResultType("old"),
+    ],
+    examples=[
+        "%old = vector.atomic.cmpxchg %expected, %replacement, %view[%row, %col][%offsets] {success_ordering = acq_rel, failure_ordering = acquire, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>",
     ],
 )
 
@@ -3215,6 +3297,7 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_atomic_reduce_mask,
     vector_atomic_rmw,
     vector_atomic_rmw_mask,
+    vector_atomic_cmpxchg,
     vector_select,
     vector_cmpi,
     vector_cmpf,

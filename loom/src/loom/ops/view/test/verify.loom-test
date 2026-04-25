@@ -271,6 +271,28 @@ func.def @atomic_invalid_ordering(%buffer: buffer, %offset: offset, %row: index,
 
 // ====
 
+// Compare-exchange failure ordering cannot include release semantics.
+func.def @atomic_cmpxchg_failure_rejects_release(%buffer: buffer, %offset: offset, %row: index, %col: index, %value: i32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4x4xi32, %layout>
+  // ERROR@+1: STRUCTURE/014 "failure_ordering" "2" "relaxed, acquire, or seq_cst failure ordering"
+  %old = view.atomic.cmpxchg %value, %value, %view[%row, %col] {success_ordering = acq_rel, failure_ordering = release, scope = workgroup} : i32, view<4x4xi32, %layout> -> i32
+  func.return
+}
+
+// ====
+
+// Compare-exchange failure ordering must not be stronger than success.
+func.def @atomic_cmpxchg_failure_not_stronger_than_success(%buffer: buffer, %offset: offset, %row: index, %col: index, %value: i32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4x4xi32, %layout>
+  // ERROR@+1: STRUCTURE/014 "failure_ordering" "1" "failure ordering no stronger than success ordering"
+  %old = view.atomic.cmpxchg %value, %value, %view[%row, %col] {success_ordering = relaxed, failure_ordering = acquire, scope = workgroup} : i32, view<4x4xi32, %layout> -> i32
+  func.return
+}
+
+// ====
+
 // Atomic kind spelling is tied to the scalar element family.
 func.def @atomic_kind_mismatch(%buffer: buffer, %offset: offset, %row: index, %col: index, %value: i32) {
   %layout = encoding.layout.dense : encoding<layout>

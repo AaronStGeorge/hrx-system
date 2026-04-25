@@ -32,6 +32,7 @@ from loom.dsl import (
     Dialect,
     EnumCase,
     EnumDef,
+    HasIndexOrNonI1IntegerScalar,
     Op,
     Operand,
     RanksMatch,
@@ -270,6 +271,35 @@ def _atomic_memory_attrs() -> list[AttrDef]:
     ]
 
 
+def _atomic_cmpxchg_memory_attrs() -> list[AttrDef]:
+    return [
+        AttrDef(
+            "success_ordering",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicOrdering,
+            doc="Memory ordering used when the compare-exchange succeeds.",
+        ),
+        AttrDef(
+            "failure_ordering",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicOrdering,
+            doc="Memory ordering used when the compare-exchange fails.",
+        ),
+        AttrDef(
+            "scope",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicScope,
+            doc="Required atomic synchronization scope.",
+        ),
+        *_cache_policy_attrs(),
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical element indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ]
+
+
 view_atomic_reduce = Op(
     name="view.atomic.reduce",
     group=view_ops,
@@ -341,6 +371,47 @@ view_atomic_rmw = Op(
     ],
 )
 
+view_atomic_cmpxchg = Op(
+    name="view.atomic.cmpxchg",
+    group=view_ops,
+    doc=(
+        "Atomically compare one scalar view element with an expected value, write a replacement value when they match, and return the old observed value. Success is derived by comparing old == expected."
+    ),
+    operands=[
+        Operand("expected", SCALAR, doc="Scalar value compared against memory."),
+        Operand("replacement", SCALAR, doc="Scalar value written on success."),
+        Operand("view", VIEW, doc="Typed destination view."),
+        Operand("indices", INDEX, doc="Dynamic logical element indices.", variadic=True),
+    ],
+    results=[Result("old", SCALAR, doc="Old memory value observed by the atomic operation.")],
+    attrs=_atomic_cmpxchg_memory_attrs(),
+    constraints=[
+        HasIndexOrNonI1IntegerScalar("expected"),
+        SameElementType("expected", "replacement", "view", "old"),
+        SameType("expected", "replacement", "old"),
+    ],
+    effects=[ReadWrites("view")],
+    verify="loom_view_atomic_cmpxchg_verify",
+    format=[
+        Ref("expected"),
+        COMMA,
+        Ref("replacement"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        AttrDict(),
+        COLON,
+        TypeOf("expected"),
+        COMMA,
+        TypeOf("view"),
+        ARROW,
+        ResultType("old"),
+    ],
+    examples=[
+        "%old = view.atomic.cmpxchg %expected, %replacement, %view[%row, %col] {success_ordering = acq_rel, failure_ordering = acquire, scope = workgroup} : i32, view<[%M]x[%N]xi32, %layout> -> i32",
+    ],
+)
+
 # ============================================================================
 # view.prefetch — discardable compiler hint for a future view access
 # ============================================================================
@@ -392,5 +463,6 @@ ALL_VIEW_OPS: tuple[Op, ...] = (
     view_store,
     view_atomic_reduce,
     view_atomic_rmw,
+    view_atomic_cmpxchg,
     view_prefetch,
 )

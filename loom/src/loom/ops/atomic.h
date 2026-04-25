@@ -55,8 +55,48 @@ typedef enum loom_atomic_kind_e {
   LOOM_ATOMIC_KIND_COUNT_,
 } loom_atomic_kind_t;
 
+// Memory ordering for view and vector atomics.
+typedef enum loom_atomic_ordering_e {
+  // No ordering constraints beyond atomicity.
+  LOOM_ATOMIC_ORDERING_RELAXED = 0,
+  // Acquire ordering on loads or read-modify-write results.
+  LOOM_ATOMIC_ORDERING_ACQUIRE = 1,
+  // Release ordering on stores or read-modify-write updates.
+  LOOM_ATOMIC_ORDERING_RELEASE = 2,
+  // Acquire-release ordering on read-modify-write success.
+  LOOM_ATOMIC_ORDERING_ACQ_REL = 3,
+  // Sequentially consistent ordering.
+  LOOM_ATOMIC_ORDERING_SEQ_CST = 4,
+  LOOM_ATOMIC_ORDERING_COUNT_,
+} loom_atomic_ordering_t;
+
+// Compare-exchange ordering validation error.
+typedef enum loom_atomic_cmpxchg_ordering_error_e {
+  // The success/failure ordering pair is valid.
+  LOOM_ATOMIC_CMPXCHG_ORDERING_ERROR_NONE = 0,
+  // Failure ordering cannot include release semantics.
+  LOOM_ATOMIC_CMPXCHG_ORDERING_ERROR_FAILURE_RELEASE,
+  // Failure ordering must not be stronger than success ordering.
+  LOOM_ATOMIC_CMPXCHG_ORDERING_ERROR_FAILURE_STRONGER,
+} loom_atomic_cmpxchg_ordering_error_t;
+
 // Returns true when |kind| is a known loom_atomic_kind_t value.
 bool loom_atomic_kind_is_valid(uint8_t kind);
+
+// Returns true when |ordering| is a known loom_atomic_ordering_t value.
+bool loom_atomic_ordering_is_valid(uint8_t ordering);
+
+// Validates the success/failure ordering pair for compare-exchange atomics.
+loom_atomic_cmpxchg_ordering_error_t loom_atomic_cmpxchg_ordering_validate(
+    uint8_t success_ordering, uint8_t failure_ordering);
+
+// Returns the attribute name responsible for |error|.
+iree_string_view_t loom_atomic_cmpxchg_ordering_error_attr_name(
+    loom_atomic_cmpxchg_ordering_error_t error);
+
+// Returns a diagnostic constraint phrase for |error|.
+iree_string_view_t loom_atomic_cmpxchg_ordering_error_expected_constraint(
+    loom_atomic_cmpxchg_ordering_error_t error);
 
 // Returns true when |kind| operates on integer element types.
 bool loom_atomic_kind_accepts_integer(uint8_t kind);

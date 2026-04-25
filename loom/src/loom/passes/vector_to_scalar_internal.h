@@ -445,6 +445,9 @@ iree_status_t loom_vector_to_scalar_lower_memory_atomic_reduce(
 iree_status_t loom_vector_to_scalar_lower_memory_atomic_rmw(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement);
 
+iree_status_t loom_vector_to_scalar_lower_memory_atomic_cmpxchg(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement);
+
 iree_status_t loom_vector_to_scalar_terms_from_explicit_indices(
     loom_vector_to_scalar_state_t* state, loom_attribute_t static_indices,
     loom_value_slice_t dynamic_indices,
