@@ -369,8 +369,8 @@ static iree_status_t loom_link_get_module_remap(
     IREE_RETURN_IF_ERROR(loom_ir_remap_initialize(
         source_module, state->target_module, state->scratch_arena,
         &(loom_ir_remap_options_t){
-            .remap_symbol = loom_link_remap_symbol,
-            .remap_symbol_user_data = state,
+            .remap_symbol = loom_ir_remap_symbol_callback_make(
+                loom_link_remap_symbol, state),
         },
         remap));
   }
@@ -894,8 +894,8 @@ static iree_status_t loom_link_merge_func_contract(loom_link_state_t* state,
     IREE_RETURN_IF_ERROR(loom_ir_remap_initialize(
         source->source_module, state->target_module, state->scratch_arena,
         &(loom_ir_remap_options_t){
-            .remap_symbol = loom_link_remap_symbol,
-            .remap_symbol_user_data = state,
+            .remap_symbol = loom_ir_remap_symbol_callback_make(
+                loom_link_remap_symbol, state),
         },
         &contract_remap));
     IREE_RETURN_IF_ERROR(loom_link_map_func_signature_values(

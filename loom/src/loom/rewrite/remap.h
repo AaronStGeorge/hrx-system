@@ -35,6 +35,29 @@ typedef iree_status_t (*loom_ir_remap_symbol_fn_t)(
     loom_module_t* target_module, loom_symbol_ref_t source_ref,
     loom_symbol_ref_t* out_target_ref);
 
+typedef struct loom_ir_remap_symbol_callback_t {
+  // Callback invoked to remap one cross-module source symbol reference.
+  loom_ir_remap_symbol_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_ir_remap_symbol_callback_t;
+
+// Returns an empty symbol remap callback.
+static inline loom_ir_remap_symbol_callback_t
+loom_ir_remap_symbol_callback_empty(void) {
+  return (loom_ir_remap_symbol_callback_t){0};
+}
+
+// Returns a symbol remap callback wrapping |fn| and |user_data|.
+static inline loom_ir_remap_symbol_callback_t
+loom_ir_remap_symbol_callback_make(loom_ir_remap_symbol_fn_t fn,
+                                   void* user_data) {
+  return (loom_ir_remap_symbol_callback_t){
+      .fn = fn,
+      .user_data = user_data,
+  };
+}
+
 // Remap behavior knobs supplied at initialization.
 typedef struct loom_ir_remap_options_t {
   // Allows unmapped SSA value references to remain unchanged when source and
@@ -42,9 +65,7 @@ typedef struct loom_ir_remap_options_t {
   // mapping for every SSA value reference.
   bool allow_unmapped_values;
   // Optional callback for cross-module symbol reference remapping.
-  loom_ir_remap_symbol_fn_t remap_symbol;
-  // Opaque caller data passed to remap_symbol.
-  void* remap_symbol_user_data;
+  loom_ir_remap_symbol_callback_t remap_symbol;
 } loom_ir_remap_options_t;
 
 // Dense SSA remap table for one source module and one target module.
@@ -70,9 +91,7 @@ typedef struct loom_ir_remap_t {
   // Allows same-module unmapped SSA refs to keep their original ID.
   bool allow_unmapped_values;
   // Optional callback for cross-module symbol reference remapping.
-  loom_ir_remap_symbol_fn_t remap_symbol;
-  // Opaque caller data passed to remap_symbol.
-  void* remap_symbol_user_data;
+  loom_ir_remap_symbol_callback_t remap_symbol;
   // Current recursive static-encoding remap depth. Internal recursion guard;
   // callers should treat this as owned by the remap helpers.
   uint16_t encoding_depth;

@@ -1005,7 +1005,8 @@ TEST_F(CallableImportTest, ImportRemapsExternalSymbolWithPolicy) {
   loom_op_t* wrapper_op = BuildCallWrapperFunction(
       source_, &source_builder_, wrapper_ref, helper_ref, i32);
   loom_callable_import_options_t options = {
-      .external_symbol_remap = RemapSymbolByName,
+      .external_symbol_remap =
+          loom_ir_remap_symbol_callback_make(RemapSymbolByName, NULL),
   };
 
   loom_func_like_t imported = {};

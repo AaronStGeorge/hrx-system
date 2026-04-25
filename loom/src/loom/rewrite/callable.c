@@ -590,9 +590,7 @@ typedef struct loom_callable_import_symbol_state_t {
   // Target-module symbol ref created for the imported callable.
   loom_symbol_ref_t target_callee_ref;
   // Optional caller policy for non-callee source symbol refs.
-  loom_ir_remap_symbol_fn_t external_symbol_remap;
-  // Opaque caller data passed to external_symbol_remap.
-  void* external_symbol_user_data;
+  loom_ir_remap_symbol_callback_t external_symbol_remap;
 } loom_callable_import_symbol_state_t;
 
 static iree_status_t loom_callable_import_remap_symbol(
@@ -605,14 +603,14 @@ static iree_status_t loom_callable_import_remap_symbol(
     *out_target_ref = state->target_callee_ref;
     return iree_ok_status();
   }
-  if (!state->external_symbol_remap) {
+  if (!state->external_symbol_remap.fn) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "callable import encountered an unresolved external symbol reference");
   }
-  return state->external_symbol_remap(state->external_symbol_user_data,
-                                      source_module, target_module, source_ref,
-                                      out_target_ref);
+  return state->external_symbol_remap.fn(state->external_symbol_remap.user_data,
+                                         source_module, target_module,
+                                         source_ref, out_target_ref);
 }
 
 iree_status_t loom_callable_import_definition(
@@ -652,7 +650,7 @@ iree_status_t loom_callable_import_definition(
         IREE_STATUS_FAILED_PRECONDITION,
         "source symbol does not point at the requested callable");
   }
-  if (!options || !options->external_symbol_remap) {
+  if (!options || !options->external_symbol_remap.fn) {
     if (loom_callable_op_may_reference_other_symbol(source_module, source.op,
                                                     source_ref)) {
       return iree_make_status(
@@ -690,13 +688,12 @@ iree_status_t loom_callable_import_definition(
   loom_callable_import_symbol_state_t symbol_state = {
       .source_callee_ref = source_ref,
       .target_callee_ref = {.module_id = 0, .symbol_id = target_symbol_id},
-      .external_symbol_remap = options ? options->external_symbol_remap : NULL,
-      .external_symbol_user_data =
-          options ? options->external_symbol_user_data : NULL,
+      .external_symbol_remap = options ? options->external_symbol_remap
+                                       : loom_ir_remap_symbol_callback_empty(),
   };
   loom_ir_remap_options_t remap_options = {
-      .remap_symbol = loom_callable_import_remap_symbol,
-      .remap_symbol_user_data = &symbol_state,
+      .remap_symbol = loom_ir_remap_symbol_callback_make(
+          loom_callable_import_remap_symbol, &symbol_state),
   };
   loom_ir_remap_t remap = {0};
   IREE_RETURN_IF_ERROR(loom_ir_remap_initialize(

@@ -35,9 +35,8 @@ iree_status_t loom_ir_remap_initialize(const loom_module_t* source_module,
       .target_module = target_module,
       .arena = arena,
       .allow_unmapped_values = options ? options->allow_unmapped_values : false,
-      .remap_symbol = options ? options->remap_symbol : NULL,
-      .remap_symbol_user_data =
-          options ? options->remap_symbol_user_data : NULL,
+      .remap_symbol = options ? options->remap_symbol
+                              : loom_ir_remap_symbol_callback_empty(),
   };
 
   remap.value_map_count = source_module->values.count;
@@ -395,15 +394,15 @@ static iree_status_t loom_ir_remap_symbol_ref(
     *out_target_ref = source_ref;
     return iree_ok_status();
   }
-  if (!remap->remap_symbol) {
+  if (!remap->remap_symbol.fn) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "cross-module symbol reference remapping requires a symbol policy");
   }
   loom_symbol_ref_t target_ref = loom_symbol_ref_null();
-  IREE_RETURN_IF_ERROR(
-      remap->remap_symbol(remap->remap_symbol_user_data, remap->source_module,
-                          remap->target_module, source_ref, &target_ref));
+  IREE_RETURN_IF_ERROR(remap->remap_symbol.fn(
+      remap->remap_symbol.user_data, remap->source_module, remap->target_module,
+      source_ref, &target_ref));
   if (!loom_symbol_ref_is_valid(target_ref) || target_ref.module_id != 0 ||
       target_ref.symbol_id >= remap->target_module->symbols.count) {
     return iree_make_status(

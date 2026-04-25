@@ -472,7 +472,8 @@ TEST_F(RemapTest, CrossModuleSymbolRefsRequirePolicy) {
                               &target_attr));
 
   loom_ir_remap_options_t options = {
-      .remap_symbol = RemapSymbolByName,
+      .remap_symbol =
+          loom_ir_remap_symbol_callback_make(RemapSymbolByName, NULL),
   };
   loom_ir_remap_t policy_remap = InitializeRemap(&options);
   IREE_ASSERT_OK(loom_ir_remap_attribute(
@@ -498,7 +499,8 @@ TEST_F(RemapTest, CrossModuleSymbolPolicyMustReturnTargetSymbol) {
                                   .symbol_id = source_symbol_id};
 
   loom_ir_remap_options_t options = {
-      .remap_symbol = RemapSymbolToMissingTarget,
+      .remap_symbol =
+          loom_ir_remap_symbol_callback_make(RemapSymbolToMissingTarget, NULL),
   };
   loom_ir_remap_t remap = InitializeRemap(&options);
   loom_attribute_t target_attr = {};

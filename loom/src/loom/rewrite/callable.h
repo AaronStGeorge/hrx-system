@@ -63,9 +63,7 @@ typedef struct loom_callable_import_options_t {
   // Optional policy for non-callee symbol references in the imported body.
   // The imported callee's own defining symbol is handled by the import helper.
   // If NULL, any other symbol reference in the source definition is rejected.
-  loom_ir_remap_symbol_fn_t external_symbol_remap;
-  // Opaque caller data passed to external_symbol_remap.
-  void* external_symbol_user_data;
+  loom_ir_remap_symbol_callback_t external_symbol_remap;
 } loom_callable_import_options_t;
 
 // Result handles produced by callable outlining.
