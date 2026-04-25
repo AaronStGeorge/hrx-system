@@ -66,6 +66,7 @@ from loom.dsl import (
     AttrDef,
     CallLikeInterface,
     CallLikeKind,
+    ContractFamily,
     EffectKind,
     EnumDef,
     FuncLikeInterface,
@@ -77,6 +78,7 @@ from loom.dsl import (
     RegionDef,
     TiedResult,
     TypeConstraint,
+    TypeSemantic,
 )
 from loom.fields import FieldKind, FieldLayout, compute_layout
 from loom.gen import bootstrap as _bootstrap
@@ -456,6 +458,34 @@ def _c_dialect_enum(dialect_name: str) -> str:
 def _guard_name(dialect_name: str) -> str:
     """Returns the header guard name."""
     return f"LOOM_OPS_{dialect_name.upper()}_OPS_H_"
+
+
+def _contract_family_mask(contracts: Sequence[ContractFamily]) -> str:
+    """Returns a stable C bitmask expression for contract families."""
+
+    unique_contracts = set(contracts)
+    if len(unique_contracts) != len(contracts):
+        duplicate_names = sorted(family.name for family in contracts if contracts.count(family) > 1)
+        raise ValueError(f"duplicate contract families in semantic metadata: {duplicate_names}")
+    ordered_contracts = [family for family in ContractFamily if family in unique_contracts]
+    if not ordered_contracts:
+        return "0"
+    return " | ".join(family.c_name for family in ordered_contracts)
+
+
+def _op_phase_c_name(op: Op) -> str:
+    """Returns the C phase enum for an op after applying its dialect default."""
+
+    phase = op.effective_phase
+    if phase is None:
+        return "LOOM_OP_PHASE_UNSPECIFIED"
+    return phase.c_name
+
+
+def _type_semantic_c_name(semantic: TypeSemantic) -> str:
+    """Returns the C enum for a type semantic role."""
+
+    return semantic.c_name
 
 
 _T = TypeVar("_T")
@@ -2888,6 +2918,15 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
     lines.append("    iree_host_size_t* out_count);")
     lines.append("")
 
+    lines.append(f"// Returns the dense semantic metadata array for the {dialect_name} dialect.")
+    lines.append(f"const loom_op_semantics_t* loom_{dialect_name}_dialect_op_semantics(")
+    lines.append("    iree_host_size_t* out_count);")
+    lines.append("")
+    lines.append(f"// Returns semantic metadata for a {dialect_name} op kind, or empty metadata.")
+    lines.append(f"loom_op_semantics_t loom_{dialect_name}_op_semantics(")
+    lines.append("    loom_op_kind_t kind);")
+    lines.append("")
+
     lines.append("#ifdef __cplusplus")
     lines.append("}")
     lines.append("#endif")
@@ -3355,6 +3394,33 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
     lines.append("}")
     lines.append("")
 
+    lines.append(f"static const loom_op_semantics_t loom_{dialect_name}_semantics_array[] = {{")
+    for op in ops:
+        lines.append("    {")
+        lines.append(f"        .phase = {_op_phase_c_name(op)},")
+        lines.append(f"        .contract_families = {_contract_family_mask(op.contracts)},")
+        lines.append("    },")
+    lines.append("};")
+    lines.append("")
+    lines.append(f"const loom_op_semantics_t* loom_{dialect_name}_dialect_op_semantics(")
+    lines.append("    iree_host_size_t* out_count) {")
+    lines.append(f"  *out_count = IREE_ARRAYSIZE(loom_{dialect_name}_semantics_array);")
+    lines.append(f"  return loom_{dialect_name}_semantics_array;")
+    lines.append("}")
+    lines.append("")
+    lines.append(f"loom_op_semantics_t loom_{dialect_name}_op_semantics(")
+    lines.append("    loom_op_kind_t kind) {")
+    lines.append(f"  if (loom_op_dialect_id(kind) != {_c_dialect_enum(dialect_name)}) {{")
+    lines.append("    return loom_op_semantics_empty();")
+    lines.append("  }")
+    lines.append("  uint8_t op_index = loom_op_dialect_index(kind);")
+    lines.append(f"  if (op_index >= IREE_ARRAYSIZE(loom_{dialect_name}_semantics_array)) {{")
+    lines.append("    return loom_op_semantics_empty();")
+    lines.append("  }")
+    lines.append(f"  return loom_{dialect_name}_semantics_array[op_index];")
+    lines.append("}")
+    lines.append("")
+
     return "\n".join(lines)
 
 
@@ -3746,9 +3812,14 @@ def generate_type_registry(
     header.append("// A 4-byte format element for type interiors. Same layout")
     header.append("// as loom_format_element_t for consistent handling.")
     header.append("typedef struct loom_type_format_element_t {")
-    header.append("  uint8_t kind;         // loom_type_format_kind_t.")
-    header.append("  uint8_t field_index;  // Which parameter this consumes.")
-    header.append("  uint16_t data;        // Kind-specific (keyword_id, skip_count).")
+    header.append("  // Format opcode, encoded as loom_type_format_kind_t.")
+    header.append("  uint8_t kind;")
+    header.append("")
+    header.append("  // Parameter index consumed by this element.")
+    header.append("  uint8_t field_index;")
+    header.append("")
+    header.append("  // Kind-specific payload such as a keyword ID or skip count.")
+    header.append("  uint16_t data;")
     header.append("} loom_type_format_element_t;")
     header.append("")
     header.append("// Descriptor for a registered type. Contains the name,")
@@ -3768,9 +3839,14 @@ def generate_type_registry(
     header.append("  // scalar facts or uses the domain-free extension behavior.")
     header.append("  const loom_value_fact_domain_t* fact_domain;")
     header.append("")
+    header.append("  // Semantic role and target-contract families for this type.")
+    header.append("  loom_type_semantics_t semantics;")
+    header.append("")
     header.append("  // Format element array for the type interior (inside <...>).")
     header.append("  // NULL for opaque types (no angle brackets).")
     header.append("  const loom_type_format_element_t* format_elements;")
+    header.append("")
+    header.append("  // Number of entries in |format_elements|.")
     header.append("  uint8_t format_element_count;")
     header.append("} loom_type_descriptor_t;")
     header.append("")
@@ -3858,6 +3934,10 @@ def generate_type_registry(
         source.append(f"    .ir_kind = {ir_kind},")
         source.append(f"    .param_count = {param_count},")
         source.append(f"    .fact_domain = {'&' + fact_domain if fact_domain else 'NULL'},")
+        source.append("    .semantics = {")
+        source.append(f"        .semantic = {_type_semantic_c_name(td.semantic)},")
+        source.append(f"        .contract_families = {_contract_family_mask(td.contracts)},")
+        source.append("    },")
         source.append(f"    .format_elements = {fmt_ref},")
         source.append(f"    .format_element_count = {fmt_count},")
         source.append("};")

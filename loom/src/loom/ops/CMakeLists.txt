@@ -209,8 +209,11 @@ loom_cc_test(
     ::op_registry
     ::type_registry
     iree::base::internal::arena
+    loom::src::loom::ops::buffer
     loom::src::loom::ops::func
     loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::vector
     loom::src::loom::util::fact_table
     iree::testing::gtest
     iree::testing::gtest_main

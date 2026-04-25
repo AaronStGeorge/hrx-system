@@ -7,10 +7,13 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/ops/buffer/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_registry.h"
 #include "loom/ops/type_registry.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/util/fact_table.h"
 
 namespace loom {
@@ -101,6 +104,51 @@ TEST(OpRegistry, RegistersProductionContextSurface) {
             nullptr);
 
   loom_context_deinitialize(&context);
+}
+
+//===----------------------------------------------------------------------===//
+// Semantic metadata
+//===----------------------------------------------------------------------===//
+
+TEST(OpSemantics, DialectTablesAreDenseAndQueryable) {
+  iree_host_size_t count = 0;
+  const loom_op_semantics_t* buffer_semantics =
+      loom_buffer_dialect_op_semantics(&count);
+  ASSERT_GT(count,
+            (iree_host_size_t)loom_op_dialect_index(LOOM_OP_BUFFER_ALLOCA));
+
+  loom_op_semantics_t alloca_semantics =
+      loom_buffer_op_semantics(LOOM_OP_BUFFER_ALLOCA);
+  EXPECT_EQ(alloca_semantics.phase, LOOM_OP_PHASE_EXECUTABLE);
+  EXPECT_EQ(alloca_semantics.contract_families, 0u);
+  EXPECT_EQ(
+      buffer_semantics[loom_op_dialect_index(LOOM_OP_BUFFER_ALLOCA)].phase,
+      LOOM_OP_PHASE_EXECUTABLE);
+
+  loom_op_semantics_t iota_semantics =
+      loom_vector_op_semantics(LOOM_OP_VECTOR_IOTA);
+  EXPECT_TRUE(loom_contract_family_set_has_any(
+      iota_semantics.contract_families, LOOM_CONTRACT_VECTOR_COORDINATE));
+
+  loom_op_semantics_t wrong_dialect =
+      loom_vector_op_semantics(LOOM_OP_KERNEL_BARRIER);
+  EXPECT_EQ(wrong_dialect.phase, LOOM_OP_PHASE_UNSPECIFIED);
+  EXPECT_EQ(wrong_dialect.contract_families, 0u);
+}
+
+TEST(TypeRegistry, DescriptorsCarrySemantics) {
+  const loom_type_descriptor_t* token =
+      loom_type_registry_lookup(iree_make_cstring_view("kernel.async.token"));
+  ASSERT_NE(token, nullptr);
+  EXPECT_EQ(token->semantics.semantic, LOOM_TYPE_SEMANTIC_CONTROL_TOKEN);
+  EXPECT_TRUE(loom_contract_family_set_has_any(
+      token->semantics.contract_families, LOOM_CONTRACT_KERNEL_ASYNC));
+
+  const loom_type_descriptor_t* tile =
+      loom_type_registry_lookup(iree_make_cstring_view("tile"));
+  ASSERT_NE(tile, nullptr);
+  EXPECT_EQ(tile->semantics.semantic, LOOM_TYPE_SEMANTIC_ORDINARY);
+  EXPECT_EQ(tile->semantics.contract_families, 0u);
 }
 
 //===----------------------------------------------------------------------===//

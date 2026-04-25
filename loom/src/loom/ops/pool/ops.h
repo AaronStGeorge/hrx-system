@@ -101,6 +101,14 @@ iree_status_t loom_pool_buffer_build(
 const loom_op_vtable_t* const* loom_pool_dialect_vtables(
     iree_host_size_t* out_count);
 
+// Returns the dense semantic metadata array for the pool dialect.
+const loom_op_semantics_t* loom_pool_dialect_op_semantics(
+    iree_host_size_t* out_count);
+
+// Returns semantic metadata for a pool op kind, or empty metadata.
+loom_op_semantics_t loom_pool_op_semantics(
+    loom_op_kind_t kind);
+
 #ifdef __cplusplus
 }
 #endif

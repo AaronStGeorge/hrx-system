@@ -182,8 +182,11 @@ loom_cc_test(
     deps = [
         ":op_registry",
         ":type_registry",
+        "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/ops/vector",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

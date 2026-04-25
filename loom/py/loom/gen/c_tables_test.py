@@ -32,6 +32,7 @@ from loom.dsl import (
     AttrMatchesElementType,
     BitRangeWithinElementWidth,
     CallLikeInterface,
+    ContractFamily,
     Dialect,
     ElementWidthAtLeastAttr,
     ElementWidthGreaterThan,
@@ -41,6 +42,7 @@ from loom.dsl import (
     MemoryAccessInterface,
     Op,
     Operand,
+    OpPhase,
     PackedPayloadBitCountMatchesStorage,
     PositiveBitWidthAttr,
     RegionDef,
@@ -50,6 +52,7 @@ from loom.dsl import (
     TotalBitCountEqual,
     TypeConstraint,
     TypeDef,
+    TypeSemantic,
     UnpackedPayloadBitCountMatchesStorage,
 )
 from loom.gen.c_tables import (
@@ -80,6 +83,20 @@ def test_generate_type_registry_emits_fact_domain_pointer() -> None:
     assert "loom_value_fact_type_domain_resolver_callback_make(\n          loom_type_registry_resolve_fact_domain, NULL)" in type_registry_c
 
 
+def test_generate_type_registry_emits_type_semantics() -> None:
+    type_def = TypeDef(
+        name="test.token",
+        semantic=TypeSemantic.CONTROL_TOKEN,
+        contracts=[ContractFamily.KERNEL_ASYNC],
+    )
+
+    type_registry_h, type_registry_c = generate_type_registry([type_def])
+
+    assert "loom_type_semantics_t semantics;" in type_registry_h
+    assert ".semantic = LOOM_TYPE_SEMANTIC_CONTROL_TOKEN," in type_registry_c
+    assert ".contract_families = LOOM_CONTRACT_KERNEL_ASYNC," in type_registry_c
+
+
 def test_generate_type_registry_rejects_invalid_fact_domain_symbol() -> None:
     type_def = TypeDef(
         name="test.handle",
@@ -91,6 +108,30 @@ def test_generate_type_registry_rejects_invalid_fact_domain_symbol() -> None:
         match=r"TypeDef 'test\.handle': fact_domain must be a C symbol name",
     ):
         generate_type_registry([type_def])
+
+
+def test_generate_dialect_tables_emit_dense_op_semantics() -> None:
+    dialect = Dialect(
+        "test",
+        dialect_id=0x01,
+        default_phase=OpPhase.EXECUTABLE,
+    )
+    op = Op(
+        "test.iota",
+        group=dialect,
+        contracts=[ContractFamily.VECTOR_COORDINATE],
+    )
+
+    ops_h = generate_ops_h("test", 0x01, [op])
+    tables_c = generate_tables_c("test", 0x01, [op])
+
+    assert "loom_test_dialect_op_semantics" in ops_h
+    assert "loom_op_semantics_t loom_test_op_semantics(" in ops_h
+    assert "static const loom_op_semantics_t loom_test_semantics_array[] = {" in tables_c
+    assert ".phase = LOOM_OP_PHASE_EXECUTABLE," in tables_c
+    assert ".contract_families = LOOM_CONTRACT_VECTOR_COORDINATE," in tables_c
+    assert "loom_op_dialect_id(kind) != LOOM_DIALECT_TEST" in tables_c
+    assert "return loom_test_semantics_array[op_index];" in tables_c
 
 
 def test_generate_tables_rejects_constraint_field_index_above_6_bit_max() -> None:

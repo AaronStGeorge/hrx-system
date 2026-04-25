@@ -1706,6 +1706,14 @@ iree_status_t loom_scalar_assume_verify(
 const loom_op_vtable_t* const* loom_scalar_dialect_vtables(
     iree_host_size_t* out_count);
 
+// Returns the dense semantic metadata array for the scalar dialect.
+const loom_op_semantics_t* loom_scalar_dialect_op_semantics(
+    iree_host_size_t* out_count);
+
+// Returns semantic metadata for a scalar op kind, or empty metadata.
+loom_op_semantics_t loom_scalar_op_semantics(
+    loom_op_kind_t kind);
+
 #ifdef __cplusplus
 }
 #endif

@@ -38,9 +38,14 @@ typedef enum loom_type_format_kind_e {
 // A 4-byte format element for type interiors. Same layout
 // as loom_format_element_t for consistent handling.
 typedef struct loom_type_format_element_t {
-  uint8_t kind;         // loom_type_format_kind_t.
-  uint8_t field_index;  // Which parameter this consumes.
-  uint16_t data;        // Kind-specific (keyword_id, skip_count).
+  // Format opcode, encoded as loom_type_format_kind_t.
+  uint8_t kind;
+
+  // Parameter index consumed by this element.
+  uint8_t field_index;
+
+  // Kind-specific payload such as a keyword ID or skip count.
+  uint16_t data;
 } loom_type_format_element_t;
 
 // Descriptor for a registered type. Contains the name,
@@ -60,9 +65,14 @@ typedef struct loom_type_descriptor_t {
   // scalar facts or uses the domain-free extension behavior.
   const loom_value_fact_domain_t* fact_domain;
 
+  // Semantic role and target-contract families for this type.
+  loom_type_semantics_t semantics;
+
   // Format element array for the type interior (inside <...>).
   // NULL for opaque types (no angle brackets).
   const loom_type_format_element_t* format_elements;
+
+  // Number of entries in |format_elements|.
   uint8_t format_element_count;
 } loom_type_descriptor_t;
 

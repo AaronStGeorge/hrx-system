@@ -165,6 +165,14 @@ iree_status_t loom_pass_yield_build(
 const loom_op_vtable_t* const* loom_pass_dialect_vtables(
     iree_host_size_t* out_count);
 
+// Returns the dense semantic metadata array for the pass dialect.
+const loom_op_semantics_t* loom_pass_dialect_op_semantics(
+    iree_host_size_t* out_count);
+
+// Returns semantic metadata for a pass op kind, or empty metadata.
+loom_op_semantics_t loom_pass_op_semantics(
+    loom_op_kind_t kind);
+
 #ifdef __cplusplus
 }
 #endif
