@@ -142,7 +142,7 @@ class LowPacketizationTest : public ::testing::Test {
 TEST_F(LowPacketizationTest, BuildsMatchingScheduleAndAllocationSidecars) {
   ParseAndVerify(
       "low.func.def target(@test_target) @packetized(%lhs: reg<test.i32>, "
-      "%rhs : reg<test.i32>) -> (reg<test.i32>) {\n"
+      "%rhs: reg<test.i32>) -> (reg<test.i32>) {\n"
       "  %c7 = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>\n"
       "  %sum = low.op<test.add.i32>(%lhs, %c7) : "
       "(reg<test.i32>, reg<test.i32>) -> reg<test.i32>\n"

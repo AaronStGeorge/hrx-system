@@ -192,7 +192,7 @@ TEST_F(LowVerifyTest, DescriptorKeysPassWithQualifiedSegments) {
   loom_verify_result_t result = VerifySource(
       "test.record @gfx1100 {}\n"
       "low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, "
-      "%rhs : reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
+      "%rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
       "  %sum = low.op<amdgpu.v_add_u32>(%lhs, %rhs) : "
       "(reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> "
       "reg<amdgpu.vgpr x1>\n"
@@ -207,7 +207,7 @@ TEST_F(LowVerifyTest, DescriptorIdMustMatchDescriptorKey) {
   static const char* kSource =
       "test.record @gfx1100 {}\n"
       "low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, "
-      "%rhs : reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
+      "%rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
       "  %sum = low.op<amdgpu.v_add_u32>(%lhs, %rhs) : "
       "(reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> "
       "reg<amdgpu.vgpr x1>\n"
@@ -335,7 +335,7 @@ TEST_F(LowVerifyTest, ImportedDeclContractsAreLocalToDecl) {
   loom_verify_result_t result = VerifySource(
       "test.record @vm_target {}\n"
       "low.func.decl import(vm, \"iree.vm.core.add_i32\") target(@vm_target) "
-      "@extern_add(%lhs : reg<vm.i32>) -> (reg<vm.i32>)\n",
+      "@extern_add(%lhs: reg<vm.i32>) -> (reg<vm.i32>)\n",
       &capture);
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_TRUE(capture.diagnostics.empty());
@@ -507,10 +507,10 @@ TEST_F(LowVerifyTest, FuncCallMatchesDirectLowFunctionSignature) {
   loom_verify_result_t result = VerifySource(
       "test.record @gfx1100 {}\n"
       "low.func.decl target(@gfx1100) @extern_add(%lhs: "
-      "reg<amdgpu.vgpr x1>, %rhs : reg<amdgpu.vgpr x1>) -> "
+      "reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> "
       "(reg<amdgpu.vgpr x1>)\n"
       "low.func.def target(@gfx1100) @caller(%lhs: reg<amdgpu.vgpr x1>, "
-      "%rhs : reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
+      "%rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
       "  %sum = low.func.call @extern_add(%lhs, %rhs) : "
       "(reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> "
       "(reg<amdgpu.vgpr x1>)\n"
@@ -625,7 +625,7 @@ TEST_F(LowVerifyTest, FuncCallRejectsOperandCountMismatch) {
   loom_verify_result_t result = VerifySource(
       "test.record @gfx1100 {}\n"
       "low.func.decl target(@gfx1100) @extern_add(%lhs: "
-      "reg<amdgpu.vgpr x1>, %rhs : reg<amdgpu.vgpr x1>) -> "
+      "reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> "
       "(reg<amdgpu.vgpr x1>)\n"
       "low.func.def target(@gfx1100) @caller(%lhs: reg<amdgpu.vgpr x1>) -> "
       "(reg<amdgpu.vgpr x1>) {\n"
@@ -652,10 +652,10 @@ TEST_F(LowVerifyTest, FuncCallRejectsOperandTypeMismatch) {
   loom_verify_result_t result = VerifySource(
       "test.record @gfx1100 {}\n"
       "low.func.decl target(@gfx1100) @extern_add(%lhs: "
-      "reg<amdgpu.vgpr x1>, %rhs : reg<amdgpu.sgpr x1>) -> "
+      "reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.sgpr x1>) -> "
       "(reg<amdgpu.vgpr x1>)\n"
       "low.func.def target(@gfx1100) @caller(%lhs: reg<amdgpu.vgpr x1>, "
-      "%rhs : reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
+      "%rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
       "  %sum = low.func.call @extern_add(%lhs, %rhs) : "
       "(reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> "
       "(reg<amdgpu.vgpr x1>)\n"

@@ -1068,7 +1068,7 @@ std::string FeatureEnumImmediateSource(const char* mode_value) {
   return FeatureTargetRecords("5") +
          std::string(
              "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
-             "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
+             "%rhs: reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
              "  %sum = low.op<test.add.i32>(%lhs, %rhs) {mode = ") +
          mode_value +
          "} : (reg<test.gpr x1>, reg<test.gpr x1>) -> reg<test.gpr x1>\n"
@@ -1116,7 +1116,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {
   std::string source =
       FeatureTargetRecords("1") +
       "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
-      "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
+      "%rhs: reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
       "  low.return %sum : reg<test.gpr x1>\n"
@@ -1155,7 +1155,7 @@ TEST_F(LowDescriptorVerifyTest, FeatureMaskTableRowKeepsLogicalFeatureWord) {
   std::string source =
       FeatureTargetRecords("1") +
       "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
-      "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
+      "%rhs: reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
       "  low.return %sum : reg<test.gpr x1>\n"
@@ -1287,7 +1287,7 @@ TEST_F(LowDescriptorVerifyTest, IgnoresImplicitDescriptorOperandRows) {
   std::string source =
       FeatureTargetRecords("5") +
       "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
-      "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
+      "%rhs: reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
       "  low.return %sum : reg<test.gpr x1>\n"
@@ -1316,7 +1316,7 @@ TEST_F(LowDescriptorVerifyTest, AcceptsMatchingTiedConstraintTypes) {
   std::string source =
       FeatureTargetRecords("5") +
       "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
-      "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
+      "%rhs: reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
       "  low.return %sum : reg<test.gpr x1>\n"
@@ -1345,7 +1345,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsTiedConstraintTypeMismatch) {
   std::string source =
       FeatureTargetRecords("5") +
       "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
-      "%rhs : reg<test.gpr x1>) -> (reg<test.alt x1>) {\n"
+      "%rhs: reg<test.gpr x1>) -> (reg<test.alt x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.alt x1>\n"
       "  low.return %sum : reg<test.alt x1>\n"
@@ -1394,7 +1394,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsDestructiveConstraintTypeMismatch) {
   std::string source =
       FeatureTargetRecords("5") +
       "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
-      "%rhs : reg<test.gpr x1>) -> (reg<test.alt x1>) {\n"
+      "%rhs: reg<test.gpr x1>) -> (reg<test.alt x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.gpr x1>) -> reg<test.alt x1>\n"
       "  low.return %sum : reg<test.alt x1>\n"
@@ -1427,7 +1427,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsCommutableConstraintTypeMismatch) {
   std::string source =
       FeatureTargetRecords("5") +
       "low.func.def target(@test_target) @add(%lhs: reg<test.gpr x1>, "
-      "%rhs : reg<test.alt x1>) -> (reg<test.gpr x1>) {\n"
+      "%rhs: reg<test.alt x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
       "reg<test.alt x1>) -> reg<test.gpr x1>\n"
       "  low.return %sum : reg<test.gpr x1>\n"

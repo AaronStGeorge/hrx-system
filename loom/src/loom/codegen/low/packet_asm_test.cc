@@ -217,7 +217,7 @@ TEST_F(LowPacketAsmTest, FormatsScheduledPacketsWithCanonicalAsmForms) {
 TEST_F(LowPacketAsmTest, FormatsStructuralBranches) {
   ParseAndVerify(
       "low.func.def target(@test_target) @packet_asm(%lhs: reg<test.i32>, "
-      "%rhs : reg<test.i32>) -> (reg<test.i32>) {\n"
+      "%rhs: reg<test.i32>) -> (reg<test.i32>) {\n"
       "  %cmp = low.op<test.cmp.eq.i32>(%lhs, %rhs) : "
       "(reg<test.i32>, reg<test.i32>) -> reg<test.i32>\n"
       "  low.cond_br %cmp, ^then, ^else : reg<test.i32>\n"
@@ -268,7 +268,7 @@ TEST_F(LowPacketAsmTest, FormatsStructuralBranches) {
 TEST_F(LowPacketAsmTest, FormatsStructuralConcat) {
   ParseAndVerify(
       "low.func.def target(@test_target) @packet_asm(%lo: reg<test.i32>, "
-      "%hi : reg<test.i32>) -> (reg<test.i32 x2>) {\n"
+      "%hi: reg<test.i32>) -> (reg<test.i32 x2>) {\n"
       "  %pair = low.concat(%lo, %hi) : (reg<test.i32>, reg<test.i32>) -> "
       "reg<test.i32 x2>\n"
       "  low.return %pair : reg<test.i32 x2>\n"
