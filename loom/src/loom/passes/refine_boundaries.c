@@ -1345,16 +1345,29 @@ static iree_status_t loom_refine_boundaries_function_cache_get(
   return iree_ok_status();
 }
 
-typedef iree_status_t (*loom_refine_boundaries_value_visitor_t)(
+typedef iree_status_t (*loom_refine_boundaries_value_fn_t)(
     void* user_data, loom_value_id_t value_id);
 
-typedef struct loom_refine_boundaries_seed_value_walk_t {
-  // Callback invoked for each value whose boundary seed can affect function
-  // processing.
-  loom_refine_boundaries_value_visitor_t visitor;
+typedef struct loom_refine_boundaries_value_callback_t {
+  // Function invoked for each value visited by a function-boundary walk.
+  loom_refine_boundaries_value_fn_t fn;
 
-  // Opaque callback state.
-  void* visitor_user_data;
+  // Opaque callback payload passed to |fn|.
+  void* user_data;
+} loom_refine_boundaries_value_callback_t;
+
+static inline loom_refine_boundaries_value_callback_t
+loom_refine_boundaries_value_callback_make(loom_refine_boundaries_value_fn_t fn,
+                                           void* user_data) {
+  return (loom_refine_boundaries_value_callback_t){
+      .fn = fn,
+      .user_data = user_data,
+  };
+}
+
+typedef struct loom_refine_boundaries_seed_value_walk_t {
+  // Callback invoked for each value whose boundary seed can affect function.
+  loom_refine_boundaries_value_callback_t visitor;
 } loom_refine_boundaries_seed_value_walk_t;
 
 static iree_status_t loom_refine_boundaries_visit_seed_op_results(
@@ -1366,7 +1379,7 @@ static iree_status_t loom_refine_boundaries_visit_seed_op_results(
       (loom_refine_boundaries_seed_value_walk_t*)user_data;
   const loom_value_id_t* results = loom_op_const_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
-    IREE_RETURN_IF_ERROR(walk->visitor(walk->visitor_user_data, results[i]));
+    IREE_RETURN_IF_ERROR(walk->visitor.fn(walk->visitor.user_data, results[i]));
   }
   return iree_ok_status();
 }
@@ -1374,21 +1387,20 @@ static iree_status_t loom_refine_boundaries_visit_seed_op_results(
 static iree_status_t loom_refine_boundaries_visit_function_seed_values(
     loom_module_t* module,
     const loom_refine_boundaries_function_t* function_info,
-    loom_refine_boundaries_value_visitor_t visitor, void* visitor_user_data,
+    loom_refine_boundaries_value_callback_t visitor,
     iree_arena_allocator_t* walk_arena) {
   for (uint16_t i = 0; i < function_info->argument_count; ++i) {
     IREE_RETURN_IF_ERROR(
-        visitor(visitor_user_data, function_info->argument_ids[i]));
+        visitor.fn(visitor.user_data, function_info->argument_ids[i]));
   }
   const loom_value_id_t* function_results =
       loom_op_const_results(function_info->function.op);
   for (uint16_t i = 0; i < function_info->result_count; ++i) {
-    IREE_RETURN_IF_ERROR(visitor(visitor_user_data, function_results[i]));
+    IREE_RETURN_IF_ERROR(visitor.fn(visitor.user_data, function_results[i]));
   }
 
   loom_refine_boundaries_seed_value_walk_t walk = {
       .visitor = visitor,
-      .visitor_user_data = visitor_user_data,
   };
   loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
   iree_arena_reset(walk_arena);
@@ -1401,10 +1413,7 @@ static iree_status_t loom_refine_boundaries_visit_function_seed_values(
 
 typedef struct loom_refine_boundaries_local_value_walk_t {
   // Callback invoked for each value described by the function-local fact cache.
-  loom_refine_boundaries_value_visitor_t visitor;
-
-  // Opaque callback state.
-  void* visitor_user_data;
+  loom_refine_boundaries_value_callback_t visitor;
 
   // Last block whose arguments were visited.
   const loom_block_t* last_arg_block;
@@ -1418,14 +1427,14 @@ static iree_status_t loom_refine_boundaries_visit_local_op_values(
       (loom_refine_boundaries_local_value_walk_t*)user_data;
   if (context->block && context->block != walk->last_arg_block) {
     for (uint16_t i = 0; i < context->block->arg_count; ++i) {
-      IREE_RETURN_IF_ERROR(walk->visitor(walk->visitor_user_data,
-                                         loom_block_arg_id(context->block, i)));
+      IREE_RETURN_IF_ERROR(walk->visitor.fn(
+          walk->visitor.user_data, loom_block_arg_id(context->block, i)));
     }
     walk->last_arg_block = context->block;
   }
   const loom_value_id_t* results = loom_op_const_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
-    IREE_RETURN_IF_ERROR(walk->visitor(walk->visitor_user_data, results[i]));
+    IREE_RETURN_IF_ERROR(walk->visitor.fn(walk->visitor.user_data, results[i]));
   }
   return iree_ok_status();
 }
@@ -1433,17 +1442,16 @@ static iree_status_t loom_refine_boundaries_visit_local_op_values(
 static iree_status_t loom_refine_boundaries_visit_function_local_values(
     loom_module_t* module,
     const loom_refine_boundaries_function_t* function_info,
-    loom_refine_boundaries_value_visitor_t visitor, void* visitor_user_data,
+    loom_refine_boundaries_value_callback_t visitor,
     iree_arena_allocator_t* walk_arena) {
   const loom_value_id_t* function_results =
       loom_op_const_results(function_info->function.op);
   for (uint16_t i = 0; i < function_info->result_count; ++i) {
-    IREE_RETURN_IF_ERROR(visitor(visitor_user_data, function_results[i]));
+    IREE_RETURN_IF_ERROR(visitor.fn(visitor.user_data, function_results[i]));
   }
 
   loom_refine_boundaries_local_value_walk_t walk = {
       .visitor = visitor,
-      .visitor_user_data = visitor_user_data,
       .last_arg_block = NULL,
   };
   loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
@@ -1527,8 +1535,10 @@ static iree_status_t loom_refine_boundaries_function_cache_matches(
       .matches = true,
   };
   IREE_RETURN_IF_ERROR(loom_refine_boundaries_visit_function_seed_values(
-      module, function_info, loom_refine_boundaries_compare_seed_value,
-      &compare, walk_arena));
+      module, function_info,
+      loom_refine_boundaries_value_callback_make(
+          loom_refine_boundaries_compare_seed_value, &compare),
+      walk_arena));
   *out_matches = compare.matches;
   return iree_ok_status();
 }
@@ -1623,8 +1633,10 @@ static iree_status_t loom_refine_boundaries_function_cache_update(
       .target_facts = &cache->local_facts,
   };
   IREE_RETURN_IF_ERROR(loom_refine_boundaries_visit_function_local_values(
-      module, function_info, loom_refine_boundaries_clone_local_fact,
-      &local_clone, walk_arena));
+      module, function_info,
+      loom_refine_boundaries_value_callback_make(
+          loom_refine_boundaries_clone_local_fact, &local_clone),
+      walk_arena));
 
   loom_refine_boundaries_seed_capture_t capture = {
       .seed_facts = seed_facts,
@@ -1633,8 +1645,10 @@ static iree_status_t loom_refine_boundaries_function_cache_update(
       .cached_seed_replacements = &cache->seed_replacements,
   };
   IREE_RETURN_IF_ERROR(loom_refine_boundaries_visit_function_seed_values(
-      module, function_info, loom_refine_boundaries_capture_seed_value,
-      &capture, walk_arena));
+      module, function_info,
+      loom_refine_boundaries_value_callback_make(
+          loom_refine_boundaries_capture_seed_value, &capture),
+      walk_arena));
   cache->has_facts = true;
   return iree_ok_status();
 }
