@@ -59,10 +59,17 @@ iree_status_t loom_print_space_if_needed(loom_print_context_t* ctx);
 // Updates token spacing state after direct output.
 void loom_print_did_write(loom_print_context_t* ctx);
 
+// Glues the next token to the previously printed token.
+void loom_print_set_glue(loom_print_context_t* ctx);
+
 // Reports a semantic field byte range to the optional field callback.
 void loom_print_report_field(loom_print_context_t* ctx,
                              loom_print_field_ref_t field_ref,
                              iree_host_size_t start, iree_host_size_t end);
+
+// Returns the byte offset where a token would start after spacing is applied.
+iree_host_size_t loom_print_next_token_start_offset(
+    const loom_print_context_t* ctx, bool glue, char first_char);
 
 // Writes indentation for the current logical line.
 iree_status_t loom_print_indent(loom_print_context_t* ctx);
@@ -86,6 +93,11 @@ iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
 bool loom_print_block_has_label(const loom_print_context_t* ctx,
                                 const loom_block_t* block);
 
+// Prints a successor reference and reports its emitted field range.
+iree_status_t loom_print_successor_ref(loom_print_context_t* ctx,
+                                       const loom_op_t* op,
+                                       uint8_t successor_index);
+
 // Prints a canonical attribute payload.
 iree_status_t loom_print_attr(loom_output_stream_t* stream,
                               const loom_attribute_t* attr,
@@ -105,6 +117,16 @@ iree_status_t loom_print_result_value_type(loom_print_context_t* ctx,
 iree_status_t loom_print_value_name_with_field(
     loom_print_context_t* ctx, loom_value_id_t value_id,
     loom_print_field_ref_t field_ref);
+
+// Prints the body of |region| using canonical block/op traversal.
+iree_status_t loom_print_region_body(
+    loom_print_context_t* ctx, const loom_region_t* region,
+    const loom_region_descriptor_t* region_descriptor);
+
+// Prints |op| using its generated assembly-format element stream.
+iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
+                                         const loom_op_t* op,
+                                         const loom_op_vtable_t* vtable);
 
 // Prints a source location annotation.
 iree_status_t loom_print_location(loom_output_stream_t* stream,
