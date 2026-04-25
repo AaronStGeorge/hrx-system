@@ -251,11 +251,7 @@ static iree_status_t loom_low_lower_rule_mapped_value(
     loom_low_lower_rule_mapped_value_t* out_mapped_value) {
   IREE_ASSERT_ARGUMENT(out_mapped_value);
   *out_mapped_value = loom_low_lower_rule_mapped_value_none();
-  if (match_context->map_value.fn == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "target-low lowering rule match context needs a value mapper");
-  }
+  IREE_ASSERT_ARGUMENT(match_context->map_value.fn);
   loom_value_id_t source_value_id =
       loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
   return match_context->map_value.fn(match_context->map_value.user_data,

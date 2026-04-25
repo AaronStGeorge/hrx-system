@@ -403,9 +403,11 @@ loom_cc_library(
     lower
   HDRS
     "lower.h"
+    "lower_internal.h"
     "lower_rules.h"
   SRCS
     "lower.c"
+    "lower_context.c"
     "lower_policy.c"
     "lower_rules.c"
   DEPS

@@ -410,11 +410,13 @@ loom_cc_library(
     name = "lower",
     srcs = [
         "lower.c",
+        "lower_context.c",
         "lower_policy.c",
         "lower_rules.c",
     ],
     hdrs = [
         "lower.h",
+        "lower_internal.h",
         "lower_rules.h",
     ],
     deps = [
