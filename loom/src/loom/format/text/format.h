@@ -400,6 +400,8 @@
 //
 //   Ref(field)            Single SSA value reference: %name.
 //   Refs(field)           Variadic SSA values: %a, %b, %c.
+//   TypedRefs(field)      Variadic typed SSA values:
+//                           %a: type, %b: type.
 //   Attr(field)           Attribute value: 42, 3.14, slt, "hello".
 //   SymbolRef(field)      Symbol reference: @name.
 //   TypeOf(field)         Type of a single field: f32, tile<4xf32>.

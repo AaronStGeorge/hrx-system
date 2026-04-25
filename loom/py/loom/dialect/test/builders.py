@@ -921,3 +921,15 @@ class TestBuilders:
         _operands.append(source)
         _operands.append(target)
         self._b.build("test.clause_copy", _operands, attributes=_attributes, regions=_regions)
+
+    def typed_use(self, *, values: list[ValueRef]) -> None:
+        """Side-effecting sink with adjacent SSA type annotations in its format.
+
+        Example::
+            test.typed_use %a: i32
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.extend(values)
+        self._b.build("test.typed_use", _operands, attributes=_attributes, regions=_regions)

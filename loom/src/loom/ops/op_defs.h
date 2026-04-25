@@ -125,9 +125,9 @@ static inline loom_named_value_slice_t loom_make_named_value_slice(
 //===----------------------------------------------------------------------===//
 
 // Instructions for the format-element-walking printer and parser. The generic
-// printer has one switch statement with ~17 cases. Each op's format element
-// array is the instruction stream for that switch. Adding ops adds .rodata
-// format arrays, not .text code.
+// printer has one switch statement over format element kinds. Each op's format
+// element array is the instruction stream for that switch. Adding ops adds
+// .rodata format arrays, not .text code.
 enum loom_format_kind_e {
   // Single operand reference: %name.
   LOOM_FORMAT_KIND_OPERAND_REF = 0,
@@ -231,6 +231,10 @@ enum loom_format_kind_e {
   // field_index references the diagnostic string attribute and data references
   // the derived i64 stable-ID attribute.
   LOOM_FORMAT_KIND_DESCRIPTOR_REF = 27,
+
+  // Variadic operand references with adjacent type annotations:
+  // %a: type, %b: type.
+  LOOM_FORMAT_KIND_OPERAND_TYPED_REFS = 28,
 };
 typedef uint8_t loom_format_kind_t;
 

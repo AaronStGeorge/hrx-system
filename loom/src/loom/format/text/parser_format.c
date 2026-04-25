@@ -1026,6 +1026,20 @@ static iree_status_t loom_parse_format_emit_operand_dict_type_mismatch(
                           params, IREE_ARRAYSIZE(params), value_token);
 }
 
+static iree_status_t loom_parse_format_emit_operand_ref_type_mismatch(
+    loom_parser_t* parser, loom_token_t value_token, loom_type_t actual_type,
+    loom_type_t annotated_type) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(value_token.text),
+      loom_param_type(actual_type),
+      loom_param_string(IREE_SV("type annotation")),
+      loom_param_type(annotated_type),
+  };
+  return loom_parser_emit(parser,
+                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1),
+                          params, IREE_ARRAYSIZE(params), value_token);
+}
+
 static void loom_parsed_attr_table_keys_initialize(
     loom_parsed_attr_table_keys_t* keys) {
   keys->keys = keys->inline_keys;
@@ -1528,6 +1542,50 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
           loom_token_t token = loom_tokenizer_next(&parser->tokenizer);
           loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
           LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
+          uint16_t operand_index = parsed->operand_count;
+          IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
+              parsed, &parser->parser_arena, value_id));
+          IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+              parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
+              operand_index, token, token.line, token.end_column));
+          first = false;
+        }
+        break;
+      }
+
+      case LOOM_FORMAT_KIND_OPERAND_TYPED_REFS: {
+        // Variadic typed operands: %a: type, %b: type. Parse until the next
+        // token is no longer an SSA value.
+        bool first = true;
+        while (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_SSA_VALUE) ||
+               (!first &&
+                loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_COMMA))) {
+          if (!first) {
+            loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA);
+          }
+          if (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_SSA_VALUE)) {
+            break;
+          }
+          loom_token_t token = loom_tokenizer_next(&parser->tokenizer);
+          loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+          LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
+          LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
+
+          uint32_t type_errors_before = parser->error_count;
+          loom_type_t annotated_type = {0};
+          IREE_RETURN_IF_ERROR(
+              loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &annotated_type));
+          if (parser->error_count > type_errors_before) {
+            return iree_ok_status();
+          }
+          loom_type_t actual_type =
+              loom_module_value_type(parser->module, value_id);
+          if (!loom_type_equal(actual_type, annotated_type)) {
+            IREE_RETURN_IF_ERROR(
+                loom_parse_format_emit_operand_ref_type_mismatch(
+                    parser, token, actual_type, annotated_type));
+            return iree_ok_status();
+          }
           uint16_t operand_index = parsed->operand_count;
           IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
               parsed, &parser->parser_arena, value_id));

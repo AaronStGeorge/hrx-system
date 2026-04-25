@@ -21,9 +21,8 @@ from loom.assembly import (
     BlockRef,
     OptionalGroup,
     Ref,
-    Refs,
+    TypedRefs,
     TypeOf,
-    TypesOf,
 )
 from loom.dsl import (
     ANY,
@@ -60,13 +59,13 @@ cfg_br = Op(
     format=[
         BlockRef("dest"),
         OptionalGroup(
-            [GLUE, LPAREN, Refs("args"), COLON, TypesOf("args"), RPAREN],
+            [GLUE, LPAREN, TypedRefs("args"), RPAREN],
             anchor="args",
         ),
     ],
     examples=[
         "cfg.br ^done",
-        "cfg.br ^join(%value : i32)",
+        "cfg.br ^join(%value: i32)",
     ],
 )
 

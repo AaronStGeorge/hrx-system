@@ -164,9 +164,9 @@ TEST_F(LivenessTest, CfgLiveInOutUsesSuccessorEdgesAndBranchOperands) {
 func.def @cfg_select(%cond: i1, %a: i32, %b: i32) -> (i32) {
   cfg.cond_br %cond, ^then, ^else : i1
 ^then:
-  cfg.br ^join(%a : i32)
+  cfg.br ^join(%a: i32)
 ^else:
-  cfg.br ^join(%b : i32)
+  cfg.br ^join(%b: i32)
 ^join(%result: i32):
   func.return %result : i32
 }
@@ -201,12 +201,12 @@ func.def @cfg_select(%cond: i1, %a: i32, %b: i32) -> (i32) {
 TEST_F(LivenessTest, CfgLoopPropagatesFixedPointLiveness) {
   ModulePtr module = ParseModule(R"(
 func.def @cfg_loop(%cond: i1, %x: i32) -> (i32) {
-  cfg.br ^loop(%x : i32)
+  cfg.br ^loop(%x: i32)
 ^loop(%iter: i32):
   cfg.cond_br %cond, ^body, ^exit : i1
 ^body:
   %next = scalar.addi %iter, %x : i32
-  cfg.br ^loop(%next : i32)
+  cfg.br ^loop(%next: i32)
 ^exit:
   func.return %iter : i32
 }

@@ -49,6 +49,7 @@ from loom.assembly import (
     Scope,
     SymbolRef,
     TemplateParam,
+    TypedRefs,
     TypeOf,
     TypesOf,
 )
@@ -1738,6 +1739,40 @@ class Parser:
                                     tok._filename,
                                 ) from None
                             value_ids.append(value_id)
+                    if value_ids:
+                        parsed.operand_ids.extend(value_ids)
+                        self._record_operand_ids(parsed, op_decl, name, value_ids)
+
+                case TypedRefs(field=name):
+                    value_ids = []
+                    while tok.at(TokenKind.SSA_VALUE):
+                        ssa_tok = tok.next()
+                        try:
+                            value_id = self._scope.lookup(ssa_tok.text)
+                        except KeyError:
+                            raise ParseError(
+                                f"undefined SSA value '%{ssa_tok.text}'",
+                                ssa_tok.location,
+                                tok._filename,
+                            ) from None
+                        tok.expect(TokenKind.COLON)
+                        annotated_type, _bindings = parse_type_from_tokens(
+                            tok,
+                            self._scope,
+                            self._module,
+                            self._type_registry,
+                            TypeParseMode.BODY,
+                        )
+                        actual_type = self._module.values[value_id].type
+                        if actual_type != annotated_type:
+                            raise ParseError(
+                                "operand type annotation does not match value type",
+                                ssa_tok.location,
+                                tok._filename,
+                            )
+                        value_ids.append(value_id)
+                        if not tok.try_consume(TokenKind.COMMA):
+                            break
                     if value_ids:
                         parsed.operand_ids.extend(value_ids)
                         self._record_operand_ids(parsed, op_decl, name, value_ids)

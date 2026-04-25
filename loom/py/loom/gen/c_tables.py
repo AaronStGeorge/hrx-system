@@ -54,6 +54,7 @@ from loom.assembly import (
     Scope,
     SymbolRef,
     TemplateParam,
+    TypedRefs,
     TypeOf,
     TypesOf,
 )
@@ -997,6 +998,12 @@ def _translate_format_elements(
                         raise ValueError(f"Op '{op.name}': Refs('{name}') references {kind.name}, expected OPERAND")
                     elements.append(("LOOM_FORMAT_KIND_OPERAND_REFS", index, "0"))
 
+                case TypedRefs(field=name):
+                    kind, index = _resolve_field(name)
+                    if kind != FieldKind.OPERAND:
+                        raise ValueError(f"Op '{op.name}': TypedRefs('{name}') references {kind.name}, expected OPERAND")
+                    elements.append(("LOOM_FORMAT_KIND_OPERAND_TYPED_REFS", index, "0"))
+
                 case BlockRef(field=name):
                     kind, index = _resolve_field(name)
                     if kind != FieldKind.SUCCESSOR:
@@ -1584,7 +1591,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             }
                         )
 
-                case Refs(field=name):
+                case Refs(field=name) | TypedRefs(field=name):
                     params.append(
                         {
                             "name": name,

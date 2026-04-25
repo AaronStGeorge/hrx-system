@@ -47,6 +47,7 @@ from loom.assembly import (
     ResultTypeList,
     Scope,
     SymbolRef,
+    TypedRefs,
     TypeOf,
     TypesOf,
     kw,
@@ -262,6 +263,19 @@ test_use = Op(
     examples=[
         "test.use %a : i32",
         "test.use %a, %b : i32, f32",
+    ],
+)
+
+test_typed_use = Op(
+    "test.typed_use",
+    group=test_ops,
+    doc="Side-effecting sink with adjacent SSA type annotations in its format.",
+    operands=[Operand("values", ANY, variadic=True)],
+    traits=[UNKNOWN_EFFECTS],
+    format=[TypedRefs("values")],
+    examples=[
+        "test.typed_use %a: i32",
+        "test.typed_use %a: i32, %b: f32",
     ],
 )
 
@@ -1698,4 +1712,5 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_low_asm_region,
     test_clause_constant,
     test_clause_copy,
+    test_typed_use,
 )

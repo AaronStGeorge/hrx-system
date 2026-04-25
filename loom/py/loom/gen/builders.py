@@ -49,6 +49,7 @@ from loom.assembly import (
     Scope,
     SymbolRef,
     TemplateParam,
+    TypedRefs,
     TypeOf,
     TypesOf,
 )
@@ -133,7 +134,7 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                             }
                         )
 
-                case Refs(field=name):
+                case Refs(field=name) | TypedRefs(field=name):
                     params.append(
                         {
                             "name": name,

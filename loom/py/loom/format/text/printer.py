@@ -59,6 +59,7 @@ from loom.assembly import (
     Scope,
     SymbolRef,
     TemplateParam,
+    TypedRefs,
     TypeOf,
     TypesOf,
 )
@@ -1241,6 +1242,18 @@ class Printer:
                     if vids:
                         names = [self._value_name(vid) for vid in vids]
                         stream.emit(", ".join(names))
+
+                case TypedRefs(field=name):
+                    vids = fields.value_ids(name)
+                    if vids:
+                        entries = [
+                            (
+                                f"{self._value_name(vid)}: "
+                                f"{self._print_value_type(vid, module)}"
+                            )
+                            for vid in vids
+                        ]
+                        stream.emit(", ".join(entries))
 
                 case Attr(field=name):
                     covered_attrs.add(name)

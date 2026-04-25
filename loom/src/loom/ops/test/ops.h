@@ -83,7 +83,8 @@ enum {
   LOOM_OP_TEST_LOW_ASM_REGION = LOOM_OP_KIND(LOOM_DIALECT_TEST, 62),
   LOOM_OP_TEST_CLAUSE_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 63),
   LOOM_OP_TEST_CLAUSE_COPY = LOOM_OP_KIND(LOOM_DIALECT_TEST, 64),
-  LOOM_OP_TEST_COUNT_ = 65,
+  LOOM_OP_TEST_TYPED_USE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 65),
+  LOOM_OP_TEST_COUNT_ = 66,
 };
 
 // Function visibility. Absent (0) means private.
@@ -1184,6 +1185,17 @@ iree_status_t loom_test_clause_copy_build(
     loom_builder_t* builder,
     loom_value_id_t source,
     loom_value_id_t target,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_TYPED_USE: Side-effecting sink with adjacent SSA type annotations in its format.
+// test.typed_use %a: i32
+LOOM_DEFINE_ISA(loom_test_typed_use_isa, LOOM_OP_TEST_TYPED_USE)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_test_typed_use_values, 0)
+iree_status_t loom_test_typed_use_build(
+    loom_builder_t* builder,
+    const loom_value_id_t* values,
+    iree_host_size_t values_count,
     loom_location_id_t location,
     loom_op_t** out_op);
 

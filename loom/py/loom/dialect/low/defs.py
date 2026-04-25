@@ -41,6 +41,7 @@ from loom.assembly import (
     Scope,
     SymbolRef,
     TemplateParam,
+    TypedRefs,
     TypeOf,
     TypesOf,
     kw,
@@ -488,13 +489,13 @@ low_br = Op(
     format=[
         BlockRef("dest"),
         OptionalGroup(
-            [GLUE, LPAREN, Refs("args"), COLON, TypesOf("args"), RPAREN],
+            [GLUE, LPAREN, TypedRefs("args"), RPAREN],
             anchor="args",
         ),
     ],
     examples=[
         "low.br ^done",
-        "low.br ^join(%value : reg<vm.i32>)",
+        "low.br ^join(%value: reg<vm.i32>)",
     ],
 )
 

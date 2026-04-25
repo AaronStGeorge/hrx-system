@@ -2329,6 +2329,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
         ShapeOf,
         SymbolRef,
         TemplateParam,
+        TypedRefs,
         TypeOf,
         TypesOf,
     )
@@ -2336,7 +2337,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
     fields: set[str] = set()
     for elem in elements:
         match elem:
-            case Ref(field=f) | Refs(field=f) | BlockRef(field=f):
+            case Ref(field=f) | Refs(field=f) | TypedRefs(field=f) | BlockRef(field=f):
                 fields.add(f)
             case (
                 Attr(field=f)

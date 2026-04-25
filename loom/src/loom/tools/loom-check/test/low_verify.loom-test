@@ -138,7 +138,7 @@ low.func.def target(@test_target) @branch(%arg: reg<test.i32>) -> (reg<test.i32>
 target.profile @test_target preset("test-low")
 low.func.def target(@test_target) @branch(%arg: reg<test.i32>) {
   // ERROR@+1: STRUCTURE/026 "low.br" "successor 0" "expected reg<test.i64>"
-  low.br ^exit(%arg : reg<test.i32>)
+  low.br ^exit(%arg: reg<test.i32>)
 ^exit(%value: reg<test.i64>):
   low.return
 }

@@ -23,10 +23,10 @@ low.func.def target(@test_target) @branch_packet(%lhs: reg<test.i32>, %rhs: reg<
   low.cond_br %cond, ^then, ^else : reg<test.i32>
 ^then:
   %call = low.op<test.call.i32>(%lhs) {callee_ordinal = 0} : (reg<test.i32>) -> reg<test.i32>
-  low.br ^join(%call : reg<test.i32>)
+  low.br ^join(%call: reg<test.i32>)
 ^else:
   %delta = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
-  low.br ^join(%delta : reg<test.i32>)
+  low.br ^join(%delta: reg<test.i32>)
 ^join(%result: reg<test.i32>):
   %one = low.const<test.const.i32> {i32_value = 1} : reg<test.i32>
   %sum = low.op<test.add.i32>(%result, %one) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>

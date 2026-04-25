@@ -3093,6 +3093,23 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         }
         break;
       }
+      case LOOM_FORMAT_KIND_OPERAND_TYPED_REFS: {
+        const loom_value_id_t* operands = loom_op_const_operands(op);
+        uint16_t start = vtable->fixed_operand_count;
+        for (uint16_t j = start; j < op->operand_count; ++j) {
+          if (j > start) {
+            IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
+          }
+          IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
+              ctx, operands[j],
+              loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, j)));
+          IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ":", true));
+          IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+          IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, operands[j]));
+          loom_print_did_write(ctx);
+        }
+        break;
+      }
       case LOOM_FORMAT_KIND_SUCCESSOR_REF: {
         IREE_RETURN_IF_ERROR(
             loom_print_successor_ref(ctx, op, element->field_index));

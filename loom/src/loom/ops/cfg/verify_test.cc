@@ -94,7 +94,7 @@ TEST_F(CfgVerifyTest, BranchCanTerminateFunctionEntryBlock) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
       "func.def @forward(%arg: i32) -> (i32) {\n"
-      "  cfg.br ^exit(%arg : i32)\n"
+      "  cfg.br ^exit(%arg: i32)\n"
       "^exit(%value: i32):\n"
       "  func.return %value : i32\n"
       "}\n",
@@ -130,7 +130,7 @@ TEST_F(CfgVerifyTest, BranchArgumentTypesMustMatchDestinationBlock) {
   DiagnosticCapture capture;
   VerifySource(
       "func.def @type_mismatch(%arg: f32) {\n"
-      "  cfg.br ^exit(%arg : f32)\n"
+      "  cfg.br ^exit(%arg: f32)\n"
       "^exit(%value: i32):\n"
       "  func.return\n"
       "}\n",
@@ -153,11 +153,11 @@ TEST_F(CfgVerifyTest, BranchArgumentTypesMayRemapDestinationBlockArguments) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
       "func.def @dependent_branch(%source_layout: encoding<layout>, "
-      "%source_view : view<4xf32, %source_layout>) {\n"
-      "  cfg.br ^exit(%source_layout, %source_view : encoding<layout>, "
-      "view<4xf32, %source_layout>)\n"
+      "%source_view: view<4xf32, %source_layout>) {\n"
+      "  cfg.br ^exit(%source_layout: encoding<layout>, "
+      "%source_view: view<4xf32, %source_layout>)\n"
       "^exit(%target_layout: encoding<layout>, "
-      "%target_view : view<4xf32, %target_layout>):\n"
+      "%target_view: view<4xf32, %target_layout>):\n"
       "  func.return\n"
       "}\n",
       &capture);

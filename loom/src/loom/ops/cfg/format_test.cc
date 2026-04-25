@@ -94,11 +94,11 @@ class CfgFormatTest : public ::testing::Test {
 TEST_F(CfgFormatTest, BranchWithArgumentsRoundTrips) {
   std::string text = RoundTrip(
       "test.func @cfg(%arg: i32) -> (i32) {\n"
-      "  cfg.br ^exit(%arg : i32)\n"
+      "  cfg.br ^exit(%arg: i32)\n"
       "^exit(%value: i32):\n"
       "  test.yield %value : i32\n"
       "}\n");
-  EXPECT_NE(text.find("cfg.br ^exit(%arg : i32)"), std::string::npos) << text;
+  EXPECT_NE(text.find("cfg.br ^exit(%arg: i32)"), std::string::npos) << text;
   EXPECT_NE(text.find("^exit(%value: i32):"), std::string::npos) << text;
 }
 

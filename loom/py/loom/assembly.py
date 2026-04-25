@@ -32,12 +32,16 @@ Example format specs:
    COLON, LPAREN, TypesOf("operands"), RPAREN,
    ARROW, ResultTypeList("results")]
 
+  # cfg.br: cfg.br ^join(%a: i32, %b: i32)
+  [BlockRef("dest"), GLUE, LPAREN, TypedRefs("args"), RPAREN]
+
   # tile.elementwise: %r = tile.elementwise(%e = %x : type) { ... } -> (type)
   [BindingList("inputs"), Region("body"), ARROW, ResultTypeList("result")]
 
 Design rules:
   - No "Custom" escape hatch. Every op is fully declarative.
-  - Variadic-ness is explicit: Ref (singular) vs Refs (variadic).
+  - Variadic-ness is explicit: Ref (singular), Refs (variadic values), and
+    TypedRefs (variadic value/type pairs).
   - Result types always use parens: -> (type) not -> type.
   - Tied results are sparse (TiedResult list, no sentinels).
   - Format element order = builder parameter order.
@@ -53,6 +57,7 @@ __all__ = [
     # Element types.
     "Ref",
     "Refs",
+    "TypedRefs",
     "BlockRef",
     "Attr",
     "SymbolRef",
@@ -139,6 +144,23 @@ class Refs:
     The field names a variadic operand on the op declaration. The
     printer emits each value's SSA name separated by commas. The
     parser consumes SSA value tokens until a non-value token.
+
+    For builders: maps to a list[Value] parameter.
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class TypedRefs:
+    """Variadic SSA value references with adjacent type annotations.
+
+    Prints/parses: %a: type, %b: type
+
+    The field names a variadic operand on the op declaration. Unlike a separate
+    Refs + TypesOf pair, each SSA value carries its type next to its name. This
+    is the canonical shape for block-edge payloads where the payload list reads
+    like a use-side argument list.
 
     For builders: maps to a list[Value] parameter.
     """
@@ -762,6 +784,7 @@ BINDING_ELEMENT = "element"
 type FormatElement = (
     Ref
     | Refs
+    | TypedRefs
     | BlockRef
     | Attr
     | SymbolRef

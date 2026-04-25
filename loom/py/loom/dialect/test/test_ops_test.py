@@ -32,6 +32,7 @@ from loom.assembly import (
     ResultTypeList,
     Scope,
     SymbolRef,
+    TypedRefs,
     TypeOf,
     TypesOf,
 )
@@ -108,7 +109,7 @@ class TestFormatFieldsMatchDeclarations:
         fields: set[str] = set()
         for elem in elements:
             match elem:
-                case Ref(field=f) | Refs(field=f):
+                case Ref(field=f) | Refs(field=f) | TypedRefs(field=f):
                     fields.add(f)
                 case Attr(field=f):
                     fields.add(f)
@@ -223,6 +224,7 @@ class TestFormatElementCoverage:
         required = {
             Ref,
             Refs,
+            TypedRefs,
             Attr,
             SymbolRef,
             TypeOf,
