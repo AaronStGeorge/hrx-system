@@ -126,6 +126,29 @@ iree_status_t loom_amdgpu_emit_low_op(
       source_op->location, out_op);
 }
 
+iree_status_t loom_amdgpu_emit_explicit_wait_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_explicit_wait_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(plan);
+  if (plan->descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
+    return iree_ok_status();
+  }
+
+  loom_named_attr_t attrs[LOOM_AMDGPU_EXPLICIT_WAIT_IMMEDIATE_CAPACITY] = {0};
+  for (iree_host_size_t i = 0; i < plan->immediate_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_intern(context, plan->immediates[i].name,
+                                            &attrs[i].name_id));
+    attrs[i].value = loom_attr_i64(plan->immediates[i].value);
+  }
+
+  loom_op_t* low_op = NULL;
+  return loom_amdgpu_emit_low_op(
+      context, source_op, plan->descriptor_id, /*operands=*/NULL,
+      /*operand_count=*/0,
+      loom_make_named_attr_slice(attrs, plan->immediate_count),
+      /*result_types=*/NULL, /*result_count=*/0, &low_op);
+}
+
 iree_status_t loom_amdgpu_emit_const_u32(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
                                          uint64_t descriptor_id, uint32_t value,

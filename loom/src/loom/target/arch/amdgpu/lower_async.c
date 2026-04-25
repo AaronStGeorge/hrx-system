@@ -460,7 +460,10 @@ iree_status_t loom_amdgpu_select_kernel_async_wait_plan(
   IREE_ASSERT_ARGUMENT(out_plan);
   IREE_ASSERT_ARGUMENT(out_selected);
   *out_plan = (loom_amdgpu_async_wait_plan_t){
-      .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
+      .wait =
+          {
+              .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
+          },
   };
   *out_selected = false;
   const loom_module_t* module = loom_low_lower_context_module(context);
@@ -480,10 +483,10 @@ iree_status_t loom_amdgpu_select_kernel_async_wait_plan(
   IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_select_counter_mask(
       loom_low_lower_context_descriptor_set(context),
       LOOM_AMDGPU_WAIT_COUNTER_MASK_VMEM_LOAD, target_count, &selection));
-  out_plan->descriptor_id = selection.descriptor_id;
-  out_plan->immediate_count = selection.immediate_count;
+  out_plan->wait.descriptor_id = selection.descriptor_id;
+  out_plan->wait.immediate_count = selection.immediate_count;
   for (iree_host_size_t i = 0; i < selection.immediate_count; ++i) {
-    out_plan->immediates[i] = (loom_amdgpu_async_wait_immediate_t){
+    out_plan->wait.immediates[i] = (loom_amdgpu_async_wait_immediate_t){
         .name = selection.immediates[i].name,
         .value = selection.immediates[i].value,
     };
@@ -569,23 +572,7 @@ iree_status_t loom_amdgpu_lower_kernel_async_wait(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_async_wait_plan_t* plan) {
   IREE_ASSERT_ARGUMENT(plan);
-  if (plan->descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
-    return iree_ok_status();
-  }
-
-  loom_named_attr_t attrs[LOOM_AMDGPU_ASYNC_WAIT_IMMEDIATE_CAPACITY] = {0};
-  for (iree_host_size_t i = 0; i < plan->immediate_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_intern(context, plan->immediates[i].name,
-                                            &attrs[i].name_id));
-    attrs[i].value = loom_attr_i64(plan->immediates[i].value);
-  }
-
-  loom_op_t* low_op = NULL;
-  return loom_amdgpu_emit_low_op(
-      context, source_op, plan->descriptor_id, /*operands=*/NULL,
-      /*operand_count=*/0,
-      loom_make_named_attr_slice(attrs, plan->immediate_count),
-      /*result_types=*/NULL, /*result_count=*/0, &low_op);
+  return loom_amdgpu_emit_explicit_wait_plan(context, source_op, &plan->wait);
 }
 
 static iree_string_view_t loom_amdgpu_async_gather_rejection_detail(

@@ -100,6 +100,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "memory_global_atomic_ordering"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/memory_global_atomic_ordering.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "memory_prefetch"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/memory_prefetch.loom-test"

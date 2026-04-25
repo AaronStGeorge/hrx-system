@@ -214,6 +214,46 @@ typedef struct loom_amdgpu_memory_access_plan_t {
   uint64_t descriptor_id;
 } loom_amdgpu_memory_access_plan_t;
 
+#define LOOM_AMDGPU_EXPLICIT_WAIT_IMMEDIATE_CAPACITY 4
+
+typedef struct loom_amdgpu_explicit_wait_immediate_t {
+  // Borrowed immediate field name from the selected descriptor set.
+  iree_string_view_t name;
+  // Concrete immediate value emitted for the wait packet.
+  uint16_t value;
+} loom_amdgpu_explicit_wait_immediate_t;
+
+typedef struct loom_amdgpu_explicit_wait_plan_t {
+  // Stable descriptor ID selected for the explicit wait packet.
+  uint64_t descriptor_id;
+  // Immediate rows emitted on the wait descriptor.
+  loom_amdgpu_explicit_wait_immediate_t
+      immediates[LOOM_AMDGPU_EXPLICIT_WAIT_IMMEDIATE_CAPACITY];
+  // Number of populated immediate rows.
+  iree_host_size_t immediate_count;
+} loom_amdgpu_explicit_wait_plan_t;
+
+#define LOOM_AMDGPU_ATOMIC_WAIT_CAPACITY 2
+#define LOOM_AMDGPU_ATOMIC_CACHE_CONTROL_CAPACITY 2
+
+typedef struct loom_amdgpu_atomic_ordering_plan_t {
+  // Explicit waits emitted before the atomic packet.
+  loom_amdgpu_explicit_wait_plan_t
+      pre_atomic_waits[LOOM_AMDGPU_ATOMIC_WAIT_CAPACITY];
+  // Number of populated pre-atomic wait packets.
+  iree_host_size_t pre_atomic_wait_count;
+  // Explicit waits emitted after the atomic packet.
+  loom_amdgpu_explicit_wait_plan_t
+      post_atomic_waits[LOOM_AMDGPU_ATOMIC_WAIT_CAPACITY];
+  // Number of populated post-atomic wait packets.
+  iree_host_size_t post_atomic_wait_count;
+  // Stable descriptor IDs for post-atomic cache-control packets.
+  uint64_t post_atomic_cache_control_descriptor_ids
+      [LOOM_AMDGPU_ATOMIC_CACHE_CONTROL_CAPACITY];
+  // Number of populated post-atomic cache-control packets.
+  iree_host_size_t post_atomic_cache_control_descriptor_count;
+} loom_amdgpu_atomic_ordering_plan_t;
+
 typedef enum loom_amdgpu_atomic_operation_kind_e {
   LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE = 0,
   LOOM_AMDGPU_ATOMIC_OPERATION_RMW = 1,
@@ -234,6 +274,8 @@ typedef struct loom_amdgpu_atomic_plan_t {
   uint32_t scalar_byte_offset;
   // Stable descriptor ID selected for the active descriptor set.
   uint64_t descriptor_id;
+  // Explicit packets required to implement source atomic ordering.
+  loom_amdgpu_atomic_ordering_plan_t ordering;
 } loom_amdgpu_atomic_plan_t;
 
 typedef struct loom_amdgpu_prefetch_plan_t {
@@ -270,23 +312,15 @@ typedef struct loom_amdgpu_async_gather_plan_t {
   uint64_t descriptor_id;
 } loom_amdgpu_async_gather_plan_t;
 
-#define LOOM_AMDGPU_ASYNC_WAIT_IMMEDIATE_CAPACITY 4
+#define LOOM_AMDGPU_ASYNC_WAIT_IMMEDIATE_CAPACITY \
+  LOOM_AMDGPU_EXPLICIT_WAIT_IMMEDIATE_CAPACITY
 
-typedef struct loom_amdgpu_async_wait_immediate_t {
-  // Borrowed immediate field name from the selected descriptor set.
-  iree_string_view_t name;
-  // Concrete immediate value emitted for the wait packet.
-  uint16_t value;
-} loom_amdgpu_async_wait_immediate_t;
+typedef loom_amdgpu_explicit_wait_immediate_t
+    loom_amdgpu_async_wait_immediate_t;
 
 typedef struct loom_amdgpu_async_wait_plan_t {
-  // Stable descriptor ID selected for the async wait packet.
-  uint64_t descriptor_id;
-  // Immediate rows emitted on the wait descriptor.
-  loom_amdgpu_async_wait_immediate_t
-      immediates[LOOM_AMDGPU_ASYNC_WAIT_IMMEDIATE_CAPACITY];
-  // Number of populated immediate rows.
-  iree_host_size_t immediate_count;
+  // Explicit wait packet selected for the async stream wait.
+  loom_amdgpu_explicit_wait_plan_t wait;
 } loom_amdgpu_async_wait_plan_t;
 
 #ifdef __cplusplus

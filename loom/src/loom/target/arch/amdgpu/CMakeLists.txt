@@ -955,6 +955,28 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_memory_global_atomic_ordering"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global_atomic_ordering.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_memory_global_atomic_ordering_gfx12_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global_atomic_ordering_gfx12_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_memory_workgroup_atomic"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_workgroup_atomic.loom-test"

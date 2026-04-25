@@ -369,6 +369,11 @@ iree_status_t loom_amdgpu_emit_low_op(
     const loom_type_t* result_types, iree_host_size_t result_count,
     loom_op_t** out_low_op);
 
+// Emits one explicit wait packet selected during source-to-low planning.
+iree_status_t loom_amdgpu_emit_explicit_wait_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_explicit_wait_plan_t* plan);
+
 // Emits one descriptor-backed low.const with an imm32 attribute.
 iree_status_t loom_amdgpu_emit_const_u32(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
