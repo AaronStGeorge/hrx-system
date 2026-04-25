@@ -2472,8 +2472,9 @@ def _global_atomic_overlays(
     saddr_off: int | None,
     address_units: int,
     descriptor_key_suffix: str = "",
+    include_packed_half_add: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
-    rows = (
+    rows = [
         ("add_u32", "GLOBAL_ATOMIC_ADD_U32", "add.u32", "FMT_NUM_U32", True),
         ("sub_u32", "GLOBAL_ATOMIC_SUB_U32", "sub.u32", "FMT_NUM_U32", True),
         ("min_i32", "GLOBAL_ATOMIC_MIN_I32", "min.i32", "FMT_NUM_I32", True),
@@ -2493,7 +2494,26 @@ def _global_atomic_overlays(
         ("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
         ("min_f32", "GLOBAL_ATOMIC_MIN_F32", "minnum.f32", "FMT_NUM_F32", True),
         ("max_f32", "GLOBAL_ATOMIC_MAX_F32", "maxnum.f32", "FMT_NUM_F32", True),
-    )
+    ]
+    if include_packed_half_add:
+        rows.extend(
+            (
+                (
+                    "pk_add_f16",
+                    "GLOBAL_ATOMIC_PK_ADD_F16",
+                    "add.pk2.f16",
+                    "FMT_NUM_PK2_F16",
+                    True,
+                ),
+                (
+                    "pk_add_bf16",
+                    "GLOBAL_ATOMIC_PK_ADD_BF16",
+                    "add.pk2.bf16",
+                    "FMT_NUM_PK2_BF16",
+                    True,
+                ),
+            )
+        )
     overlays: list[AmdgpuDescriptorOverlay] = []
     for (
         mnemonic_suffix,
@@ -2608,6 +2628,22 @@ _FLAT_ATOMIC_GFX11_ROWS = (
 _FLAT_ATOMIC_GFX12_ROWS = (
     *_FLAT_ATOMIC_GFX11_ROWS[:-2],
     (
+        "pk_add_f16",
+        "pk_add_f16",
+        "FLAT_ATOMIC_PK_ADD_F16",
+        "add.pk2.f16",
+        "FMT_NUM_PK2_F16",
+        True,
+    ),
+    (
+        "pk_add_bf16",
+        "pk_add_bf16",
+        "FLAT_ATOMIC_PK_ADD_BF16",
+        "add.pk2.bf16",
+        "FMT_NUM_PK2_BF16",
+        True,
+    ),
+    (
         "min_f32",
         "min_f32",
         "FLAT_ATOMIC_MIN_NUM_F32",
@@ -2637,6 +2673,22 @@ _FLAT_ATOMIC_GFX950_ROWS = (
     ("xor_b32", "xor", "FLAT_ATOMIC_XOR", "xor.b32", "FMT_NUM_B32", True),
     ("swap_b32", "swap", "FLAT_ATOMIC_SWAP", "exchange.b32", "FMT_NUM_B32", False),
     ("add_f32", "add_f32", "FLAT_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
+    (
+        "pk_add_f16",
+        "pk_add_f16",
+        "FLAT_ATOMIC_PK_ADD_F16",
+        "add.pk2.f16",
+        "FMT_NUM_PK2_F16",
+        True,
+    ),
+    (
+        "pk_add_bf16",
+        "pk_add_bf16",
+        "FLAT_ATOMIC_PK_ADD_BF16",
+        "add.pk2.bf16",
+        "FMT_NUM_PK2_BF16",
+        True,
+    ),
 )
 
 
@@ -2951,7 +3003,8 @@ def _buffer_atomic_overlay(
     offset_bit_width: int,
     return_field_name: str,
     return_field_value: int,
-    cache_field_names: tuple[str, ...],
+    cache_fields: tuple[tuple[str, int], ...],
+    cache_immediate_field_names: tuple[str, ...],
 ) -> AmdgpuDescriptorOverlay:
     schedule_class = (
         _SCHEDULE_VMEM_ATOMIC_RETURN
@@ -2985,6 +3038,14 @@ def _buffer_atomic_overlay(
         AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
         AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
     )
+    cache_immediate_fields = tuple(
+        (field_name, bit_width)
+        for field_name, bit_width in cache_fields
+        if field_name in cache_immediate_field_names
+    )
+    cache_immediate_defaults = {
+        return_field_name: return_field_value if returns_old_value else 0
+    }
     fixed_encoding_fields = tuple(
         (
             field_name,
@@ -2992,7 +3053,8 @@ def _buffer_atomic_overlay(
             if returns_old_value and field_name == return_field_name
             else 0,
         )
-        for field_name in cache_field_names
+        for field_name, _bit_width in cache_fields
+        if field_name not in cache_immediate_field_names
     )
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -3010,8 +3072,16 @@ def _buffer_atomic_overlay(
                 data_format_name=data_format_name, is_input=True
             ),
         ),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        immediate_fields=(
+            offset_field_name,
+            *_cache_field_names(cache_immediate_fields),
+        ),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates_with_defaults(
+                cache_immediate_fields, cache_immediate_defaults
+            ),
+        ),
         fixed_encoding_fields=(("OFFEN", 1), *fixed_encoding_fields),
         effects=_global_atomic_effects(32, counter_id=counter_id),
         constraints=constraints,
@@ -3028,14 +3098,22 @@ def _buffer_atomic_cmpswap_overlay(
     offset_bit_width: int,
     return_field_name: str,
     return_field_value: int,
-    cache_field_names: tuple[str, ...],
+    cache_fields: tuple[tuple[str, int], ...],
+    cache_immediate_field_names: tuple[str, ...],
 ) -> AmdgpuDescriptorOverlay:
+    cache_immediate_fields = tuple(
+        (field_name, bit_width)
+        for field_name, bit_width in cache_fields
+        if field_name in cache_immediate_field_names
+    )
+    cache_immediate_defaults = {return_field_name: return_field_value}
     fixed_encoding_fields = tuple(
         (
             field_name,
             return_field_value if field_name == return_field_name else 0,
         )
-        for field_name in cache_field_names
+        for field_name, _bit_width in cache_fields
+        if field_name not in cache_immediate_field_names
     )
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_atomic_cmpswap_b32_rtn",
@@ -3063,8 +3141,16 @@ def _buffer_atomic_cmpswap_overlay(
             ),
             _ignore_global_atomic_memory(data_format_name="FMT_NUM_U32", is_input=True),
         ),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        immediate_fields=(
+            offset_field_name,
+            *_cache_field_names(cache_immediate_fields),
+        ),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates_with_defaults(
+                cache_immediate_fields, cache_immediate_defaults
+            ),
+        ),
         fixed_encoding_fields=(("OFFEN", 1), *fixed_encoding_fields),
         effects=_global_atomic_effects(32, counter_id=_COUNTER_VMEM_LOAD),
         constraints=_DESTRUCTIVE_BUFFER_ATOMIC_CONSTRAINTS,
@@ -3082,8 +3168,10 @@ def _buffer_atomic_overlays(
     return_field_name: str,
     return_field_value: int,
     cache_fields: tuple[tuple[str, int], ...],
+    cache_immediate_field_names: tuple[str, ...] = (),
+    include_packed_half_add: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
-    rows = (
+    rows = [
         ("add_u32", "BUFFER_ATOMIC_ADD_U32", "add.u32", "FMT_NUM_U32", True),
         ("sub_u32", "BUFFER_ATOMIC_SUB_U32", "sub.u32", "FMT_NUM_U32", True),
         ("min_i32", "BUFFER_ATOMIC_MIN_I32", "min.i32", "FMT_NUM_I32", True),
@@ -3103,8 +3191,26 @@ def _buffer_atomic_overlays(
         ("add_f32", "BUFFER_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
         ("min_f32", "BUFFER_ATOMIC_MIN_F32", "minnum.f32", "FMT_NUM_F32", True),
         ("max_f32", "BUFFER_ATOMIC_MAX_F32", "maxnum.f32", "FMT_NUM_F32", True),
-    )
-    cache_field_names = tuple(field_name for field_name, _ in cache_fields)
+    ]
+    if include_packed_half_add:
+        rows.extend(
+            (
+                (
+                    "pk_add_f16",
+                    "BUFFER_ATOMIC_PK_ADD_F16",
+                    "add.pk2.f16",
+                    "FMT_NUM_PK2_F16",
+                    True,
+                ),
+                (
+                    "pk_add_bf16",
+                    "BUFFER_ATOMIC_PK_ADD_BF16",
+                    "add.pk2.bf16",
+                    "FMT_NUM_PK2_BF16",
+                    True,
+                ),
+            )
+        )
     overlays: list[AmdgpuDescriptorOverlay] = []
     for (
         mnemonic_suffix,
@@ -3128,7 +3234,8 @@ def _buffer_atomic_overlays(
                     offset_bit_width=offset_bit_width,
                     return_field_name=return_field_name,
                     return_field_value=return_field_value,
-                    cache_field_names=cache_field_names,
+                    cache_fields=cache_fields,
+                    cache_immediate_field_names=cache_immediate_field_names,
                 )
             )
         overlays.append(
@@ -3145,7 +3252,8 @@ def _buffer_atomic_overlays(
                 offset_bit_width=offset_bit_width,
                 return_field_name=return_field_name,
                 return_field_value=return_field_value,
-                cache_field_names=cache_field_names,
+                cache_fields=cache_fields,
+                cache_immediate_field_names=cache_immediate_field_names,
             )
         )
     overlays.append(
@@ -3156,7 +3264,8 @@ def _buffer_atomic_overlays(
             offset_bit_width=offset_bit_width,
             return_field_name=return_field_name,
             return_field_value=return_field_value,
-            cache_field_names=cache_field_names,
+            cache_fields=cache_fields,
+            cache_immediate_field_names=cache_immediate_field_names,
         )
     )
     return tuple(overlays)
@@ -3394,8 +3503,9 @@ def _ds_atomic_overlays(
     *,
     encoding_name: str = "ENC_DS",
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    include_packed_half_add: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
-    rows = (
+    rows = [
         ("ds_add_u32", "DS_ADD_U32", "add.u32", "FMT_NUM_U32", False),
         ("ds_sub_u32", "DS_SUB_U32", "sub.u32", "FMT_NUM_U32", False),
         ("ds_min_i32", "DS_MIN_I32", "min.i32", "FMT_NUM_I32", False),
@@ -3439,7 +3549,40 @@ def _ds_atomic_overlays(
             "FMT_NUM_F32",
             True,
         ),
-    )
+    ]
+    if include_packed_half_add:
+        rows.extend(
+            (
+                (
+                    "ds_pk_add_f16",
+                    "DS_PK_ADD_F16",
+                    "add.pk2.f16",
+                    "FMT_NUM_PK2_F16",
+                    False,
+                ),
+                (
+                    "ds_pk_add_bf16",
+                    "DS_PK_ADD_BF16",
+                    "add.pk2.bf16",
+                    "FMT_NUM_PK2_BF16",
+                    False,
+                ),
+                (
+                    "ds_pk_add_rtn_f16",
+                    "DS_PK_ADD_RTN_F16",
+                    "add.return.pk2.f16",
+                    "FMT_NUM_PK2_F16",
+                    True,
+                ),
+                (
+                    "ds_pk_add_rtn_bf16",
+                    "DS_PK_ADD_RTN_BF16",
+                    "add.return.pk2.bf16",
+                    "FMT_NUM_PK2_BF16",
+                    True,
+                ),
+            )
+        )
     overlays = [
         _ds_atomic_overlay(
             descriptor_key=f"amdgpu.{mnemonic}",
@@ -3777,6 +3920,7 @@ def _ds_memory_overlays(
     *,
     encoding_name: str = "ENC_DS",
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    include_packed_half_atomic_add: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     widths = ((32, 1), (64, 2), (96, 3), (128, 4))
     two_addr_widths = ((32, 1), (64, 2))
@@ -3805,6 +3949,7 @@ def _ds_memory_overlays(
         *_ds_atomic_overlays(
             encoding_name=encoding_name,
             fixed_encoding_fields=fixed_encoding_fields,
+            include_packed_half_add=include_packed_half_atomic_add,
         ),
         *(
             _ds_read2_overlay(
@@ -4700,7 +4845,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             implicit_m0=True,
             allow_accumulator_operands=True,
         ),
-        *_ds_memory_overlays(),
+        *_ds_memory_overlays(include_packed_half_atomic_add=True),
         *_ds_crosslane_overlays(),
         _v_dot4_i32_i8_overlay(signedness_modifiers=False),
         _v_dot4_u32_u8_overlay(),
@@ -4952,6 +5097,17 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
+        *_buffer_atomic_overlays(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            return_field_name="TH",
+            return_field_value=_GFX12_TH_ATOMIC_RETURN_VALUE,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            cache_immediate_field_names=_GFX12_ATOMIC_CACHE_IMMEDIATE_FIELDS,
+            include_packed_half_add=True,
+        ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
             mnemonic_suffixes=("b32", "b64", "b128"),
@@ -4992,6 +5148,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             saddr_off=None,
             address_units=1,
             descriptor_key_suffix="_saddr",
+            include_packed_half_add=True,
         ),
         *_flat_atomic_overlays(
             rows=_FLAT_ATOMIC_GFX12_ROWS,
@@ -5011,6 +5168,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_ds_memory_overlays(
             encoding_name="ENC_VDS",
             fixed_encoding_fields=(("OFFSET1", 0),),
+            include_packed_half_atomic_add=True,
         ),
         *_ds_crosslane_overlays(
             encoding_name="ENC_VDS",
@@ -5118,6 +5276,17 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
         ),
+        *_buffer_atomic_overlays(
+            encoding_name="ENC_VBUFFER",
+            resource_field_name="RSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            return_field_name="TH",
+            return_field_value=_GFX12_TH_ATOMIC_RETURN_VALUE,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            cache_immediate_field_names=_GFX12_ATOMIC_CACHE_IMMEDIATE_FIELDS,
+            include_packed_half_add=True,
+        ),
         *_global_memory_overlays(
             instruction_suffixes=("B32", "B64", "B128"),
             mnemonic_suffixes=("b32", "b64", "b128"),
@@ -5158,6 +5327,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             saddr_off=None,
             address_units=1,
             descriptor_key_suffix="_saddr",
+            include_packed_half_add=True,
         ),
         *_flat_atomic_overlays(
             rows=_FLAT_ATOMIC_GFX12_ROWS,
@@ -5177,6 +5347,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_ds_memory_overlays(
             encoding_name="ENC_VDS",
             fixed_encoding_fields=(("OFFSET1", 0),),
+            include_packed_half_atomic_add=True,
         ),
         *_ds_crosslane_overlays(
             encoding_name="ENC_VDS",

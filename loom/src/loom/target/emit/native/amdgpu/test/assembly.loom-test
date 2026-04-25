@@ -106,6 +106,56 @@ low.func.def target(@gfx950_target) @gfx950_global_load_lds(%addr64: reg<amdgpu.
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx12_packed_half_atomics waits=none
+target.profile @gfx12_target preset("amdgpu-gfx12")
+
+low.func.def target(@gfx12_target) @gfx12_packed_half_atomics(%resource: reg<amdgpu.sgpr x4>, %addr64: reg<amdgpu.vgpr x2>, %addr32: reg<amdgpu.vgpr>, %saddr: reg<amdgpu.sgpr x2>, %soffset: reg<amdgpu.sgpr>, %value0: reg<amdgpu.vgpr>, %value1: reg<amdgpu.vgpr>, %value2: reg<amdgpu.vgpr>, %value3: reg<amdgpu.vgpr>) {
+  low.op<amdgpu.buffer_atomic_pk_add_f16>(%value0, %resource, %addr32, %soffset) {offset = 4, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  %old_buffer = low.op<amdgpu.buffer_atomic_pk_add_bf16_rtn>(%value1, %resource, %addr32, %soffset) {offset = 8, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> %value1 as reg<amdgpu.vgpr>
+  low.op<amdgpu.global_atomic_pk_add_f16_saddr>(%addr32, %value2, %saddr) {offset = 12, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %old_global = low.op<amdgpu.global_atomic_pk_add_bf16_rtn_saddr>(%addr32, %value3, %saddr) {offset = 16, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.flat_atomic_pk_add_f16>(%addr64, %old_buffer) {offset = 20, scope = 2} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr>)
+  %old_flat = low.op<amdgpu.flat_atomic_pk_add_bf16_rtn>(%addr64, %old_global) {offset = 24, scope = 2} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_pk_add_f16>(%addr32, %old_flat) {offset = 28} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
+  %old_ds = low.op<amdgpu.ds_pk_add_rtn_bf16>(%addr32, %old_flat) {offset = 32} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return
+}
+
+// ----
+.Lbb0:
+  buffer_atomic_pk_add_f16 v0, v6, s[0:3], s4 offen offset:4 scope:2 th:0
+  buffer_atomic_pk_add_bf16 v1, v6, s[0:3], s4 offen offset:8 scope:2 th:1
+  global_atomic_pk_add_f16 v6, v2, s[6:7] offset:12 scope:2 th:0
+  global_atomic_pk_add_bf16 v0, v6, v3, s[6:7] offset:16 scope:2 th:1
+  flat_atomic_pk_add_f16 v[4:5], v1 offset:20 scope:2 th:0
+  flat_atomic_pk_add_bf16 v0, v[4:5], v0 offset:24 scope:2 th:1
+  ds_pk_add_f16 v6, v0 offset:28
+  ds_pk_add_rtn_bf16 v0, v6, v0 offset:32
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx950_packed_half_atomics waits=none
+target.profile @gfx950_target preset("amdgpu-gfx950")
+
+low.func.def target(@gfx950_target) @gfx950_packed_half_atomics(%addr64: reg<amdgpu.vgpr x2>, %addr32: reg<amdgpu.vgpr>, %m0: reg<amdgpu.m0>, %value0: reg<amdgpu.vgpr>, %value1: reg<amdgpu.vgpr>, %value2: reg<amdgpu.vgpr>) {
+  low.op<amdgpu.flat_atomic_pk_add_f16>(%addr64, %value0, %m0) {offset = 4} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr>, reg<amdgpu.m0>)
+  %old_flat = low.op<amdgpu.flat_atomic_pk_add_bf16_rtn>(%addr64, %value1, %m0) {offset = 8} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr>, reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_pk_add_f16>(%addr32, %value2) {offset = 12} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
+  %old_ds = low.op<amdgpu.ds_pk_add_rtn_bf16>(%addr32, %old_flat) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return
+}
+
+// ----
+.Lbb0:
+  flat_atomic_pk_add_f16 v[2:3], v0 offset:4
+  flat_atomic_pk_add_bf16 v0, v[2:3], v1 offset:8
+  ds_pk_add_f16 v5, v4 offset:12
+  ds_pk_add_rtn_bf16 v0, v5, v0 offset:16
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_stress_fragment waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
