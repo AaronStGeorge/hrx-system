@@ -13,10 +13,10 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/source_selection.h"
+#include "loom/codegen/low/testing/ir_match_test_util.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
-#include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
@@ -265,21 +265,6 @@ class SourceLoweringRuleEmissionTest : public ::testing::Test {
     return loom_low_verify_module(module, &options, out_result);
   }
 
-  iree_status_t PrintModule(const loom_module_t* module,
-                            std::string* out_text) {
-    out_text->clear();
-    iree_string_builder_t builder;
-    iree_string_builder_initialize(iree_allocator_system(), &builder);
-    iree_status_t status = loom_text_print_module_to_builder(
-        module, &builder, LOOM_TEXT_PRINT_DEFAULT);
-    if (iree_status_is_ok(status)) {
-      *out_text = std::string(iree_string_builder_buffer(&builder),
-                              iree_string_builder_size(&builder));
-    }
-    iree_string_builder_deinitialize(&builder);
-    return status;
-  }
-
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_target_low_descriptor_registry_t registry_ = {};
@@ -310,15 +295,28 @@ TEST_F(SourceLoweringRuleEmissionTest, CopiesTiedOperandsBeforeDestructiveOp) {
   EXPECT_EQ(verify_result.error_count, 0u);
   EXPECT_TRUE(verify_collector.emissions.empty());
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  const size_t copy_position = text.find("low.copy %lhs");
-  const size_t tied_position = text.find("low.op<test.tied.any>");
-  ASSERT_NE(copy_position, std::string::npos);
-  ASSERT_NE(tied_position, std::string::npos);
-  EXPECT_LT(copy_position, tied_position);
-  EXPECT_NE(text.find("-> %"), std::string::npos);
-  EXPECT_NE(text.find(" as reg<test.i32>"), std::string::npos);
+  const loom_block_t* entry_block = loom_region_const_entry_block(
+      loom_low_func_def_body(lower_result.low_func_op));
+  const loom_op_t* copy_op = nullptr;
+  const loom_op_t* tied_op = nullptr;
+  loom_op_t* op = nullptr;
+  loom_block_for_each_op(entry_block, op) {
+    if (copy_op == nullptr && loom_low_copy_isa(op)) {
+      copy_op = op;
+    }
+    if (loom_low_op_isa(op) && (uint64_t)loom_low_op_descriptor_id(op) ==
+                                   TEST_LOW_CORE_DESCRIPTOR_ID_TEST_TIED_ANY) {
+      tied_op = op;
+      break;
+    }
+  }
+  ASSERT_NE(copy_op, nullptr);
+  ASSERT_NE(tied_op, nullptr);
+  EXPECT_LT(copy_op->block_ordinal, tied_op->block_ordinal);
+  EXPECT_EQ(tied_op->tied_result_count, 1u);
+  const loom_tied_result_t* ties = loom_op_tied_results(tied_op);
+  EXPECT_EQ(ties[0].result_index, 0u);
+  EXPECT_EQ(ties[0].operand_index, 0u);
 }
 
 TEST_F(SourceLoweringRuleEmissionTest, CarriesTemporaryBetweenDescriptorOps) {
@@ -461,10 +459,16 @@ TEST_F(SourceLoweringRuleEmissionTest,
   EXPECT_EQ(verify_result.error_count, 0u);
   EXPECT_TRUE(verify_collector.emissions.empty());
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("low.const<test.const.i32> {i32_value = 2}"),
-            std::string::npos);
+  const loom_op_t* const_op = loom::testing::FindLowFuncDescriptorOp(
+      lower_result.low_func_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_CONST_I32);
+  ASSERT_NE(const_op, nullptr);
+  ASSERT_TRUE(loom_low_const_isa(const_op));
+  loom_named_attr_slice_t attrs = loom_low_const_attrs(const_op);
+  ASSERT_EQ(attrs.count, 1u);
+  EXPECT_TRUE(loom::testing::ModuleStringEquals(
+      module.get(), attrs.entries[0].name_id, IREE_SV("i32_value")));
+  ASSERT_EQ(attrs.entries[0].value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(attrs.entries[0].value.i64, 2);
 }
 
 TEST_F(SourceLoweringRuleEmissionTest,
@@ -517,10 +521,16 @@ TEST_F(SourceLoweringRuleEmissionTest,
   EXPECT_EQ(verify_result.error_count, 0u);
   EXPECT_TRUE(verify_collector.emissions.empty());
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("low.op<test.shuffle.v4i32>"), std::string::npos);
-  EXPECT_NE(text.find("shuffle_control = 27"), std::string::npos);
+  const loom_op_t* shuffle_op = loom::testing::FindLowFuncDescriptorOp(
+      lower_result.low_func_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_SHUFFLE_V4I32);
+  ASSERT_NE(shuffle_op, nullptr);
+  ASSERT_TRUE(loom_low_op_isa(shuffle_op));
+  loom_named_attr_slice_t attrs = loom_low_op_attrs(shuffle_op);
+  ASSERT_EQ(attrs.count, 1u);
+  EXPECT_TRUE(loom::testing::ModuleStringEquals(
+      module.get(), attrs.entries[0].name_id, IREE_SV("shuffle_control")));
+  ASSERT_EQ(attrs.entries[0].value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(attrs.entries[0].value.i64, 27);
 }
 
 TEST_F(SourceLoweringRuleEmissionTest,
@@ -574,12 +584,14 @@ TEST_F(SourceLoweringRuleEmissionTest, HybridPolicyUsesCallbackForUncoveredOp) {
   EXPECT_EQ(verify_result.error_count, 0u);
   EXPECT_TRUE(verify_collector.emissions.empty());
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("@div"), std::string::npos);
-  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @div"),
-            std::string::npos);
-  EXPECT_NE(text.find("low.op<test.add.i32>"), std::string::npos);
+  EXPECT_EQ(
+      loom::testing::FindModuleSymbolDefiningOp(module.get(), IREE_SV("div")),
+      lower_result.low_func_op);
+  EXPECT_TRUE(loom_low_func_def_isa(lower_result.low_func_op));
+  EXPECT_NE(
+      loom::testing::FindLowFuncDescriptorOp(
+          lower_result.low_func_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32),
+      nullptr);
 }
 
 TEST_F(SourceLoweringRuleEmissionTest,
@@ -637,10 +649,10 @@ TEST_F(SourceLoweringRuleEmissionTest,
   EXPECT_NE(emission.string_params[6].find("descriptor mapping"),
             std::string::npos);
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("func.def target(@test_target) @div"), std::string::npos);
-  EXPECT_EQ(text.find("low.func.def"), std::string::npos);
+  const loom_op_t* div_def =
+      loom::testing::FindModuleSymbolDefiningOp(module.get(), IREE_SV("div"));
+  ASSERT_NE(div_def, nullptr);
+  EXPECT_TRUE(loom_func_def_isa(div_def));
 }
 
 }  // namespace

@@ -13,9 +13,9 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/source_selection.h"
+#include "loom/codegen/low/testing/ir_match_test_util.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
-#include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
@@ -25,6 +25,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/test/descriptors.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
 
@@ -227,21 +228,6 @@ class SourceLoweringFunctionTest : public ::testing::Test {
     return loom_low_verify_module(module, &options, out_result);
   }
 
-  iree_status_t PrintModule(const loom_module_t* module,
-                            std::string* out_text) {
-    out_text->clear();
-    iree_string_builder_t builder;
-    iree_string_builder_initialize(iree_allocator_system(), &builder);
-    iree_status_t status = loom_text_print_module_to_builder(
-        module, &builder, LOOM_TEXT_PRINT_DEFAULT);
-    if (iree_status_is_ok(status)) {
-      *out_text = std::string(iree_string_builder_buffer(&builder),
-                              iree_string_builder_size(&builder));
-    }
-    iree_string_builder_deinitialize(&builder);
-    return status;
-  }
-
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_target_low_descriptor_registry_t registry_ = {};
@@ -274,18 +260,30 @@ TEST_F(SourceLoweringFunctionTest, LowersScalarFunction) {
   EXPECT_EQ(verify_result.error_count, 0u);
   EXPECT_TRUE(verify_collector.emissions.empty());
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("low.func.def target(@test_target) "
-                      "abi(object_function)"),
-            std::string::npos);
-  EXPECT_NE(text.find("@add_const"), std::string::npos);
-  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @add_const"),
-            std::string::npos);
-  EXPECT_EQ(text.find("source(@"), std::string::npos);
-  EXPECT_NE(text.find("test.const.i32"), std::string::npos);
-  EXPECT_NE(text.find("test.add.i32"), std::string::npos);
-  EXPECT_EQ(text.find("low.abi"), std::string::npos);
+  EXPECT_EQ(loom::testing::FindModuleSymbolDefiningOp(module.get(),
+                                                      IREE_SV("add_const")),
+            lower_result.low_func_op);
+  EXPECT_TRUE(loom_low_func_def_isa(lower_result.low_func_op));
+  EXPECT_TRUE(loom::testing::SymbolRefsEqual(
+      loom_low_func_def_callee(lower_result.low_func_op),
+      lower_result.low_func_ref));
+  loom_symbol_ref_t target_ref =
+      loom_low_func_def_target(lower_result.low_func_op);
+  ASSERT_TRUE(loom_symbol_ref_is_valid(target_ref));
+  ASSERT_LT(target_ref.symbol_id, module->symbols.count);
+  EXPECT_EQ(module->symbols.entries[target_ref.symbol_id].defining_op,
+            loom::testing::FindModuleSymbolDefiningOp(module.get(),
+                                                      IREE_SV("test_target")));
+  EXPECT_EQ(loom_low_func_def_abi(lower_result.low_func_op),
+            LOOM_LOW_ABI_OBJECT_FUNCTION);
+  EXPECT_NE(
+      loom::testing::FindLowFuncDescriptorOp(
+          lower_result.low_func_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_CONST_I32),
+      nullptr);
+  EXPECT_NE(
+      loom::testing::FindLowFuncDescriptorOp(
+          lower_result.low_func_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32),
+      nullptr);
 }
 
 TEST_F(SourceLoweringFunctionTest, CarriesTargetProfileAbiAndExport) {
@@ -313,21 +311,23 @@ TEST_F(SourceLoweringFunctionTest, CarriesTargetProfileAbiAndExport) {
   EXPECT_EQ(verify_result.error_count, 0u);
   EXPECT_TRUE(verify_collector.emissions.empty());
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("target.profile @test_target preset(\"test-low\")"),
-            std::string::npos);
-  EXPECT_NE(text.find("low.func.def target(@test_target) "
-                      "abi(vm_module_function) export(\"add_const_export\")"),
-            std::string::npos);
-  EXPECT_NE(text.find("@add_const"), std::string::npos);
-  EXPECT_EQ(text.find("\nfunc.def target(@test_target) "
-                      "abi(vm_module_function) export(\"add_const_export\") "
-                      "@add_const"),
-            std::string::npos);
-  EXPECT_NE(text.find("test.const.i32"), std::string::npos);
-  EXPECT_NE(text.find("test.add.i32"), std::string::npos);
-  EXPECT_EQ(text.find("target.bundle"), std::string::npos);
+  EXPECT_EQ(loom::testing::FindModuleSymbolDefiningOp(module.get(),
+                                                      IREE_SV("add_const")),
+            lower_result.low_func_op);
+  EXPECT_TRUE(loom_low_func_def_isa(lower_result.low_func_op));
+  EXPECT_EQ(loom_low_func_def_abi(lower_result.low_func_op),
+            LOOM_LOW_ABI_VM_MODULE_FUNCTION);
+  EXPECT_TRUE(loom::testing::ModuleStringEquals(
+      module.get(), loom_low_func_def_export_symbol(lower_result.low_func_op),
+      IREE_SV("add_const_export")));
+  EXPECT_NE(
+      loom::testing::FindLowFuncDescriptorOp(
+          lower_result.low_func_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_CONST_I32),
+      nullptr);
+  EXPECT_NE(
+      loom::testing::FindLowFuncDescriptorOp(
+          lower_result.low_func_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32),
+      nullptr);
 }
 
 TEST_F(SourceLoweringFunctionTest, LowersVectorCfgFunction) {
@@ -361,19 +361,41 @@ TEST_F(SourceLoweringFunctionTest, LowersVectorCfgFunction) {
   EXPECT_EQ(verify_result.error_count, 0u);
   EXPECT_TRUE(verify_collector.emissions.empty());
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("@select_vector"), std::string::npos);
-  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @select_vector"),
-            std::string::npos);
-  EXPECT_EQ(text.find("source(@"), std::string::npos);
-  EXPECT_NE(text.find("reg<test.i32 x4>"), std::string::npos);
-  EXPECT_NE(text.find("low.slice"), std::string::npos);
-  EXPECT_NE(text.find("low.concat"), std::string::npos);
-  EXPECT_NE(text.find("test.add.i32"), std::string::npos);
-  EXPECT_NE(text.find("low.cond_br"), std::string::npos);
-  EXPECT_NE(text.find("low.br"), std::string::npos);
-  EXPECT_EQ(text.find("low.abi"), std::string::npos);
+  EXPECT_EQ(loom::testing::FindModuleSymbolDefiningOp(module.get(),
+                                                      IREE_SV("select_vector")),
+            lower_result.low_func_op);
+  const loom_block_t* entry_block =
+      loom::testing::LowFuncEntryBlock(lower_result.low_func_op);
+  ASSERT_NE(entry_block, nullptr);
+  ASSERT_GE(entry_block->arg_count, 3u);
+  EXPECT_TRUE(loom::testing::RegisterTypeEquals(
+      module.get(),
+      loom_module_value_type(module.get(), entry_block->arg_ids[0]),
+      IREE_SV("test.i32"), 1));
+  EXPECT_TRUE(loom::testing::RegisterTypeEquals(
+      module.get(),
+      loom_module_value_type(module.get(), entry_block->arg_ids[1]),
+      IREE_SV("test.i32"), 4));
+  EXPECT_TRUE(loom::testing::RegisterTypeEquals(
+      module.get(),
+      loom_module_value_type(module.get(), entry_block->arg_ids[2]),
+      IREE_SV("test.i32"), 4));
+  EXPECT_NE(loom::testing::FindLowFuncBodyOp(lower_result.low_func_op,
+                                             LOOM_OP_LOW_SLICE),
+            nullptr);
+  EXPECT_NE(loom::testing::FindLowFuncBodyOp(lower_result.low_func_op,
+                                             LOOM_OP_LOW_CONCAT),
+            nullptr);
+  EXPECT_NE(
+      loom::testing::FindLowFuncDescriptorOp(
+          lower_result.low_func_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32),
+      nullptr);
+  EXPECT_NE(loom::testing::FindLowFuncBodyOp(lower_result.low_func_op,
+                                             LOOM_OP_LOW_COND_BR),
+            nullptr);
+  EXPECT_NE(loom::testing::FindLowFuncBodyOp(lower_result.low_func_op,
+                                             LOOM_OP_LOW_BR),
+            nullptr);
 }
 
 TEST_F(SourceLoweringFunctionTest, LowersResourceArgumentsAsImports) {
@@ -397,20 +419,27 @@ TEST_F(SourceLoweringFunctionTest, LowersResourceArgumentsAsImports) {
   EXPECT_EQ(verify_result.error_count, 0u);
   EXPECT_TRUE(verify_collector.emissions.empty());
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("low.func.def target(@test_target) "
-                      "abi(object_function)"),
-            std::string::npos);
-  EXPECT_NE(text.find("@resource_entry()"), std::string::npos);
-  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @resource_entry"),
-            std::string::npos);
-  EXPECT_NE(text.find("%buffer = low.resource<native_pointer>"),
-            std::string::npos);
-  EXPECT_NE(text.find("semantic_type = buffer"), std::string::npos);
-  EXPECT_EQ(text.find("source_arg"), std::string::npos);
-  EXPECT_EQ(text.find("low.abi"), std::string::npos);
-  EXPECT_EQ(text.find("low.abi.operand"), std::string::npos);
+  EXPECT_EQ(loom::testing::FindModuleSymbolDefiningOp(
+                module.get(), IREE_SV("resource_entry")),
+            lower_result.low_func_op);
+  const loom_block_t* entry_block =
+      loom::testing::LowFuncEntryBlock(lower_result.low_func_op);
+  ASSERT_NE(entry_block, nullptr);
+  EXPECT_EQ(entry_block->arg_count, 0u);
+  const loom_op_t* resource_op = loom::testing::FindLowFuncBodyOp(
+      lower_result.low_func_op, LOOM_OP_LOW_RESOURCE);
+  ASSERT_NE(resource_op, nullptr);
+  EXPECT_EQ(loom_low_resource_import_kind(resource_op),
+            LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER);
+  loom_type_id_t semantic_type_id =
+      loom_low_resource_semantic_type(resource_op);
+  ASSERT_LT(semantic_type_id, module->types.count);
+  EXPECT_TRUE(loom_type_is_buffer(module->types.entries[semantic_type_id]));
+  EXPECT_TRUE(loom::testing::RegisterTypeEquals(
+      module.get(),
+      loom_module_value_type(module.get(),
+                             loom_low_resource_result(resource_op)),
+      IREE_SV("test.ptr"), 1));
 }
 
 TEST_F(SourceLoweringFunctionTest, EmitsPreambleBeforeResourceImports) {
@@ -437,13 +466,26 @@ TEST_F(SourceLoweringFunctionTest, EmitsPreambleBeforeResourceImports) {
   EXPECT_EQ(verify_result.error_count, 0u);
   EXPECT_TRUE(verify_collector.emissions.empty());
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  const size_t live_in_position = text.find("low.live_in<test.thread_id>");
-  const size_t resource_position = text.find("low.resource");
-  ASSERT_NE(live_in_position, std::string::npos);
-  ASSERT_NE(resource_position, std::string::npos);
-  EXPECT_LT(live_in_position, resource_position);
+  const loom_block_t* entry_block =
+      loom::testing::LowFuncEntryBlock(lower_result.low_func_op);
+  ASSERT_NE(entry_block, nullptr);
+  bool saw_live_in = false;
+  bool saw_ordered_resource = false;
+  loom_op_t* op = nullptr;
+  loom_block_for_each_op(entry_block, op) {
+    if (loom_low_live_in_isa(op) &&
+        loom::testing::ModuleStringEquals(module.get(),
+                                          loom_low_live_in_source(op),
+                                          IREE_SV("test.thread_id"))) {
+      saw_live_in = true;
+    }
+    if (saw_live_in && loom_low_resource_isa(op)) {
+      saw_ordered_resource = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(saw_live_in);
+  EXPECT_TRUE(saw_ordered_resource);
 }
 
 }  // namespace

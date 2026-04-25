@@ -60,6 +60,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    ir_match_test_util
+  HDRS
+    "ir_match_test_util.h"
+  SRCS
+    "ir_match_test_util.cc"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  TESTONLY
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     text_asm_test_util
   HDRS
     "text_asm_test_util.h"

@@ -13,8 +13,8 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/source_selection.h"
+#include "loom/codegen/low/testing/ir_match_test_util.h"
 #include "loom/format/text/parser.h"
-#include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/link/linker.h"
@@ -158,21 +158,6 @@ class SourceLoweringLinkTest : public ::testing::Test {
     iree_arena_deinitialize(&selection_arena);
   }
 
-  iree_status_t PrintModule(const loom_module_t* module,
-                            std::string* out_text) {
-    out_text->clear();
-    iree_string_builder_t builder;
-    iree_string_builder_initialize(iree_allocator_system(), &builder);
-    iree_status_t status = loom_text_print_module_to_builder(
-        module, &builder, LOOM_TEXT_PRINT_DEFAULT);
-    if (iree_status_is_ok(status)) {
-      *out_text = std::string(iree_string_builder_buffer(&builder),
-                              iree_string_builder_size(&builder));
-    }
-    iree_string_builder_deinitialize(&builder);
-    return status;
-  }
-
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_target_low_descriptor_registry_t registry_ = {};
@@ -201,14 +186,12 @@ TEST_F(SourceLoweringLinkTest,
   EXPECT_NE(lower_result.low_func_op, nullptr);
   EXPECT_TRUE(lower_collector.emissions.empty());
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(linked.get(), &text));
-  EXPECT_EQ(text.find("func.decl @add"), std::string::npos);
-  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @add"),
-            std::string::npos);
-  EXPECT_NE(text.find("low.func.def target(@test_target) "
-                      "abi(object_function) @add"),
-            std::string::npos);
+  EXPECT_EQ(
+      loom::testing::FindModuleSymbolDefiningOp(linked.get(), IREE_SV("add")),
+      lower_result.low_func_op);
+  EXPECT_TRUE(loom_low_func_def_isa(lower_result.low_func_op));
+  EXPECT_EQ(loom_low_func_def_abi(lower_result.low_func_op),
+            LOOM_LOW_ABI_OBJECT_FUNCTION);
 }
 
 }  // namespace

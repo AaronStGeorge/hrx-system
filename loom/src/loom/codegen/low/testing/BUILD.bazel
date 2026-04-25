@@ -77,6 +77,18 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "ir_match_test_util",
+    testonly = True,
+    srcs = ["ir_match_test_util.cc"],
+    hdrs = ["ir_match_test_util.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "text_asm_test_util",
     testonly = True,
     srcs = ["text_asm_test_util.cc"],

@@ -619,8 +619,8 @@ loom_cc_test(
     ::source_selection
     ::verify
     iree::base::internal::arena
+    loom::src::loom::codegen::low::testing::ir_match_test_util
     loom::src::loom::format::text::parser
-    loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::buffer
     loom::src::loom::ops::cfg
@@ -629,6 +629,7 @@ loom_cc_test(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target
     loom::src::loom::ops::vector
+    loom::src::loom::target::test::descriptors_ids
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
     iree::testing::gtest
@@ -645,9 +646,9 @@ loom_cc_test(
     ::source_selection
     ::verify
     iree::base::internal::arena
+    loom::src::loom::codegen::low::testing::ir_match_test_util
     loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
-    loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::index
@@ -671,8 +672,8 @@ loom_cc_test(
     ::lower
     ::source_selection
     iree::base::internal::arena
+    loom::src::loom::codegen::low::testing::ir_match_test_util
     loom::src::loom::format::text::parser
-    loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::low
@@ -694,8 +695,8 @@ loom_cc_test(
     ::lower
     ::source_selection
     iree::base::internal::arena
+    loom::src::loom::codegen::low::testing::ir_match_test_util
     loom::src::loom::format::text::parser
-    loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::link::linker
     loom::src::loom::ops::func

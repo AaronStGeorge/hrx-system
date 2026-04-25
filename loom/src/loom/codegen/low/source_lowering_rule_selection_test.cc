@@ -5,7 +5,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include <memory>
-#include <string>
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
@@ -13,8 +12,8 @@
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/codegen/low/source_selection.h"
+#include "loom/codegen/low/testing/ir_match_test_util.h"
 #include "loom/format/text/parser.h"
-#include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
@@ -245,21 +244,6 @@ class SourceLoweringRuleSelectionTest : public ::testing::Test {
     iree_arena_deinitialize(&selection_arena);
   }
 
-  iree_status_t PrintModule(const loom_module_t* module,
-                            std::string* out_text) {
-    out_text->clear();
-    iree_string_builder_t builder;
-    iree_string_builder_initialize(iree_allocator_system(), &builder);
-    iree_status_t status = loom_text_print_module_to_builder(
-        module, &builder, LOOM_TEXT_PRINT_DEFAULT);
-    if (iree_status_is_ok(status)) {
-      *out_text = std::string(iree_string_builder_buffer(&builder),
-                              iree_string_builder_size(&builder));
-    }
-    iree_string_builder_deinitialize(&builder);
-    return status;
-  }
-
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_target_low_descriptor_registry_t registry_ = {};
@@ -281,12 +265,14 @@ TEST_F(SourceLoweringRuleSelectionTest,
   EXPECT_EQ(lower_result.remark_count, 0u);
   EXPECT_NE(lower_result.low_func_op, nullptr);
 
-  std::string text;
-  IREE_ASSERT_OK(PrintModule(module.get(), &text));
-  EXPECT_NE(text.find("@add"), std::string::npos);
-  EXPECT_EQ(text.find("\nfunc.def target(@test_target) @add"),
-            std::string::npos);
-  EXPECT_NE(text.find("low.op<test.add.i32>"), std::string::npos);
+  EXPECT_EQ(
+      loom::testing::FindModuleSymbolDefiningOp(module.get(), IREE_SV("add")),
+      lower_result.low_func_op);
+  EXPECT_TRUE(loom_low_func_def_isa(lower_result.low_func_op));
+  EXPECT_NE(
+      loom::testing::FindLowFuncDescriptorOp(
+          lower_result.low_func_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_ADD_I32),
+      nullptr);
 }
 
 }  // namespace
