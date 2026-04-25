@@ -14,6 +14,9 @@ from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DS16_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
+    _GFX12_TH_ATOMIC_RETURN_VALUE,
+    _gfx12_core_overlays,
+    _gfx1250_core_overlays,
     _validate_address_immediate_units,
 )
 from loom.target.low_descriptors import (
@@ -57,6 +60,35 @@ def _memory_descriptor(*, immediates: tuple[Immediate, ...]) -> Descriptor:
         immediates=immediates,
         effects=(Effect(EffectKind.READ, memory_space=MemorySpace.GLOBAL),),
     )
+
+
+def _fixed_field_value(
+    fixed_encoding_fields: tuple[tuple[str, int], ...], field_name: str
+) -> int:
+    for actual_field_name, value in fixed_encoding_fields:
+        if actual_field_name == field_name:
+            return value
+    raise AssertionError(f"missing fixed encoding field '{field_name}'")
+
+
+def test_gfx12_global_atomic_return_uses_temporal_hint_return_bit() -> None:
+    for overlays in (_gfx12_core_overlays(), _gfx1250_core_overlays()):
+        no_return = next(
+            overlay
+            for overlay in overlays
+            if overlay.descriptor_key == "amdgpu.global_atomic_add_u32_saddr"
+        )
+        with_return = next(
+            overlay
+            for overlay in overlays
+            if overlay.descriptor_key == "amdgpu.global_atomic_add_u32_rtn_saddr"
+        )
+
+        assert _fixed_field_value(no_return.fixed_encoding_fields, "TH") == 0
+        assert (
+            _fixed_field_value(with_return.fixed_encoding_fields, "TH")
+            == _GFX12_TH_ATOMIC_RETURN_VALUE
+        )
 
 
 def test_address_immediate_validation_rejects_missing_unit_metadata() -> None:

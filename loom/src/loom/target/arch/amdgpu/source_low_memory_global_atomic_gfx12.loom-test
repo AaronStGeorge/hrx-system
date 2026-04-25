@@ -1,0 +1,244 @@
+// TEMPLATE: loom/src/loom/test/corpus/source_low/memory_global_atomic.loom-test
+// RUN: emit source-low target-preset=amdgpu-gfx12 output=low
+
+func.def @global_atomic_add_i32(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
+  %one = scalar.constant 1 : i32
+  view.atomic.reduce<addi> %one, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
+  %old = view.atomic.rmw<addi> %one, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_atomic_add_i32() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %one = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
+  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %12 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %13 = low.op<amdgpu.v_lshlrev_b32>(%12, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %14 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_atomic_add_u32_saddr>(%13, %11, %14) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_lshlrev_b32>(%16, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %18 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old = low.op<amdgpu.global_atomic_add_u32_rtn_saddr>(%17, %15, %18) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.return
+}
+
+// ====
+
+func.def @global_atomic_add_f32(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %view = buffer.view %global[%zero] : buffer -> view<64xf32, #dense>
+  %one = scalar.constant 1.0 : f32
+  view.atomic.reduce<addf> %one, %view[%tid] {ordering = relaxed, scope = device} : f32, view<64xf32, #dense>
+  %old = view.atomic.rmw<addf> %one, %view[%tid] {ordering = relaxed, scope = device} : f32, view<64xf32, #dense> -> f32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_atomic_add_f32() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %one = low.const<amdgpu.v_mov_b32> {imm32 = 1065353216} : reg<amdgpu.vgpr>
+  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %12 = low.op<amdgpu.v_lshlrev_b32>(%11, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %13 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_atomic_add_f32_saddr>(%12, %one, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %15 = low.op<amdgpu.v_lshlrev_b32>(%14, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %16 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old = low.op<amdgpu.global_atomic_add_f32_rtn_saddr>(%15, %one, %16) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.return
+}
+
+// ====
+
+func.def @global_atomic_bitwise_i32(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
+  %mask = scalar.constant 255 : i32
+  view.atomic.reduce<andi> %mask, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
+  view.atomic.reduce<ori> %mask, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
+  view.atomic.reduce<xori> %mask, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
+  %old_and = view.atomic.rmw<andi> %mask, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
+  %old_or = view.atomic.rmw<ori> %mask, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
+  %old_xor = view.atomic.rmw<xori> %mask, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_atomic_bitwise_i32() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %mask = low.const<amdgpu.s_mov_b32> {imm32 = 255} : reg<amdgpu.sgpr>
+  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 255} : reg<amdgpu.vgpr>
+  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %15 = low.op<amdgpu.v_lshlrev_b32>(%14, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %16 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_atomic_and_b32_saddr>(%15, %13, %16) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %17 = low.const<amdgpu.v_mov_b32> {imm32 = 255} : reg<amdgpu.vgpr>
+  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %19 = low.op<amdgpu.v_lshlrev_b32>(%18, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %20 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_atomic_or_b32_saddr>(%19, %17, %20) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %21 = low.const<amdgpu.v_mov_b32> {imm32 = 255} : reg<amdgpu.vgpr>
+  %22 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %23 = low.op<amdgpu.v_lshlrev_b32>(%22, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %24 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_atomic_xor_b32_saddr>(%23, %21, %24) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %25 = low.const<amdgpu.v_mov_b32> {imm32 = 255} : reg<amdgpu.vgpr>
+  %26 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %27 = low.op<amdgpu.v_lshlrev_b32>(%26, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %28 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old_and = low.op<amdgpu.global_atomic_and_b32_rtn_saddr>(%27, %25, %28) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %30 = low.const<amdgpu.v_mov_b32> {imm32 = 255} : reg<amdgpu.vgpr>
+  %31 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %32 = low.op<amdgpu.v_lshlrev_b32>(%31, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %33 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old_or = low.op<amdgpu.global_atomic_or_b32_rtn_saddr>(%32, %30, %33) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %35 = low.const<amdgpu.v_mov_b32> {imm32 = 255} : reg<amdgpu.vgpr>
+  %36 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %37 = low.op<amdgpu.v_lshlrev_b32>(%36, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %38 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old_xor = low.op<amdgpu.global_atomic_xor_b32_rtn_saddr>(%37, %35, %38) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.return
+}
+
+// ====
+
+func.def @global_atomic_sub_i32(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
+  %delta = scalar.constant 1 : i32
+  view.atomic.reduce<subi> %delta, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
+  %old_sub = view.atomic.rmw<subi> %delta, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_atomic_sub_i32() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %delta = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
+  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %12 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %13 = low.op<amdgpu.v_lshlrev_b32>(%12, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %14 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_atomic_sub_u32_saddr>(%13, %11, %14) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %17 = low.op<amdgpu.v_lshlrev_b32>(%16, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %18 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old_sub = low.op<amdgpu.global_atomic_sub_u32_rtn_saddr>(%17, %15, %18) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.return
+}
+
+// ====
+
+func.def @global_atomic_exchange_i32(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
+  %value = scalar.constant 7 : i32
+  %old = view.atomic.rmw<xchgi> %value, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_atomic_exchange_i32() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %value = low.const<amdgpu.s_mov_b32> {imm32 = 7} : reg<amdgpu.sgpr>
+  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 7} : reg<amdgpu.vgpr>
+  %12 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %13 = low.op<amdgpu.v_lshlrev_b32>(%12, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %14 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old = low.op<amdgpu.global_atomic_swap_b32_rtn_saddr>(%13, %11, %14) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.return
+}
+
+// ====
+
+func.def @global_atomic_minmax_i32(%input: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %view = buffer.view %global[%zero] : buffer -> view<64xi32, #dense>
+  %limit = scalar.constant 1 : i32
+  view.atomic.reduce<minsi> %limit, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
+  view.atomic.reduce<maxsi> %limit, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
+  view.atomic.reduce<minui> %limit, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
+  view.atomic.reduce<maxui> %limit, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
+  %old_minsi = view.atomic.rmw<minsi> %limit, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
+  %old_maxsi = view.atomic.rmw<maxsi> %limit, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
+  %old_minui = view.atomic.rmw<minui> %limit, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
+  %old_maxui = view.atomic.rmw<maxui> %limit, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense> -> i32
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @global_atomic_minmax_i32() {
+  %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %limit = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>
+  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %16 = low.op<amdgpu.v_lshlrev_b32>(%15, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %17 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_atomic_min_i32_saddr>(%16, %14, %17) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %19 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %20 = low.op<amdgpu.v_lshlrev_b32>(%19, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %21 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_atomic_max_i32_saddr>(%20, %18, %21) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %22 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %23 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %24 = low.op<amdgpu.v_lshlrev_b32>(%23, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %25 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_atomic_min_u32_saddr>(%24, %22, %25) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %26 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %27 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %28 = low.op<amdgpu.v_lshlrev_b32>(%27, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %29 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_atomic_max_u32_saddr>(%28, %26, %29) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
+  %30 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %31 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %32 = low.op<amdgpu.v_lshlrev_b32>(%31, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %33 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old_minsi = low.op<amdgpu.global_atomic_min_i32_rtn_saddr>(%32, %30, %33) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %35 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %36 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %37 = low.op<amdgpu.v_lshlrev_b32>(%36, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %38 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old_maxsi = low.op<amdgpu.global_atomic_max_i32_rtn_saddr>(%37, %35, %38) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %40 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %41 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %42 = low.op<amdgpu.v_lshlrev_b32>(%41, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %43 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old_minui = low.op<amdgpu.global_atomic_min_u32_rtn_saddr>(%42, %40, %43) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  %45 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
+  %46 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
+  %47 = low.op<amdgpu.v_lshlrev_b32>(%46, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %48 = low.slice %view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %old_maxui = low.op<amdgpu.global_atomic_max_u32_rtn_saddr>(%47, %45, %48) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
+  low.return
+}

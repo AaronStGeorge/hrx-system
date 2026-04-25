@@ -163,6 +163,8 @@ _WAIT_COUNTER_ALU_ENCODING_ID = 22
 _GFX9_11_VECTOR_CACHE_FIELDS = (("GLC", 1), ("SLC", 1), ("DLC", 1))
 _GFX950_VECTOR_CACHE_FIELDS = (("NT", 1), ("SC0", 1), ("SC1", 1))
 _GFX12_VECTOR_CACHE_FIELDS = (("NV", 1), ("SCOPE", 2), ("TH", 3))
+# VGLOBAL atomic instructions use TH bit 0 to request returning the old value.
+_GFX12_TH_ATOMIC_RETURN_VALUE = 0x1
 _ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS = frozenset(
     (
         _ADDRESS_OFFSET_BYTE_ENCODING_ID,
@@ -2222,6 +2224,7 @@ def _global_atomic_overlay(
     offset_field_name: str,
     offset_bit_width: int,
     return_field_name: str,
+    return_field_value: int,
     cache_field_names: tuple[str, ...],
     saddr_off: int | None,
     address_units: int,
@@ -2257,7 +2260,12 @@ def _global_atomic_overlay(
         )
 
     fixed_encoding_fields: tuple[tuple[str, int], ...] = tuple(
-        (field_name, int(returns_old_value and field_name == return_field_name))
+        (
+            field_name,
+            return_field_value
+            if returns_old_value and field_name == return_field_name
+            else 0,
+        )
         for field_name in cache_field_names
     )
     if saddr_off is None:
@@ -2298,6 +2306,7 @@ def _global_atomic_overlays(
     offset_field_name: str,
     offset_bit_width: int,
     return_field_name: str,
+    return_field_value: int,
     cache_fields: tuple[tuple[str, int], ...],
     saddr_off: int | None,
     address_units: int,
@@ -2348,6 +2357,7 @@ def _global_atomic_overlays(
                     offset_field_name=offset_field_name,
                     offset_bit_width=offset_bit_width,
                     return_field_name=return_field_name,
+                    return_field_value=return_field_value,
                     cache_field_names=cache_field_names,
                     saddr_off=saddr_off,
                     address_units=address_units,
@@ -2369,6 +2379,7 @@ def _global_atomic_overlays(
                 offset_field_name=offset_field_name,
                 offset_bit_width=offset_bit_width,
                 return_field_name=return_field_name,
+                return_field_value=return_field_value,
                 cache_field_names=cache_field_names,
                 saddr_off=saddr_off,
                 address_units=address_units,
@@ -2390,6 +2401,7 @@ def _buffer_atomic_overlay(
     offset_field_name: str,
     offset_bit_width: int,
     return_field_name: str,
+    return_field_value: int,
     cache_field_names: tuple[str, ...],
 ) -> AmdgpuDescriptorOverlay:
     schedule_class = (
@@ -2425,7 +2437,12 @@ def _buffer_atomic_overlay(
         AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
     )
     fixed_encoding_fields = tuple(
-        (field_name, int(returns_old_value and field_name == return_field_name))
+        (
+            field_name,
+            return_field_value
+            if returns_old_value and field_name == return_field_name
+            else 0,
+        )
         for field_name in cache_field_names
     )
     return AmdgpuDescriptorOverlay(
@@ -2461,6 +2478,7 @@ def _buffer_atomic_overlays(
     offset_field_name: str,
     offset_bit_width: int,
     return_field_name: str,
+    return_field_value: int,
     cache_fields: tuple[tuple[str, int], ...],
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     rows = (
@@ -2505,6 +2523,7 @@ def _buffer_atomic_overlays(
                     offset_field_name=offset_field_name,
                     offset_bit_width=offset_bit_width,
                     return_field_name=return_field_name,
+                    return_field_value=return_field_value,
                     cache_field_names=cache_field_names,
                 )
             )
@@ -2521,6 +2540,7 @@ def _buffer_atomic_overlays(
                 offset_field_name=offset_field_name,
                 offset_bit_width=offset_bit_width,
                 return_field_name=return_field_name,
+                return_field_value=return_field_value,
                 cache_field_names=cache_field_names,
             )
         )
@@ -4077,6 +4097,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_field_name="OFFSET",
             offset_bit_width=12,
             return_field_name="GLC",
+            return_field_value=1,
             cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(
@@ -4113,6 +4134,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_field_name="OFFSET",
             offset_bit_width=13,
             return_field_name="GLC",
+            return_field_value=1,
             cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
             saddr_off=None,
             address_units=1,
@@ -4242,6 +4264,19 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             address_units=1,
             descriptor_key_suffix="_saddr",
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+        ),
+        *_global_atomic_overlays(
+            encoding_name="ENC_VGLOBAL",
+            address_field_name="VADDR",
+            data_field_name="VSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            return_field_name="TH",
+            return_field_value=_GFX12_TH_ATOMIC_RETURN_VALUE,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            saddr_off=None,
+            address_units=1,
+            descriptor_key_suffix="_saddr",
         ),
         *_ds_memory_overlays(
             encoding_name="ENC_VDS",
@@ -4378,6 +4413,19 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             address_units=1,
             descriptor_key_suffix="_saddr",
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+        ),
+        *_global_atomic_overlays(
+            encoding_name="ENC_VGLOBAL",
+            address_field_name="VADDR",
+            data_field_name="VSRC",
+            offset_field_name="IOFFSET",
+            offset_bit_width=24,
+            return_field_name="TH",
+            return_field_value=_GFX12_TH_ATOMIC_RETURN_VALUE,
+            cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            saddr_off=None,
+            address_units=1,
+            descriptor_key_suffix="_saddr",
         ),
         *_ds_memory_overlays(
             encoding_name="ENC_VDS",

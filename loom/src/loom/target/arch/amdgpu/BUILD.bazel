@@ -832,6 +832,7 @@ loom_check_test_suite(
         "source_low_mask.loom-test",
         "source_low_memory_global.loom-test",
         "source_low_memory_global_atomic.loom-test",
+        "source_low_memory_global_atomic_gfx12.loom-test",
         "source_low_memory_workgroup_atomic.loom-test",
         "source_low_memory_workgroup_b128.loom-test",
         "source_low_minmax.loom-test",
