@@ -179,8 +179,8 @@ void loom_verify_operand_dominance(loom_verify_state_t* state,
   const loom_value_id_t* operands = loom_op_const_operands(op);
   for (uint16_t i = 0; i < op->operand_count; ++i) {
     loom_value_id_t value_id = operands[i];
-    if (value_id == LOOM_VALUE_ID_INVALID) continue;
-    if (value_id >= state->module->values.count) {
+    if (value_id == LOOM_VALUE_ID_INVALID ||
+        value_id >= state->module->values.count) {
       loom_diagnostic_param_t params[] = {
           loom_param_u32(value_id),
           loom_param_u32((uint32_t)state->module->values.count),

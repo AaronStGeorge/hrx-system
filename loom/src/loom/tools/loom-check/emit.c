@@ -1197,6 +1197,8 @@ static iree_status_t loom_check_emit_write_source_low_text(
         IREE_STATUS_NOT_FOUND,
         "source-low found no compatible source funcs with a target profile");
   }
+  IREE_RETURN_IF_ERROR(
+      loom_target_module_compile_verify_module(module, &compile_options, 20));
 
   loom_target_module_compile_diagnostic_emitter_t verifier_emitter = {0};
   loom_target_module_compile_diagnostic_emitter_initialize(

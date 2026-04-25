@@ -274,6 +274,7 @@ loom_cc_library(
         "//loom/src/loom/pass:pipeline",
         "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:types",
+        "//loom/src/loom/verify",
         "//runtime/src/iree/base",
     ],
 )
@@ -566,6 +567,25 @@ loom_cc_test(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target/test:low_registry",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "lower_pass_test",
+    srcs = ["lower_pass_test.cc"],
+    deps = [
+        ":lower_pass",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/target",
+        "//loom/src/loom/target/test:low_registry",
+        "//loom/src/loom/target/test:lower",
+        "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

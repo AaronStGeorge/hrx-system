@@ -53,6 +53,7 @@ static iree_status_t loom_verify_region(loom_verify_state_t* state,
 
 static iree_status_t loom_verify_op(loom_verify_state_t* state,
                                     const loom_op_t* op) {
+  const uint32_t initial_error_count = state->result->error_count;
   const loom_op_vtable_t* vtable = loom_verify_lookup_vtable(state, op->kind);
   if (!vtable) {
     // Unknown op kind — emit structured diagnostic.
@@ -182,9 +183,10 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
   loom_verify_func_purity_body_effects(state, op, vtable);
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
-  // Op-specific verification callback. Runs last — all table-driven checks
-  // have passed, so the op is structurally sound and type-correct.
-  if (vtable->verify) {
+  // Op-specific verification callback. Runs last, and only when this op and
+  // its nested regions did not emit any prior verifier errors. Callbacks may
+  // assume structurally sound, type-correct IR.
+  if (vtable->verify && state->result->error_count == initial_error_count) {
     iree_diagnostic_emitter_t emitter = {
         .fn = loom_verify_diagnostic_emitter_fn,
         .user_data = state,

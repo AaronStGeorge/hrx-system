@@ -245,6 +245,7 @@ loom_cc_library(
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
+    loom::src::loom::verify
   PUBLIC
 )
 
@@ -574,6 +575,26 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::target
     loom::src::loom::target::test::low_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    lower_pass_test
+  SRCS
+    "lower_pass_test.cc"
+  DEPS
+    ::lower_pass
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::low
+    loom::src::loom::ops::target
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::target::test::lower
+    loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main
 )

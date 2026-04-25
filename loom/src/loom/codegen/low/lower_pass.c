@@ -13,6 +13,7 @@
 #include "loom/codegen/low/source_selection.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
+#include "loom/verify/verify.h"
 
 typedef struct loom_low_source_to_low_pass_state_t {
   // Maximum number of lowering diagnostics emitted before stopping.
@@ -57,6 +58,23 @@ static const loom_pass_info_t loom_low_source_to_low_pass_info_storage = {
 
 const loom_pass_info_t* loom_low_source_to_low_pass_info(void) {
   return &loom_low_source_to_low_pass_info_storage;
+}
+
+static iree_status_t loom_low_source_to_low_verify_module(
+    const loom_module_t* module, uint32_t max_errors) {
+  const loom_verify_options_t verify_options = {
+      .max_errors = max_errors,
+  };
+  loom_verify_result_t verify_result = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_verify_module(module, &verify_options, &verify_result));
+  if (verify_result.error_count > 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "source-to-low produced invalid IR with %" PRIu32 " verifier error%s",
+        verify_result.error_count, verify_result.error_count == 1 ? "" : "s");
+  }
+  return iree_ok_status();
 }
 
 bool loom_low_source_to_low_pass_config_satisfies_requirement(
@@ -206,6 +224,10 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   iree_arena_deinitialize(&selection_arena);
   IREE_RETURN_IF_ERROR(status);
 
+  if (function_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_low_source_to_low_verify_module(
+        module, state ? state->max_errors : 20));
+  }
   loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_FUNCTIONS,
                           function_count);
   if (function_count > 0) {

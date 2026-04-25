@@ -6,6 +6,7 @@
 
 #include "loom/codegen/low/testing/source_workload_pipeline.h"
 
+#include <inttypes.h>
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
@@ -16,14 +17,17 @@
 #include "loom/ops/low/ops.h"
 #include "loom/verify/verify.h"
 
-static iree_status_t loom_low_source_workload_verify_source_module(
-    const loom_module_t* module) {
+static iree_status_t loom_low_source_workload_verify_general_module(
+    const loom_module_t* module, iree_string_view_t phase) {
   loom_verify_options_t options = {0};
   loom_verify_result_t result = {0};
   IREE_RETURN_IF_ERROR(loom_verify_module(module, &options, &result));
   if (result.error_count != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "generated source failed verification");
+                            "generated %.*s failed verification with %" PRIu32
+                            " error%s",
+                            (int)phase.size, phase.data, result.error_count,
+                            result.error_count == 1 ? "" : "s");
   }
   return iree_ok_status();
 }
@@ -96,7 +100,8 @@ iree_status_t loom_low_source_workload_run_pipeline(
 
   loom_low_source_workload_count_module_source_ops(
       module, &out_counters->source_counts);
-  iree_status_t status = loom_low_source_workload_verify_source_module(module);
+  iree_status_t status =
+      loom_low_source_workload_verify_general_module(module, IREE_SV("source"));
 
   iree_arena_allocator_t lowering_arena;
   bool lowering_arena_initialized = false;
@@ -153,6 +158,10 @@ iree_status_t loom_low_source_workload_run_pipeline(
     if (iree_status_is_ok(status)) {
       out_counters->lower_error_count = lower_result.error_count;
       out_counters->lower_remark_count = lower_result.remark_count;
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_low_source_workload_verify_general_module(module,
+                                                              IREE_SV("low"));
     }
     if (iree_status_is_ok(status)) {
       status = loom_low_source_workload_verify_low_module(module, options);
