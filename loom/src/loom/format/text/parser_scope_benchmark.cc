@@ -163,13 +163,8 @@ static void ParseScopeSource(benchmark::State& state, const std::string& source,
   ParserScopeBenchmark benchmark_fixture;
   for (auto _ : state) {
     loom_module_t* module = nullptr;
-    iree_status_t status = benchmark_fixture.Parse(
-        iree_make_string_view(source.data(), source.size()), &module);
-    if (!iree_status_is_ok(status)) {
-      iree_status_ignore(status);
-      state.SkipWithError("loom_text_parse infrastructure failure");
-      break;
-    }
+    IREE_CHECK_OK(benchmark_fixture.Parse(
+        iree_make_string_view(source.data(), source.size()), &module));
     if (!module) {
       state.SkipWithError("loom_text_parse produced diagnostics");
       break;

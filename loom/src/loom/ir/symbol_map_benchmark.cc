@@ -42,7 +42,7 @@ struct BenchmarkArena {
 static void PopulateMap(loom_symbol_map_t* map, iree_arena_allocator_t* arena,
                         int64_t count) {
   for (int64_t i = 0; i < count; ++i) {
-    iree_status_ignore(
+    IREE_CHECK_OK(
         loom_symbol_map_insert(map, arena, (loom_string_id_t)i, (uint16_t)i));
   }
 }
@@ -116,7 +116,7 @@ static void BM_FindOrInsert(benchmark::State& state) {
     for (int64_t i = 0; i < total_ops; ++i) {
       loom_string_id_t name_id = (loom_string_id_t)(i % count);
       uint16_t symbol_id = 0;
-      iree_status_ignore(loom_symbol_map_find_or_insert(
+      IREE_CHECK_OK(loom_symbol_map_find_or_insert(
           &map, &bench.arena, name_id, (uint16_t)name_id, &symbol_id));
       benchmark::DoNotOptimize(symbol_id);
     }

@@ -55,7 +55,7 @@ static void BM_UvarintEncode_1Byte(benchmark::State& state) {
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t length = 0;
   for (auto _ : state) {
-    iree_status_ignore(loom_uvarint_encode(0x7F, buffer, &length));
+    IREE_CHECK_OK(loom_uvarint_encode(0x7F, buffer, &length));
     benchmark::DoNotOptimize(raw[0]);
   }
 }
@@ -66,7 +66,7 @@ static void BM_UvarintEncode_2Byte(benchmark::State& state) {
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t length = 0;
   for (auto _ : state) {
-    iree_status_ignore(loom_uvarint_encode(0x3FFF, buffer, &length));
+    IREE_CHECK_OK(loom_uvarint_encode(0x3FFF, buffer, &length));
     benchmark::DoNotOptimize(raw[0]);
   }
 }
@@ -77,7 +77,7 @@ static void BM_UvarintEncode_5Byte(benchmark::State& state) {
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t length = 0;
   for (auto _ : state) {
-    iree_status_ignore(loom_uvarint_encode(UINT32_MAX, buffer, &length));
+    IREE_CHECK_OK(loom_uvarint_encode(UINT32_MAX, buffer, &length));
     benchmark::DoNotOptimize(raw[0]);
   }
 }
@@ -88,7 +88,7 @@ static void BM_UvarintEncode_10Byte(benchmark::State& state) {
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t length = 0;
   for (auto _ : state) {
-    iree_status_ignore(loom_uvarint_encode(UINT64_MAX, buffer, &length));
+    IREE_CHECK_OK(loom_uvarint_encode(UINT64_MAX, buffer, &length));
     benchmark::DoNotOptimize(raw[0]);
   }
 }
@@ -102,12 +102,12 @@ static void BM_UvarintDecode_1Byte(benchmark::State& state) {
   uint8_t raw[LOOM_VARINT_MAX_LENGTH];
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t encoded_length = 0;
-  iree_status_ignore(loom_uvarint_encode(0x7F, buffer, &encoded_length));
+  IREE_CHECK_OK(loom_uvarint_encode(0x7F, buffer, &encoded_length));
   uint64_t decoded = 0;
   for (auto _ : state) {
     loom_bytecode_cursor_t cursor;
     loom_bytecode_cursor_initialize(raw, encoded_length, &cursor);
-    iree_status_ignore(loom_uvarint_decode(&cursor, &decoded));
+    IREE_CHECK_OK(loom_uvarint_decode(&cursor, &decoded));
     benchmark::DoNotOptimize(decoded);
   }
 }
@@ -117,12 +117,12 @@ static void BM_UvarintDecode_2Byte(benchmark::State& state) {
   uint8_t raw[LOOM_VARINT_MAX_LENGTH];
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t encoded_length = 0;
-  iree_status_ignore(loom_uvarint_encode(0x3FFF, buffer, &encoded_length));
+  IREE_CHECK_OK(loom_uvarint_encode(0x3FFF, buffer, &encoded_length));
   uint64_t decoded = 0;
   for (auto _ : state) {
     loom_bytecode_cursor_t cursor;
     loom_bytecode_cursor_initialize(raw, encoded_length, &cursor);
-    iree_status_ignore(loom_uvarint_decode(&cursor, &decoded));
+    IREE_CHECK_OK(loom_uvarint_decode(&cursor, &decoded));
     benchmark::DoNotOptimize(decoded);
   }
 }
@@ -132,12 +132,12 @@ static void BM_UvarintDecode_5Byte(benchmark::State& state) {
   uint8_t raw[LOOM_VARINT_MAX_LENGTH];
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t encoded_length = 0;
-  iree_status_ignore(loom_uvarint_encode(UINT32_MAX, buffer, &encoded_length));
+  IREE_CHECK_OK(loom_uvarint_encode(UINT32_MAX, buffer, &encoded_length));
   uint64_t decoded = 0;
   for (auto _ : state) {
     loom_bytecode_cursor_t cursor;
     loom_bytecode_cursor_initialize(raw, encoded_length, &cursor);
-    iree_status_ignore(loom_uvarint_decode(&cursor, &decoded));
+    IREE_CHECK_OK(loom_uvarint_decode(&cursor, &decoded));
     benchmark::DoNotOptimize(decoded);
   }
 }
@@ -147,12 +147,12 @@ static void BM_UvarintDecode_10Byte(benchmark::State& state) {
   uint8_t raw[LOOM_VARINT_MAX_LENGTH];
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t encoded_length = 0;
-  iree_status_ignore(loom_uvarint_encode(UINT64_MAX, buffer, &encoded_length));
+  IREE_CHECK_OK(loom_uvarint_encode(UINT64_MAX, buffer, &encoded_length));
   uint64_t decoded = 0;
   for (auto _ : state) {
     loom_bytecode_cursor_t cursor;
     loom_bytecode_cursor_initialize(raw, encoded_length, &cursor);
-    iree_status_ignore(loom_uvarint_decode(&cursor, &decoded));
+    IREE_CHECK_OK(loom_uvarint_decode(&cursor, &decoded));
     benchmark::DoNotOptimize(decoded);
   }
 }
@@ -173,7 +173,7 @@ static void BM_UvarintEncode_Batch(benchmark::State& state) {
       iree_byte_span_t remaining =
           iree_make_byte_span(raw + total, sizeof(raw) - total);
       iree_host_size_t length = 0;
-      iree_status_ignore(loom_uvarint_encode(values[i], remaining, &length));
+      IREE_CHECK_OK(loom_uvarint_encode(values[i], remaining, &length));
       total += length;
     }
     benchmark::DoNotOptimize(raw[0]);
@@ -197,7 +197,7 @@ static void BM_UvarintDecode_Batch(benchmark::State& state) {
     iree_byte_span_t remaining =
         iree_make_byte_span(raw + total, sizeof(raw) - total);
     iree_host_size_t length = 0;
-    iree_status_ignore(loom_uvarint_encode(values[i], remaining, &length));
+    IREE_CHECK_OK(loom_uvarint_encode(values[i], remaining, &length));
     total += length;
   }
 
@@ -206,7 +206,7 @@ static void BM_UvarintDecode_Batch(benchmark::State& state) {
     loom_bytecode_cursor_t cursor;
     loom_bytecode_cursor_initialize(raw, total, &cursor);
     for (int i = 0; i < kBatchSize; ++i) {
-      iree_status_ignore(loom_uvarint_decode(&cursor, &decoded));
+      IREE_CHECK_OK(loom_uvarint_decode(&cursor, &decoded));
     }
     benchmark::DoNotOptimize(decoded);
   }
@@ -223,7 +223,7 @@ static void BM_SvarintEncode_1Byte(benchmark::State& state) {
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t length = 0;
   for (auto _ : state) {
-    iree_status_ignore(loom_svarint_encode(-1, buffer, &length));
+    IREE_CHECK_OK(loom_svarint_encode(-1, buffer, &length));
     benchmark::DoNotOptimize(raw[0]);
   }
 }
@@ -233,12 +233,12 @@ static void BM_SvarintDecode_1Byte(benchmark::State& state) {
   uint8_t raw[LOOM_VARINT_MAX_LENGTH];
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t encoded_length = 0;
-  iree_status_ignore(loom_svarint_encode(-1, buffer, &encoded_length));
+  IREE_CHECK_OK(loom_svarint_encode(-1, buffer, &encoded_length));
   int64_t decoded = 0;
   for (auto _ : state) {
     loom_bytecode_cursor_t cursor;
     loom_bytecode_cursor_initialize(raw, encoded_length, &cursor);
-    iree_status_ignore(loom_svarint_decode(&cursor, &decoded));
+    IREE_CHECK_OK(loom_svarint_decode(&cursor, &decoded));
     benchmark::DoNotOptimize(decoded);
   }
 }
@@ -249,7 +249,7 @@ static void BM_SvarintEncode_10Byte(benchmark::State& state) {
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t length = 0;
   for (auto _ : state) {
-    iree_status_ignore(loom_svarint_encode(INT64_MIN, buffer, &length));
+    IREE_CHECK_OK(loom_svarint_encode(INT64_MIN, buffer, &length));
     benchmark::DoNotOptimize(raw[0]);
   }
 }
@@ -259,12 +259,12 @@ static void BM_SvarintDecode_10Byte(benchmark::State& state) {
   uint8_t raw[LOOM_VARINT_MAX_LENGTH];
   iree_byte_span_t buffer = iree_make_byte_span(raw, sizeof(raw));
   iree_host_size_t encoded_length = 0;
-  iree_status_ignore(loom_svarint_encode(INT64_MIN, buffer, &encoded_length));
+  IREE_CHECK_OK(loom_svarint_encode(INT64_MIN, buffer, &encoded_length));
   int64_t decoded = 0;
   for (auto _ : state) {
     loom_bytecode_cursor_t cursor;
     loom_bytecode_cursor_initialize(raw, encoded_length, &cursor);
-    iree_status_ignore(loom_svarint_decode(&cursor, &decoded));
+    IREE_CHECK_OK(loom_svarint_decode(&cursor, &decoded));
     benchmark::DoNotOptimize(decoded);
   }
 }

@@ -192,9 +192,9 @@ static void fuzz_strategy_raw_tokenize(const uint8_t* data, size_t size) {
     if (token.kind == LOOM_TOKEN_EOF) break;
   }
 
-  // Consume any deferred infrastructure status to prevent leaks.
-  iree_status_t status = loom_tokenizer_consume_status(&tokenizer.tokenizer);
-  iree_status_ignore(status);
+  // Malformed input is represented by LOOM_TOKEN_ERROR. The status channel is
+  // reserved for infrastructure failures.
+  IREE_CHECK_OK(loom_tokenizer_consume_status(&tokenizer.tokenizer));
   fuzz_tokenizer_deinitialize(&tokenizer);
 }
 
@@ -353,7 +353,7 @@ static void fuzz_strategy_grammar_aware(fuzz_input_t* input) {
     if (token.kind == LOOM_TOKEN_EOF) break;
   }
 
-  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
+  IREE_CHECK_OK(loom_tokenizer_consume_status(&tokenizer.tokenizer));
   fuzz_tokenizer_deinitialize(&tokenizer);
 }
 
@@ -415,7 +415,7 @@ static void fuzz_strategy_truncation(fuzz_input_t* input) {
     if (token.kind == LOOM_TOKEN_EOF) break;
   }
 
-  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
+  IREE_CHECK_OK(loom_tokenizer_consume_status(&tokenizer.tokenizer));
   fuzz_tokenizer_deinitialize(&tokenizer);
 }
 
@@ -505,21 +505,19 @@ static void fuzz_strategy_angle_nesting(fuzz_input_t* input) {
   loom_token_t opening = loom_tokenizer_next(&tokenizer.tokenizer);
   if (opening.kind == LOOM_TOKEN_LANGLE) {
     iree_string_view_t interior;
-    iree_status_t status =
-        loom_tokenizer_scan_angle_interior(&tokenizer.tokenizer, &interior);
-    if (iree_status_is_ok(status) &&
-        tokenizer.tokenizer.peeked.kind != LOOM_TOKEN_ERROR) {
+    IREE_CHECK_OK(
+        loom_tokenizer_scan_angle_interior(&tokenizer.tokenizer, &interior));
+    if (tokenizer.tokenizer.peeked.kind != LOOM_TOKEN_ERROR) {
       // Interior must be within the source buffer.
       if (interior.data < source_buffer ||
           interior.data + interior.size > source_buffer + source_length) {
         __builtin_trap();
       }
     }
-    iree_status_ignore(status);
   }
 
   fuzz_assert_position_invariant(&tokenizer.tokenizer);
-  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
+  IREE_CHECK_OK(loom_tokenizer_consume_status(&tokenizer.tokenizer));
   fuzz_tokenizer_deinitialize(&tokenizer);
 }
 
@@ -632,22 +630,20 @@ static void fuzz_strategy_api_interleave(const uint8_t* data, size_t size,
         if (loom_tokenizer_try_consume(&tokenizer.tokenizer,
                                        LOOM_TOKEN_LANGLE)) {
           iree_string_view_t interior;
-          iree_status_t status = loom_tokenizer_scan_angle_interior(
-              &tokenizer.tokenizer, &interior);
-          iree_status_ignore(status);
+          IREE_CHECK_OK(loom_tokenizer_scan_angle_interior(&tokenizer.tokenizer,
+                                                           &interior));
         }
         break;
       }
       case 9: {
-        // consume_status — retrieve and discard any pending infrastructure
-        // failure.
-        iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
+        // consume_status — verify no infrastructure failure is pending.
+        IREE_CHECK_OK(loom_tokenizer_consume_status(&tokenizer.tokenizer));
         break;
       }
     }
   }
 
-  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
+  IREE_CHECK_OK(loom_tokenizer_consume_status(&tokenizer.tokenizer));
   fuzz_tokenizer_deinitialize(&tokenizer);
 }
 
