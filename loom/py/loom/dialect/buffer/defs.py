@@ -31,6 +31,7 @@ from loom.dsl import (
     EnumDef,
     Op,
     Operand,
+    OpPhase,
     Result,
 )
 
@@ -42,6 +43,7 @@ buffer_ops = Dialect(
     "buffer",
     dialect_id=0x0C,
     doc="Opaque storage roots and typed view construction.",
+    default_phase=OpPhase.EXECUTABLE,
 )
 
 # ============================================================================

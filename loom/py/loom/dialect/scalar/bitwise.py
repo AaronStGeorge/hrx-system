@@ -10,6 +10,7 @@ from loom.dialect.scalar import IntOverflowFlags, scalar_ops
 from loom.dsl import (
     INTEGER,
     Op,
+    OpPhase,
     binary_op,
     unary_op,
 )
@@ -23,6 +24,7 @@ __all__ = ["ALL_BITWISE_OPS"]
 scalar_andi = binary_op(
     "scalar.andi",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Bitwise AND.",
     commutative=True,
@@ -33,6 +35,7 @@ scalar_andi = binary_op(
 scalar_ori = binary_op(
     "scalar.ori",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Bitwise OR.",
     commutative=True,
@@ -43,6 +46,7 @@ scalar_ori = binary_op(
 scalar_xori = binary_op(
     "scalar.xori",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Bitwise XOR.",
     commutative=True,
@@ -58,6 +62,7 @@ scalar_xori = binary_op(
 scalar_shli = binary_op(
     "scalar.shli",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Left shift.",
     flags=("overflow", IntOverflowFlags),
@@ -68,6 +73,7 @@ scalar_shli = binary_op(
 scalar_shrsi = binary_op(
     "scalar.shrsi",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Arithmetic right shift (sign-extending).",
     facts="loom_scalar_shrsi_facts",
@@ -77,6 +83,7 @@ scalar_shrsi = binary_op(
 scalar_shrui = binary_op(
     "scalar.shrui",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Logical right shift (zero-extending).",
     facts="loom_scalar_shrui_facts",

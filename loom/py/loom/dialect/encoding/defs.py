@@ -33,6 +33,7 @@ from loom.dsl import (
     Dialect,
     Op,
     Operand,
+    OpPhase,
     Result,
     SameType,
 )
@@ -50,6 +51,7 @@ encoding_ops = Dialect("encoding", dialect_id=0x09, doc="Encoding definition and
 encoding_layout_dense = Op(
     name="encoding.layout.dense",
     group=encoding_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Construct a dense row-major address layout. The consuming view type provides the rank and logical extents."),
     results=[Result("result", ENCODING_LAYOUT, doc="Dense address-layout value.")],
     traits=[PURE],
@@ -67,6 +69,7 @@ encoding_layout_dense = Op(
 encoding_layout_strided = Op(
     name="encoding.layout.strided",
     group=encoding_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Construct an address layout from per-dimension element strides. Static and dynamic stride values are interleaved in one bracket list."),
     operands=[Operand("strides", INDEX, doc="Dynamic element strides.", variadic=True)],
     results=[Result("result", ENCODING_LAYOUT, doc="Strided address-layout value.")],
@@ -98,6 +101,7 @@ encoding_layout_strided = Op(
 encoding_layout_assume_dense = Op(
     name="encoding.layout.assume.dense",
     group=encoding_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Refine an existing address-layout encoding value with the fact that it is dense row-major. The result is the same encoding value in SSA form with stronger local facts."),
     operands=[Operand("layout", ENCODING_LAYOUT, doc="Address-layout value to refine.")],
     results=[Result("result", ENCODING_LAYOUT, doc="Layout value with dense-layout facts.")],
@@ -117,6 +121,7 @@ encoding_layout_assume_dense = Op(
 encoding_layout_assume_strided = Op(
     name="encoding.layout.assume.strided",
     group=encoding_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Refine an existing address-layout encoding value with the fact that "
         "it is strided and has the given rank. Per-axis stride values remain "
@@ -147,6 +152,7 @@ encoding_layout_assume_strided = Op(
 encoding_define = Op(
     name="encoding.define",
     group=encoding_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Create an encoding value from a static encoding specification.",
     operands=[
         Operand("params", ANY, variadic=True),
@@ -183,6 +189,7 @@ encoding_define = Op(
 encoding_assume_spec = Op(
     name="encoding.assume.spec",
     group=encoding_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Refine an existing encoding value with an exact static encoding "
         "specification. Dynamic values remain ordinary SSA operands elsewhere; "

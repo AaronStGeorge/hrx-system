@@ -695,12 +695,15 @@ class InterfaceFieldSpec:
     region_field: For kind="block_arg", the name of the interface field
         that names the region the block arg belongs to. Unused for
         other kinds.
+    required: True when a soft default is still semantically required and
+        must resolve to a declared op field.
     """
 
     py_field: str
     c_field: str
     kind: str
     region_field: str = ""
+    required: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -798,7 +801,7 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
         c_struct="loom_memory_access_vtable_t",
         vtable_field="memory_access",
         fields=(
-            InterfaceFieldSpec("view", "view_operand_index", "operand"),
+            InterfaceFieldSpec("view", "view_operand_index", "operand", required=True),
             InterfaceFieldSpec("value", "value_operand_index", "operand"),
             InterfaceFieldSpec("expected", "expected_operand_index", "operand"),
             InterfaceFieldSpec("replacement", "replacement_operand_index", "operand"),
@@ -819,6 +822,55 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
 )
 
 
+def _interface_field_is_explicit(iface: Any, field_name: str) -> bool:
+    """Returns true when the declaration explicitly supplied an interface field."""
+    explicit_fields = getattr(iface, "_explicit_fields", None)
+    return explicit_fields is None or field_name in explicit_fields
+
+
+def _interface_reference_exists(
+    op: Op,
+    iface: Any,
+    field_spec: InterfaceFieldSpec,
+    py_value: Any,
+) -> bool:
+    """Returns true if an implicitly defaulted interface reference exists."""
+    if py_value is None:
+        return True
+    if field_spec.kind == "attr":
+        return any(attr_def.name == py_value and attr_def.attr_type != ATTR_TYPE_FLAGS for attr_def in op.attrs)
+    if field_spec.kind == "region":
+        return any(region_def.name == py_value for region_def in op.regions)
+    if field_spec.kind == "operand":
+        return any(operand.name == py_value for operand in op.operands)
+    if field_spec.kind == "result":
+        return any(result.name == py_value for result in op.results)
+    if field_spec.kind == "block_arg":
+        region_value = getattr(iface, field_spec.region_field)
+        region_def = next(
+            (region for region in op.regions if region.name == region_value),
+            None,
+        )
+        if region_def is None:
+            return False
+        return any(name == py_value for name, _type in region_def.implicit_args)
+    return True
+
+
+def _interface_soft_default_is_absent(
+    op: Op,
+    iface: Any,
+    field_spec: InterfaceFieldSpec,
+    py_value: Any,
+) -> bool:
+    """Returns true when a non-required soft default should emit none."""
+    if field_spec.required:
+        return False
+    if _interface_field_is_explicit(iface, field_spec.py_field):
+        return False
+    return not _interface_reference_exists(op, iface, field_spec, py_value)
+
+
 def _resolve_interface_field(
     op: Op,
     iface: Any,
@@ -832,6 +884,8 @@ def _resolve_interface_field(
     designated initializer.
     """
     py_value = getattr(iface, field_spec.py_field)
+    if _interface_soft_default_is_absent(op, iface, field_spec, py_value):
+        return "255"
     if field_spec.kind == "attr":
         return str(_resolve_attr_index(op, py_value, interface_name))
     if field_spec.kind == "region":
@@ -854,6 +908,27 @@ def _resolve_interface_field(
     raise ValueError(f"{interface_name} field {field_spec.py_field!r}: unknown kind {field_spec.kind!r}")
 
 
+def _resolve_soft_memory_field(
+    op: Op,
+    iface: MemoryAccessInterface,
+    field_name: str,
+    field_kind: str,
+    interface_name: str,
+) -> int | None:
+    """Resolves a MemoryAccessInterface field, returning None for absent defaults."""
+    field_spec = InterfaceFieldSpec(field_name, "", field_kind)
+    py_value = getattr(iface, field_name)
+    if _interface_soft_default_is_absent(op, iface, field_spec, py_value):
+        return None
+    if field_kind == "attr":
+        index = _resolve_attr_index(op, py_value, interface_name)
+    elif field_kind == "operand":
+        index = _resolve_operand_index(op, py_value, interface_name)
+    else:
+        raise ValueError(f"unsupported MemoryAccessInterface field kind {field_kind!r}")
+    return None if index == 0xFF else index
+
+
 def _validate_call_like_interface(op: Op, iface: CallLikeInterface, interface_name: str) -> None:
     """Validates CallLikeInterface's trailing variadic slice contract."""
     operand_index = _resolve_operand_index(op, iface.operands, interface_name)
@@ -873,19 +948,28 @@ def _validate_call_like_interface(op: Op, iface: CallLikeInterface, interface_na
 
 def _validate_memory_access_interface(op: Op, iface: MemoryAccessInterface, interface_name: str) -> None:
     """Validates MemoryAccessInterface's optional role coherence."""
+    if iface.view is None:
+        raise ValueError(f"{interface_name} on {op.name!r}: view operand is required")
     _resolve_operand_index(op, iface.view, interface_name)
-    if iface.indices is not None:
-        indices_index = _resolve_operand_index(op, iface.indices, interface_name)
+    indices_index = _resolve_soft_memory_field(op, iface, "indices", "operand", interface_name)
+    if indices_index is not None:
         indices_operand = op.operands[indices_index]
         if not indices_operand.variadic:
             raise ValueError(f"{interface_name} on {op.name!r}: operand {iface.indices!r} must be variadic")
         if indices_index + 1 != len(op.operands):
             raise ValueError(f"{interface_name} on {op.name!r}: operand {iface.indices!r} must be the trailing operand field")
-    if (iface.cache_scope is None) != (iface.cache_temporal is None):
+
+    cache_scope_index = _resolve_soft_memory_field(op, iface, "cache_scope", "attr", interface_name)
+    cache_temporal_index = _resolve_soft_memory_field(op, iface, "cache_temporal", "attr", interface_name)
+    if (cache_scope_index is None) != (cache_temporal_index is None):
         raise ValueError(f"{interface_name} on {op.name!r}: cache_scope and cache_temporal must be declared together")
-    if (iface.atomic_success_ordering is None) != (iface.atomic_failure_ordering is None):
+
+    atomic_ordering_index = _resolve_soft_memory_field(op, iface, "atomic_ordering", "attr", interface_name)
+    atomic_success_ordering_index = _resolve_soft_memory_field(op, iface, "atomic_success_ordering", "attr", interface_name)
+    atomic_failure_ordering_index = _resolve_soft_memory_field(op, iface, "atomic_failure_ordering", "attr", interface_name)
+    if (atomic_success_ordering_index is None) != (atomic_failure_ordering_index is None):
         raise ValueError(f"{interface_name} on {op.name!r}: atomic_success_ordering and atomic_failure_ordering must be declared together")
-    if iface.atomic_ordering is not None and iface.atomic_success_ordering is not None:
+    if atomic_ordering_index is not None and atomic_success_ordering_index is not None:
         raise ValueError(f"{interface_name} on {op.name!r}: use either atomic_ordering or success/failure orderings, not both")
 
 

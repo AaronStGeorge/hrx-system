@@ -62,6 +62,7 @@ from loom.dsl import (
     FuncLikeInterface,
     Op,
     Operand,
+    OpPhase,
     RegionDef,
     Result,
     SymbolDefinition,
@@ -268,6 +269,7 @@ _FUNC_LIKE_DECL_CONTRACT: dict[str, Any] = dict(
 func_def = Op(
     "func.def",
     group=func_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Function definition. Callable by name via func.call.",
     traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
     attrs=[*_MODIFIER_ATTRS, *_CONTRACT_ATTRS],
@@ -304,6 +306,7 @@ func_def = Op(
 func_decl = Op(
     "func.decl",
     group=func_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="External function declaration. Callable by name via func.call.",
     traits=[SYMBOL_DEFINE],
     attrs=list(_DECL_ATTRS),
@@ -431,6 +434,7 @@ func_ukernel = Op(
 func_call = Op(
     "func.call",
     group=func_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Runtime function call. Target must be func.def or func.decl.",
     operands=[
         Operand("operands", ANY, variadic=True),
@@ -540,6 +544,7 @@ func_apply = Op(
 func_return = Op(
     "func.return",
     group=func_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Return values from function body. Types must match enclosing function's result types.",
     operands=[Operand("operands", ANY, variadic=True)],
     traits=[TERMINATOR, POISON_BOUNDARY],

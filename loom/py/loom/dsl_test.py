@@ -70,6 +70,7 @@ from loom.dsl import (
     BlockArgsSatisfy,
     CallLikeInterface,
     CallLikeKind,
+    ContractFamily,
     Dialect,
     DimIndexInBounds,
     ElementWidthAtLeastAttr,
@@ -95,10 +96,12 @@ from loom.dsl import (
     ImplicitTerminator,
     LastAxisGroupedBy,
     LiteralMatchesElementType,
+    MemoryAccessInterface,
     NoAncestor,
     OffsetCountMatchesRank,
     Op,
     Operand,
+    OpPhase,
     PackedPayloadBitCountMatchesStorage,
     PositiveBitWidthAttr,
     RanksMatch,
@@ -113,6 +116,8 @@ from loom.dsl import (
     Successor,
     TotalBitCountEqual,
     TypeConstraint,
+    TypeDef,
+    TypeSemantic,
     UnpackedPayloadBitCountMatchesStorage,
     ValueCountMatchesStaticElementCount,
     Writes,
@@ -443,6 +448,29 @@ class TestInterfaces:
         assert CallLikeKind.TEMPLATE.value == "template"
         assert CallLikeKind.LOW_INTERNAL.value == "low_internal"
         assert CallLikeKind.LOW_INVOKE.value == "low_invoke"
+
+    def test_memory_access_interface_uses_soft_field_defaults(self) -> None:
+        interface = MemoryAccessInterface()
+
+        assert interface.view == "view"
+        assert interface.value == "value"
+        assert interface.indices == "indices"
+        assert interface.static_indices == "static_indices"
+        assert interface.cache_scope == "cache_scope"
+        assert interface.cache_temporal == "cache_temporal"
+        assert interface.atomic_kind == "kind"
+        assert interface.atomic_ordering == "ordering"
+        assert interface.atomic_success_ordering == "success_ordering"
+        assert interface.atomic_failure_ordering == "failure_ordering"
+        assert interface.atomic_scope == "scope"
+        assert interface._explicit_fields == frozenset()
+
+    def test_memory_access_interface_tracks_explicit_overrides(self) -> None:
+        interface = MemoryAccessInterface(value="stored", cache_scope=None)
+
+        assert interface.value == "stored"
+        assert interface.cache_scope is None
+        assert interface._explicit_fields == frozenset({"value", "cache_scope"})
 
 
 # ============================================================================
@@ -1194,6 +1222,33 @@ class TestDialect:
         assert len(g.enums) == 1
         assert isinstance(g.enums, tuple)
 
+    def test_default_phase(self) -> None:
+        g = Dialect("target", default_phase=OpPhase.MODULE_METADATA)
+        assert g.default_phase == OpPhase.MODULE_METADATA
+
+
+# ============================================================================
+# Type declaration
+# ============================================================================
+
+
+class TestTypeDef:
+    def test_semantic_metadata_defaults_to_ordinary(self) -> None:
+        type_def = TypeDef("test.handle")
+
+        assert type_def.semantic == TypeSemantic.ORDINARY
+        assert type_def.contracts == ()
+
+    def test_semantic_metadata_is_stored_as_tuples(self) -> None:
+        type_def = TypeDef(
+            "kernel.async.token",
+            semantic=TypeSemantic.CONTROL_TOKEN,
+            contracts=[ContractFamily.KERNEL_ASYNC],
+        )
+
+        assert type_def.semantic == TypeSemantic.CONTROL_TOKEN
+        assert type_def.contracts == (ContractFamily.KERNEL_ASYNC,)
+
 
 # ============================================================================
 # Op declaration
@@ -1214,6 +1269,24 @@ class TestOp:
         assert op.short_name == "addi"
         assert len(op.operands) == 2
         assert len(op.results) == 1
+
+    def test_semantic_metadata(self) -> None:
+        op = Op(
+            "vector.iota",
+            phase=OpPhase.EXECUTABLE,
+            contracts=[ContractFamily.VECTOR_COORDINATE],
+        )
+
+        assert op.phase == OpPhase.EXECUTABLE
+        assert op.contracts == (ContractFamily.VECTOR_COORDINATE,)
+
+    def test_effective_phase_uses_dialect_default(self) -> None:
+        op = Op(
+            "target.profile",
+            group=Dialect("target", default_phase=OpPhase.MODULE_METADATA),
+        )
+
+        assert op.effective_phase == OpPhase.MODULE_METADATA
 
     def test_repr(self) -> None:
         op = Op("test.op")

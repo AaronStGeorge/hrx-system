@@ -36,14 +36,17 @@ from loom.dsl import (
     VECTOR,
     VIEW,
     AttrDef,
+    ContractFamily,
     Dialect,
     EnumCase,
     EnumDef,
     Op,
     Operand,
+    OpPhase,
     Reads,
     Result,
     TypeDef,
+    TypeSemantic,
     Writes,
 )
 
@@ -64,15 +67,21 @@ kernel_ops = Dialect(
 kernel_async_token_type = TypeDef(
     name="kernel.async.token",
     doc=("Opaque token for one initiated asynchronous memory transfer. A token must be committed to exactly one kernel.async.group."),
+    semantic=TypeSemantic.CONTROL_TOKEN,
+    contracts=[ContractFamily.KERNEL_ASYNC],
 )
 
 kernel_async_group_type = TypeDef(
     name="kernel.async.group",
     doc=("Opaque handle for one ordered asynchronous copy group. A group must be waited before leaving the kernel async-copy stream."),
+    semantic=TypeSemantic.CONTROL_TOKEN,
+    contracts=[ContractFamily.KERNEL_ASYNC],
 )
 
 kernel_tensor_lds_descriptor_type = TypeDef(
     name="kernel.tensor.lds.descriptor",
+    semantic=TypeSemantic.TARGET_CONTRACT_VALUE,
+    contracts=[ContractFamily.TENSOR_MEMORY],
     doc=(
         "Opaque descriptor grouping AMDGPU tensor-memory dgroups for one "
         "global/LDS tensor transfer. The descriptor contains the low-level "
@@ -181,6 +190,7 @@ def _async_cache_attrs() -> list[AttrDef]:
 kernel_workitem_id = Op(
     name="kernel.workitem.id",
     group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Read one coordinate of the current invocation within its workgroup. "
         "The result is a logical index value, not a byte offset; target "
@@ -217,6 +227,7 @@ kernel_workitem_id = Op(
 kernel_workgroup_id = Op(
     name="kernel.workgroup.id",
     group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Read one coordinate of the current workgroup within the dispatch "
         "grid. The result is a logical index value; target lowering decides "
@@ -296,6 +307,7 @@ kernel_tensor_lds_descriptor = Op(
 kernel_barrier = Op(
     name="kernel.barrier",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
     doc=(
         "Synchronize invocations in an explicit execution scope and fence a "
         "named memory space with a required ordering. The supported kernel "
@@ -352,6 +364,7 @@ def _async_copy_attrs() -> list[AttrDef]:
 kernel_async_copy = Op(
     name="kernel.async.copy",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_ASYNC],
     doc=(
         "Initiate an asynchronous byte-for-byte transfer between two already "
         "originated views. The source and destination view types may use "
@@ -395,6 +408,7 @@ kernel_async_copy = Op(
 kernel_async_copy_mask = Op(
     name="kernel.async.copy.mask",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_ASYNC],
     doc=(
         "Predicated form of kernel.async.copy. When predicate is true, the op "
         "initiates the same transfer as kernel.async.copy. When predicate is "
@@ -440,6 +454,7 @@ kernel_async_copy_mask = Op(
 kernel_async_gather = Op(
     name="kernel.async.gather",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_ASYNC],
     doc=(
         "Initiate a subgroup-collective asynchronous gather from each "
         "invocation's source view into a lane-contiguous workgroup destination "
@@ -489,6 +504,7 @@ kernel_async_gather = Op(
 kernel_async_gather_mask = Op(
     name="kernel.async.gather.mask",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_ASYNC],
     doc=(
         "Predicated form of kernel.async.gather. False predicates perform no "
         "source or destination access for the current invocation but still "
@@ -534,6 +550,7 @@ kernel_async_gather_mask = Op(
 kernel_async_cluster_gather = Op(
     name="kernel.async.cluster.gather",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_ASYNC],
     doc=(
         "Initiate an AMDGPU gfx1250+ cluster asynchronous load from a "
         "global-like source view into a workgroup/LDS destination view. The "
@@ -586,6 +603,7 @@ kernel_async_cluster_gather = Op(
 kernel_async_cluster_gather_mask = Op(
     name="kernel.async.cluster.gather.mask",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_ASYNC],
     doc=(
         "Predicated form of kernel.async.cluster.gather. False predicates "
         "perform no source or destination access for the current invocation "
@@ -638,6 +656,7 @@ kernel_async_cluster_gather_mask = Op(
 kernel_async_tensor_load_to_lds = Op(
     name="kernel.async.tensor.load.to.lds",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_ASYNC],
     doc=(
         "Initiate an AMDGPU gfx1250+ tensor-memory load from a global-like "
         "source view into a workgroup/LDS destination view using an explicit "
@@ -688,6 +707,7 @@ kernel_async_tensor_load_to_lds = Op(
 kernel_async_tensor_store_from_lds = Op(
     name="kernel.async.tensor.store.from.lds",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_ASYNC],
     doc=(
         "Initiate an AMDGPU gfx1250+ tensor-memory store from a workgroup/LDS "
         "source view into a global-like destination view using an explicit "
@@ -738,6 +758,7 @@ kernel_async_tensor_store_from_lds = Op(
 kernel_async_group = Op(
     name="kernel.async.group",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_ASYNC],
     doc=(
         "Commit zero or more async copy/gather/cluster/tensor tokens into the "
         "ordered async stream. Empty groups are valid pipeline markers. The "
@@ -779,6 +800,7 @@ kernel_async_group = Op(
 kernel_async_wait = Op(
     name="kernel.async.wait",
     group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_ASYNC],
     doc=(
         "Wait until a committed async-copy group has completed. This completes "
         "the named group and all older groups in the same ordered async stream. "

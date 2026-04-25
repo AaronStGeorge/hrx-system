@@ -71,6 +71,7 @@ from loom.dsl import (
     NoAncestor,
     Op,
     Operand,
+    OpPhase,
     RegionDef,
     RegisterUnitsSumTo,
     Result,
@@ -325,6 +326,7 @@ _FUNC_LIKE_COMMON: dict[str, Any] = dict(
 low_func_def = Op(
     "low.func.def",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Target-bound low function definition with register-typed signature values.",
     traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
     attrs=list(_FUNC_COMMON_ATTRS),
@@ -365,6 +367,7 @@ low_func_def = Op(
 low_func_decl = Op(
     "low.func.decl",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Target-bound low function declaration with register-typed signature values.",
     traits=[SYMBOL_DEFINE],
     operands=[Operand("args", REGISTER, variadic=True)],
@@ -400,6 +403,7 @@ low_func_decl = Op(
 low_return = Op(
     "low.return",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Return register values from a low function.",
     operands=[Operand("values", REGISTER, variadic=True)],
     traits=[TERMINATOR],
@@ -474,6 +478,7 @@ low_func_call = Op(
 low_br = Op(
     "low.br",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Unconditional branch to a low successor block, forwarding register values.",
     operands=[
         Operand(
@@ -506,6 +511,7 @@ low_br = Op(
 low_cond_br = Op(
     "low.cond_br",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Conditional branch to one of two low successor blocks based on a register predicate.",
     operands=[Operand("condition", REGISTER, doc="Register predicate controlling the branch.")],
     successors=[
@@ -535,6 +541,7 @@ low_cond_br = Op(
 low_op = Op(
     "low.op",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Descriptor-backed target instruction over virtual registers.",
     operands=[Operand("operands", REGISTER, variadic=True)],
     attrs=[
@@ -574,6 +581,7 @@ low_op = Op(
 low_const = Op(
     "low.const",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Descriptor-backed constant or immediate materialization into a register.",
     attrs=[
         AttrDef("opcode", "string"),
@@ -601,6 +609,7 @@ low_const = Op(
 low_copy = Op(
     "low.copy",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Explicit virtual-register copy used by lowering and allocation.",
     operands=[Operand("source", REGISTER)],
     results=[Result("result", REGISTER)],
@@ -663,6 +672,7 @@ low_slice = Op(
 low_concat = Op(
     "low.concat",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Compose one register-range value from ordered register subranges.",
     operands=[Operand("sources", REGISTER, variadic=True)],
     results=[Result("result", REGISTER)],
@@ -721,6 +731,7 @@ low_live_in = Op(
 low_slot = Op(
     "low.slot",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Explicit function-owned stack, scratch, private, or LDS storage slot.",
     traits=[SYMBOL_DEFINE],
     symbol_def=SymbolDefinition(
@@ -757,6 +768,7 @@ low_slot = Op(
 low_spill = Op(
     "low.spill",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Explicit spill store from a register value into a low slot.",
     operands=[Operand("value", REGISTER)],
     attrs=[
@@ -789,6 +801,7 @@ low_spill = Op(
 low_reload = Op(
     "low.reload",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Explicit reload from a low slot into a register value.",
     attrs=[
         AttrDef(
@@ -819,6 +832,7 @@ low_reload = Op(
 low_frame_index = Op(
     "low.frame_index",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Symbolic address calculation for a low slot before target frame layout.",
     attrs=[
         AttrDef(
@@ -849,6 +863,7 @@ low_frame_index = Op(
 low_resource = Op(
     "low.resource",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Import a function-local target resource into a low register value.",
     attrs=[
         AttrDef("import_kind", ATTR_TYPE_ENUM, enum_def=LowResourceImportKind),
@@ -890,6 +905,7 @@ low_resource = Op(
 low_invoke = Op(
     "low.invoke",
     group=low_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Invoke an explicitly selected translated low function from non-low IR.",
     operands=[Operand("operands", ANY, variadic=True)],
     attrs=[

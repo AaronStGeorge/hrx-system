@@ -59,6 +59,7 @@ from loom.dsl import (
     LoopLikeInterface,
     Op,
     Operand,
+    OpPhase,
     RegionBranchInterface,
     RegionDef,
     Result,
@@ -75,6 +76,7 @@ scf_ops = Dialect(
     "scf",
     dialect_id=0x05,
     doc="Structured control flow operations.",
+    default_phase=OpPhase.SOURCE_STRUCTURE,
 )
 
 # ============================================================================
@@ -155,6 +157,7 @@ scf_condition = Op(
 scf_select = Op(
     "scf.select",
     group=scf_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Select between two same-typed SSA values using a scalar i1 condition. "
         "This is whole-value selection: if the selected values are vectors or "

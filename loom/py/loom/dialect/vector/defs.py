@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from typing import Any
 
 from loom.assembly import (
     ARROW,
@@ -61,6 +62,7 @@ from loom.dsl import (
     AttrMatchesElementType,
     BitRangeWithinElementWidth,
     Constraint,
+    ContractFamily,
     Dialect,
     DimIndexInBounds,
     ElementWidthAtLeastAttr,
@@ -84,6 +86,7 @@ from loom.dsl import (
     MemoryAccessInterface,
     Op,
     Operand,
+    OpPhase,
     PackedPayloadBitCountMatchesStorage,
     PositiveBitWidthAttr,
     Reads,
@@ -210,6 +213,7 @@ def _lanewise_binary(
     flags: tuple[str, EnumDef] | None = None,
     facts: str = "",
     canonicalize: str = "",
+    **kwargs: Any,
 ) -> Op:
     result_element_constraint = _element_constraint_for(result_constraint)
     attrs: list[AttrDef] = []
@@ -241,6 +245,7 @@ def _lanewise_binary(
         facts=facts,
         canonicalize=canonicalize,
         format=fmt,
+        **kwargs,
     )
 
 
@@ -253,6 +258,7 @@ def _lanewise_unary(
     flags: tuple[str, EnumDef] | None = None,
     facts: str = "",
     canonicalize: str = "",
+    **kwargs: Any,
 ) -> Op:
     result_element_constraint = _element_constraint_for(result_constraint)
     attrs: list[AttrDef] = []
@@ -281,6 +287,7 @@ def _lanewise_unary(
         facts=facts,
         canonicalize=canonicalize,
         format=fmt,
+        **kwargs,
     )
 
 
@@ -292,6 +299,7 @@ def _lanewise_unary_shape_change(
     doc: str,
     facts: str = "",
     canonicalize: str = "",
+    **kwargs: Any,
 ) -> Op:
     result_element_constraint = _element_constraint_for(result_constraint)
     return Op(
@@ -316,6 +324,7 @@ def _lanewise_unary_shape_change(
             ARROW,
             ResultType("result"),
         ],
+        **kwargs,
     )
 
 
@@ -328,6 +337,7 @@ def _vector_cast(
     constraints: Sequence[Constraint] = (),
     facts: str = "",
     canonicalize: str = "",
+    **kwargs: Any,
 ) -> Op:
     result_element_constraint = _element_constraint_for(result_constraint)
     return Op(
@@ -353,6 +363,7 @@ def _vector_cast(
             kw("to"),
             TypeOf("result"),
         ],
+        **kwargs,
     )
 
 
@@ -375,6 +386,7 @@ def _element_constraint_for(
 vector_constant = Op(
     "vector.constant",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Materialize a compile-time vector value whose every lane has the "
         "same scalar attribute payload. The result type supplies both the "
@@ -392,6 +404,7 @@ vector_constant = Op(
 vector_poison = Op(
     "vector.poison",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Materialize a typed Loom poison vector. Poison represents an invalid "
         "vector value and propagates through pure vector ops until dead-code "
@@ -425,6 +438,7 @@ vector_empty = Op(
 vector_splat = Op(
     "vector.splat",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Replicate one scalar value to every lane of a vector result. The "
         "annotation after ':' is the result vector type; the scalar operand "
@@ -447,6 +461,7 @@ vector_splat = Op(
 vector_iota = Op(
     "vector.iota",
     group=vector_ops,
+    contracts=[ContractFamily.VECTOR_COORDINATE],
     doc=(
         "Construct a vector of lane-coordinate values. Lane order is the "
         "logical row-major order of the result shape; result lane ordinal i "
@@ -549,6 +564,7 @@ vector_broadcast = Op(
 vector_from_elements = Op(
     "vector.from_elements",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Build an all-static vector from scalar element operands in logical "
         "lane order. The result vector type defines both the lane count and "
@@ -581,6 +597,7 @@ vector_from_elements = Op(
 vector_extract = Op(
     "vector.extract",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Extract a scalar or tail subvector from a vector at explicit leading "
         "indices. Supplying one index consumes the first source axis, two "
@@ -618,6 +635,7 @@ vector_extract = Op(
 vector_insert = Op(
     "vector.insert",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Insert a scalar or tail subvector into a vector at explicit leading "
         "indices. The inserted value must match the destination tail shape "
@@ -665,6 +683,7 @@ vector_insert = Op(
 vector_slice = Op(
     "vector.slice",
     group=vector_ops,
+    contracts=[ContractFamily.REGISTER_PERMUTATION],
     doc=(
         "Extract a rank-preserving contiguous register subvector at explicit "
         "offsets. The offset list has one entry per source axis; each result "
@@ -778,6 +797,7 @@ vector_transpose = Op(
 vector_shuffle = Op(
     "vector.shuffle",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Reorder a static rank-1 vector with a static lane map. Entry i of "
         "source_lanes selects the source lane for result lane i; duplicate "
@@ -905,6 +925,7 @@ vector_deinterleave = Op(
 vector_table_lookup = Op(
     "vector.table.lookup",
     group=vector_ops,
+    contracts=[ContractFamily.VECTOR_TABLE_LOOKUP],
     doc=(
         "Select values from a rank-1 register table using integer index "
         "lanes. Each result lane reads table[indices lane]; the result shape "
@@ -1087,15 +1108,12 @@ def _memory_access_interface(
     atomic_scope: str | None = None,
 ) -> MemoryAccessInterface:
     return MemoryAccessInterface(
-        view="view",
         value=value,
         expected=expected,
         replacement=replacement,
         mask=mask,
         passthrough=passthrough,
         offsets=offsets,
-        indices="indices",
-        static_indices="static_indices",
         cache_scope="cache_scope",
         cache_temporal="cache_temporal",
         atomic_kind=atomic_kind,
@@ -1126,6 +1144,7 @@ def _atomic_memory_access_interface(
 vector_load = Op(
     "vector.load",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Load a vector footprint from a typed view at a full-rank logical "
         "origin. The index list addresses the origin in view coordinates; "
@@ -1160,6 +1179,7 @@ vector_load = Op(
 vector_store = Op(
     "vector.store",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Store a vector footprint into a typed view at a full-rank logical "
         "origin. The index list addresses the origin in view coordinates; "
@@ -1890,6 +1910,7 @@ vector_atomic_cmpxchg = Op(
 vector_select = Op(
     "vector.select",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Lanewise select from two same-typed vector values using an i1 mask vector. True condition lanes choose true_value; false lanes choose false_value."),
     operands=[
         Operand("condition", VECTOR),
@@ -1921,6 +1942,7 @@ vector_select = Op(
 vector_cmpi = Op(
     "vector.cmpi",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Lanewise integer comparison producing an i1 mask vector. The predicate attribute uses the scalar.cmpi predicate names and applies independently to each lane."),
     operands=[
         Operand("lhs", VECTOR),
@@ -1955,6 +1977,7 @@ vector_cmpi = Op(
 vector_cmpf = Op(
     "vector.cmpf",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Lanewise floating-point comparison producing an i1 mask vector. The predicate attribute uses the scalar.cmpf ordered/unordered predicate names and applies independently to each lane."),
     operands=[
         Operand("lhs", VECTOR),
@@ -1995,6 +2018,7 @@ _VF = ("assumptions", FloatAssumptionFlags)
 
 vector_addf = _lanewise_binary(
     "vector.addf",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point addition of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape."),
     commutative=True,
@@ -2005,6 +2029,7 @@ vector_addf = _lanewise_binary(
 
 vector_subf = _lanewise_binary(
     "vector.subf",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point subtraction of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape."),
     flags=_VF,
@@ -2014,6 +2039,7 @@ vector_subf = _lanewise_binary(
 
 vector_mulf = _lanewise_binary(
     "vector.mulf",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point multiplication of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not imply fusion with neighboring operations."),
     commutative=True,
@@ -2024,6 +2050,7 @@ vector_mulf = _lanewise_binary(
 
 vector_divf = _lanewise_binary(
     "vector.divf",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point division of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change division-by-zero or NaN semantics."),
     flags=_VF,
@@ -2033,6 +2060,7 @@ vector_divf = _lanewise_binary(
 
 vector_remf = _lanewise_binary(
     "vector.remf",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point remainder with C fmod semantics over same-typed vector operands."),
     flags=_VF,
@@ -2042,6 +2070,7 @@ vector_remf = _lanewise_binary(
 
 vector_negf = _lanewise_unary(
     "vector.negf",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point negation of a same-typed vector operand."),
     traits=[INVOLUTION],
@@ -2082,6 +2111,7 @@ vector_maximumf = _lanewise_binary(
 
 vector_minnumf = _lanewise_binary(
     "vector.minnumf",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise C99 fmin-style floating-point minimum of same-typed vector operands; NaN lanes select the non-NaN operand."),
     commutative=True,
@@ -2092,6 +2122,7 @@ vector_minnumf = _lanewise_binary(
 
 vector_maxnumf = _lanewise_binary(
     "vector.maxnumf",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise C99 fmax-style floating-point maximum of same-typed vector operands; NaN lanes select the non-NaN operand."),
     commutative=True,
@@ -2112,6 +2143,7 @@ vector_copysignf = _lanewise_binary(
 vector_fmaf = Op(
     "vector.fmaf",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Lanewise fused multiply-add of same-typed floating-point vectors. "
         "Each result lane computes a*b + c with one final rounding; use "
@@ -2153,6 +2185,7 @@ vector_fmaf = Op(
 
 vector_addi = _lanewise_binary(
     "vector.addi",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise integer addition of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
     commutative=True,
@@ -2163,6 +2196,7 @@ vector_addi = _lanewise_binary(
 
 vector_subi = _lanewise_binary(
     "vector.subi",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise integer subtraction of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
     flags=("overflow", IntOverflowFlags),
@@ -2172,6 +2206,7 @@ vector_subi = _lanewise_binary(
 
 vector_muli = _lanewise_binary(
     "vector.muli",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise integer multiplication of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
     commutative=True,
@@ -2182,6 +2217,7 @@ vector_muli = _lanewise_binary(
 
 vector_divsi = _lanewise_binary(
     "vector.divsi",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise signed integer division of same-typed vector operands; each lane rounds toward zero.",
     facts="loom_vector_divsi_facts",
@@ -2190,6 +2226,7 @@ vector_divsi = _lanewise_binary(
 
 vector_divui = _lanewise_binary(
     "vector.divui",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise unsigned integer division of same-typed vector operands.",
     facts="loom_vector_divui_facts",
@@ -2198,6 +2235,7 @@ vector_divui = _lanewise_binary(
 
 vector_remsi = _lanewise_binary(
     "vector.remsi",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise signed integer remainder of same-typed vector operands.",
     facts="loom_vector_remsi_facts",
@@ -2206,6 +2244,7 @@ vector_remsi = _lanewise_binary(
 
 vector_remui = _lanewise_binary(
     "vector.remui",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise unsigned integer remainder of same-typed vector operands.",
     facts="loom_vector_remui_facts",
@@ -2250,6 +2289,7 @@ vector_absi = _lanewise_unary(
 
 vector_minsi = _lanewise_binary(
     "vector.minsi",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise signed integer minimum of same-typed vector operands.",
     commutative=True,
@@ -2259,6 +2299,7 @@ vector_minsi = _lanewise_binary(
 
 vector_maxsi = _lanewise_binary(
     "vector.maxsi",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise signed integer maximum of same-typed vector operands.",
     commutative=True,
@@ -2268,6 +2309,7 @@ vector_maxsi = _lanewise_binary(
 
 vector_minui = _lanewise_binary(
     "vector.minui",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise unsigned integer minimum of same-typed vector operands.",
     commutative=True,
@@ -2277,6 +2319,7 @@ vector_minui = _lanewise_binary(
 
 vector_maxui = _lanewise_binary(
     "vector.maxui",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise unsigned integer maximum of same-typed vector operands.",
     commutative=True,
@@ -2287,6 +2330,7 @@ vector_maxui = _lanewise_binary(
 vector_fmai = Op(
     "vector.fmai",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Lanewise fused integer multiply-add a*b + c over same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
     operands=[
         Operand("a", VECTOR),
@@ -2317,6 +2361,7 @@ vector_fmai = Op(
 
 vector_andi = _lanewise_binary(
     "vector.andi",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise bitwise AND of same-typed integer vector operands.",
     commutative=True,
@@ -2326,6 +2371,7 @@ vector_andi = _lanewise_binary(
 
 vector_ori = _lanewise_binary(
     "vector.ori",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise bitwise OR of same-typed integer vector operands.",
     commutative=True,
@@ -2335,6 +2381,7 @@ vector_ori = _lanewise_binary(
 
 vector_xori = _lanewise_binary(
     "vector.xori",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise bitwise XOR of same-typed integer vector operands.",
     commutative=True,
@@ -2344,6 +2391,7 @@ vector_xori = _lanewise_binary(
 
 vector_shli = _lanewise_binary(
     "vector.shli",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise left shift of same-typed integer vector operands.",
     flags=("overflow", IntOverflowFlags),
@@ -2353,6 +2401,7 @@ vector_shli = _lanewise_binary(
 
 vector_shrsi = _lanewise_binary(
     "vector.shrsi",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise arithmetic right shift of same-typed integer vector operands.",
     facts="loom_vector_shrsi_facts",
@@ -2361,6 +2410,7 @@ vector_shrsi = _lanewise_binary(
 
 vector_shrui = _lanewise_binary(
     "vector.shrui",
+    phase=OpPhase.EXECUTABLE,
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise logical right shift of same-typed integer vector operands.",
     facts="loom_vector_shrui_facts",
@@ -2737,6 +2787,7 @@ vector_signi = _lanewise_unary(
 
 vector_extf = _vector_cast(
     "vector.extf",
+    phase=OpPhase.EXECUTABLE,
     source_constraint=HasFloatElement,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point precision extension. Source and result shapes match exactly; only the floating-point element type widens."),
@@ -2747,6 +2798,7 @@ vector_extf = _vector_cast(
 
 vector_fptrunc = _vector_cast(
     "vector.fptrunc",
+    phase=OpPhase.EXECUTABLE,
     source_constraint=HasFloatElement,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point precision truncation. Source and result shapes match exactly; only the floating-point element type narrows."),
@@ -2755,6 +2807,7 @@ vector_fptrunc = _vector_cast(
 
 vector_extsi = _vector_cast(
     "vector.extsi",
+    phase=OpPhase.EXECUTABLE,
     source_constraint=HasIntegerElement,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise signed integer extension. Source and result shapes match exactly, and each source lane is sign-extended to the result element width."),
@@ -2765,6 +2818,7 @@ vector_extsi = _vector_cast(
 
 vector_extui = _vector_cast(
     "vector.extui",
+    phase=OpPhase.EXECUTABLE,
     source_constraint=HasIntegerElement,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise unsigned integer extension. Source and result shapes match exactly, and each source lane is zero-extended to the result element width."),
@@ -2773,6 +2827,7 @@ vector_extui = _vector_cast(
 
 vector_trunci = _vector_cast(
     "vector.trunci",
+    phase=OpPhase.EXECUTABLE,
     source_constraint=HasIntegerElement,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise integer truncation. Source and result shapes match exactly, and each lane keeps the low bits required by the result element width."),
@@ -2781,6 +2836,7 @@ vector_trunci = _vector_cast(
 
 vector_sitofp = _vector_cast(
     "vector.sitofp",
+    phase=OpPhase.EXECUTABLE,
     source_constraint=HasIntegerElement,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise signed integer to floating-point conversion with unchanged shape."),
@@ -2790,6 +2846,7 @@ vector_sitofp = _vector_cast(
 
 vector_uitofp = _vector_cast(
     "vector.uitofp",
+    phase=OpPhase.EXECUTABLE,
     source_constraint=HasIntegerElement,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise unsigned integer to floating-point conversion with unchanged shape."),
@@ -2797,6 +2854,7 @@ vector_uitofp = _vector_cast(
 
 vector_fptosi = _vector_cast(
     "vector.fptosi",
+    phase=OpPhase.EXECUTABLE,
     source_constraint=HasFloatElement,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise floating-point to signed integer conversion with unchanged shape."),
@@ -2804,6 +2862,7 @@ vector_fptosi = _vector_cast(
 
 vector_fptoui = _vector_cast(
     "vector.fptoui",
+    phase=OpPhase.EXECUTABLE,
     source_constraint=HasFloatElement,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise floating-point to unsigned integer conversion with unchanged shape."),
@@ -2812,6 +2871,7 @@ vector_fptoui = _vector_cast(
 vector_bitcast = Op(
     "vector.bitcast",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Bitwise reinterpretation between vector register types with the same total bit count. No numeric conversion is performed; only the lane shape and element interpretation change."),
     operands=[Operand("input", VECTOR)],
     results=[Result("result", VECTOR)],
@@ -2855,6 +2915,7 @@ def _bitfield_attrs() -> list[AttrDef]:
 vector_bitfield_extractu = Op(
     "vector.bitfield.extractu",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Extract one fixed bitfield from each integer source lane and zero-extend it into the corresponding result lane. The bitfield is identified by least-significant-bit offset and width."),
     operands=[Operand("source", VECTOR)],
     results=[Result("result", VECTOR)],
@@ -2886,6 +2947,7 @@ vector_bitfield_extractu = Op(
 vector_bitfield_extracts = Op(
     "vector.bitfield.extracts",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Extract one fixed bitfield from each integer source lane and sign-extend it into the corresponding result lane. The bitfield is identified by least-significant-bit offset and width."),
     operands=[Operand("source", VECTOR)],
     results=[Result("result", VECTOR)],
@@ -2917,6 +2979,7 @@ vector_bitfield_extracts = Op(
 vector_bitfield_insert = Op(
     "vector.bitfield.insert",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Insert the low bits of each integer field lane into a fixed bitfield of the corresponding integer base lane. Bits outside the target field are preserved from the base lane."),
     operands=[
         Operand("field", VECTOR, doc="Integer field values. Only the low `width` bits are inserted."),
@@ -2955,6 +3018,7 @@ vector_bitfield_insert = Op(
 vector_bitpack = Op(
     "vector.bitpack",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Pack the low bits of each integer source lane into a contiguous "
         "little-endian bitstream stored in integer result lanes. Source lanes "
@@ -2996,6 +3060,7 @@ vector_bitpack = Op(
 vector_bitunpacku = Op(
     "vector.bitunpacku",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Unpack unsigned fixed-width fields from a contiguous little-endian integer bitstream into zero-extended integer result lanes. Result lanes are produced in logical lane order."),
     operands=[Operand("source", VECTOR, doc="Integer storage lanes containing the packed bitstream.")],
     results=[Result("result", VECTOR, doc="Integer lanes receiving zero-extended unpacked fields.")],
@@ -3032,6 +3097,7 @@ vector_bitunpacku = Op(
 vector_bitunpacks = Op(
     "vector.bitunpacks",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Unpack signed fixed-width fields from a contiguous little-endian integer bitstream into sign-extended integer result lanes. Result lanes are produced in logical lane order."),
     operands=[Operand("source", VECTOR, doc="Integer storage lanes containing the packed bitstream.")],
     results=[Result("result", VECTOR, doc="Integer lanes receiving sign-extended unpacked fields.")],
@@ -3072,6 +3138,7 @@ vector_bitunpacks = Op(
 vector_dotf = Op(
     "vector.dotf",
     group=vector_ops,
+    contracts=[ContractFamily.VECTOR_CONTRACTION],
     doc=(
         "Compute a same-element floating-point dot product with an explicit "
         "scalar accumulator. Semantics are equivalent to accumulating "
@@ -3116,6 +3183,7 @@ vector_dotf = Op(
 vector_dot2f = Op(
     "vector.dot2f",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Group adjacent two-lane f16 or bf16 products along the last axis and "
         "add each two-product fused sum into an f32 accumulator lane. "
@@ -3164,6 +3232,7 @@ vector_dot2f = Op(
 vector_dot4i = Op(
     "vector.dot4i",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Group adjacent four-lane i8 products along the last axis and add "
         "each four-product sum into an i32 accumulator lane. The signedness "
@@ -3210,6 +3279,7 @@ vector_dot4i = Op(
 vector_dot8i4 = Op(
     "vector.dot8i4",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Treat each i32 source lane as a little-endian pack of eight 4-bit "
         "integer fields, multiply corresponding packed fields using the "
@@ -3250,6 +3320,7 @@ vector_dot8i4 = Op(
 vector_dot4f8 = Op(
     "vector.dot4f8",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Treat each i32 source lane as a little-endian pack of four 8-bit "
         "floating-point fields, decode fields according to the fp8/bf8 "
@@ -3301,6 +3372,7 @@ vector_dot4f8 = Op(
 vector_reduce = Op(
     "vector.reduce",
     group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Reduce all lanes of a vector into a scalar accumulator/result using "
         "the template combining kind. The init operand and result have the "

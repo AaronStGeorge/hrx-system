@@ -26,6 +26,7 @@ from loom.dsl import (
     AttrDef,
     Op,
     Operand,
+    OpPhase,
     Result,
     SameType,
     binary_op,
@@ -41,6 +42,7 @@ __all__ = ["ALL_ARITHMETIC_OPS"]
 scalar_addi = binary_op(
     "scalar.addi",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Integer addition.",
     commutative=True,
@@ -56,6 +58,7 @@ scalar_addi = binary_op(
 scalar_subi = binary_op(
     "scalar.subi",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Integer subtraction.",
     flags=("overflow", IntOverflowFlags),
@@ -67,6 +70,7 @@ scalar_subi = binary_op(
 scalar_muli = binary_op(
     "scalar.muli",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Integer multiplication.",
     commutative=True,
@@ -79,6 +83,7 @@ scalar_muli = binary_op(
 scalar_divsi = binary_op(
     "scalar.divsi",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Signed integer division (rounds toward zero).",
     facts="loom_scalar_divsi_facts",
@@ -89,6 +94,7 @@ scalar_divsi = binary_op(
 scalar_divui = binary_op(
     "scalar.divui",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Unsigned integer division.",
     facts="loom_scalar_divui_facts",
@@ -99,6 +105,7 @@ scalar_divui = binary_op(
 scalar_remsi = binary_op(
     "scalar.remsi",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Signed integer remainder.",
     facts="loom_scalar_remsi_facts",
@@ -109,6 +116,7 @@ scalar_remsi = binary_op(
 scalar_remui = binary_op(
     "scalar.remui",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     doc="Unsigned integer remainder.",
     facts="loom_scalar_remui_facts",
@@ -216,6 +224,7 @@ scalar_maxui = binary_op(
 scalar_fmai = Op(
     "scalar.fmai",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Fused integer multiply-add: a*b + c with no intermediate overflow check.",
     operands=[
         Operand("a", INTEGER),
@@ -248,6 +257,7 @@ scalar_fmai = Op(
 scalar_addf = binary_op(
     "scalar.addf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=FLOAT,
     doc="Floating-point addition.",
     commutative=True,
@@ -263,6 +273,7 @@ scalar_addf = binary_op(
 scalar_subf = binary_op(
     "scalar.subf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=FLOAT,
     doc="Floating-point subtraction.",
     flags=("fastmath", FastMathFlags),
@@ -274,6 +285,7 @@ scalar_subf = binary_op(
 scalar_mulf = binary_op(
     "scalar.mulf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=FLOAT,
     doc="Floating-point multiplication.",
     commutative=True,
@@ -286,6 +298,7 @@ scalar_mulf = binary_op(
 scalar_divf = binary_op(
     "scalar.divf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=FLOAT,
     doc="Floating-point division.",
     flags=("fastmath", FastMathFlags),
@@ -297,6 +310,7 @@ scalar_divf = binary_op(
 scalar_remf = binary_op(
     "scalar.remf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=FLOAT,
     doc="Floating-point remainder (C fmod semantics).",
     flags=("fastmath", FastMathFlags),
@@ -307,6 +321,7 @@ scalar_remf = binary_op(
 scalar_negf = unary_op(
     "scalar.negf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=FLOAT,
     doc="Floating-point negation.",
     traits=[INVOLUTION],
@@ -353,6 +368,7 @@ scalar_maximumf = binary_op(
 scalar_minnumf = binary_op(
     "scalar.minnumf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=FLOAT,
     doc="C99 fmin (NaN ignored, returns the non-NaN operand).",
     commutative=True,
@@ -364,6 +380,7 @@ scalar_minnumf = binary_op(
 scalar_maxnumf = binary_op(
     "scalar.maxnumf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=FLOAT,
     doc="C99 fmax (NaN ignored, returns the non-NaN operand).",
     commutative=True,

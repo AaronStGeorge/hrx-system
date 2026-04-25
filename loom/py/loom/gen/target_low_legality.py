@@ -63,7 +63,7 @@ def _resolve_ops(
     dialects: Sequence[tuple[Dialect, Sequence[Op]]],
 ) -> list[_ResolvedOp]:
     production_ops = _collect_production_ops(dialects)
-    legality_by_name = target_low_legality_by_name()
+    legality_by_name = target_low_legality_by_name(dialects)
     resolved: list[_ResolvedOp] = []
     for name, legality in legality_by_name.items():
         dialect_and_index = production_ops.get(name)

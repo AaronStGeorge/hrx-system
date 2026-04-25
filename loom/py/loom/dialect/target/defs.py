@@ -22,6 +22,7 @@ from loom.dsl import (
     EnumCase,
     EnumDef,
     Op,
+    OpPhase,
     SymbolDefinition,
     SymbolReference,
 )
@@ -34,6 +35,7 @@ target_ops = Dialect(
     "target",
     dialect_id=0x13,
     doc="Target planning records: profiles and artifacts.",
+    default_phase=OpPhase.MODULE_METADATA,
 )
 
 # ============================================================================

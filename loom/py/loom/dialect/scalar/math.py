@@ -21,6 +21,7 @@ from loom.dsl import (
     AttrDef,
     Op,
     Operand,
+    OpPhase,
     Result,
     SameType,
     binary_op,
@@ -295,6 +296,7 @@ scalar_erfcf = unary_op(
 scalar_fmaf = Op(
     "scalar.fmaf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Fused multiply-add: a*b + c with single rounding.",
     operands=[
         Operand("a", FLOAT),

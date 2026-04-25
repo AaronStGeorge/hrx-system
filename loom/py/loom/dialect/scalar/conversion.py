@@ -21,6 +21,7 @@ from loom.dsl import (
     SCALAR,
     AttrDef,
     Op,
+    OpPhase,
     Result,
     cast_op,
 )
@@ -34,6 +35,7 @@ __all__ = ["ALL_CONVERSION_OPS"]
 scalar_sitofp = cast_op(
     "scalar.sitofp",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=INTEGER,
     to_constraint=FLOAT,
     doc="Signed integer to floating-point.",
@@ -43,6 +45,7 @@ scalar_sitofp = cast_op(
 scalar_uitofp = cast_op(
     "scalar.uitofp",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=INTEGER,
     to_constraint=FLOAT,
     doc="Unsigned integer to floating-point.",
@@ -52,6 +55,7 @@ scalar_uitofp = cast_op(
 scalar_fptosi = cast_op(
     "scalar.fptosi",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=FLOAT,
     to_constraint=INTEGER,
     doc="Floating-point to signed integer (rounds toward zero).",
@@ -61,6 +65,7 @@ scalar_fptosi = cast_op(
 scalar_fptoui = cast_op(
     "scalar.fptoui",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=FLOAT,
     to_constraint=INTEGER,
     doc="Floating-point to unsigned integer (rounds toward zero).",
@@ -75,6 +80,7 @@ scalar_fptoui = cast_op(
 scalar_extf = cast_op(
     "scalar.extf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=FLOAT,
     to_constraint=FLOAT,
     doc="Float precision extension (widen): e.g. f16 to f32.",
@@ -85,6 +91,7 @@ scalar_extf = cast_op(
 scalar_fptrunc = cast_op(
     "scalar.fptrunc",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=FLOAT,
     to_constraint=FLOAT,
     doc="Float precision truncation (narrow): e.g. f32 to f16.",
@@ -100,6 +107,7 @@ scalar_fptrunc = cast_op(
 scalar_extsi = cast_op(
     "scalar.extsi",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=INTEGER,
     to_constraint=INTEGER,
     doc="Signed integer extension (sign-extend): e.g. i8 to i32.",
@@ -110,6 +118,7 @@ scalar_extsi = cast_op(
 scalar_extui = cast_op(
     "scalar.extui",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=INTEGER,
     to_constraint=INTEGER,
     doc="Unsigned integer extension (zero-extend): e.g. i8 to i32.",
@@ -120,6 +129,7 @@ scalar_extui = cast_op(
 scalar_trunci = cast_op(
     "scalar.trunci",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=INTEGER,
     to_constraint=INTEGER,
     doc="Integer truncation (narrow): e.g. i32 to i8.",
@@ -135,6 +145,7 @@ scalar_trunci = cast_op(
 scalar_bitcast = cast_op(
     "scalar.bitcast",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=SCALAR,
     to_constraint=SCALAR,
     doc="Bitwise reinterpretation: same bits, different type. No conversion.",
@@ -150,6 +161,7 @@ scalar_bitcast = cast_op(
 scalar_constant = Op(
     "scalar.constant",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=("Materialize a compile-time integer or floating-point scalar value. Logical coordinate and byte-offset constants use index.constant."),
     results=[Result("result", SCALAR)],
     attrs=[AttrDef("value", "any", doc="The constant value.")],

@@ -38,6 +38,7 @@ from loom.dsl import (
     EnumCase,
     EnumDef,
     LiteralMatchesElementType,
+    MemoryAccessInterface,
     Op,
     Operand,
     PackedPayloadBitCountMatchesStorage,
@@ -377,6 +378,47 @@ def test_generate_tables_emits_call_like_interface() -> None:
     assert ".operand_offset = 0," in tables_c
     assert ".result_offset = 0," in tables_c
     assert ".kind = LOOM_CALL_LIKE_KIND_SEMANTIC," in tables_c
+
+
+def test_generate_tables_memory_access_defaults_use_matching_fields() -> None:
+    op = Op(
+        "test.load",
+        group=Dialect("test"),
+        operands=[
+            Operand("view", ANY),
+            Operand("indices", ANY, variadic=True),
+        ],
+        results=[Result("result", ANY)],
+        attrs=[AttrDef("static_indices", ATTR_TYPE_I64_ARRAY)],
+        interfaces=[MemoryAccessInterface()],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "static const loom_memory_access_vtable_t loom_test_load_memory_access" in tables_c
+    assert ".view_operand_index = 0," in tables_c
+    assert ".value_operand_index = 255," in tables_c
+    assert ".indices_operand_offset = 1," in tables_c
+    assert ".static_indices_attr_index = 0," in tables_c
+    assert ".cache_scope_attr_index = 255," in tables_c
+
+
+def test_generate_tables_memory_access_rejects_explicit_missing_field() -> None:
+    op = Op(
+        "test.store",
+        group=Dialect("test"),
+        operands=[
+            Operand("view", ANY),
+            Operand("value", ANY),
+        ],
+        interfaces=[MemoryAccessInterface(value="payload")],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"MemoryAccessInterface on 'test\.store': operand 'payload' not found",
+    ):
+        generate_tables_c("test", 0, [op])
 
 
 def test_generate_tables_rejects_call_like_non_variadic_operand() -> None:

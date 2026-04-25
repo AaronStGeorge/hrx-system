@@ -21,6 +21,7 @@ from loom.dsl import (
     EnumDef,
     Op,
     Operand,
+    OpPhase,
     Result,
     SameType,
     comparison_op,
@@ -81,6 +82,7 @@ CmpFPredicate = EnumDef(
 scalar_cmpi = comparison_op(
     "scalar.cmpi",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INTEGER,
     predicates=CmpIPredicate,
     doc="Integer comparison.",
@@ -92,6 +94,7 @@ scalar_cmpi = comparison_op(
 scalar_cmpf = comparison_op(
     "scalar.cmpf",
     group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=FLOAT,
     predicates=CmpFPredicate,
     doc="Floating-point comparison.",

@@ -29,6 +29,7 @@ from loom.dsl import (
     SCALAR,
     VIEW,
     AttrDef,
+    ContractFamily,
     Dialect,
     EnumCase,
     EnumDef,
@@ -36,6 +37,7 @@ from loom.dsl import (
     MemoryAccessInterface,
     Op,
     Operand,
+    OpPhase,
     RanksMatch,
     Reads,
     ReadWrites,
@@ -54,6 +56,7 @@ view_ops = Dialect(
     "view",
     dialect_id=0x0D,
     doc="Logical view operations.",
+    default_phase=OpPhase.EXECUTABLE,
 )
 
 PrefetchIntent = EnumDef(
@@ -119,20 +122,17 @@ def _memory_access_interface(
     atomic_failure_ordering: str | None = None,
     atomic_scope: str | None = None,
 ) -> MemoryAccessInterface:
+    cache_fields = {} if cache else {"cache_scope": None, "cache_temporal": None}
     return MemoryAccessInterface(
-        view="view",
         value=value,
         expected=expected,
         replacement=replacement,
-        indices="indices",
-        static_indices="static_indices",
-        cache_scope="cache_scope" if cache else None,
-        cache_temporal="cache_temporal" if cache else None,
         atomic_kind=atomic_kind,
         atomic_ordering=atomic_ordering,
         atomic_success_ordering=atomic_success_ordering,
         atomic_failure_ordering=atomic_failure_ordering,
         atomic_scope=atomic_scope,
+        **cache_fields,
     )
 
 
@@ -358,6 +358,7 @@ view_atomic_reduce = Op(
     attrs=_atomic_memory_attrs(),
     constraints=[SameElementType("value", "view")],
     effects=[ReadWrites("view")],
+    contracts=[ContractFamily.MEMORY_ATOMIC],
     interfaces=[_atomic_memory_access_interface(value="value")],
     verify="loom_view_atomic_reduce_verify",
     format=[
@@ -393,6 +394,7 @@ view_atomic_rmw = Op(
         SameType("value", "result"),
     ],
     effects=[ReadWrites("view")],
+    contracts=[ContractFamily.MEMORY_ATOMIC],
     interfaces=[_atomic_memory_access_interface(value="value")],
     verify="loom_view_atomic_rmw_verify",
     format=[
@@ -434,6 +436,7 @@ view_atomic_cmpxchg = Op(
         SameType("expected", "replacement", "old"),
     ],
     effects=[ReadWrites("view")],
+    contracts=[ContractFamily.MEMORY_ATOMIC],
     interfaces=[
         _memory_access_interface(
             expected="expected",

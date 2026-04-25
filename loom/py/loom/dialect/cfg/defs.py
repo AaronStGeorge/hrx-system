@@ -31,6 +31,7 @@ from loom.dsl import (
     Dialect,
     Op,
     Operand,
+    OpPhase,
     Successor,
 )
 
@@ -42,6 +43,7 @@ cfg_ops = Dialect(
     "cfg",
     dialect_id=0x12,
     doc="Unstructured control-flow operations.",
+    default_phase=OpPhase.EXECUTABLE,
 )
 
 # ============================================================================

@@ -129,6 +129,10 @@ __all__ = [
     "SAFE_TO_SPECULATE",
     "REFINABLE_RESULT_TYPE_REFS",
     "POISON_BOUNDARY",
+    # Semantic phase/contract metadata.
+    "OpPhase",
+    "ContractFamily",
+    "TypeSemantic",
     # Trait constructors.
     "AllTypesMatch",
     "HasAncestor",
@@ -194,6 +198,7 @@ __all__ = [
     "CallLikeKind",
     "FuncLikeInterface",
     "LoopLikeInterface",
+    "MemoryAccessInterface",
     "RegionBranchInterface",
     # Op declaration.
     "Op",
@@ -791,6 +796,93 @@ REFINABLE_RESULT_TYPE_REFS = Trait("RefinableResultTypeRefs")
 # Op observes poison operands at a semantic boundary where poison can no longer
 # propagate as an ordinary SSA value.
 POISON_BOUNDARY = Trait("PoisonBoundary")
+
+
+# ============================================================================
+# Semantic phase and target-contract metadata
+# ============================================================================
+
+
+@unique
+class OpPhase(Enum):
+    """Semantic placement phase for an operation kind.
+
+    This is source IR meaning, not a specific target's legality policy. Target
+    stages derive their accepted/rejected classes from this placement plus
+    declared target-contract families.
+    """
+
+    EXECUTABLE = "LOOM_OP_PHASE_EXECUTABLE"
+    SOURCE_STRUCTURE = "LOOM_OP_PHASE_SOURCE_STRUCTURE"
+    MODULE_METADATA = "LOOM_OP_PHASE_MODULE_METADATA"
+
+    @property
+    def c_name(self) -> str:
+        return str(self.value)
+
+
+@unique
+class ContractFamily(Enum):
+    """Semantic contract family that target packages may need to implement."""
+
+    VECTOR_COORDINATE = (
+        "vector.coordinate",
+        "LOOM_CONTRACT_VECTOR_COORDINATE",
+        "vector coordinate materialization",
+    )
+    REGISTER_PERMUTATION = (
+        "register.permutation",
+        "LOOM_CONTRACT_REGISTER_PERMUTATION",
+        "register permutation",
+    )
+    VECTOR_TABLE_LOOKUP = (
+        "vector.table_lookup",
+        "LOOM_CONTRACT_VECTOR_TABLE_LOOKUP",
+        "vector table lookup",
+    )
+    VECTOR_CONTRACTION = (
+        "vector.contraction",
+        "LOOM_CONTRACT_VECTOR_CONTRACTION",
+        "vector contraction",
+    )
+    MEMORY_ATOMIC = (
+        "memory.atomic",
+        "LOOM_CONTRACT_MEMORY_ATOMIC",
+        "atomic memory access",
+    )
+    KERNEL_ASYNC = (
+        "kernel.async",
+        "LOOM_CONTRACT_KERNEL_ASYNC",
+        "kernel async pipeline",
+    )
+    KERNEL_SYNCHRONIZATION = (
+        "kernel.synchronization",
+        "LOOM_CONTRACT_KERNEL_SYNCHRONIZATION",
+        "kernel synchronization",
+    )
+    TENSOR_MEMORY = (
+        "kernel.tensor_memory",
+        "LOOM_CONTRACT_TENSOR_MEMORY",
+        "tensor memory transfer",
+    )
+
+    def __init__(self, key: str, c_name: str, diagnostic_name: str) -> None:
+        self.key = key
+        self.c_name = c_name
+        self.diagnostic_name = diagnostic_name
+
+
+@unique
+class TypeSemantic(Enum):
+    """Semantic role for non-scalar type declarations."""
+
+    ORDINARY = "LOOM_TYPE_SEMANTIC_ORDINARY"
+    CONTROL_TOKEN = "LOOM_TYPE_SEMANTIC_CONTROL_TOKEN"
+    TARGET_CONTRACT_VALUE = "LOOM_TYPE_SEMANTIC_TARGET_CONTRACT_VALUE"
+
+    @property
+    def c_name(self) -> str:
+        return str(self.value)
 
 
 # ============================================================================
@@ -2152,6 +2244,7 @@ class Dialect:
     dialect_id: int
     doc: str = ""
     enums: tuple[EnumDef, ...] = ()
+    default_phase: OpPhase | None = None
 
     def __init__(
         self,
@@ -2160,11 +2253,13 @@ class Dialect:
         dialect_id: int = 0,
         doc: str = "",
         enums: list[EnumDef] | tuple[EnumDef, ...] = (),
+        default_phase: OpPhase | None = None,
     ) -> None:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "dialect_id", dialect_id)
         object.__setattr__(self, "doc", doc)
         object.__setattr__(self, "enums", tuple(enums))
+        object.__setattr__(self, "default_phase", default_phase)
 
 
 # ============================================================================
@@ -2269,6 +2364,8 @@ class TypeDef:
     format: tuple[FormatElement, ...] = ()
     ir_kind: str = "dialect"  # "tile", "tensor", "vector", "view", etc.
     fact_domain: str | None = None
+    semantic: TypeSemantic = TypeSemantic.ORDINARY
+    contracts: tuple[ContractFamily, ...] = ()
 
     def __init__(
         self,
@@ -2279,6 +2376,8 @@ class TypeDef:
         format: list[FormatElement] | tuple[FormatElement, ...] = (),
         ir_kind: str = "dialect",
         fact_domain: str | None = None,
+        semantic: TypeSemantic = TypeSemantic.ORDINARY,
+        contracts: list[ContractFamily] | tuple[ContractFamily, ...] = (),
     ) -> None:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "doc", doc)
@@ -2286,6 +2385,8 @@ class TypeDef:
         object.__setattr__(self, "format", tuple(format))
         object.__setattr__(self, "ir_kind", ir_kind)
         object.__setattr__(self, "fact_domain", fact_domain)
+        object.__setattr__(self, "semantic", semantic)
+        object.__setattr__(self, "contracts", tuple(contracts))
 
     def __repr__(self) -> str:
         return f"TypeDef({self.name!r})"
@@ -2747,18 +2848,24 @@ class RegionBranchInterface(NamedTuple):
     selector: str
 
 
-class MemoryAccessInterface(NamedTuple):
+_DEFAULT_INTERFACE_FIELD = object()
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class MemoryAccessInterface:
     """Interface for ops that access memory through a view-like operand.
 
     Each field names an operand or attr role on the op, or None when the
     role is not part of that op shape. The generator resolves names to
     compact indices in a loom_memory_access_vtable_t so passes can query
     load/store/gather/scatter/atomic shapes without switching on every
-    concrete op kind.
+    concrete op kind. Common role names default to the same field names on
+    the op; omitted optional defaults are soft and become ``none`` if the op
+    does not declare the default field.
     """
 
     # Operand naming the accessed view or memory object.
-    view: str
+    view: str | None
     # Operand naming the value written or atomic update contribution.
     value: str | None = None
     # Operand naming the expected compare-exchange value.
@@ -2789,6 +2896,111 @@ class MemoryAccessInterface(NamedTuple):
     atomic_failure_ordering: str | None = None
     # Atomic synchronization scope attr.
     atomic_scope: str | None = None
+    # Fields explicitly supplied by the op declaration author.
+    _explicit_fields: frozenset[str] = frozenset()
+
+    def __init__(
+        self,
+        *,
+        view: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        value: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        expected: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        replacement: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        mask: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        passthrough: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        offsets: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        indices: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        static_indices: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        cache_scope: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        cache_temporal: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        atomic_kind: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        atomic_ordering: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        atomic_success_ordering: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        atomic_failure_ordering: str | None | object = _DEFAULT_INTERFACE_FIELD,
+        atomic_scope: str | None | object = _DEFAULT_INTERFACE_FIELD,
+    ) -> None:
+        explicit_fields: set[str] = set()
+
+        def _resolve(
+            field_name: str,
+            value: str | None | object,
+            default: str,
+        ) -> str | None:
+            if value is _DEFAULT_INTERFACE_FIELD:
+                return default
+            explicit_fields.add(field_name)
+            if value is None or isinstance(value, str):
+                return value
+            raise TypeError(
+                f"MemoryAccessInterface field {field_name!r}: "
+                f"expected str or None, got {value!r}"
+            )
+
+        object.__setattr__(self, "view", _resolve("view", view, "view"))
+        object.__setattr__(self, "value", _resolve("value", value, "value"))
+        object.__setattr__(self, "expected", _resolve("expected", expected, "expected"))
+        object.__setattr__(
+            self,
+            "replacement",
+            _resolve("replacement", replacement, "replacement"),
+        )
+        object.__setattr__(self, "mask", _resolve("mask", mask, "mask"))
+        object.__setattr__(
+            self,
+            "passthrough",
+            _resolve("passthrough", passthrough, "passthrough"),
+        )
+        object.__setattr__(self, "offsets", _resolve("offsets", offsets, "offsets"))
+        object.__setattr__(self, "indices", _resolve("indices", indices, "indices"))
+        object.__setattr__(
+            self,
+            "static_indices",
+            _resolve("static_indices", static_indices, "static_indices"),
+        )
+        object.__setattr__(
+            self,
+            "cache_scope",
+            _resolve("cache_scope", cache_scope, "cache_scope"),
+        )
+        object.__setattr__(
+            self,
+            "cache_temporal",
+            _resolve("cache_temporal", cache_temporal, "cache_temporal"),
+        )
+        object.__setattr__(
+            self,
+            "atomic_kind",
+            _resolve("atomic_kind", atomic_kind, "kind"),
+        )
+        object.__setattr__(
+            self,
+            "atomic_ordering",
+            _resolve("atomic_ordering", atomic_ordering, "ordering"),
+        )
+        object.__setattr__(
+            self,
+            "atomic_success_ordering",
+            _resolve(
+                "atomic_success_ordering",
+                atomic_success_ordering,
+                "success_ordering",
+            ),
+        )
+        object.__setattr__(
+            self,
+            "atomic_failure_ordering",
+            _resolve(
+                "atomic_failure_ordering",
+                atomic_failure_ordering,
+                "failure_ordering",
+            ),
+        )
+        object.__setattr__(
+            self,
+            "atomic_scope",
+            _resolve("atomic_scope", atomic_scope, "scope"),
+        )
+        object.__setattr__(self, "_explicit_fields", frozenset(explicit_fields))
 
 
 # ============================================================================
@@ -2845,6 +3057,8 @@ class Op:
     facts: str = ""  # C function name for fact inference, or "".
     type_transfer: str = ""  # C function name for semantic type transfer, or "".
     verify: str = ""  # C function name for op-specific verification, or "".
+    phase: OpPhase | None = None
+    contracts: tuple[ContractFamily, ...] = ()
     symbol_def: SymbolDefinition | None = None
     interfaces: tuple[
         Any, ...
@@ -2871,6 +3085,8 @@ class Op:
         facts: str = "",
         type_transfer: str = "",
         verify: str = "",
+        phase: OpPhase | None = None,
+        contracts: list[ContractFamily] | tuple[ContractFamily, ...] = (),
         symbol_def: SymbolDefinition | None = None,
         interfaces: list[Any] | tuple[Any, ...] = (),
         format: list[FormatElement] | tuple[FormatElement, ...] = (),
@@ -2900,6 +3116,8 @@ class Op:
         object.__setattr__(self, "facts", facts)
         object.__setattr__(self, "type_transfer", type_transfer)
         object.__setattr__(self, "verify", verify)
+        object.__setattr__(self, "phase", phase)
+        object.__setattr__(self, "contracts", tuple(contracts))
         object.__setattr__(self, "symbol_def", symbol_def)
         object.__setattr__(self, "interfaces", tuple(interfaces))
         object.__setattr__(self, "format", frozen_format)
@@ -2990,6 +3208,15 @@ class Op:
     def has_trait(self, trait_name: str) -> bool:
         """Check if this op has a trait by name."""
         return any(t.name == trait_name for t in self.traits)
+
+    @property
+    def effective_phase(self) -> OpPhase | None:
+        """Returns the op semantic phase after applying its dialect default."""
+        if self.phase is not None:
+            return self.phase
+        if self.group is None:
+            return None
+        return self.group.default_phase
 
     @property
     def is_pure(self) -> bool:

@@ -35,6 +35,7 @@ from loom.dsl import (
     EnumDef,
     Op,
     Operand,
+    OpPhase,
     Result,
     SameType,
     binary_op,
@@ -78,6 +79,7 @@ IndexPredicate = EnumDef(
 index_constant = Op(
     "index.constant",
     group=index_ops,
+    phase=OpPhase.EXECUTABLE,
     doc=(
         "Materialize a compile-time address-domain constant. The result type "
         "must be index for logical coordinates or offset for physical byte "
@@ -98,6 +100,7 @@ index_constant = Op(
 index_cast = cast_op(
     "index.cast",
     group=index_ops,
+    phase=OpPhase.EXECUTABLE,
     from_constraint=SCALAR,
     to_constraint=SCALAR,
     doc=("Explicit conversion at an address boundary. At least one side must be index or offset; pure integer width changes use scalar.extsi, scalar.extui, or scalar.trunci."),
@@ -145,6 +148,7 @@ index_assume = Op(
 index_add = binary_op(
     "index.add",
     group=index_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=ADDRESS,
     doc="Address-domain addition. Operands and result must all be index or all offset.",
     commutative=True,
@@ -159,6 +163,7 @@ index_add = binary_op(
 index_sub = binary_op(
     "index.sub",
     group=index_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=ADDRESS,
     doc="Address-domain subtraction. Operands and result must all be index or all offset.",
     canonicalize="loom_index_sub_canonicalize",
@@ -172,6 +177,7 @@ index_sub = binary_op(
 index_mul = binary_op(
     "index.mul",
     group=index_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INDEX,
     doc="Logical coordinate multiplication. Offsets are physical byte counts and cannot be multiplied with this op.",
     commutative=True,
@@ -183,6 +189,7 @@ index_mul = binary_op(
 index_div = binary_op(
     "index.div",
     group=index_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INDEX,
     doc=(
         "Logical coordinate quotient for non-negative index values with a "
@@ -198,6 +205,7 @@ index_div = binary_op(
 index_rem = binary_op(
     "index.rem",
     group=index_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=INDEX,
     doc=(
         "Logical coordinate remainder for non-negative index values with a "
@@ -213,6 +221,7 @@ index_rem = binary_op(
 index_madd = Op(
     "index.madd",
     group=index_ops,
+    phase=OpPhase.EXECUTABLE,
     doc="Logical coordinate multiply-add: a*b + c. Offsets are physical byte counts and cannot be multiplied with this op.",
     operands=[
         Operand("a", INDEX),
@@ -243,6 +252,7 @@ index_madd = Op(
 index_cmp = comparison_op(
     "index.cmp",
     group=index_ops,
+    phase=OpPhase.EXECUTABLE,
     type_constraint=ADDRESS,
     predicates=IndexPredicate,
     doc="Address-domain comparison. Operands must both be index or both be offset.",
