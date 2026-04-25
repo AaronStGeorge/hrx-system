@@ -652,6 +652,14 @@ iree_status_t loom_parsed_op_add_field_span(
     loom_location_field_kind_t kind, uint16_t index, loom_token_t start_token,
     uint32_t end_line, uint32_t end_column);
 
+// Appends a source field span ending at the parser's current consumed-token
+// cursor. Shared by generated-format element parsers.
+iree_status_t loom_parse_format_add_field_span(loom_parser_t* parser,
+                                               loom_parsed_op_t* parsed,
+                                               loom_location_field_kind_t kind,
+                                               uint16_t index,
+                                               loom_token_t start_token);
+
 // Appends a block arg to the parser's pending block arg list. These entries are
 // consumed by the next REGION format element to seed the entry block.
 // Arena-allocated with growth.
@@ -812,6 +820,26 @@ iree_status_t loom_parser_emit_result_count_mismatch(
 //===----------------------------------------------------------------------===//
 // Format walker
 //===----------------------------------------------------------------------===//
+
+// Parses an inline attribute dictionary where keys are op attribute names.
+iree_status_t loom_parse_format_inline_attr_dict(loom_parser_t* parser,
+                                                 const loom_op_vtable_t* vtable,
+                                                 loom_parsed_op_t* parsed);
+
+// Parses an operand dictionary into sorted operand storage plus key metadata.
+iree_status_t loom_parse_format_operand_dict(
+    loom_parser_t* parser, const loom_format_element_t* element,
+    loom_parsed_op_t* parsed);
+
+// Parses an attribute-keyed operand row table.
+iree_status_t loom_parse_format_attr_table(loom_parser_t* parser,
+                                           const loom_format_element_t* element,
+                                           loom_parsed_op_t* parsed);
+
+// Parses an attribute-keyed region table.
+iree_status_t loom_parse_format_region_table(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    const loom_format_element_t* element, loom_parsed_op_t* parsed);
 
 // Walks a vtable's format elements, parsing each according to its kind.
 // Populates |parsed| with operands, results, attributes, and regions.
