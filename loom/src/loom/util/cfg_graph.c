@@ -8,96 +8,22 @@
 
 #include <string.h>
 
-typedef struct loom_cfg_block_map_slot_t {
-  // Block pointer stored in this open-addressing slot.
-  const loom_block_t* block;
-  // Dense block index for block.
-  uint16_t block_index;
-} loom_cfg_block_map_slot_t;
-
-typedef struct loom_cfg_block_map_t {
-  // Power-of-two number of slots.
-  iree_host_size_t slot_count;
-  // Mask used for bucket wrapping.
-  iree_host_size_t slot_mask;
-  // Open-addressing slots.
-  loom_cfg_block_map_slot_t* slots;
-} loom_cfg_block_map_t;
-
-static iree_host_size_t loom_cfg_next_power_of_two(iree_host_size_t value) {
-  iree_host_size_t result = 1;
-  while (result < value && result <= IREE_HOST_SIZE_MAX / 2) {
-    result <<= 1;
+static bool loom_cfg_graph_try_block_index(const loom_region_t* region,
+                                           const loom_block_t* block,
+                                           uint16_t* out_block_index) {
+  if (!region || !region->blocks || !block || block->parent_region != region ||
+      block->region_index >= region->block_count ||
+      region->blocks[block->region_index] != block) {
+    return false;
   }
-  return result;
-}
-
-static iree_host_size_t loom_cfg_block_hash(const loom_block_t* block,
-                                            iree_host_size_t slot_mask) {
-  uintptr_t hash = (uintptr_t)block >> 4;
-  hash ^= hash >> 7;
-  hash *= (uintptr_t)0x9E3779B1u;
-  return (iree_host_size_t)hash & slot_mask;
-}
-
-static iree_status_t loom_cfg_block_map_initialize(
-    const loom_region_t* region, iree_arena_allocator_t* arena,
-    loom_cfg_graph_t* graph, loom_cfg_block_map_t* out_map) {
-  memset(out_map, 0, sizeof(*out_map));
-  if (region->block_count == 0) return iree_ok_status();
-
-  iree_host_size_t slot_count =
-      loom_cfg_next_power_of_two((iree_host_size_t)region->block_count * 2);
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, slot_count, sizeof(*out_map->slots), (void**)&out_map->slots));
-  memset(out_map->slots, 0, slot_count * sizeof(*out_map->slots));
-  out_map->slot_count = slot_count;
-  out_map->slot_mask = slot_count - 1;
-
-  for (uint16_t block_index = 0; block_index < region->block_count;
-       ++block_index) {
-    const loom_block_t* block = loom_region_const_block(region, block_index);
-    if (!block) {
-      graph->malformed = true;
-      continue;
-    }
-    iree_host_size_t slot_index =
-        loom_cfg_block_hash(block, out_map->slot_mask);
-    while (out_map->slots[slot_index].block) {
-      if (out_map->slots[slot_index].block == block) {
-        graph->malformed = true;
-        break;
-      }
-      slot_index = (slot_index + 1) & out_map->slot_mask;
-    }
-    if (!out_map->slots[slot_index].block) {
-      out_map->slots[slot_index] = (loom_cfg_block_map_slot_t){
-          .block = block,
-          .block_index = block_index,
-      };
-    }
+  if (out_block_index) {
+    *out_block_index = block->region_index;
   }
-  return iree_ok_status();
+  return true;
 }
 
-static bool loom_cfg_block_map_lookup(const loom_cfg_block_map_t* map,
-                                      const loom_block_t* block,
-                                      uint16_t* out_block_index) {
-  if (!block || map->slot_count == 0) return false;
-  iree_host_size_t slot_index = loom_cfg_block_hash(block, map->slot_mask);
-  while (map->slots[slot_index].block) {
-    if (map->slots[slot_index].block == block) {
-      *out_block_index = map->slots[slot_index].block_index;
-      return true;
-    }
-    slot_index = (slot_index + 1) & map->slot_mask;
-  }
-  return false;
-}
-
-static iree_status_t loom_cfg_graph_count_edges(
-    const loom_region_t* region, const loom_cfg_block_map_t* block_map,
-    loom_cfg_graph_t* graph) {
+static iree_status_t loom_cfg_graph_count_edges(const loom_region_t* region,
+                                                loom_cfg_graph_t* graph) {
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(region, block_index);
@@ -108,12 +34,14 @@ static iree_status_t loom_cfg_graph_count_edges(
     const loom_op_t* op = block->first_op;
     while (op) {
       if (op->successor_count > 0) {
-        if (op != block->last_op) graph->malformed = true;
+        if (op != block->last_op) {
+          graph->malformed = true;
+        }
         loom_block_t* const* successors = loom_op_const_successors(op);
         for (uint8_t i = 0; i < op->successor_count; ++i) {
           uint16_t target_index = 0;
-          if (!loom_cfg_block_map_lookup(block_map, successors[i],
-                                         &target_index)) {
+          if (!loom_cfg_graph_try_block_index(region, successors[i],
+                                              &target_index)) {
             graph->malformed = true;
             continue;
           }
@@ -172,20 +100,23 @@ static iree_status_t loom_cfg_graph_assign_edge_storage(
 }
 
 static void loom_cfg_graph_write_edges(
-    const loom_region_t* region, const loom_cfg_block_map_t* block_map,
-    loom_cfg_graph_t* graph, iree_host_size_t* successor_write_positions,
+    const loom_region_t* region, loom_cfg_graph_t* graph,
+    iree_host_size_t* successor_write_positions,
     iree_host_size_t* predecessor_write_positions) {
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(region, block_index);
+    if (!block) {
+      continue;
+    }
     const loom_op_t* op = block->first_op;
     while (op) {
       if (op->successor_count > 0) {
         loom_block_t* const* successors = loom_op_const_successors(op);
         for (uint8_t i = 0; i < op->successor_count; ++i) {
           uint16_t target_index = 0;
-          if (!loom_cfg_block_map_lookup(block_map, successors[i],
-                                         &target_index)) {
+          if (!loom_cfg_graph_try_block_index(region, successors[i],
+                                              &target_index)) {
             continue;
           }
           graph->successor_indices[successor_write_positions[block_index]++] =
@@ -245,34 +176,38 @@ iree_status_t loom_cfg_graph_build(const loom_region_t* region,
          ++block_index) {
       out_graph->blocks[block_index].block =
           loom_region_const_block(region, block_index);
-      if (!out_graph->blocks[block_index].block) out_graph->malformed = true;
+      const loom_block_t* block = out_graph->blocks[block_index].block;
+      if (!loom_cfg_graph_try_block_index(region, block, NULL) ||
+          block->region_index != block_index) {
+        out_graph->malformed = true;
+      }
     }
   }
 
-  loom_cfg_block_map_t block_map = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_cfg_block_map_initialize(region, arena, out_graph, &block_map));
-  IREE_RETURN_IF_ERROR(
-      loom_cfg_graph_count_edges(region, &block_map, out_graph));
+  IREE_RETURN_IF_ERROR(loom_cfg_graph_count_edges(region, out_graph));
 
   iree_host_size_t* successor_write_positions = NULL;
   iree_host_size_t* predecessor_write_positions = NULL;
   IREE_RETURN_IF_ERROR(loom_cfg_graph_assign_edge_storage(
       arena, out_graph, &successor_write_positions,
       &predecessor_write_positions));
-  loom_cfg_graph_write_edges(region, &block_map, out_graph,
-                             successor_write_positions,
+  loom_cfg_graph_write_edges(region, out_graph, successor_write_positions,
                              predecessor_write_positions);
   return loom_cfg_graph_mark_reachable(arena, out_graph);
 }
 
 iree_host_size_t loom_cfg_graph_block_index(const loom_cfg_graph_t* graph,
                                             const loom_block_t* block) {
-  if (!graph || !block) return IREE_HOST_SIZE_MAX;
-  for (iree_host_size_t i = 0; i < graph->block_count; ++i) {
-    if (graph->blocks[i].block == block) return i;
+  if (!graph || !block) {
+    return IREE_HOST_SIZE_MAX;
   }
-  return IREE_HOST_SIZE_MAX;
+  uint16_t block_index = 0;
+  if (!loom_cfg_graph_try_block_index(graph->region, block, &block_index) ||
+      block_index >= graph->block_count ||
+      graph->blocks[block_index].block != block) {
+    return IREE_HOST_SIZE_MAX;
+  }
+  return block_index;
 }
 
 loom_cfg_block_index_span_t loom_cfg_graph_successors(
