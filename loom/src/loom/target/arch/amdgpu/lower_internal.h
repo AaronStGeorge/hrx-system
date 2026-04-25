@@ -433,9 +433,6 @@ iree_status_t loom_amdgpu_lookup_m0_live_in(loom_low_lower_context_t* context,
 bool loom_amdgpu_low_legality_bundle_is_amdgpu(
     const loom_target_bundle_t* bundle);
 
-// Returns true for source vector-dot ops handled by the AMDGPU dot lowerer.
-bool loom_amdgpu_op_is_vector_dot(loom_op_kind_t kind);
-
 // Selects the AMDGPU mask compare plan for a source vector.cmpi op.
 bool loom_amdgpu_select_vector_cmpi_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

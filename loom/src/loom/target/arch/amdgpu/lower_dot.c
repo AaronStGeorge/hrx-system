@@ -100,19 +100,6 @@ static iree_status_t loom_amdgpu_dot_descriptor_key(
                                         descriptor->key_string_offset, out_key);
 }
 
-bool loom_amdgpu_op_is_vector_dot(loom_op_kind_t kind) {
-  switch (kind) {
-    case LOOM_OP_VECTOR_DOTF:
-    case LOOM_OP_VECTOR_DOT2F:
-    case LOOM_OP_VECTOR_DOT4F8:
-    case LOOM_OP_VECTOR_DOT4I:
-    case LOOM_OP_VECTOR_DOT8I4:
-      return true;
-    default:
-      return false;
-  }
-}
-
 iree_status_t loom_amdgpu_low_legality_verify_vector_dot(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
