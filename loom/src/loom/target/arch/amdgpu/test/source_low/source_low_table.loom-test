@@ -28,8 +28,8 @@ low.func.def target(@target) abi(hal_kernel) @f32_table_lookup_i8_codes() asm<am
   %four = s_mov_b32 4
   %20 = v_mov_b32 4
   %base = v_mul_lo_u32 %tid, %20
-  %22 = s_mov_b32 0
-  %codes = buffer_load_dword %codes_view, %base, %22 {offset = 0}
+  %22 = slice %codes_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %codes = global_load_b32 %base, %22 {offset = 0}
   %g0 = v_mov_b32 3212836864
   %g1 = v_mov_b32 3204448256
   %g2 = v_mov_b32 1056964608

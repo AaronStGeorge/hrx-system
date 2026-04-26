@@ -197,12 +197,12 @@ static const loom_amdgpu_memory_address_attempt_t kAmdgpuLdsAddressAttempts[] =
 };
 
 static const loom_amdgpu_memory_address_attempt_t
-    kAmdgpuBufferResourceAddressAttempts[] = {
-        {
-            .kind = LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_BUFFER_RESOURCE,
-        },
+    kAmdgpuGlobalAddressAttempts[] = {
         {
             .kind = LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_GLOBAL_SADDR,
+        },
+        {
+            .kind = LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_BUFFER_RESOURCE,
         },
 };
 
@@ -1142,10 +1142,16 @@ loom_amdgpu_memory_address_attempt_apply(
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
                  : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
     case LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_GLOBAL_SADDR:
+      if (access->source.vector_lane_byte_stride !=
+          access->source.element_byte_count) {
+        diagnostic->rejection_bits |=
+            LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_AXIS_STRIDE;
+        return LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_REJECTED;
+      }
       return loom_amdgpu_memory_access_plan_try_select_global_saddr(
                  descriptor_set, kind, access, diagnostic)
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
-                 : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_REJECTED;
+                 : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
   }
   return LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_REJECTED;
 }
@@ -1158,9 +1164,8 @@ static bool loom_amdgpu_memory_access_select_address_form(
     loom_amdgpu_memory_access_plan_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
   const loom_amdgpu_memory_address_attempt_t* attempts =
-      kAmdgpuBufferResourceAddressAttempts;
-  iree_host_size_t attempt_count =
-      IREE_ARRAYSIZE(kAmdgpuBufferResourceAddressAttempts);
+      kAmdgpuGlobalAddressAttempts;
+  iree_host_size_t attempt_count = IREE_ARRAYSIZE(kAmdgpuGlobalAddressAttempts);
   if (descriptor_domain == LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS) {
     attempts = kAmdgpuLdsAddressAttempts;
     attempt_count = IREE_ARRAYSIZE(kAmdgpuLdsAddressAttempts);

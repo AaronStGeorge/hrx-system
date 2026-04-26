@@ -54,6 +54,8 @@ typedef enum loom_native_elf_program_type_e {
   LOOM_NATIVE_ELF_PROGRAM_TYPE_LOAD = 1,
   LOOM_NATIVE_ELF_PROGRAM_TYPE_DYNAMIC = 2,
   LOOM_NATIVE_ELF_PROGRAM_TYPE_NOTE = 4,
+  LOOM_NATIVE_ELF_PROGRAM_TYPE_PHDR = 6,
+  LOOM_NATIVE_ELF_PROGRAM_TYPE_GNU_STACK = 0x6474e551,
 } loom_native_elf_program_type_t;
 
 typedef enum loom_native_elf_program_flag_bits_e {
@@ -122,6 +124,12 @@ typedef struct loom_native_elf64le_segment_t {
   uint32_t type;
   // ELF PF_* program header flags.
   uint32_t flags;
+  // Explicit output file byte offset for sectionless segments.
+  uint64_t file_offset;
+  // Explicit output file byte length for sectionless segments.
+  uint64_t file_size;
+  // Explicit runtime memory byte length for sectionless segments.
+  uint64_t memory_size;
   // First caller-provided section covered by the file image.
   iree_host_size_t first_section;
   // Number of caller-provided sections covered by the file image.

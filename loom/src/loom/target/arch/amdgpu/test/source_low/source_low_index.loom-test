@@ -27,12 +27,12 @@ low.func.def target(@target) abi(hal_kernel) @index_madd_global_b32() asm<amdgpu
   %linear = v_add_u32 %17, %x
   %19 = v_mov_b32 2
   %20 = v_lshlrev_b32 %19, %linear
-  %21 = s_mov_b32 0
-  %loaded = buffer_load_dword %input_view, %20, %21 {offset = 0}
+  %21 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %20, %21 {offset = 0}
   %23 = v_mov_b32 2
   %24 = v_lshlrev_b32 %23, %linear
-  %25 = s_mov_b32 0
-  buffer_store_dword %loaded, %output_view, %24, %25 {offset = 0}
+  %25 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %24, %loaded, %25 {offset = 0}
   return
 }
 
@@ -70,8 +70,8 @@ low.func.def target(@target) abi(hal_kernel) @workitem_y_lds_uses_explicit_vaddr
   %loaded = ds_read_b32 %20 {offset = 0}
   %22 = v_mov_b32 2
   %23 = v_lshlrev_b32 %22, %y
-  %24 = s_mov_b32 0
-  buffer_store_dword %loaded, %output_view, %23, %24 {offset = 0}
+  %24 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %23, %loaded, %24 {offset = 0}
   return
 }
 

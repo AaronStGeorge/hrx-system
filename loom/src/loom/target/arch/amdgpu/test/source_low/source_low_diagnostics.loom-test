@@ -29,8 +29,8 @@ low.func.def target(@target) abi(hal_kernel) @lds_b32_diagnostics() {
   %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
   %17 = low.const<amdgpu.v_mov_b32> {imm32 = 2} : reg<amdgpu.vgpr>
   %18 = low.op<amdgpu.v_lshlrev_b32>(%17, %tid) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %19 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  low.op<amdgpu.buffer_store_dword>(%loaded, %output_view, %18, %19) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  %19 = low.slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  low.op<amdgpu.global_store_b32_saddr>(%18, %loaded, %19) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
   low.return
 }
 
@@ -77,8 +77,8 @@ low.func.def target(@target) abi(hal_kernel) @lds_padded_diagnostics() asm<amdgp
   %loaded = ds_read_b128 %25 {offset = 0}
   %27 = v_mov_b32 4
   %28 = v_lshlrev_b32 %27, %tid
-  %29 = s_mov_b32 0
-  buffer_store_b128 %loaded, %output_view, %28, %29 {offset = 0}
+  %29 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %28, %loaded, %29 {offset = 0}
   return
 }
 
@@ -125,8 +125,8 @@ low.func.def target(@target) abi(hal_kernel) @lds_read2_write2_diagnostics() asm
   %loaded = ds_read2_b32 %25 {offset0 = 0, offset1 = 2}
   %27 = v_mov_b32 3
   %28 = v_lshlrev_b32 %27, %tid
-  %29 = s_mov_b32 0
-  buffer_store_b64 %loaded, %output_view, %28, %29 {offset = 0}
+  %29 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b64 %28, %loaded, %29 {offset = 0}
   return
 }
 
@@ -172,8 +172,8 @@ low.func.def target(@target) abi(hal_kernel) @lds_conflict_risk_diagnostics() as
   %loaded = ds_read_b128 %24 {offset = 0}
   %26 = v_mov_b32 4
   %27 = v_lshlrev_b32 %26, %tid
-  %28 = s_mov_b32 0
-  buffer_store_b128 %loaded, %output_view, %27, %28 {offset = 0}
+  %28 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %27, %loaded, %28 {offset = 0}
   return
 }
 

@@ -76,7 +76,7 @@ TEST(AmdgpuDescriptorTest, WritesNoArgGfx1100Descriptor) {
   ExpectZeroRange(bytes, 24, 44);
   EXPECT_EQ(LoadLeU32(bytes, 44), 0u);
   EXPECT_EQ(LoadLeU32(bytes, 48), 0xe0ac0000u);
-  EXPECT_EQ(LoadLeU32(bytes, 52), 0u);
+  EXPECT_EQ(LoadLeU32(bytes, 52), 0x00000080u);
   EXPECT_EQ(LoadLeU16(bytes, 56), 0x0400u);
   EXPECT_EQ(LoadLeU16(bytes, 58), 0u);
   ExpectZeroRange(bytes, 60, 64);
@@ -100,7 +100,7 @@ TEST(AmdgpuDescriptorTest, EnablesKernargSegmentPointerFromMetadata) {
       &descriptor, iree_make_byte_span(bytes.data(), bytes.size())));
 
   EXPECT_EQ(LoadLeU32(bytes, 8), 8u);
-  EXPECT_EQ(LoadLeU32(bytes, 52), 0x00000004u);
+  EXPECT_EQ(LoadLeU32(bytes, 52), 0x00000084u);
   EXPECT_EQ(LoadLeU16(bytes, 56), 0x0408u);
 }
 

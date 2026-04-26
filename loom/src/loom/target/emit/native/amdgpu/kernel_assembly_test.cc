@@ -287,7 +287,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsKernelEnvelopeForGfx11) {
   EXPECT_NE(output.find("  .amdhsa_user_sgpr_count 0\n"), std::string::npos);
   EXPECT_NE(output.find("  .amdhsa_user_sgpr_kernarg_segment_ptr 0\n"),
             std::string::npos);
-  EXPECT_NE(output.find("  .amdhsa_system_sgpr_workgroup_id_x 0\n"),
+  EXPECT_NE(output.find("  .amdhsa_system_sgpr_workgroup_id_x 1\n"),
             std::string::npos);
   EXPECT_NE(output.find("  .amdhsa_next_free_vgpr 0\n"), std::string::npos);
   EXPECT_NE(output.find("  .amdhsa_next_free_sgpr "), std::string::npos);

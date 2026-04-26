@@ -57,11 +57,18 @@ enum {
 
 #define LOOM_AMDGPU_HSACO_DYN_ENTRY_SIZE 16u
 #define LOOM_AMDGPU_HSACO_SYMBOL_ENTRY_SIZE 24u
-#define LOOM_AMDGPU_HSACO_READ_SEGMENT_BASE UINT64_C(0x100)
+#define LOOM_AMDGPU_HSACO_ELF_HEADER_SIZE UINT64_C(64)
+#define LOOM_AMDGPU_HSACO_PROGRAM_HEADER_SIZE UINT64_C(56)
+#define LOOM_AMDGPU_HSACO_PROGRAM_HEADER_COUNT UINT64_C(7)
+#define LOOM_AMDGPU_HSACO_READ_SEGMENT_BASE \
+  (LOOM_AMDGPU_HSACO_ELF_HEADER_SIZE +      \
+   LOOM_AMDGPU_HSACO_PROGRAM_HEADER_COUNT * \
+       LOOM_AMDGPU_HSACO_PROGRAM_HEADER_SIZE)
 #define LOOM_AMDGPU_HSACO_TEXT_SEGMENT_BASE UINT64_C(0x1000)
 #define LOOM_AMDGPU_HSACO_SEGMENT_PAGE_ALIGNMENT UINT64_C(0x1000)
+#define LOOM_AMDGPU_HSACO_NOTE_ALIGNMENT UINT64_C(4)
 #define LOOM_AMDGPU_HSACO_TEXT_ALIGNMENT UINT64_C(256)
-#define LOOM_AMDGPU_HSACO_READ_ALIGNMENT UINT64_C(64)
+#define LOOM_AMDGPU_HSACO_DYNAMIC_ENTRY_COUNT 6u
 
 typedef struct loom_amdgpu_hsaco_kernel_layout_t {
   // Byte offset of the kernel entry within the `.text` section.
@@ -84,7 +91,9 @@ typedef struct loom_amdgpu_hsaco_payloads_t {
   // ELF section descriptors passed to the generic writer.
   loom_native_elf64le_section_t sections[LOOM_AMDGPU_HSACO_SECTION_COUNT];
   // ELF program headers passed to the generic writer.
-  loom_native_elf64le_segment_t segments[5];
+  loom_native_elf64le_segment_t segments[7];
+  // Byte length of the header-backed read segment.
+  uint64_t read_segment_file_size;
 } loom_amdgpu_hsaco_payloads_t;
 
 static uint16_t loom_amdgpu_hsaco_section_index(iree_host_size_t index) {
@@ -511,28 +520,11 @@ static iree_status_t loom_amdgpu_hsaco_build_text(
 static iree_status_t loom_amdgpu_hsaco_build_rodata(
     const loom_amdgpu_hsaco_file_t* file,
     loom_amdgpu_hsaco_payloads_t* payloads, uint64_t rodata_address,
-    uint64_t text_address, iree_const_byte_span_t* out_rodata,
-    iree_arena_allocator_t* arena) {
+    uint64_t text_address, iree_host_size_t rodata_size,
+    iree_const_byte_span_t* out_rodata, iree_arena_allocator_t* arena) {
   IREE_ASSERT_ARGUMENT(out_rodata);
   *out_rodata = iree_make_const_byte_span(NULL, 0);
 
-  uint64_t rodata_size_u64 = 0;
-  for (iree_host_size_t i = 0; i < file->kernel_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_align_uint64(
-        rodata_size_u64, LOOM_AMDGPU_KERNEL_DESCRIPTOR_ALIGNMENT,
-        &rodata_size_u64));
-    payloads->kernel_layouts[i].descriptor_offset = rodata_size_u64;
-    if (!loom_amdgpu_hsaco_checked_add_uint64(
-            rodata_size_u64, LOOM_AMDGPU_KERNEL_DESCRIPTOR_LENGTH,
-            &rodata_size_u64)) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "AMDGPU HSACO rodata section size overflow");
-    }
-  }
-
-  iree_host_size_t rodata_size = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_hsaco_cast_host_size(rodata_size_u64, &rodata_size));
   iree_byte_span_t rodata = iree_make_byte_span(NULL, 0);
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_hsaco_allocate_zeroed(arena, rodata_size, &rodata));
@@ -573,6 +565,34 @@ static iree_status_t loom_amdgpu_hsaco_build_rodata(
                             rodata.data_length - descriptor_offset)));
   }
   *out_rodata = iree_make_const_byte_span(rodata.data, rodata.data_length);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_hsaco_plan_rodata(
+    const loom_amdgpu_hsaco_file_t* file,
+    loom_amdgpu_hsaco_payloads_t* payloads,
+    iree_const_byte_span_t* out_placeholder) {
+  IREE_ASSERT_ARGUMENT(out_placeholder);
+  *out_placeholder = iree_make_const_byte_span(NULL, 0);
+
+  uint64_t rodata_size_u64 = 0;
+  for (iree_host_size_t i = 0; i < file->kernel_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_align_uint64(
+        rodata_size_u64, LOOM_AMDGPU_KERNEL_DESCRIPTOR_ALIGNMENT,
+        &rodata_size_u64));
+    payloads->kernel_layouts[i].descriptor_offset = rodata_size_u64;
+    if (!loom_amdgpu_hsaco_checked_add_uint64(
+            rodata_size_u64, LOOM_AMDGPU_KERNEL_DESCRIPTOR_LENGTH,
+            &rodata_size_u64)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU HSACO rodata section size overflow");
+    }
+  }
+
+  iree_host_size_t rodata_size = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_hsaco_cast_host_size(rodata_size_u64, &rodata_size));
+  *out_placeholder = iree_make_const_byte_span(NULL, rodata_size);
   return iree_ok_status();
 }
 
@@ -626,7 +646,7 @@ static iree_status_t loom_amdgpu_hsaco_build_symbol_table(
         symbol_table, symbol_index++, layout->descriptor_name_offset,
         LOOM_AMDGPU_HSACO_SYMBOL_BIND_GLOBAL,
         LOOM_AMDGPU_HSACO_SYMBOL_TYPE_OBJECT,
-        LOOM_AMDGPU_HSACO_SYMBOL_VISIBILITY_DEFAULT,
+        LOOM_AMDGPU_HSACO_SYMBOL_VISIBILITY_PROTECTED,
         loom_amdgpu_hsaco_section_index(LOOM_AMDGPU_HSACO_SECTION_RODATA),
         descriptor_address, LOOM_AMDGPU_KERNEL_DESCRIPTOR_LENGTH));
   }
@@ -705,10 +725,10 @@ static iree_status_t loom_amdgpu_hsaco_build_dynamic_table(
   IREE_ASSERT_ARGUMENT(out_dynamic_table);
   *out_dynamic_table = iree_make_const_byte_span(NULL, 0);
 
-  enum { DYNAMIC_ENTRY_COUNT = 6 };
   iree_byte_span_t dynamic_table = iree_make_byte_span(NULL, 0);
   IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_allocate_zeroed(
-      arena, DYNAMIC_ENTRY_COUNT * LOOM_AMDGPU_HSACO_DYN_ENTRY_SIZE,
+      arena,
+      LOOM_AMDGPU_HSACO_DYNAMIC_ENTRY_COUNT * LOOM_AMDGPU_HSACO_DYN_ENTRY_SIZE,
       &dynamic_table));
   iree_host_size_t offset = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_append_u64(
@@ -784,12 +804,35 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_hsaco_build_text(file, payloads, &text, arena));
 
+  iree_const_byte_span_t rodata_placeholder =
+      iree_make_const_byte_span(NULL, 0);
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_hsaco_plan_rodata(file, payloads, &rodata_placeholder));
+
+  iree_host_size_t symbol_table_size = 0;
+  if (!iree_host_size_checked_mul(symbol_count,
+                                  LOOM_AMDGPU_HSACO_SYMBOL_ENTRY_SIZE,
+                                  &symbol_table_size)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU HSACO symbol table size overflow");
+  }
+  iree_const_byte_span_t symbol_table_placeholder =
+      iree_make_const_byte_span(NULL, symbol_table_size);
+
+  iree_const_byte_span_t hash = iree_make_const_byte_span(NULL, 0);
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_hsaco_build_sysv_hash(file, symbol_count, &hash, arena));
+
+  iree_const_byte_span_t dynamic_table_placeholder =
+      iree_make_const_byte_span(NULL, LOOM_AMDGPU_HSACO_DYNAMIC_ENTRY_COUNT *
+                                          LOOM_AMDGPU_HSACO_DYN_ENTRY_SIZE);
+
   loom_native_elf64le_section_t* sections = payloads->sections;
   sections[LOOM_AMDGPU_HSACO_SECTION_NOTE] = (loom_native_elf64le_section_t){
       .name = IREE_SV(".note"),
       .type = LOOM_NATIVE_ELF_SECTION_TYPE_NOTE,
       .flags = LOOM_NATIVE_ELF_SECTION_FLAG_ALLOC,
-      .alignment = LOOM_AMDGPU_HSACO_READ_ALIGNMENT,
+      .alignment = LOOM_AMDGPU_HSACO_NOTE_ALIGNMENT,
       .contents = note,
   };
   sections[LOOM_AMDGPU_HSACO_SECTION_DYNSYM] = (loom_native_elf64le_section_t){
@@ -800,6 +843,7 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
       .entry_size = LOOM_AMDGPU_HSACO_SYMBOL_ENTRY_SIZE,
       .link = loom_amdgpu_hsaco_section_index(LOOM_AMDGPU_HSACO_SECTION_DYNSTR),
       .info = 1,
+      .contents = symbol_table_placeholder,
   };
   sections[LOOM_AMDGPU_HSACO_SECTION_HASH] = (loom_native_elf64le_section_t){
       .name = IREE_SV(".hash"),
@@ -808,6 +852,7 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
       .alignment = 4,
       .entry_size = sizeof(uint32_t),
       .link = loom_amdgpu_hsaco_section_index(LOOM_AMDGPU_HSACO_SECTION_DYNSYM),
+      .contents = hash,
   };
   sections[LOOM_AMDGPU_HSACO_SECTION_DYNSTR] = (loom_native_elf64le_section_t){
       .name = IREE_SV(".dynstr"),
@@ -822,13 +867,14 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
       .type = LOOM_NATIVE_ELF_SECTION_TYPE_PROGBITS,
       .flags = LOOM_NATIVE_ELF_SECTION_FLAG_ALLOC,
       .alignment = LOOM_AMDGPU_KERNEL_DESCRIPTOR_ALIGNMENT,
+      .contents = rodata_placeholder,
   };
   sections[LOOM_AMDGPU_HSACO_SECTION_TEXT] = (loom_native_elf64le_section_t){
       .name = IREE_SV(".text"),
       .type = LOOM_NATIVE_ELF_SECTION_TYPE_PROGBITS,
       .flags = LOOM_NATIVE_ELF_SECTION_FLAG_ALLOC |
                LOOM_NATIVE_ELF_SECTION_FLAG_EXECINSTR,
-      .alignment = LOOM_AMDGPU_HSACO_TEXT_ALIGNMENT,
+      .alignment = LOOM_AMDGPU_HSACO_SEGMENT_PAGE_ALIGNMENT,
       .contents = text,
   };
   sections[LOOM_AMDGPU_HSACO_SECTION_DYNAMIC] = (loom_native_elf64le_section_t){
@@ -836,9 +882,10 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
       .type = LOOM_NATIVE_ELF_SECTION_TYPE_DYNAMIC,
       .flags = LOOM_NATIVE_ELF_SECTION_FLAG_WRITE |
                LOOM_NATIVE_ELF_SECTION_FLAG_ALLOC,
-      .alignment = 8,
+      .alignment = LOOM_AMDGPU_HSACO_SEGMENT_PAGE_ALIGNMENT,
       .entry_size = LOOM_AMDGPU_HSACO_DYN_ENTRY_SIZE,
       .link = loom_amdgpu_hsaco_section_index(LOOM_AMDGPU_HSACO_SECTION_DYNSTR),
+      .contents = dynamic_table_placeholder,
   };
   sections[LOOM_AMDGPU_HSACO_SECTION_SYMTAB] = (loom_native_elf64le_section_t){
       .name = IREE_SV(".symtab"),
@@ -847,6 +894,7 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
       .entry_size = LOOM_AMDGPU_HSACO_SYMBOL_ENTRY_SIZE,
       .link = loom_amdgpu_hsaco_section_index(LOOM_AMDGPU_HSACO_SECTION_STRTAB),
       .info = 1,
+      .contents = symbol_table_placeholder,
   };
   sections[LOOM_AMDGPU_HSACO_SECTION_STRTAB] = (loom_native_elf64le_section_t){
       .name = IREE_SV(".strtab"),
@@ -859,6 +907,7 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
   uint64_t read_end = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_hsaco_assign_read_addresses(sections, &read_end));
+  payloads->read_segment_file_size = read_end;
   uint64_t text_address = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_align_uint64(
       iree_max(read_end, LOOM_AMDGPU_HSACO_TEXT_SEGMENT_BASE),
@@ -878,7 +927,9 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
   iree_const_byte_span_t rodata = iree_make_const_byte_span(NULL, 0);
   IREE_RETURN_IF_ERROR(loom_amdgpu_hsaco_build_rodata(
       file, payloads, sections[LOOM_AMDGPU_HSACO_SECTION_RODATA].address,
-      text_address, &rodata, arena));
+      text_address,
+      sections[LOOM_AMDGPU_HSACO_SECTION_RODATA].contents.data_length, &rodata,
+      arena));
   sections[LOOM_AMDGPU_HSACO_SECTION_RODATA].contents = rodata;
 
   iree_const_byte_span_t symbol_table = iree_make_const_byte_span(NULL, 0);
@@ -888,11 +939,6 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
   sections[LOOM_AMDGPU_HSACO_SECTION_DYNSYM].contents = symbol_table;
   sections[LOOM_AMDGPU_HSACO_SECTION_SYMTAB].contents = symbol_table;
 
-  iree_const_byte_span_t hash = iree_make_const_byte_span(NULL, 0);
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_hsaco_build_sysv_hash(file, symbol_count, &hash, arena));
-  sections[LOOM_AMDGPU_HSACO_SECTION_HASH].contents = hash;
-
   iree_const_byte_span_t dynamic_table = iree_make_const_byte_span(NULL, 0);
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_hsaco_build_dynamic_table(sections, &dynamic_table, arena));
@@ -901,19 +947,32 @@ static iree_status_t loom_amdgpu_hsaco_prepare_sections(
 }
 
 static void loom_amdgpu_hsaco_prepare_segments(
-    const loom_native_elf64le_section_t* sections,
-    loom_native_elf64le_segment_t segments[5]) {
+    loom_amdgpu_hsaco_payloads_t* payloads) {
+  const loom_native_elf64le_section_t* sections = payloads->sections;
+  loom_native_elf64le_segment_t* segments = payloads->segments;
   segments[0] = (loom_native_elf64le_segment_t){
-      .type = LOOM_NATIVE_ELF_PROGRAM_TYPE_LOAD,
+      .type = LOOM_NATIVE_ELF_PROGRAM_TYPE_PHDR,
       .flags = LOOM_NATIVE_ELF_PROGRAM_FLAG_READ,
-      .first_section = LOOM_AMDGPU_HSACO_SECTION_NOTE,
-      .section_count = LOOM_AMDGPU_HSACO_SECTION_RODATA -
-                       LOOM_AMDGPU_HSACO_SECTION_NOTE + 1u,
-      .virtual_address = sections[LOOM_AMDGPU_HSACO_SECTION_NOTE].address,
-      .physical_address = sections[LOOM_AMDGPU_HSACO_SECTION_NOTE].address,
-      .alignment = LOOM_AMDGPU_HSACO_READ_ALIGNMENT,
+      .file_offset = LOOM_AMDGPU_HSACO_ELF_HEADER_SIZE,
+      .file_size = LOOM_AMDGPU_HSACO_PROGRAM_HEADER_COUNT *
+                   LOOM_AMDGPU_HSACO_PROGRAM_HEADER_SIZE,
+      .memory_size = LOOM_AMDGPU_HSACO_PROGRAM_HEADER_COUNT *
+                     LOOM_AMDGPU_HSACO_PROGRAM_HEADER_SIZE,
+      .virtual_address = LOOM_AMDGPU_HSACO_ELF_HEADER_SIZE,
+      .physical_address = LOOM_AMDGPU_HSACO_ELF_HEADER_SIZE,
+      .alignment = 8,
   };
   segments[1] = (loom_native_elf64le_segment_t){
+      .type = LOOM_NATIVE_ELF_PROGRAM_TYPE_LOAD,
+      .flags = LOOM_NATIVE_ELF_PROGRAM_FLAG_READ,
+      .file_offset = 0,
+      .file_size = payloads->read_segment_file_size,
+      .memory_size = payloads->read_segment_file_size,
+      .virtual_address = 0,
+      .physical_address = 0,
+      .alignment = LOOM_AMDGPU_HSACO_SEGMENT_PAGE_ALIGNMENT,
+  };
+  segments[2] = (loom_native_elf64le_segment_t){
       .type = LOOM_NATIVE_ELF_PROGRAM_TYPE_LOAD,
       .flags = LOOM_NATIVE_ELF_PROGRAM_FLAG_READ |
                LOOM_NATIVE_ELF_PROGRAM_FLAG_EXECUTE,
@@ -921,9 +980,9 @@ static void loom_amdgpu_hsaco_prepare_segments(
       .section_count = 1,
       .virtual_address = sections[LOOM_AMDGPU_HSACO_SECTION_TEXT].address,
       .physical_address = sections[LOOM_AMDGPU_HSACO_SECTION_TEXT].address,
-      .alignment = LOOM_AMDGPU_HSACO_TEXT_ALIGNMENT,
+      .alignment = LOOM_AMDGPU_HSACO_SEGMENT_PAGE_ALIGNMENT,
   };
-  segments[2] = (loom_native_elf64le_segment_t){
+  segments[3] = (loom_native_elf64le_segment_t){
       .type = LOOM_NATIVE_ELF_PROGRAM_TYPE_LOAD,
       .flags = LOOM_NATIVE_ELF_PROGRAM_FLAG_READ |
                LOOM_NATIVE_ELF_PROGRAM_FLAG_WRITE,
@@ -931,9 +990,9 @@ static void loom_amdgpu_hsaco_prepare_segments(
       .section_count = 1,
       .virtual_address = sections[LOOM_AMDGPU_HSACO_SECTION_DYNAMIC].address,
       .physical_address = sections[LOOM_AMDGPU_HSACO_SECTION_DYNAMIC].address,
-      .alignment = 8,
+      .alignment = LOOM_AMDGPU_HSACO_SEGMENT_PAGE_ALIGNMENT,
   };
-  segments[3] = (loom_native_elf64le_segment_t){
+  segments[4] = (loom_native_elf64le_segment_t){
       .type = LOOM_NATIVE_ELF_PROGRAM_TYPE_DYNAMIC,
       .flags = LOOM_NATIVE_ELF_PROGRAM_FLAG_READ |
                LOOM_NATIVE_ELF_PROGRAM_FLAG_WRITE,
@@ -943,7 +1002,18 @@ static void loom_amdgpu_hsaco_prepare_segments(
       .physical_address = sections[LOOM_AMDGPU_HSACO_SECTION_DYNAMIC].address,
       .alignment = 8,
   };
-  segments[4] = (loom_native_elf64le_segment_t){
+  segments[5] = (loom_native_elf64le_segment_t){
+      .type = LOOM_NATIVE_ELF_PROGRAM_TYPE_GNU_STACK,
+      .flags = LOOM_NATIVE_ELF_PROGRAM_FLAG_READ |
+               LOOM_NATIVE_ELF_PROGRAM_FLAG_WRITE,
+      .file_offset = 0,
+      .file_size = 0,
+      .memory_size = 0,
+      .virtual_address = 0,
+      .physical_address = 0,
+      .alignment = 0,
+  };
+  segments[6] = (loom_native_elf64le_segment_t){
       .type = LOOM_NATIVE_ELF_PROGRAM_TYPE_NOTE,
       .flags = LOOM_NATIVE_ELF_PROGRAM_FLAG_READ,
       .first_section = LOOM_AMDGPU_HSACO_SECTION_NOTE,
@@ -986,7 +1056,7 @@ iree_status_t loom_amdgpu_hsaco_write_file(
       loom_amdgpu_hsaco_copy_metadata_kernels(file, &payloads, scratch_arena));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_hsaco_prepare_sections(file, &payloads, scratch_arena));
-  loom_amdgpu_hsaco_prepare_segments(payloads.sections, payloads.segments);
+  loom_amdgpu_hsaco_prepare_segments(&payloads);
 
   const loom_native_elf64le_file_t elf_file = {
       .type = LOOM_NATIVE_ELF_FILE_TYPE_DYN,

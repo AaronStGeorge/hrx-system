@@ -73,8 +73,8 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_minnum_maxnum() asm<amd
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
   %14 = v_mov_b32 0
-  %15 = s_mov_b32 0
-  %loaded = buffer_load_b128 %input_view, %14, %15 {offset = 0}
+  %15 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %14, %15 {offset = 0}
   %min_init = v_mov_b32 1148846080
   %18 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %19 = v_min_f32 %min_init, %18
@@ -95,7 +95,7 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_minnum_maxnum() asm<amd
   %max = v_max_f32 %32, %33
   %stored = concat(%min, %max) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   %36 = v_mov_b32 0
-  %37 = s_mov_b32 0
-  buffer_store_b64 %stored, %output_view, %36, %37 {offset = 0}
+  %37 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b64 %36, %stored, %37 {offset = 0}
   return
 }

@@ -225,18 +225,25 @@ TEST(AmdgpuHsacoTest, WritesGfx1100CodeObjectEnvelope) {
   EXPECT_EQ(LoadLeU16(bytes, 18), LOOM_NATIVE_ELF_MACHINE_AMDGPU);
   EXPECT_EQ(LoadLeU32(bytes, 48), LOOM_NATIVE_ELF_AMDGPU_FLAG_MACH_GFX1100);
 
-  ASSERT_EQ(LoadLeU16(bytes, 56), 5u);
+  ASSERT_EQ(LoadLeU16(bytes, 56), 7u);
   const size_t program_header_offset = (size_t)LoadLeU64(bytes, 32);
+  bool found_program_header_table = false;
   bool found_dynamic_program_header = false;
+  bool found_stack_program_header = false;
   bool found_note_program_header = false;
   for (size_t i = 0; i < LoadLeU16(bytes, 56); ++i) {
     const size_t offset = program_header_offset + i * 56;
     const uint32_t type = LoadLeU32(bytes, offset);
+    found_program_header_table |= type == LOOM_NATIVE_ELF_PROGRAM_TYPE_PHDR;
     found_dynamic_program_header |=
         type == LOOM_NATIVE_ELF_PROGRAM_TYPE_DYNAMIC;
+    found_stack_program_header |=
+        type == LOOM_NATIVE_ELF_PROGRAM_TYPE_GNU_STACK;
     found_note_program_header |= type == LOOM_NATIVE_ELF_PROGRAM_TYPE_NOTE;
   }
+  EXPECT_TRUE(found_program_header_table);
   EXPECT_TRUE(found_dynamic_program_header);
+  EXPECT_TRUE(found_stack_program_header);
   EXPECT_TRUE(found_note_program_header);
 
   const std::vector<Section> sections = ReadSections(bytes);
@@ -272,6 +279,33 @@ TEST(AmdgpuHsacoTest, WritesGfx1100CodeObjectEnvelope) {
   EXPECT_EQ(bytes.substr((size_t)text.offset, sizeof(s_endpgm)),
             std::string((const char*)s_endpgm, sizeof(s_endpgm)));
 
+  const size_t program_header_table = program_header_offset;
+  EXPECT_EQ(LoadLeU32(bytes, program_header_table + 0),
+            LOOM_NATIVE_ELF_PROGRAM_TYPE_PHDR);
+  EXPECT_EQ(LoadLeU64(bytes, program_header_table + 8), program_header_offset);
+  EXPECT_EQ(LoadLeU64(bytes, program_header_table + 16), program_header_offset);
+  EXPECT_EQ(LoadLeU64(bytes, program_header_table + 32), 7u * 56u);
+  const size_t read_load = program_header_offset + 56u;
+  EXPECT_EQ(LoadLeU32(bytes, read_load + 0), LOOM_NATIVE_ELF_PROGRAM_TYPE_LOAD);
+  EXPECT_EQ(LoadLeU64(bytes, read_load + 8), 0u);
+  EXPECT_EQ(LoadLeU64(bytes, read_load + 16), 0u);
+  EXPECT_EQ(LoadLeU64(bytes, read_load + 32), rodata.offset + rodata.size);
+  EXPECT_EQ(LoadLeU64(bytes, read_load + 48), 4096u);
+  const size_t execute_load = program_header_offset + 2u * 56u;
+  EXPECT_EQ(LoadLeU32(bytes, execute_load + 0),
+            LOOM_NATIVE_ELF_PROGRAM_TYPE_LOAD);
+  EXPECT_EQ(LoadLeU64(bytes, execute_load + 8), text.offset);
+  EXPECT_EQ(LoadLeU64(bytes, execute_load + 16), text.address);
+  EXPECT_EQ(LoadLeU64(bytes, execute_load + 48), 4096u);
+  EXPECT_EQ(text.offset & 4095u, text.address & 4095u);
+  const size_t write_load = program_header_offset + 3u * 56u;
+  EXPECT_EQ(LoadLeU32(bytes, write_load + 0),
+            LOOM_NATIVE_ELF_PROGRAM_TYPE_LOAD);
+  EXPECT_EQ(LoadLeU64(bytes, write_load + 8), dynamic.offset);
+  EXPECT_EQ(LoadLeU64(bytes, write_load + 16), dynamic.address);
+  EXPECT_EQ(LoadLeU64(bytes, write_load + 48), 4096u);
+  EXPECT_EQ(dynamic.offset & 4095u, dynamic.address & 4095u);
+
   const std::string dynstr_contents =
       bytes.substr((size_t)dynstr.offset, (size_t)dynstr.size);
   ASSERT_GE(dynstr_contents.size(), 1u);
@@ -295,7 +329,7 @@ TEST(AmdgpuHsacoTest, WritesGfx1100CodeObjectEnvelope) {
                                      LoadLeU32(bytes, descriptor_symbol + 0)),
             "loom_kernel.kd");
   EXPECT_EQ((uint8_t)bytes[descriptor_symbol + 4], 0x11u);
-  EXPECT_EQ((uint8_t)bytes[descriptor_symbol + 5], 0u);
+  EXPECT_EQ((uint8_t)bytes[descriptor_symbol + 5], 3u);
   EXPECT_EQ(LoadLeU16(bytes, descriptor_symbol + 6), rodata.index);
   EXPECT_EQ(LoadLeU64(bytes, descriptor_symbol + 8), rodata.address);
   EXPECT_EQ(LoadLeU64(bytes, descriptor_symbol + 16),

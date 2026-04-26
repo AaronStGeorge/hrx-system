@@ -242,7 +242,8 @@ static iree_status_t loom_run_vm_create_context(
   iree_vm_module_t* modules[] = {module};
   return iree_tooling_create_context_from_flags(
       runtime->instance, IREE_ARRAYSIZE(modules), modules, default_device_uri,
-      allocator, out_context, out_device, out_device_allocator);
+      allocator, out_context, out_device, out_device_allocator,
+      /*out_replay_recorder=*/NULL);
 }
 
 static iree_status_t loom_run_vm_lookup_function(

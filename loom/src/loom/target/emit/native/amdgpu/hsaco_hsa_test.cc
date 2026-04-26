@@ -831,80 +831,12 @@ iree_status_t CompileWorkitemStoreKernelForAmdgpu(const AmdgpuHsaTarget& target,
       out_hsaco, arena.arena());
 }
 
-iree_status_t LookupUniqueDescriptorKeyBySemanticTag(
-    const loom_low_descriptor_set_t* descriptor_set,
-    iree_string_view_t semantic_tag, iree_string_view_t* out_key) {
-  IREE_ASSERT_ARGUMENT(descriptor_set);
-  IREE_ASSERT_ARGUMENT(out_key);
-  *out_key = iree_string_view_empty();
-  uint32_t match_count = 0;
-  for (uint32_t i = 0; i < descriptor_set->descriptor_count; ++i) {
-    const loom_low_descriptor_t* descriptor = &descriptor_set->descriptors[i];
-    iree_string_view_t descriptor_semantic_tag = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, descriptor->semantic_tag_string_offset,
-        &descriptor_semantic_tag));
-    if (!iree_string_view_equal(descriptor_semantic_tag, semantic_tag)) {
-      continue;
-    }
-    iree_string_view_t descriptor_key = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
-        descriptor_set, descriptor->key_string_offset, &descriptor_key));
-    if (match_count != 0) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU descriptor set has ambiguous semantic tag '%.*s'",
-          (int)semantic_tag.size, semantic_tag.data);
-    }
-    *out_key = descriptor_key;
-    ++match_count;
-  }
-  if (match_count == 0) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU descriptor set has no descriptor for semantic tag '%.*s'",
-        (int)semantic_tag.size, semantic_tag.data);
-  }
-  return iree_ok_status();
-}
-
-iree_status_t Buffer128DescriptorKeysForProcessor(
-    const loom_amdgpu_processor_info_t* processor,
-    iree_string_view_t* out_load_key, iree_string_view_t* out_store_key) {
-  IREE_ASSERT_ARGUMENT(processor);
-  IREE_ASSERT_ARGUMENT(out_load_key);
-  IREE_ASSERT_ARGUMENT(out_store_key);
-  *out_load_key = iree_string_view_empty();
-  *out_store_key = iree_string_view_empty();
-
-  loom_target_low_descriptor_registry_t target_registry = {};
-  loom_amdgpu_low_descriptor_registry_initialize(&target_registry);
-  const loom_low_descriptor_set_t* descriptor_set = nullptr;
-  IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_lookup_by_id(
-      &target_registry.registry, processor->descriptor_set_stable_id,
-      &descriptor_set));
-  if (descriptor_set == nullptr) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU descriptor registry has no set for processor '%.*s'",
-        (int)processor->target_cpu.size, processor->target_cpu.data);
-  }
-  IREE_RETURN_IF_ERROR(LookupUniqueDescriptorKeyBySemanticTag(
-      descriptor_set, IREE_SV("memory.load.u128"), out_load_key));
-  return LookupUniqueDescriptorKeyBySemanticTag(
-      descriptor_set, IREE_SV("memory.store.u128"), out_store_key);
-}
-
 iree_status_t CompileB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
                                              std::string* out_hsaco) {
   IREE_ASSERT_ARGUMENT(out_hsaco);
   *out_hsaco = {};
   const loom_amdgpu_processor_info_t* processor = nullptr;
   IREE_RETURN_IF_ERROR(PrepareTargetProcessorForLowHsaco(target, &processor));
-  iree_string_view_t load_key = iree_string_view_empty();
-  iree_string_view_t store_key = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(
-      Buffer128DescriptorKeysForProcessor(processor, &load_key, &store_key));
 
   std::string source =
       "low.func.def target(@gfx_target) @loom_kernel() {\n"
@@ -918,20 +850,16 @@ iree_status_t CompileB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
       "= hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %target = low.resource<hal_buffer_resource> {index = 1, semantic_type "
       "= hal.buffer} : reg<amdgpu.sgpr x4>\n"
-      "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
-      "reg<amdgpu.sgpr>\n"
-      "  %loaded = low.op<";
-  source.append(load_key.data, load_key.size);
-  source +=
-      ">(%source, %byte_offset, %zero) {offset = 0} : "
-      "(reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>) -> "
+      "  %source_ptr = low.slice %source[0] : reg<amdgpu.sgpr x4> -> "
+      "reg<amdgpu.sgpr x2>\n"
+      "  %target_ptr = low.slice %target[0] : reg<amdgpu.sgpr x4> -> "
+      "reg<amdgpu.sgpr x2>\n"
+      "  %loaded = low.op<amdgpu.global_load_b128_saddr>(%byte_offset, "
+      "%source_ptr) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> "
       "reg<amdgpu.vgpr x4>\n"
-      "  low.op<";
-  source.append(store_key.data, store_key.size);
-  source +=
-      ">(%loaded, %target, %byte_offset, %zero) {offset = 0} : "
-      "(reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, "
-      "reg<amdgpu.sgpr>)\n"
+      "  low.op<amdgpu.global_store_b128_saddr>(%byte_offset, %loaded, "
+      "%target_ptr) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, "
+      "reg<amdgpu.sgpr x2>)\n"
       "  low.return\n"
       "}\n";
   TestArena arena;

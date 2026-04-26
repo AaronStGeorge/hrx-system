@@ -48,8 +48,8 @@ low.func.def target(@target) abi(hal_kernel) @i32_b128() asm<amdgpu.gfx11.core> 
   %zero = s_mov_b32 0
   %15 = v_mov_b32 4
   %16 = v_lshlrev_b32 %15, %tid
-  %17 = s_mov_b32 0
-  %loaded = buffer_load_b128 %input_view, %16, %17 {offset = 0}
+  %17 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %16, %17 {offset = 0}
   %19 = v_mov_b32 9
   %20 = v_mov_b32 9
   %21 = v_mov_b32 9
@@ -88,7 +88,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_b128() asm<amdgpu.gfx11.core> 
   %result = concat(%44, %47, %50, %53) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   %55 = v_mov_b32 4
   %56 = v_lshlrev_b32 %55, %tid
-  %57 = s_mov_b32 0
-  buffer_store_b128 %result, %output_view, %56, %57 {offset = 0}
+  %57 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %56, %result, %57 {offset = 0}
   return
 }

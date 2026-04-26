@@ -110,6 +110,7 @@ loom_cc_library(
     "hal_runtime.c"
   DEPS
     ::hal_backend
+    iree::async
     iree::async::util::proactor_pool
     iree::base
     iree::base::threading

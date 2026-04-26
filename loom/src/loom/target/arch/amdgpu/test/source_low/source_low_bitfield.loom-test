@@ -12,17 +12,21 @@ func.def @i32_bitfield_extractu(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extractu() {
-  %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
-  %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
-  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %loaded = low.op<amdgpu.buffer_load_dword_off_zero>(%input_view) {offset = 0} : (reg<amdgpu.sgpr x4>) -> reg<amdgpu.vgpr>
-  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 4} : reg<amdgpu.vgpr>
-  %12 = low.op<amdgpu.v_lshrrev_b32>(%11, %loaded) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 15} : reg<amdgpu.vgpr>
-  %nibble = low.op<amdgpu.v_and_b32>(%12, %13) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword_off_zero>(%nibble, %output_view) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>)
-  low.return
+low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extractu() asm<amdgpu.gfx11.core> {
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %10 = v_mov_b32 0
+  %11 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %10, %11 {offset = 0}
+  %13 = v_mov_b32 4
+  %14 = v_lshrrev_b32 %13, %loaded
+  %15 = v_mov_b32 15
+  %nibble = v_and_b32 %14, %15
+  %17 = v_mov_b32 0
+  %18 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %17, %nibble, %18 {offset = 0}
+  return
 }
 
 // ====
@@ -38,17 +42,21 @@ func.def @i32_bitfield_extracts(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extracts() {
-  %input_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
-  %output_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
-  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %loaded = low.op<amdgpu.buffer_load_dword_off_zero>(%input_view) {offset = 0} : (reg<amdgpu.sgpr x4>) -> reg<amdgpu.vgpr>
-  %11 = low.const<amdgpu.v_mov_b32> {imm32 = 24} : reg<amdgpu.vgpr>
-  %12 = low.op<amdgpu.v_lshlrev_b32>(%11, %loaded) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 28} : reg<amdgpu.vgpr>
-  %nibble = low.op<amdgpu.v_ashrrev_i32>(%13, %12) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword_off_zero>(%nibble, %output_view) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>)
-  low.return
+low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extracts() asm<amdgpu.gfx11.core> {
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %10 = v_mov_b32 0
+  %11 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %10, %11 {offset = 0}
+  %13 = v_mov_b32 24
+  %14 = v_lshlrev_b32 %13, %loaded
+  %15 = v_mov_b32 28
+  %nibble = v_ashrrev_i32 %15, %14
+  %17 = v_mov_b32 0
+  %18 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %17, %nibble, %18 {offset = 0}
+  return
 }
 
 // ====
@@ -66,22 +74,28 @@ func.def @i32_bitfield_insert(%field_buffer: buffer, %base_buffer: buffer, %outp
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_bitfield_insert() {
-  %field_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
-  %base_view = low.resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
-  %output_view = low.resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
-  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %field = low.op<amdgpu.buffer_load_dword_off_zero>(%field_view) {offset = 0} : (reg<amdgpu.sgpr x4>) -> reg<amdgpu.vgpr>
-  %base = low.op<amdgpu.buffer_load_dword_off_zero>(%base_view) {offset = 0} : (reg<amdgpu.sgpr x4>) -> reg<amdgpu.vgpr>
-  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 15} : reg<amdgpu.vgpr>
-  %17 = low.op<amdgpu.v_and_b32>(%field, %16) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %18 = low.const<amdgpu.v_mov_b32> {imm32 = 8} : reg<amdgpu.vgpr>
-  %19 = low.op<amdgpu.v_lshlrev_b32>(%18, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %20 = low.const<amdgpu.v_mov_b32> {imm32 = 4294963455} : reg<amdgpu.vgpr>
-  %21 = low.op<amdgpu.v_and_b32>(%base, %20) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %inserted = low.op<amdgpu.v_or_b32>(%21, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword_off_zero>(%inserted, %output_view) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>)
-  low.return
+low.func.def target(@target) abi(hal_kernel) @i32_bitfield_insert() asm<amdgpu.gfx11.core> {
+  %field_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %base_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %14 = v_mov_b32 0
+  %15 = slice %field_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %field = global_load_b32 %14, %15 {offset = 0}
+  %17 = v_mov_b32 0
+  %18 = slice %base_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %base = global_load_b32 %17, %18 {offset = 0}
+  %20 = v_mov_b32 15
+  %21 = v_and_b32 %field, %20
+  %22 = v_mov_b32 8
+  %23 = v_lshlrev_b32 %22, %21
+  %24 = v_mov_b32 4294963455
+  %25 = v_and_b32 %base, %24
+  %inserted = v_or_b32 %25, %23
+  %27 = v_mov_b32 0
+  %28 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %27, %inserted, %28 {offset = 0}
+  return
 }
 
 // ====
@@ -106,8 +120,8 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdg
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
   %14 = v_mov_b32 0
-  %15 = s_mov_b32 0
-  %loaded = buffer_load_b128 %input_view, %14, %15 {offset = 0}
+  %15 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %14, %15 {offset = 0}
   %17 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %18 = v_mov_b32 15
   %19 = v_and_b32 %17, %18
@@ -198,7 +212,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdg
   %104 = v_sub_nc_u32 %102, %103
   %result = concat(%95, %98, %101, %104) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   %106 = v_mov_b32 0
-  %107 = s_mov_b32 0
-  buffer_store_b128 %result, %output_view, %106, %107 {offset = 0}
+  %107 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %106, %result, %107 {offset = 0}
   return
 }

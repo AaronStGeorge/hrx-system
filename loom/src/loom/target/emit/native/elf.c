@@ -166,17 +166,27 @@ static iree_status_t loom_native_elf64le_validate_file(
     IREE_RETURN_IF_ERROR(loom_native_elf64le_validate_alignment(
         segment->alignment, IREE_SV("segment.alignment")));
     if (segment->section_count == 0) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "ELF segment %" PRIhsz " must cover at least one section", i);
-    }
-    iree_host_size_t segment_end = 0;
-    if (!iree_host_size_checked_add(segment->first_section,
-                                    segment->section_count, &segment_end) ||
-        segment_end > file->section_count) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "ELF segment %" PRIhsz " section range is outside the file", i);
+      if (segment->first_section != 0) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "ELF sectionless segment %" PRIhsz
+                                " must not specify a first section",
+                                i);
+      }
+      if (segment->memory_size < segment->file_size) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "ELF sectionless segment %" PRIhsz
+                                " memory size is smaller than its file size",
+                                i);
+      }
+    } else {
+      iree_host_size_t segment_end = 0;
+      if (!iree_host_size_checked_add(segment->first_section,
+                                      segment->section_count, &segment_end) ||
+          segment_end > file->section_count) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "ELF segment %" PRIhsz " section range is outside the file", i);
+      }
     }
   }
   return iree_ok_status();
@@ -455,9 +465,17 @@ static iree_status_t loom_native_elf64le_write_header(
 static iree_status_t loom_native_elf64le_segment_range(
     const loom_native_elf64le_layout_t* layout,
     const loom_native_elf64le_segment_t* segment, uint64_t* out_offset,
-    uint64_t* out_file_size) {
+    uint64_t* out_file_size, uint64_t* out_memory_size) {
   IREE_ASSERT_ARGUMENT(out_offset);
   IREE_ASSERT_ARGUMENT(out_file_size);
+  IREE_ASSERT_ARGUMENT(out_memory_size);
+
+  if (segment->section_count == 0) {
+    *out_offset = segment->file_offset;
+    *out_file_size = segment->file_size;
+    *out_memory_size = segment->memory_size;
+    return iree_ok_status();
+  }
 
   const iree_host_size_t first_section_index = segment->first_section + 1u;
   const iree_host_size_t last_section_index =
@@ -476,6 +494,7 @@ static iree_status_t loom_native_elf64le_segment_range(
                             "ELF segment file range overflow");
   }
   *out_file_size = end_offset - first_section->file_offset;
+  *out_memory_size = *out_file_size;
   return iree_ok_status();
 }
 
@@ -486,8 +505,9 @@ static iree_status_t loom_native_elf64le_write_program_headers(
     const loom_native_elf64le_segment_t* segment = &file->segments[i];
     uint64_t file_offset = 0;
     uint64_t file_size = 0;
+    uint64_t memory_size = 0;
     IREE_RETURN_IF_ERROR(loom_native_elf64le_segment_range(
-        layout, segment, &file_offset, &file_size));
+        layout, segment, &file_offset, &file_size, &memory_size));
     IREE_RETURN_IF_ERROR(loom_native_elf64le_write_u32(stream, segment->type));
     IREE_RETURN_IF_ERROR(loom_native_elf64le_write_u32(stream, segment->flags));
     IREE_RETURN_IF_ERROR(loom_native_elf64le_write_u64(stream, file_offset));
@@ -496,7 +516,7 @@ static iree_status_t loom_native_elf64le_write_program_headers(
     IREE_RETURN_IF_ERROR(
         loom_native_elf64le_write_u64(stream, segment->physical_address));
     IREE_RETURN_IF_ERROR(loom_native_elf64le_write_u64(stream, file_size));
-    IREE_RETURN_IF_ERROR(loom_native_elf64le_write_u64(stream, file_size));
+    IREE_RETURN_IF_ERROR(loom_native_elf64le_write_u64(stream, memory_size));
     IREE_RETURN_IF_ERROR(loom_native_elf64le_write_u64(
         stream, segment->alignment == 0 ? 1u : segment->alignment));
   }

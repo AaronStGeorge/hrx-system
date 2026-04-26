@@ -580,6 +580,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
   loom_amdgpu_kernel_descriptor_flags_t descriptor_flags = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_descriptor_flags(
       allocation, user_sgpr_count, &descriptor_flags));
+  descriptor_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X;
   uint32_t system_vgpr_workitem_id = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_descriptor_workitem_id_mode_from_flags(

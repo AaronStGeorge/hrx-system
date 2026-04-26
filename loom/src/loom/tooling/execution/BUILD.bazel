@@ -95,6 +95,7 @@ loom_cc_library(
     hdrs = ["hal_runtime.h"],
     deps = [
         ":hal_backend",
+        "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/threading",

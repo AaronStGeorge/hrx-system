@@ -19,11 +19,11 @@ low.func.def target(@target) abi(hal_kernel) @cache_system_bypass_load_device_wr
   %zero = s_mov_b32 0
   %11 = v_mov_b32 4
   %12 = v_lshlrev_b32 %11, %tid
-  %13 = s_mov_b32 0
-  %loaded = buffer_load_b128 %input_view, %12, %13 {offset = 0, scope = 3, th = 3}
+  %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %12, %13 {offset = 0, scope = 3, th = 3}
   %15 = v_mov_b32 4
   %16 = v_lshlrev_b32 %15, %tid
-  %17 = s_mov_b32 0
-  buffer_store_b128 %loaded, %output_view, %16, %17 {offset = 0, scope = 2, th = 7}
+  %17 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %16, %loaded, %17 {offset = 0, scope = 2, th = 7}
   return
 }
