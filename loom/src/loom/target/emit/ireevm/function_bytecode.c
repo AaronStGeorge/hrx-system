@@ -572,7 +572,7 @@ static iree_status_t loom_ireevm_validate_sidecars(
   }
   if (allocation->spill_count != 0 || allocation->spill_plan_count != 0) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "VM bytecode emission requires unspilled allocation sidecars");
   }
   return iree_ok_status();
