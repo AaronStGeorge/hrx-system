@@ -37,3 +37,27 @@ func.def @i32_scalar_2d_store(%input: buffer, %output: buffer) {
   vector.store %loaded, %output_view[%y, %x] : vector<1xi32>, view<4x8xi32, #dense>
   func.return
 }
+
+// ====
+
+func.def @f16x2_b32(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x2xf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x2xf16, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x2xf16, #dense> -> vector<2xf16>
+  vector.store %loaded, %output_view[%tid, 0] : vector<2xf16>, view<64x2xf16, #dense>
+  func.return
+}
+
+// ====
+
+func.def @bf16x2_b32(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x2xbf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x2xbf16, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x2xbf16, #dense> -> vector<2xbf16>
+  vector.store %loaded, %output_view[%tid, 0] : vector<2xbf16>, view<64x2xbf16, #dense>
+  func.return
+}

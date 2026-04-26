@@ -27,7 +27,9 @@ static bool loom_amdgpu_vector_bitcast_storage_shape(
   }
 
   return loom_amdgpu_type_packed_integer_storage(type, out_payload_bit_count,
-                                                 out_register_count);
+                                                 out_register_count) ||
+         loom_amdgpu_type_packed_16bit_float_storage(
+             type, out_payload_bit_count, out_register_count);
 }
 
 static bool loom_amdgpu_vector_bitcast_plan_from_op(

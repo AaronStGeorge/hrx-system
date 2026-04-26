@@ -18,3 +18,17 @@ func.def @f32x2_to_i32x2_bitcast(%floats: vector<2xf32>) -> (vector<2xi32>) {
   %bits = vector.bitcast %floats : vector<2xf32> to vector<2xi32>
   func.return %bits : vector<2xi32>
 }
+
+// ====
+
+func.def @f16x2_to_i32_bitcast(%halves: vector<2xf16>) -> (vector<1xi32>) {
+  %bits = vector.bitcast %halves : vector<2xf16> to vector<1xi32>
+  func.return %bits : vector<1xi32>
+}
+
+// ====
+
+func.def @bf16x2_to_i32_bitcast(%halves: vector<2xbf16>) -> (vector<1xi32>) {
+  %bits = vector.bitcast %halves : vector<2xbf16> to vector<1xi32>
+  func.return %bits : vector<1xi32>
+}

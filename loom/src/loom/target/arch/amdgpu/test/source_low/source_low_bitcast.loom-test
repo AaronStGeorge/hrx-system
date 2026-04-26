@@ -34,3 +34,27 @@ func.def @f32x2_to_i32x2_bitcast(%floats: vector<2xf32>) -> (vector<2xi32>) {
 low.func.def target(@target) abi(hal_kernel) @f32x2_to_i32x2_bitcast(%bits: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
   return %bits
 }
+
+// ====
+
+func.def @f16x2_to_i32_bitcast(%halves: vector<2xf16>) -> (vector<1xi32>) {
+  %bits = vector.bitcast %halves : vector<2xf16> to vector<1xi32>
+  func.return %bits : vector<1xi32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f16x2_to_i32_bitcast(%bits: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+  return %bits
+}
+
+// ====
+
+func.def @bf16x2_to_i32_bitcast(%halves: vector<2xbf16>) -> (vector<1xi32>) {
+  %bits = vector.bitcast %halves : vector<2xbf16> to vector<1xi32>
+  func.return %bits : vector<1xi32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @bf16x2_to_i32_bitcast(%bits: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+  return %bits
+}

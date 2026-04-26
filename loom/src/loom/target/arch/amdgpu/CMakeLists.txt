@@ -621,6 +621,7 @@ iree_c_embed_data(
     amdgpu_hal_testdata
   SRCS
     "execution/testdata/b128_vector_add.loom"
+    "execution/testdata/dot2f_f16_buffer.loom"
     "execution/testdata/dot4i_u8u8_buffer.loom"
     "execution/testdata/dot4i_u8u8_gemm4x8x4.loom"
     "execution/testdata/dot4i_u8u8_tile8x4.loom"

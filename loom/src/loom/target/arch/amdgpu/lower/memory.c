@@ -41,7 +41,9 @@ static bool loom_amdgpu_memory_access_register_footprint(
 
   uint32_t payload_bit_count = 0;
   if (!loom_amdgpu_type_packed_integer_storage(vector_type, &payload_bit_count,
-                                               &register_count)) {
+                                               &register_count) &&
+      !loom_amdgpu_type_packed_16bit_float_storage(
+          vector_type, &payload_bit_count, &register_count)) {
     diagnostic->rejection_bits |=
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_TYPE;
     return false;

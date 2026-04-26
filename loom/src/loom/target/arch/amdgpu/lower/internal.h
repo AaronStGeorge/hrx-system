@@ -35,6 +35,10 @@ extern "C" {
 // keep live as individual VGPRs.
 #define LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES 8u
 
+// Maximum number of packed f16/bf16 lanes accepted for packed-half payloads.
+#define LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES \
+  (LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES * 2u)
+
 // Maximum number of packed 32-bit registers accepted for packed byte payloads.
 #define LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS 4u
 
@@ -84,6 +88,13 @@ uint32_t loom_amdgpu_vector_i8_lane_count(loom_type_t type);
 bool loom_amdgpu_type_packed_integer_storage(loom_type_t type,
                                              uint32_t* out_payload_bit_count,
                                              uint32_t* out_register_count);
+
+// Returns true when the source type is an f16/bf16 vector payload that can be
+// stored in packed 32-bit registers. Odd lane counts occupy the low half of the
+// final register; the high half is unspecified.
+bool loom_amdgpu_type_packed_16bit_float_storage(
+    loom_type_t type, uint32_t* out_payload_bit_count,
+    uint32_t* out_register_count);
 
 // Returns true when the source type is a byte-addressable view that can map to
 // an AMDGPU HAL/global buffer resource or LDS root.

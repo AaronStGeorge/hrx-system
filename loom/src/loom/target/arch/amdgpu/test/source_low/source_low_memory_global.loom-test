@@ -134,3 +134,61 @@ low.func.def target(@target) abi(hal_kernel) @i32_scalar_2d_store() asm<amdgpu.g
   global_store_b32 %29, %loaded, %30 {offset = 0}
   return
 }
+
+// ====
+
+func.def @f16x2_b32(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x2xf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x2xf16, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x2xf16, #dense> -> vector<2xf16>
+  vector.store %loaded, %output_view[%tid, 0] : vector<2xf16>, view<64x2xf16, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f16x2_b32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %11 = v_mov_b32 2
+  %12 = v_lshlrev_b32 %11, %tid
+  %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %12, %13 {offset = 0}
+  %15 = v_mov_b32 2
+  %16 = v_lshlrev_b32 %15, %tid
+  %17 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %16, %loaded, %17 {offset = 0}
+  return
+}
+
+// ====
+
+func.def @bf16x2_b32(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x2xbf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x2xbf16, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x2xbf16, #dense> -> vector<2xbf16>
+  vector.store %loaded, %output_view[%tid, 0] : vector<2xbf16>, view<64x2xbf16, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @bf16x2_b32() asm<amdgpu.gfx11.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
+  %zero = s_mov_b32 0
+  %11 = v_mov_b32 2
+  %12 = v_lshlrev_b32 %11, %tid
+  %13 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %12, %13 {offset = 0}
+  %15 = v_mov_b32 2
+  %16 = v_lshlrev_b32 %15, %tid
+  %17 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %16, %loaded, %17 {offset = 0}
+  return
+}

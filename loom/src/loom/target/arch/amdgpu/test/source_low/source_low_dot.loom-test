@@ -23,3 +23,63 @@ low.func.def target(@target) abi(hal_kernel) @f32_dotf(%lhs: reg<amdgpu.vgpr x4>
   %dot = v_fma_f32 %18, %19, %17
   return %dot
 }
+
+// ====
+
+func.def @f16_dot2f(%lhs: vector<8xf16>, %rhs: vector<8xf16>, %acc: vector<4xf32>) -> (vector<4xf32>) {
+  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
+  %dot = vector.dot2f %lhs, %rhs, %acc : vector<8xf16>, vector<8xf16>, vector<4xf32>
+  func.return %dot : vector<4xf32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f16_dot2f(%lhs: reg<amdgpu.vgpr x4>, %rhs: reg<amdgpu.vgpr x4>, %acc: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.gfx11.core> {
+  %9 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %10 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %11 = slice %acc[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %12 = v_dot2_f32_f16 %9, %10, %11
+  %13 = slice %lhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %14 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %15 = slice %acc[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %16 = v_dot2_f32_f16 %13, %14, %15
+  %17 = slice %lhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %18 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %19 = slice %acc[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %20 = v_dot2_f32_f16 %17, %18, %19
+  %21 = slice %lhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %22 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %23 = slice %acc[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %24 = v_dot2_f32_f16 %21, %22, %23
+  %dot = concat(%12, %16, %20, %24) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  return %dot
+}
+
+// ====
+
+func.def @bf16_dot2f(%lhs: vector<8xbf16>, %rhs: vector<8xbf16>, %acc: vector<4xf32>) -> (vector<4xf32>) {
+  // REMARK@+1: BACKEND/002 "selected AMDGPU packed dot descriptor"
+  %dot = vector.dot2f %lhs, %rhs, %acc : vector<8xbf16>, vector<8xbf16>, vector<4xf32>
+  func.return %dot : vector<4xf32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @bf16_dot2f(%lhs: reg<amdgpu.vgpr x4>, %rhs: reg<amdgpu.vgpr x4>, %acc: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.gfx11.core> {
+  %9 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %10 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %11 = slice %acc[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %12 = v_dot2_f32_bf16 %9, %10, %11
+  %13 = slice %lhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %14 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %15 = slice %acc[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %16 = v_dot2_f32_bf16 %13, %14, %15
+  %17 = slice %lhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %18 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %19 = slice %acc[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %20 = v_dot2_f32_bf16 %17, %18, %19
+  %21 = slice %lhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %22 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %23 = slice %acc[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %24 = v_dot2_f32_bf16 %21, %22, %23
+  %dot = concat(%12, %16, %20, %24) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  return %dot
+}

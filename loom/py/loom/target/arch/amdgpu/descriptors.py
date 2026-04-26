@@ -4152,6 +4152,48 @@ def _vop3p_packed_dot_fixed_fields(
     return tuple(fields)
 
 
+def _v_dot2_f32_packed_float_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_VOP3P",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
+            AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_dot2_f32_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_dot2_f32_packed_float_overlay(
+        descriptor_key="amdgpu.v_dot2_f32_f16",
+        instruction_name="V_DOT2_F32_F16",
+        mnemonic="v_dot2_f32_f16",
+        semantic_tag="dot.f16f16.f32x1",
+    )
+
+
+def _v_dot2_f32_bf16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_dot2_f32_packed_float_overlay(
+        descriptor_key="amdgpu.v_dot2_f32_bf16",
+        instruction_name="V_DOT2_F32_BF16",
+        mnemonic="v_dot2_f32_bf16",
+        semantic_tag="dot.bf16bf16.f32x1",
+    )
+
+
 def _v_dot4_i32_i8_overlay(
     *, op_sel_hi_field: str = "OP_SEL_HI", signedness_modifiers: bool
 ) -> AmdgpuDescriptorOverlay:
@@ -4898,6 +4940,8 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         *_ds_memory_overlays(include_packed_half_atomic_add=True),
         *_ds_crosslane_overlays(),
+        _v_dot2_f32_f16_overlay(),
+        _v_dot2_f32_bf16_overlay(),
         _v_dot4_i32_i8_overlay(signedness_modifiers=False),
         _v_dot4_u32_u8_overlay(),
         _v_dot8_i32_i4_overlay(signedness_modifiers=False),
@@ -5051,6 +5095,8 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         ),
         *_ds_memory_overlays(),
         *_ds_crosslane_overlays(),
+        _v_dot2_f32_f16_overlay(),
+        _v_dot2_f32_bf16_overlay(),
         _v_dot4_i32_i8_overlay(signedness_modifiers=True),
         _v_dot4_i32_iu8_overlay(lhs_signed=True, rhs_signed=False),
         _v_dot4_i32_iu8_overlay(lhs_signed=False, rhs_signed=True),
@@ -5226,6 +5272,8 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             fixed_encoding_fields=(),
             include_fetch_invalid=True,
         ),
+        _v_dot2_f32_f16_overlay(),
+        _v_dot2_f32_bf16_overlay(),
         _v_dot4_i32_i8_overlay(op_sel_hi_field="OPSEL_HI", signedness_modifiers=True),
         _v_dot4_i32_iu8_overlay(
             op_sel_hi_field="OPSEL_HI", lhs_signed=True, rhs_signed=False
@@ -5405,6 +5453,8 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             fixed_encoding_fields=(),
             include_fetch_invalid=True,
         ),
+        _v_dot2_f32_f16_overlay(),
+        _v_dot2_f32_bf16_overlay(),
         _v_dot4_i32_i8_overlay(op_sel_hi_field="OPSEL_HI", signedness_modifiers=True),
         _v_dot4_i32_iu8_overlay(
             op_sel_hi_field="OPSEL_HI", lhs_signed=True, rhs_signed=False

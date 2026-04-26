@@ -67,6 +67,12 @@ static iree_status_t loom_amdgpu_dot_match_map_value(
 
   uint32_t unused_payload_bit_count = 0;
   uint32_t packed_register_count = 0;
+  if (loom_amdgpu_type_packed_16bit_float_storage(
+          source_type, &unused_payload_bit_count, &packed_register_count)) {
+    return loom_amdgpu_dot_match_register(
+        context, LOOM_AMDGPU_REG_CLASS_ID_VGPR, packed_register_count,
+        out_mapped_value);
+  }
   if (loom_amdgpu_type_packed_integer_storage(
           source_type, &unused_payload_bit_count, &packed_register_count)) {
     return loom_amdgpu_dot_match_register(
@@ -134,8 +140,9 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_dot(
     return loom_target_low_legality_reject(
         context, provider, op, IREE_SV("op"),
         loom_op_name(loom_target_low_legality_module(context), op),
-        IREE_SV("AMDGPU source-to-low supports vector.dotf, vector.dot4i, and "
-                "vector.dot8i4 forms; other vector dot families require "
+        IREE_SV("AMDGPU source-to-low supports vector.dotf, vector.dot2f, "
+                "vector.dot4i, and vector.dot8i4 forms; other vector dot "
+                "families require "
                 "additional target contracts"));
   }
 

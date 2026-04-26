@@ -122,6 +122,33 @@ bool loom_amdgpu_type_packed_integer_storage(loom_type_t type,
   return true;
 }
 
+bool loom_amdgpu_type_packed_16bit_float_storage(
+    loom_type_t type, uint32_t* out_payload_bit_count,
+    uint32_t* out_register_count) {
+  IREE_ASSERT_ARGUMENT(out_payload_bit_count);
+  IREE_ASSERT_ARGUMENT(out_register_count);
+  *out_payload_bit_count = 0;
+  *out_register_count = 0;
+  if (!loom_type_is_vector(type) || loom_type_rank(type) != 1 ||
+      !loom_type_is_all_static(type)) {
+    return false;
+  }
+  const int64_t lane_count = loom_type_dim_static_size_at(type, 0);
+  if (lane_count < 1 ||
+      lane_count > (int64_t)LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES) {
+    return false;
+  }
+  const loom_scalar_type_t element_type = loom_type_element_type(type);
+  if (element_type != LOOM_SCALAR_TYPE_F16 &&
+      element_type != LOOM_SCALAR_TYPE_BF16) {
+    return false;
+  }
+  const uint32_t register_count = (uint32_t)((lane_count + 1) / 2);
+  *out_payload_bit_count = (uint32_t)lane_count * 16u;
+  *out_register_count = register_count;
+  return true;
+}
+
 bool loom_amdgpu_type_is_byte_addressable_view(loom_type_t type) {
   if (!loom_type_is_view(type)) {
     return false;
@@ -403,6 +430,12 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
   }
   uint32_t unused_payload_bit_count = 0;
   uint32_t packed_register_count = 0;
+  if (loom_amdgpu_type_packed_16bit_float_storage(
+          source_type, &unused_payload_bit_count, &packed_register_count)) {
+    return loom_amdgpu_make_register_type(context,
+                                          LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                                          packed_register_count, out_low_type);
+  }
   if (loom_amdgpu_type_packed_integer_storage(
           source_type, &unused_payload_bit_count, &packed_register_count)) {
     if (packed_register_count == 1) {
@@ -417,6 +450,8 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
       IREE_SV("AMDGPU lowering currently supports only i32 scalar values, "
               "address scalar values, rank-1 static i32/f32 vectors with "
               "1 to 8 lanes, rank-1 static i1 mask vectors with 1 to 8 lanes, "
+              "rank-1 static f16/bf16 vectors that fit in 1 to 8 packed "
+              "32-bit registers, "
               "and rank-1 static integer vectors that fit in 1 to 4 packed "
               "32-bit registers"));
 }
