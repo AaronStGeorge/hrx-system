@@ -139,6 +139,22 @@ loom_low_source_memory_access_single_dynamic_term(
   return plan->dynamic_term_count == 1 ? &plan->dynamic_terms[0] : NULL;
 }
 
+// Computes facts for the dynamic byte offset produced by |term|.
+//
+// Returns false when the source index facts cannot be interpreted as a
+// non-negative byte contribution, such as a negative byte stride. Successful
+// results may still be conservative unknown facts.
+bool loom_low_source_memory_dynamic_term_byte_facts(
+    const loom_value_fact_table_t* fact_table,
+    const loom_low_source_memory_dynamic_term_t* term,
+    loom_value_facts_t* out_facts);
+
+// Returns true when |term|'s dynamic byte offset is proven to fit in an
+// unsigned integer with |bit_count| bits.
+bool loom_low_source_memory_dynamic_term_fits_unsigned_bit_count(
+    const loom_value_fact_table_t* fact_table,
+    const loom_low_source_memory_dynamic_term_t* term, uint8_t bit_count);
+
 // Builds a target-independent source memory plan for indexed source memory ops.
 //
 // Returns false when the source op cannot be decomposed into a complete source

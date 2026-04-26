@@ -290,6 +290,34 @@ static bool loom_low_source_memory_access_power_of_two_shift(
   return true;
 }
 
+bool loom_low_source_memory_dynamic_term_byte_facts(
+    const loom_value_fact_table_t* fact_table,
+    const loom_low_source_memory_dynamic_term_t* term,
+    loom_value_facts_t* out_facts) {
+  IREE_ASSERT_ARGUMENT(fact_table);
+  IREE_ASSERT_ARGUMENT(term);
+  IREE_ASSERT_ARGUMENT(out_facts);
+  *out_facts = loom_value_facts_unknown();
+  if (term->byte_stride < 0) {
+    return false;
+  }
+  const loom_value_facts_t index_facts =
+      loom_value_fact_table_lookup(fact_table, term->index);
+  const loom_value_facts_t byte_stride_facts =
+      loom_value_facts_exact_i64(term->byte_stride);
+  loom_value_facts_muli(&index_facts, &byte_stride_facts, out_facts);
+  return true;
+}
+
+bool loom_low_source_memory_dynamic_term_fits_unsigned_bit_count(
+    const loom_value_fact_table_t* fact_table,
+    const loom_low_source_memory_dynamic_term_t* term, uint8_t bit_count) {
+  loom_value_facts_t byte_facts = {0};
+  return loom_low_source_memory_dynamic_term_byte_facts(fact_table, term,
+                                                        &byte_facts) &&
+         loom_value_facts_fit_unsigned_bit_count(byte_facts, bit_count);
+}
+
 static bool loom_low_source_memory_operation_kind_from_op(
     const loom_op_t* source_op,
     loom_low_source_memory_operation_kind_t* out_operation_kind) {

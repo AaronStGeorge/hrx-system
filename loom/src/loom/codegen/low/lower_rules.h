@@ -176,6 +176,8 @@ struct loom_low_lower_rule_match_context_t {
   loom_low_lower_rule_match_register_class_callback_t register_class;
   // Optional source value materializer predicate bridge.
   loom_low_lower_rule_match_can_materialize_value_callback_t can_materialize;
+  // Optional dense source value facts used by fact-backed guard rows.
+  const loom_value_fact_table_t* fact_table;
 };
 
 typedef struct loom_low_lower_value_ref_t {
@@ -259,6 +261,10 @@ typedef enum loom_low_lower_guard_kind_e {
   // All source i64_array attribute elements must fall in
   // [minimum_i64, maximum_i64].
   LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENTS_RANGE = 12,
+  // Source value facts must fit in a signed integer with |u64| bits.
+  LOOM_LOW_LOWER_GUARD_VALUE_SIGNED_BIT_COUNT = 13,
+  // Source value facts must fit in an unsigned integer with |u64| bits.
+  LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT = 14,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
@@ -276,7 +282,7 @@ typedef struct loom_low_lower_guard_t {
   uint16_t diagnostic_index;
   // Required attribute kind for ATTR_KIND guards.
   loom_attr_kind_t attr_kind;
-  // Required enum value, divisor, count, or element index payload.
+  // Required enum value, divisor, count, element index, or bit-count payload.
   uint64_t u64;
   // Stable descriptor ID used by DESCRIPTOR_AVAILABLE guards.
   uint64_t descriptor_id;

@@ -190,6 +190,28 @@ TEST(FactsMake, InvalidRange) {
 }
 
 //===----------------------------------------------------------------------===//
+// Bit-width fit predicates
+//===----------------------------------------------------------------------===//
+
+TEST(FactsFitBitCount, SignedRange) {
+  EXPECT_TRUE(loom_value_facts_fit_signed_bit_count(
+      loom_value_facts_make(INT32_MIN, INT32_MAX, 1), 32));
+  EXPECT_FALSE(loom_value_facts_fit_signed_bit_count(
+      loom_value_facts_make(0, (int64_t)UINT32_MAX, 1), 32));
+  EXPECT_FALSE(
+      loom_value_facts_fit_signed_bit_count(loom_value_facts_unknown(), 32));
+}
+
+TEST(FactsFitBitCount, UnsignedRange) {
+  EXPECT_TRUE(loom_value_facts_fit_unsigned_bit_count(
+      loom_value_facts_make(0, (int64_t)UINT32_MAX, 1), 32));
+  EXPECT_FALSE(loom_value_facts_fit_unsigned_bit_count(
+      loom_value_facts_make(-1, INT32_MAX, 1), 32));
+  EXPECT_FALSE(
+      loom_value_facts_fit_unsigned_bit_count(loom_value_facts_unknown(), 32));
+}
+
+//===----------------------------------------------------------------------===//
 // Equality
 //===----------------------------------------------------------------------===//
 

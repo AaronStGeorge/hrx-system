@@ -188,6 +188,38 @@ static inline bool loom_value_facts_divisible_by(loom_value_facts_t facts,
   return facts.known_divisor % divisor == 0;
 }
 
+// Returns true if all values described by |facts| fit in a signed integer with
+// |bit_count| bits. Unknown facts never fit sub-64-bit domains because that
+// would permit silent narrowing.
+static inline bool loom_value_facts_fit_signed_bit_count(
+    loom_value_facts_t facts, uint8_t bit_count) {
+  if (bit_count == 0 || loom_value_facts_is_float(facts)) {
+    return false;
+  }
+  if (bit_count >= 64) {
+    return true;
+  }
+  const int64_t minimum_value = -(INT64_C(1) << (bit_count - 1));
+  const int64_t maximum_value = (INT64_C(1) << (bit_count - 1)) - 1;
+  return facts.range_lo >= minimum_value && facts.range_hi <= maximum_value;
+}
+
+// Returns true if all values described by |facts| fit in an unsigned integer
+// with |bit_count| bits. Facts use signed ranges, so any negative lower bound
+// rejects the unsigned domain.
+static inline bool loom_value_facts_fit_unsigned_bit_count(
+    loom_value_facts_t facts, uint8_t bit_count) {
+  if (bit_count == 0 || loom_value_facts_is_float(facts) ||
+      facts.range_lo < 0) {
+    return false;
+  }
+  if (bit_count >= 63) {
+    return true;
+  }
+  const uint64_t maximum_value = (UINT64_C(1) << bit_count) - 1;
+  return (uint64_t)facts.range_hi <= maximum_value;
+}
+
 // Returns true if the facts carry no information (full range, unit
 // divisor, no flags).
 static inline bool loom_value_facts_is_unknown(loom_value_facts_t facts) {

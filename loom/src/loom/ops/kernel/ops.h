@@ -346,6 +346,11 @@ iree_status_t loom_kernel_workitem_id_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_kernel_workitem_id_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_KERNEL_WORKGROUP_ID: Read one coordinate of the current workgroup within the dispatch grid. The result is a logical index value; target lowering decides whether the coordinate is carried in scalar registers, ABI state, or target-specific builtin values.
 // %bid = kernel.workgroup.id<x> : index
@@ -358,6 +363,11 @@ iree_status_t loom_kernel_workgroup_id_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_kernel_workgroup_id_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // Returns the vtable array for the kernel dialect.
 const loom_op_vtable_t* const* loom_kernel_dialect_vtables(

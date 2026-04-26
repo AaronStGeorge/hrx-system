@@ -297,6 +297,31 @@ static iree_status_t loom_low_lower_rule_mapped_value_register_class_matches(
   return iree_ok_status();
 }
 
+static bool loom_low_lower_rule_value_facts_fit_bit_count(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, uint64_t bit_count, bool is_signed_domain) {
+  if (match_context->fact_table == NULL || bit_count > UINT8_MAX) {
+    return false;
+  }
+  loom_value_id_t value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  const loom_type_t type =
+      loom_module_value_type(match_context->module, value_id);
+  if (!loom_type_is_scalar(type)) {
+    return false;
+  }
+  if (loom_scalar_type_is_float(loom_type_element_type(type))) {
+    return false;
+  }
+  const loom_value_facts_t facts =
+      loom_value_fact_table_lookup(match_context->fact_table, value_id);
+  if (is_signed_domain) {
+    return loom_value_facts_fit_signed_bit_count(facts, (uint8_t)bit_count);
+  }
+  return loom_value_facts_fit_unsigned_bit_count(facts, (uint8_t)bit_count);
+}
+
 static iree_status_t loom_low_lower_rule_guard_matches(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -436,6 +461,16 @@ static iree_status_t loom_low_lower_rule_guard_matches(
           lhs_value.register_unit_count == rhs_value.register_unit_count;
       return iree_ok_status();
     }
+    case LOOM_LOW_LOWER_GUARD_VALUE_SIGNED_BIT_COUNT:
+      *out_matches = loom_low_lower_rule_value_facts_fit_bit_count(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          guard->u64, /*is_signed_domain=*/true);
+      return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT:
+      *out_matches = loom_low_lower_rule_value_facts_fit_bit_count(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          guard->u64, /*is_signed_domain=*/false);
+      return iree_ok_status();
     default:
       IREE_ASSERT_UNREACHABLE();
       return iree_ok_status();
@@ -594,6 +629,7 @@ iree_status_t loom_low_lower_rule_set_select(
               .fn = loom_low_lower_rule_match_can_materialize_from_lowering,
               .user_data = context,
           },
+      .fact_table = loom_low_lower_context_fact_table(context),
   };
   return loom_low_lower_rule_set_select_with_match_context(
       &match_context, rule_set, source_op, out_selection);

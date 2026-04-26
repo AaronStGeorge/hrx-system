@@ -1,0 +1,29 @@
+// RUN: pass canonicalize
+
+func.def @workitem_id_hal_coordinate_facts() -> (i64, i64) {
+  %x = kernel.workitem.id<x> : index
+  %lo = test.fact_range_lo %x : index -> i64
+  %hi = test.fact_range_hi %x : index -> i64
+  func.return %lo, %hi : i64, i64
+}
+// ----
+func.def @workitem_id_hal_coordinate_facts() -> (i64, i64) {
+  %lo = scalar.constant 0 : i64
+  %hi = scalar.constant 4294967295 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
+func.def @workgroup_id_hal_coordinate_facts() -> (i1, i64) {
+  %x = kernel.workgroup.id<x> : index
+  %nn = test.fact_non_negative %x : index -> i1
+  %hi = test.fact_range_hi %x : index -> i64
+  func.return %nn, %hi : i1, i64
+}
+// ----
+func.def @workgroup_id_hal_coordinate_facts() -> (i1, i64) {
+  %nn = scalar.constant true : i1
+  %hi = scalar.constant 4294967295 : i64
+  func.return %nn, %hi : i1, i64
+}

@@ -209,6 +209,7 @@ kernel_workitem_id = Op(
         ),
     ],
     traits=[PURE],
+    facts="loom_kernel_workitem_id_facts",
     format=[
         TemplateParam("dimension"),
         COLON,
@@ -246,6 +247,7 @@ kernel_workgroup_id = Op(
         ),
     ],
     traits=[PURE],
+    facts="loom_kernel_workgroup_id_facts",
     format=[
         TemplateParam("dimension"),
         COLON,
