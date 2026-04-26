@@ -40,6 +40,19 @@ func.def @i32_scalar_2d_store(%input: buffer, %output: buffer) {
 
 // ====
 
+func.def @i32_dynamic_constant_index(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero_offset = index.constant 0 : offset
+  %zero = index.constant 0 : index
+  %input_view = buffer.view %input[%zero_offset] : buffer -> view<64x1x4xi32, #dense>
+  %output_view = buffer.view %output[%zero_offset] : buffer -> view<64x1x4xi32, #dense>
+  %loaded = vector.load %input_view[%tid, %zero, 0] : view<64x1x4xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[%tid, %zero, 0] : vector<4xi32>, view<64x1x4xi32, #dense>
+  func.return
+}
+
+// ====
+
 func.def @f16x2_b32(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset

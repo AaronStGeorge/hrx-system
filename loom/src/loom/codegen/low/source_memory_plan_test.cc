@@ -111,6 +111,14 @@ class SourceMemoryPlanTest : public ::testing::Test {
     return op;
   }
 
+  loom_op_t* BuildIndexConstant(int64_t value) {
+    loom_op_t* op = nullptr;
+    IREE_CHECK_OK(loom_index_constant_build(
+        &builder_, loom_attr_i64(value),
+        loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), LOOM_LOCATION_UNKNOWN, &op));
+    return op;
+  }
+
   loom_value_id_t BuildDenseLayout() {
     loom_op_t* op = nullptr;
     IREE_CHECK_OK(loom_encoding_layout_dense_build(
@@ -337,6 +345,47 @@ TEST_F(SourceMemoryPlanTest, DynamicDenseLoadClassifiesMultipleIndices) {
   EXPECT_EQ(plan.dynamic_terms[1].axis, 1u);
   EXPECT_EQ(plan.dynamic_terms[1].byte_stride, 4);
   EXPECT_EQ(plan.dynamic_terms[1].byte_shift, 2u);
+}
+
+TEST_F(SourceMemoryPlanTest, ExactDynamicIndexFoldsIntoStaticOffset) {
+  loom_value_id_t buffer = DefineBufferArg();
+  loom_value_id_t first_index = DefineIndexArg();
+  loom_value_id_t second_index =
+      loom_index_constant_result(BuildIndexConstant(3));
+  loom_value_id_t layout = BuildDenseLayout();
+  loom_value_id_t base_offset =
+      loom_index_constant_result(BuildOffsetConstant(8));
+
+  loom_op_t* view_op = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(&builder_, buffer, base_offset,
+                                        ViewType2D(8, 8, layout),
+                                        LOOM_LOCATION_UNKNOWN, &view_op));
+  const loom_value_id_t dynamic_indices[] = {
+      first_index,
+      second_index,
+  };
+  int64_t static_indices[] = {INT64_MIN, INT64_MIN};
+  loom_op_t* load_op = nullptr;
+  IREE_ASSERT_OK(loom_vector_load_build(
+      &builder_, 0, loom_buffer_view_result(view_op), dynamic_indices,
+      IREE_ARRAYSIZE(dynamic_indices), static_indices,
+      IREE_ARRAYSIZE(static_indices), 0, 0, VectorType1D(4),
+      LOOM_LOCATION_UNKNOWN, &load_op));
+
+  loom_value_fact_table_t facts = {0};
+  ComputeFacts(&facts);
+  loom_low_source_memory_access_plan_t plan = {};
+  loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+  ASSERT_TRUE(BuildPlan(&facts, load_op, &plan, &diagnostic));
+  EXPECT_EQ(plan.static_byte_offset, 20);
+  ASSERT_EQ(plan.dynamic_term_count, 1u);
+  EXPECT_EQ(plan.dynamic_terms[0].index, first_index);
+  EXPECT_EQ(plan.dynamic_terms[0].source,
+            LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE);
+  EXPECT_EQ(plan.dynamic_terms[0].dimension, LOOM_KERNEL_DIMENSION_COUNT_);
+  EXPECT_EQ(plan.dynamic_terms[0].axis, 0u);
+  EXPECT_EQ(plan.dynamic_terms[0].byte_stride, 32);
+  EXPECT_EQ(plan.dynamic_terms[0].byte_shift, 5u);
 }
 
 TEST_F(SourceMemoryPlanTest, WholeRank1ViewPlanIncludesBase) {

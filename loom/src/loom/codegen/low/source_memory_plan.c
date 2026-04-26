@@ -187,6 +187,36 @@ static bool loom_low_source_memory_access_static_byte_offset(
       IREE_ARRAYSIZE(lane_indices), out_static_byte_offset);
 }
 
+static void loom_low_source_memory_access_fold_exact_dynamic_indices(
+    const loom_value_fact_table_t* fact_table,
+    loom_value_slice_t dynamic_indices, loom_attribute_t static_indices,
+    int64_t* folded_static_indices, uint8_t* dynamic_axes,
+    loom_value_id_t* dynamic_index_values, uint8_t* dynamic_axis_count) {
+  for (uint16_t i = 0; i < static_indices.count; ++i) {
+    folded_static_indices[i] = static_indices.i64_array[i];
+  }
+
+  uint8_t folded_dynamic_axis_count = 0;
+  const uint8_t original_dynamic_axis_count = *dynamic_axis_count;
+  for (uint8_t i = 0; i < original_dynamic_axis_count; ++i) {
+    const uint8_t dynamic_axis = dynamic_axes[i];
+    const loom_value_id_t dynamic_index = dynamic_indices.values[i];
+    int64_t exact_index = 0;
+    if (dynamic_axis < static_indices.count &&
+        loom_low_source_memory_access_exact_i64(
+            loom_value_fact_table_lookup(fact_table, dynamic_index),
+            &exact_index) &&
+        exact_index != INT64_MIN) {
+      folded_static_indices[dynamic_axis] = exact_index;
+      continue;
+    }
+    dynamic_axes[folded_dynamic_axis_count] = dynamic_axis;
+    dynamic_index_values[folded_dynamic_axis_count] = dynamic_index;
+    ++folded_dynamic_axis_count;
+  }
+  *dynamic_axis_count = folded_dynamic_axis_count;
+}
+
 static bool loom_low_source_memory_access_add_view_base_byte_offset(
     const loom_value_fact_table_t* fact_table, loom_value_id_t view_value_id,
     loom_low_source_memory_access_plan_t* plan,
@@ -394,6 +424,15 @@ static bool loom_low_source_memory_access_plan_from_components(
         LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_COUNT;
     return false;
   }
+  int64_t folded_static_indices[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {0};
+  loom_value_id_t
+      dynamic_index_values[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY] = {0};
+  loom_low_source_memory_access_fold_exact_dynamic_indices(
+      fact_table, dynamic_indices, static_indices, folded_static_indices,
+      dynamic_axes, dynamic_index_values, &dynamic_axis_count);
+  static_indices =
+      loom_attr_i64_array(folded_static_indices, static_indices.count);
+
   int64_t static_byte_offset = 0;
   if (!loom_low_source_memory_access_static_byte_offset(
           &vector_access, static_indices, dynamic_axes, dynamic_axis_count,
@@ -428,7 +467,7 @@ static bool loom_low_source_memory_access_plan_from_components(
       return false;
     }
 
-    const loom_value_id_t dynamic_index = dynamic_indices.values[i];
+    const loom_value_id_t dynamic_index = dynamic_index_values[i];
     loom_kernel_dimension_t dynamic_index_dimension =
         LOOM_KERNEL_DIMENSION_COUNT_;
     loom_low_source_memory_dynamic_index_source_t dynamic_index_source =
