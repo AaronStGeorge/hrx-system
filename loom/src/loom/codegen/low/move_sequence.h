@@ -50,8 +50,10 @@ typedef struct loom_low_move_sequence_emit_callback_t {
 
 // Options for lowering one parallel move set to a linear sequence.
 typedef struct loom_low_move_sequence_options_t {
-  // Optional scratch unit used to break cycles.
-  const loom_low_move_location_t* temporary_location;
+  // Scratch units available to break cycles.
+  const loom_low_move_location_t* temporary_locations;
+  // Number of entries in |temporary_locations|.
+  iree_host_size_t temporary_location_count;
   // Required sequenced move emitter.
   loom_low_move_sequence_emit_callback_t emit_move;
 } loom_low_move_sequence_options_t;
@@ -78,10 +80,20 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_units(
     const loom_low_allocation_edge_copy_group_t* group, loom_low_move_t* moves,
     iree_host_size_t move_count);
 
+// Populates |temporary_locations| from the scratch units planned for one
+// allocation edge-copy group. |temporary_location_count| must match
+// group->temporary_count.
+iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_edge_copy_group_t* group,
+    loom_low_move_location_t* temporary_locations,
+    iree_host_size_t temporary_location_count);
+
 // Emits |moves| as a sequential move list that preserves parallel-copy
 // semantics. Identity moves are elided. Acyclic overlap is handled by choosing
-// a safe order. Cycles use |temporary_location| when provided and otherwise
-// fail loud with IREE_STATUS_FAILED_PRECONDITION.
+// a safe order. Cycles use a matching storage-class entry in
+// |temporary_locations| and otherwise fail loud with
+// IREE_STATUS_FAILED_PRECONDITION.
 //
 // |moves| is caller-owned scratch storage and is mutated during sequencing.
 iree_status_t loom_low_move_sequence_emit(

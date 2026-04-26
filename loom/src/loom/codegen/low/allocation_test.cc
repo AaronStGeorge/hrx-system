@@ -248,8 +248,11 @@ TEST_F(LowAllocationTest, RecordsBranchEdgeCopyGroups) {
       allocation.edge_copy_groups[0];
   EXPECT_TRUE(loom_low_br_isa(group.terminator_op));
   EXPECT_EQ(group.source_ordinal, 0u);
+  EXPECT_EQ(group.program_point, 0u);
   EXPECT_EQ(group.copy_start, 0u);
   EXPECT_EQ(group.copy_count, 1u);
+  EXPECT_EQ(group.temporary_start, 0u);
+  EXPECT_EQ(group.temporary_count, 0u);
   const loom_low_allocation_edge_copy_t& edge_copy =
       allocation.edge_copies[group.copy_start];
   EXPECT_EQ(edge_copy.source_value_id, FindValueIdByName("lhs"));
@@ -265,6 +268,51 @@ TEST_F(LowAllocationTest, RecordsBranchEdgeCopyGroups) {
   EXPECT_EQ(loom_low_allocation_find_edge_copy_group_by_source_ordinal(
                 &allocation, group.source_ordinal),
             &group);
+}
+
+TEST_F(LowAllocationTest, RecordsBranchEdgeCopyTemporariesForCycles) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%lhs: reg<test.phys>, "
+      "%rhs: reg<test.phys>) -> (reg<test.phys>, reg<test.phys>) {\n"
+      "  low.br ^join(%rhs: reg<test.phys>, %lhs: reg<test.phys>)\n"
+      "^join(%a: reg<test.phys>, %b: reg<test.phys>):\n"
+      "  low.return %a, %b : reg<test.phys>, reg<test.phys>\n"
+      "}\n");
+  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+
+  ASSERT_EQ(allocation.edge_copy_group_count, 1u);
+  const loom_low_allocation_edge_copy_group_t& group =
+      allocation.edge_copy_groups[0];
+  ASSERT_EQ(group.temporary_count, 1u);
+  ASSERT_EQ(allocation.edge_copy_temporary_count, 1u);
+  const loom_low_allocation_edge_copy_temporary_t& temporary =
+      allocation.edge_copy_temporaries[group.temporary_start];
+  EXPECT_EQ(temporary.location_kind,
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER);
+  EXPECT_EQ(temporary.location, 2u);
+}
+
+TEST_F(LowAllocationTest, RecordsDiamondBranchEdgeCopyGroups) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%cond: reg<test.i32>, "
+      "%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) {\n"
+      "  low.cond_br %cond, ^left, ^right : reg<test.i32>\n"
+      "^left:\n"
+      "  low.br ^join(%lhs: reg<test.phys>)\n"
+      "^right:\n"
+      "  low.br ^join(%rhs: reg<test.phys>)\n"
+      "^join(%incoming: reg<test.phys>):\n"
+      "  low.return %incoming : reg<test.phys>\n"
+      "}\n");
+  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+
+  ASSERT_EQ(allocation.edge_copy_group_count, 2u);
+  ASSERT_EQ(allocation.edge_copy_count, 2u);
+  EXPECT_EQ(allocation.edge_copy_groups[0].source_ordinal, 1u);
+  EXPECT_EQ(allocation.edge_copy_groups[0].copy_count, 1u);
+  EXPECT_EQ(allocation.edge_copy_groups[1].source_ordinal, 2u);
+  EXPECT_EQ(allocation.edge_copy_groups[1].copy_count, 1u);
+  EXPECT_EQ(allocation.edge_copy_temporary_count, 0u);
 }
 
 TEST_F(LowAllocationTest, RejectsTiedResultWhenOperandSpills) {

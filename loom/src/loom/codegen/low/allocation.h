@@ -223,16 +223,34 @@ typedef struct loom_low_allocation_edge_copy_t {
   uint32_t destination_assignment_index;
 } loom_low_allocation_edge_copy_t;
 
+// Scratch unit reserved for sequencing cyclic edge-copy moves.
+typedef struct loom_low_allocation_edge_copy_temporary_t {
+  // Storage class of the cyclic move set.
+  loom_liveness_value_class_t value_class;
+  // Descriptor-set-local register class ID for |value_class|.
+  uint16_t descriptor_reg_class_id;
+  // Target-visible scratch location kind.
+  loom_low_allocation_location_kind_t location_kind;
+  // Physical register, target ID, or spill slot ordinal used as scratch.
+  uint32_t location;
+} loom_low_allocation_edge_copy_temporary_t;
+
 // Contiguous edge-copy group for one low.br terminator.
 typedef struct loom_low_allocation_edge_copy_group_t {
   // low.br terminator that owns this outgoing edge.
   const loom_op_t* terminator_op;
   // Source-order ordinal of |terminator_op| in its low function body.
   uint32_t source_ordinal;
+  // Program point where the edge copies execute before |terminator_op|.
+  uint32_t program_point;
   // First edge-copy record for |terminator_op|.
   uint32_t copy_start;
   // Number of edge-copy records for |terminator_op|.
   uint32_t copy_count;
+  // First temporary record reserved for |terminator_op|.
+  uint32_t temporary_start;
+  // Number of temporary records reserved for |terminator_op|.
+  uint32_t temporary_count;
 } loom_low_allocation_edge_copy_group_t;
 
 // Options controlling allocation sidecar construction.
@@ -294,6 +312,10 @@ typedef struct loom_low_allocation_sidecar_t {
   const loom_low_allocation_edge_copy_group_t* edge_copy_groups;
   // Number of records in |edge_copy_groups|.
   iree_host_size_t edge_copy_group_count;
+  // Scratch units reserved for cyclic edge-copy groups.
+  const loom_low_allocation_edge_copy_temporary_t* edge_copy_temporaries;
+  // Number of records in |edge_copy_temporaries|.
+  iree_host_size_t edge_copy_temporary_count;
   // Number of assignments whose location kind is SPILL_SLOT.
   iree_host_size_t spill_count;
   // Number of low.copy ops coalesced into one location.

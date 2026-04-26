@@ -15,23 +15,35 @@
 namespace loom {
 namespace {
 
-loom_low_move_location_t Location(uint32_t ordinal) {
+loom_liveness_value_class_t ValueClass(uint16_t register_class_id) {
+  return loom_liveness_value_class_t{
+      .type_kind = LOOM_TYPE_REGISTER,
+      .register_class_id = register_class_id,
+  };
+}
+
+loom_low_move_location_t Location(uint32_t ordinal,
+                                  uint16_t register_class_id = 0) {
   return loom_low_move_location_t{
       .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .value_class = ValueClass(register_class_id),
+      .descriptor_reg_class_id = register_class_id,
       .location = ordinal,
   };
 }
 
-loom_low_move_t Move(uint32_t destination, uint32_t source) {
+loom_low_move_t Move(uint32_t destination, uint32_t source,
+                     uint16_t register_class_id = 0) {
   return loom_low_move_t{
-      .destination = Location(destination),
-      .source = Location(source),
+      .destination = Location(destination, register_class_id),
+      .source = Location(source, register_class_id),
   };
 }
 
 std::string MoveString(const loom_low_move_location_t* destination,
                        const loom_low_move_location_t* source) {
-  return std::to_string(destination->location) + "<-" +
+  return std::to_string(destination->descriptor_reg_class_id) + ":" +
+         std::to_string(destination->location) + "<-" +
          std::to_string(source->location);
 }
 
@@ -45,10 +57,12 @@ iree_status_t RecordMove(void* user_data,
 
 std::vector<std::string> EmitMoves(loom_low_move_t* moves,
                                    iree_host_size_t move_count,
-                                   const loom_low_move_location_t* temporary) {
+                                   const loom_low_move_location_t* temporaries,
+                                   iree_host_size_t temporary_count) {
   std::vector<std::string> emitted_moves;
   loom_low_move_sequence_options_t options = {
-      .temporary_location = temporary,
+      .temporary_locations = temporaries,
+      .temporary_location_count = temporary_count,
       .emit_move =
           {
               .fn = RecordMove,
@@ -65,7 +79,7 @@ TEST(LowMoveSequenceTest, SkipsIdentityMoves) {
       Move(1, 1),
   };
 
-  EXPECT_TRUE(EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr).empty());
+  EXPECT_TRUE(EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr, 0).empty());
 }
 
 TEST(LowMoveSequenceTest, EmitsIndependentMovesInInputOrder) {
@@ -74,8 +88,8 @@ TEST(LowMoveSequenceTest, EmitsIndependentMovesInInputOrder) {
       Move(5, 1),
   };
 
-  EXPECT_THAT(EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr),
-              ::testing::ElementsAre("4<-0", "5<-1"));
+  EXPECT_THAT(EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr, 0),
+              ::testing::ElementsAre("0:4<-0", "0:5<-1"));
 }
 
 TEST(LowMoveSequenceTest, ReordersForwardClobberingShift) {
@@ -84,8 +98,8 @@ TEST(LowMoveSequenceTest, ReordersForwardClobberingShift) {
       Move(2, 1),
   };
 
-  EXPECT_THAT(EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr),
-              ::testing::ElementsAre("2<-1", "1<-0"));
+  EXPECT_THAT(EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr, 0),
+              ::testing::ElementsAre("0:2<-1", "0:1<-0"));
 }
 
 TEST(LowMoveSequenceTest, KeepsBackwardShiftInInputOrder) {
@@ -94,8 +108,8 @@ TEST(LowMoveSequenceTest, KeepsBackwardShiftInInputOrder) {
       Move(1, 2),
   };
 
-  EXPECT_THAT(EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr),
-              ::testing::ElementsAre("0<-1", "1<-2"));
+  EXPECT_THAT(EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr, 0),
+              ::testing::ElementsAre("0:0<-1", "0:1<-2"));
 }
 
 TEST(LowMoveSequenceTest, UsesTemporaryForCycle) {
@@ -105,8 +119,26 @@ TEST(LowMoveSequenceTest, UsesTemporaryForCycle) {
   };
   const loom_low_move_location_t temporary = Location(9);
 
-  EXPECT_THAT(EmitMoves(moves, IREE_ARRAYSIZE(moves), &temporary),
-              ::testing::ElementsAre("9<-0", "0<-1", "1<-9"));
+  EXPECT_THAT(EmitMoves(moves, IREE_ARRAYSIZE(moves), &temporary, 1),
+              ::testing::ElementsAre("0:9<-0", "0:0<-1", "0:1<-9"));
+}
+
+TEST(LowMoveSequenceTest, UsesMatchingTemporaryForMixedClassCycles) {
+  loom_low_move_t moves[] = {
+      Move(0, 1, 0),
+      Move(1, 0, 0),
+      Move(4, 5, 1),
+      Move(5, 4, 1),
+  };
+  const loom_low_move_location_t temporaries[] = {
+      Location(9, 0),
+      Location(11, 1),
+  };
+
+  EXPECT_THAT(EmitMoves(moves, IREE_ARRAYSIZE(moves), temporaries,
+                        IREE_ARRAYSIZE(temporaries)),
+              ::testing::ElementsAre("0:9<-0", "0:0<-1", "0:1<-9", "1:11<-4",
+                                     "1:4<-5", "1:5<-11"));
 }
 
 TEST(LowMoveSequenceTest, RejectsCycleWithoutTemporary) {

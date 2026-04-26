@@ -16,6 +16,13 @@ bool loom_low_move_locations_equal(const loom_low_move_location_t* lhs,
          lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id;
 }
 
+static bool loom_low_move_locations_share_storage_class(
+    const loom_low_move_location_t* lhs, const loom_low_move_location_t* rhs) {
+  return lhs->location_kind == rhs->location_kind &&
+         lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id &&
+         loom_liveness_value_class_equal(lhs->value_class, rhs->value_class);
+}
+
 iree_status_t loom_low_move_location_from_assignment_unit(
     const loom_low_allocation_assignment_t* assignment, uint32_t unit_index,
     loom_low_move_location_t* out_location) {
@@ -42,6 +49,19 @@ iree_status_t loom_low_move_location_from_assignment_unit(
       .location = assignment->location_base + unit_index,
   };
   return iree_ok_status();
+}
+
+static void loom_low_move_location_from_edge_copy_temporary(
+    const loom_low_allocation_edge_copy_temporary_t* temporary,
+    loom_low_move_location_t* out_location) {
+  IREE_ASSERT_ARGUMENT(temporary);
+  IREE_ASSERT_ARGUMENT(out_location);
+  *out_location = (loom_low_move_location_t){
+      .location_kind = temporary->location_kind,
+      .value_class = temporary->value_class,
+      .descriptor_reg_class_id = temporary->descriptor_reg_class_id,
+      .location = temporary->location,
+  };
 }
 
 iree_status_t loom_low_move_sequence_count_edge_copy_units(
@@ -125,6 +145,37 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_units(
   return iree_ok_status();
 }
 
+iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_edge_copy_group_t* group,
+    loom_low_move_location_t* temporary_locations,
+    iree_host_size_t temporary_location_count) {
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(group);
+  if (temporary_location_count != 0) {
+    IREE_ASSERT_ARGUMENT(temporary_locations);
+  }
+  if (temporary_location_count != group->temporary_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "edge-copy temporary storage has %zu entries but needs %" PRIu32,
+        temporary_location_count, group->temporary_count);
+  }
+  if (group->temporary_start > allocation->edge_copy_temporary_count ||
+      group->temporary_count >
+          allocation->edge_copy_temporary_count - group->temporary_start) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "edge-copy temporary group range is outside allocation");
+  }
+  for (uint32_t i = 0; i < group->temporary_count; ++i) {
+    loom_low_move_location_from_edge_copy_temporary(
+        &allocation->edge_copy_temporaries[group->temporary_start + i],
+        &temporary_locations[i]);
+  }
+  return iree_ok_status();
+}
+
 static void loom_low_move_sequence_remove_move(loom_low_move_t* moves,
                                                iree_host_size_t* move_count,
                                                iree_host_size_t move_index) {
@@ -163,6 +214,27 @@ static iree_status_t loom_low_move_sequence_find_move_by_destination(
                           "parallel move cycle is malformed");
 }
 
+static iree_status_t loom_low_move_sequence_find_temporary(
+    const loom_low_move_sequence_options_t* options,
+    const loom_low_move_location_t* storage_class,
+    const loom_low_move_location_t** out_temporary_location) {
+  IREE_ASSERT_ARGUMENT(out_temporary_location);
+  *out_temporary_location = NULL;
+  for (iree_host_size_t i = 0; i < options->temporary_location_count; ++i) {
+    const loom_low_move_location_t* temporary =
+        &options->temporary_locations[i];
+    if (!loom_low_move_locations_share_storage_class(temporary,
+                                                     storage_class)) {
+      continue;
+    }
+    *out_temporary_location = temporary;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                          "parallel move cycle requires a temporary "
+                          "location");
+}
+
 static iree_status_t loom_low_move_sequence_validate(
     const loom_low_move_t* moves, iree_host_size_t move_count,
     const loom_low_move_sequence_options_t* options) {
@@ -174,15 +246,21 @@ static iree_status_t loom_low_move_sequence_validate(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "parallel move emitter is required");
   }
+  if (options->temporary_location_count != 0 &&
+      options->temporary_locations == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "parallel move temporary locations are required");
+  }
   for (iree_host_size_t i = 0; i < move_count; ++i) {
-    if (options->temporary_location != NULL &&
-        (loom_low_move_locations_equal(options->temporary_location,
-                                       &moves[i].destination) ||
-         loom_low_move_locations_equal(options->temporary_location,
-                                       &moves[i].source))) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "parallel move temporary location aliases move storage");
+    for (iree_host_size_t j = 0; j < options->temporary_location_count; ++j) {
+      const loom_low_move_location_t* temporary =
+          &options->temporary_locations[j];
+      if (loom_low_move_locations_equal(temporary, &moves[i].destination) ||
+          loom_low_move_locations_equal(temporary, &moves[i].source)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "parallel move temporary location aliases move storage");
+      }
     }
     for (iree_host_size_t j = i + 1; j < move_count; ++j) {
       if (!loom_low_move_locations_equal(&moves[i].destination,
@@ -192,6 +270,19 @@ static iree_status_t loom_low_move_sequence_validate(
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "parallel move rows contain duplicate destinations");
+    }
+  }
+  for (iree_host_size_t i = 0; i < options->temporary_location_count; ++i) {
+    const loom_low_move_location_t* lhs = &options->temporary_locations[i];
+    for (iree_host_size_t j = i + 1; j < options->temporary_location_count;
+         ++j) {
+      if (!loom_low_move_locations_equal(lhs,
+                                         &options->temporary_locations[j])) {
+        continue;
+      }
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "parallel move temporary locations contain duplicates");
     }
   }
   return iree_ok_status();
@@ -211,15 +302,12 @@ static iree_status_t loom_low_move_sequence_emit_one(
 static iree_status_t loom_low_move_sequence_emit_cycle(
     loom_low_move_t* moves, iree_host_size_t* move_count,
     const loom_low_move_sequence_options_t* options) {
-  if (options->temporary_location == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "parallel move cycle requires a temporary "
-                            "location");
-  }
-
   const loom_low_move_location_t saved_location = moves[0].destination;
+  const loom_low_move_location_t* temporary_location = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_find_temporary(
+      options, &saved_location, &temporary_location));
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_emit_one(
-      options, options->temporary_location, &saved_location));
+      options, temporary_location, &saved_location));
 
   loom_low_move_location_t destination = moves[0].destination;
   loom_low_move_location_t source = moves[0].source;
@@ -229,7 +317,7 @@ static iree_status_t loom_low_move_sequence_emit_cycle(
         moves, *move_count, &destination, &move_index));
     if (loom_low_move_locations_equal(&source, &saved_location)) {
       IREE_RETURN_IF_ERROR(loom_low_move_sequence_emit_one(
-          options, &destination, options->temporary_location));
+          options, &destination, temporary_location));
       loom_low_move_sequence_remove_move(moves, move_count, move_index);
       return iree_ok_status();
     }

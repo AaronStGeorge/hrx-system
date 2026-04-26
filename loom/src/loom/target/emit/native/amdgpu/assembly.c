@@ -1015,20 +1015,34 @@ static iree_status_t loom_amdgpu_emit_edge_copy_group(
   }
   loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
   loom_low_move_t* moves = inline_moves;
+  loom_low_move_location_t inline_temporaries[LOOM_AMDGPU_INLINE_MOVE_COUNT];
+  loom_low_move_location_t* temporaries = inline_temporaries;
   iree_status_t status = iree_ok_status();
   if (move_count > IREE_ARRAYSIZE(inline_moves)) {
     status =
         iree_allocator_malloc_array(context->builder->allocator, move_count,
                                     sizeof(*moves), (void**)&moves);
   }
+  if (iree_status_is_ok(status) &&
+      group->temporary_count > IREE_ARRAYSIZE(inline_temporaries)) {
+    status = iree_allocator_malloc_array(
+        context->builder->allocator, group->temporary_count,
+        sizeof(*temporaries), (void**)&temporaries);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_low_move_sequence_populate_edge_copy_units(
         context->allocation, group, moves, move_count);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_move_sequence_populate_edge_copy_temporaries(
+        context->allocation, group, temporaries, group->temporary_count);
   }
   loom_amdgpu_assembly_move_state_t move_state = {
       .context = context,
   };
   loom_low_move_sequence_options_t options = {
+      .temporary_locations = temporaries,
+      .temporary_location_count = group->temporary_count,
       .emit_move =
           {
               .fn = loom_amdgpu_append_edge_move,
@@ -1043,6 +1057,9 @@ static iree_status_t loom_amdgpu_emit_edge_copy_group(
   }
   if (moves != inline_moves) {
     iree_allocator_free(context->builder->allocator, moves);
+  }
+  if (temporaries != inline_temporaries) {
+    iree_allocator_free(context->builder->allocator, temporaries);
   }
   return status;
 }
