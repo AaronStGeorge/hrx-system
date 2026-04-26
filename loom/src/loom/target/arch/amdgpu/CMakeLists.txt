@@ -623,6 +623,7 @@ iree_c_embed_data(
     "execution/testdata/b128_vector_add.loom"
     "execution/testdata/dot2f_f16_buffer.loom"
     "execution/testdata/dot2f_f16_gemm4x8x4.loom"
+    "execution/testdata/dot2f_f16_lds_gemm4x8x4.loom"
     "execution/testdata/dot4i_u8u8_buffer.loom"
     "execution/testdata/dot4i_u8u8_gemm4x8x4.loom"
     "execution/testdata/dot4i_u8u8_tile8x4.loom"
@@ -1095,6 +1096,17 @@ iree_executable_test(
     "source_low_memory_workgroup_b128"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_workgroup_b128.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_memory_workgroup_packed16"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_workgroup_packed16.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

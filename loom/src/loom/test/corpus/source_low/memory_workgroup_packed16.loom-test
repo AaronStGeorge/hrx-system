@@ -1,0 +1,33 @@
+// RUN: roundtrip
+
+func.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 512 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 8, memory_space = workgroup} : buffer
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x4xf16, #dense>
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64x4xf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xf16, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x4xf16, #dense> -> vector<4xf16>
+  vector.store %loaded, %scratch_view[%tid, 0] : vector<4xf16>, view<64x4xf16, #dense>
+  %roundtrip = vector.load %scratch_view[%tid, 0] : view<64x4xf16, #dense> -> vector<4xf16>
+  vector.store %roundtrip, %output_view[%tid, 0] : vector<4xf16>, view<64x4xf16, #dense>
+  func.return
+}
+
+// ====
+
+func.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 512 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 8, memory_space = workgroup} : buffer
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x4xbf16, #dense>
+  %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64x4xbf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xbf16, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x4xbf16, #dense> -> vector<4xbf16>
+  vector.store %loaded, %scratch_view[%tid, 0] : vector<4xbf16>, view<64x4xbf16, #dense>
+  %roundtrip = vector.load %scratch_view[%tid, 0] : view<64x4xbf16, #dense> -> vector<4xbf16>
+  vector.store %roundtrip, %output_view[%tid, 0] : vector<4xbf16>, view<64x4xbf16, #dense>
+  func.return
+}

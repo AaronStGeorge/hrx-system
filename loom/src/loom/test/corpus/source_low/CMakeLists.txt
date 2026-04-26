@@ -166,6 +166,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "memory_workgroup_packed16"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/memory_workgroup_packed16.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "numeric_conversion"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/numeric_conversion.loom-test"
