@@ -227,12 +227,21 @@ static iree_status_t loom_amdgpu_module_compile_lower_function(
   loom_low_lower_report_storage_t report_storage = {0};
   IREE_RETURN_IF_ERROR(loom_target_compile_report_allocate_low_lowering_rows(
       report, sidecar_arena, &report_storage));
+  static const loom_target_low_legality_provider_t* const
+      kLowLegalityProviders[] = {
+          &loom_amdgpu_low_legality_provider_storage,
+      };
   const loom_low_lower_options_t lower_options = {
       .target_ref = entry->target_ref,
       .bundle = &entry->bundle_storage.bundle,
       .descriptor_registry = &low_registry->registry,
       .descriptor_requirements =
           LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .legality_provider_list =
+          {
+              .count = IREE_ARRAYSIZE(kLowLegalityProviders),
+              .values = kLowLegalityProviders,
+          },
       .policy = policy,
       .emitter = loom_target_module_compile_emitter(diagnostic_emitter),
       .max_errors = max_errors,

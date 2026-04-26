@@ -12,29 +12,11 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/buffer/ops.h"
-#include "loom/ops/encoding/ops.h"
-#include "loom/ops/func/ops.h"
-#include "loom/ops/index/ops.h"
-#include "loom/ops/kernel/ops.h"
-#include "loom/ops/low/ops.h"
-#include "loom/ops/target/ops.h"
-#include "loom/ops/vector/ops.h"
-#include "loom/ops/view/ops.h"
+#include "loom/ops/op_registry.h"
 #include "loom/target/arch/amdgpu/target_info_defs.h"
 
 namespace loom {
 namespace {
-
-using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t*);
-
-void RegisterDialect(loom_context_t* context, uint8_t dialect_id,
-                     DialectVtablesFn dialect_vtables_fn) {
-  iree_host_size_t count = 0;
-  const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
-  IREE_ASSERT_OK(loom_context_register_dialect(context, dialect_id, vtables,
-                                               (uint16_t)count));
-}
 
 iree_status_t ParseCurrentTargetB128AddModule(loom_context_t* context,
                                               iree_arena_block_pool_t* pool,
@@ -73,18 +55,8 @@ TEST(AmdgpuRunLoomHalBackendTest, PreservesDetailedReportRows) {
   iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
 
   loom_context_t context = {};
-  loom_context_initialize(iree_allocator_system(), &context);
-  RegisterDialect(&context, LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
-  RegisterDialect(&context, LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
-  RegisterDialect(&context, LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
-  RegisterDialect(&context, LOOM_DIALECT_KERNEL, loom_kernel_dialect_vtables);
-  RegisterDialect(&context, LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables);
-  RegisterDialect(&context, LOOM_DIALECT_ENCODING,
-                  loom_encoding_dialect_vtables);
-  RegisterDialect(&context, LOOM_DIALECT_VIEW, loom_view_dialect_vtables);
-  RegisterDialect(&context, LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
-  RegisterDialect(&context, LOOM_DIALECT_LOW, loom_low_dialect_vtables);
-  IREE_ASSERT_OK(loom_context_finalize(&context));
+  IREE_ASSERT_OK(
+      loom_op_registry_initialize_context(iree_allocator_system(), &context));
 
   loom_module_t* module = nullptr;
   IREE_ASSERT_OK(

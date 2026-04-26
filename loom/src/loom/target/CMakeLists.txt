@@ -153,8 +153,6 @@ loom_cc_library(
     "low_legality.h"
   SRCS
     "low_legality.c"
-    "low_legality_table.c"
-    "low_legality_table.h"
   DEPS
     ::low_descriptor_registry
     ::types
@@ -163,19 +161,9 @@ loom_cc_library(
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
-    loom::src::loom::ops::buffer
-    loom::src::loom::ops::cfg
-    loom::src::loom::ops::encoding
     loom::src::loom::ops::func
-    loom::src::loom::ops::index
-    loom::src::loom::ops::kernel
-    loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
-    loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
-    loom::src::loom::ops::target
-    loom::src::loom::ops::vector
-    loom::src::loom::ops::view
     loom::src::loom::util::fact_table
     loom::src::loom::util::walk
   PUBLIC

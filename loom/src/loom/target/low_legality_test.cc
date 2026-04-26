@@ -78,12 +78,18 @@ class TargetLowLegalityTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
-    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
-    RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
-    RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
-    RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables);
-    RegisterDialect(LOOM_DIALECT_KERNEL, loom_kernel_dialect_vtables);
-    RegisterDialect(LOOM_DIALECT_SCF, loom_scf_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables,
+                    loom_func_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables,
+                    loom_scalar_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables,
+                    loom_vector_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables,
+                    loom_cfg_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_KERNEL, loom_kernel_dialect_vtables,
+                    loom_kernel_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_SCF, loom_scf_dialect_vtables,
+                    loom_scf_dialect_op_semantics);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
     IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(
@@ -109,13 +115,20 @@ class TargetLowLegalityTest : public ::testing::Test {
 
   using DialectVtablesFn =
       const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+  using DialectSemanticsFn = const loom_op_semantics_t* (*)(iree_host_size_t*);
 
-  void RegisterDialect(uint8_t dialect_id,
-                       DialectVtablesFn dialect_vtables_fn) {
+  void RegisterDialect(uint8_t dialect_id, DialectVtablesFn dialect_vtables_fn,
+                       DialectSemanticsFn dialect_semantics_fn) {
     iree_host_size_t count = 0;
     const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
+    iree_host_size_t semantics_count = 0;
+    const loom_op_semantics_t* semantics =
+        dialect_semantics_fn(&semantics_count);
+    ASSERT_EQ(semantics_count, count);
     IREE_ASSERT_OK(loom_context_register_dialect(&context_, dialect_id, vtables,
                                                  (uint16_t)count));
+    IREE_ASSERT_OK(loom_context_register_dialect_semantics(
+        &context_, dialect_id, semantics, (uint16_t)semantics_count));
   }
 
   loom_func_like_t FirstFunction(loom_module_t* module) {

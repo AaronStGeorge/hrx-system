@@ -53,6 +53,72 @@ TEST_F(ContextTest, FinalizeBuildsOpNameLookupTable) {
   EXPECT_EQ(loom_context_resolve_op(&context_, kind), &kTestOpVtable);
 }
 
+TEST_F(ContextTest, RegisterDialectSemanticsResolvesByOpKind) {
+  static const uint8_t kTestOpName[] = {
+      8, 4, 't', 'e', 's', 't', '.', 'n', 'o', 'p', '\0',
+  };
+  static const loom_op_vtable_t kTestOpVtable = {
+      .name = kTestOpName,
+  };
+  static const loom_op_vtable_t* const kTestDialectVtables[] = {
+      &kTestOpVtable,
+  };
+  static const loom_op_semantics_t kTestDialectSemantics[] = {
+      {
+          .phase = LOOM_OP_PHASE_EXECUTABLE,
+          .contract_families = LOOM_CONTRACT_VECTOR_CONTRACTION,
+      },
+  };
+
+  IREE_ASSERT_OK(loom_context_register_dialect(
+      &context_, LOOM_DIALECT_TEST, kTestDialectVtables,
+      IREE_ARRAYSIZE(kTestDialectVtables)));
+  IREE_ASSERT_OK(loom_context_register_dialect_semantics(
+      &context_, LOOM_DIALECT_TEST, kTestDialectSemantics,
+      IREE_ARRAYSIZE(kTestDialectSemantics)));
+
+  loom_op_semantics_t semantics = loom_context_resolve_op_semantics(
+      &context_, LOOM_OP_KIND(LOOM_DIALECT_TEST, 0));
+  EXPECT_EQ(semantics.phase, LOOM_OP_PHASE_EXECUTABLE);
+  EXPECT_TRUE(loom_contract_family_set_has_any(
+      semantics.contract_families, LOOM_CONTRACT_VECTOR_CONTRACTION));
+
+  loom_op_semantics_t missing = loom_context_resolve_op_semantics(
+      &context_, LOOM_OP_KIND(LOOM_DIALECT_TEST, 1));
+  EXPECT_EQ(missing.phase, LOOM_OP_PHASE_UNSPECIFIED);
+  EXPECT_EQ(missing.contract_families, 0u);
+}
+
+TEST_F(ContextTest, RegisterDialectSemanticsRequiresMatchingVtables) {
+  static const uint8_t kTestOpName[] = {
+      8, 4, 't', 'e', 's', 't', '.', 'n', 'o', 'p', '\0',
+  };
+  static const loom_op_vtable_t kTestOpVtable = {
+      .name = kTestOpName,
+  };
+  static const loom_op_vtable_t* const kTestDialectVtables[] = {
+      &kTestOpVtable,
+  };
+  static const loom_op_semantics_t kTestDialectSemantics[] = {
+      {
+          .phase = LOOM_OP_PHASE_EXECUTABLE,
+      },
+  };
+
+  iree_status_t status = loom_context_register_dialect_semantics(
+      &context_, LOOM_DIALECT_TEST, kTestDialectSemantics,
+      IREE_ARRAYSIZE(kTestDialectSemantics));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+
+  IREE_ASSERT_OK(loom_context_register_dialect(
+      &context_, LOOM_DIALECT_TEST, kTestDialectVtables,
+      IREE_ARRAYSIZE(kTestDialectVtables)));
+
+  status = loom_context_register_dialect_semantics(&context_, LOOM_DIALECT_TEST,
+                                                   kTestDialectSemantics, 0);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+}
+
 TEST_F(ContextTest, RegisterSourceDeduplicatesBySpelling) {
   loom_source_id_t first_id = LOOM_SOURCE_ID_INVALID;
   loom_source_id_t second_id = LOOM_SOURCE_ID_INVALID;

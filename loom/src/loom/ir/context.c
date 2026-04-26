@@ -57,12 +57,52 @@ iree_status_t loom_context_register_dialect(
                             "dialect ID %u exceeds maximum %u", dialect_id,
                             LOOM_DIALECT_BUILTIN_COUNT_ - 1);
   }
+  if (op_count > 0 && vtables == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "dialect ID %u registration requires vtables",
+                            dialect_id);
+  }
   if (context->op_vtables.dialects[dialect_id].entries != NULL) {
     return iree_make_status(IREE_STATUS_ALREADY_EXISTS,
                             "dialect ID %u is already registered", dialect_id);
   }
   context->op_vtables.dialects[dialect_id].op_count = op_count;
   context->op_vtables.dialects[dialect_id].entries = vtables;
+  return iree_ok_status();
+}
+
+iree_status_t loom_context_register_dialect_semantics(
+    loom_context_t* context, uint8_t dialect_id,
+    const loom_op_semantics_t* semantics, uint16_t op_count) {
+  if (dialect_id >= LOOM_DIALECT_BUILTIN_COUNT_) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "dialect ID %u exceeds maximum %u", dialect_id,
+                            LOOM_DIALECT_BUILTIN_COUNT_ - 1);
+  }
+  if (op_count > 0 && semantics == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "dialect ID %u semantic registration requires metadata", dialect_id);
+  }
+  loom_dialect_vtables_t* dialect = &context->op_vtables.dialects[dialect_id];
+  if (dialect->entries == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "dialect ID %u vtables must be registered before "
+                            "semantic metadata",
+                            dialect_id);
+  }
+  if (dialect->op_count != op_count) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "dialect ID %u semantic count %u does not match "
+                            "vtable count %u",
+                            dialect_id, op_count, dialect->op_count);
+  }
+  if (dialect->semantics != NULL) {
+    return iree_make_status(
+        IREE_STATUS_ALREADY_EXISTS,
+        "dialect ID %u semantic metadata is already registered", dialect_id);
+  }
+  dialect->semantics = semantics;
   return iree_ok_status();
 }
 
@@ -197,6 +237,21 @@ const loom_op_vtable_t* loom_context_resolve_op(const loom_context_t* context,
   return dialect->entries[op_index];
 }
 
+loom_op_semantics_t loom_context_resolve_op_semantics(
+    const loom_context_t* context, loom_op_kind_t kind) {
+  uint8_t dialect_id = loom_op_dialect_id(kind);
+  if (dialect_id >= LOOM_DIALECT_BUILTIN_COUNT_) {
+    return loom_op_semantics_empty();
+  }
+  const loom_dialect_vtables_t* dialect =
+      &context->op_vtables.dialects[dialect_id];
+  uint8_t op_index = loom_op_dialect_index(kind);
+  if (op_index >= dialect->op_count || dialect->semantics == NULL) {
+    return loom_op_semantics_empty();
+  }
+  return dialect->semantics[op_index];
+}
+
 const loom_op_vtable_t* loom_context_lookup_op_by_name(
     const loom_context_t* context, iree_string_view_t name,
     loom_op_kind_t* out_kind) {
@@ -241,6 +296,11 @@ iree_string_view_t loom_op_name(const loom_module_t* module,
       loom_context_resolve_op(module->context, op->kind);
   if (vtable) return loom_op_vtable_name(vtable);
   return IREE_SV("unknown");
+}
+
+loom_op_semantics_t loom_op_semantics(const loom_module_t* module,
+                                      const loom_op_t* op) {
+  return loom_context_resolve_op_semantics(module->context, op->kind);
 }
 
 bool loom_op_has_trait(const loom_module_t* module, const loom_op_t* op,

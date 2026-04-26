@@ -96,6 +96,11 @@ TEST(OpRegistry, RegistersProductionContextSurface) {
   ASSERT_NE(vtable, nullptr);
   EXPECT_EQ(kind, LOOM_OP_FUNC_DEF);
 
+  loom_op_semantics_t iota_semantics =
+      loom_context_resolve_op_semantics(&context, LOOM_OP_VECTOR_IOTA);
+  EXPECT_TRUE(loom_contract_family_set_has_any(
+      iota_semantics.contract_families, LOOM_CONTRACT_VECTOR_COORDINATE));
+
   EXPECT_NE(loom_context_lookup_encoding_vtable(
                 &context, iree_make_cstring_view("dense")),
             nullptr);

@@ -13,11 +13,19 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
-#include "loom/ops/kernel/ops.h"
 #include "loom/ops/scf/ops.h"
-#include "loom/target/low_legality_table.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/walk.h"
+
+typedef uint8_t loom_target_low_legality_t;
+
+enum loom_target_low_legality_e {
+  LOOM_TARGET_LOW_LEGALITY_UNSUPPORTED = 0,
+  LOOM_TARGET_LOW_LEGALITY_CORE = 1,
+  LOOM_TARGET_LOW_LEGALITY_PROVIDER = 2,
+  LOOM_TARGET_LOW_LEGALITY_SOURCE_ONLY = 3,
+  LOOM_TARGET_LOW_LEGALITY_MODULE_METADATA = 4,
+};
 
 struct loom_target_low_legality_context_t {
   // Source module being checked.
@@ -383,22 +391,10 @@ static bool loom_target_low_legality_type_is_async_control(
 }
 
 static bool loom_target_low_legality_op_accepts_async_control(
-    loom_op_kind_t kind) {
-  switch (kind) {
-    case LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER:
-    case LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK:
-    case LOOM_OP_KERNEL_ASYNC_COPY:
-    case LOOM_OP_KERNEL_ASYNC_COPY_MASK:
-    case LOOM_OP_KERNEL_ASYNC_GATHER:
-    case LOOM_OP_KERNEL_ASYNC_GATHER_MASK:
-    case LOOM_OP_KERNEL_ASYNC_GROUP:
-    case LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS:
-    case LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS:
-    case LOOM_OP_KERNEL_ASYNC_WAIT:
-      return true;
-    default:
-      return false;
-  }
+    const loom_module_t* module, const loom_op_t* op) {
+  loom_op_semantics_t semantics = loom_op_semantics(module, op);
+  return loom_contract_family_set_has_any(semantics.contract_families,
+                                          LOOM_CONTRACT_KERNEL_ASYNC);
 }
 
 static iree_status_t loom_target_low_legality_verify_type(
@@ -443,7 +439,8 @@ static iree_status_t loom_target_low_legality_verify_value(
   }
   const loom_type_t type = loom_module_value_type(context->module, value_id);
   if (loom_target_low_legality_type_is_async_control(context->module, type)) {
-    if (loom_target_low_legality_op_accepts_async_control(op->kind)) {
+    if (loom_target_low_legality_op_accepts_async_control(context->module,
+                                                          op)) {
       return iree_ok_status();
     }
     return loom_target_low_legality_reject(
@@ -521,8 +518,27 @@ static iree_status_t loom_target_low_legality_reject_source_only_op(
 
 static iree_status_t loom_target_low_legality_verify_op_class(
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
-  loom_target_low_legality_t legality =
-      loom_target_low_legality_class(op->kind);
+  loom_op_semantics_t semantics = loom_op_semantics(context->module, op);
+  loom_target_low_legality_t legality = LOOM_TARGET_LOW_LEGALITY_UNSUPPORTED;
+  if (semantics.contract_families != 0) {
+    legality = LOOM_TARGET_LOW_LEGALITY_PROVIDER;
+  } else {
+    switch (semantics.phase) {
+      case LOOM_OP_PHASE_EXECUTABLE:
+        legality = LOOM_TARGET_LOW_LEGALITY_CORE;
+        break;
+      case LOOM_OP_PHASE_SOURCE_STRUCTURE:
+        legality = LOOM_TARGET_LOW_LEGALITY_SOURCE_ONLY;
+        break;
+      case LOOM_OP_PHASE_MODULE_METADATA:
+        legality = LOOM_TARGET_LOW_LEGALITY_MODULE_METADATA;
+        break;
+      case LOOM_OP_PHASE_UNSPECIFIED:
+      default:
+        legality = LOOM_TARGET_LOW_LEGALITY_UNSUPPORTED;
+        break;
+    }
+  }
   switch (legality) {
     case LOOM_TARGET_LOW_LEGALITY_CORE:
       return iree_ok_status();

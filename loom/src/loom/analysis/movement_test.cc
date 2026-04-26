@@ -343,7 +343,7 @@ TEST_F(MovementTest, ClassifiesMaskedLoadPolicyAndMask) {
   IREE_ASSERT_OK(loom_vector_load_mask_build(
       &builder_, LOOM_VECTOR_LOAD_MASK_BUILD_FLAG_HAS_CACHE_SCOPE, view,
       nullptr, 0, static_indices, IREE_ARRAYSIZE(static_indices), mask,
-      passthrough, LOOM_KERNEL_CACHE_SCOPE_CU, 0,
+      passthrough, LOOM_CACHE_SCOPE_CU, 0,
       VectorType1D(LOOM_SCALAR_TYPE_F32, 4), LOOM_LOCATION_UNKNOWN, &op));
 
   loom_movement_analysis_t analysis = {};
@@ -358,7 +358,7 @@ TEST_F(MovementTest, ClassifiesMaskedLoadPolicyAndMask) {
   EXPECT_TRUE(
       iree_any_bit_set(request.cache_policy.build_flags,
                        LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_SCOPE));
-  EXPECT_EQ(request.cache_policy.cache_scope, LOOM_KERNEL_CACHE_SCOPE_CU);
+  EXPECT_EQ(request.cache_policy.cache_scope, LOOM_CACHE_SCOPE_CU);
 }
 
 TEST_F(MovementTest, ClassifiesVectorGatherOffsets) {
@@ -430,8 +430,7 @@ TEST_F(MovementTest, ClassifiesAsyncCopyAsBytePreserving) {
       dest_buffer, 64, ViewType1D(LOOM_SCALAR_TYPE_I8, 16, layout));
   loom_op_t* op = nullptr;
   IREE_ASSERT_OK(loom_kernel_async_copy_build(
-      &builder_, source, dest, LOOM_KERNEL_CACHE_SCOPE_CU,
-      LOOM_KERNEL_CACHE_TEMPORAL_REGULAR,
+      &builder_, source, dest, LOOM_CACHE_SCOPE_CU, LOOM_CACHE_TEMPORAL_REGULAR,
       LOOM_KERNEL_DIRECTION_GLOBAL_TO_WORKGROUP, KernelAsyncTokenType(),
       LOOM_LOCATION_UNKNOWN, &op));
 
@@ -464,8 +463,8 @@ TEST_F(MovementTest, ClassifiesAsyncGatherAsSubgroupGather) {
       dest_buffer, 128, ViewType2D(LOOM_SCALAR_TYPE_I8, 64, 4, layout));
   loom_op_t* op = nullptr;
   IREE_ASSERT_OK(loom_kernel_async_gather_mask_build(
-      &builder_, source, dest, predicate, LOOM_KERNEL_CACHE_SCOPE_CU,
-      LOOM_KERNEL_CACHE_TEMPORAL_REGULAR, KernelAsyncTokenType(),
+      &builder_, source, dest, predicate, LOOM_CACHE_SCOPE_CU,
+      LOOM_CACHE_TEMPORAL_REGULAR, KernelAsyncTokenType(),
       LOOM_LOCATION_UNKNOWN, &op));
 
   loom_movement_analysis_t analysis = {};
@@ -496,9 +495,9 @@ TEST_F(MovementTest, ClassifiesAsyncClusterGatherControlOperands) {
       dest_buffer, 256, ViewType1D(LOOM_SCALAR_TYPE_I8, 16, layout));
   loom_op_t* op = nullptr;
   IREE_ASSERT_OK(loom_kernel_async_cluster_gather_mask_build(
-      &builder_, source, dest, cluster_mask, predicate,
-      LOOM_KERNEL_CACHE_SCOPE_SE, LOOM_KERNEL_CACHE_TEMPORAL_HIGH_TEMPORAL,
-      KernelAsyncTokenType(), LOOM_LOCATION_UNKNOWN, &op));
+      &builder_, source, dest, cluster_mask, predicate, LOOM_CACHE_SCOPE_SE,
+      LOOM_CACHE_TEMPORAL_HIGH_TEMPORAL, KernelAsyncTokenType(),
+      LOOM_LOCATION_UNKNOWN, &op));
 
   loom_movement_analysis_t analysis = {};
   InitializeAnalysis(&analysis);
@@ -532,13 +531,13 @@ TEST_F(MovementTest, ClassifiesAsyncTensorDescriptorsAndDirections) {
       dest_buffer, 128, ViewType2D(LOOM_SCALAR_TYPE_F32, 2, 2, layout));
   loom_op_t* load_op = nullptr;
   IREE_ASSERT_OK(loom_kernel_async_tensor_load_to_lds_build(
-      &builder_, source, lds, descriptor, LOOM_KERNEL_CACHE_SCOPE_CU,
-      LOOM_KERNEL_CACHE_TEMPORAL_REGULAR, KernelAsyncTokenType(),
+      &builder_, source, lds, descriptor, LOOM_CACHE_SCOPE_CU,
+      LOOM_CACHE_TEMPORAL_REGULAR, KernelAsyncTokenType(),
       LOOM_LOCATION_UNKNOWN, &load_op));
   loom_op_t* store_op = nullptr;
   IREE_ASSERT_OK(loom_kernel_async_tensor_store_from_lds_build(
-      &builder_, lds, dest, descriptor, LOOM_KERNEL_CACHE_SCOPE_DEVICE,
-      LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK, KernelAsyncTokenType(),
+      &builder_, lds, dest, descriptor, LOOM_CACHE_SCOPE_DEVICE,
+      LOOM_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK, KernelAsyncTokenType(),
       LOOM_LOCATION_UNKNOWN, &store_op));
 
   loom_movement_analysis_t analysis = {};

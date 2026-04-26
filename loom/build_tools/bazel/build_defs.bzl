@@ -135,7 +135,9 @@ def loom_target_table_cc_library(
       source: Generated C source filename.
       header: Generated C header filename.
       args: Generator arguments before the output flags. Arguments may use
-        $(rootpath <label>) for declared inputs.
+        $(rootpath <label>) for declared inputs; the Bazel action rewrites
+        those to $(execpath <label>) while CMake conversion maps them to source
+        paths.
       inputs: Source/vendor data labels consumed by the generator.
       cmake_generator_deps: Source-file labels that should retrigger CMake
         generation when the generator implementation changes.
@@ -150,6 +152,11 @@ def loom_target_table_cc_library(
     if visibility != None:
         genrule_kwargs["visibility"] = visibility
 
+    # BUILD files use rootpath so the CMake converter can map external data
+    # labels to their fetched source directories. Bazel genrules execute in the
+    # action sandbox and need execpath to read declared srcs.
+    bazel_args = [arg.replace("$(rootpath ", "$(execpath ") for arg in args]
+
     iree_genrule(
         name = name + "_gen",
         srcs = inputs,
@@ -159,7 +166,7 @@ def loom_target_table_cc_library(
         ],
         cmd = " ".join(
             ["$(location %s)" % generator] +
-            args + [
+            bazel_args + [
                 "--source=$(execpath %s)" % source,
                 "--header=$(execpath %s)" % header,
             ],

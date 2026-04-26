@@ -46,6 +46,7 @@ loom_cc_library(
     "location.h"
     "module.h"
     "scalar_type.h"
+    "semantics.h"
     "types.h"
   SRCS
     "attribute.c"

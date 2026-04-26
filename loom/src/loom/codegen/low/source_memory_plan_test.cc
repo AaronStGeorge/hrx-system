@@ -227,9 +227,9 @@ TEST_F(SourceMemoryPlanTest, StaticDenseScalarLoadUsesMemoryAccessFacet) {
       LOOM_VIEW_LOAD_BUILD_FLAG_HAS_CACHE_SCOPE |
           LOOM_VIEW_LOAD_BUILD_FLAG_HAS_CACHE_TEMPORAL,
       loom_buffer_view_result(view_op), nullptr, 0, static_indices,
-      IREE_ARRAYSIZE(static_indices), LOOM_VIEW_CACHE_SCOPE_DEVICE,
-      LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL,
-      loom_type_scalar(LOOM_SCALAR_TYPE_F32), LOOM_LOCATION_UNKNOWN, &load_op));
+      IREE_ARRAYSIZE(static_indices), LOOM_CACHE_SCOPE_DEVICE,
+      LOOM_CACHE_TEMPORAL_NON_TEMPORAL, loom_type_scalar(LOOM_SCALAR_TYPE_F32),
+      LOOM_LOCATION_UNKNOWN, &load_op));
 
   loom_value_fact_table_t facts = {0};
   ComputeFacts(&facts);
@@ -246,9 +246,8 @@ TEST_F(SourceMemoryPlanTest, StaticDenseScalarLoadUsesMemoryAccessFacet) {
   EXPECT_EQ(plan.cache_policy.build_flags,
             LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_SCOPE |
                 LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_TEMPORAL);
-  EXPECT_EQ(plan.cache_policy.cache_scope, LOOM_VIEW_CACHE_SCOPE_DEVICE);
-  EXPECT_EQ(plan.cache_policy.cache_temporal,
-            LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL);
+  EXPECT_EQ(plan.cache_policy.cache_scope, LOOM_CACHE_SCOPE_DEVICE);
+  EXPECT_EQ(plan.cache_policy.cache_temporal, LOOM_CACHE_TEMPORAL_NON_TEMPORAL);
 }
 
 TEST_F(SourceMemoryPlanTest, DynamicDenseLoadClassifiesWorkitemIndex) {

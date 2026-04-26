@@ -83,7 +83,6 @@ from loom.dsl import (
 from loom.fields import FieldKind, FieldLayout, compute_layout
 from loom.gen import bootstrap as _bootstrap
 from loom.gen.generated_file import line_comment_header
-from loom.gen.target_low_legality import generate_target_low_legality_table
 
 # ============================================================================
 # Constants
@@ -3565,14 +3564,18 @@ def generate_op_registry(
     source.append("typedef const loom_op_vtable_t* const* (*loom_op_registry_dialect_vtables_fn_t)(")
     source.append("    iree_host_size_t* out_count);")
     source.append("")
+    source.append("typedef const loom_op_semantics_t* (*loom_op_registry_dialect_semantics_fn_t)(")
+    source.append("    iree_host_size_t* out_count);")
+    source.append("")
     source.append("typedef struct loom_op_registry_dialect_registration_t {")
     source.append("  loom_dialect_id_t dialect_id;")
     source.append("  loom_op_registry_dialect_vtables_fn_t vtables_fn;")
+    source.append("  loom_op_registry_dialect_semantics_fn_t semantics_fn;")
     source.append("} loom_op_registry_dialect_registration_t;")
     source.append("")
     source.append("static const loom_op_registry_dialect_registration_t loom_op_registry_dialects[] = {")
     for dialect, _ops in sorted(dialects, key=lambda item: item[0].dialect_id):
-        source.append(f"    {{{_c_dialect_enum(dialect.name)}, loom_{dialect.name}_dialect_vtables}},")
+        source.append(f"    {{{_c_dialect_enum(dialect.name)}, loom_{dialect.name}_dialect_vtables, loom_{dialect.name}_dialect_op_semantics}},")
     source.append("};")
     source.append("")
     source.append("static const loom_op_registry_entry_t loom_op_registry[] = {")
@@ -3614,6 +3617,9 @@ def generate_op_registry(
     source.append("    const loom_op_registry_dialect_registration_t* registration) {")
     source.append("  iree_host_size_t count = 0;")
     source.append("  const loom_op_vtable_t* const* vtables = registration->vtables_fn(&count);")
+    source.append("  iree_host_size_t semantics_count = 0;")
+    source.append("  const loom_op_semantics_t* semantics =")
+    source.append("      registration->semantics_fn(&semantics_count);")
     source.append("  if (count > UINT16_MAX) {")
     source.append("    return iree_make_status(")
     source.append("        IREE_STATUS_RESOURCE_EXHAUSTED,")
@@ -3621,8 +3627,17 @@ def generate_op_registry(
     source.append('        " ops, exceeding the uint16_t registry cap",')
     source.append("        (unsigned)registration->dialect_id, count);")
     source.append("  }")
-    source.append("  return loom_context_register_dialect(")
-    source.append("      context, registration->dialect_id, vtables, (uint16_t)count);")
+    source.append("  if (semantics_count != count) {")
+    source.append("    return iree_make_status(")
+    source.append("        IREE_STATUS_FAILED_PRECONDITION,")
+    source.append('        "dialect %u semantics count %" PRIhsz')
+    source.append('        " does not match vtable count %" PRIhsz,')
+    source.append("        (unsigned)registration->dialect_id, semantics_count, count);")
+    source.append("  }")
+    source.append("  IREE_RETURN_IF_ERROR(loom_context_register_dialect(")
+    source.append("      context, registration->dialect_id, vtables, (uint16_t)count));")
+    source.append("  return loom_context_register_dialect_semantics(")
+    source.append("      context, registration->dialect_id, semantics, (uint16_t)count);")
     source.append("}")
     source.append("")
     source.append("iree_status_t loom_op_registry_register_all_dialects(loom_context_t* context) {")
@@ -4172,17 +4187,6 @@ def main() -> None:
         ("keyword_table.inc", keyword_table),
     ]:
         path = output_root / filename
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
-
-    # Generate target-owned policy tables that still depend on op kinds.
-    target_low_legality = generate_target_low_legality_table(production_dialects)
-    target_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "target"
-    for filename, content in [
-        ("low_legality_table.h", target_low_legality.header),
-        ("low_legality_table.c", target_low_legality.source),
-    ]:
-        path = target_root / filename
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 

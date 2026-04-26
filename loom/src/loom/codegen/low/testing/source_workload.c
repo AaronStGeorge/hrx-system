@@ -136,37 +136,59 @@ static iree_string_view_t loom_low_source_workload_default_string(
 
 typedef const loom_op_vtable_t* const* (
     *loom_low_source_workload_dialect_vtables_fn_t)(iree_host_size_t* count);
+typedef const loom_op_semantics_t* (
+    *loom_low_source_workload_dialect_semantics_fn_t)(iree_host_size_t* count);
 
 static iree_status_t loom_low_source_workload_register_dialect(
     loom_context_t* context, uint8_t dialect_id,
-    loom_low_source_workload_dialect_vtables_fn_t dialect_vtables_fn) {
+    loom_low_source_workload_dialect_vtables_fn_t dialect_vtables_fn,
+    loom_low_source_workload_dialect_semantics_fn_t dialect_semantics_fn) {
   iree_host_size_t count = 0;
   const loom_op_vtable_t* const* vtables = dialect_vtables_fn(&count);
-  return loom_context_register_dialect(context, dialect_id, vtables,
-                                       (uint16_t)count);
+  iree_host_size_t semantics_count = 0;
+  const loom_op_semantics_t* semantics = dialect_semantics_fn(&semantics_count);
+  if (semantics_count != count) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "dialect %u semantics count %" PRIhsz
+                            " does not match vtable count %" PRIhsz,
+                            (unsigned)dialect_id, semantics_count, count);
+  }
+  IREE_RETURN_IF_ERROR(loom_context_register_dialect(context, dialect_id,
+                                                     vtables, (uint16_t)count));
+  return loom_context_register_dialect_semantics(context, dialect_id, semantics,
+                                                 (uint16_t)count);
 }
 
 iree_status_t loom_low_source_workload_register_dialects(
     loom_context_t* context) {
   IREE_ASSERT_ARGUMENT(context);
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
-      context, LOOM_DIALECT_TARGET, loom_target_dialect_vtables));
+      context, LOOM_DIALECT_TARGET, loom_target_dialect_vtables,
+      loom_target_dialect_op_semantics));
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
-      context, LOOM_DIALECT_CFG, loom_cfg_dialect_vtables));
+      context, LOOM_DIALECT_CFG, loom_cfg_dialect_vtables,
+      loom_cfg_dialect_op_semantics));
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
-      context, LOOM_DIALECT_FUNC, loom_func_dialect_vtables));
+      context, LOOM_DIALECT_FUNC, loom_func_dialect_vtables,
+      loom_func_dialect_op_semantics));
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
-      context, LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables));
+      context, LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables,
+      loom_buffer_dialect_op_semantics));
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
-      context, LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables));
+      context, LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables,
+      loom_encoding_dialect_op_semantics));
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
-      context, LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables));
+      context, LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables,
+      loom_scalar_dialect_op_semantics));
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
-      context, LOOM_DIALECT_INDEX, loom_index_dialect_vtables));
+      context, LOOM_DIALECT_INDEX, loom_index_dialect_vtables,
+      loom_index_dialect_op_semantics));
   IREE_RETURN_IF_ERROR(loom_low_source_workload_register_dialect(
-      context, LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables));
-  return loom_low_source_workload_register_dialect(context, LOOM_DIALECT_LOW,
-                                                   loom_low_dialect_vtables);
+      context, LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables,
+      loom_vector_dialect_op_semantics));
+  return loom_low_source_workload_register_dialect(
+      context, LOOM_DIALECT_LOW, loom_low_dialect_vtables,
+      loom_low_dialect_op_semantics);
 }
 
 //===----------------------------------------------------------------------===//
