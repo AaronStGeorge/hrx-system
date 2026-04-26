@@ -31,7 +31,7 @@
    LOOM_CHECK_HAVE_LLVMIR || LOOM_CHECK_HAVE_WASM || LOOM_CHECK_HAVE_X86)
 
 #if LOOM_CHECK_HAVE_AMDGPU
-#include "loom/target/arch/amdgpu/check_provider.h"
+#include "loom/target/arch/amdgpu/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_AMDGPU
 #if LOOM_CHECK_HAVE_IREEVM
 #include "loom/target/emit/ireevm/check_provider.h"

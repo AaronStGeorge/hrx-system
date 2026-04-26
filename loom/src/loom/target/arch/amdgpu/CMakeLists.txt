@@ -449,39 +449,39 @@ loom_cc_library(
     lower
   HDRS
     "lower.h"
-    "lower_internal.h"
-    "lower_memory_internal.h"
-    "lower_plan.h"
+    "lower/internal.h"
+    "lower/memory_internal.h"
+    "lower/plan.h"
   SRCS
-    "lower.c"
-    "lower_abi.c"
-    "lower_arithmetic_rules.c"
-    "lower_async.c"
-    "lower_async_rules.c"
-    "lower_atomic.c"
-    "lower_bitfield.c"
-    "lower_bitpack.c"
-    "lower_buffer.c"
-    "lower_dot.c"
-    "lower_dot_rules.c"
-    "lower_emit_support.c"
-    "lower_integer_rules.c"
-    "lower_lds_layout.c"
-    "lower_mask.c"
-    "lower_memory.c"
-    "lower_memory_cache.c"
-    "lower_memory_diagnostics.c"
-    "lower_memory_emit.c"
-    "lower_memory_legality.c"
-    "lower_preamble.c"
-    "lower_prefetch.c"
-    "lower_reduce_rules.c"
-    "lower_structural.c"
-    "lower_support.c"
-    "lower_sync.c"
-    "lower_table.c"
-    "lower_values.c"
-    "lower_view.c"
+    "lower/abi.c"
+    "lower/arithmetic_rules.c"
+    "lower/async.c"
+    "lower/async_rules.c"
+    "lower/atomic.c"
+    "lower/bitfield.c"
+    "lower/bitpack.c"
+    "lower/buffer.c"
+    "lower/dot.c"
+    "lower/dot_rules.c"
+    "lower/emit_support.c"
+    "lower/integer_rules.c"
+    "lower/lds_layout.c"
+    "lower/mask.c"
+    "lower/memory.c"
+    "lower/memory_cache.c"
+    "lower/memory_diagnostics.c"
+    "lower/memory_emit.c"
+    "lower/memory_legality.c"
+    "lower/preamble.c"
+    "lower/prefetch.c"
+    "lower/reduce_rules.c"
+    "lower/registry.c"
+    "lower/structural.c"
+    "lower/support.c"
+    "lower/sync.c"
+    "lower/table.c"
+    "lower/values.c"
+    "lower/view.c"
   DEPS
     ::descriptor_ids
     ::hal_kernel_abi
@@ -512,9 +512,9 @@ loom_cc_library(
   NAME
     amdgpu_hal_backend
   HDRS
-    "amdgpu_hal_backend.h"
+    "execution/amdgpu_hal_backend.h"
   SRCS
-    "amdgpu_hal_backend.c"
+    "execution/amdgpu_hal_backend.c"
   DEPS
     ::target_info
     iree::base
@@ -530,7 +530,7 @@ loom_cc_test(
   NAME
     amdgpu_hal_backend_test
   SRCS
-    "amdgpu_hal_backend_test.cc"
+    "execution/amdgpu_hal_backend_test.cc"
   DEPS
     ::amdgpu_hal_backend
     ::target_info
@@ -548,9 +548,9 @@ loom_cc_library(
   NAME
     check_provider
   HDRS
-    "check_provider.h"
+    "check/provider.h"
   SRCS
-    "check_provider.c"
+    "check/provider.c"
   DEPS
     ::low_registry
     ::lower
@@ -565,9 +565,9 @@ loom_cc_library(
   NAME
     execution_provider
   HDRS
-    "execution_provider.h"
+    "execution/provider.h"
   SRCS
-    "execution_provider.c"
+    "execution/provider.c"
   DEPS
     ::low_registry
     ::amdgpu_hal_backend
@@ -581,12 +581,12 @@ iree_c_embed_data(
   NAME
     amdgpu_hal_testdata
   SRCS
-    "testdata/b128_vector_add.loom"
-    "testdata/gfx11_wmma_zero.loom"
+    "execution/testdata/b128_vector_add.loom"
+    "execution/testdata/gfx11_wmma_zero.loom"
   C_FILE_OUTPUT
-    "amdgpu_hal_testdata.c"
+    "execution/amdgpu_hal_testdata.c"
   H_FILE_OUTPUT
-    "amdgpu_hal_testdata.h"
+    "execution/amdgpu_hal_testdata.h"
   IDENTIFIER
     "loom_amdgpu_amdgpu_hal_testdata"
   TESTONLY
@@ -598,7 +598,7 @@ loom_cc_test(
   NAME
     hal_execution_test
   SRCS
-    "hal_execution_test.cc"
+    "execution/hal_execution_test.cc"
   DEPS
     ::execution_provider
     ::amdgpu_hal_testdata
@@ -728,7 +728,7 @@ iree_executable_test(
   NAME
     "low_hal_structural"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/low_hal_structural.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_hal_structural.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -739,7 +739,7 @@ iree_executable_test(
   NAME
     "low_packet_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/low_packet_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_packet_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -750,7 +750,7 @@ iree_executable_test(
   NAME
     "source_low_addtid"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_addtid.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_addtid.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -761,7 +761,7 @@ iree_executable_test(
   NAME
     "source_low_async"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_async.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_async.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -772,7 +772,7 @@ iree_executable_test(
   NAME
     "source_low_async_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_async_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_async_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -783,7 +783,7 @@ iree_executable_test(
   NAME
     "source_low_async_gfx950"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_async_gfx950.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_async_gfx950.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -794,7 +794,7 @@ iree_executable_test(
   NAME
     "source_low_bitcast"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_bitcast.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitcast.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -805,7 +805,7 @@ iree_executable_test(
   NAME
     "source_low_bitfield"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_bitfield.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitfield.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -816,7 +816,7 @@ iree_executable_test(
   NAME
     "source_low_bitpack"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_bitpack.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitpack.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -827,7 +827,7 @@ iree_executable_test(
   NAME
     "source_low_bitpack_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_bitpack_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitpack_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -838,7 +838,7 @@ iree_executable_test(
   NAME
     "source_low_bitunpack"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_bitunpack.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitunpack.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -849,7 +849,7 @@ iree_executable_test(
   NAME
     "source_low_bitunpack_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_bitunpack_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_bitunpack_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -860,7 +860,7 @@ iree_executable_test(
   NAME
     "source_low_cache_policy"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_cache_policy.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_cache_policy.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -871,7 +871,7 @@ iree_executable_test(
   NAME
     "source_low_cache_policy_gfx950"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_cache_policy_gfx950.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_cache_policy_gfx950.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -882,7 +882,7 @@ iree_executable_test(
   NAME
     "source_low_conversion"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_conversion.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_conversion.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -893,7 +893,7 @@ iree_executable_test(
   NAME
     "source_low_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -904,7 +904,7 @@ iree_executable_test(
   NAME
     "source_low_dot"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_dot.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_dot.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -915,7 +915,7 @@ iree_executable_test(
   NAME
     "source_low_index"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_index.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_index.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -926,7 +926,7 @@ iree_executable_test(
   NAME
     "source_low_mask"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_mask.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_mask.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -937,7 +937,7 @@ iree_executable_test(
   NAME
     "source_low_memory_generic_atomic"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_generic_atomic.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_generic_atomic.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -948,7 +948,7 @@ iree_executable_test(
   NAME
     "source_low_memory_generic_atomic_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_generic_atomic_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_generic_atomic_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -959,7 +959,7 @@ iree_executable_test(
   NAME
     "source_low_memory_generic_atomic_gfx12"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_generic_atomic_gfx12.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_generic_atomic_gfx12.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -970,7 +970,7 @@ iree_executable_test(
   NAME
     "source_low_memory_generic_atomic_gfx950"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_generic_atomic_gfx950.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_generic_atomic_gfx950.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -981,7 +981,7 @@ iree_executable_test(
   NAME
     "source_low_memory_global"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -992,7 +992,7 @@ iree_executable_test(
   NAME
     "source_low_memory_global_atomic"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global_atomic.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global_atomic.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1003,7 +1003,7 @@ iree_executable_test(
   NAME
     "source_low_memory_global_atomic_gfx12"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global_atomic_gfx12.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global_atomic_gfx12.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1014,7 +1014,7 @@ iree_executable_test(
   NAME
     "source_low_memory_global_atomic_ordering"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global_atomic_ordering.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global_atomic_ordering.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1025,7 +1025,7 @@ iree_executable_test(
   NAME
     "source_low_memory_global_atomic_ordering_gfx12"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_global_atomic_ordering_gfx12.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_global_atomic_ordering_gfx12.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1036,7 +1036,7 @@ iree_executable_test(
   NAME
     "source_low_memory_workgroup_atomic"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_workgroup_atomic.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_workgroup_atomic.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1047,7 +1047,7 @@ iree_executable_test(
   NAME
     "source_low_memory_workgroup_b128"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_memory_workgroup_b128.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_memory_workgroup_b128.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1058,7 +1058,7 @@ iree_executable_test(
   NAME
     "source_low_minmax"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_minmax.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_minmax.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1069,7 +1069,7 @@ iree_executable_test(
   NAME
     "source_low_minmax_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_minmax_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_minmax_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1080,7 +1080,7 @@ iree_executable_test(
   NAME
     "source_low_numeric_f32"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_numeric_f32.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_numeric_f32.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1091,7 +1091,7 @@ iree_executable_test(
   NAME
     "source_low_numeric_i32"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_numeric_i32.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_numeric_i32.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1102,7 +1102,7 @@ iree_executable_test(
   NAME
     "source_low_packed_dot"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_packed_dot.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_packed_dot.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1113,7 +1113,7 @@ iree_executable_test(
   NAME
     "source_low_packed_dot_gfx950"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_packed_dot_gfx950.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_packed_dot_gfx950.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1124,7 +1124,7 @@ iree_executable_test(
   NAME
     "source_low_prefetch_gfx12"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_prefetch_gfx12.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_prefetch_gfx12.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1135,7 +1135,7 @@ iree_executable_test(
   NAME
     "source_low_reduce"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_reduce.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_reduce.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1146,7 +1146,7 @@ iree_executable_test(
   NAME
     "source_low_scalar_i32"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_scalar_i32.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_i32.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1157,7 +1157,7 @@ iree_executable_test(
   NAME
     "source_low_slice"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_slice.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_slice.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1168,7 +1168,7 @@ iree_executable_test(
   NAME
     "source_low_slice_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_slice_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_slice_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1179,7 +1179,7 @@ iree_executable_test(
   NAME
     "source_low_sync"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_sync.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_sync.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1190,7 +1190,7 @@ iree_executable_test(
   NAME
     "source_low_table"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_table.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_table.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -1201,7 +1201,7 @@ iree_executable_test(
   NAME
     "source_low_table_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_table_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_table_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

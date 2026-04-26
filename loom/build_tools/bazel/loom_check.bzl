@@ -57,6 +57,7 @@ def loom_check_test_suite(
         data = [],
         env = {},
         runner = "//loom/src/loom/tools/loom-check",
+        test_name_prefix_to_strip = "",
         **kwargs):
     """Creates one test per .loom-test file, bundled into a test suite.
 
@@ -72,12 +73,19 @@ def loom_check_test_suite(
       data: Additional runfiles made available to each generated test.
       env: Additional test environment variables for each generated test.
       runner: loom-check compatible runner binary.
+      test_name_prefix_to_strip: Optional source path prefix to remove before
+          deriving generated test names. This lets suites move files into a
+          directory such as "test/" without changing the familiar test target
+          names.
       **kwargs: Additional attributes passed to each loom_check_test
           and the test suite, when supported by both.
     """
     tests = []
     for src in srcs:
-        test_name = _loom_check_test_base_name(src).replace("/", "_")
+        test_name_src = _loom_check_test_base_name(src)
+        if test_name_prefix_to_strip and test_name_src.startswith(test_name_prefix_to_strip):
+            test_name_src = test_name_src[len(test_name_prefix_to_strip):]
+        test_name = test_name_src.replace("/", "_")
         loom_check_test(
             name = test_name,
             src = src,
