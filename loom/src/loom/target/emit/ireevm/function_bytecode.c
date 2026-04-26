@@ -521,12 +521,6 @@ static iree_status_t loom_ireevm_emit_low_cond_br(
   uint16_t condition_reg = 0;
   IREE_RETURN_IF_ERROR(loom_ireevm_lookup_i32_register(
       state, loom_low_cond_br_condition(op), &condition_reg));
-  if (loom_low_cond_br_true_dest(op)->arg_count != 0 ||
-      loom_low_cond_br_false_dest(op)->arg_count != 0) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "VM conditional branch emission does not support block arguments");
-  }
   IREE_RETURN_IF_ERROR(loom_ireevm_bytecode_write_u8(
       &state->writer, LOOM_IREEVM_OP_COND_BRANCH));
   IREE_RETURN_IF_ERROR(
