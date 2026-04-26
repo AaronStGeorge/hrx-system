@@ -6,6 +6,8 @@
 
 #include "loom/target/emit/llvmir/amdgpu/target_env.h"
 
+#include <stdint.h>
+
 #define LOOM_LLVMIR_AMDGPU_TARGET_TRIPLE IREE_SVL("amdgcn-amd-amdhsa")
 #define LOOM_LLVMIR_AMDGPU_DATA_LAYOUT                           \
   IREE_SVL(                                                      \
@@ -45,15 +47,15 @@ static const loom_target_snapshot_t kAmdgpuHalSnapshot = {
     .offset_bitwidth = 64,
     .max_workgroup_size =
         {
-            .x = UINT16_MAX,
+            .x = 1024,
+            .y = 1024,
+            .z = 1024,
+        },
+    .max_workgroup_count =
+        {
+            .x = INT32_MAX,
             .y = UINT16_MAX,
             .z = UINT16_MAX,
-        },
-    .max_grid_workitem_count =
-        {
-            .x = UINT32_MAX,
-            .y = UINT32_MAX,
-            .z = UINT32_MAX,
         },
     .memory_spaces =
         {

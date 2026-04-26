@@ -27,7 +27,8 @@ static bool loom_amdgpu_prefetch_static_offset_split(
   }
   plan->immediate_offset = (int64_t)immediate_offset;
   plan->scalar_byte_offset = (uint32_t)scalar_byte_offset;
-  return true;
+  return loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
+      &plan->source, plan->source.static_byte_offset, 32);
 }
 
 static bool loom_amdgpu_prefetch_select_dynamic_index(
@@ -41,6 +42,9 @@ static bool loom_amdgpu_prefetch_select_dynamic_index(
     return false;
   }
   if (term->byte_stride < 0 || term->byte_stride > UINT32_MAX) {
+    return false;
+  }
+  if (!loom_low_source_memory_dynamic_term_fits_unsigned_bit_count(term, 32)) {
     return false;
   }
   if (term->byte_stride != 1 &&

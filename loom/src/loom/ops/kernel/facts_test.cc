@@ -38,7 +38,7 @@ static const loom_target_snapshot_t kHalSnapshot = {
             .y = 512,
             .z = 64,
         },
-    .max_grid_workitem_count =
+    .max_workgroup_count =
         {
             .x = 1024,
             .y = 2048,
@@ -172,7 +172,7 @@ func.def @kernel_coords() -> (index, index, index) {
   loom_value_facts_t workgroup_facts = loom_value_fact_table_lookup(
       &table, loom_kernel_workgroup_id_result(workgroup_id));
   EXPECT_EQ(workgroup_facts.range_lo, 0);
-  EXPECT_EQ(workgroup_facts.range_hi, 255);
+  EXPECT_EQ(workgroup_facts.range_hi, 2047);
 
   loom_op_t* byte_offset = workgroup_id->next_op->next_op;
   ASSERT_TRUE(loom_index_mul_isa(byte_offset));

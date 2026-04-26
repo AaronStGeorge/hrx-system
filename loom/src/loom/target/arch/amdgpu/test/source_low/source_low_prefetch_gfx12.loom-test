@@ -21,19 +21,20 @@ low.func.def target(@target) abi(hal_kernel) @prefetch_static() asm<amdgpu.gfx12
 
 func.def @prefetch_workgroup_id(%input: buffer) {
   %gid = kernel.workgroup.id<x> : index
+  %bounded_gid = index.assume %gid [range(%gid, 0, 1024)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
-  view.prefetch %input_view[%gid] {intent = read, locality = l2} : view<64xi32, #dense>
+  view.prefetch %input_view[%bounded_gid] {intent = read, locality = l2} : view<64xi32, #dense>
   func.return
 }
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @prefetch_workgroup_id() asm<amdgpu.gfx12.core> {
-  %gid = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
+  %bounded_gid = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
-  %7 = s_mov_b32 2
-  %8 = s_lshl_b32 %gid, %7
-  s_buffer_prefetch_data %input_view, %8 {offset = 0, count = 1}
+  %8 = s_mov_b32 2
+  %9 = s_lshl_b32 %bounded_gid, %8
+  s_buffer_prefetch_data %input_view, %9 {offset = 0, count = 1}
   return
 }

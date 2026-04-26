@@ -96,6 +96,8 @@ typedef struct loom_low_source_memory_dynamic_term_t {
   uint8_t axis;
   // Byte stride multiplied by |index| before adding it to the address.
   int64_t byte_stride;
+  // Facts for |index| multiplied by |byte_stride|, in bytes.
+  loom_value_facts_t byte_facts;
   // Power-of-two shift used to compute the dynamic byte offset, or
   // LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE when multiplication or
   // target-specific handling is required.
@@ -139,21 +141,19 @@ loom_low_source_memory_access_single_dynamic_term(
   return plan->dynamic_term_count == 1 ? &plan->dynamic_terms[0] : NULL;
 }
 
-// Computes facts for the dynamic byte offset produced by |term|.
-//
-// Returns false when the source index facts cannot be interpreted as a
-// non-negative byte contribution, such as a negative byte stride. Successful
-// results may still be conservative unknown facts.
-bool loom_low_source_memory_dynamic_term_byte_facts(
-    const loom_value_fact_table_t* fact_table,
-    const loom_low_source_memory_dynamic_term_t* term,
-    loom_value_facts_t* out_facts);
-
 // Returns true when |term|'s dynamic byte offset is proven to fit in an
 // unsigned integer with |bit_count| bits.
-bool loom_low_source_memory_dynamic_term_fits_unsigned_bit_count(
-    const loom_value_fact_table_t* fact_table,
-    const loom_low_source_memory_dynamic_term_t* term, uint8_t bit_count);
+static inline bool loom_low_source_memory_dynamic_term_fits_unsigned_bit_count(
+    const loom_low_source_memory_dynamic_term_t* term, uint8_t bit_count) {
+  return loom_value_facts_fit_unsigned_bit_count(term->byte_facts, bit_count);
+}
+
+// Returns true when the sum of all dynamic byte terms plus
+// |static_byte_offset| is proven to fit in an unsigned integer with
+// |bit_count| bits.
+bool loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
+    const loom_low_source_memory_access_plan_t* plan,
+    int64_t static_byte_offset, uint8_t bit_count);
 
 // Builds a target-independent source memory plan for indexed source memory ops.
 //

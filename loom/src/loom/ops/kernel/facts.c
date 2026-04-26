@@ -31,8 +31,8 @@ static uint32_t loom_kernel_workgroup_size_dim(
   }
 }
 
-static uint32_t loom_kernel_grid_workitem_count_dim(
-    const loom_target_grid_workitem_limit_t* size,
+static uint32_t loom_kernel_workgroup_count_dim(
+    const loom_target_workgroup_count_limit_t* size,
     loom_kernel_dimension_t dimension) {
   switch (dimension) {
     case LOOM_KERNEL_DIMENSION_X:
@@ -83,17 +83,8 @@ static loom_value_facts_t loom_kernel_workgroup_id_target_facts(
   if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
     return loom_kernel_hal_coordinate_facts();
   }
-  const uint32_t max_grid_workitem_count = loom_kernel_grid_workitem_count_dim(
-      &bundle->snapshot->max_grid_workitem_count, dimension);
-  if (max_grid_workitem_count == 0) {
-    return loom_kernel_hal_coordinate_facts();
-  }
-  const uint32_t fixed_workgroup_size = loom_kernel_workgroup_size_dim(
-      &bundle->export_plan->hal_kernel.required_workgroup_size, dimension);
-  const uint32_t max_workgroup_count =
-      fixed_workgroup_size == 0
-          ? max_grid_workitem_count
-          : max_grid_workitem_count / fixed_workgroup_size;
+  const uint32_t max_workgroup_count = loom_kernel_workgroup_count_dim(
+      &bundle->snapshot->max_workgroup_count, dimension);
   if (max_workgroup_count == 0) {
     return loom_kernel_hal_coordinate_facts();
   }

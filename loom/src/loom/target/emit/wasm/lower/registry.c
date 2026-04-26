@@ -1008,6 +1008,10 @@ static bool loom_wasm_select_memory_access(
                                                 out_plan->root_value_id)) {
     return false;
   }
+  if (!loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
+          out_plan, out_plan->static_byte_offset, 32)) {
+    return false;
+  }
   for (uint8_t i = 0; i < out_plan->dynamic_term_count; ++i) {
     const loom_low_source_memory_dynamic_term_t* term =
         &out_plan->dynamic_terms[i];

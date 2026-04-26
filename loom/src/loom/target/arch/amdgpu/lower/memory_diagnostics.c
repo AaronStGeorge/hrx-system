@@ -153,6 +153,13 @@ static const loom_amdgpu_memory_access_rejection_detail_t
         },
         {
             .rejection_bit =
+                LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_OFFSET_RANGE,
+            .detail = IREE_SVL(
+                "AMDGPU memory lowering requires dynamic byte offsets to be "
+                "proven non-negative and 32-bit"),
+        },
+        {
+            .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_B128_DYNAMIC_ALIGNMENT,
             .detail = IREE_SVL(
                 "128-bit AMDGPU buffer memory accesses currently require "

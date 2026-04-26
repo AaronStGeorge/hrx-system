@@ -88,14 +88,14 @@ typedef struct loom_target_workgroup_size_t {
   uint32_t z;
 } loom_target_workgroup_size_t;
 
-typedef struct loom_target_grid_workitem_limit_t {
-  // Maximum grid size along the x dimension, in workitems.
+typedef struct loom_target_workgroup_count_limit_t {
+  // Maximum dispatch workgroup count along the x dimension.
   uint32_t x;
-  // Maximum grid size along the y dimension, in workitems.
+  // Maximum dispatch workgroup count along the y dimension.
   uint32_t y;
-  // Maximum grid size along the z dimension, in workitems.
+  // Maximum dispatch workgroup count along the z dimension.
   uint32_t z;
-} loom_target_grid_workitem_limit_t;
+} loom_target_workgroup_count_limit_t;
 
 typedef struct loom_target_snapshot_t {
   // Stable snapshot name for diagnostics and tests.
@@ -121,9 +121,9 @@ typedef struct loom_target_snapshot_t {
   // Maximum API/hardware local workgroup size per dimension. Zero dimensions
   // mean the target has not supplied a tighter limit.
   loom_target_workgroup_size_t max_workgroup_size;
-  // Maximum API/hardware dispatch grid size in workitems per dimension. Zero
+  // Maximum API/hardware dispatch workgroup count per dimension. Zero
   // dimensions mean the target has not supplied a tighter limit.
-  loom_target_grid_workitem_limit_t max_grid_workitem_count;
+  loom_target_workgroup_count_limit_t max_workgroup_count;
   // Address space assignments used by target-specific ABI lowering.
   loom_target_memory_space_map_t memory_spaces;
 } loom_target_snapshot_t;

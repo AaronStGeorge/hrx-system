@@ -15,7 +15,9 @@
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
 
 static bool loom_low_lower_type_is_none(loom_type_t type) {
@@ -265,6 +267,8 @@ static bool loom_low_lower_op_is_structural(loom_op_kind_t kind) {
     case LOOM_OP_CFG_BR:
     case LOOM_OP_CFG_COND_BR:
     case LOOM_OP_FUNC_RETURN:
+    case LOOM_OP_INDEX_ASSUME:
+    case LOOM_OP_SCALAR_ASSUME:
       return true;
     default:
       return false;
@@ -766,11 +770,29 @@ static iree_status_t loom_low_lower_remap_values(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_lower_bind_identity_results(
+    loom_low_lower_context_t* context, const loom_op_t* source_op) {
+  IREE_ASSERT_EQ(source_op->operand_count, source_op->result_count);
+  const loom_value_id_t* source_operands = loom_op_const_operands(source_op);
+  const loom_value_id_t* source_results = loom_op_const_results(source_op);
+  for (uint16_t i = 0; i < source_op->result_count; ++i) {
+    loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_lookup_value(context, source_operands[i], &low_value));
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_bind_value(context, source_results[i], low_value));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_lower_structural_op(
     loom_low_lower_context_t* context, loom_region_t* source_body,
     const loom_op_t* source_op, bool* out_handled) {
   *out_handled = true;
   switch (source_op->kind) {
+    case LOOM_OP_INDEX_ASSUME:
+    case LOOM_OP_SCALAR_ASSUME:
+      return loom_low_lower_bind_identity_results(context, source_op);
     case LOOM_OP_FUNC_RETURN: {
       loom_value_slice_t values = loom_func_return_operands(source_op);
       loom_value_id_t* low_values = NULL;

@@ -290,32 +290,29 @@ static bool loom_low_source_memory_access_power_of_two_shift(
   return true;
 }
 
-bool loom_low_source_memory_dynamic_term_byte_facts(
-    const loom_value_fact_table_t* fact_table,
-    const loom_low_source_memory_dynamic_term_t* term,
-    loom_value_facts_t* out_facts) {
+static void loom_low_source_memory_dynamic_term_compute_byte_facts(
+    const loom_value_fact_table_t* fact_table, loom_value_id_t index,
+    int64_t byte_stride, loom_value_facts_t* out_facts) {
   IREE_ASSERT_ARGUMENT(fact_table);
-  IREE_ASSERT_ARGUMENT(term);
   IREE_ASSERT_ARGUMENT(out_facts);
-  *out_facts = loom_value_facts_unknown();
-  if (term->byte_stride < 0) {
-    return false;
-  }
   const loom_value_facts_t index_facts =
-      loom_value_fact_table_lookup(fact_table, term->index);
+      loom_value_fact_table_lookup(fact_table, index);
   const loom_value_facts_t byte_stride_facts =
-      loom_value_facts_exact_i64(term->byte_stride);
+      loom_value_facts_exact_i64(byte_stride);
   loom_value_facts_muli(&index_facts, &byte_stride_facts, out_facts);
-  return true;
 }
 
-bool loom_low_source_memory_dynamic_term_fits_unsigned_bit_count(
-    const loom_value_fact_table_t* fact_table,
-    const loom_low_source_memory_dynamic_term_t* term, uint8_t bit_count) {
-  loom_value_facts_t byte_facts = {0};
-  return loom_low_source_memory_dynamic_term_byte_facts(fact_table, term,
-                                                        &byte_facts) &&
-         loom_value_facts_fit_unsigned_bit_count(byte_facts, bit_count);
+bool loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
+    const loom_low_source_memory_access_plan_t* plan,
+    int64_t static_byte_offset, uint8_t bit_count) {
+  IREE_ASSERT_ARGUMENT(plan);
+  loom_value_facts_t offset_facts =
+      loom_value_facts_exact_i64(static_byte_offset);
+  for (uint8_t i = 0; i < plan->dynamic_term_count; ++i) {
+    loom_value_facts_addi(&offset_facts, &plan->dynamic_terms[i].byte_facts,
+                          &offset_facts);
+  }
+  return loom_value_facts_fit_unsigned_bit_count(offset_facts, bit_count);
 }
 
 static bool loom_low_source_memory_operation_kind_from_op(
@@ -513,12 +510,16 @@ static bool loom_low_source_memory_access_plan_from_components(
     uint32_t byte_shift = LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE;
     (void)loom_low_source_memory_access_power_of_two_shift(byte_stride,
                                                            &byte_shift);
+    loom_value_facts_t byte_facts = loom_value_facts_unknown();
+    loom_low_source_memory_dynamic_term_compute_byte_facts(
+        fact_table, dynamic_index, byte_stride, &byte_facts);
     out_plan->dynamic_terms[i] = (loom_low_source_memory_dynamic_term_t){
         .index = dynamic_index,
         .source = dynamic_index_source,
         .dimension = dynamic_index_dimension,
         .axis = dynamic_axis,
         .byte_stride = byte_stride,
+        .byte_facts = byte_facts,
         .byte_shift = byte_shift,
     };
   }

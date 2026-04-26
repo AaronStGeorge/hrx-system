@@ -581,6 +581,11 @@ static bool loom_amdgpu_atomic_select_offset(
     }
     plan->immediate_offset = plan->source.static_byte_offset;
     plan->scalar_byte_offset = 0;
+    if (!loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
+            &plan->source, /*static_byte_offset=*/0, 32)) {
+      diagnostic->rejection_bits |= LOOM_AMDGPU_ATOMIC_REJECTION_OFFSET_RANGE;
+      return false;
+    }
     return true;
   }
   if (plan->source.static_byte_offset < 0) {
@@ -602,6 +607,11 @@ static bool loom_amdgpu_atomic_select_offset(
     }
     plan->immediate_offset = (int64_t)immediate_offset;
     plan->scalar_byte_offset = (uint32_t)scalar_byte_offset;
+    if (!loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
+            &plan->source, plan->source.static_byte_offset, 32)) {
+      diagnostic->rejection_bits |= LOOM_AMDGPU_ATOMIC_REJECTION_OFFSET_RANGE;
+      return false;
+    }
     return true;
   }
   if ((static_byte_offset % offset_info.unit_byte_count) != 0) {
@@ -616,6 +626,11 @@ static bool loom_amdgpu_atomic_select_offset(
   }
   plan->immediate_offset = (int64_t)encoded_offset;
   plan->scalar_byte_offset = 0;
+  if (!loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
+          &plan->source, plan->source.static_byte_offset, 32)) {
+    diagnostic->rejection_bits |= LOOM_AMDGPU_ATOMIC_REJECTION_OFFSET_RANGE;
+    return false;
+  }
   return true;
 }
 
