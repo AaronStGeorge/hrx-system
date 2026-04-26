@@ -65,6 +65,18 @@ func.def @f16x2_b32(%input: buffer, %output: buffer) {
 
 // ====
 
+func.def @f16x4_b64(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x4xf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xf16, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x4xf16, #dense> -> vector<4xf16>
+  vector.store %loaded, %output_view[%tid, 0] : vector<4xf16>, view<64x4xf16, #dense>
+  func.return
+}
+
+// ====
+
 func.def @bf16x2_b32(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
@@ -72,5 +84,17 @@ func.def @bf16x2_b32(%input: buffer, %output: buffer) {
   %output_view = buffer.view %output[%zero] : buffer -> view<64x2xbf16, #dense>
   %loaded = vector.load %input_view[%tid, 0] : view<64x2xbf16, #dense> -> vector<2xbf16>
   vector.store %loaded, %output_view[%tid, 0] : vector<2xbf16>, view<64x2xbf16, #dense>
+  func.return
+}
+
+// ====
+
+func.def @bf16x4_b64(%input: buffer, %output: buffer) {
+  %tid = kernel.workitem.id<x> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x4xbf16, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xbf16, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x4xbf16, #dense> -> vector<4xbf16>
+  vector.store %loaded, %output_view[%tid, 0] : vector<4xbf16>, view<64x4xbf16, #dense>
   func.return
 }

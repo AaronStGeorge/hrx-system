@@ -83,7 +83,7 @@ static bool loom_amdgpu_static_rank1_slice_shape(loom_type_t source_type,
   return true;
 }
 
-static bool loom_amdgpu_packed_integer_slice_window_is_supported(
+static bool loom_amdgpu_packed_register_bit_slice_window_is_supported(
     uint32_t source_bit_offset, uint32_t result_payload_bit_count,
     uint32_t result_register_count) {
   for (uint32_t register_index = 0; register_index < result_register_count;
@@ -151,10 +151,14 @@ static bool loom_amdgpu_vector_slice_plan_from_op(
     uint32_t result_payload_bit_count = 0;
     uint32_t source_register_count = 0;
     uint32_t result_register_count = 0;
-    if (!loom_amdgpu_type_packed_integer_storage(
-            source_type, &source_payload_bit_count, &source_register_count) ||
-        !loom_amdgpu_type_packed_integer_storage(
-            result_type, &result_payload_bit_count, &result_register_count)) {
+    if ((!loom_amdgpu_type_packed_integer_storage(
+             source_type, &source_payload_bit_count, &source_register_count) ||
+         !loom_amdgpu_type_packed_integer_storage(
+             result_type, &result_payload_bit_count, &result_register_count)) &&
+        (!loom_amdgpu_type_packed_16bit_float_storage(
+             source_type, &source_payload_bit_count, &source_register_count) ||
+         !loom_amdgpu_type_packed_16bit_float_storage(
+             result_type, &result_payload_bit_count, &result_register_count))) {
       return false;
     }
     const int32_t element_bit_count =
@@ -164,7 +168,7 @@ static bool loom_amdgpu_vector_slice_plan_from_op(
     }
     const uint32_t source_bit_offset =
         lane_offset * (uint32_t)element_bit_count;
-    if (!loom_amdgpu_packed_integer_slice_window_is_supported(
+    if (!loom_amdgpu_packed_register_bit_slice_window_is_supported(
             source_bit_offset, result_payload_bit_count,
             result_register_count)) {
       return false;
@@ -172,7 +176,7 @@ static bool loom_amdgpu_vector_slice_plan_from_op(
     out_plan->source_register_count = source_register_count;
     out_plan->result_register_count = result_register_count;
     out_plan->element_bit_count = (uint32_t)element_bit_count;
-    out_plan->kind = LOOM_AMDGPU_VECTOR_SLICE_KIND_PACKED_INTEGER;
+    out_plan->kind = LOOM_AMDGPU_VECTOR_SLICE_KIND_PACKED_REGISTER_BITS;
   }
 
   out_plan->lane_offset = lane_offset;
@@ -230,7 +234,7 @@ static iree_status_t loom_amdgpu_lower_vector_slice_32bit_lanes(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_lower_vector_slice_packed_integer(
+static iree_status_t loom_amdgpu_lower_vector_slice_packed_register_bits(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_slice_plan_t* select, loom_value_id_t low_source,
     loom_type_t lane_type, loom_value_id_t* low_registers) {
@@ -247,6 +251,10 @@ static iree_status_t loom_amdgpu_lower_vector_slice_packed_integer(
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
           context, source_op, low_source, source_register_index, lane_type,
           &source_register));
+    }
+    if (source_register_bit_offset == 0) {
+      low_registers[i] = source_register;
+      continue;
     }
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
         context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32,
@@ -271,7 +279,7 @@ iree_status_t loom_amdgpu_lower_vector_slice(
     IREE_RETURN_IF_ERROR(loom_amdgpu_lower_vector_slice_32bit_lanes(
         context, source_op, plan, low_source, lane_type, low_registers));
   } else {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_lower_vector_slice_packed_integer(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_lower_vector_slice_packed_register_bits(
         context, source_op, plan, low_source, lane_type, low_registers));
   }
 
@@ -321,8 +329,8 @@ iree_status_t loom_amdgpu_low_legality_verify_vector_structural(
       return loom_target_low_legality_reject(
           context, provider, op, IREE_SV("shape"), loom_op_name(module, op),
           IREE_SV("AMDGPU vector.slice currently requires static rank-1 "
-                  "32-bit lane slices or packed integer bit windows contained "
-                  "within each selected 32-bit register"));
+                  "32-bit lane slices or packed bit windows contained within "
+                  "each selected 32-bit register"));
     }
     default:
       *out_handled = false;

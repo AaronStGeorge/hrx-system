@@ -150,7 +150,7 @@ typedef struct loom_amdgpu_vector_select_plan_t {
 typedef enum loom_amdgpu_vector_slice_kind_e {
   LOOM_AMDGPU_VECTOR_SLICE_KIND_NONE = 0,
   LOOM_AMDGPU_VECTOR_SLICE_KIND_32BIT_LANES = 1,
-  LOOM_AMDGPU_VECTOR_SLICE_KIND_PACKED_INTEGER = 2,
+  LOOM_AMDGPU_VECTOR_SLICE_KIND_PACKED_REGISTER_BITS = 2,
 } loom_amdgpu_vector_slice_kind_t;
 
 typedef struct loom_amdgpu_vector_slice_plan_t {
@@ -168,7 +168,7 @@ typedef struct loom_amdgpu_vector_slice_plan_t {
   uint32_t source_register_count;
   // Result 32-bit backing register count.
   uint32_t result_register_count;
-  // Source element bit count for packed integer slices.
+  // Source element bit count for packed register-bit slices.
   uint32_t element_bit_count;
 } loom_amdgpu_vector_slice_plan_t;
 
