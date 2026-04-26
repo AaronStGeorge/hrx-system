@@ -743,6 +743,7 @@ iree_c_embed_data(
         "execution/testdata/dot4i_u8u8_gemm4x8x4.loom",
         "execution/testdata/dot4i_u8u8_tile8x4.loom",
         "execution/testdata/dot8i4_u4u4_buffer.loom",
+        "execution/testdata/dot8i4_u4u4_lds_coop_gemm4x4x32.loom",
         "execution/testdata/gfx11_wmma_lds_roundtrip.loom",
         "execution/testdata/gfx11_wmma_zero.loom",
         "execution/testdata/lds_b128_roundtrip.loom",
