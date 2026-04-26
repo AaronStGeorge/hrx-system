@@ -135,6 +135,18 @@ TEST(OpSemantics, DialectTablesAreDenseAndQueryable) {
   EXPECT_TRUE(loom_contract_family_set_has_any(
       iota_semantics.contract_families, LOOM_CONTRACT_VECTOR_COORDINATE));
 
+  loom_op_semantics_t tensor_descriptor_semantics =
+      loom_kernel_op_semantics(LOOM_OP_KERNEL_TENSOR_LDS_DESCRIPTOR);
+  EXPECT_TRUE(loom_contract_family_set_has_any(
+      tensor_descriptor_semantics.contract_families,
+      LOOM_CONTRACT_TENSOR_MEMORY));
+
+  loom_op_semantics_t tensor_load_semantics =
+      loom_kernel_op_semantics(LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS);
+  EXPECT_TRUE(loom_contract_family_set_has_any(
+      tensor_load_semantics.contract_families,
+      LOOM_CONTRACT_KERNEL_ASYNC | LOOM_CONTRACT_TENSOR_MEMORY));
+
   loom_op_semantics_t wrong_dialect =
       loom_vector_op_semantics(LOOM_OP_KERNEL_BARRIER);
   EXPECT_EQ(wrong_dialect.phase, LOOM_OP_PHASE_UNSPECIFIED);
@@ -148,6 +160,15 @@ TEST(TypeRegistry, DescriptorsCarrySemantics) {
   EXPECT_EQ(token->semantics.semantic, LOOM_TYPE_SEMANTIC_CONTROL_TOKEN);
   EXPECT_TRUE(loom_contract_family_set_has_any(
       token->semantics.contract_families, LOOM_CONTRACT_KERNEL_ASYNC));
+
+  const loom_type_descriptor_t* tensor_descriptor = loom_type_registry_lookup(
+      iree_make_cstring_view("kernel.tensor.lds.descriptor"));
+  ASSERT_NE(tensor_descriptor, nullptr);
+  EXPECT_EQ(tensor_descriptor->semantics.semantic,
+            LOOM_TYPE_SEMANTIC_TARGET_CONTRACT_VALUE);
+  EXPECT_TRUE(loom_contract_family_set_has_any(
+      tensor_descriptor->semantics.contract_families,
+      LOOM_CONTRACT_TENSOR_MEMORY));
 
   const loom_type_descriptor_t* tile =
       loom_type_registry_lookup(iree_make_cstring_view("tile"));

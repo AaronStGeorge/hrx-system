@@ -264,6 +264,7 @@ kernel_workgroup_id = Op(
 kernel_tensor_lds_descriptor = Op(
     name="kernel.tensor.lds.descriptor",
     group=kernel_ops,
+    contracts=[ContractFamily.TENSOR_MEMORY],
     doc=(
         "Bundle AMDGPU tensor-memory descriptor groups into one typed SSA "
         "value. The dgroups are the exact operands lowered to "
@@ -656,7 +657,7 @@ kernel_async_cluster_gather_mask = Op(
 kernel_async_tensor_load_to_lds = Op(
     name="kernel.async.tensor.load.to.lds",
     group=kernel_ops,
-    contracts=[ContractFamily.KERNEL_ASYNC],
+    contracts=[ContractFamily.KERNEL_ASYNC, ContractFamily.TENSOR_MEMORY],
     doc=(
         "Initiate an AMDGPU gfx1250+ tensor-memory load from a global-like "
         "source view into a workgroup/LDS destination view using an explicit "
@@ -707,7 +708,7 @@ kernel_async_tensor_load_to_lds = Op(
 kernel_async_tensor_store_from_lds = Op(
     name="kernel.async.tensor.store.from.lds",
     group=kernel_ops,
-    contracts=[ContractFamily.KERNEL_ASYNC],
+    contracts=[ContractFamily.KERNEL_ASYNC, ContractFamily.TENSOR_MEMORY],
     doc=(
         "Initiate an AMDGPU gfx1250+ tensor-memory store from a workgroup/LDS "
         "source view into a global-like destination view using an explicit "

@@ -16,8 +16,11 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/buffer/ops.h"
 #include "loom/ops/cfg/ops.h"
+#include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
@@ -80,8 +83,14 @@ class TargetLowLegalityTest : public ::testing::Test {
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables,
                     loom_func_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables,
+                    loom_buffer_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables,
+                    loom_encoding_dialect_op_semantics);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables,
                     loom_scalar_dialect_op_semantics);
+    RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables,
+                    loom_index_dialect_op_semantics);
     RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables,
                     loom_vector_dialect_op_semantics);
     RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables,
@@ -304,6 +313,17 @@ static iree_status_t AcceptVectorIotaContract(
   return iree_ok_status();
 }
 
+static iree_status_t AcceptAnyContractOp(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled) {
+  (void)provider;
+  loom_op_semantics_t semantics =
+      loom_op_semantics(loom_target_low_legality_module(context), op);
+  *out_handled = semantics.contract_families != 0;
+  return iree_ok_status();
+}
+
 TEST_F(TargetLowLegalityTest, ProviderMayClaimProviderRequiredOp) {
   ModulePtr module = ParseSource(
       "func.def @iota(%base: i32, %step: i32) -> (vector<4xi32>) {\n"
@@ -314,6 +334,61 @@ TEST_F(TargetLowLegalityTest, ProviderMayClaimProviderRequiredOp) {
   const loom_target_low_legality_provider_t provider = {
       .name = IREE_SVL("test-provider"),
       .try_verify_op = AcceptVectorIotaContract,
+  };
+  const loom_target_low_legality_provider_t* providers[] = {&provider};
+  const loom_target_low_legality_provider_list_t provider_list =
+      loom_target_low_legality_provider_list_make(providers,
+                                                  IREE_ARRAYSIZE(providers));
+  EmissionCollector collector;
+  const loom_target_low_legality_options_t options = {
+      .bundle = bundle_,
+      .descriptor_registry = &registry_.registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .provider_list = provider_list,
+      .emitter = collector.emitter(),
+  };
+  loom_target_low_legality_result_t result = {};
+  IREE_ASSERT_OK(loom_target_low_verify_function_legality(
+      module.get(), FirstFunction(module.get()), &options, &result));
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_EQ(result.remark_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
+}
+
+TEST_F(TargetLowLegalityTest, ProviderMayClaimTensorAsyncContractValues) {
+  ModulePtr module = ParseSource(
+      "func.def @tensor_async(%source_buffer: buffer, %byte_offset: offset) {\n"
+      "  %zero = index.constant 0 : offset\n"
+      "  %bytes = index.constant 16384 : offset\n"
+      "  %layout = encoding.layout.dense : encoding<layout>\n"
+      "  %i32_zero = scalar.constant 0 : i32\n"
+      "  %d0 = vector.splat %i32_zero : vector<4xi32>\n"
+      "  %d1 = vector.splat %i32_zero : vector<8xi32>\n"
+      "  %desc = kernel.tensor.lds.descriptor dgroups(%d0, %d1) : "
+      "vector<4xi32>, vector<8xi32> -> kernel.tensor.lds.descriptor\n"
+      "  %global = buffer.assume.memory_space %source_buffer {memory_space = "
+      "global} : buffer\n"
+      "  %source = buffer.view %global[%byte_offset] : buffer -> "
+      "view<64x64xf32, %layout>\n"
+      "  %scratch = buffer.alloca %bytes {base_alignment = 256, memory_space = "
+      "workgroup} : buffer\n"
+      "  %dest = buffer.view %scratch[%zero] : buffer -> "
+      "view<64x64xf32, %layout>\n"
+      "  %copy = kernel.async.tensor.load.to.lds %source to %dest using %desc "
+      "{cache_scope = cu, cache_temporal = regular} : "
+      "view<64x64xf32, %layout> to view<64x64xf32, %layout>, "
+      "kernel.tensor.lds.descriptor -> kernel.async.token\n"
+      "  %group = kernel.async.group %copy : kernel.async.token -> "
+      "kernel.async.group\n"
+      "  kernel.async.wait %group {newer_groups = 0} : kernel.async.group\n"
+      "  func.return\n"
+      "}\n");
+
+  const loom_target_low_legality_provider_t provider = {
+      .name = IREE_SVL("test-provider"),
+      .try_verify_op = AcceptAnyContractOp,
   };
   const loom_target_low_legality_provider_t* providers[] = {&provider};
   const loom_target_low_legality_provider_list_t provider_list =

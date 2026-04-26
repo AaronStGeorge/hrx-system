@@ -14,6 +14,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/ops/type_registry.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/walk.h"
 
@@ -370,31 +371,72 @@ static iree_status_t loom_target_low_legality_verify_scalar_type(
                                          IREE_SV("unknown scalar type"));
 }
 
-static bool loom_target_low_legality_type_is_opaque_dialect(
-    const loom_module_t* module, loom_type_t type, iree_string_view_t name) {
-  if (!loom_type_is_dialect(type) || loom_type_dialect_param_count(type) != 0) {
-    return false;
+static const loom_type_descriptor_t*
+loom_target_low_legality_resolve_dialect_type(const loom_module_t* module,
+                                              loom_type_t type,
+                                              iree_string_view_t* out_name) {
+  *out_name = IREE_SV("<unknown>");
+  if (!loom_type_is_dialect(type)) {
+    return NULL;
   }
   loom_string_id_t name_id = loom_type_dialect_name_id(type);
   if (name_id == LOOM_STRING_ID_INVALID || name_id >= module->strings.count) {
-    return false;
+    return NULL;
   }
-  return iree_string_view_equal(module->strings.entries[name_id], name);
+  iree_string_view_t name = module->strings.entries[name_id];
+  *out_name = name;
+  const loom_type_descriptor_t* descriptor = loom_type_registry_lookup(name);
+  if (descriptor == NULL ||
+      descriptor->param_count != loom_type_dialect_param_count(type)) {
+    return NULL;
+  }
+  return descriptor;
 }
 
-static bool loom_target_low_legality_type_is_async_control(
-    const loom_module_t* module, loom_type_t type) {
-  return loom_target_low_legality_type_is_opaque_dialect(
-             module, type, IREE_SV("kernel.async.token")) ||
-         loom_target_low_legality_type_is_opaque_dialect(
-             module, type, IREE_SV("kernel.async.group"));
+static bool loom_target_low_legality_op_accepts_type_contract(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_type_descriptor_t* descriptor) {
+  loom_op_semantics_t op_semantics = loom_op_semantics(module, op);
+  return loom_contract_family_set_has_any(
+      op_semantics.contract_families, descriptor->semantics.contract_families);
 }
 
-static bool loom_target_low_legality_op_accepts_async_control(
-    const loom_module_t* module, const loom_op_t* op) {
-  loom_op_semantics_t semantics = loom_op_semantics(module, op);
-  return loom_contract_family_set_has_any(semantics.contract_families,
-                                          LOOM_CONTRACT_KERNEL_ASYNC);
+static iree_status_t loom_target_low_legality_verify_registered_type(
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    loom_type_t type, bool* out_handled) {
+  *out_handled = false;
+  iree_string_view_t type_name = iree_string_view_empty();
+  const loom_type_descriptor_t* descriptor =
+      loom_target_low_legality_resolve_dialect_type(context->module, type,
+                                                    &type_name);
+  if (descriptor == NULL ||
+      descriptor->semantics.semantic == LOOM_TYPE_SEMANTIC_ORDINARY) {
+    return iree_ok_status();
+  }
+  *out_handled = true;
+  if (descriptor->semantics.contract_families != 0 &&
+      loom_target_low_legality_op_accepts_type_contract(context->module, op,
+                                                        descriptor)) {
+    return iree_ok_status();
+  }
+  switch (descriptor->semantics.semantic) {
+    case LOOM_TYPE_SEMANTIC_CONTROL_TOKEN:
+      return loom_target_low_legality_reject(
+          context, NULL, op, IREE_SV("type"), type_name,
+          IREE_SV("control tokens must be produced or consumed by ops from a "
+                  "matching target contract family before target-low "
+                  "lowering"));
+    case LOOM_TYPE_SEMANTIC_TARGET_CONTRACT_VALUE:
+      return loom_target_low_legality_reject(
+          context, NULL, op, IREE_SV("type"), type_name,
+          IREE_SV("target contract values must be produced or consumed by ops "
+                  "from a matching target contract family before target-low "
+                  "lowering"));
+    default:
+      return loom_target_low_legality_reject(
+          context, NULL, op, IREE_SV("type"), type_name,
+          IREE_SV("registered type has no target-low legality mapping yet"));
+  }
 }
 
 static iree_status_t loom_target_low_legality_verify_type(
@@ -405,6 +447,12 @@ static iree_status_t loom_target_low_legality_verify_type(
   }
   if (loom_type_is_buffer(type) || loom_type_is_view(type) ||
       loom_type_is_register(type) || loom_type_is_encoding(type)) {
+    return iree_ok_status();
+  }
+  bool registered_type_handled = false;
+  IREE_RETURN_IF_ERROR(loom_target_low_legality_verify_registered_type(
+      context, op, type, &registered_type_handled));
+  if (registered_type_handled) {
     return iree_ok_status();
   }
   if (loom_type_is_vector(type)) {
@@ -438,16 +486,6 @@ static iree_status_t loom_target_low_legality_verify_value(
         IREE_SV("operation references an invalid SSA value"));
   }
   const loom_type_t type = loom_module_value_type(context->module, value_id);
-  if (loom_target_low_legality_type_is_async_control(context->module, type)) {
-    if (loom_target_low_legality_op_accepts_async_control(context->module,
-                                                          op)) {
-      return iree_ok_status();
-    }
-    return loom_target_low_legality_reject(
-        context, NULL, op, IREE_SV("type"), IREE_SV("kernel.async"),
-        IREE_SV("async control values must be consumed by kernel.async ops "
-                "before target-low lowering"));
-  }
   return loom_target_low_legality_verify_type(context, op, type);
 }
 
