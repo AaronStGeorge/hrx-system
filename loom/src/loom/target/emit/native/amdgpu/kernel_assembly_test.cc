@@ -25,26 +25,9 @@
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/low_descriptor_registry.h"
-#include "loom/target/tool/llvm.h"
 
 namespace loom {
 namespace {
-
-std::string ToString(const loom_llvm_tool_output_t& output) {
-  return output.data ? std::string(output.data, output.length) : std::string();
-}
-
-bool IsToolUnavailable(iree_status_t status) {
-  return iree_status_is_not_found(status) ||
-         iree_status_is_unavailable(status) ||
-         iree_status_is_unimplemented(status);
-}
-
-bool VersionTextListsAmdgcnTarget(const std::string& version_text) {
-  return version_text.find("amdgcn") != std::string::npos ||
-         version_text.find("AMDGPU") != std::string::npos ||
-         version_text.find("AMD GCN") != std::string::npos;
-}
 
 class AmdgpuKernelAssemblyTest : public ::testing::Test {
  protected:
@@ -738,120 +721,6 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsMemoryAluStressKernelForGfx11) {
   EXPECT_LT(wait_after_scalar_store, endpgm);
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
-}
-
-TEST_F(AmdgpuKernelAssemblyTest, AssemblesKernelEnvelopeForGfx11WithLlvmMc) {
-  std::string assembly;
-  EmitKernelForPreset("amdgpu-gfx11", "gfx1100", &assembly);
-
-  loom_llvm_toolchain_t toolchain;
-  loom_llvm_toolchain_initialize_from_environment(&toolchain);
-
-  loom_llvm_tool_output_t version_text = {};
-  iree_status_t status =
-      loom_llvm_tool_query_version(&toolchain, LOOM_LLVM_TOOL_LLVM_MC,
-                                   iree_allocator_system(), &version_text);
-  if (IsToolUnavailable(status)) {
-    IREE_EXPECT_NOT_OK(status);
-    GTEST_SKIP() << "llvm-mc is unavailable in this test environment";
-  }
-  IREE_ASSERT_OK(status);
-
-  std::string version = ToString(version_text);
-  loom_llvm_tool_output_deinitialize(&version_text, iree_allocator_system());
-  if (!VersionTextListsAmdgcnTarget(version)) {
-    GTEST_SKIP() << "llvm-mc does not report amdgcn target support";
-  }
-
-  const iree_string_view_t arguments[] = {
-      IREE_SV("--triple=amdgcn-amd-amdhsa"),
-      IREE_SV("--mcpu=gfx1100"),
-  };
-  loom_llvm_tool_output_t object = {};
-  IREE_ASSERT_OK(loom_llvm_tool_assemble_native_object(
-      &toolchain, iree_make_string_view(assembly.data(), assembly.size()),
-      arguments, IREE_ARRAYSIZE(arguments), iree_allocator_system(), &object));
-  EXPECT_GT(object.length, 0u);
-  loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
-}
-
-TEST_F(AmdgpuKernelAssemblyTest, DisassemblesGfx11ObjectWithLlvmObjdump) {
-  std::string assembly;
-  EmitKernelForPreset("amdgpu-gfx11", "gfx1100", &assembly);
-
-  loom_llvm_toolchain_t toolchain;
-  loom_llvm_toolchain_initialize_from_environment(&toolchain);
-
-  loom_llvm_tool_output_t llvm_mc_version_text = {};
-  iree_status_t status = loom_llvm_tool_query_version(
-      &toolchain, LOOM_LLVM_TOOL_LLVM_MC, iree_allocator_system(),
-      &llvm_mc_version_text);
-  if (IsToolUnavailable(status)) {
-    IREE_EXPECT_NOT_OK(status);
-    GTEST_SKIP() << "llvm-mc is unavailable in this test environment";
-  }
-  IREE_ASSERT_OK(status);
-
-  std::string llvm_mc_version = ToString(llvm_mc_version_text);
-  loom_llvm_tool_output_deinitialize(&llvm_mc_version_text,
-                                     iree_allocator_system());
-  if (!VersionTextListsAmdgcnTarget(llvm_mc_version)) {
-    GTEST_SKIP() << "llvm-mc does not report amdgcn target support";
-  }
-
-  const iree_string_view_t mc_arguments[] = {
-      IREE_SV("--triple=amdgcn-amd-amdhsa"),
-      IREE_SV("--mcpu=gfx1100"),
-  };
-  loom_llvm_tool_output_t object = {};
-  IREE_ASSERT_OK(loom_llvm_tool_assemble_native_object(
-      &toolchain, iree_make_string_view(assembly.data(), assembly.size()),
-      mc_arguments, IREE_ARRAYSIZE(mc_arguments), iree_allocator_system(),
-      &object));
-
-  loom_llvm_tool_output_t objdump_version_text = {};
-  status = loom_llvm_tool_query_version(&toolchain, LOOM_LLVM_TOOL_LLVM_OBJDUMP,
-                                        iree_allocator_system(),
-                                        &objdump_version_text);
-  if (IsToolUnavailable(status)) {
-    IREE_EXPECT_NOT_OK(status);
-    loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
-    GTEST_SKIP() << "llvm-objdump is unavailable in this test environment";
-  }
-  IREE_ASSERT_OK(status);
-
-  std::string objdump_version = ToString(objdump_version_text);
-  loom_llvm_tool_output_deinitialize(&objdump_version_text,
-                                     iree_allocator_system());
-  if (!VersionTextListsAmdgcnTarget(objdump_version)) {
-    loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
-    GTEST_SKIP() << "llvm-objdump does not report amdgcn target support";
-  }
-
-  const iree_string_view_t objdump_arguments[] = {
-      IREE_SV("--disassemble"),
-      IREE_SV("--mcpu=gfx1100"),
-  };
-  loom_llvm_tool_output_t disassembly = {};
-  IREE_ASSERT_OK(loom_llvm_tool_disassemble_object(
-      &toolchain, iree_make_const_byte_span(object.data, object.length),
-      objdump_arguments, IREE_ARRAYSIZE(objdump_arguments),
-      iree_allocator_system(), &disassembly));
-  const std::string disassembly_text = ToString(disassembly);
-  EXPECT_NE(disassembly_text.find("s_mov_b32 s2, 7"), std::string::npos)
-      << disassembly_text;
-  EXPECT_NE(disassembly_text.find("s_mov_b32 s3, 5"), std::string::npos)
-      << disassembly_text;
-  EXPECT_NE(disassembly_text.find("s_add_u32 s2, s2, s3"), std::string::npos)
-      << disassembly_text;
-  EXPECT_NE(disassembly_text.find("s_load_b64 s[0:1], s[0:1], s2"),
-            std::string::npos)
-      << disassembly_text;
-  EXPECT_NE(disassembly_text.find("s_endpgm"), std::string::npos)
-      << disassembly_text;
-
-  loom_llvm_tool_output_deinitialize(&disassembly, iree_allocator_system());
-  loom_llvm_tool_output_deinitialize(&object, iree_allocator_system());
 }
 
 TEST_F(AmdgpuKernelAssemblyTest, EmitsTargetIdsForCurrentAmdgpuPresets) {

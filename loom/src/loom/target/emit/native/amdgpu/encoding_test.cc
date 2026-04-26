@@ -7,17 +7,21 @@
 #include "loom/target/emit/native/amdgpu/encoding.h"
 
 #include <string>
+#include <vector>
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/target/arch/amdgpu/descriptor_ids.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 
@@ -60,6 +64,10 @@ class AmdgpuEncodingTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_amdgpu_low_descriptor_registry_initialize(&target_registry_);
+    IREE_ASSERT_OK(loom_target_low_descriptor_set_select_for_bundle(
+        &target_registry_.registry, &loom_amdgpu_low_target_bundle_gfx11_core,
+        LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+        &gfx11_descriptor_set_));
   }
 
   void TearDown() override {
@@ -230,11 +238,467 @@ class AmdgpuEncodingTest : public ::testing::Test {
     BuildSidecarsForPreset("amdgpu-gfx11", body, arena, out_packetization);
   }
 
+  void AddDirectSymbol(const char* name, loom_symbol_ref_t* out_ref) {
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_intern_string(
+        module_, iree_make_cstring_view(name), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
+    *out_ref = (loom_symbol_ref_t){
+        .module_id = 0,
+        .symbol_id = symbol_id,
+    };
+  }
+
+  void BuildDirectRegisterType(uint16_t reg_class_id, uint32_t unit_count,
+                               loom_type_t* out_type) {
+    IREE_ASSERT_OK(loom_low_build_register_type(
+        module_, DirectDescriptorSet(), reg_class_id, unit_count, out_type));
+  }
+
+  struct DirectRegisterArg {
+    // Descriptor-set-local register class ID for the argument.
+    uint16_t reg_class_id;
+    // Number of contiguous allocation units in the argument type.
+    uint32_t unit_count;
+  };
+
+  void BeginDirectGfx11Function(const DirectRegisterArg* args,
+                                iree_host_size_t arg_count) {
+    ResetModule();
+    direct_nodes_.clear();
+    direct_scheduled_node_indices_.clear();
+    direct_blocks_.clear();
+    direct_assignments_.clear();
+    direct_function_ = nullptr;
+    direct_target_ = {};
+    IREE_ASSERT_OK(loom_module_allocate(
+        &context_, IREE_SV("amdgpu_encoding_direct_test"), &block_pool_,
+        /*hints=*/nullptr, iree_allocator_system(), &module_));
+
+    loom_builder_initialize(module_, &module_->arena,
+                            loom_module_block(module_), &direct_builder_);
+    loom_symbol_ref_t target_ref = loom_symbol_ref_null();
+    AddDirectSymbol("gfx_target", &target_ref);
+    loom_string_id_t preset_id = LOOM_STRING_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("amdgpu-gfx11"),
+                                             &preset_id));
+    loom_op_t* profile_op = nullptr;
+    IREE_ASSERT_OK(loom_target_profile_build(
+        &direct_builder_, target_ref, preset_id, loom_named_attr_slice_empty(),
+        /*location=*/0, &profile_op));
+
+    std::vector<loom_type_t> arg_types;
+    arg_types.resize(arg_count);
+    for (iree_host_size_t i = 0; i < arg_count; ++i) {
+      IREE_ASSERT_OK(loom_low_build_register_type(
+          module_, DirectDescriptorSet(), args[i].reg_class_id,
+          args[i].unit_count, &arg_types[i]));
+    }
+
+    loom_symbol_ref_t function_ref = loom_symbol_ref_null();
+    AddDirectSymbol("gfx_kernel", &function_ref);
+    IREE_ASSERT_OK(loom_low_func_def_build(
+        &direct_builder_, /*build_flags=*/0, /*visibility=*/0, /*cc=*/0,
+        /*purity=*/0, /*allocation=*/0, /*schedule=*/0, target_ref, /*abi=*/0,
+        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+        loom_named_attr_slice_empty(), function_ref, arg_types.data(),
+        arg_types.size(),
+        /*result_types=*/nullptr, /*result_count=*/0, /*tied_results=*/nullptr,
+        /*tied_result_count=*/0, /*predicates=*/nullptr,
+        /*predicates_count=*/0, /*location=*/0, &direct_function_));
+    (void)loom_builder_enter_region(&direct_builder_, direct_function_,
+                                    loom_low_func_def_body(direct_function_));
+    IREE_ASSERT_OK(loom_low_resolve_function_target(
+        module_, direct_function_, &target_registry_.registry,
+        iree_diagnostic_emitter_t{}, &direct_target_));
+    ASSERT_EQ(direct_target_.descriptor_set, DirectDescriptorSet());
+  }
+
+  const loom_low_descriptor_set_t* DirectDescriptorSet() const {
+    return gfx11_descriptor_set_;
+  }
+
+  void AddDirectAssignment(loom_value_id_t value_id, uint16_t reg_class_id,
+                           uint32_t location_base, uint32_t unit_count) {
+    direct_assignments_.push_back(loom_low_allocation_assignment_t{
+        .value_id = value_id,
+        .value_class = {},
+        .descriptor_reg_class_id = reg_class_id,
+        .start_point = 0,
+        .end_point = UINT32_MAX,
+        .unit_count = unit_count,
+        .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+        .location_base = location_base,
+        .location_count = unit_count,
+    });
+  }
+
+  void AddDirectDescriptorPacket(loom_op_t* op, uint64_t descriptor_id) {
+    const loom_low_descriptor_set_t* descriptor_set = DirectDescriptorSet();
+    const uint32_t descriptor_ordinal =
+        loom_low_descriptor_set_lookup_descriptor_by_id(descriptor_set,
+                                                        descriptor_id);
+    ASSERT_NE(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
+    const loom_low_descriptor_t* descriptor =
+        loom_low_descriptor_set_descriptor_at(descriptor_set,
+                                              descriptor_ordinal);
+    ASSERT_NE(descriptor, nullptr);
+    const uint32_t node_index = (uint32_t)direct_nodes_.size();
+    direct_nodes_.push_back(loom_low_schedule_node_t{
+        .op = op,
+        .block = op->parent_block,
+        .block_index = 0,
+        .source_ordinal = node_index,
+        .scheduled_ordinal = node_index,
+        .kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
+        .traits = 0,
+        .descriptor_ordinal = descriptor_ordinal,
+        .descriptor_id = descriptor_id,
+        .schedule_class_id = descriptor->schedule_class_id,
+        .schedule_class_name = iree_string_view_empty(),
+        .latency_cycles = 0,
+        .latency_kind = LOOM_LOW_LATENCY_KIND_UNKNOWN,
+        .model_quality = LOOM_LOW_MODEL_QUALITY_UNKNOWN,
+        .issue_use_count = 0,
+        .hazard_count = 0,
+        .effect_count = descriptor->effect_count,
+    });
+    direct_scheduled_node_indices_.push_back(node_index);
+  }
+
+  void AddDirectTerminatorPacket(loom_op_t* op) {
+    const uint32_t node_index = (uint32_t)direct_nodes_.size();
+    direct_nodes_.push_back(loom_low_schedule_node_t{
+        .op = op,
+        .block = op->parent_block,
+        .block_index = 0,
+        .source_ordinal = node_index,
+        .scheduled_ordinal = node_index,
+        .kind = LOOM_LOW_SCHEDULE_NODE_TERMINATOR,
+        .traits = 0,
+        .descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE,
+        .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
+        .schedule_class_id = 0,
+        .schedule_class_name = iree_string_view_empty(),
+        .latency_cycles = 0,
+        .latency_kind = LOOM_LOW_LATENCY_KIND_UNKNOWN,
+        .model_quality = LOOM_LOW_MODEL_QUALITY_UNKNOWN,
+        .issue_use_count = 0,
+        .hazard_count = 0,
+        .effect_count = 0,
+    });
+    direct_scheduled_node_indices_.push_back(node_index);
+  }
+
+  void FinishDirectSidecars(loom_low_schedule_sidecar_t* out_schedule,
+                            loom_low_allocation_sidecar_t* out_allocation) {
+    ASSERT_NE(direct_function_, nullptr);
+    ASSERT_LE(direct_nodes_.size(), (iree_host_size_t)UINT32_MAX);
+    ASSERT_LE(direct_scheduled_node_indices_.size(),
+              (iree_host_size_t)UINT32_MAX);
+    direct_blocks_.push_back(loom_low_schedule_block_t{
+        .block =
+            loom_region_entry_block(loom_low_func_def_body(direct_function_)),
+        .node_start = 0,
+        .node_count = (uint32_t)direct_nodes_.size(),
+        .scheduled_node_start = 0,
+        .scheduled_node_count = (uint32_t)direct_scheduled_node_indices_.size(),
+    });
+    *out_schedule = loom_low_schedule_sidecar_t{
+        .module = module_,
+        .function_op = direct_function_,
+        .target = direct_target_,
+        .liveness = {},
+        .blocks = direct_blocks_.data(),
+        .block_count = direct_blocks_.size(),
+        .nodes = direct_nodes_.data(),
+        .node_count = direct_nodes_.size(),
+        .dependencies = nullptr,
+        .dependency_count = 0,
+        .scheduled_node_indices = direct_scheduled_node_indices_.data(),
+        .scheduled_node_count = direct_scheduled_node_indices_.size(),
+        .pressure_steps = nullptr,
+        .pressure_step_count = 0,
+        .candidate_decisions = nullptr,
+        .candidate_decision_count = 0,
+        .resource_uses = nullptr,
+        .resource_use_count = 0,
+        .effect_uses = nullptr,
+        .effect_use_count = 0,
+        .hazard_uses = nullptr,
+        .hazard_use_count = 0,
+        .hazard_gaps = nullptr,
+        .hazard_gap_count = 0,
+        .model_summaries = nullptr,
+        .model_summary_count = 0,
+        .resource_summaries = nullptr,
+        .resource_summary_count = 0,
+    };
+    *out_allocation = loom_low_allocation_sidecar_t{
+        .module = module_,
+        .function_op = direct_function_,
+        .target = direct_target_,
+        .liveness = {},
+        .allocation_mode = 0,
+        .assignments = direct_assignments_.data(),
+        .assignment_count = direct_assignments_.size(),
+        .spill_plans = nullptr,
+        .spill_plan_count = 0,
+        .remarks = nullptr,
+        .remark_count = 0,
+        .copy_decisions = nullptr,
+        .copy_decision_count = 0,
+        .spill_count = 0,
+        .coalesced_copy_count = 0,
+        .materialized_copy_count = 0,
+    };
+  }
+
+  void BuildDirectI64Attr(const char* name, int64_t value,
+                          loom_named_attr_t* out_attr) {
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_intern_string(
+        module_, iree_make_cstring_view(name), &name_id));
+    *out_attr = loom_named_attr_t{
+        .name_id = name_id,
+        .reserved = 0,
+        .value = loom_attr_i64(value),
+    };
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
   loom_target_low_descriptor_registry_t target_registry_ = {};
+  const loom_low_descriptor_set_t* gfx11_descriptor_set_ = nullptr;
+  loom_builder_t direct_builder_ = {};
+  loom_op_t* direct_function_ = nullptr;
+  loom_low_resolved_target_t direct_target_ = {};
+  std::vector<loom_low_schedule_node_t> direct_nodes_;
+  std::vector<uint32_t> direct_scheduled_node_indices_;
+  std::vector<loom_low_schedule_block_t> direct_blocks_;
+  std::vector<loom_low_allocation_assignment_t> direct_assignments_;
 };
+
+TEST_F(AmdgpuEncodingTest, DirectlyEncodesReturnPacket) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  BeginDirectGfx11Function(/*args=*/nullptr, /*arg_count=*/0);
+
+  loom_op_t* return_op = nullptr;
+  IREE_ASSERT_OK(loom_low_return_build(&direct_builder_, /*values=*/nullptr,
+                                       /*values_count=*/0, /*location=*/0,
+                                       &return_op));
+  AddDirectTerminatorPacket(return_op);
+
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_allocation_sidecar_t allocation = {};
+  FinishDirectSidecars(&schedule, &allocation);
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(&schedule, &allocation,
+                                                       &text, &arena));
+
+  ASSERT_EQ(text.data_length, 4u);
+  EXPECT_EQ(ReadU32LE(text.data), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuEncodingTest, DirectlyEncodesSop1MovePacket) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  BeginDirectGfx11Function(/*args=*/nullptr, /*arg_count=*/0);
+
+  loom_type_t sgpr = {};
+  BuildDirectRegisterType(LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1, &sgpr);
+  loom_named_attr_t imm32 = {};
+  BuildDirectI64Attr("imm32", 7, &imm32);
+  loom_op_t* move_op = nullptr;
+  IREE_ASSERT_OK(loom_low_build_descriptor_op(
+      &direct_builder_, DirectDescriptorSet(),
+      LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32, /*operands=*/nullptr,
+      /*operand_count=*/0, loom_make_named_attr_slice(&imm32, 1), &sgpr,
+      /*result_count=*/1, /*tied_results=*/nullptr,
+      /*tied_result_count=*/0, /*location=*/0, &move_op));
+  AddDirectAssignment(loom_op_results(move_op)[0],
+                      LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+                      /*location_base=*/0, /*unit_count=*/1);
+  AddDirectDescriptorPacket(move_op, LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32);
+
+  loom_op_t* return_op = nullptr;
+  IREE_ASSERT_OK(loom_low_return_build(&direct_builder_, /*values=*/nullptr,
+                                       /*values_count=*/0, /*location=*/0,
+                                       &return_op));
+  AddDirectTerminatorPacket(return_op);
+
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_allocation_sidecar_t allocation = {};
+  FinishDirectSidecars(&schedule, &allocation);
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(&schedule, &allocation,
+                                                       &text, &arena));
+
+  ASSERT_EQ(text.data_length, 8u);
+  EXPECT_TRUE(IsSop1SMovB32(ReadU32LE(text.data + 0)));
+  EXPECT_EQ(ReadU32LE(text.data + 0) & UINT32_C(0xFF), UINT32_C(0x87));
+  EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuEncodingTest, DirectlyEncodesValuAddPacket) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  const DirectRegisterArg args[] = {
+      {LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1},
+      {LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1},
+  };
+  BeginDirectGfx11Function(args, IREE_ARRAYSIZE(args));
+
+  loom_type_t vgpr = {};
+  BuildDirectRegisterType(LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, &vgpr);
+  const loom_value_id_t operands[] = {
+      loom_region_entry_arg_id(loom_low_func_def_body(direct_function_), 0),
+      loom_region_entry_arg_id(loom_low_func_def_body(direct_function_), 1),
+  };
+  loom_op_t* add_op = nullptr;
+  IREE_ASSERT_OK(loom_low_build_descriptor_op(
+      &direct_builder_, DirectDescriptorSet(),
+      LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32, operands, IREE_ARRAYSIZE(operands),
+      loom_named_attr_slice_empty(), &vgpr, /*result_count=*/1,
+      /*tied_results=*/nullptr, /*tied_result_count=*/0, /*location=*/0,
+      &add_op));
+  AddDirectAssignment(operands[0], LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                      /*location_base=*/0, /*unit_count=*/1);
+  AddDirectAssignment(operands[1], LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                      /*location_base=*/1, /*unit_count=*/1);
+  AddDirectAssignment(loom_op_results(add_op)[0], LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                      /*location_base=*/0,
+                      /*unit_count=*/1);
+  AddDirectDescriptorPacket(add_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32);
+
+  loom_op_t* return_op = nullptr;
+  IREE_ASSERT_OK(loom_low_return_build(&direct_builder_, /*values=*/nullptr,
+                                       /*values_count=*/0, /*location=*/0,
+                                       &return_op));
+  AddDirectTerminatorPacket(return_op);
+
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_allocation_sidecar_t allocation = {};
+  FinishDirectSidecars(&schedule, &allocation);
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(&schedule, &allocation,
+                                                       &text, &arena));
+
+  ASSERT_EQ(text.data_length, 8u);
+  EXPECT_EQ(ReadU32LE(text.data + 0), UINT32_C(0x4A000300));
+  EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuEncodingTest, DirectlyEncodesMubufStorePacket) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  const DirectRegisterArg args[] = {
+      {LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1},
+      {LOOM_AMDGPU_REG_CLASS_ID_SGPR, 4},
+      {LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1},
+      {LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1},
+  };
+  BeginDirectGfx11Function(args, IREE_ARRAYSIZE(args));
+
+  const loom_value_id_t operands[] = {
+      loom_region_entry_arg_id(loom_low_func_def_body(direct_function_), 0),
+      loom_region_entry_arg_id(loom_low_func_def_body(direct_function_), 1),
+      loom_region_entry_arg_id(loom_low_func_def_body(direct_function_), 2),
+      loom_region_entry_arg_id(loom_low_func_def_body(direct_function_), 3),
+  };
+  loom_named_attr_t offset = {};
+  BuildDirectI64Attr("offset", 8, &offset);
+  loom_op_t* store_op = nullptr;
+  IREE_ASSERT_OK(loom_low_build_descriptor_op(
+      &direct_builder_, DirectDescriptorSet(),
+      LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_STORE_DWORD, operands,
+      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(&offset, 1),
+      /*result_types=*/nullptr, /*result_count=*/0, /*tied_results=*/nullptr,
+      /*tied_result_count=*/0, /*location=*/0, &store_op));
+  AddDirectAssignment(operands[0], LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                      /*location_base=*/0, /*unit_count=*/1);
+  AddDirectAssignment(operands[1], LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+                      /*location_base=*/0, /*unit_count=*/4);
+  AddDirectAssignment(operands[2], LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                      /*location_base=*/1, /*unit_count=*/1);
+  AddDirectAssignment(operands[3], LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+                      /*location_base=*/4, /*unit_count=*/1);
+  AddDirectDescriptorPacket(store_op,
+                            LOOM_AMDGPU_DESCRIPTOR_ID_BUFFER_STORE_DWORD);
+
+  loom_op_t* return_op = nullptr;
+  IREE_ASSERT_OK(loom_low_return_build(&direct_builder_, /*values=*/nullptr,
+                                       /*values_count=*/0, /*location=*/0,
+                                       &return_op));
+  AddDirectTerminatorPacket(return_op);
+
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_allocation_sidecar_t allocation = {};
+  FinishDirectSidecars(&schedule, &allocation);
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(&schedule, &allocation,
+                                                       &text, &arena));
+
+  ASSERT_EQ(text.data_length, 12u);
+  EXPECT_EQ(ReadU32LE(text.data + 0), UINT32_C(0xE0680008));
+  EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0x04400001));
+  EXPECT_EQ(ReadU32LE(text.data + 8), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(AmdgpuEncodingTest, DirectlyEncodesDsStorePacket) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  const DirectRegisterArg args[] = {
+      {LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1},
+      {LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1},
+  };
+  BeginDirectGfx11Function(args, IREE_ARRAYSIZE(args));
+
+  const loom_value_id_t operands[] = {
+      loom_region_entry_arg_id(loom_low_func_def_body(direct_function_), 0),
+      loom_region_entry_arg_id(loom_low_func_def_body(direct_function_), 1),
+  };
+  loom_named_attr_t offset = {};
+  BuildDirectI64Attr("offset", 4, &offset);
+  loom_op_t* store_op = nullptr;
+  IREE_ASSERT_OK(loom_low_build_descriptor_op(
+      &direct_builder_, DirectDescriptorSet(),
+      LOOM_AMDGPU_DESCRIPTOR_ID_DS_WRITE_B32, operands,
+      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(&offset, 1),
+      /*result_types=*/nullptr, /*result_count=*/0, /*tied_results=*/nullptr,
+      /*tied_result_count=*/0, /*location=*/0, &store_op));
+  AddDirectAssignment(operands[0], LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                      /*location_base=*/0, /*unit_count=*/1);
+  AddDirectAssignment(operands[1], LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                      /*location_base=*/1, /*unit_count=*/1);
+  AddDirectDescriptorPacket(store_op, LOOM_AMDGPU_DESCRIPTOR_ID_DS_WRITE_B32);
+
+  loom_op_t* return_op = nullptr;
+  IREE_ASSERT_OK(loom_low_return_build(&direct_builder_, /*values=*/nullptr,
+                                       /*values_count=*/0, /*location=*/0,
+                                       &return_op));
+  AddDirectTerminatorPacket(return_op);
+
+  loom_low_schedule_sidecar_t schedule = {};
+  loom_low_allocation_sidecar_t allocation = {};
+  FinishDirectSidecars(&schedule, &allocation);
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(&schedule, &allocation,
+                                                       &text, &arena));
+
+  ASSERT_EQ(text.data_length, 12u);
+  EXPECT_EQ(ReadU32LE(text.data + 0), UINT32_C(0xD8340004));
+  EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0x00000100));
+  EXPECT_EQ(ReadU32LE(text.data + 8), UINT32_C(0xBFB00000));
+  iree_arena_deinitialize(&arena);
+}
 
 TEST_F(AmdgpuEncodingTest, EncodesInlineScalarConstantAndReturn) {
   iree_arena_allocator_t arena;
