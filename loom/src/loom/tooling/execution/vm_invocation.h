@@ -48,6 +48,8 @@ typedef struct loom_run_vm_invocation_plan_t {
   loom_run_vm_value_specs_t output_specs;
   // Plan-owned optional materialized expected output values for comparison.
   iree_vm_list_t* expected_outputs;
+  // Plan-owned heap HAL allocator backing expected host output buffers.
+  iree_hal_allocator_t* expected_output_allocator;
   // Maximum number of output elements to format.
   iree_host_size_t max_output_element_count;
 } loom_run_vm_invocation_plan_t;

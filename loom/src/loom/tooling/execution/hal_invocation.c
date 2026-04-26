@@ -44,6 +44,7 @@ void loom_run_hal_invocation_plan_deinitialize(
     return;
   }
   iree_vm_list_release(plan->expected_bindings);
+  iree_hal_allocator_release(plan->expected_binding_allocator);
   iree_vm_list_release(plan->bindings);
   *plan = (loom_run_hal_invocation_plan_t){0};
 }
@@ -410,18 +411,18 @@ iree_status_t loom_run_hal_invocation_plan_prepare_from_specs(
                             "HAL runtime is not initialized");
   }
 
-  iree_hal_allocator_t* heap_allocator = NULL;
   iree_status_t status = loom_run_hal_parse_binding_specs(
       runtime, bindings, iree_hal_device_allocator(runtime->device), allocator,
       &out_plan->bindings);
   if (iree_status_is_ok(status) && expected_bindings->count != 0) {
-    status = iree_hal_allocator_create_heap(IREE_SV("heap"), allocator,
-                                            allocator, &heap_allocator);
+    status =
+        iree_hal_allocator_create_heap(IREE_SV("heap"), allocator, allocator,
+                                       &out_plan->expected_binding_allocator);
   }
   if (iree_status_is_ok(status) && expected_bindings->count != 0) {
-    status = loom_run_hal_parse_binding_specs(runtime, expected_bindings,
-                                              heap_allocator, allocator,
-                                              &out_plan->expected_bindings);
+    status = loom_run_hal_parse_binding_specs(
+        runtime, expected_bindings, out_plan->expected_binding_allocator,
+        allocator, &out_plan->expected_bindings);
   }
   if (iree_status_is_ok(status)) {
     out_plan->options = *options;
@@ -429,7 +430,6 @@ iree_status_t loom_run_hal_invocation_plan_prepare_from_specs(
   } else {
     loom_run_hal_invocation_plan_deinitialize(out_plan);
   }
-  iree_hal_allocator_release(heap_allocator);
   return status;
 }
 

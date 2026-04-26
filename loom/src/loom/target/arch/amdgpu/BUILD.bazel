@@ -734,6 +734,7 @@ iree_c_embed_data(
     testonly = True,
     srcs = [
         "execution/testdata/b128_vector_add.loom",
+        "execution/testdata/gfx11_wmma_lds_roundtrip.loom",
         "execution/testdata/gfx11_wmma_zero.loom",
     ],
     c_file_output = "execution/amdgpu_hal_testdata.c",

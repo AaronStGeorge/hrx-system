@@ -64,6 +64,7 @@ void loom_run_vm_invocation_plan_deinitialize(
     return;
   }
   iree_vm_list_release(plan->expected_outputs);
+  iree_hal_allocator_release(plan->expected_output_allocator);
   iree_vm_list_release(plan->inputs);
   *plan = (loom_run_vm_invocation_plan_t){0};
 }
@@ -165,22 +166,22 @@ iree_status_t loom_run_vm_invocation_plan_prepare_from_specs(
   IREE_RETURN_IF_ERROR(loom_run_vm_value_specs_validate(
       &request->options->expected_outputs, IREE_SV("expected VM output")));
 
-  iree_hal_allocator_t* heap_allocator = NULL;
   iree_status_t status = iree_tooling_parse_variants(
       request->arguments_cconv,
       loom_run_vm_value_specs_list(&request->options->inputs), request->device,
       request->device_allocator, allocator, &out_plan->inputs);
   if (iree_status_is_ok(status) &&
       request->options->expected_outputs.count != 0) {
-    status = iree_hal_allocator_create_heap(IREE_SV("heap"), allocator,
-                                            allocator, &heap_allocator);
+    status =
+        iree_hal_allocator_create_heap(IREE_SV("heap"), allocator, allocator,
+                                       &out_plan->expected_output_allocator);
   }
   if (iree_status_is_ok(status) &&
       request->options->expected_outputs.count != 0) {
     status = iree_tooling_parse_variants(
         request->results_cconv,
         loom_run_vm_value_specs_list(&request->options->expected_outputs),
-        request->device, heap_allocator, allocator,
+        request->device, out_plan->expected_output_allocator, allocator,
         &out_plan->expected_outputs);
   }
   if (iree_status_is_ok(status)) {
@@ -199,7 +200,6 @@ iree_status_t loom_run_vm_invocation_plan_prepare_from_specs(
   } else {
     loom_run_vm_invocation_plan_deinitialize(out_plan);
   }
-  iree_hal_allocator_release(heap_allocator);
   return status;
 }
 
