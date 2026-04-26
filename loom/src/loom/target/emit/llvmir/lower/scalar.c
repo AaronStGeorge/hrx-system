@@ -8,7 +8,7 @@
 
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
-#include "loom/target/emit/llvmir/lower_internal.h"
+#include "loom/target/emit/llvmir/lower/internal.h"
 
 static_assert((int)LOOM_INDEX_CMP_PREDICATE_EQ ==
                   (int)LOOM_SCALAR_CMPI_PREDICATE_EQ,

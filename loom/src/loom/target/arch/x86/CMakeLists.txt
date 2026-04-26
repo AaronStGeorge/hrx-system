@@ -135,13 +135,13 @@ loom_cc_library(
     lower
   HDRS
     "lower.h"
-    "lower_internal.h"
+    "lower/internal.h"
   SRCS
-    "lower.c"
-    "lower_avx512_memory.c"
-    "lower_avx512_reduce.c"
-    "lower_avx512_rules.c"
-    "lower_packed_dot.c"
+    "lower/avx512_memory.c"
+    "lower/avx512_reduce.c"
+    "lower/avx512_rules.c"
+    "lower/packed_dot.c"
+    "lower/registry.c"
   DEPS
     ::avx512_descriptors_ids
     ::avx512_packed_dot_descriptors_ids
@@ -166,9 +166,9 @@ loom_cc_library(
   NAME
     check_provider
   HDRS
-    "check_provider.h"
+    "check/provider.h"
   SRCS
-    "check_provider.c"
+    "check/provider.c"
   DEPS
     ::low_registry
     ::lower
@@ -196,7 +196,7 @@ iree_executable_test(
   NAME
     "source_low"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -207,7 +207,7 @@ iree_executable_test(
   NAME
     "source_low_avx512_packed_dot"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_avx512_packed_dot.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_avx512_packed_dot.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -218,7 +218,7 @@ iree_executable_test(
   NAME
     "source_low_packed_dot"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_packed_dot.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_packed_dot.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -229,7 +229,7 @@ iree_executable_test(
   NAME
     "source_low_scalar_f32"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_scalar_f32.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_f32.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -240,7 +240,7 @@ iree_executable_test(
   NAME
     "source_low_v4"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_v4.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_v4.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

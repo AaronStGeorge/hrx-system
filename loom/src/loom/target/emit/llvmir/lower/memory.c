@@ -4,16 +4,17 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/ops/vector/memory.h"
+
 #include "loom/ir/facts.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/cache.h"
 #include "loom/ops/encoding/storage.h"
 #include "loom/ops/index/ops.h"
-#include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/emit/llvmir/intrinsics_builtin.h"
-#include "loom/target/emit/llvmir/lower_internal.h"
+#include "loom/target/emit/llvmir/lower/internal.h"
 
 static loom_value_fact_memory_space_t
 loom_llvmir_lowering_memory_space_from_buffer_attr(uint8_t value) {

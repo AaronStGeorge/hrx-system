@@ -197,7 +197,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "lower",
-    srcs = ["lower.c"],
+    srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
     deps = [
         "//loom/src/loom/codegen/low:lower",
@@ -211,8 +211,8 @@ loom_cc_library(
 
 loom_cc_library(
     name = "check_provider",
-    srcs = ["check_provider.c"],
-    hdrs = ["check_provider.h"],
+    srcs = ["check/provider.c"],
+    hdrs = ["check/provider.h"],
     deps = [
         ":low_registry",
         ":lower",
@@ -223,8 +223,8 @@ loom_cc_library(
 
 loom_cc_library(
     name = "execution_provider",
-    srcs = ["execution_provider.c"],
-    hdrs = ["execution_provider.h"],
+    srcs = ["execution/provider.c"],
+    hdrs = ["execution/provider.h"],
     deps = [
         ":execution_backend",
         ":low_registry",
@@ -235,8 +235,8 @@ loom_cc_library(
 
 loom_cc_library(
     name = "execution_backend",
-    srcs = ["execution_backend.c"],
-    hdrs = ["execution_backend.h"],
+    srcs = ["execution/backend.c"],
+    hdrs = ["execution/backend.h"],
     deps = [
         ":candidate",
         "//loom/src/loom/tooling/execution:compile_report_capture",
@@ -317,8 +317,9 @@ loom_cc_test(
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
-        "pass_source_low.loom-test",
-        "source_low.loom-test",
-        "source_low_diagnostics.loom-test",
+        "test/source_low/pass_source_low.loom-test",
+        "test/source_low/source_low.loom-test",
+        "test/source_low/source_low_diagnostics.loom-test",
     ],
+    test_name_prefix_to_strip = "test/source_low/",
 )

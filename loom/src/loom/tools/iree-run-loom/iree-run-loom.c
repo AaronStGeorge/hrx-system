@@ -26,7 +26,7 @@
 #include "loom/target/arch/amdgpu/execution/provider.h"
 #endif  // IREE_RUN_LOOM_HAVE_AMDGPU
 #if IREE_RUN_LOOM_HAVE_IREEVM
-#include "loom/target/emit/ireevm/execution_provider.h"
+#include "loom/target/emit/ireevm/execution/provider.h"
 #endif  // IREE_RUN_LOOM_HAVE_IREEVM
 
 #if IREE_RUN_LOOM_HAVE_ANY_PROVIDER

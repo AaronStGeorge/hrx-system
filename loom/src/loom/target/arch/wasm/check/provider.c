@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/arch/wasm/check_provider.h"
+#include "loom/target/arch/wasm/check/provider.h"
 
 #include "loom/target/arch/wasm/low_registry.h"
 #include "loom/target/emit/wasm/lower.h"

@@ -34,16 +34,16 @@
 #include "loom/target/arch/amdgpu/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_AMDGPU
 #if LOOM_CHECK_HAVE_IREEVM
-#include "loom/target/emit/ireevm/check_provider.h"
+#include "loom/target/emit/ireevm/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_IREEVM
 #if LOOM_CHECK_HAVE_LLVMIR
-#include "loom/target/emit/llvmir/check_provider.h"
+#include "loom/target/emit/llvmir/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_LLVMIR
 #if LOOM_CHECK_HAVE_WASM
-#include "loom/target/arch/wasm/check_provider.h"
+#include "loom/target/arch/wasm/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_WASM
 #if LOOM_CHECK_HAVE_X86
-#include "loom/target/arch/x86/check_provider.h"
+#include "loom/target/arch/x86/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_X86
 
 #if LOOM_CHECK_HAVE_ANY_PROVIDER

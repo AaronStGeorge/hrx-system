@@ -6,11 +6,10 @@
 
 // Lowering for AMDGPU-native Loom LLVMIR intrinsic contracts.
 
-#include "loom/target/emit/llvmir/amdgpu/lower.h"
-
 #include "loom/ops/llvmir/ops.h"
 #include "loom/target/emit/llvmir/amdgpu/intrinsics.h"
-#include "loom/target/emit/llvmir/lower_internal.h"
+#include "loom/target/emit/llvmir/amdgpu/lower.h"
+#include "loom/target/emit/llvmir/lower/internal.h"
 
 static bool loom_llvmir_amdgpu_target_profile_is_amdgpu(
     const loom_llvmir_lowering_state_t* state) {

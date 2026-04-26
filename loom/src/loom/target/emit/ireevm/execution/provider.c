@@ -4,9 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/ireevm/execution_provider.h"
+#include "loom/target/emit/ireevm/execution/provider.h"
 
-#include "loom/target/emit/ireevm/execution_backend.h"
+#include "loom/target/emit/ireevm/execution/backend.h"
 #include "loom/target/emit/ireevm/low_registry.h"
 
 static const loom_run_execution_backend_t* const

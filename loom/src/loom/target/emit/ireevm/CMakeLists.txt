@@ -132,7 +132,7 @@ loom_cc_library(
   HDRS
     "lower.h"
   SRCS
-    "lower.c"
+    "lower/registry.c"
   DEPS
     iree::base
     loom::src::loom::codegen::low::lower
@@ -147,9 +147,9 @@ loom_cc_library(
   NAME
     check_provider
   HDRS
-    "check_provider.h"
+    "check/provider.h"
   SRCS
-    "check_provider.c"
+    "check/provider.c"
   DEPS
     ::low_registry
     ::lower
@@ -162,9 +162,9 @@ loom_cc_library(
   NAME
     execution_provider
   HDRS
-    "execution_provider.h"
+    "execution/provider.h"
   SRCS
-    "execution_provider.c"
+    "execution/provider.c"
   DEPS
     ::execution_backend
     ::low_registry
@@ -177,9 +177,9 @@ loom_cc_library(
   NAME
     execution_backend
   HDRS
-    "execution_backend.h"
+    "execution/backend.h"
   SRCS
-    "execution_backend.c"
+    "execution/backend.c"
   DEPS
     ::candidate
     iree::base
@@ -265,7 +265,7 @@ iree_executable_test(
   NAME
     "pass_source_low"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/pass_source_low.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/pass_source_low.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -276,7 +276,7 @@ iree_executable_test(
   NAME
     "source_low"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -287,7 +287,7 @@ iree_executable_test(
   NAME
     "source_low_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

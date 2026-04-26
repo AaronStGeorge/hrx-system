@@ -4,9 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/llvmir/check_provider.h"
+#include "loom/target/emit/llvmir/check/provider.h"
 
-#include "loom/target/emit/llvmir/loom_check.h"
+#include "loom/target/emit/llvmir/check/loom_check.h"
 
 static const loom_check_emit_provider_t* const kLoomLlvmirCheckEmitProviders[] =
     {

@@ -197,15 +197,15 @@ loom_cc_library(
 loom_cc_library(
     name = "lower",
     srcs = [
-        "lower.c",
-        "lower_memory.c",
-        "lower_scalar.c",
-        "lower_target.c",
-        "lower_vector.c",
+        "lower/memory.c",
+        "lower/registry.c",
+        "lower/scalar.c",
+        "lower/target.c",
+        "lower/vector.c",
     ],
     hdrs = [
         "lower.h",
-        "lower_internal.h",
+        "lower/internal.h",
     ],
     deps = [
         ":core",
@@ -275,8 +275,8 @@ loom_cc_library(
 
 loom_cc_library(
     name = "loom_check",
-    srcs = ["loom_check.c"],
-    hdrs = ["loom_check.h"],
+    srcs = ["check/loom_check.c"],
+    hdrs = ["check/loom_check.h"],
     deps = [
         ":core",
         ":legality",
@@ -295,8 +295,8 @@ loom_cc_library(
 
 loom_cc_library(
     name = "check_provider",
-    srcs = ["check_provider.c"],
-    hdrs = ["check_provider.h"],
+    srcs = ["check/provider.c"],
+    hdrs = ["check/provider.h"],
     deps = [
         ":loom_check",
         "//loom/src/loom/tools/loom-check:provider",

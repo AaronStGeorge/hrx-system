@@ -140,13 +140,13 @@ loom_cc_library(
     lower
   HDRS
     "lower.h"
-    "lower_internal.h"
+    "lower/internal.h"
   SRCS
-    "lower.c"
-    "lower_memory.c"
-    "lower_scalar.c"
-    "lower_target.c"
-    "lower_vector.c"
+    "lower/memory.c"
+    "lower/registry.c"
+    "lower/scalar.c"
+    "lower/target.c"
+    "lower/vector.c"
   DEPS
     ::core
     ::target_env
@@ -223,9 +223,9 @@ loom_cc_library(
   NAME
     loom_check
   HDRS
-    "loom_check.h"
+    "check/loom_check.h"
   SRCS
-    "loom_check.c"
+    "check/loom_check.c"
   DEPS
     ::core
     ::legality
@@ -246,9 +246,9 @@ loom_cc_library(
   NAME
     check_provider
   HDRS
-    "check_provider.h"
+    "check/provider.h"
   SRCS
-    "check_provider.c"
+    "check/provider.c"
   DEPS
     ::loom_check
     iree::base

@@ -39,9 +39,9 @@ loom_cc_library(
   NAME
     loom_check
   HDRS
-    "loom_check.h"
+    "check/loom_check.h"
   SRCS
-    "loom_check.c"
+    "check/loom_check.c"
   DEPS
     ::assembly
     iree::base

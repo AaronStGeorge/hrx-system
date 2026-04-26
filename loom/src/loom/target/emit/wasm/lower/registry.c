@@ -4,8 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/wasm/lower.h"
-
 #include <stdint.h>
 
 #include "loom/codegen/low/lower_rules.h"
@@ -16,6 +14,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/emit/wasm/lower.h"
 
 static bool loom_wasm_type_is_address_i32(loom_type_t type) {
   if (!loom_type_is_scalar(type)) {

@@ -7,7 +7,7 @@
 // Lowering for target-neutral Loom vector ops into structured LLVMIR ops.
 
 #include "loom/ops/vector/ops.h"
-#include "loom/target/emit/llvmir/lower_internal.h"
+#include "loom/target/emit/llvmir/lower/internal.h"
 
 static iree_status_t loom_llvmir_lowering_vector_lane_count(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,

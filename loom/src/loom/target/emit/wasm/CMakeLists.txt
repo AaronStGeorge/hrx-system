@@ -85,7 +85,7 @@ loom_cc_library(
   HDRS
     "lower.h"
   SRCS
-    "lower.c"
+    "lower/registry.c"
   DEPS
     iree::base
     loom::src::loom::codegen::low::lower

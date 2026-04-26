@@ -14,7 +14,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
-#include "loom/target/arch/x86/lower_internal.h"
+#include "loom/target/arch/x86/lower/internal.h"
 
 static bool loom_x86_memory_space_is_object_memory(
     loom_value_fact_memory_space_t memory_space) {

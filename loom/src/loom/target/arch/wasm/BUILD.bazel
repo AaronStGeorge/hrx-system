@@ -99,8 +99,8 @@ loom_cc_library(
 
 loom_cc_library(
     name = "check_provider",
-    srcs = ["check_provider.c"],
-    hdrs = ["check_provider.h"],
+    srcs = ["check/provider.c"],
+    hdrs = ["check/provider.h"],
     deps = [
         ":low_registry",
         "//loom/src/loom/target/emit/wasm:lower",
@@ -152,10 +152,11 @@ loom_cc_test(
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
-        "source_low.loom-test",
-        "source_low_diagnostics.loom-test",
+        "test/source_low/source_low.loom-test",
+        "test/source_low/source_low_diagnostics.loom-test",
     ],
     data = [
         "//loom/src/loom/test/corpus/source_low:vector_v4.loom-test",
     ],
+    test_name_prefix_to_strip = "test/source_low/",
 )

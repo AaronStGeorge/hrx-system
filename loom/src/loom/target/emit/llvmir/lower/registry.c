@@ -18,7 +18,7 @@
 #include "loom/ops/type_registry.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
-#include "loom/target/emit/llvmir/lower_internal.h"
+#include "loom/target/emit/llvmir/lower/internal.h"
 #include "loom/util/cfg_graph.h"
 
 static iree_string_view_t loom_llvmir_lowering_module_name(

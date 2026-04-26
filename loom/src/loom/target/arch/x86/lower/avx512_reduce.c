@@ -9,7 +9,7 @@
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
-#include "loom/target/arch/x86/lower_internal.h"
+#include "loom/target/arch/x86/lower/internal.h"
 
 enum loom_x86_avx512_reduce_type_pattern_e {
   LOOM_X86_AVX512_REDUCE_TYPE_V4I32 = 0,

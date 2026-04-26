@@ -6,13 +6,12 @@
 
 // Lowering for x86-native Loom vector contracts into structured LLVMIR ops.
 
-#include "loom/target/emit/llvmir/x86/lower.h"
-
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/x86/packed_dot_vector.h"
-#include "loom/target/emit/llvmir/lower_internal.h"
+#include "loom/target/emit/llvmir/lower/internal.h"
 #include "loom/target/emit/llvmir/x86/intrinsics.h"
+#include "loom/target/emit/llvmir/x86/lower.h"
 
 static bool loom_llvmir_x86_target_profile_is_x86(
     const loom_llvmir_lowering_state_t* state) {

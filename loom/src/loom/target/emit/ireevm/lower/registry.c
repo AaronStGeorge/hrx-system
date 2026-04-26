@@ -4,13 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/ireevm/lower.h"
-
 #include <stdint.h>
 
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/target/emit/ireevm/descriptors.h"
+#include "loom/target/emit/ireevm/lower.h"
 
 static bool loom_ireevm_type_is_i1_or_i32(loom_type_t type) {
   if (!loom_type_is_scalar(type)) {

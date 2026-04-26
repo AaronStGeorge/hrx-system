@@ -118,8 +118,8 @@ loom_cc_library(
 
 loom_cc_library(
     name = "loom_check",
-    srcs = ["loom_check.c"],
-    hdrs = ["loom_check.h"],
+    srcs = ["check/loom_check.c"],
+    hdrs = ["check/loom_check.h"],
     deps = [
         ":assembly",
         "//loom/src/loom/codegen/low:packetization",

@@ -9,7 +9,7 @@
 #include <stdint.h>
 
 #include "loom/ops/vector/ops.h"
-#include "loom/target/arch/x86/lower_internal.h"
+#include "loom/target/arch/x86/lower/internal.h"
 #include "loom/target/arch/x86/packed_dot_contract.h"
 #include "loom/target/arch/x86/packed_dot_descriptors.h"
 #include "loom/target/arch/x86/packed_dot_vector.h"

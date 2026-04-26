@@ -9,7 +9,7 @@
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
 #include "loom/target/arch/amdgpu/packet_diagnostics.h"
-#include "loom/target/emit/native/amdgpu/loom_check.h"
+#include "loom/target/emit/native/amdgpu/check/loom_check.h"
 
 static const loom_check_emit_provider_t* const kLoomAmdgpuCheckEmitProviders[] =
     {

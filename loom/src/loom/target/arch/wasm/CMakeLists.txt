@@ -50,9 +50,9 @@ loom_cc_library(
   NAME
     check_provider
   HDRS
-    "check_provider.h"
+    "check/provider.h"
   SRCS
-    "check_provider.c"
+    "check/provider.c"
   DEPS
     ::low_registry
     iree::base
@@ -108,7 +108,7 @@ iree_executable_test(
   NAME
     "source_low"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -119,7 +119,7 @@ iree_executable_test(
   NAME
     "source_low_diagnostics"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/source_low_diagnostics.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

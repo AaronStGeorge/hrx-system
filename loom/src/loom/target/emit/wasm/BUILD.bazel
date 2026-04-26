@@ -109,7 +109,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "lower",
-    srcs = ["lower.c"],
+    srcs = ["lower/registry.c"],
     hdrs = ["lower.h"],
     deps = [
         "//loom/src/loom/codegen/low:lower",
