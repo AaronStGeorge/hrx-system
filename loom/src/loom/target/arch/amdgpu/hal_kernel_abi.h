@@ -47,11 +47,23 @@ extern "C" {
 // Stable low.live_in source spelling for workitem_id.x in v0.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE "amdgpu.workitem_id.x"
 
-// Stable low.live_in source spelling for workitem_id.y in v1.
+// Stable low.live_in source spelling for workitem_id.y in v1 on targets that
+// expose unpacked workitem-id VGPRs.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Y_SOURCE "amdgpu.workitem_id.y"
 
-// Stable low.live_in source spelling for workitem_id.z in v2.
+// Stable low.live_in source spelling for workitem_id.z in v2 on targets that
+// expose unpacked workitem-id VGPRs.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE "amdgpu.workitem_id.z"
+
+// Stable low.live_in source spelling for targets that pack workitem_id.x/y into
+// v0. Lowering must unpack logical dimensions before ordinary use.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_PACKED_XY_SOURCE \
+  "amdgpu.workitem_id.packed.xy"
+
+// Stable low.live_in source spelling for targets that pack workitem_id.x/y/z
+// into v0. Lowering must unpack logical dimensions before ordinary use.
+#define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_PACKED_XYZ_SOURCE \
+  "amdgpu.workitem_id.packed.xyz"
 
 // Stable low.live_in source spelling for the M0 special register.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_M0_SOURCE "amdgpu.m0"
@@ -132,6 +144,15 @@ bool loom_amdgpu_hal_kernel_abi_is_workitem_id_y_live_in(
 bool loom_amdgpu_hal_kernel_abi_is_workitem_id_z_live_in(
     const loom_module_t* module, loom_value_id_t value_id);
 
+// Returns true if |value_id| is defined by the packed workitem_id.x/y live-in.
+bool loom_amdgpu_hal_kernel_abi_is_workitem_id_packed_xy_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
+// Returns true if |value_id| is defined by the packed workitem_id.x/y/z
+// live-in.
+bool loom_amdgpu_hal_kernel_abi_is_workitem_id_packed_xyz_live_in(
+    const loom_module_t* module, loom_value_id_t value_id);
+
 // Returns true if |value_id| is defined by the M0 special-register live-in.
 bool loom_amdgpu_hal_kernel_abi_is_m0_live_in(const loom_module_t* module,
                                               loom_value_id_t value_id);
@@ -141,8 +162,8 @@ bool loom_amdgpu_hal_kernel_abi_is_m0_live_in(const loom_module_t* module,
 //
 // The returned array is arena-owned. The current ABI fixes the kernarg segment
 // pointer live-in to s[0:1], workgroup_id.x/y/z live-ins to the SGPRs
-// immediately following enabled user SGPRs, and workitem_id.x/y/z live-ins to
-// v0/v1/v2 when present.
+// immediately following enabled user SGPRs, unpacked workitem_id.x/y/z live-ins
+// to v0/v1/v2, and packed workitem-id live-ins to v0 when present.
 iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
     const loom_module_t* module, const loom_op_t* function_op,
     const loom_low_descriptor_set_t* descriptor_set,

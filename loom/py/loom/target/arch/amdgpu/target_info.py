@@ -68,6 +68,7 @@ class AmdgpuProcessorInfo:
     kernel_descriptor_has_architected_flat_scratch: bool = False
     kernel_descriptor_uses_gfx10_sgpr_encoding: bool = False
     kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False
+    kernel_descriptor_has_packed_workitem_id: bool = False
 
 
 def gfx11_processor_info(
@@ -87,6 +88,7 @@ def gfx11_processor_info(
         kernel_descriptor_has_architected_flat_scratch=True,
         kernel_descriptor_uses_gfx10_sgpr_encoding=True,
         kernel_descriptor_has_dx10_clamp_and_ieee_mode=True,
+        kernel_descriptor_has_packed_workitem_id=True,
     )
 
 
@@ -100,6 +102,7 @@ def gfx1170_processor_info() -> AmdgpuProcessorInfo:
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+        kernel_descriptor_has_packed_workitem_id=True,
     )
 
 
@@ -156,6 +159,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=64,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx940",
@@ -166,6 +170,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=64,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx941",
@@ -176,6 +181,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=64,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx942",
@@ -186,6 +192,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=64,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
     gfx11_processor_info(target_cpu="gfx1100", elf_machine_flags=0x041),
     gfx11_processor_info(target_cpu="gfx1101", elf_machine_flags=0x046),
@@ -205,6 +212,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1201",
@@ -215,6 +223,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1250",
@@ -225,6 +234,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1251",
@@ -235,6 +245,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx1252",
@@ -245,6 +256,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
     AmdgpuProcessorInfo(
         target_cpu="gfx950",
@@ -255,6 +267,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=64,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950,
+        kernel_descriptor_has_packed_workitem_id=True,
     ),
 )
 

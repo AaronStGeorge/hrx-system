@@ -26,6 +26,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx11Processor) {
   EXPECT_EQ(processor->kernel_descriptor_profile,
             LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11);
   EXPECT_TRUE(processor->kernel_descriptor_has_architected_flat_scratch);
+  EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
 }
 
 TEST(AmdgpuTargetInfoTest, IteratesProcessors) {
@@ -76,6 +77,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpMatrixOnlyProcessor) {
   EXPECT_EQ(processor->default_wavefront_size, 64u);
   EXPECT_EQ(processor->matrix_feature_profile,
             LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940);
+  EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1170AsMatrixOnlyProcessor) {

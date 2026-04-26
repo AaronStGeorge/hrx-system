@@ -117,6 +117,8 @@ typedef struct loom_amdgpu_processor_info_t {
   bool kernel_descriptor_uses_gfx10_sgpr_encoding;
   // True when DX10 clamp and IEEE mode defaults are supported.
   bool kernel_descriptor_has_dx10_clamp_and_ieee_mode;
+  // True when workitem IDs are packed into v0 instead of separate VGPRs.
+  bool kernel_descriptor_has_packed_workitem_id;
 } loom_amdgpu_processor_info_t;
 
 typedef struct loom_amdgpu_amdhsa_target_id_t {

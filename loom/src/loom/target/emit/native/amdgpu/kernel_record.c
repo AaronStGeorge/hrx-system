@@ -36,6 +36,15 @@ typedef struct loom_amdgpu_kernel_record_workitem_id_t {
   iree_string_view_t label;
 } loom_amdgpu_kernel_record_workitem_id_t;
 
+typedef struct loom_amdgpu_kernel_record_packed_workitem_id_t {
+  // Predicate identifying the packed ABI live-in value.
+  bool (*is_live_in)(const loom_module_t* module, loom_value_id_t value_id);
+  // Kernel descriptor flags that request the packed logical dimensions.
+  loom_amdgpu_kernel_descriptor_flags_t descriptor_flags;
+  // Diagnostic label for the packed live-in source.
+  iree_string_view_t label;
+} loom_amdgpu_kernel_record_packed_workitem_id_t;
+
 typedef struct loom_amdgpu_kernel_record_workgroup_id_t {
   // Predicate identifying the ABI live-in value.
   bool (*is_live_in)(const loom_module_t* module, loom_value_id_t value_id);
@@ -364,6 +373,7 @@ static iree_status_t loom_amdgpu_kernel_record_validate_kernarg_live_in(
 
 static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
     const loom_low_allocation_sidecar_t* allocation, uint32_t system_sgpr_base,
+    bool target_has_packed_workitem_id,
     loom_amdgpu_kernel_descriptor_flags_t* out_flags) {
   IREE_ASSERT_ARGUMENT(out_flags);
   *out_flags = 0;
@@ -413,8 +423,29 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
           .label = IREE_SVL("workitem_id.z"),
       },
   };
+  static const loom_amdgpu_kernel_record_packed_workitem_id_t
+      packed_workitem_ids[] = {
+          {
+              .is_live_in =
+                  loom_amdgpu_hal_kernel_abi_is_workitem_id_packed_xy_live_in,
+              .descriptor_flags =
+                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X |
+                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y,
+              .label = IREE_SVL("packed workitem_id.x/y"),
+          },
+          {
+              .is_live_in =
+                  loom_amdgpu_hal_kernel_abi_is_workitem_id_packed_xyz_live_in,
+              .descriptor_flags =
+                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_X |
+                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Y |
+                  LOOM_AMDGPU_KERNEL_DESCRIPTOR_SYSTEM_VGPR_WORKITEM_ID_Z,
+              .label = IREE_SVL("packed workitem_id.x/y/z"),
+          },
+      };
   bool found_workgroup_ids[IREE_ARRAYSIZE(workgroup_ids)] = {0};
   bool found_workitem_ids[IREE_ARRAYSIZE(workitem_ids)] = {0};
+  bool found_packed_workitem_id = false;
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
@@ -448,10 +479,54 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
       }
       *out_flags |= workgroup_ids[j].descriptor_flag;
     }
+    for (iree_host_size_t j = 0; j < IREE_ARRAYSIZE(packed_workitem_ids); ++j) {
+      if (!packed_workitem_ids[j].is_live_in(allocation->module,
+                                             assignment->value_id)) {
+        continue;
+      }
+      if (!target_has_packed_workitem_id) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "AMDGPU kernel emission target does not support %.*s live-ins",
+            (int)packed_workitem_ids[j].label.size,
+            packed_workitem_ids[j].label.data);
+      }
+      if (found_packed_workitem_id) {
+        return iree_make_status(
+            IREE_STATUS_ALREADY_EXISTS,
+            "AMDGPU kernel emission found duplicate packed workitem-id "
+            "live-ins");
+      }
+      for (iree_host_size_t k = 0; k < IREE_ARRAYSIZE(found_workitem_ids);
+           ++k) {
+        if (found_workitem_ids[k]) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "AMDGPU kernel emission cannot mix packed and unpacked "
+              "workitem-id live-ins");
+        }
+      }
+      found_packed_workitem_id = true;
+      if (assignment->location_base != 0 || assignment->location_count != 1) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "AMDGPU kernel emission requires the %.*s live-in to be fixed to "
+            "v0",
+            (int)packed_workitem_ids[j].label.size,
+            packed_workitem_ids[j].label.data);
+      }
+      *out_flags |= packed_workitem_ids[j].descriptor_flags;
+    }
     for (iree_host_size_t j = 0; j < IREE_ARRAYSIZE(workitem_ids); ++j) {
       if (!workitem_ids[j].is_live_in(allocation->module,
                                       assignment->value_id)) {
         continue;
+      }
+      if (found_packed_workitem_id) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "AMDGPU kernel emission cannot mix packed and unpacked "
+            "workitem-id live-ins");
       }
       if (found_workitem_ids[j]) {
         return iree_make_status(
@@ -471,6 +546,13 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
       }
       *out_flags |= workitem_ids[j].descriptor_flag;
     }
+  }
+  if (target_has_packed_workitem_id &&
+      (found_workitem_ids[1] || found_workitem_ids[2])) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU kernel emission requires packed workitem-id live-ins when "
+        "workitem_id.y/z are used on this target");
   }
   if (iree_any_bit_set(
           *out_flags,
@@ -573,13 +655,22 @@ iree_status_t loom_amdgpu_kernel_record_build(
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_kernarg_live_in(
       allocation, abi_layout));
 
+  const loom_target_snapshot_t* snapshot =
+      &schedule->target.bundle_storage.snapshot;
+  const loom_target_hal_kernel_abi_t* hal_kernel =
+      &schedule->target.bundle_storage.export_plan.hal_kernel;
+  const loom_amdgpu_processor_info_t* processor = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
+      snapshot->target_cpu, &processor));
+
   const uint32_t user_sgpr_count =
       abi_layout->uses_kernarg_segment_ptr
           ? LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT
           : 0;
   loom_amdgpu_kernel_descriptor_flags_t descriptor_flags = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_collect_descriptor_flags(
-      allocation, user_sgpr_count, &descriptor_flags));
+      allocation, user_sgpr_count,
+      processor->kernel_descriptor_has_packed_workitem_id, &descriptor_flags));
   descriptor_flags |= LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_WORKGROUP_ID_X;
   uint32_t system_vgpr_workitem_id = 0;
   IREE_RETURN_IF_ERROR(
@@ -590,14 +681,6 @@ iree_status_t loom_amdgpu_kernel_record_build(
       register_usage.next_free_sgpr > user_sgpr_count
           ? register_usage.next_free_sgpr
           : user_sgpr_count;
-
-  const loom_target_snapshot_t* snapshot =
-      &schedule->target.bundle_storage.snapshot;
-  const loom_target_hal_kernel_abi_t* hal_kernel =
-      &schedule->target.bundle_storage.export_plan.hal_kernel;
-  const loom_amdgpu_processor_info_t* processor = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_processor(
-      snapshot->target_cpu, &processor));
 
   iree_string_view_t target_id = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_concat3(
