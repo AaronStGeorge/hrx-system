@@ -204,6 +204,27 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 
 target.profile @x86_target preset("x86-avx512")
 
+low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.zmm>) {
+  low.br ^join(%lhs: reg<x86.zmm>)
+^join(%incoming: reg<x86.zmm>):
+  %sum = low.op<x86.avx512.vpaddd.zmm>(%incoming, %lhs) : (reg<x86.zmm>, reg<x86.zmm>) -> reg<x86.zmm>
+  low.op<x86.avx512.vmovdqu32.store.zmm>(%sum, %base) {disp32 = 256} : (reg<x86.zmm>, reg<x86.gpr64>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  vmovdqa32 zmm1, zmm0
+  jmp .Lbb1
+.Lbb1:
+  vpaddd zmm0, zmm1, zmm0
+  vmovdqu32 [rax + 256], zmm0
+  ret
+
+// ====
+
+target.profile @x86_target preset("x86-avx512")
+
 low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: reg<x86.gpr64>, %row: reg<x86.gpr64>, %stride: reg<x86.gpr64>, %col: reg<x86.gpr64>) asm<x86.avx512.core> {
   %bias = mov.imm64 256
   %row_copy = copy %row : reg<x86.gpr64> -> reg<x86.gpr64>

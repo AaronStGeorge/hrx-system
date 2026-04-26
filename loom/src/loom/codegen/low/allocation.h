@@ -210,6 +210,31 @@ typedef struct loom_low_allocation_copy_decision_t {
   loom_low_allocation_copy_kind_t kind;
 } loom_low_allocation_copy_decision_t;
 
+// Copy required to materialize one low.br edge payload into a destination block
+// argument location.
+typedef struct loom_low_allocation_edge_copy_t {
+  // SSA value forwarded by the branch edge.
+  loom_value_id_t source_value_id;
+  // Destination block argument receiving |source_value_id|.
+  loom_value_id_t destination_value_id;
+  // Assignment index for |source_value_id|.
+  uint32_t source_assignment_index;
+  // Assignment index for |destination_value_id|.
+  uint32_t destination_assignment_index;
+} loom_low_allocation_edge_copy_t;
+
+// Contiguous edge-copy group for one low.br terminator.
+typedef struct loom_low_allocation_edge_copy_group_t {
+  // low.br terminator that owns this outgoing edge.
+  const loom_op_t* terminator_op;
+  // Source-order ordinal of |terminator_op| in its low function body.
+  uint32_t source_ordinal;
+  // First edge-copy record for |terminator_op|.
+  uint32_t copy_start;
+  // Number of edge-copy records for |terminator_op|.
+  uint32_t copy_count;
+} loom_low_allocation_edge_copy_group_t;
+
 // Options controlling allocation sidecar construction.
 typedef struct loom_low_allocation_options_t {
   // Descriptor registry available to the allocator.
@@ -261,6 +286,14 @@ typedef struct loom_low_allocation_sidecar_t {
   const loom_low_allocation_copy_decision_t* copy_decisions;
   // Number of records in |copy_decisions|.
   iree_host_size_t copy_decision_count;
+  // Edge-copy records grouped by low.br terminator source order.
+  const loom_low_allocation_edge_copy_t* edge_copies;
+  // Number of records in |edge_copies|.
+  iree_host_size_t edge_copy_count;
+  // Per-low.br groups indexing |edge_copies|.
+  const loom_low_allocation_edge_copy_group_t* edge_copy_groups;
+  // Number of records in |edge_copy_groups|.
+  iree_host_size_t edge_copy_group_count;
   // Number of assignments whose location kind is SPILL_SLOT.
   iree_host_size_t spill_count;
   // Number of low.copy ops coalesced into one location.
@@ -285,6 +318,12 @@ iree_status_t loom_low_allocate_function(
 // eventual storage reuse policy.
 iree_status_t loom_low_allocation_verify_sidecar(
     const loom_low_allocation_sidecar_t* sidecar);
+
+// Finds the edge-copy group for the source-order node, or NULL when the node
+// has no edge-copy payload.
+const loom_low_allocation_edge_copy_group_t*
+loom_low_allocation_find_edge_copy_group_by_source_ordinal(
+    const loom_low_allocation_sidecar_t* sidecar, uint32_t source_ordinal);
 
 // Resolves the descriptor-set register class spelling for |assignment|.
 iree_status_t loom_low_allocation_assignment_register_class_name(

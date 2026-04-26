@@ -230,6 +230,43 @@ TEST_F(LowAllocationTest, CoalescesTiedResultWithOperand) {
                      FindAssignmentByName(allocation, "out"));
 }
 
+TEST_F(LowAllocationTest, RecordsBranchEdgeCopyGroups) {
+  ParseAndVerify(
+      "low.func.def target(@test_target) @allocated(%lhs: reg<test.phys>, "
+      "%rhs: reg<test.phys>) -> (reg<test.phys>) {\n"
+      "  low.br ^join(%lhs: reg<test.phys>)\n"
+      "^join(%incoming: reg<test.phys>):\n"
+      "  %sum = low.op<test.add.phys>(%incoming, %rhs) : "
+      "(reg<test.phys>, reg<test.phys>) -> reg<test.phys>\n"
+      "  low.return %sum : reg<test.phys>\n"
+      "}\n");
+  loom_low_allocation_sidecar_t allocation = AllocateFirstLowFunction();
+
+  ASSERT_EQ(allocation.edge_copy_group_count, 1u);
+  ASSERT_EQ(allocation.edge_copy_count, 1u);
+  const loom_low_allocation_edge_copy_group_t& group =
+      allocation.edge_copy_groups[0];
+  EXPECT_TRUE(loom_low_br_isa(group.terminator_op));
+  EXPECT_EQ(group.source_ordinal, 0u);
+  EXPECT_EQ(group.copy_start, 0u);
+  EXPECT_EQ(group.copy_count, 1u);
+  const loom_low_allocation_edge_copy_t& edge_copy =
+      allocation.edge_copies[group.copy_start];
+  EXPECT_EQ(edge_copy.source_value_id, FindValueIdByName("lhs"));
+  EXPECT_EQ(edge_copy.destination_value_id, FindValueIdByName("incoming"));
+  ASSERT_LT(edge_copy.source_assignment_index, allocation.assignment_count);
+  ASSERT_LT(edge_copy.destination_assignment_index,
+            allocation.assignment_count);
+  EXPECT_EQ(allocation.assignments[edge_copy.source_assignment_index].value_id,
+            edge_copy.source_value_id);
+  EXPECT_EQ(
+      allocation.assignments[edge_copy.destination_assignment_index].value_id,
+      edge_copy.destination_value_id);
+  EXPECT_EQ(loom_low_allocation_find_edge_copy_group_by_source_ordinal(
+                &allocation, group.source_ordinal),
+            &group);
+}
+
 TEST_F(LowAllocationTest, RejectsTiedResultWhenOperandSpills) {
   ParseAndVerify(
       "low.func.def target(@test_target) @allocated(%acc: reg<test.i32>) -> "

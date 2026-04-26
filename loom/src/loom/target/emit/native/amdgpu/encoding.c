@@ -798,6 +798,26 @@ static iree_status_t loom_amdgpu_encode_move_sequence(
   return loom_low_move_sequence_emit(moves, move_count, &options);
 }
 
+static iree_status_t loom_amdgpu_encode_edge_copy_group(
+    loom_amdgpu_encode_state_t* state,
+    const loom_low_allocation_edge_copy_group_t* group) {
+  iree_host_size_t move_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_count_edge_copy_units(
+      state->allocation, group, &move_count));
+  if (move_count == 0) {
+    return iree_ok_status();
+  }
+  loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
+  loom_low_move_t* moves = inline_moves;
+  if (move_count > IREE_ARRAYSIZE(inline_moves)) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->arena, move_count, sizeof(*moves), (void**)&moves));
+  }
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_populate_edge_copy_units(
+      state->allocation, group, moves, move_count));
+  return loom_amdgpu_encode_move_sequence(state, moves, move_count);
+}
+
 static iree_status_t loom_amdgpu_encode_copy_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   const loom_op_t* op = packet->node->op;
@@ -1194,9 +1214,16 @@ static iree_status_t loom_amdgpu_encode_branch_packet(
   const loom_op_t* op = packet->node->op;
   loom_value_slice_t args = loom_low_br_args(op);
   if (args.count != 0) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU native encoding branch arguments require "
-                            "block-argument copy lowering");
+    const loom_low_allocation_edge_copy_group_t* group =
+        loom_low_allocation_find_edge_copy_group_by_source_ordinal(
+            state->allocation, packet->node->source_ordinal);
+    if (!group) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU native encoding branch edge copies are missing from "
+          "allocation");
+    }
+    IREE_RETURN_IF_ERROR(loom_amdgpu_encode_edge_copy_group(state, group));
   }
   uint16_t immediate = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_encode_branch_offset(

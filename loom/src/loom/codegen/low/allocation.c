@@ -52,6 +52,10 @@ typedef struct loom_low_allocation_build_state_t {
   loom_low_allocation_remark_t* remarks;
   // Mutable copy/coalescing decision records being built.
   loom_low_allocation_copy_decision_t* copy_decisions;
+  // Mutable branch edge-copy records being built.
+  loom_low_allocation_edge_copy_t* edge_copies;
+  // Mutable branch edge-copy group records being built.
+  loom_low_allocation_edge_copy_group_t* edge_copy_groups;
   // Number of initialized assignment records.
   iree_host_size_t assignment_count;
   // Number of initialized spill materialization plan records.
@@ -60,6 +64,10 @@ typedef struct loom_low_allocation_build_state_t {
   iree_host_size_t remark_count;
   // Number of initialized copy/coalescing decision records.
   iree_host_size_t copy_decision_count;
+  // Number of initialized branch edge-copy records.
+  iree_host_size_t edge_copy_count;
+  // Number of initialized branch edge-copy group records.
+  iree_host_size_t edge_copy_group_count;
   // Number of spill-slot assignments.
   iree_host_size_t spill_count;
   // Number of coalesced copy decisions.
@@ -1244,6 +1252,117 @@ static iree_status_t loom_low_allocation_record_copy_decisions(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_allocation_count_edge_copy_groups(
+    const loom_region_t* body, iree_host_size_t* out_group_count,
+    iree_host_size_t* out_copy_count) {
+  IREE_ASSERT_ARGUMENT(out_group_count);
+  IREE_ASSERT_ARGUMENT(out_copy_count);
+  *out_group_count = 0;
+  *out_copy_count = 0;
+  loom_block_t* block = NULL;
+  loom_region_for_each_block(body, block) {
+    loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (!loom_low_br_isa(op)) {
+        continue;
+      }
+      loom_value_slice_t args = loom_low_br_args(op);
+      if (args.count == 0) {
+        continue;
+      }
+      if (*out_group_count == IREE_HOST_SIZE_MAX ||
+          args.count > IREE_HOST_SIZE_MAX - *out_copy_count) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "low.br edge-copy count exceeds host size");
+      }
+      ++*out_group_count;
+      *out_copy_count += args.count;
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_record_edge_copy_group(
+    loom_low_allocation_build_state_t* state, const loom_op_t* op,
+    uint32_t source_ordinal) {
+  loom_value_slice_t args = loom_low_br_args(op);
+  if (args.count == 0) {
+    return iree_ok_status();
+  }
+  const loom_block_t* dest = loom_low_br_dest(op);
+  if (args.count != dest->arg_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low.br edge-copy payload count does not match destination block args");
+  }
+  if (state->edge_copy_count > UINT32_MAX ||
+      args.count > UINT32_MAX - state->edge_copy_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low.br edge-copy group exceeds u32 range");
+  }
+  loom_low_allocation_edge_copy_group_t* group =
+      &state->edge_copy_groups[state->edge_copy_group_count++];
+  *group = (loom_low_allocation_edge_copy_group_t){
+      .terminator_op = op,
+      .source_ordinal = source_ordinal,
+      .copy_start = (uint32_t)state->edge_copy_count,
+      .copy_count = (uint32_t)args.count,
+  };
+  for (uint16_t i = 0; i < dest->arg_count; ++i) {
+    uint32_t source_assignment_index = 0;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+        state, args.values[i], &source_assignment_index));
+    uint32_t destination_assignment_index = 0;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+        state, dest->arg_ids[i], &destination_assignment_index));
+    state->edge_copies[state->edge_copy_count++] =
+        (loom_low_allocation_edge_copy_t){
+            .source_value_id = args.values[i],
+            .destination_value_id = dest->arg_ids[i],
+            .source_assignment_index = source_assignment_index,
+            .destination_assignment_index = destination_assignment_index,
+        };
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_record_edge_copy_groups(
+    loom_low_allocation_build_state_t* state) {
+  iree_host_size_t group_count = 0;
+  iree_host_size_t copy_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_count_edge_copy_groups(
+      state->body, &group_count, &copy_count));
+  if (copy_count == 0) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(state->arena, copy_count,
+                                                 sizeof(*state->edge_copies),
+                                                 (void**)&state->edge_copies));
+  memset(state->edge_copies, 0, copy_count * sizeof(*state->edge_copies));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->arena, group_count, sizeof(*state->edge_copy_groups),
+      (void**)&state->edge_copy_groups));
+  memset(state->edge_copy_groups, 0,
+         group_count * sizeof(*state->edge_copy_groups));
+
+  uint32_t source_ordinal = 0;
+  loom_block_t* block = NULL;
+  loom_region_for_each_block(state->body, block) {
+    loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (!loom_low_br_isa(op)) {
+        ++source_ordinal;
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(loom_low_allocation_record_edge_copy_group(
+          state, op, source_ordinal));
+      ++source_ordinal;
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_assign_intervals(
     loom_low_allocation_build_state_t* state) {
   iree_host_size_t allocatable_count = 0;
@@ -1643,6 +1762,99 @@ static iree_status_t loom_low_allocation_verify_copy_decision(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_allocation_verify_edge_copy(
+    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_edge_copy_t* edge_copy,
+    iree_host_size_t edge_copy_index) {
+  if (edge_copy->source_assignment_index >= sidecar->assignment_count ||
+      edge_copy->destination_assignment_index >= sidecar->assignment_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy %zu references assignment %u -> %u outside "
+        "assignment count %zu",
+        edge_copy_index, edge_copy->source_assignment_index,
+        edge_copy->destination_assignment_index, sidecar->assignment_count);
+  }
+  const loom_low_allocation_assignment_t* source_assignment =
+      &sidecar->assignments[edge_copy->source_assignment_index];
+  const loom_low_allocation_assignment_t* destination_assignment =
+      &sidecar->assignments[edge_copy->destination_assignment_index];
+  if (source_assignment->value_id != edge_copy->source_value_id ||
+      destination_assignment->value_id != edge_copy->destination_value_id) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy %zu assignment indices do not match values",
+        edge_copy_index);
+  }
+  if (source_assignment->descriptor_reg_class_id !=
+      destination_assignment->descriptor_reg_class_id) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy %zu crosses descriptor register classes",
+        edge_copy_index);
+  }
+  if (source_assignment->location_count == 0 ||
+      source_assignment->location_count !=
+          destination_assignment->location_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy %zu requires non-empty matching location ranges",
+        edge_copy_index);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_verify_edge_copy_group(
+    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_edge_copy_group_t* group,
+    iree_host_size_t group_index, uint32_t expected_source_ordinal,
+    iree_host_size_t expected_copy_start) {
+  if (!group->terminator_op || !loom_low_br_isa(group->terminator_op)) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "allocation edge-copy group %zu is not low.br",
+                            group_index);
+  }
+  if (group->copy_start != expected_copy_start) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy group %zu starts at %u but expected %zu",
+        group_index, group->copy_start, expected_copy_start);
+  }
+  if (group->source_ordinal != expected_source_ordinal) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy group %zu has source ordinal %u but expected %u",
+        group_index, group->source_ordinal, expected_source_ordinal);
+  }
+  if (group->copy_start > sidecar->edge_copy_count ||
+      group->copy_count > sidecar->edge_copy_count - group->copy_start) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy group %zu range is outside edge-copy count %zu",
+        group_index, sidecar->edge_copy_count);
+  }
+  loom_value_slice_t args = loom_low_br_args(group->terminator_op);
+  const loom_block_t* dest = loom_low_br_dest(group->terminator_op);
+  if (args.count != dest->arg_count || args.count != group->copy_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy group %zu does not match low.br edge payload",
+        group_index);
+  }
+  for (uint16_t i = 0; i < dest->arg_count; ++i) {
+    const loom_low_allocation_edge_copy_t* edge_copy =
+        &sidecar->edge_copies[group->copy_start + i];
+    if (edge_copy->source_value_id != args.values[i] ||
+        edge_copy->destination_value_id != dest->arg_ids[i]) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "allocation edge-copy group %zu payload %u does not match low.br",
+          group_index, i);
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_allocation_verify_sidecar(
     const loom_low_allocation_sidecar_t* sidecar) {
   if (!sidecar) {
@@ -1682,6 +1894,14 @@ iree_status_t loom_low_allocation_verify_sidecar(
   if (sidecar->copy_decision_count > 0 && !sidecar->copy_decisions) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation sidecar copy decisions are required");
+  }
+  if (sidecar->edge_copy_count > 0 && !sidecar->edge_copies) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "allocation sidecar edge copies are required");
+  }
+  if (sidecar->edge_copy_group_count > 0 && !sidecar->edge_copy_groups) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "allocation sidecar edge-copy groups are required");
   }
   iree_host_size_t spill_count = 0;
   for (iree_host_size_t i = 0; i < sidecar->assignment_count; ++i) {
@@ -1738,6 +1958,44 @@ iree_status_t loom_low_allocation_verify_sidecar(
         break;
     }
   }
+  iree_host_size_t edge_copy_group_count = 0;
+  iree_host_size_t edge_copy_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_count_edge_copy_groups(
+      body, &edge_copy_group_count, &edge_copy_count));
+  if (sidecar->edge_copy_group_count != edge_copy_group_count ||
+      sidecar->edge_copy_count != edge_copy_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation sidecar has %zu edge-copy groups/%zu edge copies for "
+        "%zu/%zu low.br edge payloads",
+        sidecar->edge_copy_group_count, sidecar->edge_copy_count,
+        edge_copy_group_count, edge_copy_count);
+  }
+  iree_host_size_t expected_edge_copy_start = 0;
+  iree_host_size_t expected_edge_copy_group_index = 0;
+  uint32_t source_ordinal = 0;
+  loom_block_t* block = NULL;
+  loom_region_for_each_block(body, block) {
+    loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (!loom_low_br_isa(op) || loom_low_br_args(op).count == 0) {
+        ++source_ordinal;
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(loom_low_allocation_verify_edge_copy_group(
+          sidecar, &sidecar->edge_copy_groups[expected_edge_copy_group_index],
+          expected_edge_copy_group_index, source_ordinal,
+          expected_edge_copy_start));
+      expected_edge_copy_start +=
+          sidecar->edge_copy_groups[expected_edge_copy_group_index].copy_count;
+      ++expected_edge_copy_group_index;
+      ++source_ordinal;
+    }
+  }
+  for (iree_host_size_t i = 0; i < sidecar->edge_copy_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_allocation_verify_edge_copy(
+        sidecar, &sidecar->edge_copies[i], i));
+  }
   iree_host_size_t expected_copy_decision_count =
       loom_low_allocation_count_copy_ops(body);
   if (sidecar->copy_decision_count != expected_copy_decision_count) {
@@ -1766,6 +2024,27 @@ iree_status_t loom_low_allocation_verify_sidecar(
         "allocation sidecar copy counters do not match copy decisions");
   }
   return iree_ok_status();
+}
+
+const loom_low_allocation_edge_copy_group_t*
+loom_low_allocation_find_edge_copy_group_by_source_ordinal(
+    const loom_low_allocation_sidecar_t* sidecar, uint32_t source_ordinal) {
+  IREE_ASSERT_ARGUMENT(sidecar);
+  iree_host_size_t lower = 0;
+  iree_host_size_t upper = sidecar->edge_copy_group_count;
+  while (lower < upper) {
+    iree_host_size_t middle = lower + (upper - lower) / 2;
+    const loom_low_allocation_edge_copy_group_t* group =
+        &sidecar->edge_copy_groups[middle];
+    if (source_ordinal < group->source_ordinal) {
+      upper = middle;
+    } else if (source_ordinal > group->source_ordinal) {
+      lower = middle + 1;
+    } else {
+      return group;
+    }
+  }
+  return NULL;
 }
 
 iree_status_t loom_low_allocation_assignment_register_class_name(
@@ -1947,6 +2226,7 @@ iree_status_t loom_low_allocate_function(
   IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_fixed_values(&state));
   IREE_RETURN_IF_ERROR(loom_low_allocation_assign_intervals(&state));
   IREE_RETURN_IF_ERROR(loom_low_allocation_record_copy_decisions(&state));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_record_edge_copy_groups(&state));
 
   loom_low_allocation_sidecar_t sidecar = {
       .module = module,
@@ -1962,6 +2242,10 @@ iree_status_t loom_low_allocate_function(
       .remark_count = state.remark_count,
       .copy_decisions = state.copy_decisions,
       .copy_decision_count = state.copy_decision_count,
+      .edge_copies = state.edge_copies,
+      .edge_copy_count = state.edge_copy_count,
+      .edge_copy_groups = state.edge_copy_groups,
+      .edge_copy_group_count = state.edge_copy_group_count,
       .spill_count = state.spill_count,
       .coalesced_copy_count = state.coalesced_copy_count,
       .materialized_copy_count = state.materialized_copy_count,

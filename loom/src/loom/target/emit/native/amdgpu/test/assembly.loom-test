@@ -42,6 +42,28 @@ low.func.def target(@gfx11_target) @gfx11_branch() {
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_branch_args waits=none
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_branch_args(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.vgpr>) {
+  low.br ^join(%lhs: reg<amdgpu.vgpr>)
+^join(%incoming: reg<amdgpu.vgpr>):
+  %sum = low.op<amdgpu.v_add_u32>(%incoming, %lhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.buffer_store_dword>(%sum, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  v_mov_b32 v2, v0
+  s_branch .Lbb1
+.Lbb1:
+  v_add_u32 v0, v2, v0
+  buffer_store_dword v0, v1, s[0:3], s4 offen offset:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_cond_branch waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 

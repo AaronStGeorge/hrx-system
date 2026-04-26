@@ -20,6 +20,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::move_sequence
     loom::src::loom::codegen::low::packet
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir

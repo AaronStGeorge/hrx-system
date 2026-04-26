@@ -65,6 +65,19 @@ iree_status_t loom_low_move_location_from_assignment_unit(
     const loom_low_allocation_assignment_t* assignment, uint32_t unit_index,
     loom_low_move_location_t* out_location);
 
+// Counts scalar unit moves required by one allocation edge-copy group.
+iree_status_t loom_low_move_sequence_count_edge_copy_units(
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_edge_copy_group_t* group,
+    iree_host_size_t* out_move_count);
+
+// Populates |moves| from one allocation edge-copy group. |move_count| must
+// match loom_low_move_sequence_count_edge_copy_units.
+iree_status_t loom_low_move_sequence_populate_edge_copy_units(
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_edge_copy_group_t* group, loom_low_move_t* moves,
+    iree_host_size_t move_count);
+
 // Emits |moves| as a sequential move list that preserves parallel-copy
 // semantics. Identity moves are elided. Acyclic overlap is handled by choosing
 // a safe order. Cycles use |temporary_location| when provided and otherwise

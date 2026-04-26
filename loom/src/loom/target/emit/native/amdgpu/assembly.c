@@ -992,6 +992,61 @@ static iree_status_t loom_amdgpu_emit_move_sequence(
   return loom_low_move_sequence_emit(moves, move_count, &options);
 }
 
+static iree_status_t loom_amdgpu_append_edge_move(
+    void* user_data, const loom_low_move_location_t* destination,
+    const loom_low_move_location_t* source) {
+  loom_amdgpu_assembly_move_state_t* state =
+      (loom_amdgpu_assembly_move_state_t*)user_data;
+  iree_string_view_t mnemonic = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_copy_mnemonic(
+      destination->descriptor_reg_class_id, &mnemonic));
+  state->mnemonic = mnemonic;
+  return loom_amdgpu_append_move(user_data, destination, source);
+}
+
+static iree_status_t loom_amdgpu_emit_edge_copy_group(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_allocation_edge_copy_group_t* group) {
+  iree_host_size_t move_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_count_edge_copy_units(
+      context->allocation, group, &move_count));
+  if (move_count == 0) {
+    return iree_ok_status();
+  }
+  loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
+  loom_low_move_t* moves = inline_moves;
+  iree_status_t status = iree_ok_status();
+  if (move_count > IREE_ARRAYSIZE(inline_moves)) {
+    status =
+        iree_allocator_malloc_array(context->builder->allocator, move_count,
+                                    sizeof(*moves), (void**)&moves);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_move_sequence_populate_edge_copy_units(
+        context->allocation, group, moves, move_count);
+  }
+  loom_amdgpu_assembly_move_state_t move_state = {
+      .context = context,
+  };
+  loom_low_move_sequence_options_t options = {
+      .emit_move =
+          {
+              .fn = loom_amdgpu_append_edge_move,
+              .user_data = &move_state,
+          },
+  };
+  if (iree_status_is_ok(status)) {
+    status = loom_low_move_sequence_emit(moves, move_count, &options);
+  }
+  if (iree_status_is_ok(status) && move_state.emitted_count != 0) {
+    status = iree_string_builder_append_cstring(context->builder, "\n  ");
+  }
+  if (moves != inline_moves) {
+    iree_allocator_free(context->builder->allocator, moves);
+  }
+  return status;
+}
+
 static iree_status_t loom_amdgpu_append_copy_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
@@ -1396,9 +1451,15 @@ static iree_status_t loom_amdgpu_append_branch_packet(
   const loom_op_t* op = context->packet->node->op;
   loom_value_slice_t args = loom_low_br_args(op);
   if (args.count != 0) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU assembly branch arguments require "
-                            "block-argument copy lowering");
+    const loom_low_allocation_edge_copy_group_t* group =
+        loom_low_allocation_find_edge_copy_group_by_source_ordinal(
+            context->allocation, context->packet->node->source_ordinal);
+    if (!group) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU assembly branch edge copies are missing from allocation");
+    }
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_edge_copy_group(context, group));
   }
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, "s_branch "));

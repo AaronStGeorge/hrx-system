@@ -44,6 +44,87 @@ iree_status_t loom_low_move_location_from_assignment_unit(
   return iree_ok_status();
 }
 
+iree_status_t loom_low_move_sequence_count_edge_copy_units(
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_edge_copy_group_t* group,
+    iree_host_size_t* out_move_count) {
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(group);
+  IREE_ASSERT_ARGUMENT(out_move_count);
+  *out_move_count = 0;
+  if (group->copy_start > allocation->edge_copy_count ||
+      group->copy_count > allocation->edge_copy_count - group->copy_start) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "edge-copy group range is outside allocation");
+  }
+  for (uint32_t i = 0; i < group->copy_count; ++i) {
+    const loom_low_allocation_edge_copy_t* edge_copy =
+        &allocation->edge_copies[group->copy_start + i];
+    if (edge_copy->source_assignment_index >= allocation->assignment_count ||
+        edge_copy->destination_assignment_index >=
+            allocation->assignment_count) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "edge-copy references an assignment outside allocation");
+    }
+    const loom_low_allocation_assignment_t* source_assignment =
+        &allocation->assignments[edge_copy->source_assignment_index];
+    const loom_low_allocation_assignment_t* destination_assignment =
+        &allocation->assignments[edge_copy->destination_assignment_index];
+    if (source_assignment->location_count !=
+        destination_assignment->location_count) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "edge-copy source and destination location counts differ");
+    }
+    if (source_assignment->location_count >
+        IREE_HOST_SIZE_MAX - *out_move_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "edge-copy unit move count exceeds host size");
+    }
+    *out_move_count += source_assignment->location_count;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_move_sequence_populate_edge_copy_units(
+    const loom_low_allocation_sidecar_t* allocation,
+    const loom_low_allocation_edge_copy_group_t* group, loom_low_move_t* moves,
+    iree_host_size_t move_count) {
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(group);
+  if (move_count != 0) {
+    IREE_ASSERT_ARGUMENT(moves);
+  }
+  iree_host_size_t expected_move_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_count_edge_copy_units(
+      allocation, group, &expected_move_count));
+  if (move_count != expected_move_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "edge-copy move storage has %zu entries but needs "
+                            "%zu",
+                            move_count, expected_move_count);
+  }
+  iree_host_size_t move_index = 0;
+  for (uint32_t i = 0; i < group->copy_count; ++i) {
+    const loom_low_allocation_edge_copy_t* edge_copy =
+        &allocation->edge_copies[group->copy_start + i];
+    const loom_low_allocation_assignment_t* source_assignment =
+        &allocation->assignments[edge_copy->source_assignment_index];
+    const loom_low_allocation_assignment_t* destination_assignment =
+        &allocation->assignments[edge_copy->destination_assignment_index];
+    for (uint32_t unit_index = 0;
+         unit_index < source_assignment->location_count; ++unit_index) {
+      IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
+          destination_assignment, unit_index, &moves[move_index].destination));
+      IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
+          source_assignment, unit_index, &moves[move_index].source));
+      ++move_index;
+    }
+  }
+  return iree_ok_status();
+}
+
 static void loom_low_move_sequence_remove_move(loom_low_move_t* moves,
                                                iree_host_size_t* move_count,
                                                iree_host_size_t move_index) {
