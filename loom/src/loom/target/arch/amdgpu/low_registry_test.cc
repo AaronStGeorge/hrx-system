@@ -27,6 +27,14 @@ void ExpectBundleSelectsDescriptorSet(
   EXPECT_EQ(bundle->snapshot->codegen_format,
             LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE);
   EXPECT_EQ(bundle->snapshot->artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
+  EXPECT_EQ(bundle->snapshot->max_workgroup_size.x, 1024u);
+  EXPECT_EQ(bundle->snapshot->max_workgroup_size.y, 1024u);
+  EXPECT_EQ(bundle->snapshot->max_workgroup_size.z, 1024u);
+  EXPECT_EQ(bundle->snapshot->max_flat_workgroup_size, 1024u);
+  EXPECT_EQ(bundle->snapshot->max_grid_size.x, 2147483647u);
+  EXPECT_EQ(bundle->snapshot->max_grid_size.y, 65535u);
+  EXPECT_EQ(bundle->snapshot->max_grid_size.z, 65535u);
+  EXPECT_EQ(bundle->snapshot->max_flat_grid_size, 4294967295ull);
   EXPECT_EQ(bundle->export_plan->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
 
   const loom_low_descriptor_set_t* descriptor_set = nullptr;

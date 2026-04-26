@@ -88,6 +88,15 @@ typedef struct loom_target_workgroup_size_t {
   uint32_t z;
 } loom_target_workgroup_size_t;
 
+typedef struct loom_target_grid_size_t {
+  // Maximum dispatched grid size along the x dimension.
+  uint32_t x;
+  // Maximum dispatched grid size along the y dimension.
+  uint32_t y;
+  // Maximum dispatched grid size along the z dimension.
+  uint32_t z;
+} loom_target_grid_size_t;
+
 typedef struct loom_target_workgroup_count_limit_t {
   // Maximum dispatch workgroup count along the x dimension.
   uint32_t x;
@@ -121,6 +130,15 @@ typedef struct loom_target_snapshot_t {
   // Maximum API/hardware local workgroup size per dimension. Zero dimensions
   // mean the target has not supplied a tighter limit.
   loom_target_workgroup_size_t max_workgroup_size;
+  // Maximum flat local workgroup size. Zero means the target has not supplied a
+  // tighter total-workitem limit across the workgroup dimensions.
+  uint32_t max_flat_workgroup_size;
+  // Maximum API/hardware dispatched grid size per dimension, in workitems.
+  // Zero dimensions mean the target has not supplied a tighter limit.
+  loom_target_grid_size_t max_grid_size;
+  // Maximum flat dispatched grid size, in workitems. Zero means the target has
+  // not supplied a tighter total-workitem limit across the grid dimensions.
+  uint64_t max_flat_grid_size;
   // Maximum API/hardware dispatch workgroup count per dimension. Zero
   // dimensions mean the target has not supplied a tighter limit.
   loom_target_workgroup_count_limit_t max_workgroup_count;

@@ -292,6 +292,14 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileHasGenericTargetBundle) {
   EXPECT_EQ(ToString(bundle->name), ToString(profile->name));
   ExpectSnapshotMatchesLlvmEnv(bundle->snapshot, profile->target_env);
   EXPECT_EQ(bundle->snapshot->memory_spaces.host, UINT32_MAX);
+  EXPECT_EQ(bundle->snapshot->max_workgroup_size.x, 1024u);
+  EXPECT_EQ(bundle->snapshot->max_workgroup_size.y, 1024u);
+  EXPECT_EQ(bundle->snapshot->max_workgroup_size.z, 1024u);
+  EXPECT_EQ(bundle->snapshot->max_flat_workgroup_size, 1024u);
+  EXPECT_EQ(bundle->snapshot->max_grid_size.x, 2147483647u);
+  EXPECT_EQ(bundle->snapshot->max_grid_size.y, 65535u);
+  EXPECT_EQ(bundle->snapshot->max_grid_size.z, 65535u);
+  EXPECT_EQ(bundle->snapshot->max_flat_grid_size, 4294967295ull);
   ASSERT_NE(bundle->export_plan, nullptr);
   EXPECT_EQ(ToString(bundle->export_plan->name), ToString(profile->name));
   EXPECT_EQ(bundle->export_plan->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
