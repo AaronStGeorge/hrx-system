@@ -625,6 +625,7 @@ iree_c_embed_data(
     "execution/testdata/dot8i4_u4u4_buffer.loom"
     "execution/testdata/gfx11_wmma_lds_roundtrip.loom"
     "execution/testdata/gfx11_wmma_zero.loom"
+    "execution/testdata/lds_b128_roundtrip.loom"
   C_FILE_OUTPUT
     "execution/amdgpu_hal_testdata.c"
   H_FILE_OUTPUT
