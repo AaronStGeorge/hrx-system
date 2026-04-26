@@ -16,6 +16,7 @@
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/slot_layout.h"
 #include "loom/target/emit/native/fragment.h"
+#include "loom/target/launch.h"
 
 #define LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT 2u
 
@@ -672,6 +673,13 @@ iree_status_t loom_amdgpu_kernel_record_build(
   const loom_amdgpu_metadata_argument_t* arguments = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_build_metadata_arguments(
       abi_layout, &arguments, scratch_arena));
+  const bool has_required_workgroup_size =
+      loom_target_workgroup_size_is_concrete(
+          &hal_kernel->required_workgroup_size);
+  const uint32_t max_flat_workgroup_size =
+      hal_kernel->flat_workgroup_size_max != 0
+          ? hal_kernel->flat_workgroup_size_max
+          : snapshot->max_flat_workgroup_size;
 
   *out_record = (loom_amdgpu_kernel_record_t){
       .symbol = symbol,
@@ -692,9 +700,9 @@ iree_status_t loom_amdgpu_kernel_record_build(
                   (uint32_t)segment_usage.private_segment_fixed_size,
               .sgpr_count = next_free_sgpr,
               .vgpr_count = register_usage.next_free_vgpr,
-              .max_flat_workgroup_size = hal_kernel->flat_workgroup_size_max,
+              .max_flat_workgroup_size = max_flat_workgroup_size,
               .required_workgroup_size = hal_kernel->required_workgroup_size,
-              .has_required_workgroup_size = true,
+              .has_required_workgroup_size = has_required_workgroup_size,
               .arguments = arguments,
               .argument_count = abi_layout->resource_count,
           },

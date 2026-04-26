@@ -10,6 +10,7 @@
 
 #include "loom/ir/module.h"
 #include "loom/ops/target/facts.h"
+#include "loom/target/launch.h"
 
 static iree_status_t loom_target_function_contract_string_from_id(
     const loom_module_t* module, loom_string_id_t string_id,
@@ -147,6 +148,15 @@ iree_status_t loom_target_function_contract_resolve(
   }
   IREE_RETURN_IF_ERROR(loom_target_function_contract_apply_abi_attrs(
       module, func_facts->abi_attrs, &out_bundle_storage->export_plan));
+  if (out_bundle_storage->export_plan.abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
+    if (out_bundle_storage->export_plan.hal_kernel.binding_alignment == 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "HAL kernel binding alignment must be non-zero");
+    }
+    IREE_RETURN_IF_ERROR(loom_target_validate_hal_kernel_launch(
+        &out_bundle_storage->snapshot,
+        &out_bundle_storage->export_plan.hal_kernel));
+  }
   if (!iree_string_view_is_empty(func_facts->export_symbol)) {
     out_bundle_storage->export_plan.export_symbol = func_facts->export_symbol;
   }

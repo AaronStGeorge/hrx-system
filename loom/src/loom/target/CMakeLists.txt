@@ -22,6 +22,30 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    launch
+  HDRS
+    "launch.h"
+  SRCS
+    "launch.c"
+  DEPS
+    ::types
+    iree::base
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    launch_test
+  SRCS
+    "launch_test.cc"
+  DEPS
+    ::launch
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     artifact_plan
   HDRS
     "artifact_plan.h"
@@ -59,6 +83,7 @@ loom_cc_library(
   SRCS
     "function_contract.c"
   DEPS
+    ::launch
     ::types
     iree::base
     loom::src::loom::analysis::symbol_facts

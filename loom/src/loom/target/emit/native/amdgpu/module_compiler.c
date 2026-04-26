@@ -27,6 +27,7 @@
 #include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
+#include "loom/target/launch.h"
 #include "loom/target/module_compiler.h"
 
 enum {
@@ -387,6 +388,8 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
 
   const loom_target_hal_kernel_abi_t* hal_kernel =
       &plan->entry->bundle_storage.bundle.export_plan->hal_kernel;
+  IREE_RETURN_IF_ERROR(loom_target_require_concrete_hal_kernel_launch(
+      hal_kernel, IREE_SV("AMDGPU HAL executable export")));
   *out_export = (loom_amdgpu_hal_executable_export_t){
       .symbol_name = out_contribution->kernel.metadata.descriptor_symbol,
       .workgroup_size = hal_kernel->required_workgroup_size,

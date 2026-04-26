@@ -27,6 +27,26 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "launch",
+    srcs = ["launch.c"],
+    hdrs = ["launch.h"],
+    deps = [
+        ":types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "launch_test",
+    srcs = ["launch_test.cc"],
+    deps = [
+        ":launch",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "artifact_plan",
     srcs = ["artifact_plan.c"],
     hdrs = ["artifact_plan.h"],
@@ -56,6 +76,7 @@ loom_cc_library(
     srcs = ["function_contract.c"],
     hdrs = ["function_contract.h"],
     deps = [
+        ":launch",
         ":types",
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/ir",
