@@ -1377,6 +1377,32 @@ static iree_status_t loom_amdgpu_append_return_packet(
   return iree_string_builder_append_cstring(context->builder, "s_endpgm");
 }
 
+static iree_status_t loom_amdgpu_append_branch_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  (void)user_data;
+  const loom_op_t* op = context->packet->node->op;
+  loom_value_slice_t args = loom_low_br_args(op);
+  if (args.count != 0) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "AMDGPU assembly branch arguments require "
+                            "block-argument copy lowering");
+  }
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "s_branch "));
+  return loom_native_assembly_append_block_label(
+      context->schedule, loom_low_br_dest(op), context->builder);
+}
+
+static iree_status_t loom_amdgpu_append_cond_branch_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  (void)user_data;
+  (void)context;
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "AMDGPU assembly conditional branches require target lowering to an "
+      "explicit SCC, VCC, or EXEC branch form");
+}
+
 static iree_status_t loom_amdgpu_verify_assembly_target(
     const loom_low_schedule_sidecar_t* schedule) {
   if (schedule == NULL || schedule->target.descriptor_set == NULL) {
@@ -1450,6 +1476,22 @@ static const loom_native_assembly_structural_packet_callback_t
             .append_packet =
                 {
                     .fn = loom_amdgpu_append_return_packet,
+                    .user_data = NULL,
+                },
+        },
+        {
+            .op_kind = LOOM_OP_LOW_BR,
+            .append_packet =
+                {
+                    .fn = loom_amdgpu_append_branch_packet,
+                    .user_data = NULL,
+                },
+        },
+        {
+            .op_kind = LOOM_OP_LOW_COND_BR,
+            .append_packet =
+                {
+                    .fn = loom_amdgpu_append_cond_branch_packet,
                     .user_data = NULL,
                 },
         },

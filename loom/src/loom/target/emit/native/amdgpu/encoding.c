@@ -61,6 +61,8 @@ typedef struct loom_amdgpu_encode_state_t {
   iree_host_size_t length;
   // Next wait-packet row to compare with the current scheduled packet.
   iree_host_size_t next_wait_packet_index;
+  // Planned byte offset for each scheduled block.
+  iree_host_size_t* block_offsets;
 } loom_amdgpu_encode_state_t;
 
 static iree_status_t loom_amdgpu_descriptor_string(
@@ -1123,6 +1125,77 @@ static iree_status_t loom_amdgpu_encode_return_packet(
   return loom_amdgpu_encode_sopp_word(state, state->target->s_endpgm_opcode, 0);
 }
 
+static iree_status_t loom_amdgpu_encode_branch_offset(
+    loom_amdgpu_encode_state_t* state, const loom_block_t* target_block,
+    uint16_t* out_immediate) {
+  IREE_ASSERT_ARGUMENT(out_immediate);
+  *out_immediate = 0;
+  const uint32_t target_block_index =
+      loom_low_packet_block_index(state->schedule, target_block);
+  if (target_block_index == LOOM_LOW_PACKET_INDEX_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU native encoding branch target block is not "
+                            "in the scheduled low function");
+  }
+  if (state->data == NULL) {
+    return iree_ok_status();
+  }
+  IREE_ASSERT(state->block_offsets != NULL);
+  if (state->length > (iree_host_size_t)INT64_MAX - 4 ||
+      state->block_offsets[target_block_index] > (iree_host_size_t)INT64_MAX) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU native encoding branch target byte offset exceeds int64_t");
+  }
+
+  const int64_t branch_base_offset = (int64_t)state->length + 4;
+  const int64_t target_offset =
+      (int64_t)state->block_offsets[target_block_index];
+  const int64_t relative_byte_offset = target_offset - branch_base_offset;
+  if ((relative_byte_offset % 4) != 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU native encoding branch target offset is not dword aligned");
+  }
+  const int64_t relative_dword_offset = relative_byte_offset / 4;
+  if (relative_dword_offset < INT16_MIN || relative_dword_offset > INT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU native encoding branch target offset %" PRId64
+        " dword(s) does not fit a signed 16-bit SOPP label",
+        relative_dword_offset);
+  }
+  *out_immediate =
+      (uint16_t)((uint32_t)relative_dword_offset & UINT32_C(0xFFFF));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_encode_branch_packet(
+    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
+  const loom_op_t* op = packet->node->op;
+  loom_value_slice_t args = loom_low_br_args(op);
+  if (args.count != 0) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "AMDGPU native encoding branch arguments require "
+                            "block-argument copy lowering");
+  }
+  uint16_t immediate = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encode_branch_offset(
+      state, loom_low_br_dest(op), &immediate));
+  return loom_amdgpu_encode_sopp_word(state, state->target->s_branch_opcode,
+                                      immediate);
+}
+
+static iree_status_t loom_amdgpu_encode_cond_branch_packet(
+    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
+  (void)state;
+  (void)packet;
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "AMDGPU native encoding conditional branches require target lowering to "
+      "an explicit SCC, VCC, or EXEC branch form");
+}
+
 static iree_status_t loom_amdgpu_encode_live_in_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   (void)state;
@@ -1360,6 +1433,8 @@ static const loom_amdgpu_encode_structural_dispatch_t
         {LOOM_OP_LOW_SLICE, loom_amdgpu_encode_slice_packet},
         {LOOM_OP_LOW_CONCAT, loom_amdgpu_encode_concat_packet},
         {LOOM_OP_LOW_FRAME_INDEX, loom_amdgpu_encode_frame_index_packet},
+        {LOOM_OP_LOW_BR, loom_amdgpu_encode_branch_packet},
+        {LOOM_OP_LOW_COND_BR, loom_amdgpu_encode_cond_branch_packet},
         {LOOM_OP_LOW_RETURN, loom_amdgpu_encode_return_packet},
 };
 
@@ -1401,11 +1476,6 @@ static iree_status_t loom_amdgpu_resolve_encoding_target(
   }
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_info_lookup_descriptor_set_by_id(
       schedule->target.descriptor_set->stable_id, out_target));
-  if (schedule->block_count != 1) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU native encoding requires a single low function block");
-  }
   return iree_ok_status();
 }
 
@@ -1471,13 +1541,22 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_into_state(
     loom_amdgpu_encode_state_t* state) {
   state->length = 0;
   state->next_wait_packet_index = 0;
-  const iree_host_size_t packet_count = loom_low_packet_count(state->schedule);
-  for (iree_host_size_t packet_index = 0; packet_index < packet_count;
-       ++packet_index) {
-    loom_low_packet_view_t packet = {0};
-    IREE_RETURN_IF_ERROR(loom_low_packet_view_at(
-        state->schedule, state->allocation, packet_index, &packet));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_encode_packet(state, &packet));
+  for (iree_host_size_t block_index = 0;
+       block_index < state->schedule->block_count; ++block_index) {
+    const loom_low_schedule_block_t* block =
+        &state->schedule->blocks[block_index];
+    if (state->block_offsets != NULL) {
+      state->block_offsets[block_index] = state->length;
+    }
+    for (uint32_t scheduled_ordinal = 0;
+         scheduled_ordinal < block->scheduled_node_count; ++scheduled_ordinal) {
+      const iree_host_size_t packet_index =
+          block->scheduled_node_start + scheduled_ordinal;
+      loom_low_packet_view_t packet = {0};
+      IREE_RETURN_IF_ERROR(loom_low_packet_view_at(
+          state->schedule, state->allocation, packet_index, &packet));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_encode_packet(state, &packet));
+    }
   }
   if (state->wait_packets != NULL &&
       state->next_wait_packet_index != state->wait_packets->packet_count) {
@@ -1514,6 +1593,12 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_verify_wait_packet_plan(schedule, wait_packets));
   }
+  iree_host_size_t* block_offsets = NULL;
+  if (schedule->block_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, schedule->block_count,
+                                                   sizeof(*block_offsets),
+                                                   (void**)&block_offsets));
+  }
 
   loom_amdgpu_encode_state_t sizing_state = {
       .schedule = schedule,
@@ -1525,6 +1610,7 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
       .immediate_name_id_count = immediate_name_id_count,
       .wait_packets = wait_packets,
       .arena = arena,
+      .block_offsets = block_offsets,
   };
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_encode_instruction_stream_into_state(&sizing_state));
@@ -1547,6 +1633,7 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
       .arena = arena,
       .data = data,
       .capacity = sizing_state.length,
+      .block_offsets = block_offsets,
   };
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_encode_instruction_stream_into_state(&writing_state));

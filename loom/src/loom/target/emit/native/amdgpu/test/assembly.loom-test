@@ -19,6 +19,29 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_branch waits=none
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_branch() {
+  low.br ^body
+^body:
+  low.op<amdgpu.s_wait_idle>() : ()
+  low.br ^exit
+^exit:
+  low.return
+}
+
+// ----
+.Lbb0:
+  s_branch .Lbb1
+.Lbb1:
+  s_wait_idle
+  s_branch .Lbb2
+.Lbb2:
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_buffer_off_zero waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 

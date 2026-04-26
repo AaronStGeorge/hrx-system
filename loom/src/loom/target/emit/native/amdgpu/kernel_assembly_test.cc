@@ -406,20 +406,15 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsWorkitemZDescriptorMode) {
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target",
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
-      "  %tid_z = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE
-      "> : reg<amdgpu.vgpr>\n"
-      "  %binding = low.resource<hal_buffer_resource> {index = 0, "
-      "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
-      "  %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
-      "reg<amdgpu.vgpr>\n"
-      "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
-      "reg<amdgpu.sgpr>\n"
-      "  low.op<amdgpu.buffer_store_dword>(%tid_z, %binding, %vaddr, %zero) "
-      "{offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, "
-      "reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)\n"
-      "  low.return\n"
-      "}\n",
+      R"(low.func.def target(@gfx_target) @loom_kernel() {
+  %packed_tid = low.live_in<amdgpu.workitem_id.packed.xyz> : reg<amdgpu.vgpr>
+  %binding = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
+  %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  low.op<amdgpu.buffer_store_dword>(%packed_tid, %binding, %vaddr, %zero) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
+  low.return
+}
+)",
       1, 2, &abi_layout, &sidecar_arena, &packetization);
 
   iree_string_builder_t builder;

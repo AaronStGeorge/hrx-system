@@ -504,6 +504,28 @@ TEST_F(AmdgpuEncodingTest, DirectlyEncodesReturnPacket) {
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(AmdgpuEncodingTest, EncodesStructuralBranchOffsets) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_packetization_t packetization = {};
+  BuildGfx11Sidecars(
+      "low.func.def target(@gfx_target) @gfx_kernel() {\n"
+      "  low.br ^loop\n"
+      "^loop:\n"
+      "  low.br ^loop\n"
+      "}\n",
+      &arena, &packetization);
+
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  IREE_ASSERT_OK(loom_amdgpu_encode_instruction_stream(
+      &packetization.schedule, &packetization.allocation, &text, &arena));
+
+  ASSERT_EQ(text.data_length, 8u);
+  EXPECT_EQ(ReadU32LE(text.data + 0), UINT32_C(0xBFA00000));
+  EXPECT_EQ(ReadU32LE(text.data + 4), UINT32_C(0xBFA0FFFF));
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(AmdgpuEncodingTest, DirectlyEncodesSop1MovePacket) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
