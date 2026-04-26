@@ -116,8 +116,8 @@ bool loom_amdgpu_memory_access_select(
     loom_low_source_memory_access_diagnostic_t* out_source_diagnostic,
     loom_amdgpu_memory_access_diagnostic_t* out_diagnostic);
 
-// Selects the target operand path used for a dynamic source memory index.
-bool loom_amdgpu_memory_access_select_dynamic_index_kind(
+// Selects target operand paths for dynamic source memory address terms.
+bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
     const loom_module_t* module, loom_amdgpu_memory_access_plan_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic);
 

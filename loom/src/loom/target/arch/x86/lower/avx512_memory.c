@@ -116,13 +116,15 @@ static bool loom_x86_select_memory_access(
     out_plan->index_scale = 0;
     return true;
   }
-  if (out_plan->source.dynamic_index_source !=
-      LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE) {
+  const loom_low_source_memory_dynamic_term_t* term =
+      loom_low_source_memory_access_single_dynamic_term(&out_plan->source);
+  if (!term ||
+      term->source != LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE) {
     return false;
   }
   out_plan->address_kind = LOOM_X86_MEMORY_ADDRESS_INDEXED;
-  return loom_x86_dynamic_stride_as_address_scale(
-      out_plan->source.dynamic_index_byte_stride, &out_plan->index_scale);
+  return loom_x86_dynamic_stride_as_address_scale(term->byte_stride,
+                                                  &out_plan->index_scale);
 }
 
 iree_status_t loom_x86_select_avx512_op(void* user_data,
@@ -220,8 +222,11 @@ static iree_status_t loom_x86_lower_vector_load(
         plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32
             ? X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_INDEXED_XMM
             : X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_LOAD_INDEXED_ZMM;
-    IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-        context, plan->source.dynamic_index, &operands[1]));
+    const loom_low_source_memory_dynamic_term_t* term =
+        loom_low_source_memory_access_single_dynamic_term(&plan->source);
+    IREE_ASSERT(term);
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_lookup_value(context, term->index, &operands[1]));
     IREE_RETURN_IF_ERROR(
         loom_x86_make_scale_attr(context, plan->index_scale, &attrs[1]));
     operand_count = 2;
@@ -264,8 +269,11 @@ static iree_status_t loom_x86_lower_vector_store(
         plan->value_kind == LOOM_X86_MEMORY_VALUE_XMM32
             ? X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_INDEXED_XMM
             : X86_AVX512_CORE_DESCRIPTOR_ID_X86_AVX512_VMOVDQU32_STORE_INDEXED_ZMM;
-    IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-        context, plan->source.dynamic_index, &operands[2]));
+    const loom_low_source_memory_dynamic_term_t* term =
+        loom_low_source_memory_access_single_dynamic_term(&plan->source);
+    IREE_ASSERT(term);
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_lookup_value(context, term->index, &operands[2]));
     IREE_RETURN_IF_ERROR(
         loom_x86_make_scale_attr(context, plan->index_scale, &attrs[1]));
     operand_count = 3;

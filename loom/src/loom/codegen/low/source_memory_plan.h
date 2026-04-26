@@ -83,6 +83,25 @@ typedef struct loom_low_source_memory_access_diagnostic_t {
   loom_low_source_memory_access_rejection_flags_t rejection_bits;
 } loom_low_source_memory_access_diagnostic_t;
 
+#define LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY LOOM_TYPE_MAX_RANK
+
+typedef struct loom_low_source_memory_dynamic_term_t {
+  // Dynamic source SSA value multiplied into this address term.
+  loom_value_id_t index;
+  // Source provenance for the dynamic index value.
+  loom_low_source_memory_dynamic_index_source_t source;
+  // Workitem/workgroup dimension when |source| is a coordinate.
+  loom_kernel_dimension_t dimension;
+  // View axis represented by |index|.
+  uint8_t axis;
+  // Byte stride multiplied by |index| before adding it to the address.
+  int64_t byte_stride;
+  // Power-of-two shift used to compute the dynamic byte offset, or
+  // LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE when multiplication or
+  // target-specific handling is required.
+  uint32_t byte_shift;
+} loom_low_source_memory_dynamic_term_t;
+
 typedef struct loom_low_source_memory_access_plan_t {
   // Source operation category being planned.
   loom_low_source_memory_operation_kind_t operation_kind;
@@ -100,28 +119,24 @@ typedef struct loom_low_source_memory_access_plan_t {
   int64_t vector_lane_byte_stride;
   // Total static byte offset selected from the source view access.
   int64_t static_byte_offset;
-  // Dynamic view-axis index used to compute a target address operand, or
-  // invalid for a purely static access.
-  loom_value_id_t dynamic_index;
-  // Source provenance for the dynamic index value.
-  loom_low_source_memory_dynamic_index_source_t dynamic_index_source;
-  // Workitem/workgroup dimension when |dynamic_index_source| is a coordinate.
-  loom_kernel_dimension_t dynamic_index_dimension;
-  // View axis represented by |dynamic_index|.
-  uint8_t dynamic_axis;
-  // Byte stride multiplied by dynamic_index before adding it to the address.
-  int64_t dynamic_index_byte_stride;
-  // Power-of-two shift used to compute the dynamic byte offset, or
-  // LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE when multiplication or
-  // target-specific handling is required.
-  uint32_t dynamic_index_byte_shift;
+  // Dynamic address terms ordered by increasing view axis.
+  loom_low_source_memory_dynamic_term_t
+      dynamic_terms[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY];
+  // Number of populated dynamic address terms.
+  uint8_t dynamic_term_count;
   // Optional cache policy copied from the source memory op.
   loom_vector_memory_cache_policy_t cache_policy;
 } loom_low_source_memory_access_plan_t;
 
 static inline bool loom_low_source_memory_access_is_dynamic(
     const loom_low_source_memory_access_plan_t* plan) {
-  return plan->dynamic_index != LOOM_VALUE_ID_INVALID;
+  return plan->dynamic_term_count != 0;
+}
+
+static inline const loom_low_source_memory_dynamic_term_t*
+loom_low_source_memory_access_single_dynamic_term(
+    const loom_low_source_memory_access_plan_t* plan) {
+  return plan->dynamic_term_count == 1 ? &plan->dynamic_terms[0] : NULL;
 }
 
 // Builds a target-independent source memory plan for indexed source memory ops.

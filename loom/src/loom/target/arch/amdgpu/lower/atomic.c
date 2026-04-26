@@ -872,7 +872,7 @@ static bool loom_amdgpu_atomic_select(
       break;
     case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
       out_plan->address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT;
-      if (out_plan->source.dynamic_index != LOOM_VALUE_ID_INVALID) {
+      if (loom_low_source_memory_access_is_dynamic(&out_plan->source)) {
         memory_diagnostic->rejection_bits |=
             LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_FLAT_DYNAMIC_ADDRESS;
         return false;
@@ -911,11 +911,14 @@ static bool loom_amdgpu_atomic_select(
       .source = out_plan->source,
       .address_form = out_plan->address_form,
   };
-  if (!loom_amdgpu_memory_access_select_dynamic_index_kind(
+  if (!loom_amdgpu_memory_access_select_dynamic_term_kinds(
           module, &memory_access, memory_diagnostic)) {
     return false;
   }
-  out_plan->dynamic_index_kind = memory_access.dynamic_index_kind;
+  for (iree_host_size_t i = 0; i < LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY;
+       ++i) {
+    out_plan->dynamic_term_kinds[i] = memory_access.dynamic_term_kinds[i];
+  }
 
   const loom_type_t value_type =
       out_plan->operation_kind == LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG
@@ -927,12 +930,16 @@ static bool loom_amdgpu_atomic_select(
     return false;
   }
   loom_amdgpu_atomic_select_packet_attrs(descriptor_set, out_plan);
-  if (out_plan->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR &&
-      out_plan->dynamic_index_kind ==
+  if (out_plan->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR) {
+    for (uint8_t i = 0; i < out_plan->source.dynamic_term_count; ++i) {
+      if (out_plan->dynamic_term_kinds[i] !=
           LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET) {
-    memory_diagnostic->rejection_bits |=
-        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_GLOBAL_FALLBACK_ADDRESS;
-    return false;
+        continue;
+      }
+      memory_diagnostic->rejection_bits |=
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_GLOBAL_FALLBACK_ADDRESS;
+      return false;
+    }
   }
   if (!loom_amdgpu_atomic_select_global_ordering(descriptor_set, out_plan,
                                                  source_op, diagnostic)) {
@@ -1061,14 +1068,9 @@ static iree_status_t loom_amdgpu_emit_atomic_buffer_soffset(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_atomic_plan_t* plan, loom_value_id_t* out_low_soffset) {
   IREE_ASSERT_ARGUMENT(out_low_soffset);
-  const loom_value_id_t dynamic_index =
-      plan->dynamic_index_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET
-          ? plan->source.dynamic_index
-          : LOOM_VALUE_ID_INVALID;
-  return loom_amdgpu_emit_sgpr_byte_offset(
-      context, source_op, dynamic_index, plan->source.dynamic_index_byte_stride,
-      plan->source.dynamic_index_byte_shift, plan->scalar_byte_offset,
-      out_low_soffset);
+  return loom_amdgpu_emit_sgpr_byte_offset_terms(
+      context, source_op, &plan->source, plan->dynamic_term_kinds,
+      plan->scalar_byte_offset, out_low_soffset);
 }
 
 static iree_status_t loom_amdgpu_emit_atomic_ordering_waits(
@@ -1129,13 +1131,16 @@ iree_status_t loom_amdgpu_lower_view_atomic(
   loom_amdgpu_memory_access_plan_t access = {
       .source = plan->source,
       .address_form = plan->address_form,
-      .dynamic_index_kind = plan->dynamic_index_kind,
       .immediate_offset = plan->immediate_offset,
       .scalar_byte_offset = plan->scalar_byte_offset,
       .vgpr_count = 1,
       .packet_byte_count = 4,
       .descriptor_id = plan->descriptor_id,
   };
+  for (iree_host_size_t i = 0; i < LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY;
+       ++i) {
+    access.dynamic_term_kinds[i] = plan->dynamic_term_kinds[i];
+  }
   const loom_value_id_t low_base_addr =
       plan->source.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP
           ? low_resource

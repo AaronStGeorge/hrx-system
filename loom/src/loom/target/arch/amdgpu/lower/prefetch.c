@@ -32,29 +32,31 @@ static bool loom_amdgpu_prefetch_static_offset_split(
 
 static bool loom_amdgpu_prefetch_select_dynamic_index(
     const loom_module_t* module, loom_amdgpu_prefetch_plan_t* plan) {
-  if (plan->source.dynamic_index == LOOM_VALUE_ID_INVALID) {
+  if (!loom_low_source_memory_access_is_dynamic(&plan->source)) {
     return true;
   }
-  if (plan->source.dynamic_index_byte_stride < 0 ||
-      plan->source.dynamic_index_byte_stride > UINT32_MAX) {
+  const loom_low_source_memory_dynamic_term_t* term =
+      loom_low_source_memory_access_single_dynamic_term(&plan->source);
+  if (!term) {
     return false;
   }
-  if (plan->source.dynamic_index_byte_stride != 1 &&
-      plan->source.dynamic_index_byte_shift ==
-          LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE) {
+  if (term->byte_stride < 0 || term->byte_stride > UINT32_MAX) {
+    return false;
+  }
+  if (term->byte_stride != 1 &&
+      term->byte_shift == LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE) {
     return false;
   }
 
-  switch (plan->source.dynamic_index_source) {
+  switch (term->source) {
     case LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID:
-      plan->dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
+      plan->dynamic_term_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
       return true;
     case LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE:
-      if (loom_amdgpu_module_value_prefers_vgpr(module,
-                                                plan->source.dynamic_index)) {
+      if (loom_amdgpu_module_value_prefers_vgpr(module, term->index)) {
         return false;
       }
-      plan->dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
+      plan->dynamic_term_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
       return true;
     case LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID:
     case LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_NONE:
@@ -168,14 +170,21 @@ iree_status_t loom_amdgpu_lower_view_prefetch(
       context, loom_view_prefetch_view(source_op), &low_resource));
 
   const loom_value_id_t dynamic_index =
-      plan->dynamic_index_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET
-          ? plan->source.dynamic_index
+      plan->dynamic_term_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET
+          ? plan->source.dynamic_terms[0].index
           : LOOM_VALUE_ID_INVALID;
+  const int64_t dynamic_index_byte_stride =
+      dynamic_index == LOOM_VALUE_ID_INVALID
+          ? 1
+          : plan->source.dynamic_terms[0].byte_stride;
+  const uint32_t dynamic_index_byte_shift =
+      dynamic_index == LOOM_VALUE_ID_INVALID
+          ? LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE
+          : plan->source.dynamic_terms[0].byte_shift;
   loom_value_id_t low_soffset = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_sgpr_byte_offset(
-      context, source_op, dynamic_index, plan->source.dynamic_index_byte_stride,
-      plan->source.dynamic_index_byte_shift, plan->scalar_byte_offset,
-      &low_soffset));
+      context, source_op, dynamic_index, dynamic_index_byte_stride,
+      dynamic_index_byte_shift, plan->scalar_byte_offset, &low_soffset));
 
   loom_named_attr_t attrs[2] = {0};
   iree_host_size_t attr_count = 0;

@@ -369,6 +369,14 @@ iree_status_t loom_amdgpu_emit_sgpr_byte_offset(
     uint32_t dynamic_index_byte_shift, uint32_t static_byte_offset,
     loom_value_id_t* out_low_offset);
 
+// Emits an SGPR byte offset from the scalar-address terms selected for a source
+// memory access plus a static byte offset.
+iree_status_t loom_amdgpu_emit_sgpr_byte_offset_terms(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_low_source_memory_access_plan_t* source,
+    const loom_amdgpu_memory_dynamic_index_kind_t* dynamic_term_kinds,
+    uint32_t static_byte_offset, loom_value_id_t* out_low_offset);
+
 // Maps a source result to the low register type already selected by the active
 // lowering policy and verifies that it is a register payload.
 iree_status_t loom_amdgpu_low_result_type(loom_low_lower_context_t* context,

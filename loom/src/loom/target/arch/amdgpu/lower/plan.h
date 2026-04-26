@@ -191,8 +191,9 @@ typedef struct loom_amdgpu_memory_access_plan_t {
   loom_low_source_memory_access_plan_t source;
   // Selected target addressing form for the memory packet.
   loom_amdgpu_memory_address_form_t address_form;
-  // Target operand path used for the dynamic index.
-  loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
+  // Target operand path selected for each source dynamic address term.
+  loom_amdgpu_memory_dynamic_index_kind_t
+      dynamic_term_kinds[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY];
   // Static offset value encoded in the descriptor's first offset immediate.
   int64_t immediate_offset;
   // Static offset value encoded in the descriptor's second offset immediate.
@@ -271,8 +272,9 @@ typedef struct loom_amdgpu_atomic_plan_t {
   loom_amdgpu_atomic_operation_kind_t operation_kind;
   // Selected target addressing form for the atomic packet.
   loom_amdgpu_memory_address_form_t address_form;
-  // Target operand path used for the dynamic index.
-  loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
+  // Target operand path selected for each source dynamic address term.
+  loom_amdgpu_memory_dynamic_index_kind_t
+      dynamic_term_kinds[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY];
   // Static offset value encoded in the descriptor offset immediate.
   int64_t immediate_offset;
   // Static byte offset materialized through the scalar SOFFSET operand.
@@ -288,8 +290,8 @@ typedef struct loom_amdgpu_atomic_plan_t {
 typedef struct loom_amdgpu_prefetch_plan_t {
   // Target-independent source memory access plan being wrapped.
   loom_low_source_memory_access_plan_t source;
-  // Source operand path used for the scalar offset.
-  loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind;
+  // Target operand path selected for the source dynamic address term.
+  loom_amdgpu_memory_dynamic_index_kind_t dynamic_term_kind;
   // Static offset value encoded in the descriptor offset immediate.
   int64_t immediate_offset;
   // Static byte offset materialized through the scalar SOFFSET operand.
@@ -303,8 +305,9 @@ typedef struct loom_amdgpu_prefetch_plan_t {
 typedef struct loom_amdgpu_async_gather_plan_t {
   // Source global-like view access transferred into LDS.
   loom_low_source_memory_access_plan_t source;
-  // Target operand path used for the dynamic source address.
-  loom_amdgpu_memory_dynamic_index_kind_t source_dynamic_index_kind;
+  // Target operand path selected for each source dynamic address term.
+  loom_amdgpu_memory_dynamic_index_kind_t
+      source_dynamic_term_kinds[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY];
   // Source SSA view value passed to kernel.async.gather.
   loom_value_id_t source_view;
   // Destination LDS view value passed to kernel.async.gather.

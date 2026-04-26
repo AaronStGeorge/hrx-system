@@ -1008,10 +1008,12 @@ static bool loom_wasm_select_memory_access(
                                                 out_plan->root_value_id)) {
     return false;
   }
-  if (loom_low_source_memory_access_is_dynamic(out_plan) &&
-      (out_plan->dynamic_index_byte_stride <= 0 ||
-       !loom_wasm_i64_fits_i32(out_plan->dynamic_index_byte_stride))) {
-    return false;
+  for (uint8_t i = 0; i < out_plan->dynamic_term_count; ++i) {
+    const loom_low_source_memory_dynamic_term_t* term =
+        &out_plan->dynamic_terms[i];
+    if (term->byte_stride <= 0 || !loom_wasm_i64_fits_i32(term->byte_stride)) {
+      return false;
+    }
   }
   return true;
 }
@@ -1359,21 +1361,25 @@ static iree_status_t loom_wasm_emit_dynamic_address_offset(
   if (!loom_low_source_memory_access_is_dynamic(plan)) {
     return iree_ok_status();
   }
-  loom_value_id_t dynamic_index = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(context, plan->dynamic_index,
-                                                   &dynamic_index));
-  loom_value_id_t dynamic_offset = dynamic_index;
-  if (plan->dynamic_index_byte_stride != 1) {
-    loom_value_id_t stride = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_wasm_emit_i32_const(
-        context, plan->dynamic_index_byte_stride, location, &stride));
+  for (uint8_t i = 0; i < plan->dynamic_term_count; ++i) {
+    const loom_low_source_memory_dynamic_term_t* term = &plan->dynamic_terms[i];
+    loom_value_id_t dynamic_index = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_lookup_value(context, term->index, &dynamic_index));
+    loom_value_id_t dynamic_offset = dynamic_index;
+    if (term->byte_stride != 1) {
+      loom_value_id_t stride = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_wasm_emit_i32_const(context, term->byte_stride,
+                                                    location, &stride));
+      IREE_RETURN_IF_ERROR(loom_wasm_emit_i32_binary(
+          context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_MUL, dynamic_index,
+          stride, location, &dynamic_offset));
+    }
     IREE_RETURN_IF_ERROR(loom_wasm_emit_i32_binary(
-        context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_MUL, dynamic_index,
-        stride, location, &dynamic_offset));
+        context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD, *inout_address,
+        dynamic_offset, location, inout_address));
   }
-  return loom_wasm_emit_i32_binary(
-      context, WASM_CORE_SIMD128_DESCRIPTOR_ID_WASM_I32_ADD, *inout_address,
-      dynamic_offset, location, inout_address);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_wasm_emit_memory_address(

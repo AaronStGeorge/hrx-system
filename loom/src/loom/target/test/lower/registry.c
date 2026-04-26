@@ -1506,9 +1506,11 @@ static bool loom_test_low_source_memory_access_is_supported(
   if (!loom_low_source_memory_access_is_dynamic(plan)) {
     return true;
   }
-  return plan->dynamic_index_source ==
-             LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE &&
-         plan->dynamic_index_byte_stride == 4;
+  const loom_low_source_memory_dynamic_term_t* term =
+      loom_low_source_memory_access_single_dynamic_term(plan);
+  return term &&
+         term->source == LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE &&
+         term->byte_stride == 4;
 }
 
 typedef struct loom_test_low_memory_access_plan_t {
@@ -1645,8 +1647,11 @@ static iree_status_t loom_test_low_emit_vector_load(
   };
   iree_host_size_t operand_count = 1;
   if (loom_low_source_memory_access_is_dynamic(&plan->access)) {
+    const loom_low_source_memory_dynamic_term_t* term =
+        loom_low_source_memory_access_single_dynamic_term(&plan->access);
+    IREE_ASSERT(term);
     IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-        context, plan->access.dynamic_index, &operands[operand_count++]));
+        context, term->index, &operands[operand_count++]));
   }
   loom_type_t result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_lower_map_value(
@@ -1675,8 +1680,11 @@ static iree_status_t loom_test_low_emit_vector_store(
   };
   iree_host_size_t operand_count = 1;
   if (loom_low_source_memory_access_is_dynamic(&plan->access)) {
+    const loom_low_source_memory_dynamic_term_t* term =
+        loom_low_source_memory_access_single_dynamic_term(&plan->access);
+    IREE_ASSERT(term);
     IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-        context, plan->access.dynamic_index, &operands[operand_count++]));
+        context, term->index, &operands[operand_count++]));
   }
   IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
       context, loom_vector_store_value(source_op), &operands[operand_count++]));

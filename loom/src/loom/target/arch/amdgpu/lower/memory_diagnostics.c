@@ -213,17 +213,18 @@ loom_amdgpu_memory_access_bank_summary(
   loom_amdgpu_memory_access_bank_summary_t summary = {
       .reason = IREE_SV("bank-pattern-unknown"),
   };
+  const loom_low_source_memory_dynamic_term_t* term =
+      loom_low_source_memory_access_single_dynamic_term(&access->source);
   if (access->source.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP ||
-      access->source.dynamic_index == LOOM_VALUE_ID_INVALID ||
-      access->dynamic_index_kind != LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR ||
-      access->source.dynamic_index_byte_stride == 0 ||
-      (access->source.dynamic_index_byte_stride %
-       LOOM_AMDGPU_LDS_BANK_WIDTH_BYTES) != 0) {
+      !term ||
+      access->dynamic_term_kinds[0] != LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR ||
+      term->byte_stride == 0 ||
+      (term->byte_stride % LOOM_AMDGPU_LDS_BANK_WIDTH_BYTES) != 0) {
     return summary;
   }
 
-  summary.bank_stride_words = access->source.dynamic_index_byte_stride /
-                              LOOM_AMDGPU_LDS_BANK_WIDTH_BYTES;
+  summary.bank_stride_words =
+      term->byte_stride / LOOM_AMDGPU_LDS_BANK_WIDTH_BYTES;
   summary.conflict_degree = loom_amdgpu_gcd_u32(summary.bank_stride_words,
                                                 LOOM_AMDGPU_LDS_BANK_COUNT);
   const uint32_t vector_footprint_bytes =
@@ -231,10 +232,9 @@ loom_amdgpu_memory_access_bank_summary(
                                      : access->source.element_byte_count *
                                            iree_max(access->vgpr_count, 1u);
   if (summary.conflict_degree == 1) {
-    summary.reason =
-        access->source.dynamic_index_byte_stride > vector_footprint_bytes
-            ? IREE_SV("padded-bank-conflict-free")
-            : IREE_SV("bank-conflict-free");
+    summary.reason = term->byte_stride > vector_footprint_bytes
+                         ? IREE_SV("padded-bank-conflict-free")
+                         : IREE_SV("bank-conflict-free");
   } else {
     summary.reason = IREE_SV("bank-conflict-risk");
   }
@@ -291,7 +291,9 @@ iree_status_t loom_amdgpu_record_memory_access_diagnostic(
       loom_amdgpu_memory_space_name(access->source.memory_space),
       loom_amdgpu_memory_operation_name(kind), packet_key, IREE_SV("selected"),
       access->source.element_byte_count, access->vgpr_count,
-      access->source.dynamic_index_byte_stride,
+      access->source.dynamic_term_count == 1
+          ? access->source.dynamic_terms[0].byte_stride
+          : 0,
       access->source.vector_lane_byte_stride, bank_summary.bank_stride_words,
       bank_summary.conflict_degree, bank_summary.reason);
 }

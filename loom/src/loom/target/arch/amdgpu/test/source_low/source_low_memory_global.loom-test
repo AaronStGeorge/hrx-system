@@ -92,3 +92,45 @@ low.func.def target(@target) abi(hal_kernel) @i32_b128() asm<amdgpu.gfx11.core> 
   global_store_b128 %56, %result, %57 {offset = 0}
   return
 }
+
+// ====
+
+func.def @i32_scalar_2d_store(%input: buffer, %output: buffer) {
+  %x = kernel.workitem.id<x> : index
+  %y = kernel.workitem.id<y> : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<4x8xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<4x8xi32, #dense>
+  %loaded = vector.load %input_view[%y, %x] : view<4x8xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%y, %x] : vector<1xi32>, view<4x8xi32, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i32_scalar_2d_store() asm<amdgpu.gfx11.core> {
+  %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x4>
+  %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x4>
+  %11 = v_mov_b32 1023
+  %x = v_and_b32 %packed_tid, %11
+  %13 = v_mov_b32 10
+  %14 = v_lshrrev_b32 %13, %packed_tid
+  %15 = v_mov_b32 1023
+  %y = v_and_b32 %14, %15
+  %zero = s_mov_b32 0
+  %18 = v_mov_b32 5
+  %19 = v_lshlrev_b32 %18, %y
+  %20 = v_mov_b32 2
+  %21 = v_lshlrev_b32 %20, %x
+  %22 = v_add_u32 %19, %21
+  %23 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b32 %22, %23 {offset = 0}
+  %25 = v_mov_b32 5
+  %26 = v_lshlrev_b32 %25, %y
+  %27 = v_mov_b32 2
+  %28 = v_lshlrev_b32 %27, %x
+  %29 = v_add_u32 %26, %28
+  %30 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b32 %29, %loaded, %30 {offset = 0}
+  return
+}
