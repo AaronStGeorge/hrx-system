@@ -15,9 +15,15 @@ from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DWORD_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
     _GFX12_TH_ATOMIC_RETURN_VALUE,
+    AmdgpuAtomicKind,
+    AmdgpuAtomicMemorySpace,
+    AmdgpuAtomicOperationKind,
+    AmdgpuAtomicValueKind,
+    AmdgpuMemoryAddressForm,
     _gfx12_core_overlays,
     _gfx1250_core_overlays,
     _validate_address_immediate_units,
+    amdgpu_atomic_descriptor_candidates,
 )
 from loom.target.low_descriptors import (
     Descriptor,
@@ -67,6 +73,45 @@ def _immediate_default(immediates: tuple[Immediate, ...], name: str) -> int:
         if immediate.field_name == name:
             return immediate.default_value
     raise AssertionError(f"missing immediate '{name}'")
+
+
+def test_atomic_descriptor_candidates_are_derived_from_overlay_metadata() -> None:
+    candidates = amdgpu_atomic_descriptor_candidates()
+
+    assert len(candidates) == 104
+    assert candidates[0].descriptor_key == "amdgpu.ds_add_u32"
+    assert candidates[0].memory_space == AmdgpuAtomicMemorySpace.WORKGROUP
+    assert candidates[0].address_form == AmdgpuMemoryAddressForm.DEFAULT
+    assert candidates[0].operation_kind == AmdgpuAtomicOperationKind.REDUCE
+    assert candidates[0].atomic_kind == AmdgpuAtomicKind.ADDI
+    assert candidates[0].value_kind == AmdgpuAtomicValueKind.I32
+
+    global_saddr_add = next(
+        candidate
+        for candidate in candidates
+        if candidate.descriptor_key == "amdgpu.global_atomic_add_u32_saddr"
+    )
+    assert global_saddr_add.memory_space == AmdgpuAtomicMemorySpace.GLOBAL
+    assert global_saddr_add.address_form == AmdgpuMemoryAddressForm.GLOBAL_SADDR
+
+    flat_cmpxchg = next(
+        candidate
+        for candidate in candidates
+        if candidate.descriptor_key == "amdgpu.flat_atomic_cmpswap_b32_rtn"
+    )
+    assert flat_cmpxchg.memory_space == AmdgpuAtomicMemorySpace.GENERIC
+    assert flat_cmpxchg.operation_kind == AmdgpuAtomicOperationKind.CMPXCHG
+    assert flat_cmpxchg.atomic_kind == AmdgpuAtomicKind.NONE
+
+
+def test_atomic_descriptor_candidates_exclude_unsupported_packed_half_rows() -> None:
+    keys = {
+        candidate.descriptor_key for candidate in amdgpu_atomic_descriptor_candidates()
+    }
+
+    assert "amdgpu.buffer_atomic_pk_add_f16" not in keys
+    assert "amdgpu.flat_atomic_pk_add_bf16_rtn" not in keys
+    assert "amdgpu.ds_pk_add_rtn_f16" not in keys
 
 
 def test_gfx12_global_atomic_return_uses_temporal_hint_return_bit() -> None:

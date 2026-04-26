@@ -17,6 +17,7 @@
 
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/ir.h"
+#include "loom/target/arch/amdgpu/lower/kinds.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -174,15 +175,6 @@ typedef struct loom_amdgpu_vector_slice_plan_t {
 #define LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE \
   LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE
 
-typedef enum loom_amdgpu_memory_address_form_e {
-  LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT = 0,
-  LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO = 1,
-  LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_2ADDR = 2,
-  LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR = 3,
-  LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DS_ADDTID = 4,
-  LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT = 5,
-} loom_amdgpu_memory_address_form_t;
-
 typedef enum loom_amdgpu_memory_dynamic_index_kind_e {
   LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE = 0,
   LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR = 1,
@@ -265,12 +257,6 @@ typedef struct loom_amdgpu_atomic_ordering_plan_t {
   // Number of populated post-atomic cache-control packets.
   iree_host_size_t post_atomic_cache_control_descriptor_count;
 } loom_amdgpu_atomic_ordering_plan_t;
-
-typedef enum loom_amdgpu_atomic_operation_kind_e {
-  LOOM_AMDGPU_ATOMIC_OPERATION_REDUCE = 0,
-  LOOM_AMDGPU_ATOMIC_OPERATION_RMW = 1,
-  LOOM_AMDGPU_ATOMIC_OPERATION_CMPXCHG = 2,
-} loom_amdgpu_atomic_operation_kind_t;
 
 typedef uint32_t loom_amdgpu_atomic_plan_flags_t;
 

@@ -87,6 +87,16 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    lower_kinds
+  HDRS
+    "lower/kinds.h"
+  DEPS
+
+  PUBLIC
+)
+
 loom_target_table_cc_library(
   NAME
     descriptor_ids
@@ -105,6 +115,33 @@ loom_target_table_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+)
+
+loom_target_table_cc_library(
+  NAME
+    atomic_candidates
+  GENERATOR
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_atomic_candidates.py"
+  SOURCE
+    "lower/atomic_candidates.c"
+  HEADER
+    "lower/atomic_candidates.h"
+  ARGS
+    "--public-header=loom/target/arch/amdgpu/lower/atomic_candidates.h"
+  INPUTS
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_atomic_candidates.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/generated_file.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptor_overlay.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
+  DEPS
+    ::descriptor_ids
+    ::lower_kinds
+    iree::base
+    loom::src::loom::ops::atomic
+    loom::src::loom::util::fact_table
 )
 
 loom_target_table_cc_library(
@@ -483,8 +520,10 @@ loom_cc_library(
     "lower/values.c"
     "lower/view.c"
   DEPS
+    ::atomic_candidates
     ::descriptor_ids
     ::hal_kernel_abi
+    ::lower_kinds
     ::target_info
     ::wait_packets
     iree::base

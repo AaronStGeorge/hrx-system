@@ -63,6 +63,22 @@ _TEST_LOW_DESCRIPTOR_SHARD_SRCS = _LOW_DESCRIPTOR_SHARD_GENERATOR_SRCS + [
 ]
 
 py_binary(
+    name = "amdgpu_atomic_candidates",
+    srcs = [
+        "gen/amdgpu_atomic_candidates.py",
+        "gen/generated_file.py",
+    ] + _LOW_DESCRIPTOR_GENERATOR_SRCS + [
+        "target/arch/__init__.py",
+        "target/arch/amdgpu/__init__.py",
+        "target/arch/amdgpu/descriptor_overlay.py",
+        "target/arch/amdgpu/descriptors.py",
+        "target/arch/amdgpu/encoding.py",
+        "target/arch/amdgpu/isa_xml.py",
+    ],
+    main = "gen/amdgpu_atomic_candidates.py",
+)
+
+py_binary(
     name = "amdgpu_descriptor_ids",
     srcs = [
         "gen/amdgpu_descriptor_ids.py",

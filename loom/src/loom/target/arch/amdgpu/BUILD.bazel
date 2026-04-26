@@ -255,6 +255,20 @@ _AMDGPU_DESCRIPTOR_ID_GENERATOR_DEPS = [
     "//loom/py/loom:target/low_descriptors.py",
 ]
 
+_AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom:amdgpu_atomic_candidates"
+
+_AMDGPU_ATOMIC_CANDIDATE_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_atomic_candidates.py"
+
+_AMDGPU_ATOMIC_CANDIDATE_GENERATOR_DEPS = [
+    "//loom/py/loom:gen/amdgpu_atomic_candidates.py",
+    "//loom/py/loom:gen/generated_file.py",
+    "//loom/py/loom:target/arch/amdgpu/descriptor_overlay.py",
+    "//loom/py/loom:target/arch/amdgpu/descriptors.py",
+    "//loom/py/loom:target/arch/amdgpu/encoding.py",
+    "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
+    "//loom/py/loom:target/low_descriptors.py",
+]
+
 _AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom:amdgpu_encoding_tables"
 
 _AMDGPU_ENCODING_TABLE_GENERATOR_SCRIPT = "//loom/py/loom:gen/amdgpu_encoding_tables.py"
@@ -290,6 +304,11 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "lower_kinds",
+    hdrs = ["lower/kinds.h"],
+)
+
 loom_target_table_cc_library(
     name = "descriptor_ids",
     args = [
@@ -300,6 +319,25 @@ loom_target_table_cc_library(
     generator = _AMDGPU_DESCRIPTOR_ID_GENERATOR,
     header = "descriptor_ids.h",
     source = "descriptor_ids.c",
+)
+
+loom_target_table_cc_library(
+    name = "atomic_candidates",
+    args = [
+        "--public-header=loom/target/arch/amdgpu/lower/atomic_candidates.h",
+    ],
+    cmake_generator = _AMDGPU_ATOMIC_CANDIDATE_GENERATOR_SCRIPT,
+    cmake_generator_deps = _AMDGPU_ATOMIC_CANDIDATE_GENERATOR_DEPS,
+    generator = _AMDGPU_ATOMIC_CANDIDATE_GENERATOR,
+    header = "lower/atomic_candidates.h",
+    source = "lower/atomic_candidates.c",
+    deps = [
+        ":descriptor_ids",
+        ":lower_kinds",
+        "//loom/src/loom/ops:atomic",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
 )
 
 loom_target_table_cc_library(
@@ -605,8 +643,10 @@ loom_cc_library(
         "lower/plan.h",
     ],
     deps = [
+        ":atomic_candidates",
         ":descriptor_ids",
         ":hal_kernel_abi",
+        ":lower_kinds",
         ":target_info",
         ":wait_packets",
         "//loom/src/loom/codegen/low:descriptors",
