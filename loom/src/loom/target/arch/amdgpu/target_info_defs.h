@@ -81,6 +81,8 @@ typedef struct loom_amdgpu_descriptor_set_info_t {
   uint16_t s_endpgm_opcode;
   // SOPP opcode used when lowering structural `low.br` to `s_branch`.
   uint16_t s_branch_opcode;
+  // SOPP opcode used when lowering structural `low.cond_br` on SCC=true.
+  uint16_t s_cbranch_scc1_opcode;
   // True when descriptor packets have implemented native binary encoding.
   bool supports_descriptor_packet_encoding;
   // Buffer resource descriptor cache-swizzle encoding shape.

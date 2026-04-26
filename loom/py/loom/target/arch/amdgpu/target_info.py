@@ -41,6 +41,8 @@ AMDGPU_SOPP_S_ENDPGM_GFX9_GFX10_GFX13_OPCODE = 0x001
 AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE = 0x030
 AMDGPU_SOPP_S_BRANCH_GFX9_GFX10_GFX13_OPCODE = 0x002
 AMDGPU_SOPP_S_BRANCH_GFX11_GFX12_OPCODE = 0x020
+AMDGPU_SOPP_S_CBRANCH_SCC1_GFX9_GFX10_GFX13_OPCODE = 0x005
+AMDGPU_SOPP_S_CBRANCH_SCC1_GFX11_GFX12_OPCODE = 0x022
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +51,7 @@ class AmdgpuDescriptorSetInfo:
     low_preset_key: str
     s_endpgm_opcode: int
     s_branch_opcode: int
+    s_cbranch_scc1_opcode: int
     supports_descriptor_packet_encoding: bool
     buffer_resource_cache_swizzle: str = AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE
     vector_memory_cache_policy_encoding: str = (
@@ -115,6 +118,7 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         low_preset_key="amdgpu-gfx1250",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE,
         s_branch_opcode=AMDGPU_SOPP_S_BRANCH_GFX11_GFX12_OPCODE,
+        s_cbranch_scc1_opcode=AMDGPU_SOPP_S_CBRANCH_SCC1_GFX11_GFX12_OPCODE,
         supports_descriptor_packet_encoding=True,
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     ),
@@ -123,6 +127,7 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         low_preset_key="amdgpu-gfx11",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE,
         s_branch_opcode=AMDGPU_SOPP_S_BRANCH_GFX11_GFX12_OPCODE,
+        s_cbranch_scc1_opcode=AMDGPU_SOPP_S_CBRANCH_SCC1_GFX11_GFX12_OPCODE,
         supports_descriptor_packet_encoding=True,
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
     ),
@@ -131,6 +136,7 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         low_preset_key="amdgpu-gfx12",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX11_GFX12_OPCODE,
         s_branch_opcode=AMDGPU_SOPP_S_BRANCH_GFX11_GFX12_OPCODE,
+        s_cbranch_scc1_opcode=AMDGPU_SOPP_S_CBRANCH_SCC1_GFX11_GFX12_OPCODE,
         supports_descriptor_packet_encoding=True,
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     ),
@@ -139,6 +145,7 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         low_preset_key="amdgpu-gfx950",
         s_endpgm_opcode=AMDGPU_SOPP_S_ENDPGM_GFX9_GFX10_GFX13_OPCODE,
         s_branch_opcode=AMDGPU_SOPP_S_BRANCH_GFX9_GFX10_GFX13_OPCODE,
+        s_cbranch_scc1_opcode=AMDGPU_SOPP_S_CBRANCH_SCC1_GFX9_GFX10_GFX13_OPCODE,
         supports_descriptor_packet_encoding=True,
         buffer_resource_cache_swizzle=AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT,
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,

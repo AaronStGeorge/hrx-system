@@ -133,18 +133,23 @@ def materialize_amdgpu_descriptor_overlay(
     instruction = _select_instruction(spec, overlay)
     encoding = _select_instruction_encoding(instruction, overlay)
     _validate_operand_overlay(spec, overlay, instruction, encoding)
+    operands = tuple(
+        _materialize_operand_overlay(operand_overlay)
+        for operand_overlay in overlay.operands
+    ) + tuple(
+        implicit_overlay.descriptor_operand
+        for implicit_overlay in overlay.implicit_operands
+        if implicit_overlay.descriptor_operand is not None
+    )
     return Descriptor(
         key=overlay.descriptor_key,
         mnemonic=overlay.mnemonic or overlay.instruction_name.lower(),
         semantic_tag=overlay.semantic_tag,
         operands=tuple(
-            _materialize_operand_overlay(operand_overlay)
-            for operand_overlay in overlay.operands
+            operand for operand in operands if operand.role is OperandRole.RESULT
         )
         + tuple(
-            implicit_overlay.descriptor_operand
-            for implicit_overlay in overlay.implicit_operands
-            if implicit_overlay.descriptor_operand is not None
+            operand for operand in operands if operand.role is not OperandRole.RESULT
         ),
         immediates=_materialize_immediates(overlay),
         encoding_field_values=tuple(
@@ -481,18 +486,39 @@ def _validate_implicit_operand_decision(
             "provides an ignore reason"
         )
     descriptor_operand = implicit_overlay.descriptor_operand
-    if descriptor_operand.role is not OperandRole.IMPLICIT:
-        explicit_low_roles = (
+    mapped_low_roles = (
+        OperandRole.RESULT,
+        OperandRole.OPERAND,
+        OperandRole.PREDICATE,
+        OperandRole.RESOURCE,
+        OperandRole.IMPLICIT,
+    )
+    if descriptor_operand.role not in mapped_low_roles:
+        raise AmdgpuDescriptorOverlayError(
+            f"descriptor overlay '{overlay.descriptor_key}' maps implicit XML "
+            f"operand {_format_implicit_xml_operand(xml_operand)} to low operand "
+            f"'{descriptor_operand.field_name}' with invalid low role"
+        )
+    if descriptor_operand.role is OperandRole.RESULT and not xml_operand.is_output:
+        raise AmdgpuDescriptorOverlayError(
+            f"descriptor overlay '{overlay.descriptor_key}' maps input-only "
+            f"implicit XML operand {_format_implicit_xml_operand(xml_operand)} "
+            f"to result '{descriptor_operand.field_name}'"
+        )
+    if (
+        descriptor_operand.role
+        in (
             OperandRole.OPERAND,
             OperandRole.PREDICATE,
             OperandRole.RESOURCE,
         )
-        if descriptor_operand.role not in explicit_low_roles:
-            raise AmdgpuDescriptorOverlayError(
-                f"descriptor overlay '{overlay.descriptor_key}' maps implicit XML "
-                f"operand {_format_implicit_xml_operand(xml_operand)} to low operand "
-                f"'{descriptor_operand.field_name}' with invalid low role"
-            )
+        and not xml_operand.is_input
+    ):
+        raise AmdgpuDescriptorOverlayError(
+            f"descriptor overlay '{overlay.descriptor_key}' maps output-only "
+            f"implicit XML operand {_format_implicit_xml_operand(xml_operand)} "
+            f"to packet operand '{descriptor_operand.field_name}'"
+        )
     if OperandFlag.IMPLICIT not in descriptor_operand.flags:
         raise AmdgpuDescriptorOverlayError(
             f"descriptor overlay '{overlay.descriptor_key}' maps implicit XML "

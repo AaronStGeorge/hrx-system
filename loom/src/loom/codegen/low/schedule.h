@@ -52,6 +52,8 @@ typedef enum loom_low_schedule_dependency_kind_e {
   LOOM_LOW_SCHEDULE_DEPENDENCY_CONTROL = 3,
   // Structural anchoring dependency keeping fixed-position packets in place.
   LOOM_LOW_SCHEDULE_DEPENDENCY_ANCHOR = 4,
+  // Target architectural state dependency such as flags or special registers.
+  LOOM_LOW_SCHEDULE_DEPENDENCY_STATE = 5,
 } loom_low_schedule_dependency_kind_t;
 
 enum loom_low_schedule_diagnostic_bits_e {

@@ -1076,6 +1076,58 @@ static iree_status_t loom_low_verify_descriptor_operand_roles(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_verify_descriptor_state_operands(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    const uint32_t operand_index = descriptor->operand_start + i;
+    const loom_low_operand_t* operand =
+        &descriptor_set->operands[operand_index];
+    const uint16_t state_flags =
+        operand->flags &
+        (LOOM_LOW_OPERAND_FLAG_STATE_READ | LOOM_LOW_OPERAND_FLAG_STATE_WRITE);
+    if (state_flags == 0) {
+      continue;
+    }
+    if (operand->reg_class_alt_count != 1) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low descriptor %" PRIu32 " state operand row %" PRIu16
+          " must name exactly one register-class alternative",
+          descriptor_index, i);
+    }
+    const uint32_t alt_index = operand->reg_class_alt_start;
+    if (alt_index >= descriptor_set->reg_class_alt_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low descriptor %" PRIu32
+                              " state operand row %" PRIu16
+                              " has an out-of-range register-class "
+                              "alternative",
+                              descriptor_index, i);
+    }
+    const loom_low_reg_class_alt_t* alt =
+        &descriptor_set->reg_class_alts[alt_index];
+    if (iree_any_bit_set(alt->flags, LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE) ||
+        alt->reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
+        alt->reg_class_id >= descriptor_set->reg_class_count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor %" PRIu32
+                              " state operand row %" PRIu16
+                              " must name one concrete register class",
+                              descriptor_index, i);
+    }
+    if (operand->role == LOOM_LOW_OPERAND_ROLE_IMPLICIT &&
+        state_flags != LOOM_LOW_OPERAND_FLAG_STATE_WRITE) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor %" PRIu32
+                              " implicit state operand row %" PRIu16
+                              " must be a write-only clobber",
+                              descriptor_index, i);
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_index) {
@@ -1155,6 +1207,8 @@ static iree_status_t loom_low_verify_descriptor(
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_roles(
       descriptor_set, descriptor, descriptor_index));
+  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_state_operands(
+      descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_encoding_contract(
       descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_effect_contract(
@@ -1173,7 +1227,8 @@ static iree_status_t loom_low_verify_operand(
   IREE_RETURN_IF_ERROR(loom_low_verify_known_flags(
       operand->flags,
       LOOM_LOW_OPERAND_FLAG_IMPLICIT | LOOM_LOW_OPERAND_FLAG_TIED |
-          LOOM_LOW_OPERAND_FLAG_EARLY_CLOBBER | LOOM_LOW_OPERAND_FLAG_OPTIONAL,
+          LOOM_LOW_OPERAND_FLAG_EARLY_CLOBBER | LOOM_LOW_OPERAND_FLAG_OPTIONAL |
+          LOOM_LOW_OPERAND_FLAG_STATE_READ | LOOM_LOW_OPERAND_FLAG_STATE_WRITE,
       "operand", operand_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_required_string(
       descriptor_set, operand->field_name_string_offset, "operand.field_name"));

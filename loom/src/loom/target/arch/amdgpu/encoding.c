@@ -154,6 +154,8 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("sop2");
     case LOOM_AMDGPU_ENCODING_FORMAT_SOPP:
       return IREE_SV("sopp");
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOPC:
+      return IREE_SV("sopc");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP2:
       return IREE_SV("vop2");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP2_LITERAL:

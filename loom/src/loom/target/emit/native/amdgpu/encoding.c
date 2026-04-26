@@ -217,6 +217,24 @@ static iree_status_t loom_amdgpu_assignment_vgpr(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_verify_scc_assignment(
+    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id) {
+  const loom_low_allocation_assignment_t* assignment = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_find_assignment(allocation, value_id, &assignment));
+  if (assignment->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_SCC) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU native encoding conditional branch condition must be SCC");
+  }
+  if (assignment->location_base != 0 || assignment->location_count != 1) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU native encoding SCC condition must use "
+                            "the single architectural SCC register");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_move_location_sgpr(
     const loom_low_allocation_sidecar_t* allocation,
     const loom_low_move_location_t* location, uint16_t* out_register) {
@@ -1082,6 +1100,7 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
           return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
       }
     case LOOM_AMDGPU_ENCODING_FORMAT_SOP2:
+    case LOOM_AMDGPU_ENCODING_FORMAT_SOPC:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP2:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P:
@@ -1188,12 +1207,19 @@ static iree_status_t loom_amdgpu_encode_branch_packet(
 
 static iree_status_t loom_amdgpu_encode_cond_branch_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
-  (void)state;
-  (void)packet;
-  return iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
-      "AMDGPU native encoding conditional branches require target lowering to "
-      "an explicit SCC, VCC, or EXEC branch form");
+  const loom_op_t* op = packet->node->op;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_verify_scc_assignment(
+      state->allocation, loom_low_cond_br_condition(op)));
+  uint16_t true_immediate = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encode_branch_offset(
+      state, loom_low_cond_br_true_dest(op), &true_immediate));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encode_sopp_word(
+      state, state->target->s_cbranch_scc1_opcode, true_immediate));
+  uint16_t false_immediate = 0;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encode_branch_offset(
+      state, loom_low_cond_br_false_dest(op), &false_immediate));
+  return loom_amdgpu_encode_sopp_word(state, state->target->s_branch_opcode,
+                                      false_immediate);
 }
 
 static iree_status_t loom_amdgpu_encode_live_in_packet(

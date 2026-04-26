@@ -21,6 +21,11 @@ bool loom_amdgpu_type_is_i32(loom_type_t type) {
          loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32;
 }
 
+bool loom_amdgpu_type_is_i1(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
+}
+
 bool loom_amdgpu_type_is_address_scalar(loom_type_t type) {
   return loom_type_is_scalar(type) &&
          (loom_type_element_type(type) == LOOM_SCALAR_TYPE_INDEX ||
@@ -205,6 +210,12 @@ iree_status_t loom_amdgpu_make_sgpr_range_type(
 iree_status_t loom_amdgpu_make_vgpr_type(loom_low_lower_context_t* context,
                                          loom_type_t* out_type) {
   return loom_amdgpu_make_register_type(context, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+                                        1, out_type);
+}
+
+iree_status_t loom_amdgpu_make_scc_type(loom_low_lower_context_t* context,
+                                        loom_type_t* out_type) {
+  return loom_amdgpu_make_register_type(context, LOOM_AMDGPU_REG_CLASS_ID_SCC,
                                         1, out_type);
 }
 
@@ -406,6 +417,9 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
                                    loom_type_t source_type,
                                    loom_type_t* out_low_type) {
   (void)user_data;
+  if (loom_amdgpu_type_is_i1(source_type)) {
+    return loom_amdgpu_make_scc_type(context, out_low_type);
+  }
   if (loom_amdgpu_type_is_i32(source_type)) {
     return loom_amdgpu_make_sgpr_type(context, out_low_type);
   }
@@ -447,7 +461,8 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
   }
   return loom_low_lower_emit_reject(
       context, source_op, IREE_SV("type"), IREE_SV("source"),
-      IREE_SV("AMDGPU lowering currently supports only i32 scalar values, "
+      IREE_SV("AMDGPU lowering currently supports only i1 and i32 scalar "
+              "values, "
               "address scalar values, rank-1 static i32/f32 vectors with "
               "1 to 8 lanes, rank-1 static i1 mask vectors with 1 to 8 lanes, "
               "rank-1 static f16/bf16 vectors that fit in 1 to 8 packed "

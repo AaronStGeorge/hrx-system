@@ -42,6 +42,30 @@ low.func.def target(@gfx11_target) @gfx11_branch() {
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_cond_branch waits=none
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_cond_branch(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>) {
+  %cond = low.op<amdgpu.s_cmp_lt_i32>(%lhs, %rhs) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.scc>
+  low.cond_br %cond, ^then, ^else : reg<amdgpu.scc>
+^then:
+  low.return
+^else:
+  low.return
+}
+
+// ----
+.Lbb0:
+  s_cmp_lt_i32 s0, s1
+  s_cbranch_scc1 .Lbb1
+  s_branch .Lbb2
+.Lbb1:
+  s_endpgm
+.Lbb2:
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_buffer_off_zero waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 

@@ -134,6 +134,10 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
             raise ValueError(f"AMDGPU low preset key is required for {info.key}")
         if info.s_endpgm_opcode < 0 or info.s_endpgm_opcode > 0xFFFF:
             raise ValueError(f"AMDGPU s_endpgm opcode for {info.key} must fit u16")
+        if info.s_branch_opcode < 0 or info.s_branch_opcode > 0xFFFF:
+            raise ValueError(f"AMDGPU s_branch opcode for {info.key} must fit u16")
+        if info.s_cbranch_scc1_opcode < 0 or info.s_cbranch_scc1_opcode > 0xFFFF:
+            raise ValueError(f"AMDGPU s_cbranch_scc1 opcode for {info.key} must fit u16")
         _buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle)
         _vector_memory_cache_policy_encoding_expr(info.vector_memory_cache_policy_encoding)
 
@@ -199,20 +203,21 @@ def _emit_descriptor_set_rows(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
     packet_encoding_width = len("packet_encoding")
     cache_swizzle_width = len("LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT")
     lines = [
-        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(stable_id_, descriptor_set_key_, low_preset_key_, s_endpgm_opcode_, s_branch_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
+        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(stable_id_, descriptor_set_key_, low_preset_key_, s_endpgm_opcode_, s_branch_opcode_, s_cbranch_scc1_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
         "  { \\",
         "    .descriptor_set_stable_id = stable_id_, \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
         "    .low_preset_key = IREE_SVL(low_preset_key_), \\",
         "    .s_endpgm_opcode = UINT16_C(s_endpgm_opcode_), \\",
         "    .s_branch_opcode = UINT16_C(s_branch_opcode_), \\",
+        "    .s_cbranch_scc1_opcode = UINT16_C(s_cbranch_scc1_opcode_), \\",
         "    .supports_descriptor_packet_encoding = supports_descriptor_packet_encoding_, \\",
         "    .buffer_resource_cache_swizzle = buffer_resource_cache_swizzle_, \\",
         "    .vector_memory_cache_policy_encoding = vector_memory_cache_policy_encoding_, \\",
         "  }",
         "",
         "static const loom_amdgpu_descriptor_set_info_t kAmdgpuDescriptorSetInfos[] = {",
-        "  // stable_id            descriptor_set_key     low_preset_key   s_endpgm s_branch packet_encoding cache_swizzle cache_policy",
+        "  // stable_id            descriptor_set_key     low_preset_key   s_endpgm s_branch s_cbranch_scc1 packet_encoding cache_swizzle cache_policy",
     ]
     lines.extend(
         (
@@ -222,6 +227,7 @@ def _emit_descriptor_set_rows(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
             f"{_padded_arg(_c_string_arg(info.low_preset_key), preset_width)}"
             f"{_padded_arg(f'0x{info.s_endpgm_opcode:03x}', opcode_width)}"
             f"{_padded_arg(f'0x{info.s_branch_opcode:03x}', opcode_width)}"
+            f"{_padded_arg(f'0x{info.s_cbranch_scc1_opcode:03x}', opcode_width)}"
             f"{_padded_arg(_bool_literal(info.supports_descriptor_packet_encoding), packet_encoding_width)}"
             f"{_padded_arg(_buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle), cache_swizzle_width)}"
             f"{_vector_memory_cache_policy_encoding_expr(info.vector_memory_cache_policy_encoding)}"

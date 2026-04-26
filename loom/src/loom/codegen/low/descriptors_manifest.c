@@ -89,6 +89,8 @@ static const loom_low_manifest_flag_name_t kLoomLowOperandFlagNames[] = {
     {LOOM_LOW_OPERAND_FLAG_TIED, "tied"},
     {LOOM_LOW_OPERAND_FLAG_EARLY_CLOBBER, "early_clobber"},
     {LOOM_LOW_OPERAND_FLAG_OPTIONAL, "optional"},
+    {LOOM_LOW_OPERAND_FLAG_STATE_READ, "state_read"},
+    {LOOM_LOW_OPERAND_FLAG_STATE_WRITE, "state_write"},
 };
 
 static const loom_low_manifest_flag_name_t kLoomLowImmediateFlagNames[] = {

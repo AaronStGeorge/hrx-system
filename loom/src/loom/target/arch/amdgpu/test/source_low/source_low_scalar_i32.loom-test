@@ -25,3 +25,16 @@ low.func.def target(@target) abi(hal_kernel) @scalar_i32_uniform_sgpr(%lhs: reg<
   %lshr = s_lshr_b32 %ashr, %shift
   return %lshr
 }
+
+// ====
+
+func.def @scalar_i32_compare_scc(%lhs: i32, %rhs: i32) -> (i1) {
+  %cmp = scalar.cmpi slt, %lhs, %rhs : i32
+  func.return %cmp : i1
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_i32_compare_scc(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>) -> (reg<amdgpu.scc>) asm<amdgpu.gfx11.core> {
+  %cmp = s_cmp_lt_i32 %lhs, %rhs
+  return %cmp
+}

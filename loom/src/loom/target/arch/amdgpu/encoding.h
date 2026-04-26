@@ -56,6 +56,8 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLBL = 14,
   // RDNA3 global/flat memory instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLOBAL = 15,
+  // Scalar compare instruction format.
+  LOOM_AMDGPU_ENCODING_FORMAT_SOPC = 20,
   // Scalar one-destination immediate instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_SOPK = 21,
   // RDNA4 local data share instruction format.

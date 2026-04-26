@@ -67,6 +67,7 @@ _REG_SGPR = "amdgpu.sgpr"
 _REG_VGPR = "amdgpu.vgpr"
 _REG_AGPR = "amdgpu.agpr"
 _REG_M0 = "amdgpu.m0"
+_REG_SCC = "amdgpu.scc"
 
 _RESOURCE_SALU = "amdgpu.salu"
 _RESOURCE_VALU = "amdgpu.valu"
@@ -195,6 +196,7 @@ _VGPR_AGPR_CONST_ALT = (
     RegClassAlt(None, flags=(RegClassAltFlag.IMMEDIATE,)),
 )
 _M0_ALT = (RegClassAlt(_REG_M0, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
+_SCC_ALT = (RegClassAlt(_REG_SCC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 
 
 class AmdgpuAtomicMemorySpace(CEnum):
@@ -456,6 +458,36 @@ def _m0_implicit_resource(field_name: str = "m0") -> Operand:
 
 def _m0_result(field_name: str = "dst") -> Operand:
     return Operand(field_name, OperandRole.RESULT, _M0_ALT, unit_count=1)
+
+
+def _scc_result(field_name: str = "scc") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.RESULT,
+        _SCC_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_WRITE),
+        unit_count=1,
+    )
+
+
+def _scc_predicate(field_name: str = "scc") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.PREDICATE,
+        _SCC_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
+        unit_count=1,
+    )
+
+
+def _scc_clobber(field_name: str = "scc") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _SCC_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_WRITE),
+        unit_count=1,
+    )
 
 
 def _vgpr_result(field_name: str = "dst", *, units: int = 1) -> Operand:
@@ -881,14 +913,18 @@ def _cache_immediates_with_defaults(
     )
 
 
-_IGNORE_SCC_OUTPUT = AmdgpuImplicitOperandOverlay(
-    operand_type="OPR_SSRC_SPECIAL_SCC",
-    data_format_name="FMT_NUM_B1",
-    size_bits=1,
-    is_input=False,
-    is_output=True,
-    ignore_reason="value-pseudo-drops-scc",
-)
+def _scc_output(descriptor_operand: Operand) -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_SSRC_SPECIAL_SCC",
+        descriptor_operand=descriptor_operand,
+        data_format_name="FMT_NUM_B1",
+        size_bits=1,
+        is_input=False,
+        is_output=True,
+    )
+
+
+_SCC_CLOBBER_OUTPUT = _scc_output(_scc_clobber())
 
 _IGNORE_GLOBAL_READ_MEMORY = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
@@ -1130,7 +1166,7 @@ def _s_add_u32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
             AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
         ),
-        implicit_operands=(_IGNORE_SCC_OUTPUT,),
+        implicit_operands=(_SCC_CLOBBER_OUTPUT,),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -1148,7 +1184,7 @@ def _s_sub_u32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
             AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
         ),
-        implicit_operands=(_IGNORE_SCC_OUTPUT,),
+        implicit_operands=(_SCC_CLOBBER_OUTPUT,),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -1172,7 +1208,31 @@ def _s_binary_u32_overlay(
             AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
             AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
         ),
-        implicit_operands=(_IGNORE_SCC_OUTPUT,),
+        implicit_operands=(_SCC_CLOBBER_OUTPUT,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_cmp_i32_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_SOPC",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
+        ),
+        implicit_operands=(_scc_output(_scc_result()),),
+        asm_forms=_asm(results=("scc",), operands=("lhs", "rhs")),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -1277,6 +1337,71 @@ def _s_xor_b32_overlay() -> AmdgpuDescriptorOverlay:
         instruction_name="S_XOR_B32",
         mnemonic="s_xor_b32",
         semantic_tag="integer.xor.u32",
+    )
+
+
+def _s_cmp_i32_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _s_cmp_i32_overlay(
+            descriptor_key="amdgpu.s_cmp_eq_i32",
+            instruction_name="S_CMP_EQ_I32",
+            mnemonic="s_cmp_eq_i32",
+            semantic_tag="integer.compare.eq.i32",
+        ),
+        _s_cmp_i32_overlay(
+            descriptor_key="amdgpu.s_cmp_lg_i32",
+            instruction_name="S_CMP_LG_I32",
+            mnemonic="s_cmp_lg_i32",
+            semantic_tag="integer.compare.ne.i32",
+        ),
+        _s_cmp_i32_overlay(
+            descriptor_key="amdgpu.s_cmp_lt_i32",
+            instruction_name="S_CMP_LT_I32",
+            mnemonic="s_cmp_lt_i32",
+            semantic_tag="integer.compare.slt.i32",
+        ),
+        _s_cmp_i32_overlay(
+            descriptor_key="amdgpu.s_cmp_le_i32",
+            instruction_name="S_CMP_LE_I32",
+            mnemonic="s_cmp_le_i32",
+            semantic_tag="integer.compare.sle.i32",
+        ),
+        _s_cmp_i32_overlay(
+            descriptor_key="amdgpu.s_cmp_gt_i32",
+            instruction_name="S_CMP_GT_I32",
+            mnemonic="s_cmp_gt_i32",
+            semantic_tag="integer.compare.sgt.i32",
+        ),
+        _s_cmp_i32_overlay(
+            descriptor_key="amdgpu.s_cmp_ge_i32",
+            instruction_name="S_CMP_GE_I32",
+            mnemonic="s_cmp_ge_i32",
+            semantic_tag="integer.compare.sge.i32",
+        ),
+        _s_cmp_i32_overlay(
+            descriptor_key="amdgpu.s_cmp_lt_u32",
+            instruction_name="S_CMP_LT_U32",
+            mnemonic="s_cmp_lt_u32",
+            semantic_tag="integer.compare.ult.i32",
+        ),
+        _s_cmp_i32_overlay(
+            descriptor_key="amdgpu.s_cmp_le_u32",
+            instruction_name="S_CMP_LE_U32",
+            mnemonic="s_cmp_le_u32",
+            semantic_tag="integer.compare.ule.i32",
+        ),
+        _s_cmp_i32_overlay(
+            descriptor_key="amdgpu.s_cmp_gt_u32",
+            instruction_name="S_CMP_GT_U32",
+            mnemonic="s_cmp_gt_u32",
+            semantic_tag="integer.compare.ugt.i32",
+        ),
+        _s_cmp_i32_overlay(
+            descriptor_key="amdgpu.s_cmp_ge_u32",
+            instruction_name="S_CMP_GE_U32",
+            mnemonic="s_cmp_ge_u32",
+            semantic_tag="integer.compare.uge.i32",
+        ),
     )
 
 
@@ -4807,6 +4932,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
+        *_s_cmp_i32_overlays(),
         _v_add_u32_overlay("V_ADD_U32"),
         _v_sub_u32_overlay("V_SUB_U32", "v_sub_u32"),
         _v_mov_b32_literal_overlay(),
@@ -4971,6 +5097,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
+        *_s_cmp_i32_overlays(),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
@@ -5133,6 +5260,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
+        *_s_cmp_i32_overlays(),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
@@ -5314,6 +5442,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
+        *_s_cmp_i32_overlays(),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
@@ -5519,6 +5648,13 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             physical_count=1024,
         ),
         RegClass(
+            _REG_SCC,
+            1,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
+        ),
+        RegClass(
             _REG_AGPR,
             32,
             SpillSlotSpace.SCRATCH,
@@ -5608,6 +5744,13 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=1024,
+        ),
+        RegClass(
+            _REG_SCC,
+            1,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
         ),
         RegClass(
             _REG_M0,
@@ -5706,6 +5849,13 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=1024,
+        ),
+        RegClass(
+            _REG_SCC,
+            1,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
         ),
         RegClass(
             _REG_M0,
@@ -5822,6 +5972,13 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=1024,
+        ),
+        RegClass(
+            _REG_SCC,
+            1,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
         ),
         RegClass(
             _REG_M0,
@@ -6323,7 +6480,7 @@ def amdgpu_common_reg_class_ids() -> tuple[tuple[str, int], ...]:
     """Returns descriptor-set-local register-class IDs shared by all AMDGPU sets."""
 
     result: list[tuple[str, int]] = []
-    for reg_class_name in (_REG_SGPR, _REG_VGPR):
+    for reg_class_name in (_REG_SGPR, _REG_VGPR, _REG_SCC):
         expected_reg_class_id: int | None = None
         for descriptor_set in _amdgpu_core_descriptor_set_bases():
             reg_class_id = next(

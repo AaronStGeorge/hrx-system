@@ -49,6 +49,9 @@ extern "C" {
 // Returns true when the source type is a scalar i32.
 bool loom_amdgpu_type_is_i32(loom_type_t type);
 
+// Returns true when the source type is a scalar i1.
+bool loom_amdgpu_type_is_i1(loom_type_t type);
+
 // Returns true when the source type is an address-sized scalar lowered through
 // the current 32-bit AMDGPU scalar path.
 bool loom_amdgpu_type_is_address_scalar(loom_type_t type);
@@ -128,6 +131,10 @@ iree_status_t loom_amdgpu_make_sgpr_range_type(
 // Builds a one-unit VGPR register type in the current lowering context.
 iree_status_t loom_amdgpu_make_vgpr_type(loom_low_lower_context_t* context,
                                          loom_type_t* out_type);
+
+// Builds the one-unit SCC register type in the current lowering context.
+iree_status_t loom_amdgpu_make_scc_type(loom_low_lower_context_t* context,
+                                        loom_type_t* out_type);
 
 // Builds a multi-unit VGPR register type in the current lowering context.
 iree_status_t loom_amdgpu_make_vgpr_range_type(
@@ -242,6 +249,9 @@ extern const loom_low_lower_rule_set_t loom_amdgpu_arithmetic_rule_set;
 
 // Target-local rule table for scalar integer and index arithmetic source ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_integer_rule_set;
+
+// Target-local rule table for scalar comparison source ops.
+extern const loom_low_lower_rule_set_t loom_amdgpu_compare_rule_set;
 
 // Target-local rule table for vector dot source ops.
 extern const loom_low_lower_rule_set_t loom_amdgpu_dot_rule_set;

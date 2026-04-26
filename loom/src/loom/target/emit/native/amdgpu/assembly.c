@@ -495,11 +495,24 @@ static iree_status_t loom_amdgpu_append_asm_form_values(
           IREE_STATUS_OUT_OF_RANGE,
           "AMDGPU asm-form operand row is outside the descriptor set");
     }
+    const uint16_t descriptor_operand_index =
+        descriptor_set->asm_operand_indices[asm_operand_index];
+    if (descriptor_operand_index >= descriptor->operand_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "AMDGPU asm-form operand index is outside the descriptor");
+    }
+    const loom_low_operand_t* descriptor_operand =
+        &descriptor_set
+             ->operands[descriptor->operand_start + descriptor_operand_index];
+    if (iree_any_bit_set(descriptor_operand->flags,
+                         LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
+      continue;
+    }
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_append_asm_form_separator(context, in_list));
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_asm_form_value(
-        context, descriptor,
-        descriptor_set->asm_operand_indices[asm_operand_index], is_result));
+        context, descriptor, descriptor_operand_index, is_result));
   }
   return iree_ok_status();
 }
@@ -1393,14 +1406,46 @@ static iree_status_t loom_amdgpu_append_branch_packet(
       context->schedule, loom_low_br_dest(op), context->builder);
 }
 
+static iree_status_t loom_amdgpu_verify_scc_condition_assignment(
+    const loom_native_assembly_packet_context_t* context,
+    loom_value_id_t condition_value_id) {
+  const loom_low_allocation_assignment_t* assignment = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_find_assignment(context, condition_value_id, &assignment));
+  if (assignment->location_kind !=
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU assembly conditional branch condition is not physically "
+        "allocated");
+  }
+  if (assignment->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_SCC) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU assembly conditional branch condition must "
+                            "be allocated to SCC");
+  }
+  if (assignment->location_base != 0 || assignment->location_count != 1) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU assembly SCC condition must use the single "
+                            "architectural SCC register");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_append_cond_branch_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
-  (void)context;
-  return iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
-      "AMDGPU assembly conditional branches require target lowering to an "
-      "explicit SCC, VCC, or EXEC branch form");
+  const loom_op_t* op = context->packet->node->op;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_verify_scc_condition_assignment(
+      context, loom_low_cond_br_condition(op)));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "s_cbranch_scc1 "));
+  IREE_RETURN_IF_ERROR(loom_native_assembly_append_block_label(
+      context->schedule, loom_low_cond_br_true_dest(op), context->builder));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "\n  s_branch "));
+  return loom_native_assembly_append_block_label(
+      context->schedule, loom_low_cond_br_false_dest(op), context->builder);
 }
 
 static iree_status_t loom_amdgpu_verify_assembly_target(

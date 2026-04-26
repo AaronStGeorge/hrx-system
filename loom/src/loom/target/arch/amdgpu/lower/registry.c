@@ -554,8 +554,8 @@ static iree_status_t loom_amdgpu_low_legality_try_verify_op(
 
 static const loom_low_lower_rule_set_t* const kAmdgpuRuleSets[] = {
     &loom_amdgpu_arithmetic_rule_set, &loom_amdgpu_integer_rule_set,
-    &loom_amdgpu_dot_rule_set,        &loom_amdgpu_reduce_rule_set,
-    &loom_amdgpu_async_rule_set,
+    &loom_amdgpu_compare_rule_set,    &loom_amdgpu_dot_rule_set,
+    &loom_amdgpu_reduce_rule_set,     &loom_amdgpu_async_rule_set,
 };
 
 static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {

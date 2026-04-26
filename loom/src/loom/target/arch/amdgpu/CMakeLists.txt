@@ -498,6 +498,7 @@ loom_cc_library(
     "lower/bitfield.c"
     "lower/bitpack.c"
     "lower/buffer.c"
+    "lower/compare_rules.c"
     "lower/dot.c"
     "lower/dot_rules.c"
     "lower/emit_support.c"
