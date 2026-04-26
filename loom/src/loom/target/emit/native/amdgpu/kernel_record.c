@@ -15,6 +15,7 @@
 #include "loom/target/arch/amdgpu/gfx950_descriptors.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/emit/native/amdgpu/slot_layout.h"
+#include "loom/target/emit/native/fragment.h"
 
 #define LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT 2u
 
@@ -205,13 +206,12 @@ static iree_status_t loom_amdgpu_kernel_record_validate_target(
                             "AMDGPU kernel emission requires ELF artifacts");
   }
   if (export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU kernel emission requires a HAL kernel ABI");
   }
   if (export_plan->linkage != LOOM_TARGET_LINKAGE_DEFAULT) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU kernel emission currently requires default linkage");
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU kernel emission requires default linkage");
   }
   IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_validate_target_id_component(
       snapshot->target_triple, IREE_SV("target_triple")));
@@ -233,9 +233,9 @@ static iree_status_t loom_amdgpu_kernel_record_validate_function_shape(
   const loom_block_t* entry_block = loom_region_const_entry_block(body);
   if (entry_block->arg_count != 0 || function_op->result_count != 0) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU kernel emission currently requires ABI-lowered kernels with no "
-        "low function arguments or results");
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU kernel emission requires ABI-lowered kernels with no low "
+        "function arguments or results");
   }
   return iree_ok_status();
 }
@@ -260,30 +260,11 @@ static iree_status_t loom_amdgpu_kernel_record_collect_register_usage(
     loom_amdgpu_kernel_record_register_usage_t* out_usage) {
   IREE_ASSERT_ARGUMENT(out_usage);
   *out_usage = (loom_amdgpu_kernel_record_register_usage_t){0};
-  if (allocation->spill_plan_count != 0 || allocation->spill_count != 0) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU kernel emission requires materialized spill lowering before "
-        "spilled allocations can be emitted");
-  }
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
     if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
       continue;
-    }
-    if (assignment->location_kind !=
-        LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "AMDGPU kernel emission value %" PRIu32
-                              " is not physically allocated",
-                              assignment->value_id);
-    }
-    if (assignment->location_count == 0) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "AMDGPU kernel emission value %" PRIu32
-                              " has an empty physical register range",
-                              assignment->value_id);
     }
     if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_record_update_high_water(
@@ -342,9 +323,7 @@ static iree_status_t loom_amdgpu_kernel_record_validate_kernarg_live_in(
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
-    if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER ||
-        assignment->location_kind !=
-            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
+    if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
       continue;
     }
     if (!loom_amdgpu_hal_kernel_abi_is_kernarg_segment_ptr_live_in(
@@ -449,9 +428,7 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
-    if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER ||
-        assignment->location_kind !=
-            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
+    if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
       continue;
     }
     for (iree_host_size_t j = 0; j < IREE_ARRAYSIZE(workgroup_ids); ++j) {
@@ -618,7 +595,8 @@ iree_status_t loom_amdgpu_kernel_record_build(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU kernel emission scratch arena is required");
   }
-  IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
+  IREE_RETURN_IF_ERROR(
+      loom_native_fragment_validate_emission_inputs(schedule, allocation));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_record_validate_target(&schedule->target));
   IREE_RETURN_IF_ERROR(

@@ -35,6 +35,7 @@ loom_assert_no_dependencies(
         ":assembly",
         ":contribution",
         ":elf",
+        ":fragment",
         ":object",
     ],
 )
@@ -48,9 +49,22 @@ loom_cc_library(
     srcs = ["assembly.c"],
     hdrs = ["assembly.h"],
     deps = [
+        ":fragment",
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "fragment",
+    srcs = ["fragment.c"],
+    hdrs = ["fragment.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
     ],

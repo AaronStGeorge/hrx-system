@@ -18,11 +18,27 @@ loom_cc_library(
   SRCS
     "assembly.c"
   DEPS
+    ::fragment
     iree::base
     loom::src::loom::codegen::low::packet
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    fragment
+  HDRS
+    "fragment.h"
+  SRCS
+    "fragment.c"
+  DEPS
+    iree::base
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::ir
+    loom::src::loom::ops::low
   PUBLIC
 )
 

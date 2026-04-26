@@ -86,19 +86,6 @@ static iree_status_t loom_amdgpu_append_register_range(
 static iree_status_t loom_amdgpu_append_assignment(
     const loom_native_assembly_packet_context_t* context,
     const loom_low_allocation_assignment_t* assignment) {
-  if (assignment->location_kind !=
-      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "AMDGPU assembly value %" PRIu32
-                            " is not physically allocated",
-                            assignment->value_id);
-  }
-  if (assignment->location_count == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU assembly value %" PRIu32
-                            " has an empty physical register range",
-                            assignment->value_id);
-  }
   if (assignment->descriptor_reg_class_id ==
       AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
     return loom_amdgpu_append_register_range(context, "s", assignment);
@@ -123,12 +110,6 @@ static iree_status_t loom_amdgpu_append_assignment(
 static iree_status_t loom_amdgpu_append_move_location(
     const loom_native_assembly_packet_context_t* context,
     const loom_low_move_location_t* location) {
-  if (location->location_kind !=
-      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU assembly move location is not physically allocated");
-  }
   if (location->descriptor_reg_class_id ==
       AMDGPU_GFX11_CORE_REG_CLASS_ID_AMDGPU_SGPR) {
     return iree_string_builder_append_format(context->builder, "s%" PRIu32,
@@ -1077,19 +1058,10 @@ static iree_status_t loom_amdgpu_append_copy_packet(
   if (loom_amdgpu_assignments_match(source_assignment, result_assignment)) {
     return iree_ok_status();
   }
-  if (source_assignment->location_kind !=
-          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
-      result_assignment->location_kind !=
-          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
+  if (source_assignment->location_count != result_assignment->location_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU assembly copy requires physical register assignments");
-  }
-  if (source_assignment->location_count == 0 ||
-      source_assignment->location_count != result_assignment->location_count) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU assembly copy requires non-empty matching register ranges");
+        "AMDGPU assembly copy requires matching register ranges");
   }
   const uint32_t register_count = source_assignment->location_count;
   const uint32_t last_register_offset = register_count - 1;
@@ -1162,20 +1134,6 @@ static iree_status_t loom_amdgpu_append_slice_packet(
   const loom_low_allocation_assignment_t* result_assignment = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
       context, loom_low_slice_result(op), &result_assignment));
-  if (source_assignment->location_kind !=
-          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
-      result_assignment->location_kind !=
-          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU assembly slice requires physical register assignments");
-  }
-  if (source_assignment->location_count == 0 ||
-      result_assignment->location_count == 0) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU assembly slice requires non-empty register ranges");
-  }
   const int64_t offset = loom_low_slice_offset(op);
   if (offset < 0 || offset > UINT32_MAX) {
     return iree_make_status(
@@ -1246,14 +1204,6 @@ static iree_status_t loom_amdgpu_append_concat_packet(
   const loom_low_allocation_assignment_t* result_assignment = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
       context, loom_low_concat_result(op), &result_assignment));
-  if (result_assignment->location_kind !=
-          LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
-      result_assignment->location_count == 0) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU assembly concat requires a non-empty physical result range");
-  }
-
   iree_string_view_t mnemonic = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_copy_mnemonic(
       result_assignment->descriptor_reg_class_id, &mnemonic));
@@ -1275,14 +1225,6 @@ static iree_status_t loom_amdgpu_append_concat_packet(
     status = loom_amdgpu_find_assignment(context, sources.values[i],
                                          &source_assignment);
     if (!iree_status_is_ok(status)) {
-      break;
-    }
-    if (source_assignment->location_kind !=
-            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
-        source_assignment->location_count == 0) {
-      status = iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU assembly concat requires non-empty physical source ranges");
       break;
     }
     if (source_assignment->descriptor_reg_class_id !=
@@ -1453,12 +1395,6 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
 static iree_status_t loom_amdgpu_append_return_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
-  loom_value_slice_t values = loom_low_return_values(context->packet->node->op);
-  if (values.count != 0) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU assembly return values require ABI lowering");
-  }
   return iree_string_builder_append_cstring(context->builder, "s_endpgm");
 }
 
@@ -1490,13 +1426,6 @@ static iree_status_t loom_amdgpu_verify_scc_condition_assignment(
   const loom_low_allocation_assignment_t* assignment = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_find_assignment(context, condition_value_id, &assignment));
-  if (assignment->location_kind !=
-      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU assembly conditional branch condition is not physically "
-        "allocated");
-  }
   if (assignment->descriptor_reg_class_id != LOOM_AMDGPU_REG_CLASS_ID_SCC) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU assembly conditional branch condition must "

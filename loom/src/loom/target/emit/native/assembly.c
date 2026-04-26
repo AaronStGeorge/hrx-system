@@ -10,6 +10,7 @@
 
 #include "loom/ir/context.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/emit/native/fragment.h"
 
 iree_string_view_t loom_native_assembly_module_string(
     const loom_module_t* module, loom_string_id_t string_id) {
@@ -161,7 +162,8 @@ iree_status_t loom_native_assembly_format_fragment(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "native assembly output builder is required");
   }
-  IREE_RETURN_IF_ERROR(loom_low_packet_validate_sidecars(schedule, allocation));
+  IREE_RETURN_IF_ERROR(
+      loom_native_fragment_validate_emission_inputs(schedule, allocation));
 
   for (iree_host_size_t block_index = 0; block_index < schedule->block_count;
        ++block_index) {

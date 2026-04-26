@@ -753,10 +753,10 @@ TEST_F(AmdgpuKernelAssemblyTest, RejectsFunctionArgumentsBeforeAbiLowering) {
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
-  iree_status_t status = loom_amdgpu_emit_kernel_assembly(
-      &packetization.schedule, &packetization.allocation, &builder,
-      &sidecar_arena);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        loom_amdgpu_emit_kernel_assembly(
+                            &packetization.schedule, &packetization.allocation,
+                            &builder, &sidecar_arena));
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
 }
@@ -775,10 +775,10 @@ TEST_F(AmdgpuKernelAssemblyTest, RejectsNonDefaultLinkage) {
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
-  iree_status_t status = loom_amdgpu_emit_kernel_assembly(
-      &packetization.schedule, &packetization.allocation, &builder,
-      &sidecar_arena);
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        loom_amdgpu_emit_kernel_assembly(
+                            &packetization.schedule, &packetization.allocation,
+                            &builder, &sidecar_arena));
   iree_string_builder_deinitialize(&builder);
   iree_arena_deinitialize(&sidecar_arena);
 }

@@ -191,13 +191,6 @@ static iree_status_t loom_x86_append_assignment(
     const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context,
     const loom_low_allocation_assignment_t* assignment) {
-  if (assignment->location_kind !=
-      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "x86 assembly value %" PRIu32
-                            " is not physically allocated",
-                            assignment->value_id);
-  }
   if (assignment->location_count != 1) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "x86 assembly multi-register value %" PRIu32
@@ -1061,11 +1054,6 @@ static iree_status_t loom_x86_append_descriptor_packet(
 static iree_status_t loom_x86_append_return_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
-  loom_value_slice_t values = loom_low_return_values(context->packet->node->op);
-  if (values.count != 0) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "x86 assembly return values require ABI lowering");
-  }
   return iree_string_builder_append_cstring(context->builder, "ret");
 }
 
