@@ -43,6 +43,18 @@ static const loom_target_snapshot_t kAmdgpuHalSnapshot = {
     .default_pointer_bitwidth = 64,
     .index_bitwidth = 32,
     .offset_bitwidth = 64,
+    .max_workgroup_size =
+        {
+            .x = UINT16_MAX,
+            .y = UINT16_MAX,
+            .z = UINT16_MAX,
+        },
+    .max_grid_workitem_count =
+        {
+            .x = UINT32_MAX,
+            .y = UINT32_MAX,
+            .z = UINT32_MAX,
+        },
     .memory_spaces =
         {
             .generic = 0,

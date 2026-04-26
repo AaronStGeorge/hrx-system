@@ -48,6 +48,7 @@ typedef struct loom_value_fact_table_t loom_value_fact_table_t;
 typedef struct loom_value_fact_extension_entry_t
     loom_value_fact_extension_entry_t;
 typedef struct loom_value_fact_domain_t loom_value_fact_domain_t;
+typedef struct loom_target_bundle_t loom_target_bundle_t;
 
 typedef const loom_value_fact_domain_t* (
     *loom_value_fact_type_domain_resolver_fn_t)(
@@ -350,6 +351,10 @@ struct loom_fact_context_t {
   // Table that owns the dense facts and any extension payloads allocated by
   // inference helpers.
   loom_value_fact_table_t* table;
+
+  // Optional selected target bundle for target/profile-sensitive fact
+  // inference. Generic analyses leave this NULL and receive source-level facts.
+  const loom_target_bundle_t* target_bundle;
 
   // Optional type-domain resolver installed by layers that own registered type
   // descriptors. The fact table itself intentionally does not depend on the

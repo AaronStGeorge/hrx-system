@@ -936,6 +936,7 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
 
   iree_status_t status = loom_value_fact_table_initialize(
       &context.fact_table, &context.arena, module->values.count);
+  context.fact_table.context.target_bundle = options->bundle;
   if (iree_status_is_ok(status)) {
     status = loom_value_fact_table_compute(&context.fact_table, module,
                                            source_function);

@@ -698,6 +698,7 @@ iree_status_t loom_target_low_verify_function_legality(
   } else {
     status = loom_value_fact_table_initialize(
         &context.local_fact_table, &context.arena, module->values.count);
+    context.local_fact_table.context.target_bundle = options->bundle;
     if (iree_status_is_ok(status)) {
       status = loom_value_fact_table_compute(&context.local_fact_table, module,
                                              function);

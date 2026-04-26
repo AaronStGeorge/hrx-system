@@ -42,7 +42,9 @@ iree_status_t ParseLowNoopModule(loom_context_t* context,
                                  loom_module_t** out_module) {
   static const char kSource[] =
       "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
-      "low.func.def target(@gfx_target) abi(hal_kernel) @loom_kernel() {\n"
+      "low.func.def target(@gfx_target) abi(hal_kernel, {"
+      "hal_workgroup_size_x = 64, hal_workgroup_size_y = 1, "
+      "hal_workgroup_size_z = 1}) @loom_kernel() {\n"
       "  low.return\n"
       "}\n";
   loom_text_parse_options_t parse_options = {
@@ -59,12 +61,16 @@ iree_status_t ParseLowMultiExportArtifactModule(
   static const char kSource[] =
       "target.profile @gfx_target preset(\"amdgpu-gfx11\")\n"
       "target.artifact @gfx_artifact target(@gfx_target)\n"
-      "low.func.def target(@gfx_target) abi(hal_kernel) "
+      "low.func.def target(@gfx_target) abi(hal_kernel, {"
+      "hal_workgroup_size_x = 64, hal_workgroup_size_y = 1, "
+      "hal_workgroup_size_z = 1}) "
       "export(\"second_kernel\", {artifact = @gfx_artifact, ordinal = 1}) "
       "@second() {\n"
       "  low.return\n"
       "}\n"
-      "low.func.def target(@gfx_target) abi(hal_kernel) "
+      "low.func.def target(@gfx_target) abi(hal_kernel, {"
+      "hal_workgroup_size_x = 64, hal_workgroup_size_y = 1, "
+      "hal_workgroup_size_z = 1}) "
       "export(\"first_kernel\", {artifact = @gfx_artifact, ordinal = 0}) "
       "@first() {\n"
       "  low.return\n"

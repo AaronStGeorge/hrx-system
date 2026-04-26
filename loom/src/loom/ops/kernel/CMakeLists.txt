@@ -29,7 +29,28 @@ loom_cc_library(
     loom::src::loom::ops::cache
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::view
+    loom::src::loom::target::types
+    loom::src::loom::util::fact_table
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    facts_test
+  SRCS
+    "facts_test.cc"
+  DEPS
+    ::kernel
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::target::types
+    loom::src::loom::testing::module_ptr
+    loom::src::loom::util::fact_table
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

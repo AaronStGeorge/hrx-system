@@ -33,6 +33,18 @@
       .default_pointer_bitwidth = 64,                          \
       .index_bitwidth = 32,                                    \
       .offset_bitwidth = 64,                                   \
+      .max_workgroup_size =                                    \
+          {                                                    \
+              .x = UINT16_MAX,                                 \
+              .y = UINT16_MAX,                                 \
+              .z = UINT16_MAX,                                 \
+          },                                                   \
+      .max_grid_workitem_count =                               \
+          {                                                    \
+              .x = UINT32_MAX,                                 \
+              .y = UINT32_MAX,                                 \
+              .z = UINT32_MAX,                                 \
+          },                                                   \
       .memory_spaces =                                         \
           {                                                    \
               .generic = 0,                                    \
@@ -58,7 +70,7 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
     .hal_kernel =
         {
             .binding_alignment = 16,
-            .required_workgroup_size = {.x = 64, .y = 1, .z = 1},
+            .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
             .flat_workgroup_size_min = 64,
             .flat_workgroup_size_max = 64,
             .buffer_resource_flags = 159744,

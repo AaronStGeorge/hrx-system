@@ -246,8 +246,8 @@ TEST_F(AmdgpuOccupancyTest, Gfx11VgprPressureReportsNextCliff) {
 
   EXPECT_EQ(occupancy.wave_size, 64u);
   EXPECT_EQ(occupancy.max_waves_per_simd, 16u);
-  EXPECT_EQ(occupancy.flat_workgroup_size, 64u);
-  EXPECT_EQ(occupancy.waves_per_workgroup, 1u);
+  EXPECT_EQ(occupancy.flat_workgroup_size, 0u);
+  EXPECT_EQ(occupancy.waves_per_workgroup, 0u);
   EXPECT_EQ(occupancy.resident_waves_per_simd, 15u);
   EXPECT_EQ(occupancy.occupancy_percent, 93u);
   ASSERT_NE(occupancy.limiting_register_class_index,

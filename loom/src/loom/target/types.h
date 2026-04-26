@@ -88,6 +88,15 @@ typedef struct loom_target_workgroup_size_t {
   uint32_t z;
 } loom_target_workgroup_size_t;
 
+typedef struct loom_target_grid_workitem_limit_t {
+  // Maximum grid size along the x dimension, in workitems.
+  uint32_t x;
+  // Maximum grid size along the y dimension, in workitems.
+  uint32_t y;
+  // Maximum grid size along the z dimension, in workitems.
+  uint32_t z;
+} loom_target_grid_workitem_limit_t;
+
 typedef struct loom_target_snapshot_t {
   // Stable snapshot name for diagnostics and tests.
   iree_string_view_t name;
@@ -109,6 +118,12 @@ typedef struct loom_target_snapshot_t {
   uint32_t index_bitwidth;
   // Offset bit width chosen for lowered byte offsets.
   uint32_t offset_bitwidth;
+  // Maximum API/hardware local workgroup size per dimension. Zero dimensions
+  // mean the target has not supplied a tighter limit.
+  loom_target_workgroup_size_t max_workgroup_size;
+  // Maximum API/hardware dispatch grid size in workitems per dimension. Zero
+  // dimensions mean the target has not supplied a tighter limit.
+  loom_target_grid_workitem_limit_t max_grid_workitem_count;
   // Address space assignments used by target-specific ABI lowering.
   loom_target_memory_space_map_t memory_spaces;
 } loom_target_snapshot_t;
@@ -116,7 +131,8 @@ typedef struct loom_target_snapshot_t {
 typedef struct loom_target_hal_kernel_abi_t {
   // ABI-required byte alignment for binding pointer parameters.
   uint32_t binding_alignment;
-  // ABI-required fixed workgroup size for each kernel entry point.
+  // Function-selected fixed workgroup size for a kernel entry point. A zero
+  // dimension means the function has not selected a fixed size yet.
   loom_target_workgroup_size_t required_workgroup_size;
   // Optimization lower flat workgroup size advertised to the backend.
   uint32_t flat_workgroup_size_min;
