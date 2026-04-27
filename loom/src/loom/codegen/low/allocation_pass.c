@@ -10,6 +10,7 @@
 
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_materialization.h"
+#include "loom/codegen/low/function.h"
 #include "loom/ops/low/ops.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
@@ -263,7 +264,7 @@ iree_status_t loom_low_materialize_allocation_create(
 iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
                                                   loom_module_t* module,
                                                   loom_func_like_t function) {
-  if (!loom_low_func_def_isa(function.op)) {
+  if (!loom_low_function_def_isa(function.op)) {
     return iree_ok_status();
   }
 

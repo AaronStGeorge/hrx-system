@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "loom/codegen/low/diagnostics.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/register_class_map.h"
 #include "loom/codegen/low/requirements.h"
 #include "loom/error/error_defs.h"
@@ -27,7 +28,7 @@ typedef struct loom_low_schedule_build_state_t {
   const loom_low_schedule_options_t* options;
   // Arena owning all sidecar storage produced by this schedule.
   iree_arena_allocator_t* arena;
-  // low.func.def operation being scheduled.
+  // Low function definition operation being scheduled.
   const loom_op_t* function_op;
   // Body region of function_op.
   loom_region_t* body;
@@ -1957,9 +1958,9 @@ iree_status_t loom_low_schedule_function(
         "module, low function op, options with descriptor registry, arena, and "
         "output sidecar are required");
   }
-  if (!loom_low_func_def_isa(low_func_op)) {
+  if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected low.func.def");
+                            "expected low.func.def or low.kernel.def");
   }
   if (!loom_low_schedule_strategy_is_valid(options->strategy)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1973,11 +1974,11 @@ iree_status_t loom_low_schedule_function(
       .options = options,
       .arena = arena,
       .function_op = low_func_op,
-      .body = loom_low_func_def_body(low_func_op),
+      .body = loom_low_function_body((loom_op_t*)low_func_op),
   };
   if (!state.body) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low.func.def body is required");
+                            "low function body is required");
   }
   IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_verify_requirements(
       options->descriptor_registry,

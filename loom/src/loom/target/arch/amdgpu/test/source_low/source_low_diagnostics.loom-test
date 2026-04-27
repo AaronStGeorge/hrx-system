@@ -17,7 +17,7 @@ func.def @lds_b32_diagnostics(%output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_b32_diagnostics() {
+low.func.def target(@target) @lds_b32_diagnostics() {
   %m0 = low.live_in<amdgpu.m0> : reg<amdgpu.m0>
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -56,7 +56,7 @@ func.def @lds_padded_diagnostics(%output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_padded_diagnostics() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_padded_diagnostics() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
@@ -104,7 +104,7 @@ func.def @lds_read2_write2_diagnostics(%output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_read2_write2_diagnostics() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_read2_write2_diagnostics() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
@@ -151,7 +151,7 @@ func.def @lds_conflict_risk_diagnostics(%output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_conflict_risk_diagnostics() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_conflict_risk_diagnostics() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0

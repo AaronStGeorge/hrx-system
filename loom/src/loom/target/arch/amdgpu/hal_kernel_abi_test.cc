@@ -10,6 +10,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -81,7 +82,7 @@ class AmdgpuHalKernelAbiTest : public ::testing::Test {
     loom_block_t* block = loom_module_block(module_);
     const loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
-      if (loom_low_func_def_isa(op)) {
+      if (loom_low_function_def_isa(op)) {
         return op;
       }
     }
@@ -129,7 +130,7 @@ class AmdgpuHalKernelAbiTest : public ::testing::Test {
 
 TEST_F(AmdgpuHalKernelAbiTest, LaysOutOneHalBufferResource) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  low.return\n"
@@ -156,7 +157,7 @@ TEST_F(AmdgpuHalKernelAbiTest, LaysOutOneHalBufferResource) {
 
 TEST_F(AmdgpuHalKernelAbiTest, LaysOutTwoHalBufferResources) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %input = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %output = low.resource<hal_buffer_resource> {index = 1, "
@@ -182,7 +183,7 @@ TEST_F(AmdgpuHalKernelAbiTest, LaysOutTwoHalBufferResources) {
 
 TEST_F(AmdgpuHalKernelAbiTest, AllowsNoResources) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  low.return\n"
       "}\n",
       "");
@@ -199,7 +200,7 @@ TEST_F(AmdgpuHalKernelAbiTest, AllowsNoResources) {
 
 TEST_F(AmdgpuHalKernelAbiTest, RejectsDuplicateBindingIndex) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding0 = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %binding1 = low.resource<hal_buffer_resource> {index = 0, "
@@ -222,7 +223,7 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsDuplicateBindingIndex) {
 
 TEST_F(AmdgpuHalKernelAbiTest, RejectsMissingDenseBindingIndex) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding1 = low.resource<hal_buffer_resource> {index = 1, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  low.return\n"
@@ -243,7 +244,7 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsMissingDenseBindingIndex) {
 
 TEST_F(AmdgpuHalKernelAbiTest, RejectsWrongAbiType) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding0 = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x3>\n"
       "  low.return\n"
@@ -264,7 +265,7 @@ TEST_F(AmdgpuHalKernelAbiTest, RejectsWrongAbiType) {
 
 TEST_F(AmdgpuHalKernelAbiTest, RejectsWrongImportKind) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding = low.resource<vm_state> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  low.return\n"

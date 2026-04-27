@@ -20,7 +20,7 @@ extern "C" {
 #endif
 
 // Emits an AMDGPU assembly fragment for one scheduled and allocated AMDGPU
-// low.func.def. The fragment assumes exact physical-register inputs and
+// target-low function. The fragment assumes exact physical-register inputs and
 // outputs; it does not emit kernel metadata, PAL metadata, or an ELF code
 // object envelope. Values must be physically allocated and unspilled.
 iree_status_t loom_amdgpu_emit_assembly_fragment(

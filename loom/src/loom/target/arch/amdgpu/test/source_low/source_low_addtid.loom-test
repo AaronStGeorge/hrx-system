@@ -15,7 +15,7 @@ func.def @workgroup_memory_workitem_x_b32() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @workgroup_memory_workitem_x_b32() {
+low.func.def target(@target) @workgroup_memory_workitem_x_b32() {
   %m0 = low.live_in<amdgpu.m0> : reg<amdgpu.m0>
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>

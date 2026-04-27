@@ -22,6 +22,7 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/target/ops.h"
@@ -854,7 +855,7 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
     loom_low_schedule_strategy_t strategy, iree_diagnostic_emitter_t emitter,
     iree_arena_allocator_t* analysis_arena, loom_check_result_t* result) {
   loom_op_t* low_function = NULL;
-  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_func_def(
+  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
       module, symbol_name, &low_function));
   IREE_RETURN_IF_ERROR(loom_low_cleanup_function(module, low_function,
                                                  descriptor_registry, emitter));
@@ -880,7 +881,7 @@ static iree_status_t loom_check_emit_write_low_allocation_json(
     iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* analysis_arena,
     loom_check_result_t* result) {
   loom_op_t* low_function = NULL;
-  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_func_def(
+  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
       module, symbol_name, &low_function));
   IREE_RETURN_IF_ERROR(loom_low_cleanup_function(module, low_function,
                                                  descriptor_registry, emitter));
@@ -917,7 +918,7 @@ static iree_status_t loom_check_emit_write_low_packet_json(
     iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* analysis_arena,
     loom_check_result_t* result) {
   loom_op_t* low_function = NULL;
-  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_func_def(
+  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
       module, symbol_name, &low_function));
   const loom_low_allocation_fixed_value_t* fixed_values = NULL;
   iree_host_size_t fixed_value_count = 0;
@@ -1060,6 +1061,31 @@ static iree_string_view_t loom_check_emit_symbol_name(
   return module->strings.entries[symbol->name_id];
 }
 
+static bool loom_check_emit_source_low_targetable_op(const loom_op_t* op) {
+  return loom_func_def_isa(op) || loom_kernel_def_isa(op);
+}
+
+static bool loom_check_emit_source_low_has_target(const loom_op_t* op) {
+  if (loom_func_def_isa(op)) {
+    return loom_symbol_ref_is_valid(loom_func_def_target(op));
+  }
+  if (loom_kernel_def_isa(op)) {
+    return loom_symbol_ref_is_valid(loom_kernel_def_target(op));
+  }
+  return false;
+}
+
+static void loom_check_emit_source_low_set_target(
+    loom_op_t* op, loom_symbol_ref_t target_ref) {
+  if (loom_func_def_isa(op)) {
+    loom_op_attrs(op)[loom_func_def_target_ATTR_INDEX] =
+        loom_attr_symbol(target_ref);
+  } else if (loom_kernel_def_isa(op)) {
+    loom_op_attrs(op)[loom_kernel_def_target_ATTR_INDEX] =
+        loom_attr_symbol(target_ref);
+  }
+}
+
 static iree_status_t loom_check_emit_prepare_source_low_target_preset(
     loom_module_t* module, const loom_check_emit_request_t* request) {
   if (!request->has_source_low_target_preset_option) {
@@ -1069,14 +1095,15 @@ static iree_status_t loom_check_emit_prepare_source_low_target_preset(
   iree_host_size_t targetable_func_count = 0;
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
     const loom_symbol_t* symbol = &module->symbols.entries[i];
-    if (!symbol->defining_op || !loom_func_def_isa(symbol->defining_op)) {
+    if (!symbol->defining_op ||
+        !loom_check_emit_source_low_targetable_op(symbol->defining_op)) {
       continue;
     }
-    if (loom_symbol_ref_is_valid(loom_func_def_target(symbol->defining_op))) {
+    if (loom_check_emit_source_low_has_target(symbol->defining_op)) {
       iree_string_view_t func_name = loom_check_emit_symbol_name(module, i);
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "source-low target-preset cannot be used with pre-targeted func "
+          "source-low target-preset cannot be used with pre-targeted entry "
           "@%.*s",
           (int)func_name.size, func_name.data);
     }
@@ -1084,8 +1111,8 @@ static iree_status_t loom_check_emit_prepare_source_low_target_preset(
   }
   if (targetable_func_count == 0) {
     return iree_make_status(IREE_STATUS_NOT_FOUND,
-                            "source-low target-preset found no func.def ops to "
-                            "target");
+                            "source-low target-preset found no source entries "
+                            "to target");
   }
 
   loom_symbol_ref_t target_ref = loom_symbol_ref_null();
@@ -1110,11 +1137,11 @@ static iree_status_t loom_check_emit_prepare_source_low_target_preset(
 
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
     const loom_symbol_t* symbol = &module->symbols.entries[i];
-    if (!symbol->defining_op || !loom_func_def_isa(symbol->defining_op)) {
+    if (!symbol->defining_op ||
+        !loom_check_emit_source_low_targetable_op(symbol->defining_op)) {
       continue;
     }
-    loom_op_attrs(symbol->defining_op)[loom_func_def_target_ATTR_INDEX] =
-        loom_attr_symbol(target_ref);
+    loom_check_emit_source_low_set_target(symbol->defining_op, target_ref);
   }
   return iree_ok_status();
 }

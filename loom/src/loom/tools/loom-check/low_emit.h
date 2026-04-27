@@ -4,7 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Shared helpers for target-owned loom-check emit providers over low.func.def.
+// Shared helpers for target-owned loom-check emit providers over target-low
+// functions.
 
 #ifndef LOOM_TOOLS_LOOM_CHECK_LOW_EMIT_H_
 #define LOOM_TOOLS_LOOM_CHECK_LOW_EMIT_H_
@@ -62,8 +63,8 @@ iree_status_t loom_check_low_emit_parse_allocation_option(
     loom_check_low_emit_fixed_value_spec_t* fixed_specs,
     iree_host_size_t fixed_spec_capacity, iree_host_size_t* fixed_spec_count);
 
-// Finds a module-local low.func.def by symbol name.
-iree_status_t loom_check_low_emit_find_low_func_def(
+// Finds a module-local target-low function definition by symbol name.
+iree_status_t loom_check_low_emit_find_low_function_def(
     loom_module_t* module, iree_string_view_t symbol_name,
     loom_op_t** out_low_function);
 

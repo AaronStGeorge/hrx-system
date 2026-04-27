@@ -17,7 +17,7 @@ func.def @async_gather_dword(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @async_gather_dword() {
+low.func.def target(@target) @async_gather_dword() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -53,7 +53,7 @@ func.def @async_gather_b128(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @async_gather_b128() {
+low.func.def target(@target) @async_gather_b128() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -94,7 +94,7 @@ func.def @async_gather_two_stage(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @async_gather_two_stage() {
+low.func.def target(@target) @async_gather_two_stage() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -144,7 +144,7 @@ func.def @async_gather_multi_packet_newer_group(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @async_gather_multi_packet_newer_group() {
+low.func.def target(@target) @async_gather_multi_packet_newer_group() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -195,7 +195,7 @@ func.def @async_gather_second_lds_slot(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @async_gather_second_lds_slot() {
+low.func.def target(@target) @async_gather_second_lds_slot() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>

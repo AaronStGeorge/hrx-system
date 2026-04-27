@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "loom/codegen/low/diagnostics.h"
+#include "loom/codegen/low/function.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -83,7 +84,7 @@ static iree_status_t loom_low_allocation_map_slot_space(
 
 static iree_status_t loom_low_allocation_verify_no_existing_slot_traffic(
     const loom_op_t* function_op) {
-  loom_region_t* body = loom_low_func_def_body(function_op);
+  loom_region_t* body = loom_low_function_body((loom_op_t*)function_op);
   loom_block_t* block = NULL;
   loom_region_for_each_block(body, block) {
     loom_op_t* op = NULL;
@@ -91,7 +92,7 @@ static iree_status_t loom_low_allocation_verify_no_existing_slot_traffic(
       if (loom_low_spill_isa(op) || loom_low_reload_isa(op)) {
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
-            "low allocation materialization requires a low.func.def without "
+            "low allocation materialization requires a low function without "
             "existing low.spill or low.reload ops");
       }
     }
@@ -171,10 +172,10 @@ static iree_status_t loom_low_allocation_insert_slot_records(
     loom_module_t* module, const loom_low_allocation_sidecar_t* sidecar,
     iree_arena_allocator_t* arena, loom_low_materialized_spill_slot_t* slots) {
   loom_symbol_ref_t function_ref =
-      loom_low_func_def_callee(sidecar->function_op);
+      loom_low_function_callee(sidecar->function_op);
   if (!sidecar->function_op->parent_block) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "low.func.def is not inserted in a block");
+                            "low function is not inserted in a block");
   }
 
   loom_builder_t builder;

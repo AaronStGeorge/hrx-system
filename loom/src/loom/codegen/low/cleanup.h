@@ -23,7 +23,7 @@
 extern "C" {
 #endif
 
-// Removes dead-removable target-low ops from one low.func.def.
+// Removes dead-removable target-low ops from one target-low function.
 //
 // |descriptor_registry| selects the descriptor set named by the low function's
 // target profile. Descriptor-backed low.op/low.const packets are removable only

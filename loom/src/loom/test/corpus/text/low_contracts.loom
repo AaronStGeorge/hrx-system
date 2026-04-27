@@ -31,9 +31,9 @@ low.func.def target(@low_native_resource_target) abi(object_function) export("lo
 
 target.profile @low_hal_resource_target preset("amdgpu-gfx11") {contract_set_key = "test.low.core"}
 
-low.func.def target(@low_hal_resource_target) abi(hal_kernel, {hal_binding_alignment = 16, hal_flat_workgroup_size_max = 1, hal_flat_workgroup_size_min = 1, hal_workgroup_size_x = 1, hal_workgroup_size_y = 1, hal_workgroup_size_z = 1}) export("low_hal_resource") @low_hal_resource() -> (reg<amdgpu.sgpr x4>) {
+low.kernel.def target(@low_hal_resource_target) export("low_hal_resource") workgroup_size(1, 1, 1) @low_hal_resource() {
   %binding = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
-  low.return %binding : reg<amdgpu.sgpr x4>
+  low.return
 }
 
 func.decl @extern_add(%lhs: i32, %rhs: i32) -> (i32)

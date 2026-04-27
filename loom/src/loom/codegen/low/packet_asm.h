@@ -49,7 +49,8 @@ typedef struct loom_low_packet_asm_options_t {
 } loom_low_packet_asm_options_t;
 
 // Formats |schedule| and |allocation| as scheduled packet assembly text.
-// The sidecars must describe the same low.func.def and target descriptor set.
+// The sidecars must describe the same target-low function and target
+// descriptor set.
 iree_status_t loom_low_packet_asm_format(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,

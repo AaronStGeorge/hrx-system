@@ -6,6 +6,7 @@
 
 #include "loom/codegen/low/diagnostics.h"
 
+#include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 
@@ -52,6 +53,10 @@ iree_string_view_t loom_low_diagnostic_function_name(
   if (loom_low_func_def_isa(function_op)) {
     return loom_low_diagnostic_symbol_name(
         module, loom_low_func_def_callee(function_op));
+  }
+  if (loom_low_kernel_def_isa(function_op)) {
+    return loom_low_diagnostic_symbol_name(
+        module, loom_low_kernel_def_callee(function_op));
   }
   if (loom_low_func_decl_isa(function_op)) {
     return loom_low_diagnostic_symbol_name(

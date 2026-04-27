@@ -14,7 +14,7 @@ func.def @lds_atomic_add_i32() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_atomic_add_i32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_atomic_add_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -53,7 +53,7 @@ func.def @lds_atomic_ordering_i32() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_atomic_ordering_i32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_atomic_ordering_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -104,7 +104,7 @@ func.def @lds_atomic_add_f32() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_atomic_add_f32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_atomic_add_f32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -140,7 +140,7 @@ func.def @lds_atomic_minnum_maxnum_f32() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_atomic_minnum_maxnum_f32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_atomic_minnum_maxnum_f32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -186,7 +186,7 @@ func.def @lds_atomic_bitwise_i32() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_atomic_bitwise_i32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_atomic_bitwise_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -242,7 +242,7 @@ func.def @lds_atomic_sub_i32() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_atomic_sub_i32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_atomic_sub_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -277,7 +277,7 @@ func.def @lds_atomic_exchange_i32() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_atomic_exchange_i32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_atomic_exchange_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -308,7 +308,7 @@ func.def @lds_atomic_cmpxchg_i32() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_atomic_cmpxchg_i32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_atomic_cmpxchg_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -347,7 +347,7 @@ func.def @lds_atomic_minmax_i32() {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_atomic_minmax_i32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_atomic_minmax_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256

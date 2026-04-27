@@ -2766,6 +2766,18 @@ class FuncLikeInterface(NamedTuple):
     export_symbol: str | None = None
     # Optional export payload dictionary attr.
     export_attrs: str | None = None
+    # Optional target artifact symbol attr for entry-style exports.
+    artifact: str | None = None
+    # Optional export ordinal attr for entry-style exports.
+    export_ordinal: str | None = None
+    # Optional export linkage attr for entry-style exports.
+    export_linkage: str | None = None
+    # Optional fixed workgroup size X dimension attr for kernel entries.
+    workgroup_size_x: str | None = None
+    # Optional fixed workgroup size Y dimension attr for kernel entries.
+    workgroup_size_y: str | None = None
+    # Optional fixed workgroup size Z dimension attr for kernel entries.
+    workgroup_size_z: str | None = None
     # Visibility enum attr (e.g., public). None if not applicable.
     visibility: str | None = None
     # Calling convention enum attr. None if not applicable.

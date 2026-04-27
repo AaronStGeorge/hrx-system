@@ -6,8 +6,8 @@
 
 // AMDGPU HSA code-object emission from target-low native fragments.
 //
-// This layer consumes a scheduled and physically allocated low.func.def for one
-// HAL kernel and writes a loadable HSACO ELF containing metadata, a kernel
+// This layer consumes a scheduled and physically allocated target-low HAL
+// kernel and writes a loadable HSACO ELF containing metadata, a kernel
 // descriptor, and encoded native text.
 
 #ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_KERNEL_HSACO_H_
@@ -82,7 +82,7 @@ iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
     iree_host_size_t contribution_count, iree_io_stream_t* stream,
     iree_arena_allocator_t* scratch_arena);
 
-// Emits complete AMDGPU HSACO for one ABI-lowered HAL kernel low.func.def.
+// Emits complete AMDGPU HSACO for one ABI-lowered target-low HAL kernel.
 //
 // The output stream receives a self-contained ELF code object with metadata,
 // one kernel descriptor, and one encoded text entry. |options| may provide

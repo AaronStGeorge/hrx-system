@@ -20,7 +20,7 @@ typedef enum loom_amdgpu_loom_check_wait_mode_e {
 } loom_amdgpu_loom_check_wait_mode_t;
 
 typedef struct loom_amdgpu_loom_check_emit_options_t {
-  // Module-local low.func.def symbol selected by the RUN line.
+  // Module-local target-low function symbol selected by the RUN line.
   iree_string_view_t function_symbol_name;
   // Candidate selection strategy used by low packetization.
   loom_low_schedule_strategy_t schedule_strategy;

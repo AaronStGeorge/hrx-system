@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 
@@ -179,7 +180,7 @@ iree_status_t loom_check_low_emit_parse_allocation_option(
       token, option_scope, budgets, budget_capacity, budget_count);
 }
 
-iree_status_t loom_check_low_emit_find_low_func_def(
+iree_status_t loom_check_low_emit_find_low_function_def(
     loom_module_t* module, iree_string_view_t symbol_name,
     loom_op_t** out_low_function) {
   IREE_ASSERT_ARGUMENT(module);
@@ -198,8 +199,8 @@ iree_status_t loom_check_low_emit_find_low_func_def(
                             (int)symbol_name.size, symbol_name.data);
   }
   const loom_symbol_t* symbol = &module->symbols.entries[symbol_id];
-  if (!loom_low_func_def_isa(symbol->defining_op) ||
-      !loom_low_func_def_body(symbol->defining_op)) {
+  if (!loom_low_function_def_isa(symbol->defining_op) ||
+      !loom_low_function_body(symbol->defining_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "symbol '@%.*s' does not name a low function body",
                             (int)symbol_name.size, symbol_name.data);
@@ -277,7 +278,7 @@ static iree_status_t loom_check_low_emit_find_value_in_low_function(
     iree_string_view_t value_name, loom_value_id_t* out_value_id) {
   IREE_ASSERT_ARGUMENT(out_value_id);
   *out_value_id = LOOM_VALUE_ID_INVALID;
-  loom_region_t* body = loom_low_func_def_body(low_function);
+  const loom_region_t* body = loom_low_function_const_body(low_function);
   bool found = false;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_find_value_in_region(
       module, body, value_name, &found, out_value_id));
@@ -306,8 +307,8 @@ iree_status_t loom_check_low_emit_resolve_fixed_value_specs(
   }
   IREE_ASSERT_ARGUMENT(fixed_specs);
   IREE_ASSERT_ARGUMENT(low_function);
-  if (!loom_low_func_def_isa(low_function) ||
-      !loom_low_func_def_body(low_function)) {
+  if (!loom_low_function_def_isa(low_function) ||
+      !loom_low_function_body(low_function)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "low fixed allocation requires a low function body");
@@ -349,7 +350,7 @@ iree_status_t loom_check_low_emit_packetize_function(
   }
 
   loom_op_t* low_function = NULL;
-  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_func_def(
+  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
       request->module, function_symbol_name, &low_function));
   const loom_low_allocation_fixed_value_t* fixed_values = NULL;
   iree_host_size_t fixed_value_count = 0;

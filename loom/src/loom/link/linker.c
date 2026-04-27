@@ -958,6 +958,42 @@ static iree_status_t loom_link_merge_func_contract(loom_link_state_t* state,
             .field_name = IREE_SV("export_attrs"),
         },
         {
+            .source_attr_index = source_func.vtable->artifact_attr_index,
+            .target_attr_index = target_func.vtable->artifact_attr_index,
+            .field_name = IREE_SV("artifact"),
+        },
+        {
+            .source_attr_index = source_func.vtable->export_ordinal_attr_index,
+            .target_attr_index = target_func.vtable->export_ordinal_attr_index,
+            .field_name = IREE_SV("export_ordinal"),
+        },
+        {
+            .source_attr_index = source_func.vtable->export_linkage_attr_index,
+            .target_attr_index = target_func.vtable->export_linkage_attr_index,
+            .field_name = IREE_SV("export_linkage"),
+        },
+        {
+            .source_attr_index =
+                source_func.vtable->workgroup_size_x_attr_index,
+            .target_attr_index =
+                target_func.vtable->workgroup_size_x_attr_index,
+            .field_name = IREE_SV("workgroup_size_x"),
+        },
+        {
+            .source_attr_index =
+                source_func.vtable->workgroup_size_y_attr_index,
+            .target_attr_index =
+                target_func.vtable->workgroup_size_y_attr_index,
+            .field_name = IREE_SV("workgroup_size_y"),
+        },
+        {
+            .source_attr_index =
+                source_func.vtable->workgroup_size_z_attr_index,
+            .target_attr_index =
+                target_func.vtable->workgroup_size_z_attr_index,
+            .field_name = IREE_SV("workgroup_size_z"),
+        },
+        {
             .source_attr_index = source_func.vtable->predicates_attr_index,
             .target_attr_index = target_func.vtable->predicates_attr_index,
             .field_name = IREE_SV("predicates"),

@@ -76,7 +76,7 @@ typedef struct loom_amdgpu_occupancy_register_class_t {
   uint32_t spill_reload_count;
 } loom_amdgpu_occupancy_register_class_t;
 
-// AMDGPU occupancy sidecar for one allocated low.func.def body.
+// AMDGPU occupancy sidecar for one allocated target-low function body.
 typedef struct loom_amdgpu_occupancy_sidecar_t {
   // Allocation sidecar this occupancy estimate was built from.
   const loom_low_allocation_sidecar_t* allocation;

@@ -2,7 +2,7 @@
 
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
-low.func.def target(@gfx11_target) abi(hal_kernel) @gfx11_wmma_zero_hal_kernel() {
+low.kernel.def target(@gfx11_target) workgroup_size(64, 1, 1) @gfx11_wmma_zero_hal_kernel() {
   %output = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
   %a = low.concat(%zero, %zero, %zero, %zero) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>

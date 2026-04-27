@@ -7,9 +7,10 @@
 // Target-aware function contract materialization.
 //
 // Generic func symbol facts carry only function-local structure: target symbol,
-// ABI/export syntax, and signature/import facts. This target layer resolves the
-// referenced target.profile facts and overlays the function-owned contract onto
-// the selected profile bundle for lowering, packaging, and execution.
+// ABI/export syntax, kernel launch structure, and signature/import facts. This
+// target layer resolves the referenced target.profile facts and overlays the
+// func-like-owned contract onto the selected profile bundle for lowering,
+// packaging, and execution.
 
 #ifndef LOOM_TARGET_FUNCTION_CONTRACT_H_
 #define LOOM_TARGET_FUNCTION_CONTRACT_H_
@@ -25,12 +26,13 @@ extern "C" {
 #endif
 
 // Resolves |func_facts|'s target profile and materializes the effective target
-// bundle selected by the function.
+// bundle selected by the func-like symbol.
 //
 // The target snapshot and config come from target.profile facts. The export
 // plan starts from the target profile defaults and is then overlaid with
-// function-owned ABI/export attrs. |out_bundle_storage| owns the copied payload
-// fields and its embedded bundle points at those copies.
+// function-owned ABI/export attrs or kernel-owned launch/export attrs.
+// |out_bundle_storage| owns the copied payload fields and its embedded bundle
+// points at those copies.
 iree_status_t loom_target_function_contract_resolve(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
     const loom_func_symbol_facts_t* func_facts,

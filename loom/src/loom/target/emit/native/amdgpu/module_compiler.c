@@ -15,7 +15,7 @@
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
@@ -37,6 +37,10 @@ enum {
 static bool loom_amdgpu_module_compile_bundle_is_compatible(
     void* user_data, const loom_target_module_compile_entry_t* entry) {
   (void)user_data;
+  if (!loom_kernel_def_isa(entry->func.op) &&
+      !loom_low_kernel_def_isa(entry->func.op)) {
+    return false;
+  }
   const loom_target_bundle_t* bundle = &entry->bundle_storage.bundle;
   return bundle && bundle->snapshot && bundle->export_plan &&
          bundle->snapshot->codegen_format ==
@@ -50,7 +54,7 @@ static bool loom_amdgpu_module_compile_bundle_is_compatible(
 typedef struct loom_amdgpu_module_compile_kernel_plan_t {
   // Target-resolved function entry used to build this kernel.
   const loom_target_module_compile_entry_t* entry;
-  // Selected or lowered low.func.def op for packetization.
+  // Selected or lowered low.kernel.def op for packetization.
   loom_op_t* low_function_op;
   // ABI/resource materialization result captured before packetization.
   loom_amdgpu_hal_resource_materialization_result_t materialization;
@@ -274,15 +278,15 @@ static iree_status_t loom_amdgpu_module_compile_select_low_function(
   IREE_ASSERT_ARGUMENT(out_low_function_op);
   *out_low_function_op = NULL;
 
-  if (loom_low_func_def_isa(source_function.op)) {
+  if (loom_low_kernel_def_isa(source_function.op)) {
     *out_low_function_op = source_function.op;
     return iree_ok_status();
   }
-  if (!loom_func_def_isa(source_function.op)) {
+  if (!loom_kernel_def_isa(source_function.op)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU HAL executable compilation requires the export source to be "
-        "a func.def or low.func.def");
+        "a kernel.def or low.kernel.def");
   }
 
   loom_low_lower_result_t lower_result = {0};

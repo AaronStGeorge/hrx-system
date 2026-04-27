@@ -7,6 +7,7 @@
 #include "loom/codegen/low/cleanup.h"
 
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
@@ -56,9 +57,9 @@ iree_status_t loom_low_cleanup_function(
         IREE_STATUS_INVALID_ARGUMENT,
         "module, low function op, and descriptor registry are required");
   }
-  if (!loom_low_func_def_isa(low_func_op)) {
+  if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected low.func.def");
+                            "expected low.func.def or low.kernel.def");
   }
 
   loom_low_resolved_target_t target = {0};
@@ -71,8 +72,9 @@ iree_status_t loom_low_cleanup_function(
 
   loom_func_like_t function = loom_func_like_cast(module, low_func_op);
   if (!loom_func_like_isa(function)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected low.func.def to be function-like");
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "expected low function definition to be function-like");
   }
 
   iree_arena_allocator_t pass_arena;

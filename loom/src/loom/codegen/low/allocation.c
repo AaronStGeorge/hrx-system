@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "loom/codegen/low/diagnostics.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/register_class_map.h"
 #include "loom/codegen/low/requirements.h"
 #include "loom/error/error_defs.h"
@@ -25,7 +26,7 @@ typedef struct loom_low_allocation_build_state_t {
   iree_arena_allocator_t* arena;
   // Body region of the low function.
   loom_region_t* body;
-  // low.func.def operation being allocated.
+  // Low function definition operation being allocated.
   const loom_op_t* function_op;
   // Resolved target selected by the low function.
   loom_low_resolved_target_t target;
@@ -307,7 +308,7 @@ static const char* loom_low_allocation_mode_name(uint8_t allocation_mode) {
 
 static iree_status_t loom_low_allocation_validate_synthesis_mode(
     const loom_op_t* low_func_op) {
-  uint8_t allocation_mode = loom_low_func_def_allocation(low_func_op);
+  uint8_t allocation_mode = loom_low_function_allocation(low_func_op);
   if (loom_low_allocation_mode_can_synthesize(allocation_mode)) {
     return iree_ok_status();
   }
@@ -2484,19 +2485,22 @@ iree_status_t loom_low_allocation_verify_sidecar(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation sidecar module is required");
   }
-  if (!sidecar->function_op || !loom_low_func_def_isa(sidecar->function_op)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar low.func.def is required");
+  if (!sidecar->function_op ||
+      !loom_low_function_def_isa(sidecar->function_op)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "allocation sidecar low function definition is required");
   }
   if (!sidecar->target.descriptor_set) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation sidecar target descriptor set is "
                             "required");
   }
-  loom_region_t* body = loom_low_func_def_body(sidecar->function_op);
+  loom_region_t* body =
+      loom_low_function_body((loom_op_t*)sidecar->function_op);
   if (!body) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "allocation sidecar low.func.def body is required");
+                            "allocation sidecar low function body is required");
   }
   if (sidecar->assignment_count > 0 && !sidecar->assignments) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -2835,9 +2839,9 @@ iree_status_t loom_low_allocate_function(
         "module, low function op, options with descriptor registry, arena, and "
         "output sidecar are required");
   }
-  if (!loom_low_func_def_isa(low_func_op)) {
+  if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected low.func.def");
+                            "expected low.func.def or low.kernel.def");
   }
   IREE_RETURN_IF_ERROR(loom_low_allocation_validate_option_shapes(options));
   *out_sidecar = (loom_low_allocation_sidecar_t){0};
@@ -2846,12 +2850,12 @@ iree_status_t loom_low_allocate_function(
       .module = module,
       .options = options,
       .arena = arena,
-      .body = loom_low_func_def_body(low_func_op),
+      .body = loom_low_function_body((loom_op_t*)low_func_op),
       .function_op = low_func_op,
   };
   if (!state.body) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "low.func.def body is required");
+                            "low function body is required");
   }
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_validate_synthesis_mode(low_func_op));
@@ -2885,7 +2889,7 @@ iree_status_t loom_low_allocate_function(
       .function_op = low_func_op,
       .target = state.target,
       .liveness = state.liveness,
-      .allocation_mode = loom_low_func_def_allocation(low_func_op),
+      .allocation_mode = loom_low_function_allocation(low_func_op),
       .assignments = state.assignments,
       .assignment_count = state.assignment_count,
       .spill_plans = state.spill_plans,

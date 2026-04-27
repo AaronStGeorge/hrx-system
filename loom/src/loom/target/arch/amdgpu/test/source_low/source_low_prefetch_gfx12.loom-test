@@ -9,7 +9,7 @@ func.def @prefetch_static(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @prefetch_static() asm<amdgpu.gfx12.core> {
+low.func.def target(@target) @prefetch_static() asm<amdgpu.gfx12.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 272} : reg<amdgpu.sgpr x4>
   %base = s_mov_b32 16
   %5 = s_mov_b32 0
@@ -29,7 +29,7 @@ func.def @prefetch_workgroup_id(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @prefetch_workgroup_id() asm<amdgpu.gfx12.core> {
+low.func.def target(@target) @prefetch_workgroup_id() asm<amdgpu.gfx12.core> {
   %bounded_gid = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0

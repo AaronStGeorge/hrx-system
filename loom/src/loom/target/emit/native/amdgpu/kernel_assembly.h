@@ -32,7 +32,7 @@ typedef struct loom_amdgpu_kernel_assembly_options_t {
   const loom_amdgpu_wait_packet_plan_t* wait_packets;
 } loom_amdgpu_kernel_assembly_options_t;
 
-// Emits complete AMDGPU assembly for one ABI-lowered HAL kernel low.func.def.
+// Emits complete AMDGPU assembly for one ABI-lowered target-low HAL kernel.
 // The output is assembler input containing a text function body and an AMDHSA
 // kernel descriptor. It deliberately remains text: assembling, disassembling,
 // loading, and launching are tool/runtime adapter responsibilities.

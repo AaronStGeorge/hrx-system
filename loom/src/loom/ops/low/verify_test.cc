@@ -738,11 +738,11 @@ TEST_F(LowVerifyTest, ResourceImportsPassForVmNativeAndHalAbiShapes) {
       "}\n";
   source += kHalTargetBundle;
   source +=
-      "low.func.def target(@hal_target) abi(hal_kernel) @hal_kernel() -> "
-      "(reg<amdgpu.sgpr x4>) {\n"
+      "low.kernel.def target(@hal_target) workgroup_size(64, 1, 1) "
+      "@hal_kernel() {\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
-      "  low.return %binding : reg<amdgpu.sgpr x4>\n"
+      "  low.return\n"
       "}\n";
   loom_verify_result_t result = VerifySource(source.c_str(), &capture);
   EXPECT_EQ(result.error_count, 0u);

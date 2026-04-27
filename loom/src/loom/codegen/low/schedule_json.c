@@ -9,6 +9,7 @@
 #include <inttypes.h>
 
 #include "loom/analysis/liveness_json.h"
+#include "loom/codegen/low/function.h"
 #include "loom/ir/context.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
@@ -30,9 +31,9 @@ static iree_string_view_t loom_low_schedule_json_symbol_name(
 
 static iree_string_view_t loom_low_schedule_json_function_name(
     const loom_low_schedule_sidecar_t* sidecar) {
-  if (loom_low_func_def_isa(sidecar->function_op)) {
+  if (loom_low_function_def_isa(sidecar->function_op)) {
     return loom_low_schedule_json_symbol_name(
-        sidecar->module, loom_low_func_def_callee(sidecar->function_op));
+        sidecar->module, loom_low_function_callee(sidecar->function_op));
   }
   return IREE_SV("<unnamed>");
 }

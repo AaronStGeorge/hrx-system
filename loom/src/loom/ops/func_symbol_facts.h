@@ -84,6 +84,9 @@ typedef struct loom_func_symbol_facts_t {
   // Borrowed target ABI attribute overrides from the func op.
   loom_named_attr_slice_t abi_attrs;
 
+  // True when the func-like op is a dispatchable kernel entry.
+  bool is_kernel_entry;
+
   // True when the func declares an artifact/package export.
   bool exports;
 
@@ -104,6 +107,12 @@ typedef struct loom_func_symbol_facts_t {
 
   // Export ordinal within artifact_symbol when has_export_ordinal is true.
   uint32_t export_ordinal;
+
+  // True when the kernel entry declares a fixed workgroup size.
+  bool has_required_workgroup_size;
+
+  // Fixed workgroup size for kernel entries when required.
+  loom_target_workgroup_size_t required_workgroup_size;
 } loom_func_symbol_facts_t;
 
 // Symbol fact domain used by generated func symbol descriptors.

@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/register_class_map.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -320,7 +321,7 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_validate_target(
 
   iree_string_view_t target_symbol_name = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_symbol_name(
-      module, loom_low_func_def_target(function_op), IREE_SV("function target"),
+      module, loom_low_function_target(function_op), IREE_SV("function target"),
       &target_symbol_name));
   if (!iree_string_view_equal(target_symbol_name, target_bundle->name)) {
     return iree_make_status(
@@ -495,14 +496,15 @@ iree_status_t loom_amdgpu_hal_kernel_abi_layout_from_low(
         "AMDGPU HAL kernel ABI requires a module, function, descriptor set, "
         "and arena");
   }
-  if (!loom_low_func_def_isa(function_op)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU HAL kernel ABI requires low.func.def");
+  if (!loom_low_function_def_isa(function_op)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL kernel ABI requires low.func.def or low.kernel.def");
   }
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_validate_target(
       module, function_op, target_bundle));
 
-  loom_region_t* body = loom_low_func_def_body(function_op);
+  loom_region_t* body = loom_low_function_body((loom_op_t*)function_op);
   uint64_t max_binding_index = 0;
   iree_host_size_t resource_count = 0;
   if (body != NULL) {
@@ -623,13 +625,14 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
         "AMDGPU HAL kernel ABI fixed-value collection requires a module, "
         "function, descriptor set, and arena");
   }
-  if (!loom_low_func_def_isa(function_op)) {
+  if (!loom_low_function_def_isa(function_op)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU HAL kernel ABI fixed-value collection requires low.func.def");
+        "AMDGPU HAL kernel ABI fixed-value collection requires low.func.def or "
+        "low.kernel.def");
   }
 
-  loom_region_t* body = loom_low_func_def_body(function_op);
+  loom_region_t* body = loom_low_function_body((loom_op_t*)function_op);
   if (body == NULL || body->block_count == 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,

@@ -350,8 +350,10 @@ iree_status_t loom_low_lower_create_function_symbol(
   IREE_ASSERT_ARGUMENT(out_symbol_ref);
   *out_symbol_ref = loom_symbol_ref_null();
   IREE_ASSERT(context->low_func_op != NULL);
+  loom_func_like_t low_function =
+      loom_func_like_cast(context->module, context->low_func_op);
   iree_string_view_t low_function_name = loom_low_lower_symbol_name(
-      context->module, loom_low_func_def_callee(context->low_func_op));
+      context->module, loom_func_like_callee(low_function));
   return loom_low_lower_create_derived_symbol(
       context, low_function_name, suffix, append_index, index, out_symbol_ref);
 }

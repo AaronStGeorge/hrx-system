@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
@@ -146,7 +147,7 @@ static iree_status_t loom_amdgpu_kernel_record_symbol_name(
     iree_string_view_t* out_symbol) {
   IREE_ASSERT_ARGUMENT(out_symbol);
   *out_symbol = iree_string_view_empty();
-  loom_symbol_ref_t symbol_ref = loom_low_func_def_callee(function_op);
+  loom_symbol_ref_t symbol_ref = loom_low_function_callee(function_op);
   if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
       symbol_ref.symbol_id >= module->symbols.count) {
     return iree_make_status(
@@ -222,11 +223,12 @@ static iree_status_t loom_amdgpu_kernel_record_validate_target(
 
 static iree_status_t loom_amdgpu_kernel_record_validate_function_shape(
     const loom_op_t* function_op) {
-  if (!loom_low_func_def_isa(function_op)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU kernel emission requires low.func.def");
+  if (!loom_low_function_def_isa(function_op)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU kernel emission requires low.func.def or low.kernel.def");
   }
-  loom_region_t* body = loom_low_func_def_body(function_op);
+  const loom_region_t* body = loom_low_function_const_body(function_op);
   if (body == NULL || body->block_count == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU kernel emission function body is required");

@@ -529,6 +529,7 @@ loom_cc_library(
     ::wait_packets
     iree::base
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::source_memory_plan
     loom::src::loom::ir
@@ -686,6 +687,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::register_class_map
     loom::src::loom::ir
     loom::src::loom::ops::low
@@ -709,6 +711,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::builder
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::function
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::rewrite::rewriter
@@ -727,6 +730,7 @@ loom_cc_test(
     ::low_registry
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::target_binding
     loom::src::loom::format::text::parser
     loom::src::loom::ir
@@ -749,6 +753,7 @@ loom_cc_test(
     ::wait_plan
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::target_binding
     loom::src::loom::codegen::low::verify
@@ -1282,6 +1287,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low
@@ -1303,6 +1309,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::function
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::target_info

@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/function.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -28,9 +29,9 @@ static iree_string_view_t loom_low_allocation_json_symbol_name(
 
 static iree_string_view_t loom_low_allocation_json_function_name(
     const loom_low_allocation_sidecar_t* sidecar) {
-  if (loom_low_func_def_isa(sidecar->function_op)) {
+  if (loom_low_function_def_isa(sidecar->function_op)) {
     return loom_low_allocation_json_symbol_name(
-        sidecar->module, loom_low_func_def_callee(sidecar->function_op));
+        sidecar->module, loom_low_function_callee(sidecar->function_op));
   }
   return IREE_SV("<unnamed>");
 }

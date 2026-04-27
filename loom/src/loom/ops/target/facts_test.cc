@@ -264,11 +264,6 @@ target.profile @gfx preset("test.profile") {
   contract_feature_bits = 7,
   contract_set_key = "amdgpu.gfx11",
   hal_binding_alignment = 16,
-  hal_flat_workgroup_size_max = 256,
-  hal_flat_workgroup_size_min = 64,
-  hal_workgroup_size_x = 16,
-  hal_workgroup_size_y = 4,
-  hal_workgroup_size_z = 1,
   index_bitwidth = 64,
   memory_space_descriptor = 9,
   target_cpu = "gfx1100",
@@ -289,11 +284,11 @@ target.profile @gfx preset("test.profile") {
   EXPECT_EQ(facts->snapshot.memory_spaces.descriptor, 9u);
   EXPECT_EQ(facts->export_plan.abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
   EXPECT_EQ(facts->export_plan.hal_kernel.binding_alignment, 16u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.x, 16u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.y, 4u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.z, 1u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.flat_workgroup_size_min, 64u);
-  EXPECT_EQ(facts->export_plan.hal_kernel.flat_workgroup_size_max, 256u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.x, 0u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.y, 0u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.required_workgroup_size.z, 0u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.flat_workgroup_size_min, 0u);
+  EXPECT_EQ(facts->export_plan.hal_kernel.flat_workgroup_size_max, 0u);
   EXPECT_TRUE(iree_string_view_equal(facts->config.contract_set_key,
                                      IREE_SV("amdgpu.gfx11")));
   EXPECT_EQ(facts->config.contract_feature_bits, 7u);

@@ -46,7 +46,7 @@ typedef struct loom_low_packet_view_t {
 typedef struct loom_low_packet_asm_form_sidecar_t {
   // Module containing the packetized low function.
   const loom_module_t* module;
-  // low.func.def operation packetized by this sidecar.
+  // Target-low function operation packetized by this sidecar.
   const loom_op_t* function_op;
   // Resolved target context selected by |function_op|.
   loom_low_resolved_target_t target;

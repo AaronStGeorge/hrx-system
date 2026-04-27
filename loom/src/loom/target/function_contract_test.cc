@@ -196,19 +196,15 @@ low.func.def target(@wasm) @kernel() {
   EXPECT_TRUE(iree_string_view_is_empty(storage.export_plan.export_symbol));
 }
 
-TEST_F(TargetFunctionContractTest, FuncOwnedContractOverridesPreset) {
+TEST_F(TargetFunctionContractTest, KernelEntryContractOverlaysPreset) {
   ModulePtr module = ParseModule(R"(
-target.profile @wasm preset("test.profile")
-
-low.func.def target(@wasm) abi(hal_kernel, {
+target.profile @wasm preset("test.profile") {
+  abi = hal_kernel,
   hal_binding_alignment = 16,
-  hal_workgroup_size_x = 8,
-  hal_workgroup_size_y = 4,
-  hal_workgroup_size_z = 2,
-  hal_flat_workgroup_size_min = 32,
-  hal_flat_workgroup_size_max = 64,
   hal_buffer_resource_flags = 7
-}) export("dispatch", {linkage = "dso_local", ordinal = 5}) @kernel() {
+}
+
+low.kernel.def target(@wasm) export("dispatch") ordinal(5) linkage(dso_local) workgroup_size(8, 4, 2) @kernel() {
   low.return
 }
 )");
@@ -227,8 +223,8 @@ low.func.def target(@wasm) abi(hal_kernel, {
   EXPECT_EQ(storage.export_plan.hal_kernel.required_workgroup_size.x, 8u);
   EXPECT_EQ(storage.export_plan.hal_kernel.required_workgroup_size.y, 4u);
   EXPECT_EQ(storage.export_plan.hal_kernel.required_workgroup_size.z, 2u);
-  EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_min, 32u);
-  EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_max, 64u);
+  EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_min, 0u);
+  EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_max, 0u);
   EXPECT_EQ(storage.export_plan.hal_kernel.buffer_resource_flags, 7u);
 }
 

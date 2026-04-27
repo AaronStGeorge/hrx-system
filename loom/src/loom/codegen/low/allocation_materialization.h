@@ -44,10 +44,10 @@ typedef struct loom_low_allocation_materialization_result_t {
 } loom_low_allocation_materialization_result_t;
 
 // Materializes spill plans in |sidecar| into low.slot, low.spill, and
-// low.reload ops. The sidecar must describe |module| and a low.func.def inside
-// it. Slot records are inserted after the function definition at module scope.
-// Stores are inserted at the defining point of each spilled value, and reloads
-// are inserted immediately before each original operand use.
+// low.reload ops. The sidecar must describe |module| and a target-low function
+// inside it. Slot records are inserted after the function definition at module
+// scope. Stores are inserted at the defining point of each spilled value, and
+// reloads are inserted immediately before each original operand use.
 iree_status_t loom_low_allocation_materialize_spills(
     loom_module_t* module, const loom_low_allocation_sidecar_t* sidecar,
     const loom_low_allocation_materialization_options_t* options,

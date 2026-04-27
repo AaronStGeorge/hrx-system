@@ -54,8 +54,8 @@ typedef struct loom_amdgpu_module_compile_options_t {
 // Compiles |module| into an allocator-owned IREE HAL AMDGPU executable.
 //
 // |module| is mutated in place: source functions may gain sibling low IR and
-// HAL low.resource imports in the selected low.func.def are materialized before
-// scheduling. Target profiles are resolved through the linked descriptor
+// HAL low.resource imports in the selected target-low function are materialized
+// before scheduling. Target profiles are resolved through the linked descriptor
 // registry without materializing companion target records in the IR. The caller
 // owns |out_executable| and must release it with
 // loom_amdgpu_hal_executable_deinitialize.

@@ -135,12 +135,27 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    function
+  HDRS
+    "function.h"
+  SRCS
+    "function.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     diagnostics
   HDRS
     "diagnostics.h"
   SRCS
     "diagnostics.c"
   DEPS
+    ::function
     ::target_binding
     iree::base
     loom::src::loom::analysis::liveness
@@ -159,6 +174,7 @@ loom_cc_library(
   DEPS
     ::descriptors
     ::diagnostics
+    ::function
     ::register_class_map
     ::requirements
     ::target_binding
@@ -196,6 +212,7 @@ loom_cc_library(
     ::allocation
     ::descriptors
     ::diagnostics
+    ::function
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::error_defs
@@ -216,6 +233,7 @@ loom_cc_library(
     ::allocation
     ::allocation_materialization
     ::descriptors
+    ::function
     ::pass_requirements
     iree::base
     iree::base::internal::arena
@@ -259,6 +277,7 @@ loom_cc_library(
   DEPS
     ::allocation
     ::descriptors
+    ::function
     iree::base
     loom::src::loom::format::text::printer
     loom::src::loom::ir
@@ -278,6 +297,7 @@ loom_cc_library(
   DEPS
     ::descriptors
     ::diagnostics
+    ::function
     ::register_class_map
     ::requirements
     ::target_binding
@@ -301,6 +321,7 @@ loom_cc_library(
     "schedule_json.c"
   DEPS
     ::descriptors
+    ::function
     ::schedule
     iree::base
     loom::src::loom::analysis::liveness_json
@@ -357,6 +378,7 @@ loom_cc_library(
     "cleanup.c"
   DEPS
     ::descriptors
+    ::function
     ::target_binding
     iree::base
     iree::base::internal::arena
@@ -379,6 +401,7 @@ loom_cc_library(
   DEPS
     ::allocation
     ::cleanup
+    ::function
     ::packet
     ::schedule
     iree::base
@@ -399,6 +422,7 @@ loom_cc_library(
   DEPS
     ::allocation
     ::descriptors
+    ::function
     ::packet
     ::schedule
     iree::base
@@ -437,6 +461,7 @@ loom_cc_library(
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar

@@ -30,14 +30,15 @@ bool SymbolRefsEqual(loom_symbol_ref_t lhs, loom_symbol_ref_t rhs);
 bool ModuleStringEquals(const loom_module_t* module, loom_string_id_t string_id,
                         iree_string_view_t expected);
 
-// Returns the entry block of a low.func.def body, or nullptr.
+// Returns the entry block of a target-low function body, or nullptr.
 const loom_block_t* LowFuncEntryBlock(const loom_op_t* low_func_op);
 
-// Finds the first op with |kind| inside a low.func.def body.
+// Finds the first op with |kind| inside a target-low function body.
 const loom_op_t* FindLowFuncBodyOp(const loom_op_t* low_func_op,
                                    loom_op_kind_t kind);
 
-// Finds the first low.op or low.const using |descriptor_id| in a low.func.def.
+// Finds the first low.op or low.const using |descriptor_id| in a target-low
+// function.
 const loom_op_t* FindLowFuncDescriptorOp(const loom_op_t* low_func_op,
                                          uint64_t descriptor_id);
 

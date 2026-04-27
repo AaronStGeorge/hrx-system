@@ -12,7 +12,7 @@ func.def @global_atomic_release_reduce_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_release_reduce_i32() {
+low.func.def target(@target) @global_atomic_release_reduce_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -40,7 +40,7 @@ func.def @global_atomic_acquire_rmw_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_acquire_rmw_i32() {
+low.func.def target(@target) @global_atomic_acquire_rmw_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -69,7 +69,7 @@ func.def @global_atomic_acq_rel_rmw_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_acq_rel_rmw_i32() {
+low.func.def target(@target) @global_atomic_acq_rel_rmw_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -101,7 +101,7 @@ func.def @global_atomic_acq_rel_cmpxchg_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_acq_rel_cmpxchg_i32() {
+low.func.def target(@target) @global_atomic_acq_rel_cmpxchg_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -136,7 +136,7 @@ func.def @global_atomic_seq_cst_reduce_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_seq_cst_reduce_i32() {
+low.func.def target(@target) @global_atomic_seq_cst_reduce_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>

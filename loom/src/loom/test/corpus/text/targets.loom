@@ -10,6 +10,6 @@ target.profile @matmul_gfx1100_target preset("amdgpu-gfx11") {contract_feature_b
 
 target.artifact @matmul_gfx1100_hsaco target(@matmul_gfx1100_target) {abi = hal_executable, artifact_format = elf}
 
-func.def target(@matmul_gfx1100_target) abi(hal_kernel, {hal_binding_alignment = 16, hal_flat_workgroup_size_max = 64, hal_flat_workgroup_size_min = 64, hal_workgroup_size_x = 16, hal_workgroup_size_y = 4, hal_workgroup_size_z = 1}) export("matmul", {artifact = @matmul_gfx1100_hsaco}) @matmul_gfx1100() {
-  func.return
+kernel.def target(@matmul_gfx1100_target) export("matmul") artifact(@matmul_gfx1100_hsaco) workgroup_size(16, 4, 1) @matmul_gfx1100() {
+  kernel.return
 }

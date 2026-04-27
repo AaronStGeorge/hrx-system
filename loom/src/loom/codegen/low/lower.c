@@ -16,6 +16,7 @@
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
@@ -177,10 +178,11 @@ static iree_status_t loom_low_lower_validate_options(
         IREE_STATUS_INVALID_ARGUMENT,
         "module, source function, options, and result are required");
   }
-  if (source_function.op->kind != LOOM_OP_FUNC_DEF) {
+  if (source_function.op->kind != LOOM_OP_FUNC_DEF &&
+      source_function.op->kind != LOOM_OP_KERNEL_DEF) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "source-to-low lowering currently requires "
-                            "a func.def source function");
+                            "a func.def or kernel.def source function");
   }
   if (!loom_symbol_ref_is_valid(options->target_ref) ||
       options->target_ref.module_id != 0 ||
@@ -267,6 +269,7 @@ static bool loom_low_lower_op_is_structural(loom_op_kind_t kind) {
     case LOOM_OP_CFG_BR:
     case LOOM_OP_CFG_COND_BR:
     case LOOM_OP_FUNC_RETURN:
+    case LOOM_OP_KERNEL_RETURN:
     case LOOM_OP_INDEX_ASSUME:
     case LOOM_OP_SCALAR_ASSUME:
       return true;
@@ -539,15 +542,30 @@ static iree_status_t loom_low_lower_map_signature_types(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_lower_create_function_op(
+static loom_region_t* loom_low_lower_low_body(
+    const loom_low_lower_context_t* context) {
+  if (loom_low_func_def_isa(context->low_func_op)) {
+    return loom_low_func_def_body(context->low_func_op);
+  }
+  if (loom_low_kernel_def_isa(context->low_func_op)) {
+    return loom_low_kernel_def_body(context->low_func_op);
+  }
+  return NULL;
+}
+
+static bool loom_low_lower_source_is_kernel_entry(
+    const loom_low_lower_context_t* context) {
+  return loom_kernel_def_isa(context->source_function.op);
+}
+
+static iree_status_t loom_low_lower_create_func_op(
     loom_low_lower_context_t* context, loom_region_t* source_body,
-    loom_symbol_ref_t low_func_ref) {
-  loom_type_t* arg_types = NULL;
-  iree_host_size_t arg_count = 0;
-  loom_type_t* result_types = NULL;
-  iree_host_size_t result_count = 0;
-  IREE_RETURN_IF_ERROR(loom_low_lower_map_signature_types(
-      context, &arg_types, &arg_count, &result_types, &result_count));
+    loom_symbol_ref_t low_func_ref, const loom_type_t* arg_types,
+    iree_host_size_t arg_count, const loom_type_t* result_types,
+    iree_host_size_t result_count) {
+  uint16_t predicate_count = 0;
+  const loom_predicate_t* predicates =
+      loom_func_like_predicates(context->source_function, &predicate_count);
 
   loom_low_func_def_build_flags_t build_flags = 0;
   uint8_t visibility = loom_func_like_visibility(context->source_function);
@@ -556,9 +574,8 @@ static iree_status_t loom_low_lower_create_function_op(
   const bool has_explicit_abi = loom_low_lower_function_attr_present(
       context->source_function,
       context->source_function.vtable->abi_attr_index);
-  uint8_t abi = has_explicit_abi
-                    ? loom_func_like_abi(context->source_function)
-                    : context->options->bundle->export_plan->abi_kind;
+  uint8_t abi =
+      has_explicit_abi ? loom_func_like_abi(context->source_function) : 0;
   loom_named_attr_slice_t abi_attrs =
       loom_func_like_abi_attrs(context->source_function);
   loom_string_id_t export_symbol =
@@ -589,11 +606,97 @@ static iree_status_t loom_low_lower_create_function_op(
       /*allocation=*/0, /*schedule=*/0, context->options->target_ref, abi,
       abi_attrs, export_symbol, export_attrs, low_func_ref, arg_types,
       arg_count, result_types, result_count, /*tied_results=*/NULL,
-      /*tied_result_count=*/0, /*predicates=*/NULL, /*predicates_count=*/0,
+      /*tied_result_count=*/0, predicates, predicate_count,
       context->source_function.op->location, &context->low_func_op));
 
-  loom_region_t* low_body = loom_low_func_def_body(context->low_func_op);
+  loom_region_t* low_body = loom_low_lower_low_body(context);
   low_body->flags = source_body->flags;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_create_kernel_op(
+    loom_low_lower_context_t* context, loom_region_t* source_body,
+    loom_symbol_ref_t low_func_ref, const loom_type_t* arg_types,
+    iree_host_size_t arg_count) {
+  uint16_t predicate_count = 0;
+  const loom_predicate_t* predicates =
+      loom_func_like_predicates(context->source_function, &predicate_count);
+
+  loom_low_kernel_def_build_flags_t build_flags = 0;
+  loom_string_id_t export_symbol =
+      loom_func_like_export_symbol(context->source_function);
+  if (export_symbol != LOOM_STRING_ID_INVALID) {
+    build_flags |= LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL;
+  }
+
+  loom_symbol_ref_t artifact =
+      loom_func_like_artifact(context->source_function);
+  if (loom_symbol_ref_is_valid(artifact)) {
+    build_flags |= LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_ARTIFACT;
+  }
+
+  int64_t export_ordinal = 0;
+  if (loom_func_like_export_ordinal(context->source_function,
+                                    &export_ordinal)) {
+    build_flags |= LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_ORDINAL;
+  }
+
+  uint8_t export_linkage = 0;
+  if (loom_func_like_export_linkage(context->source_function,
+                                    &export_linkage)) {
+    build_flags |= LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_LINKAGE;
+  }
+
+  uint32_t workgroup_size_x = 0;
+  uint32_t workgroup_size_y = 0;
+  uint32_t workgroup_size_z = 0;
+  if (loom_func_like_workgroup_size(context->source_function, &workgroup_size_x,
+                                    &workgroup_size_y, &workgroup_size_z)) {
+    build_flags |= LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_X |
+                   LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Y |
+                   LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Z;
+  }
+
+  loom_builder_initialize(context->module, &context->module->arena,
+                          loom_module_block(context->module),
+                          &context->builder);
+  loom_builder_set_before(&context->builder, context->source_function.op);
+  IREE_RETURN_IF_ERROR(loom_low_kernel_def_build(
+      &context->builder, build_flags, /*allocation=*/0, /*schedule=*/0,
+      context->options->target_ref, export_symbol, artifact, export_ordinal,
+      export_linkage, workgroup_size_x, workgroup_size_y, workgroup_size_z,
+      low_func_ref, arg_types, arg_count, predicates, predicate_count,
+      context->source_function.op->location, &context->low_func_op));
+
+  loom_region_t* low_body = loom_low_lower_low_body(context);
+  low_body->flags = source_body->flags;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_create_function_op(
+    loom_low_lower_context_t* context, loom_region_t* source_body,
+    loom_symbol_ref_t low_func_ref) {
+  loom_type_t* arg_types = NULL;
+  iree_host_size_t arg_count = 0;
+  loom_type_t* result_types = NULL;
+  iree_host_size_t result_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_lower_map_signature_types(
+      context, &arg_types, &arg_count, &result_types, &result_count));
+
+  if (loom_low_lower_source_is_kernel_entry(context)) {
+    if (result_count != 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "kernel.def lowering cannot produce low "
+                              "function results");
+    }
+    IREE_RETURN_IF_ERROR(loom_low_lower_create_kernel_op(
+        context, source_body, low_func_ref, arg_types, arg_count));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_low_lower_create_func_op(
+        context, source_body, low_func_ref, arg_types, arg_count, result_types,
+        result_count));
+  }
+
   context->result->low_func_op = context->low_func_op;
   context->result->low_func_ref = low_func_ref;
 
@@ -610,7 +713,7 @@ static iree_status_t loom_low_lower_create_function_op(
 
 static iree_status_t loom_low_lower_map_blocks(
     loom_low_lower_context_t* context, loom_region_t* source_body) {
-  loom_region_t* low_body = loom_low_func_def_body(context->low_func_op);
+  loom_region_t* low_body = loom_low_lower_low_body(context);
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       &context->arena, source_body->block_count, sizeof(*context->block_map),
       (void**)&context->block_map));
@@ -681,7 +784,7 @@ static iree_status_t loom_low_lower_emit_argument_resource_imports(
     return iree_ok_status();
   }
 
-  loom_region_t* low_body = loom_low_func_def_body(context->low_func_op);
+  loom_region_t* low_body = loom_low_lower_low_body(context);
   loom_builder_ip_t saved_ip = loom_builder_enter_region(
       &context->builder, context->low_func_op, low_body);
   loom_builder_set_block(&context->builder, loom_region_entry_block(low_body));
@@ -726,7 +829,7 @@ static iree_status_t loom_low_lower_emit_preamble(
     return iree_ok_status();
   }
 
-  loom_region_t* low_body = loom_low_func_def_body(context->low_func_op);
+  loom_region_t* low_body = loom_low_lower_low_body(context);
   loom_builder_ip_t saved_ip = loom_builder_enter_region(
       &context->builder, context->low_func_op, low_body);
   loom_builder_set_block(&context->builder, loom_region_entry_block(low_body));
@@ -800,6 +903,11 @@ static iree_status_t loom_low_lower_structural_op(
           context, values.values, values.count, &low_values));
       loom_op_t* low_return_op = NULL;
       return loom_low_return_build(&context->builder, low_values, values.count,
+                                   source_op->location, &low_return_op);
+    }
+    case LOOM_OP_KERNEL_RETURN: {
+      loom_op_t* low_return_op = NULL;
+      return loom_low_return_build(&context->builder, NULL, 0,
                                    source_op->location, &low_return_op);
     }
     case LOOM_OP_CFG_BR: {
@@ -884,7 +992,7 @@ static iree_status_t loom_low_lower_emit_selected_plan(
 
 static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
                                               loom_region_t* source_body) {
-  loom_region_t* low_body = loom_low_func_def_body(context->low_func_op);
+  loom_region_t* low_body = loom_low_lower_low_body(context);
   loom_builder_ip_t saved_ip = loom_builder_enter_region(
       &context->builder, context->low_func_op, low_body);
   iree_status_t status = iree_ok_status();

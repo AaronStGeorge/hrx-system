@@ -55,6 +55,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation_pass
     loom::src::loom::codegen::low::cleanup
     loom::src::loom::codegen::low::descriptors_manifest
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::lower_pass
     loom::src::loom::codegen::low::packet_json
@@ -74,6 +75,7 @@ loom_cc_library(
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::func
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target

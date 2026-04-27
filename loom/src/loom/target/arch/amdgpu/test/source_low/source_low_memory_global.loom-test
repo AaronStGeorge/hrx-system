@@ -11,7 +11,7 @@ func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_saddr_fallback() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @global_saddr_fallback() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 20} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 20} : reg<amdgpu.sgpr x4>
   %base = s_mov_b32 4
@@ -41,7 +41,7 @@ func.def @i32_b128(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_b128() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @i32_b128() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
@@ -107,7 +107,7 @@ func.def @i32_scalar_2d_store(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_scalar_2d_store() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @i32_scalar_2d_store() asm<amdgpu.gfx11.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x4>
@@ -149,7 +149,7 @@ func.def @i32_dynamic_constant_index(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_dynamic_constant_index() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @i32_dynamic_constant_index() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
@@ -179,7 +179,7 @@ func.def @f16x2_b32(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @f16x2_b32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @f16x2_b32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -208,7 +208,7 @@ func.def @f16x4_b64(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @f16x4_b64() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @f16x4_b64() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
@@ -237,7 +237,7 @@ func.def @bf16x2_b32(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @bf16x2_b32() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @bf16x2_b32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -266,7 +266,7 @@ func.def @bf16x4_b64(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @bf16x4_b64() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @bf16x4_b64() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>

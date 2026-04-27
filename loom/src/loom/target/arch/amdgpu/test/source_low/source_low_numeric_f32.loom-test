@@ -16,7 +16,7 @@ func.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @f32_arith() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @f32_arith() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -57,7 +57,7 @@ func.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @f32_fma() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @f32_fma() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -110,7 +110,7 @@ func.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buff
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @f32_scalarized() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @f32_scalarized() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>

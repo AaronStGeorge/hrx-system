@@ -69,7 +69,7 @@ class LowFuncAsmRoundTripHarness {
   ~LowFuncAsmRoundTripHarness();
 
   // Initializes a parser/printer context using one descriptor-set provider and
-  // matching preset bundle so low.func.def inputs can carry target profiles
+  // matching preset bundle so target-low inputs can carry target profiles
   // without every target test re-registering dialects by hand.
   iree_status_t Initialize(
       loom_low_descriptor_set_provider_t descriptor_set_provider,

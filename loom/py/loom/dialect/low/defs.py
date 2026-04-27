@@ -407,6 +407,12 @@ _KERNEL_FUNC_LIKE_COMMON: dict[str, Any] = dict(
     callee="callee",
     target="target",
     export_symbol="export_symbol",
+    artifact="artifact",
+    export_ordinal="export_ordinal",
+    export_linkage="export_linkage",
+    workgroup_size_x="workgroup_size_x",
+    workgroup_size_y="workgroup_size_y",
+    workgroup_size_z="workgroup_size_z",
     predicates="predicates",
 )
 
@@ -467,6 +473,7 @@ low_kernel_def = Op(
         name="function",
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
+        fact_domain="loom_func_symbol_fact_domain",
     ),
     regions=[RegionDef("body", doc="Low kernel body.", terminator="low.return")],
     interfaces=[FuncLikeInterface(**_KERNEL_FUNC_LIKE_COMMON, body="body")],

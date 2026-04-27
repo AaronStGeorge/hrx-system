@@ -7,6 +7,7 @@
 #include "loom/codegen/low/packetization.h"
 
 #include "loom/codegen/low/cleanup.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
 
@@ -40,9 +41,9 @@ iree_status_t loom_low_packetize_function(
                             "low allocation reserved ranges are required when "
                             "allocation_reserved_range_count is non-zero");
   }
-  if (!loom_low_func_def_isa(low_func_op)) {
+  if (!loom_low_function_def_isa(low_func_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected low.func.def");
+                            "expected low.func.def or low.kernel.def");
   }
 
   *out_packetization = (loom_low_packetization_t){0};

@@ -4,11 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU fixed-segment layout for function-owned low.slot records.
+// AMDGPU fixed-segment layout for target-low function-owned low.slot records.
 //
 // This layout is the single contract shared by kernel metadata and native
-// encoding. Each low.slot owned by a low.func.def is packed in module source
-// order into the target segment selected by its space, with the slot's
+// encoding. Each low.slot owned by a target-low function is packed in module
+// source order into the target segment selected by its space, with the slot's
 // requested alignment applied before assigning its byte offset.
 
 #ifndef LOOM_TARGET_EMIT_NATIVE_AMDGPU_SLOT_LAYOUT_H_

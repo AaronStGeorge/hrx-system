@@ -25,54 +25,13 @@ static iree_status_t loom_target_function_contract_string_from_id(
   return iree_ok_status();
 }
 
-static iree_status_t loom_target_function_contract_u32_attr(
-    const loom_attribute_t* attr, iree_string_view_t field_name,
-    uint32_t* out_value) {
-  if (attr->kind != LOOM_ATTR_I64) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "func ABI field %.*s must be an integer",
-                            (int)field_name.size, field_name.data);
-  }
-  int64_t value = loom_attr_as_i64(*attr);
-  if (value < 0 || value > UINT32_MAX) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "func ABI field %.*s must fit in u32",
-                            (int)field_name.size, field_name.data);
-  }
-  *out_value = (uint32_t)value;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_target_function_contract_apply_abi_attr(
     iree_string_view_t name, const loom_attribute_t* value,
     loom_target_export_plan_t* export_plan) {
-  if (iree_string_view_equal(name, IREE_SV("hal_binding_alignment"))) {
-    return loom_target_function_contract_u32_attr(
-        value, name, &export_plan->hal_kernel.binding_alignment);
-  } else if (iree_string_view_equal(name, IREE_SV("hal_workgroup_size_x"))) {
-    return loom_target_function_contract_u32_attr(
-        value, name, &export_plan->hal_kernel.required_workgroup_size.x);
-  } else if (iree_string_view_equal(name, IREE_SV("hal_workgroup_size_y"))) {
-    return loom_target_function_contract_u32_attr(
-        value, name, &export_plan->hal_kernel.required_workgroup_size.y);
-  } else if (iree_string_view_equal(name, IREE_SV("hal_workgroup_size_z"))) {
-    return loom_target_function_contract_u32_attr(
-        value, name, &export_plan->hal_kernel.required_workgroup_size.z);
-  } else if (iree_string_view_equal(name,
-                                    IREE_SV("hal_flat_workgroup_size_min"))) {
-    return loom_target_function_contract_u32_attr(
-        value, name, &export_plan->hal_kernel.flat_workgroup_size_min);
-  } else if (iree_string_view_equal(name,
-                                    IREE_SV("hal_flat_workgroup_size_max"))) {
-    return loom_target_function_contract_u32_attr(
-        value, name, &export_plan->hal_kernel.flat_workgroup_size_max);
-  } else if (iree_string_view_equal(name,
-                                    IREE_SV("hal_buffer_resource_flags"))) {
-    return loom_target_function_contract_u32_attr(
-        value, name, &export_plan->hal_kernel.buffer_resource_flags);
-  }
+  (void)value;
+  (void)export_plan;
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "func ABI field '%.*s' is not supported",
+                          "func ABI override field '%.*s' is not supported",
                           (int)name.size, name.data);
 }
 
@@ -140,6 +99,11 @@ iree_status_t loom_target_function_contract_resolve(
   out_bundle_storage->export_plan.name = func_facts->name;
   out_bundle_storage->export_plan.export_symbol = iree_string_view_empty();
   if (func_facts->has_abi) {
+    if (func_facts->is_kernel_entry) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "kernel entries derive their ABI from the "
+                              "target profile");
+    }
     out_bundle_storage->export_plan.abi_kind = func_facts->abi_kind;
   }
   if (out_bundle_storage->export_plan.abi_kind == LOOM_TARGET_ABI_UNKNOWN) {
@@ -148,6 +112,16 @@ iree_status_t loom_target_function_contract_resolve(
   }
   IREE_RETURN_IF_ERROR(loom_target_function_contract_apply_abi_attrs(
       module, func_facts->abi_attrs, &out_bundle_storage->export_plan));
+  if (func_facts->is_kernel_entry &&
+      out_bundle_storage->export_plan.abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "kernel entry target contract must resolve a HAL "
+                            "kernel ABI");
+  }
+  if (func_facts->has_required_workgroup_size) {
+    out_bundle_storage->export_plan.hal_kernel.required_workgroup_size =
+        func_facts->required_workgroup_size;
+  }
   if (out_bundle_storage->export_plan.abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
     if (out_bundle_storage->export_plan.hal_kernel.binding_alignment == 0) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

@@ -610,6 +610,94 @@ loom_named_attr_slice_t loom_func_like_export_attrs(loom_func_like_t func) {
       loom_op_attrs(func.op)[func.vtable->export_attrs_attr_index]);
 }
 
+loom_symbol_ref_t loom_func_like_artifact(loom_func_like_t func) {
+  if (!func.vtable ||
+      func.vtable->artifact_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return loom_symbol_ref_null();
+  }
+  loom_attribute_t attr =
+      loom_op_attrs(func.op)[func.vtable->artifact_attr_index];
+  if (loom_attr_is_absent(attr)) {
+    return loom_symbol_ref_null();
+  }
+  return loom_attr_as_symbol(attr);
+}
+
+bool loom_func_like_export_ordinal(loom_func_like_t func,
+                                   int64_t* out_ordinal) {
+  IREE_ASSERT_ARGUMENT(out_ordinal);
+  *out_ordinal = 0;
+  if (!func.vtable ||
+      func.vtable->export_ordinal_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return false;
+  }
+  loom_attribute_t attr =
+      loom_op_attrs(func.op)[func.vtable->export_ordinal_attr_index];
+  if (loom_attr_is_absent(attr)) {
+    return false;
+  }
+  *out_ordinal = loom_attr_as_i64(attr);
+  return true;
+}
+
+bool loom_func_like_export_linkage(loom_func_like_t func,
+                                   uint8_t* out_linkage) {
+  IREE_ASSERT_ARGUMENT(out_linkage);
+  *out_linkage = 0;
+  if (!func.vtable ||
+      func.vtable->export_linkage_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return false;
+  }
+  loom_attribute_t attr =
+      loom_op_attrs(func.op)[func.vtable->export_linkage_attr_index];
+  if (loom_attr_is_absent(attr)) {
+    return false;
+  }
+  *out_linkage = loom_attr_as_enum(attr);
+  return true;
+}
+
+static bool loom_func_like_i64_attr(loom_func_like_t func, uint8_t attr_index,
+                                    int64_t* out_value) {
+  if (attr_index == LOOM_ATTR_INDEX_NONE) {
+    return false;
+  }
+  loom_attribute_t attr = loom_op_attrs(func.op)[attr_index];
+  if (loom_attr_is_absent(attr)) {
+    return false;
+  }
+  *out_value = loom_attr_as_i64(attr);
+  return true;
+}
+
+bool loom_func_like_workgroup_size(loom_func_like_t func, uint32_t* out_x,
+                                   uint32_t* out_y, uint32_t* out_z) {
+  IREE_ASSERT_ARGUMENT(out_x);
+  IREE_ASSERT_ARGUMENT(out_y);
+  IREE_ASSERT_ARGUMENT(out_z);
+  *out_x = 0;
+  *out_y = 0;
+  *out_z = 0;
+  if (!func.vtable) {
+    return false;
+  }
+  int64_t x = 0;
+  int64_t y = 0;
+  int64_t z = 0;
+  if (!loom_func_like_i64_attr(func, func.vtable->workgroup_size_x_attr_index,
+                               &x) ||
+      !loom_func_like_i64_attr(func, func.vtable->workgroup_size_y_attr_index,
+                               &y) ||
+      !loom_func_like_i64_attr(func, func.vtable->workgroup_size_z_attr_index,
+                               &z)) {
+    return false;
+  }
+  *out_x = (uint32_t)x;
+  *out_y = (uint32_t)y;
+  *out_z = (uint32_t)z;
+  return true;
+}
+
 const loom_value_id_t* loom_func_like_arg_ids(loom_func_like_t func,
                                               uint16_t* out_count) {
   if (!func.vtable) {

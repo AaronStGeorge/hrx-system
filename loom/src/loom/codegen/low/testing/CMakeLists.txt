@@ -46,6 +46,7 @@ loom_cc_library(
     ::source_workload
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::source_selection

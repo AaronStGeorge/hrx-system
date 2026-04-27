@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include "loom/codegen/low/function.h"
 #include "loom/ir/context.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
@@ -103,7 +104,7 @@ static iree_status_t loom_amdgpu_lower_buffer_alloca(
   loom_op_t* slot_op = NULL;
   iree_status_t status = loom_low_slot_build(
       builder, slot_ref,
-      loom_low_func_def_callee(loom_low_lower_context_low_function(context)),
+      loom_low_function_callee(loom_low_lower_context_low_function(context)),
       LOOM_LOW_SLOT_SPACE_LDS, plan->byte_length, plan->base_alignment,
       source_op->location, &slot_op);
   loom_builder_restore(builder, saved_ip);

@@ -17,7 +17,7 @@ func.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_f16x4_b64_roundtrip() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_f16x4_b64_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
@@ -63,7 +63,7 @@ func.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_f16x8_b128_roundtrip() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_f16x8_b128_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
@@ -109,7 +109,7 @@ func.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_bf16x4_b64_roundtrip() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_bf16x4_b64_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
@@ -155,7 +155,7 @@ func.def @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @lds_bf16x8_b128_roundtrip() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @lds_bf16x8_b128_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>

@@ -8,10 +8,10 @@
 //
 // Packetization is the shared producer contract for low emitters: it cleans
 // dead-removable packets, runs the scheduler and allocator over one
-// low.func.def, verifies that their sidecars describe the same target function,
-// and returns the arena-owned sidecars that packet emitters consume. This layer
-// does not emit bytes, text, JSON, or target artifacts; each target emitter
-// owns those artifact decisions.
+// target-low function, verifies that their sidecars describe the same target
+// function, and returns the arena-owned sidecars that packet emitters consume.
+// This layer does not emit bytes, text, JSON, or target artifacts; each target
+// emitter owns those artifact decisions.
 
 #ifndef LOOM_CODEGEN_LOW_PACKETIZATION_H_
 #define LOOM_CODEGEN_LOW_PACKETIZATION_H_
@@ -53,7 +53,7 @@ typedef struct loom_low_packetization_options_t {
   iree_diagnostic_emitter_t emitter;
 } loom_low_packetization_options_t;
 
-// Packetization result for one low.func.def. The schedule and allocation
+// Packetization result for one target-low function. The schedule and allocation
 // sidecars borrow from the caller-provided module and arena.
 typedef struct loom_low_packetization_t {
   // Schedule sidecar for the packetized function.
@@ -62,9 +62,9 @@ typedef struct loom_low_packetization_t {
   loom_low_allocation_sidecar_t allocation;
 } loom_low_packetization_t;
 
-// Cleans, schedules, allocates, and validates one low.func.def for target
-// emitters. |module| is mutated by cleanup before sidecar construction, and
-// |arena| must outlive |out_packetization|.
+// Cleans, schedules, allocates, and validates one target-low function for
+// target emitters. |module| is mutated by cleanup before sidecar construction,
+// and |arena| must outlive |out_packetization|.
 iree_status_t loom_low_packetize_function(
     loom_module_t* module, loom_op_t* low_func_op,
     const loom_low_packetization_options_t* options,

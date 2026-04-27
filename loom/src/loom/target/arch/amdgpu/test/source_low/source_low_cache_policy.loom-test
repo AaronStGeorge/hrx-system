@@ -12,7 +12,7 @@ func.def @cache_system_bypass_load_device_writeback_store(%input: buffer, %outpu
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @cache_system_bypass_load_device_writeback_store() asm<amdgpu.gfx12.core> {
+low.func.def target(@target) @cache_system_bypass_load_device_writeback_store() asm<amdgpu.gfx12.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>

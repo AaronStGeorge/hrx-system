@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_ids.h"
@@ -710,9 +711,9 @@ static iree_string_view_t loom_amdgpu_wait_packet_json_symbol_name(
 static iree_string_view_t loom_amdgpu_wait_packet_json_function_name(
     const loom_amdgpu_wait_packet_plan_t* plan) {
   const loom_low_schedule_sidecar_t* schedule = plan->wait_plan->schedule;
-  if (loom_low_func_def_isa(schedule->function_op)) {
+  if (loom_low_function_def_isa(schedule->function_op)) {
     return loom_amdgpu_wait_packet_json_symbol_name(
-        schedule->module, loom_low_func_def_callee(schedule->function_op));
+        schedule->module, loom_low_function_callee(schedule->function_op));
   }
   return IREE_SV("<unnamed>");
 }

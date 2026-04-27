@@ -7,7 +7,7 @@ func.def @i32_to_u8x4_bitunpack(%packed: vector<1xi32>) -> (vector<4xi32>) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_to_u8x4_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @i32_to_u8x4_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 255
   %6 = v_and_b32 %packed, %5
   %7 = v_mov_b32 8
@@ -31,7 +31,7 @@ func.def @i32_to_s8x4_bitunpack(%packed: vector<1xi32>) -> (vector<4xi32>) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_to_s8x4_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @i32_to_s8x4_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x4>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 24
   %6 = v_lshlrev_b32 %5, %packed
   %7 = v_mov_b32 24
@@ -58,7 +58,7 @@ func.def @i32_to_u4x8_bitunpack(%packed: vector<1xi32>) -> (vector<8xi32>) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32_to_u4x8_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @i32_to_u4x8_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 15
   %6 = v_and_b32 %packed, %5
   %7 = v_mov_b32 4
@@ -94,7 +94,7 @@ func.def @i8x2_to_u2x8_bitunpack(%packed: vector<2xi8>) -> (vector<8xi32>) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i8x2_to_u2x8_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @i8x2_to_u2x8_bitunpack(%packed: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 3
   %6 = v_and_b32 %packed, %5
   %7 = v_mov_b32 2

@@ -9,6 +9,7 @@
 #include <inttypes.h>
 
 #include "loom/codegen/low/builder.h"
+#include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/rewrite/rewriter.h"
@@ -149,7 +150,7 @@ static iree_status_t loom_amdgpu_hal_resource_find_kernarg_live_in(
   *out_value = LOOM_VALUE_ID_INVALID;
   *out_insert_before = NULL;
 
-  loom_region_t* body = loom_low_func_def_body(function_op);
+  loom_region_t* body = loom_low_function_body(function_op);
   if (body == NULL || body->block_count == 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -219,7 +220,7 @@ static iree_status_t loom_amdgpu_hal_resource_ensure_kernarg_live_in(
   } else {
     loom_builder_set_block(
         &rewriter->builder,
-        loom_region_entry_block(loom_low_func_def_body(function_op)));
+        loom_region_entry_block(loom_low_function_body(function_op)));
   }
   loom_op_t* live_in_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_live_in_build(
@@ -458,10 +459,11 @@ iree_status_t loom_amdgpu_hal_resource_materialize(
         "AMDGPU HAL resource materialization requires a module, function, "
         "target bundle, descriptor set, and scratch arena");
   }
-  if (!loom_low_func_def_isa(function_op)) {
+  if (!loom_low_function_def_isa(function_op)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU HAL resource materialization requires low.func.def");
+        "AMDGPU HAL resource materialization requires low.func.def or "
+        "low.kernel.def");
   }
 
   loom_amdgpu_hal_kernel_abi_layout_t layout = {0};
@@ -487,7 +489,7 @@ iree_status_t loom_amdgpu_hal_resource_materialize(
   loom_value_id_t kernarg_ptr = LOOM_VALUE_ID_INVALID;
   bool inserted_live_in = false;
 
-  loom_region_t* body = loom_low_func_def_body(function_op);
+  loom_region_t* body = loom_low_function_body(function_op);
   for (uint16_t block_index = 0;
        iree_status_is_ok(status) && block_index < body->block_count;
        ++block_index) {

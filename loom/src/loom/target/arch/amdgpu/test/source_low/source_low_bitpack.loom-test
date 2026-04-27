@@ -7,7 +7,7 @@ func.def @i32x4_to_i8x4_bitpack(%codes: vector<4xi32>) -> (vector<4xi8>) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @i32x4_to_i8x4_bitpack(%codes: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) @i32x4_to_i8x4_bitpack(%codes: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %5 = v_mov_b32 255
   %6 = slice %codes[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %7 = v_and_b32 %6, %5

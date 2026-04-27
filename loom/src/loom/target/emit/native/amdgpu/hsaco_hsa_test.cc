@@ -21,6 +21,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
@@ -625,7 +626,7 @@ loom_op_t* FindFirstLowFunction(loom_module_t* module) {
   loom_block_t* block = loom_module_block(module);
   loom_op_t* op = nullptr;
   loom_block_for_each_op(block, op) {
-    if (loom_low_func_def_isa(op)) {
+    if (loom_low_function_def_isa(op)) {
       return op;
     }
   }
@@ -812,7 +813,7 @@ iree_status_t CompileWorkitemStoreKernelForAmdgpu(const AmdgpuHsaTarget& target,
   LowKernelCompiler compiler;
   return compiler.CompileKernel(
       processor->low_preset_key,
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
       "  %four = low.const<amdgpu.v_mov_b32> {imm32 = 4} : "
@@ -839,7 +840,7 @@ iree_status_t CompileB128CopyKernelForAmdgpu(const AmdgpuHsaTarget& target,
   IREE_RETURN_IF_ERROR(PrepareTargetProcessorForLowHsaco(target, &processor));
 
   std::string source =
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
       "  %scale = low.const<amdgpu.v_mov_b32> {imm32 = 16} : "

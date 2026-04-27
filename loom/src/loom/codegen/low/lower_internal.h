@@ -55,7 +55,7 @@ struct loom_low_lower_context_t {
   loom_value_fact_table_t fact_table;
   // Builder used while emitting the low function.
   loom_builder_t builder;
-  // Emitted low.func.def operation, or NULL before emission starts.
+  // Emitted target-low function operation, or NULL before emission starts.
   loom_op_t* low_func_op;
   // Number of source values captured by |value_map|.
   iree_host_size_t value_map_count;

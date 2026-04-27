@@ -88,7 +88,7 @@ typedef struct loom_amdgpu_hal_kernarg_resource_t {
 } loom_amdgpu_hal_kernarg_resource_t;
 
 typedef struct loom_amdgpu_hal_kernel_abi_layout_t {
-  // low.func.def operation whose resources are laid out.
+  // Target-low function operation whose resources are laid out.
   const loom_op_t* function_op;
   // Total kernarg segment size in bytes.
   uint32_t kernarg_segment_size;

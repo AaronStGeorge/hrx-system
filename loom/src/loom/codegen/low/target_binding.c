@@ -67,6 +67,10 @@ static iree_string_view_t loom_low_function_name(const loom_module_t* module,
   if (loom_low_func_def_isa(low_func_op)) {
     return loom_low_symbol_name(module, loom_low_func_def_callee(low_func_op));
   }
+  if (loom_low_kernel_def_isa(low_func_op)) {
+    return loom_low_symbol_name(module,
+                                loom_low_kernel_def_callee(low_func_op));
+  }
   if (loom_low_func_decl_isa(low_func_op)) {
     return loom_low_symbol_name(module, loom_low_func_decl_callee(low_func_op));
   }
@@ -158,6 +162,11 @@ static bool loom_low_get_function_target_ref(const loom_op_t* low_func_op,
     *out_target_attr_index = loom_low_func_def_target_ATTR_INDEX;
     return true;
   }
+  if (loom_low_kernel_def_isa(low_func_op)) {
+    *out_target_ref = loom_low_kernel_def_target(low_func_op);
+    *out_target_attr_index = loom_low_kernel_def_target_ATTR_INDEX;
+    return true;
+  }
   if (loom_low_func_decl_isa(low_func_op)) {
     *out_target_ref = loom_low_func_decl_target(low_func_op);
     *out_target_attr_index = loom_low_func_decl_target_ATTR_INDEX;
@@ -195,12 +204,8 @@ static iree_status_t loom_low_resolve_func_target(
   loom_symbol_fact_table_initialize_with_options(&fact_table, &fact_options,
                                                  &arena);
 
-  loom_symbol_ref_t func_ref = loom_symbol_ref_null();
-  if (loom_low_func_def_isa(low_func_op)) {
-    func_ref = loom_low_func_def_callee(low_func_op);
-  } else {
-    func_ref = loom_low_func_decl_callee(low_func_op);
-  }
+  loom_symbol_ref_t func_ref = loom_func_like_callee(
+      loom_func_like_cast(module, (loom_op_t*)low_func_op));
 
   const loom_symbol_facts_base_t* base_facts = NULL;
   iree_status_t status = loom_symbol_fact_table_lookup_ref(
@@ -263,7 +268,8 @@ iree_status_t loom_low_resolve_function_target(
   if (!loom_low_get_function_target_ref(low_func_op, &target_ref,
                                         &target_attr_index)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "expected low.func.def or low.func.decl");
+                            "expected low.func.def, low.kernel.def, or "
+                            "low.func.decl");
   }
 
   const loom_symbol_t* target_symbol =

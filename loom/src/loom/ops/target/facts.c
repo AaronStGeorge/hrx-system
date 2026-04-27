@@ -259,28 +259,6 @@ static iree_status_t loom_target_profile_apply_override(
     return loom_target_profile_u32_attr(
         value, name, 0, UINT32_MAX,
         &facts->export_plan.hal_kernel.binding_alignment);
-  } else if (iree_string_view_equal(name, IREE_SV("hal_workgroup_size_x"))) {
-    return loom_target_profile_u32_attr(
-        value, name, 0, UINT32_MAX,
-        &facts->export_plan.hal_kernel.required_workgroup_size.x);
-  } else if (iree_string_view_equal(name, IREE_SV("hal_workgroup_size_y"))) {
-    return loom_target_profile_u32_attr(
-        value, name, 0, UINT32_MAX,
-        &facts->export_plan.hal_kernel.required_workgroup_size.y);
-  } else if (iree_string_view_equal(name, IREE_SV("hal_workgroup_size_z"))) {
-    return loom_target_profile_u32_attr(
-        value, name, 0, UINT32_MAX,
-        &facts->export_plan.hal_kernel.required_workgroup_size.z);
-  } else if (iree_string_view_equal(name,
-                                    IREE_SV("hal_flat_workgroup_size_min"))) {
-    return loom_target_profile_u32_attr(
-        value, name, 0, UINT32_MAX,
-        &facts->export_plan.hal_kernel.flat_workgroup_size_min);
-  } else if (iree_string_view_equal(name,
-                                    IREE_SV("hal_flat_workgroup_size_max"))) {
-    return loom_target_profile_u32_attr(
-        value, name, 0, UINT32_MAX,
-        &facts->export_plan.hal_kernel.flat_workgroup_size_max);
   } else if (iree_string_view_equal(name,
                                     IREE_SV("hal_buffer_resource_flags"))) {
     return loom_target_profile_u32_attr(

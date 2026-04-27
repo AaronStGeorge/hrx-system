@@ -10,6 +10,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
@@ -83,7 +84,7 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
     loom_block_t* block = loom_module_block(module_);
     loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
-      if (loom_low_func_def_isa(op)) {
+      if (loom_low_function_def_isa(op)) {
         return op;
       }
     }
@@ -104,7 +105,7 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
     if (function_op == nullptr) {
       return false;
     }
-    loom_region_t* body = loom_low_func_def_body(function_op);
+    loom_region_t* body = loom_low_function_body(function_op);
     for (uint16_t block_index = 0; block_index < body->block_count;
          ++block_index) {
       const loom_block_t* block = loom_region_const_block(body, block_index);
@@ -124,7 +125,7 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
       return 0;
     }
     int count = 0;
-    loom_region_t* body = loom_low_func_def_body(function_op);
+    loom_region_t* body = loom_low_function_body(function_op);
     for (uint16_t block_index = 0; block_index < body->block_count;
          ++block_index) {
       const loom_block_t* block = loom_region_const_block(body, block_index);
@@ -145,7 +146,7 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
       return 0;
     }
     int count = 0;
-    loom_region_t* body = loom_low_func_def_body(function_op);
+    loom_region_t* body = loom_low_function_body(function_op);
     for (uint16_t block_index = 0; block_index < body->block_count;
          ++block_index) {
       const loom_block_t* block = loom_region_const_block(body, block_index);
@@ -169,7 +170,7 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
     if (function_op == nullptr) {
       return false;
     }
-    loom_region_t* body = loom_low_func_def_body(function_op);
+    loom_region_t* body = loom_low_function_body(function_op);
     for (uint16_t block_index = 0; block_index < body->block_count;
          ++block_index) {
       const loom_block_t* block = loom_region_const_block(body, block_index);
@@ -198,7 +199,7 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
       return 0;
     }
     int count = 0;
-    loom_region_t* body = loom_low_func_def_body(function_op);
+    loom_region_t* body = loom_low_function_body(function_op);
     const loom_block_t* entry_block = loom_region_const_entry_block(body);
     const loom_op_t* op = nullptr;
     loom_block_for_each_op(entry_block, op) {
@@ -272,7 +273,7 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
 TEST_F(AmdgpuHalResourceMaterializationTest,
        MaterializesHalBufferResourceFromKernargPointer) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %value = low.const<amdgpu.v_mov_b32> {imm32 = 42} : "
       "reg<amdgpu.vgpr>\n"
       "  %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : "
@@ -354,7 +355,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 TEST_F(AmdgpuHalResourceMaterializationTest,
        MaterializesHalBufferResourceRangeFromValidByteCount) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer, valid_byte_count = 64} : "
       "reg<amdgpu.sgpr x4>\n"
@@ -382,7 +383,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
        MaterializesGfx950CacheSwizzledHalBufferResource) {
   BuildModuleForPreset(
       "amdgpu-gfx950",
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer, cache_swizzle_stride = 64} : "
       "reg<amdgpu.sgpr x4>\n"
@@ -412,7 +413,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 TEST_F(AmdgpuHalResourceMaterializationTest,
        RejectsCacheSwizzleOnUnsupportedTarget) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer, cache_swizzle_stride = 64} : "
       "reg<amdgpu.sgpr x4>\n"
@@ -490,7 +491,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 TEST_F(AmdgpuHalResourceMaterializationTest,
        LeavesUnusedResourceAbiWithoutLiveIn) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  low.return\n"
       "}\n",
       "");
@@ -525,7 +526,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 
 TEST_F(AmdgpuHalResourceMaterializationTest, FixesWorkitemIdXLiveInToVgprZero) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
       "  low.return\n"
@@ -556,7 +557,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest, FixesWorkitemIdXLiveInToVgprZero) {
 TEST_F(AmdgpuHalResourceMaterializationTest,
        FixesWorkitemIdYZLiveInsToVgprOneAndTwo) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid_y = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Y_SOURCE
       "> : reg<amdgpu.vgpr>\n"
       "  %tid_z = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE
@@ -593,7 +594,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 TEST_F(AmdgpuHalResourceMaterializationTest,
        FixesWorkgroupIdYZLiveInsAfterKernargUserSgprs) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %kernarg = "
       "low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_KERNARG_SEGMENT_PTR_SOURCE
       "> : reg<amdgpu.sgpr x2>\n"
@@ -630,7 +631,7 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
 
 TEST_F(AmdgpuHalResourceMaterializationTest, RejectsUnsupportedResourceShape) {
   BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding = low.resource<vm_state> {index = 0, semantic_type = "
       "hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  low.return\n"

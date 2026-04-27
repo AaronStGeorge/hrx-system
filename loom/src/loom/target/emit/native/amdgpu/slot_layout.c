@@ -6,6 +6,8 @@
 
 #include "loom/target/emit/native/amdgpu/slot_layout.h"
 
+#include "loom/codegen/low/function.h"
+
 typedef struct loom_amdgpu_slot_layout_state_t {
   // Function symbol whose slots are being laid out.
   loom_symbol_ref_t function_ref;
@@ -116,7 +118,7 @@ static iree_status_t loom_amdgpu_slot_layout_scan(
   IREE_ASSERT_ARGUMENT(function_op);
   IREE_ASSERT_ARGUMENT(out_state);
   *out_state = (loom_amdgpu_slot_layout_state_t){
-      .function_ref = loom_low_func_def_callee(function_op),
+      .function_ref = loom_low_function_callee(function_op),
       .records = records,
       .record_capacity = record_capacity,
   };

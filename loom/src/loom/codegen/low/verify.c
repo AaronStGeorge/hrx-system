@@ -94,11 +94,26 @@ static iree_string_view_t loom_low_verify_function_name(
     return loom_low_verify_symbol_name(module,
                                        loom_low_func_def_callee(low_func_op));
   }
+  if (loom_low_kernel_def_isa(low_func_op)) {
+    return loom_low_verify_symbol_name(module,
+                                       loom_low_kernel_def_callee(low_func_op));
+  }
   if (loom_low_func_decl_isa(low_func_op)) {
     return loom_low_verify_symbol_name(module,
                                        loom_low_func_decl_callee(low_func_op));
   }
   return IREE_SV("<unnamed>");
+}
+
+static loom_region_t* loom_low_verify_function_body(
+    const loom_op_t* low_func_op) {
+  if (loom_low_func_def_isa(low_func_op)) {
+    return loom_low_func_def_body(low_func_op);
+  }
+  if (loom_low_kernel_def_isa(low_func_op)) {
+    return loom_low_kernel_def_body(low_func_op);
+  }
+  return NULL;
 }
 
 static iree_string_view_t loom_low_verify_string_or_empty(
@@ -1269,7 +1284,8 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
   loom_low_resolved_target_t target = {0};
   IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
       state->module, low_func_op, state->registry, counting_emitter, &target));
-  if (target.descriptor_set == NULL || !loom_low_func_def_isa(low_func_op) ||
+  loom_region_t* body = loom_low_verify_function_body(low_func_op);
+  if (target.descriptor_set == NULL || body == NULL ||
       loom_low_verify_should_stop(state)) {
     return iree_ok_status();
   }
@@ -1285,7 +1301,7 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
       &function_state.register_class_map));
   loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
   return loom_walk_region(
-      state->module, loom_low_func_def_body(low_func_op), LOOM_WALK_PRE_ORDER,
+      state->module, body, LOOM_WALK_PRE_ORDER,
       (loom_walk_callback_t){loom_low_verify_walk_op, &function_state},
       &state->arena, &walk_result);
 }
@@ -1326,7 +1342,10 @@ iree_status_t loom_low_verify_module(const loom_module_t* module,
     loom_block_t* entry_block = loom_region_entry_block(module->body);
     const loom_op_t* op = NULL;
     loom_block_for_each_op(entry_block, op) {
-      if (!loom_low_func_def_isa(op) && !loom_low_func_decl_isa(op)) continue;
+      if (!loom_low_func_def_isa(op) && !loom_low_kernel_def_isa(op) &&
+          !loom_low_func_decl_isa(op)) {
+        continue;
+      }
       status = loom_low_verify_function(&state, op);
       if (!iree_status_is_ok(status) || loom_low_verify_should_stop(&state)) {
         break;

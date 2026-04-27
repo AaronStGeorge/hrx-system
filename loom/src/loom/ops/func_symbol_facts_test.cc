@@ -14,6 +14,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/target/types.h"
 #include "loom/testing/module_ptr.h"
@@ -30,6 +31,7 @@ class FuncSymbolFactsTest : public ::testing::Test {
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_KERNEL, loom_kernel_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     iree_arena_initialize(&block_pool_, &analysis_arena_);
@@ -143,19 +145,13 @@ func.decl import("env") @do_work(%arg0: i32) -> (i32)
   EXPECT_TRUE(iree_string_view_equal(facts->import_symbol, IREE_SV("do_work")));
 }
 
-TEST_F(FuncSymbolFactsTest, FunctionOwnedContractRemainsTargetNeutral) {
+TEST_F(FuncSymbolFactsTest, KernelEntryContractRemainsTargetNeutral) {
   ModulePtr module = ParseModule(R"(
 test.record @profile
 test.record @artifact
 
-func.def target(@profile) abi(hal_kernel, {
-  hal_binding_alignment = 16
-}) export("dispatch", {
-  artifact = @artifact,
-  linkage = "dso_local",
-  ordinal = 5
-}) @kernel() {
-  func.return
+kernel.def target(@profile) export("dispatch") artifact(@artifact) ordinal(5) linkage(dso_local) workgroup_size(8, 4, 2) @kernel() {
+  kernel.return
 }
 )");
 
@@ -163,9 +159,9 @@ func.def target(@profile) abi(hal_kernel, {
       LookupFunc(module.get(), IREE_SV("kernel"));
   EXPECT_TRUE(iree_string_view_equal(facts->name, IREE_SV("kernel")));
   EXPECT_TRUE(loom_symbol_ref_is_valid(facts->target_symbol));
-  EXPECT_TRUE(facts->has_abi);
-  EXPECT_EQ(facts->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
-  EXPECT_EQ(facts->abi_attrs.count, 1u);
+  EXPECT_TRUE(facts->is_kernel_entry);
+  EXPECT_FALSE(facts->has_abi);
+  EXPECT_EQ(facts->abi_attrs.count, 0u);
   EXPECT_TRUE(facts->exports);
   EXPECT_TRUE(
       iree_string_view_equal(facts->export_symbol, IREE_SV("dispatch")));
@@ -174,6 +170,10 @@ func.def target(@profile) abi(hal_kernel, {
   EXPECT_EQ(facts->export_linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
   EXPECT_TRUE(facts->has_export_ordinal);
   EXPECT_EQ(facts->export_ordinal, 5u);
+  EXPECT_TRUE(facts->has_required_workgroup_size);
+  EXPECT_EQ(facts->required_workgroup_size.x, 8u);
+  EXPECT_EQ(facts->required_workgroup_size.y, 4u);
+  EXPECT_EQ(facts->required_workgroup_size.z, 2u);
 }
 
 TEST_F(FuncSymbolFactsTest, ContractRequiresTargetProfile) {

@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/source_selection.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
@@ -71,7 +72,7 @@ static iree_status_t loom_low_source_workload_verify_low_module(
 static uint32_t loom_low_source_workload_count_low_descriptor_ops(
     const loom_op_t* low_func_op) {
   uint32_t count = 0;
-  const loom_region_t* body = loom_low_func_def_body(low_func_op);
+  const loom_region_t* body = loom_low_function_const_body(low_func_op);
   for (uint16_t block_index = 0; block_index < body->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(body, block_index);
@@ -148,8 +149,9 @@ iree_status_t loom_low_source_workload_run_pipeline(
                                   "source lowering produced errors");
       } else if (iree_status_is_ok(status) &&
                  func_lower_result.low_func_op == NULL) {
-        status = iree_make_status(IREE_STATUS_INTERNAL,
-                                  "source lowering did not emit low.func.def");
+        status = iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "source lowering did not emit a target-low function");
       }
       if (iree_status_is_ok(status)) {
         lowered_funcs[i] = func_lower_result.low_func_op;

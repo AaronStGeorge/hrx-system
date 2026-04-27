@@ -74,6 +74,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::func
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::test
     loom::src::loom::target::types
     loom::src::loom::testing::module_ptr

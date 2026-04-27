@@ -48,8 +48,8 @@ typedef struct loom_amdgpu_kernel_record_options_t {
   const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout;
 } loom_amdgpu_kernel_record_options_t;
 
-// Builds the shared emission record for one scheduled and allocated
-// low.func.def. The returned record points into input IR and |scratch_arena|.
+// Builds the shared emission record for one scheduled and allocated target-low
+// HAL kernel. The returned record points into input IR and |scratch_arena|.
 iree_status_t loom_amdgpu_kernel_record_build(
     const loom_low_schedule_sidecar_t* schedule,
     const loom_low_allocation_sidecar_t* allocation,

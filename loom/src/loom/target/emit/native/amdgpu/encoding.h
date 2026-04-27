@@ -19,8 +19,9 @@
 extern "C" {
 #endif
 
-// Encodes one scheduled and allocated AMDGPU low.func.def into an arena-owned
-// instruction byte stream. The returned bytes are only the executable text
+// Encodes one scheduled and allocated AMDGPU target-low function into an
+// arena-owned instruction byte stream. The returned bytes are only the
+// executable text
 // payload; kernel descriptors, metadata, ELF sections, and relocations are
 // emitted by later native code-object layers. Values must be physically
 // allocated and unspilled.

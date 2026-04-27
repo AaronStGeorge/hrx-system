@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/codegen/low/function.h"
 #include "loom/ir/context.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/vector/ops.h"
@@ -249,7 +250,7 @@ static iree_status_t loom_amdgpu_lookup_packed_workitem_id_live_in(
 
   loom_op_t* low_function = loom_low_lower_context_low_function(context);
   loom_region_t* body =
-      low_function ? loom_low_func_def_body(low_function) : NULL;
+      low_function ? loom_low_function_body(low_function) : NULL;
   IREE_ASSERT(body != NULL);
   IREE_ASSERT_GT(body->block_count, 0);
   const loom_block_t* entry_block = loom_region_const_entry_block(body);
@@ -331,7 +332,7 @@ iree_status_t loom_amdgpu_lookup_m0_live_in(loom_low_lower_context_t* context,
   *out_value_id = LOOM_VALUE_ID_INVALID;
   loom_op_t* low_function = loom_low_lower_context_low_function(context);
   loom_region_t* body =
-      low_function ? loom_low_func_def_body(low_function) : NULL;
+      low_function ? loom_low_function_body(low_function) : NULL;
   IREE_ASSERT(body != NULL);
   IREE_ASSERT_GT(body->block_count, 0);
   loom_string_id_t source_id = LOOM_STRING_ID_INVALID;

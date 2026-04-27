@@ -275,12 +275,13 @@ typedef struct loom_low_allocation_options_t {
   loom_low_allocation_diagnostic_flags_t diagnostic_flags;
 } loom_low_allocation_options_t;
 
-// Allocation sidecar for one low.func.def body. All arrays are arena-owned by
-// the caller-provided arena passed to loom_low_allocate_function.
+// Allocation sidecar for one target-low function body. All arrays are
+// arena-owned by the caller-provided arena passed to
+// loom_low_allocate_function.
 typedef struct loom_low_allocation_sidecar_t {
   // Module containing the allocated low function.
   const loom_module_t* module;
-  // low.func.def operation allocated by this sidecar.
+  // Target-low function operation allocated by this sidecar.
   const loom_op_t* function_op;
   // Resolved target context selected by |function_op|.
   loom_low_resolved_target_t target;
@@ -324,11 +325,11 @@ typedef struct loom_low_allocation_sidecar_t {
   iree_host_size_t materialized_copy_count;
 } loom_low_allocation_sidecar_t;
 
-// Allocates one low.func.def body and writes an arena-owned sidecar. This first
-// allocator is deliberately simple and deterministic: it performs per-class
-// linear-scan-style first-fit assignment over liveness intervals, uses target
-// physical register counts or explicit budgets as hard limits, and reports
-// spills as sidecar remarks without mutating IR.
+// Allocates one target-low function body and writes an arena-owned sidecar.
+// This first allocator is deliberately simple and deterministic: it performs
+// per-class linear-scan-style first-fit assignment over liveness intervals,
+// uses target physical register counts or explicit budgets as hard limits, and
+// reports spills as sidecar remarks without mutating IR.
 iree_status_t loom_low_allocate_function(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,

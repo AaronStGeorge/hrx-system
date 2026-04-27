@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/util/json.h"
@@ -770,9 +771,9 @@ static iree_string_view_t loom_amdgpu_wait_plan_json_symbol_name(
 
 static iree_string_view_t loom_amdgpu_wait_plan_json_function_name(
     const loom_low_schedule_sidecar_t* schedule) {
-  if (loom_low_func_def_isa(schedule->function_op)) {
+  if (loom_low_function_def_isa(schedule->function_op)) {
     return loom_amdgpu_wait_plan_json_symbol_name(
-        schedule->module, loom_low_func_def_callee(schedule->function_op));
+        schedule->module, loom_low_function_callee(schedule->function_op));
   }
   return IREE_SV("<unnamed>");
 }

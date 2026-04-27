@@ -32,6 +32,10 @@ static bool loom_func_symbol_attr_present(loom_func_like_t func,
   return !loom_attr_is_absent(loom_op_attrs(func.op)[attr_index]);
 }
 
+static bool loom_func_symbol_interface_field_present(uint8_t attr_index) {
+  return attr_index != LOOM_ATTR_INDEX_NONE;
+}
+
 static iree_status_t loom_func_symbol_string_attr(
     const loom_module_t* module, const loom_attribute_t* attr,
     iree_string_view_t field_name, iree_string_view_t* out_string) {
@@ -124,6 +128,49 @@ static iree_status_t loom_func_symbol_apply_export_attrs(
   return iree_ok_status();
 }
 
+static iree_status_t loom_func_symbol_apply_direct_export_attrs(
+    loom_func_like_t func, loom_func_symbol_facts_t* facts) {
+  loom_symbol_ref_t artifact_symbol = loom_func_like_artifact(func);
+  if (loom_symbol_ref_is_valid(artifact_symbol)) {
+    facts->artifact_symbol = artifact_symbol;
+    facts->exports = true;
+  }
+
+  int64_t export_ordinal = 0;
+  if (loom_func_like_export_ordinal(func, &export_ordinal)) {
+    if (export_ordinal < 0 || export_ordinal > UINT32_MAX) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "func contract field export_ordinal must fit "
+                              "in u32");
+    }
+    facts->export_ordinal = (uint32_t)export_ordinal;
+    facts->has_export_ordinal = true;
+    facts->exports = true;
+  }
+
+  uint8_t export_linkage = 0;
+  if (loom_func_like_export_linkage(func, &export_linkage)) {
+    facts->export_linkage = (loom_target_linkage_t)export_linkage;
+    facts->has_export_linkage = true;
+    facts->exports = true;
+  }
+
+  uint32_t workgroup_size_x = 0;
+  uint32_t workgroup_size_y = 0;
+  uint32_t workgroup_size_z = 0;
+  if (loom_func_like_workgroup_size(func, &workgroup_size_x, &workgroup_size_y,
+                                    &workgroup_size_z)) {
+    facts->required_workgroup_size = (loom_target_workgroup_size_t){
+        .x = workgroup_size_x,
+        .y = workgroup_size_y,
+        .z = workgroup_size_z,
+    };
+    facts->has_required_workgroup_size = true;
+  }
+
+  return iree_ok_status();
+}
+
 static iree_status_t loom_func_symbol_apply_imports(
     const loom_module_t* module, loom_func_like_t func,
     loom_func_symbol_facts_t* facts) {
@@ -188,6 +235,8 @@ static iree_status_t loom_func_symbol_fact_compute(
   facts->result_count = func.op->result_count;
   IREE_RETURN_IF_ERROR(loom_func_symbol_apply_imports(module, func, facts));
   facts->target_symbol = loom_func_like_target(func);
+  facts->is_kernel_entry = loom_func_symbol_interface_field_present(
+      func.vtable->workgroup_size_x_attr_index);
 
   bool has_abi_attr =
       loom_func_symbol_attr_present(func, func.vtable->abi_attr_index);
@@ -199,8 +248,21 @@ static iree_status_t loom_func_symbol_fact_compute(
   loom_string_id_t export_symbol_id = loom_func_like_export_symbol(func);
   bool has_export_symbol = export_symbol_id != LOOM_STRING_ID_INVALID;
   loom_named_attr_slice_t export_attrs = loom_func_like_export_attrs(func);
+  const bool has_direct_export_contract =
+      loom_symbol_ref_is_valid(loom_func_like_artifact(func)) ||
+      loom_func_symbol_attr_present(func,
+                                    func.vtable->export_ordinal_attr_index) ||
+      loom_func_symbol_attr_present(func,
+                                    func.vtable->export_linkage_attr_index) ||
+      loom_func_symbol_attr_present(func,
+                                    func.vtable->workgroup_size_x_attr_index) ||
+      loom_func_symbol_attr_present(func,
+                                    func.vtable->workgroup_size_y_attr_index) ||
+      loom_func_symbol_attr_present(func,
+                                    func.vtable->workgroup_size_z_attr_index);
   bool has_func_contract = has_abi_attr || facts->abi_attrs.count > 0 ||
-                           has_export_symbol || export_attrs.count > 0;
+                           has_export_symbol || export_attrs.count > 0 ||
+                           has_direct_export_contract;
   if (has_func_contract && !loom_symbol_ref_is_valid(facts->target_symbol)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -214,6 +276,7 @@ static iree_status_t loom_func_symbol_fact_compute(
   }
   IREE_RETURN_IF_ERROR(
       loom_func_symbol_apply_export_attrs(module, export_attrs, facts));
+  IREE_RETURN_IF_ERROR(loom_func_symbol_apply_direct_export_attrs(func, facts));
   if (export_attrs.count > 0) {
     facts->exports = true;
   }

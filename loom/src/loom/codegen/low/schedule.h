@@ -384,12 +384,12 @@ typedef struct loom_low_schedule_options_t {
   loom_low_schedule_strategy_t strategy;
 } loom_low_schedule_options_t;
 
-// Schedule sidecar for one low.func.def body. All arrays are arena-owned by the
-// caller-provided arena passed to loom_low_schedule_function.
+// Schedule sidecar for one target-low function body. All arrays are arena-owned
+// by the caller-provided arena passed to loom_low_schedule_function.
 typedef struct loom_low_schedule_sidecar_t {
   // Module containing the scheduled low function.
   const loom_module_t* module;
-  // low.func.def operation scheduled by this sidecar.
+  // Target-low function operation scheduled by this sidecar.
   const loom_op_t* function_op;
   // Resolved target context selected by |function_op|.
   loom_low_resolved_target_t target;
@@ -450,11 +450,11 @@ typedef struct loom_low_schedule_sidecar_t {
   iree_host_size_t resource_summary_count;
 } loom_low_schedule_sidecar_t;
 
-// Schedules one low.func.def body and writes an arena-owned sidecar. The caller
-// must keep |module| immutable and |arena| alive for as long as |out_sidecar|
-// is used. This function performs descriptor target resolution and liveness
-// analysis; malformed user IR is reported through |options->emitter| when
-// provided and otherwise fails loud with status.
+// Schedules one target-low function body and writes an arena-owned sidecar. The
+// caller must keep |module| immutable and |arena| alive for as long as
+// |out_sidecar| is used. This function performs descriptor target resolution
+// and liveness analysis; malformed user IR is reported through
+// |options->emitter| when provided and otherwise fails loud with status.
 iree_status_t loom_low_schedule_function(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_schedule_options_t* options, iree_arena_allocator_t* arena,

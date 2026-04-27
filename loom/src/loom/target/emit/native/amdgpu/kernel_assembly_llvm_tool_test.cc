@@ -9,6 +9,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
@@ -92,7 +93,7 @@ class AmdgpuKernelAssemblyLlvmToolTest : public ::testing::Test {
     loom_block_t* block = loom_module_block(module);
     loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
-      if (loom_low_func_def_isa(op)) {
+      if (loom_low_function_def_isa(op)) {
         return op;
       }
     }
@@ -148,7 +149,7 @@ class AmdgpuKernelAssemblyLlvmToolTest : public ::testing::Test {
     loom_low_packetization_t packetization = {};
     BuildSidecarsForPreset(
         preset_key, "gfx_target",
-        "low.func.def target(@gfx_target) @loom_kernel() {\n"
+        "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
         "  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : "
         "reg<amdgpu.sgpr x2>\n"
         "  %c0 = low.op<amdgpu.s_mov_b32>() {imm32 = 7} : () -> "

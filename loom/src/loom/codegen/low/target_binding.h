@@ -78,7 +78,8 @@ typedef struct loom_low_resolved_descriptor_packet_t {
 // Resolves the target profile payloads and descriptor set for |low_func_op|.
 // User IR failures are emitted through |emitter| and leave
 // out_target->descriptor_set NULL. Infrastructure failures are returned as
-// status. |low_func_op| must be low.func.def or low.func.decl.
+// status. |low_func_op| must be a target-low function definition or
+// declaration.
 iree_status_t loom_low_resolve_function_target(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_descriptor_registry_t* registry,

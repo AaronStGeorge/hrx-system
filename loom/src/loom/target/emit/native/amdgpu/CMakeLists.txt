@@ -102,6 +102,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::function
     loom::src::loom::ir
     loom::src::loom::ops::low
   PUBLIC
@@ -148,6 +149,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::packet
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
@@ -253,7 +255,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::verify
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
-    loom::src::loom::ops::func
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::low
     loom::src::loom::ops::target
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
@@ -332,6 +334,7 @@ loom_cc_test(
     ::kernel_assembly
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::target_binding
     loom::src::loom::codegen::low::verify
@@ -358,6 +361,7 @@ loom_cc_test(
     ::kernel_assembly
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::verify
     loom::src::loom::format::text::parser
@@ -450,6 +454,7 @@ loom_cc_test(
     iree::base::internal::dynamic_library
     iree::io::stream
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::target_binding
     loom::src::loom::codegen::low::verify

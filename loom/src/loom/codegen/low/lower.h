@@ -7,11 +7,11 @@
 // Source-to-target-low lowering foundation.
 //
 // This layer owns the target-independent mechanics of lowering a verified
-// source function into a low.func.def: target legality gating, function/block
-// cloning, source-to-low SSA value mapping, source location preservation, and
-// structural CFG terminators. Target packages provide descriptor choices and
-// type mappings through callbacks so this library never links concrete backend
-// descriptor tables.
+// source function into a target-low function entry: target legality gating,
+// function/block cloning, source-to-low SSA value mapping, source location
+// preservation, and structural CFG terminators. Target packages provide
+// descriptor choices and type mappings through callbacks so this library never
+// links concrete backend descriptor tables.
 
 #ifndef LOOM_CODEGEN_LOW_LOWER_H_
 #define LOOM_CODEGEN_LOW_LOWER_H_
@@ -315,7 +315,7 @@ bool loom_low_lower_policy_registry_has_bundle(
     const loom_target_bundle_t* bundle);
 
 typedef struct loom_low_lower_options_t {
-  // Module-local target.profile symbol used by the emitted low.func.def.
+  // Module-local target.profile symbol used by the emitted low function.
   loom_symbol_ref_t target_ref;
   // Target bundle selected for this lowering attempt.
   const loom_target_bundle_t* bundle;
@@ -346,7 +346,7 @@ typedef struct loom_low_lower_result_t {
   uint32_t remark_count;
   // Descriptor set selected by |options.bundle|.
   const loom_low_descriptor_set_t* descriptor_set;
-  // Emitted low.func.def op, or NULL when user diagnostics prevented emission.
+  // Emitted low function op, or NULL when user diagnostics prevented emission.
   loom_op_t* low_func_op;
   // Module-local symbol reference for |low_func_op|.
   loom_symbol_ref_t low_func_ref;
@@ -364,11 +364,11 @@ typedef struct loom_low_lower_result_t {
   iree_host_size_t report_row_total_count;
 } loom_low_lower_result_t;
 
-// Lowers one func.def-like source function into a low.func.def in place.
+// Lowers one func.def-like source function into a target-low function in place.
 //
 // User IR failures are emitted through |options->emitter| and counted in
-// |out_result|. The function returns OK in that case and does not emit a
-// low.func.def. On success the emitted low.func.def preserves the source
+// |out_result|. The function returns OK in that case and does not emit a low
+// function. On success the emitted target-low function preserves the source
 // function symbol and replaces the source op at the same module position.
 // Infrastructure failures such as malformed options, invalid target symbols,
 // or a policy that violates the lowering contract are returned as status
@@ -391,7 +391,7 @@ loom_builder_t* loom_low_lower_context_builder(
 loom_func_like_t loom_low_lower_context_source_function(
     const loom_low_lower_context_t* context);
 
-// Returns the emitted low.func.def op, or NULL during planning.
+// Returns the emitted target-low function op, or NULL during planning.
 loom_op_t* loom_low_lower_context_low_function(
     const loom_low_lower_context_t* context);
 

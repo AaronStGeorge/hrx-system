@@ -11,6 +11,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packetization.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/verify.h"
@@ -82,7 +83,7 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     loom_block_t* block = loom_module_block(module);
     loom_op_t* op = nullptr;
     loom_block_for_each_op(block, op) {
-      if (loom_low_func_def_isa(op)) {
+      if (loom_low_function_def_isa(op)) {
         return op;
       }
     }
@@ -224,7 +225,7 @@ class AmdgpuKernelAssemblyTest : public ::testing::Test {
     loom_low_packetization_t packetization = {};
     BuildSidecarsForPreset(
         preset_key, "gfx_target",
-        "low.func.def target(@gfx_target) @loom_kernel() {\n"
+        "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
         "  %kernarg = low.live_in<amdgpu.kernarg_segment_ptr> : "
         "reg<amdgpu.sgpr x2>\n"
         "  %c0 = low.op<amdgpu.s_mov_b32>() {imm32 = 7} : () -> "
@@ -312,7 +313,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsFixedSegmentSizesFromLowSlots) {
   loom_low_packetization_t packetization = {};
   BuildSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target",
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  low.return\n"
       "}\n"
       "low.slot @lds0 {align = 64, function = @loom_kernel, size = 128, "
@@ -349,7 +350,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsHalBufferResourceMetadata) {
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target",
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %value = low.const<amdgpu.v_mov_b32> {imm32 = 1} : "
@@ -406,7 +407,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsWorkitemZDescriptorMode) {
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target",
-      R"(low.func.def target(@gfx_target) @loom_kernel() {
+      R"(low.kernel.def target(@gfx_target) @loom_kernel() {
   %packed_tid = low.live_in<amdgpu.workitem_id.packed.xyz> : reg<amdgpu.vgpr>
   %binding = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %vaddr = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
@@ -444,7 +445,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsWorkgroupZDescriptorFlags) {
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target",
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %bid_z = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Z_SOURCE
       "> : reg<amdgpu.sgpr>\n"
       "  %resource = low.resource<hal_buffer_resource> {index = 0, "
@@ -490,7 +491,7 @@ TEST_F(AmdgpuKernelAssemblyTest,
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target",
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %binding = low.resource<hal_buffer_resource> {index = 0, "
       "semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>\n"
       "  %value = low.const<amdgpu.v_mov_b32> {imm32 = 42} : "
@@ -558,7 +559,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsB128CopyKernelForGfx11) {
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target",
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
       "  %source = low.resource<hal_buffer_resource> {index = 0, semantic_type "
@@ -635,7 +636,7 @@ TEST_F(AmdgpuKernelAssemblyTest, EmitsMemoryAluStressKernelForGfx11) {
   loom_amdgpu_hal_kernel_abi_layout_t abi_layout = {};
   BuildMaterializedHalResourceSidecarsForPreset(
       "amdgpu-gfx11", "gfx_target",
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
       "> : reg<amdgpu.vgpr>\n"
       "  %source = low.resource<hal_buffer_resource> {index = 0, semantic_type "
@@ -744,12 +745,13 @@ TEST_F(AmdgpuKernelAssemblyTest, RejectsFunctionArgumentsBeforeAbiLowering) {
   iree_arena_allocator_t sidecar_arena;
   iree_arena_initialize(&block_pool_, &sidecar_arena);
   loom_low_packetization_t packetization = {};
-  BuildSidecarsForPreset("amdgpu-gfx11", "gfx_target",
-                         "low.func.def target(@gfx_target) @loom_kernel(%arg: "
-                         "reg<amdgpu.sgpr>) {\n"
-                         "  low.return\n"
-                         "}\n",
-                         &sidecar_arena, &packetization);
+  BuildSidecarsForPreset(
+      "amdgpu-gfx11", "gfx_target",
+      "low.kernel.def target(@gfx_target) @loom_kernel(%arg: "
+      "reg<amdgpu.sgpr>) {\n"
+      "  low.return\n"
+      "}\n",
+      &sidecar_arena, &packetization);
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -768,7 +770,7 @@ TEST_F(AmdgpuKernelAssemblyTest, RejectsNonDefaultLinkage) {
   BuildSidecarsFromSource(
       "target.profile @gfx_target preset(\"amdgpu-gfx11\") {linkage = "
       "\"dso_local\"}\n"
-      "low.func.def target(@gfx_target) @loom_kernel() {\n"
+      "low.kernel.def target(@gfx_target) @loom_kernel() {\n"
       "  low.return\n"
       "}\n",
       &sidecar_arena, &packetization);

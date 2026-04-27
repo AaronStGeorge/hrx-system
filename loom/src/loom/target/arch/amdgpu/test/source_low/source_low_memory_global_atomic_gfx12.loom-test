@@ -13,7 +13,7 @@ func.def @global_atomic_add_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_add_i32() {
+low.func.def target(@target) @global_atomic_add_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -45,7 +45,7 @@ func.def @global_atomic_add_f32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_add_f32() {
+low.func.def target(@target) @global_atomic_add_f32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -77,7 +77,7 @@ func.def @global_atomic_minnum_maxnum_f32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_minnum_maxnum_f32() {
+low.func.def target(@target) @global_atomic_minnum_maxnum_f32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -114,7 +114,7 @@ func.def @global_atomic_dynamic_minnum_f32(%input: buffer, %value: f32) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_dynamic_minnum_f32(%value: reg<amdgpu.vgpr>) {
+low.func.def target(@target) @global_atomic_dynamic_minnum_f32(%value: reg<amdgpu.vgpr>) {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -147,7 +147,7 @@ func.def @global_atomic_bitwise_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_bitwise_i32() {
+low.func.def target(@target) @global_atomic_bitwise_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -199,7 +199,7 @@ func.def @global_atomic_sub_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_sub_i32() {
+low.func.def target(@target) @global_atomic_sub_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -230,7 +230,7 @@ func.def @global_atomic_exchange_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_exchange_i32() {
+low.func.def target(@target) @global_atomic_exchange_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -257,7 +257,7 @@ func.def @global_atomic_cmpxchg_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_cmpxchg_i32() {
+low.func.def target(@target) @global_atomic_cmpxchg_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -293,7 +293,7 @@ func.def @global_atomic_minmax_i32(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) abi(hal_kernel) @global_atomic_minmax_i32() {
+low.func.def target(@target) @global_atomic_minmax_i32() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
