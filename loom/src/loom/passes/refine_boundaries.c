@@ -2205,6 +2205,7 @@ static iree_status_t loom_refine_boundaries_clone_function_specialization(
       source_op->tied_result_count, source_op->attribute_count, target_location,
       &target_op));
   target_op->instance_flags = source_op->instance_flags;
+  target_op->traits = source_op->traits;
 
   loom_attribute_t* target_attrs = loom_op_attrs(target_op);
   const loom_attribute_t* source_attrs = loom_op_const_attrs(source_op);
@@ -2284,10 +2285,10 @@ static iree_status_t loom_refine_boundaries_create_specialization_group(
 static void loom_refine_boundaries_retarget_call(loom_module_t* module,
                                                  loom_op_t* call_op,
                                                  loom_symbol_ref_t callee) {
-  loom_trait_flags_t old_traits = loom_op_effective_traits(module, call_op);
+  loom_trait_flags_t old_traits = call_op->traits;
   loom_op_attrs(call_op)[0] = loom_attr_symbol(callee);
-  loom_trait_flags_t new_traits = loom_op_effective_traits(module, call_op);
-  loom_module_update_op_direct_effects(call_op, old_traits, new_traits);
+  loom_op_refresh_effective_traits(module, call_op);
+  loom_module_update_op_direct_effects(call_op, old_traits, call_op->traits);
 }
 
 static iree_status_t loom_refine_boundaries_create_specializations(

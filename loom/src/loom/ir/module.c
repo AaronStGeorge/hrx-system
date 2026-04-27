@@ -324,14 +324,6 @@ static iree_status_t loom_module_initialize_block(loom_module_t* module,
 // Region effect summaries
 //===----------------------------------------------------------------------===//
 
-static loom_trait_flags_t loom_module_effective_traits(
-    const loom_module_t* module, const loom_op_t* op) {
-  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
-  if (!vtable) return LOOM_TRAIT_UNKNOWN_EFFECTS;
-  return vtable->effective_traits ? vtable->effective_traits(op)
-                                  : vtable->traits;
-}
-
 static void loom_region_adjust_effect_count(uint32_t* count, int32_t delta) {
   if (delta < 0) {
     uint32_t decrement = (uint32_t)(-delta);
@@ -378,20 +370,19 @@ static void loom_module_adjust_op_direct_effect_counts(
 }
 
 void loom_module_record_op_effects(loom_module_t* module, loom_op_t* op) {
+  (void)module;
   if (!op || iree_any_bit_set(
                  op->flags, LOOM_OP_FLAG_DEAD | LOOM_OP_FLAG_EFFECTS_COUNTED)) {
     return;
   }
-  loom_module_adjust_op_direct_effect_counts(
-      op, loom_module_effective_traits(module, op), +1);
+  loom_module_adjust_op_direct_effect_counts(op, op->traits, +1);
   op->flags |= LOOM_OP_FLAG_EFFECTS_COUNTED;
 }
 
 void loom_module_drop_op_effects(loom_module_t* module, loom_op_t* op) {
   if (!op) return;
   if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_EFFECTS_COUNTED)) {
-    loom_module_adjust_op_direct_effect_counts(
-        op, loom_module_effective_traits(module, op), -1);
+    loom_module_adjust_op_direct_effect_counts(op, op->traits, -1);
     op->flags &= ~LOOM_OP_FLAG_EFFECTS_COUNTED;
   }
   loom_region_t** regions = loom_op_regions(op);

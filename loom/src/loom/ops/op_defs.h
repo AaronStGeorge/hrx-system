@@ -869,12 +869,21 @@ static inline const loom_use_t* loom_value_single_use(
 // Effect query helpers
 //===----------------------------------------------------------------------===//
 
-// Returns the effective trait flags for |op|, incorporating per-instance
-// state via the vtable's effective_traits callback when present. Falls
-// back to the vtable's static traits when no callback is registered.
-// Returns 0 (no traits) when the vtable cannot be resolved.
+// Returns the cached effective trait flags for |op|.
+//
+// IR constructors initialize this word from the op vtable construction default.
+// Descriptor-backed and callback-backed ops stamp richer per-instance traits at
+// construction or mutation boundaries so generic passes can query effects with
+// one op-local load.
 loom_trait_flags_t loom_op_effective_traits(const loom_module_t* module,
                                             const loom_op_t* op);
+
+// Refreshes callback-backed effective traits for |op| after attrs or instance
+// flags have changed. Ops with no effective-traits callback keep their current
+// trait word; descriptor-backed ops are stamped explicitly by target-low
+// construction helpers.
+void loom_op_refresh_effective_traits(const loom_module_t* module,
+                                      loom_op_t* op);
 
 // Returns true if |op| may write to a resource or has unknown effects.
 bool loom_op_may_write(const loom_module_t* module, const loom_op_t* op);

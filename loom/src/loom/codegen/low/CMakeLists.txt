@@ -41,12 +41,27 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    descriptor_traits
+  HDRS
+    "descriptor_traits.h"
+  SRCS
+    "descriptor_traits.c"
+  DEPS
+    ::descriptors
+    iree::base
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     builder
   HDRS
     "builder.h"
   SRCS
     "builder.c"
   DEPS
+    ::descriptor_traits
     ::descriptors
     iree::base
     loom::src::loom::ir
@@ -102,6 +117,7 @@ loom_cc_library(
     "text_asm.c"
     "text_asm_structural.c"
   DEPS
+    ::builder
     ::descriptors
     iree::base
     loom::src::loom::format::text::low_asm

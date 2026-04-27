@@ -558,6 +558,7 @@ static iree_status_t loom_scf_region_branch_build_empty_clone(
       result_count, branch_op->region_count, /*tied_result_count=*/0,
       branch_op->attribute_count, branch_op->location, out_new_branch));
   (*out_new_branch)->instance_flags = branch_op->instance_flags;
+  (*out_new_branch)->traits = branch_op->traits;
 
   if (branch_op->operand_count > 0) {
     memcpy(
@@ -613,6 +614,7 @@ static iree_status_t loom_scf_region_branch_clone_tail_after_branch(
       tail_op->result_count, 0, 0, tail_op->attribute_count, tail_op->location,
       out_cloned_tail));
   (*out_cloned_tail)->instance_flags = tail_op->instance_flags;
+  (*out_cloned_tail)->traits = tail_op->traits;
 
   loom_value_slice_t new_branch_results = {
       .values = loom_op_results(new_branch),

@@ -345,11 +345,8 @@ static bool loom_block_dominates(const loom_dominance_info_t* info,
 
 static bool loom_op_crosses_isolation_boundary(
     const loom_dominance_info_t* info, const loom_op_t* op) {
-  const loom_op_vtable_t* vtable = loom_op_vtable(info->module, op);
-  if (!vtable) return false;
-  loom_trait_flags_t traits =
-      vtable->effective_traits ? vtable->effective_traits(op) : vtable->traits;
-  return loom_traits_is_isolated(traits);
+  (void)info;
+  return loom_traits_is_isolated(op->traits);
 }
 
 //===----------------------------------------------------------------------===//

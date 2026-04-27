@@ -276,10 +276,23 @@ const loom_region_descriptor_t* loom_op_vtable_region_descriptor(
 
 loom_trait_flags_t loom_op_effective_traits(const loom_module_t* module,
                                             const loom_op_t* op) {
+  (void)module;
+  IREE_ASSERT_ARGUMENT(op);
+  return op->traits;
+}
+
+void loom_op_refresh_effective_traits(const loom_module_t* module,
+                                      loom_op_t* op) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(op);
   const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
-  if (!vtable) return LOOM_TRAIT_UNKNOWN_EFFECTS;
-  if (vtable->effective_traits) return vtable->effective_traits(op);
-  return vtable->traits;
+  if (!vtable) {
+    op->traits = LOOM_TRAIT_UNKNOWN_EFFECTS;
+    return;
+  }
+  if (vtable->effective_traits) {
+    op->traits = vtable->effective_traits(op);
+  }
 }
 
 bool loom_op_may_write(const loom_module_t* module, const loom_op_t* op) {
@@ -1385,6 +1398,8 @@ static iree_status_t loom_builder_allocate_op_storage(
   op->region_count = region_count;
   op->tied_result_count = tied_result_count;
   op->attribute_count = attribute_count;
+  const loom_op_vtable_t* vtable = loom_op_vtable(builder->module, op);
+  op->traits = vtable ? vtable->traits : LOOM_TRAIT_UNKNOWN_EFFECTS;
   op->location = location;
   op->parent_op = builder->ip.parent_op;
   loom_use_index_t* operand_use_indices = loom_op_operand_use_indices(op);
@@ -2134,6 +2149,7 @@ iree_status_t loom_builder_finalize_op(loom_builder_t* builder, loom_op_t* op) {
   // Wire the symbol table entry for symbol-defining ops so that
   // loom_func_like_cast can find the defining op without a scan.
   const loom_op_vtable_t* vtable = loom_op_vtable(builder->module, op);
+  loom_op_refresh_effective_traits(builder->module, op);
   if (vtable && iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE)) {
     loom_module_link_symbol_defining_op(builder->module, op, vtable);
   }

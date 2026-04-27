@@ -377,6 +377,11 @@ static iree_status_t loom_finalize_op(
   // Set instance flags.
   op->instance_flags = parsed->instance_flags;
 
+  // Attribute- or instance-flag-dependent traits become part of the op at the
+  // parse construction boundary. Later use/def rebuilds must not recompute
+  // semantic traits.
+  loom_op_refresh_effective_traits(parser->module, op);
+
   // Link symbol-defining ops incrementally so the symbol table has
   // valid defining_op pointers throughout parsing. Use-def chains
   // are built in batch by loom_module_compute_uses after parsing.

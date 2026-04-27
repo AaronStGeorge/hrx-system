@@ -717,12 +717,10 @@ iree_status_t loom_rewriter_set_attr(loom_rewriter_t* rewriter, loom_op_t* op,
                                      loom_attribute_t value) {
   IREE_RETURN_IF_ERROR(
       loom_rewriter_validate_attr_write(rewriter, op, attr_index, value));
-  loom_trait_flags_t old_traits =
-      loom_op_effective_traits(rewriter->module, op);
+  loom_trait_flags_t old_traits = op->traits;
   loom_op_attrs(op)[attr_index] = value;
-  loom_trait_flags_t new_traits =
-      loom_op_effective_traits(rewriter->module, op);
-  loom_module_update_op_direct_effects(op, old_traits, new_traits);
+  loom_op_refresh_effective_traits(rewriter->module, op);
+  loom_module_update_op_direct_effects(op, old_traits, op->traits);
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_result_users_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(
@@ -761,12 +759,10 @@ iree_status_t loom_rewriter_replace_attr_dict(
 iree_status_t loom_rewriter_set_instance_flags(loom_rewriter_t* rewriter,
                                                loom_op_t* op, uint8_t flags) {
   if (op->instance_flags == flags) return iree_ok_status();
-  loom_trait_flags_t old_traits =
-      loom_op_effective_traits(rewriter->module, op);
+  loom_trait_flags_t old_traits = op->traits;
   op->instance_flags = flags;
-  loom_trait_flags_t new_traits =
-      loom_op_effective_traits(rewriter->module, op);
-  loom_module_update_op_direct_effects(op, old_traits, new_traits);
+  loom_op_refresh_effective_traits(rewriter->module, op);
+  loom_module_update_op_direct_effects(op, old_traits, op->traits);
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_result_users_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(

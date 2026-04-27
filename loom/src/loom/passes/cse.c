@@ -508,12 +508,7 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
         continue;
       }
 
-      // Compute effective traits once per op. For most ops this is just
-      // vtable->traits; for ops with an effective_traits callback (e.g.,
-      // func.call with a pure callee) it incorporates instance flags.
-      loom_trait_flags_t traits = vtable->effective_traits
-                                      ? vtable->effective_traits(op)
-                                      : vtable->traits;
+      loom_trait_flags_t traits = op->traits;
 
       // Write barrier: a write or unknown-effect op invalidates all
       // non-PURE entries up the scope chain. This must happen before

@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/descriptor_traits.h"
 #include "loom/ir/module.h"
 
 iree_status_t loom_low_build_register_class_string_id(
@@ -57,11 +58,14 @@ iree_status_t loom_low_build_register_type(
 
 static iree_status_t loom_low_build_descriptor_opcode_id(
     loom_builder_t* builder, const loom_low_descriptor_set_t* descriptor_set,
-    uint64_t descriptor_id, loom_string_id_t* out_opcode_id) {
+    uint64_t descriptor_id, loom_string_id_t* out_opcode_id,
+    const loom_low_descriptor_t** out_descriptor) {
   IREE_ASSERT_ARGUMENT(builder);
   IREE_ASSERT_ARGUMENT(descriptor_set);
   IREE_ASSERT_ARGUMENT(out_opcode_id);
+  IREE_ASSERT_ARGUMENT(out_descriptor);
   *out_opcode_id = LOOM_STRING_ID_INVALID;
+  *out_descriptor = NULL;
   if (descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low descriptor ID is required");
@@ -94,6 +98,7 @@ static iree_status_t loom_low_build_descriptor_opcode_id(
                             " has no descriptor key",
                             descriptor_id);
   }
+  *out_descriptor = descriptor;
   return loom_module_intern_string(builder->module, key, out_opcode_id);
 }
 
@@ -124,12 +129,15 @@ iree_status_t loom_low_build_descriptor_op(
   }
 
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
+  const loom_low_descriptor_t* descriptor = NULL;
   IREE_RETURN_IF_ERROR(loom_low_build_descriptor_opcode_id(
-      builder, descriptor_set, descriptor_id, &opcode_id));
+      builder, descriptor_set, descriptor_id, &opcode_id, &descriptor));
   IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
       builder, LOOM_OP_LOW_OP, (uint16_t)operand_count, (uint16_t)result_count,
       /*region_count=*/0, (uint16_t)tied_result_count, /*attribute_count=*/3,
       location, out_op));
+  (*out_op)->traits =
+      loom_low_descriptor_effective_traits(descriptor_set, descriptor);
   if (operand_count > 0) {
     memcpy(loom_op_operands(*out_op), operands,
            operand_count * sizeof(loom_value_id_t));
@@ -165,12 +173,15 @@ iree_status_t loom_low_build_descriptor_const(
   *out_op = NULL;
 
   loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
+  const loom_low_descriptor_t* descriptor = NULL;
   IREE_RETURN_IF_ERROR(loom_low_build_descriptor_opcode_id(
-      builder, descriptor_set, descriptor_id, &opcode_id));
+      builder, descriptor_set, descriptor_id, &opcode_id, &descriptor));
   IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
       builder, LOOM_OP_LOW_CONST, /*operand_count=*/0, /*result_count=*/1,
       /*region_count=*/0, /*tied_result_count=*/0, /*attribute_count=*/3,
       location, out_op));
+  (*out_op)->traits =
+      loom_low_descriptor_effective_traits(descriptor_set, descriptor);
   loom_op_attrs(*out_op)[loom_low_const_opcode_ATTR_INDEX] =
       loom_attr_string(opcode_id);
   loom_op_attrs(*out_op)[loom_low_const_descriptor_id_ATTR_INDEX] =

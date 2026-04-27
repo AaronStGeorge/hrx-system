@@ -6,10 +6,10 @@
 
 #include <inttypes.h>
 
+#include "loom/codegen/low/builder.h"
 #include "loom/codegen/low/text_asm_internal.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/low/ops.h"
 
 static const loom_low_descriptor_registry_t*
 loom_low_descriptor_text_asm_state_registry(
@@ -910,24 +910,27 @@ static iree_status_t loom_low_descriptor_text_asm_build_packet(
                             "low asm packet build shape does not match the "
                             "packet descriptor");
   }
-  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      builder->module, packet->opcode_key, &opcode_id));
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_low_descriptor_text_asm_descriptor_set(packet->descriptor_set);
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_text_asm_descriptor(packet->descriptor);
   if (packet->builds_as_const) {
     if (result_count != 1) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "low asm const packet must have one result");
     }
-    return loom_low_const_build(builder, opcode_id, attributes, result_types[0],
-                                location, out_op);
+    return loom_low_build_descriptor_const(builder, descriptor_set,
+                                           descriptor->stable_id, attributes,
+                                           result_types[0], location, out_op);
   }
   const loom_tied_result_t* tied_results = NULL;
   iree_host_size_t tied_result_count = 0;
   IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_build_tied_results(
       builder, packet, &tied_results, &tied_result_count));
-  return loom_low_op_build(builder, opcode_id, operands, operand_count,
-                           attributes, result_types, result_count, tied_results,
-                           tied_result_count, location, out_op);
+  return loom_low_build_descriptor_op(
+      builder, descriptor_set, descriptor->stable_id, operands, operand_count,
+      attributes, result_types, result_count, tied_results, tied_result_count,
+      location, out_op);
 }
 
 static iree_status_t loom_low_descriptor_text_asm_build_return(

@@ -38,6 +38,7 @@ loom_assert_no_dependencies(
         ":allocation_pass",
         ":cleanup",
         ":descriptors",
+        ":descriptor_traits",
         ":descriptors_manifest",
         ":diagnostics",
         ":function",
@@ -64,6 +65,7 @@ loom_assert_no_dependencies(
         ":allocation_materialization",
         ":allocation_pass",
         ":cleanup",
+        ":descriptor_traits",
         ":diagnostics",
         ":function",
         ":move_sequence",
@@ -106,10 +108,22 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "descriptor_traits",
+    srcs = ["descriptor_traits.c"],
+    hdrs = ["descriptor_traits.h"],
+    deps = [
+        ":descriptors",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "builder",
     srcs = ["builder.c"],
     hdrs = ["builder.h"],
     deps = [
+        ":descriptor_traits",
         ":descriptors",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
@@ -155,6 +169,7 @@ loom_cc_library(
         "text_asm_internal.h",
     ],
     deps = [
+        ":builder",
         ":descriptors",
         "//loom/src/loom/format/text:low_asm",
         "//loom/src/loom/ir",

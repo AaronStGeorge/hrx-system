@@ -98,3 +98,73 @@ func.def @nested_while_write_blocks_outer_load_cse(%cond: i1, %buffer: buffer, %
   %after = view.load %view[0] : view<1xf32, %layout> -> f32
   func.return %after : f32
 }
+
+// ====
+
+// Descriptor-backed low ops must expose their descriptor effects through the
+// generic op trait cache. test.add.i32 is pure even though low.op's static
+// vtable default is conservative.
+// RUN: pass cse
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @descriptor_low_ops_cse(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm<test.low.core> {
+  %a = test.add.i32 %lhs, %rhs
+  %b = test.add.i32 %lhs, %rhs
+  return %a, %b
+}
+
+// ----
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @descriptor_low_ops_cse(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
+  %a = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %a, %a : reg<test.i32>, reg<test.i32>
+}
+
+// ====
+
+// Descriptor-backed reads are CSE candidates until a descriptor-backed write
+// invalidates the read scope.
+// RUN: pass cse
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @descriptor_low_reads_cse(%ptr: reg<test.ptr>) -> (reg<test.i32 x4>) asm<test.low.core> {
+  %a = test.load.v4i32 %ptr
+  %b = test.load.v4i32 %ptr
+  %out = test.add.v4i32 %a, %b
+  return %out
+}
+
+// ----
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @descriptor_low_reads_cse(%ptr: reg<test.ptr>) -> (reg<test.i32 x4>) {
+  %a = low.op<test.load.v4i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32 x4>
+  %out = low.op<test.add.v4i32>(%a, %a) : (reg<test.i32 x4>, reg<test.i32 x4>) -> reg<test.i32 x4>
+  low.return %out : reg<test.i32 x4>
+}
+
+// ====
+
+// Descriptor-backed writes are barriers for descriptor-backed reads.
+// RUN: pass cse
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @descriptor_low_write_blocks_read_cse(%ptr: reg<test.ptr>, %value: reg<test.i32 x4>) -> (reg<test.i32 x4>) asm<test.low.core> {
+  %before = test.load.v4i32 %ptr
+  test.store.v4i32 %ptr, %value
+  %after = test.load.v4i32 %ptr
+  %out = test.add.v4i32 %before, %after
+  return %out
+}
+
+// ----
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @descriptor_low_write_blocks_read_cse(%ptr: reg<test.ptr>, %value: reg<test.i32 x4>) -> (reg<test.i32 x4>) {
+  %before = low.op<test.load.v4i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32 x4>
+  low.op<test.store.v4i32>(%ptr, %value) : (reg<test.ptr>, reg<test.i32 x4>)
+  %after = low.op<test.load.v4i32>(%ptr) : (reg<test.ptr>) -> reg<test.i32 x4>
+  %out = low.op<test.add.v4i32>(%before, %after) : (reg<test.i32 x4>, reg<test.i32 x4>) -> reg<test.i32 x4>
+  low.return %out : reg<test.i32 x4>
+}

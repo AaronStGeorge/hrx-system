@@ -605,8 +605,8 @@ enum loom_op_flag_bits_e {
 };
 typedef uint8_t loom_op_flags_t;
 
-// Trait bitfield on the op vtable. Enables fast checks in passes:
-//   vtable->traits & LOOM_TRAIT_PURE
+// Generic semantic trait bitfield. Op vtables carry construction defaults and
+// op instances carry the effective trait word consumed by pass hot paths.
 enum loom_trait_bits_e {
   LOOM_TRAIT_PURE = 1u << 0,
   LOOM_TRAIT_COMMUTATIVE = 1u << 1,
@@ -753,12 +753,11 @@ typedef iree_status_t (*loom_op_verify_fn_t)(const loom_module_t* module,
 typedef iree_status_t (*loom_canonicalize_fn_t)(loom_op_t* op,
                                                 loom_rewriter_t* rewriter);
 
-// Per-instance effective traits callback. Returns the trait flags for
-// a specific op instance, incorporating instance-specific state like
-// instance_flags. NULL means "use vtable->traits as-is" (the common
-// case). Only ops whose traits depend on instance-specific state
-// implement this — e.g., func.call uses it to report PURE when the
-// canonicalizer has determined the callee is pure.
+// Per-instance effective traits callback. Recomputes the trait flags for a
+// specific op instance when construction or mutation changes attrs/flags that
+// affect generic semantics. NULL means "use the op vtable construction default
+// as-is" and is the common case. Pass hot paths read loom_op_t::traits instead
+// of invoking this callback.
 //
 // Instance flags are dialect-specific per op kind: bit 0 on func.call
 // means "callee pure" but bit 0 on scalar.addf means a fast-math flag.
@@ -1107,11 +1106,13 @@ typedef struct loom_memory_access_t {
 // The name field is a B-string: [total_len][ns_len]"namespace.opname\0".
 // Full name = name+2 for name[0] bytes. Namespace = name+2 for
 // name[1] bytes. Short name = name+2+name[1]+1 for the remainder.
-// Layout is cache-optimized for compiler pass inner loops:
+// Layout is cache-optimized for construction, verification, and pass dispatch:
 //
-//   Cache line 1 (bytes 0-63): scalars and pointers touched by every
-//   pass on every op — traits, counts, canonicalize/fact/type-transfer fn
-//   pointers, attr/operand descriptors.
+//   Cache line 1 (bytes 0-63): scalars and pointers touched by common pass
+//   dispatch — construction-default traits, counts, canonicalize/fact/type-
+//   transfer fn pointers, attr/operand descriptors. Effective per-instance
+//   traits live on loom_op_t so descriptor-backed ops do not need vtable or
+//   descriptor queries in generic pass hot paths.
 //
 //   Cache line 2 (bytes 64-127): verification, parse/print, and
 //   diagnostics — descriptor arrays only needed by the verifier,
@@ -1132,6 +1133,7 @@ typedef struct loom_memory_access_t {
 struct loom_op_vtable_t {
   // --- Cache line 1: compiler pass hot path (0-63) ---
 
+  // Construction-default traits stamped onto new op instances.
   loom_trait_flags_t traits;
   uint8_t fixed_operand_count;
   uint8_t fixed_result_count;
@@ -1230,6 +1232,12 @@ typedef struct loom_op_t {
   uint16_t result_count;
   // Number of in-place result/operand ties in trailing storage.
   uint16_t tied_result_count;
+  // Effective generic semantic traits for this op instance.
+  loom_trait_flags_t traits;
+  // Source location (index into module's location table).
+  // Carries the full source range for diagnostics and debug info.
+  // Value locations are derived: value -> def -> op -> location.
+  loom_location_id_t location;
   // Number of child region pointers in trailing storage.
   uint8_t region_count;
   // Number of successor block pointers in trailing storage.
@@ -1244,10 +1252,6 @@ typedef struct loom_op_t {
   // semantics. Bit layout is dialect-specific (each flag enum defines
   // its own mask constants in the per-dialect ops.h).
   uint8_t instance_flags;
-  // Source location (index into module's location table).
-  // Carries the full source range for diagnostics and debug info.
-  // Value locations are derived: value -> def -> op -> location.
-  loom_location_id_t location;
   // Monotonic position key within parent_block. Live ops in a block have
   // strictly increasing ordinals, enabling O(1) same-block order comparisons
   // without carrying mutable array indices on every insertion.
