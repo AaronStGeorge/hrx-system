@@ -354,28 +354,6 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    kernel_assembly_llvm_tool_test
-  SRCS
-    "kernel_assembly_llvm_tool_test.cc"
-  DEPS
-    ::kernel_assembly
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::function
-    loom::src::loom::codegen::low::packetization
-    loom::src::loom::codegen::low::verify
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::target
-    loom::src::loom::target::arch::amdgpu::low_registry
-    loom::src::loom::target::tool::llvm
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     hsaco_test
   SRCS
     "hsaco_test.cc"
