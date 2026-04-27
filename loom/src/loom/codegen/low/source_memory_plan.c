@@ -290,13 +290,79 @@ static bool loom_low_source_memory_access_power_of_two_shift(
   return true;
 }
 
-static void loom_low_source_memory_dynamic_term_compute_byte_facts(
-    const loom_value_fact_table_t* fact_table, loom_value_id_t index,
-    int64_t byte_stride, loom_value_facts_t* out_facts) {
+static loom_value_facts_t loom_low_source_memory_access_axis_dimension_facts(
+    const loom_value_fact_table_t* fact_table, loom_type_t view_type,
+    uint8_t axis) {
+  if (!loom_type_dim_is_dynamic_at(view_type, axis)) {
+    return loom_value_facts_exact_i64(
+        loom_type_dim_static_size_at(view_type, axis));
+  }
+  const loom_value_id_t dimension_value_id =
+      loom_type_dim_value_id_at(view_type, axis);
+  return loom_value_facts_non_negative_extent(
+      loom_value_fact_table_lookup(fact_table, dimension_value_id));
+}
+
+static bool loom_low_source_memory_access_origin_domain_facts(
+    const loom_value_fact_table_t* fact_table,
+    const loom_vector_memory_access_t* vector_access, uint8_t dynamic_axis,
+    loom_value_facts_t* out_facts) {
   IREE_ASSERT_ARGUMENT(fact_table);
+  IREE_ASSERT_ARGUMENT(vector_access);
   IREE_ASSERT_ARGUMENT(out_facts);
-  const loom_value_facts_t index_facts =
+  *out_facts = loom_value_facts_unknown();
+
+  int64_t extent = 0;
+  if (!loom_vector_memory_access_static_axis_extent(vector_access, dynamic_axis,
+                                                    &extent) ||
+      extent <= 0) {
+    return false;
+  }
+
+  const loom_value_facts_t dimension_facts =
+      loom_low_source_memory_access_axis_dimension_facts(
+          fact_table, vector_access->view_type, dynamic_axis);
+  if (loom_value_facts_is_float(dimension_facts) ||
+      dimension_facts.range_hi == INT64_MAX || dimension_facts.range_hi < 0 ||
+      dimension_facts.range_hi < extent) {
+    return false;
+  }
+  *out_facts = loom_value_facts_make(0, dimension_facts.range_hi - extent, 1);
+  return true;
+}
+
+static loom_value_facts_t loom_low_source_memory_access_intersect_index_facts(
+    loom_value_facts_t index_facts, loom_value_facts_t domain_facts) {
+  if (loom_value_facts_is_float(index_facts) ||
+      loom_value_facts_is_float(domain_facts)) {
+    return index_facts;
+  }
+  const int64_t lower_bound =
+      loom_max_i64(index_facts.range_lo, domain_facts.range_lo);
+  const int64_t upper_bound =
+      loom_min_i64(index_facts.range_hi, domain_facts.range_hi);
+  if (lower_bound > upper_bound) {
+    return loom_value_facts_unknown();
+  }
+  return loom_value_facts_make(lower_bound, upper_bound,
+                               index_facts.known_divisor);
+}
+
+static void loom_low_source_memory_dynamic_term_compute_byte_facts(
+    const loom_value_fact_table_t* fact_table,
+    const loom_vector_memory_access_t* vector_access, loom_value_id_t index,
+    uint8_t dynamic_axis, int64_t byte_stride, loom_value_facts_t* out_facts) {
+  IREE_ASSERT_ARGUMENT(fact_table);
+  IREE_ASSERT_ARGUMENT(vector_access);
+  IREE_ASSERT_ARGUMENT(out_facts);
+  loom_value_facts_t index_facts =
       loom_value_fact_table_lookup(fact_table, index);
+  loom_value_facts_t domain_facts = loom_value_facts_unknown();
+  if (loom_low_source_memory_access_origin_domain_facts(
+          fact_table, vector_access, dynamic_axis, &domain_facts)) {
+    index_facts = loom_low_source_memory_access_intersect_index_facts(
+        index_facts, domain_facts);
+  }
   const loom_value_facts_t byte_stride_facts =
       loom_value_facts_exact_i64(byte_stride);
   loom_value_facts_muli(&index_facts, &byte_stride_facts, out_facts);
@@ -512,7 +578,8 @@ static bool loom_low_source_memory_access_plan_from_components(
                                                            &byte_shift);
     loom_value_facts_t byte_facts = loom_value_facts_unknown();
     loom_low_source_memory_dynamic_term_compute_byte_facts(
-        fact_table, dynamic_index, byte_stride, &byte_facts);
+        fact_table, &vector_access, dynamic_index, dynamic_axis, byte_stride,
+        &byte_facts);
     out_plan->dynamic_terms[i] = (loom_low_source_memory_dynamic_term_t){
         .index = dynamic_index,
         .source = dynamic_index_source,

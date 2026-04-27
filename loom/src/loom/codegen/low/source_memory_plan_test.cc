@@ -300,17 +300,11 @@ TEST_F(SourceMemoryPlanTest, DynamicDenseLoadClassifiesWorkitemIndex) {
   EXPECT_EQ(plan.vector_lane_byte_stride, 4);
 
   EXPECT_EQ(plan.dynamic_terms[0].byte_facts.range_lo, 0);
-  EXPECT_EQ(plan.dynamic_terms[0].byte_facts.range_hi, (int64_t)UINT32_MAX * 4);
-  EXPECT_FALSE(loom_low_source_memory_dynamic_term_fits_unsigned_bit_count(
-      &plan.dynamic_terms[0], 32));
+  EXPECT_EQ(plan.dynamic_terms[0].byte_facts.range_hi, 112);
   EXPECT_TRUE(loom_low_source_memory_dynamic_term_fits_unsigned_bit_count(
-      &plan.dynamic_terms[0], 34));
-  EXPECT_FALSE(loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
-      &plan, /*static_byte_offset=*/plan.static_byte_offset, 32));
-  EXPECT_FALSE(loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
-      &plan, /*static_byte_offset=*/plan.static_byte_offset, 34));
+      &plan.dynamic_terms[0], 32));
   EXPECT_TRUE(loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
-      &plan, /*static_byte_offset=*/plan.static_byte_offset, 35));
+      &plan, /*static_byte_offset=*/plan.static_byte_offset, 32));
 }
 
 TEST_F(SourceMemoryPlanTest, DynamicDenseLoadClassifiesMultipleIndices) {
@@ -350,6 +344,8 @@ TEST_F(SourceMemoryPlanTest, DynamicDenseLoadClassifiesMultipleIndices) {
   EXPECT_EQ(plan.dynamic_terms[0].dimension, LOOM_KERNEL_DIMENSION_COUNT_);
   EXPECT_EQ(plan.dynamic_terms[0].axis, 0u);
   EXPECT_EQ(plan.dynamic_terms[0].byte_stride, 32);
+  EXPECT_EQ(plan.dynamic_terms[0].byte_facts.range_lo, 0);
+  EXPECT_EQ(plan.dynamic_terms[0].byte_facts.range_hi, 224);
   EXPECT_EQ(plan.dynamic_terms[0].byte_shift, 5u);
   EXPECT_EQ(plan.dynamic_terms[1].index, second_index);
   EXPECT_EQ(plan.dynamic_terms[1].source,
@@ -357,7 +353,11 @@ TEST_F(SourceMemoryPlanTest, DynamicDenseLoadClassifiesMultipleIndices) {
   EXPECT_EQ(plan.dynamic_terms[1].dimension, LOOM_KERNEL_DIMENSION_COUNT_);
   EXPECT_EQ(plan.dynamic_terms[1].axis, 1u);
   EXPECT_EQ(plan.dynamic_terms[1].byte_stride, 4);
+  EXPECT_EQ(plan.dynamic_terms[1].byte_facts.range_lo, 0);
+  EXPECT_EQ(plan.dynamic_terms[1].byte_facts.range_hi, 16);
   EXPECT_EQ(plan.dynamic_terms[1].byte_shift, 2u);
+  EXPECT_TRUE(loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
+      &plan, /*static_byte_offset=*/plan.static_byte_offset, 32));
 }
 
 TEST_F(SourceMemoryPlanTest, ExactDynamicIndexFoldsIntoStaticOffset) {
@@ -472,6 +472,8 @@ TEST_F(SourceMemoryPlanTest, SubviewPlanClassifiesWorkitemRow) {
   EXPECT_EQ(plan.dynamic_terms[0].dimension, LOOM_KERNEL_DIMENSION_X);
   EXPECT_EQ(plan.dynamic_terms[0].axis, 0u);
   EXPECT_EQ(plan.dynamic_terms[0].byte_stride, 16);
+  EXPECT_EQ(plan.dynamic_terms[0].byte_facts.range_lo, 0);
+  EXPECT_EQ(plan.dynamic_terms[0].byte_facts.range_hi, 1008);
   EXPECT_EQ(plan.dynamic_terms[0].byte_shift, 4u);
   EXPECT_EQ(plan.vector_lane_count, 4u);
   EXPECT_EQ(plan.vector_lane_byte_stride, 4);
