@@ -170,6 +170,7 @@ enum loom_amdgpu_arithmetic_diagnostic_e {
   LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS = 5,
   LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS_VGPR = 6,
   LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_RESULT_VGPR = 7,
+  LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS_U32 = 8,
 };
 
 static const loom_low_lower_diagnostic_t kAmdgpuArithmeticDiagnostics[] = {
@@ -229,6 +230,13 @@ static const loom_low_lower_diagnostic_t kAmdgpuArithmeticDiagnostics[] = {
             .reason = IREE_SVL("AMDGPU arithmetic lowering requires a VGPR "
                                "result for vector descriptor emission"),
         },
+    [LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS_U32] =
+        {
+            .subject_kind = IREE_SVL("address-width"),
+            .subject_name = IREE_SVL("u32"),
+            .reason = IREE_SVL("AMDGPU index lowering requires address "
+                               "results proven non-negative and 32-bit"),
+        },
 };
 
 #define LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(value_ref, type_pattern, \
@@ -261,6 +269,15 @@ static const loom_low_lower_diagnostic_t kAmdgpuArithmeticDiagnostics[] = {
       .value_ref_index = value_ref,                                      \
       .diagnostic_index = diagnostic,                                    \
       .register_class_id = reg_class,                                    \
+  }
+
+#define LOOM_AMDGPU_ARITHMETIC_GUARD_UNSIGNED_BIT_COUNT(value_ref, bit_count, \
+                                                        diagnostic)           \
+  {                                                                           \
+      .kind = LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT,                  \
+      .value_ref_index = value_ref,                                           \
+      .u64 = bit_count,                                                       \
+      .diagnostic_index = diagnostic,                                         \
   }
 
 static const loom_low_lower_guard_t kAmdgpuArithmeticGuards[] = {
@@ -569,6 +586,9 @@ static const loom_low_lower_guard_t kAmdgpuArithmeticGuards[] = {
     LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE(
         LOOM_AMDGPU_ARITHMETIC_RESULT0, LOOM_AMDGPU_ARITHMETIC_TYPE_ADDRESS,
         LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS),
+    LOOM_AMDGPU_ARITHMETIC_GUARD_UNSIGNED_BIT_COUNT(
+        LOOM_AMDGPU_ARITHMETIC_RESULT0, 32,
+        LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_ADDRESS_U32),
     LOOM_AMDGPU_ARITHMETIC_GUARD_LOW_REG_CLASS(
         LOOM_AMDGPU_ARITHMETIC_RESULT0, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
         LOOM_AMDGPU_ARITHMETIC_DIAGNOSTIC_RESULT_VGPR),
@@ -588,6 +608,7 @@ static const loom_low_lower_guard_t kAmdgpuArithmeticGuards[] = {
 };
 
 #undef LOOM_AMDGPU_ARITHMETIC_GUARD_LOW_REG_CLASS
+#undef LOOM_AMDGPU_ARITHMETIC_GUARD_UNSIGNED_BIT_COUNT
 #undef LOOM_AMDGPU_ARITHMETIC_GUARD_MATERIALIZABLE
 #undef LOOM_AMDGPU_ARITHMETIC_GUARD_DESCRIPTOR
 #undef LOOM_AMDGPU_ARITHMETIC_GUARD_VALUE
@@ -672,7 +693,7 @@ enum loom_amdgpu_arithmetic_guard_range_e {
   LOOM_AMDGPU_ARITHMETIC_GUARDS_INDEX_MADD =
       LOOM_AMDGPU_ARITHMETIC_GUARDS_SCALAR_UITOFP +
       LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_UNARY,
-  LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_INDEX_MADD = 10,
+  LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_INDEX_MADD = 11,
   LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_ =
       LOOM_AMDGPU_ARITHMETIC_GUARDS_INDEX_MADD +
       LOOM_AMDGPU_ARITHMETIC_GUARD_COUNT_INDEX_MADD,

@@ -27,8 +27,8 @@ static bool loom_amdgpu_prefetch_static_offset_split(
   }
   plan->immediate_offset = (int64_t)immediate_offset;
   plan->scalar_byte_offset = (uint32_t)scalar_byte_offset;
-  return loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
-      &plan->source, plan->source.static_byte_offset, 32);
+  return loom_amdgpu_source_memory_offset_fits_u32(
+      &plan->source, plan->source.static_byte_offset);
 }
 
 static bool loom_amdgpu_prefetch_select_dynamic_index(

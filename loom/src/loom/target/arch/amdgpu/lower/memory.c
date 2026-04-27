@@ -170,6 +170,13 @@ bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
   return true;
 }
 
+bool loom_amdgpu_source_memory_offset_fits_u32(
+    const loom_low_source_memory_access_plan_t* source,
+    int64_t static_byte_offset) {
+  return loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
+      source, static_byte_offset, 32);
+}
+
 typedef enum loom_amdgpu_memory_descriptor_domain_e {
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE = 0,
   LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR = 1,
@@ -782,8 +789,8 @@ static bool loom_amdgpu_memory_access_split_static_offset(
     }
     access->immediate_offset = (uint32_t)encoded_offset;
     access->scalar_byte_offset = 0;
-    if (!loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
-            &access->source, access->source.static_byte_offset, 32)) {
+    if (!loom_amdgpu_source_memory_offset_fits_u32(
+            &access->source, access->source.static_byte_offset)) {
       diagnostic->rejection_bits |=
           LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_OFFSET_RANGE;
       return false;
@@ -808,8 +815,8 @@ static bool loom_amdgpu_memory_access_split_static_offset(
   }
   access->immediate_offset = (uint32_t)immediate_offset;
   access->scalar_byte_offset = (uint32_t)scalar_byte_offset;
-  if (!loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
-          &access->source, access->source.static_byte_offset, 32)) {
+  if (!loom_amdgpu_source_memory_offset_fits_u32(
+          &access->source, access->source.static_byte_offset)) {
     diagnostic->rejection_bits |=
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_OFFSET_RANGE;
     return false;
@@ -839,8 +846,8 @@ static bool loom_amdgpu_memory_access_split_global_saddr_static_offset(
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_GLOBAL_FALLBACK_OFFSET_RANGE;
     return false;
   }
-  if (!loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
-          &access->source, /*static_byte_offset=*/0, 32)) {
+  if (!loom_amdgpu_source_memory_offset_fits_u32(&access->source,
+                                                 /*static_byte_offset=*/0)) {
     diagnostic->rejection_bits |=
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_OFFSET_RANGE;
     return false;
@@ -884,8 +891,8 @@ static bool loom_amdgpu_memory_access_split_ds2_static_offset(
   access->immediate_offset = encoded_offsets[0];
   access->secondary_immediate_offset = encoded_offsets[1];
   access->scalar_byte_offset = 0;
-  if (!loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
-          &access->source, secondary_byte_offset, 32)) {
+  if (!loom_amdgpu_source_memory_offset_fits_u32(&access->source,
+                                                 secondary_byte_offset)) {
     diagnostic->rejection_bits |=
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_OFFSET_RANGE;
     return false;

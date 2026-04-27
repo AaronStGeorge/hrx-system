@@ -304,6 +304,14 @@ static bool loom_amdgpu_async_gather_select(
         LOOM_AMDGPU_ASYNC_GATHER_REJECTION_OFFSET_IMMEDIATE;
     return false;
   }
+  if (!loom_amdgpu_source_memory_offset_fits_u32(&out_plan->source,
+                                                 /*static_byte_offset=*/0)) {
+    out_diagnostic->memory_diagnostic.rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_OFFSET_RANGE;
+    out_diagnostic->rejection_bits |=
+        LOOM_AMDGPU_ASYNC_GATHER_REJECTION_SOURCE_ADDRESS;
+    return false;
+  }
   out_plan->source_immediate_offset = out_plan->source.static_byte_offset;
 
   loom_amdgpu_memory_access_plan_t access = {

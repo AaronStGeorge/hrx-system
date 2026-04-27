@@ -142,6 +142,7 @@ enum loom_amdgpu_integer_diagnostic_e {
   LOOM_AMDGPU_INTEGER_DIAGNOSTIC_I32_VGPR = 4,
   LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS_VGPR = 5,
   LOOM_AMDGPU_INTEGER_DIAGNOSTIC_SGPR = 6,
+  LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS_U32 = 7,
 };
 
 static const loom_low_lower_diagnostic_t kAmdgpuIntegerDiagnostics[] = {
@@ -194,6 +195,13 @@ static const loom_low_lower_diagnostic_t kAmdgpuIntegerDiagnostics[] = {
             .reason = IREE_SVL("AMDGPU scalar descriptor emission requires "
                                "SGPR operands and results"),
         },
+    [LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS_U32] =
+        {
+            .subject_kind = IREE_SVL("address-width"),
+            .subject_name = IREE_SVL("u32"),
+            .reason = IREE_SVL("AMDGPU index lowering requires address "
+                               "results proven non-negative and 32-bit"),
+        },
 };
 
 #define LOOM_AMDGPU_INTEGER_GUARD_VALUE(value_ref, type_pattern, diagnostic) \
@@ -227,6 +235,15 @@ static const loom_low_lower_diagnostic_t kAmdgpuIntegerDiagnostics[] = {
       .diagnostic_index = diagnostic,                                   \
   }
 
+#define LOOM_AMDGPU_INTEGER_GUARD_UNSIGNED_BIT_COUNT(value_ref, bit_count, \
+                                                     diagnostic)           \
+  {                                                                        \
+      .kind = LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT,               \
+      .value_ref_index = value_ref,                                        \
+      .u64 = bit_count,                                                    \
+      .diagnostic_index = diagnostic,                                      \
+  }
+
 #define LOOM_AMDGPU_INTEGER_GUARDS_SGPR_BINARY(type_pattern, diagnostic,      \
                                                descriptor)                    \
   LOOM_AMDGPU_INTEGER_GUARD_VALUE(LOOM_AMDGPU_INTEGER_OPERAND0, type_pattern, \
@@ -246,6 +263,30 @@ static const loom_low_lower_diagnostic_t kAmdgpuIntegerDiagnostics[] = {
           LOOM_AMDGPU_INTEGER_DIAGNOSTIC_SGPR),                               \
       LOOM_AMDGPU_INTEGER_GUARD_DESCRIPTOR(descriptor)
 
+#define LOOM_AMDGPU_INTEGER_GUARDS_SGPR_ADDRESS_BINARY(descriptor)             \
+  LOOM_AMDGPU_INTEGER_GUARD_VALUE(LOOM_AMDGPU_INTEGER_OPERAND0,                \
+                                  LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,            \
+                                  LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS),     \
+      LOOM_AMDGPU_INTEGER_GUARD_VALUE(LOOM_AMDGPU_INTEGER_OPERAND1,            \
+                                      LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,        \
+                                      LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS), \
+      LOOM_AMDGPU_INTEGER_GUARD_VALUE(LOOM_AMDGPU_INTEGER_RESULT0,             \
+                                      LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,        \
+                                      LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS), \
+      LOOM_AMDGPU_INTEGER_GUARD_UNSIGNED_BIT_COUNT(                            \
+          LOOM_AMDGPU_INTEGER_RESULT0, 32,                                     \
+          LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS_U32),                         \
+      LOOM_AMDGPU_INTEGER_GUARD_LOW_REG_CLASS(                                 \
+          LOOM_AMDGPU_INTEGER_RESULT0, LOOM_AMDGPU_REG_CLASS_ID_SGPR,          \
+          LOOM_AMDGPU_INTEGER_DIAGNOSTIC_SGPR),                                \
+      LOOM_AMDGPU_INTEGER_GUARD_LOW_REG_CLASS(                                 \
+          LOOM_AMDGPU_INTEGER_OPERAND0, LOOM_AMDGPU_REG_CLASS_ID_SGPR,         \
+          LOOM_AMDGPU_INTEGER_DIAGNOSTIC_SGPR),                                \
+      LOOM_AMDGPU_INTEGER_GUARD_LOW_REG_CLASS(                                 \
+          LOOM_AMDGPU_INTEGER_OPERAND1, LOOM_AMDGPU_REG_CLASS_ID_SGPR,         \
+          LOOM_AMDGPU_INTEGER_DIAGNOSTIC_SGPR),                                \
+      LOOM_AMDGPU_INTEGER_GUARD_DESCRIPTOR(descriptor)
+
 #define LOOM_AMDGPU_INTEGER_GUARDS_VGPR_BINARY(type_pattern, diagnostic,      \
                                                operand0_ref, operand1_ref,    \
                                                materializer_diag, descriptor) \
@@ -262,6 +303,29 @@ static const loom_low_lower_diagnostic_t kAmdgpuIntegerDiagnostics[] = {
                                                materializer_diag),            \
       LOOM_AMDGPU_INTEGER_GUARD_MATERIALIZABLE(operand1_ref,                  \
                                                materializer_diag),            \
+      LOOM_AMDGPU_INTEGER_GUARD_DESCRIPTOR(descriptor)
+
+#define LOOM_AMDGPU_INTEGER_GUARDS_VGPR_ADDRESS_BINARY(                        \
+    operand0_ref, operand1_ref, descriptor)                                    \
+  LOOM_AMDGPU_INTEGER_GUARD_VALUE(LOOM_AMDGPU_INTEGER_OPERAND0,                \
+                                  LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,            \
+                                  LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS),     \
+      LOOM_AMDGPU_INTEGER_GUARD_VALUE(LOOM_AMDGPU_INTEGER_OPERAND1,            \
+                                      LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,        \
+                                      LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS), \
+      LOOM_AMDGPU_INTEGER_GUARD_VALUE(LOOM_AMDGPU_INTEGER_RESULT0,             \
+                                      LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,        \
+                                      LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS), \
+      LOOM_AMDGPU_INTEGER_GUARD_UNSIGNED_BIT_COUNT(                            \
+          LOOM_AMDGPU_INTEGER_RESULT0, 32,                                     \
+          LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS_U32),                         \
+      LOOM_AMDGPU_INTEGER_GUARD_LOW_REG_CLASS(                                 \
+          LOOM_AMDGPU_INTEGER_RESULT0, LOOM_AMDGPU_REG_CLASS_ID_VGPR,          \
+          LOOM_AMDGPU_INTEGER_DIAGNOSTIC_RESULT_VGPR),                         \
+      LOOM_AMDGPU_INTEGER_GUARD_MATERIALIZABLE(                                \
+          operand0_ref, LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS_VGPR),          \
+      LOOM_AMDGPU_INTEGER_GUARD_MATERIALIZABLE(                                \
+          operand1_ref, LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS_VGPR),          \
       LOOM_AMDGPU_INTEGER_GUARD_DESCRIPTOR(descriptor)
 
 enum loom_amdgpu_integer_rule_e {
@@ -291,8 +355,14 @@ enum loom_amdgpu_integer_rule_e {
 };
 
 #define LOOM_AMDGPU_INTEGER_GUARD_COUNT_BINARY 7
-#define LOOM_AMDGPU_INTEGER_GUARD_START(rule) \
-  ((rule) * LOOM_AMDGPU_INTEGER_GUARD_COUNT_BINARY)
+#define LOOM_AMDGPU_INTEGER_GUARD_COUNT_ADDRESS_BINARY 8
+#define LOOM_AMDGPU_INTEGER_GUARD_START(rule)                     \
+  ((rule) < LOOM_AMDGPU_INTEGER_RULE_INDEX_ADD_SGPR               \
+       ? (rule) * LOOM_AMDGPU_INTEGER_GUARD_COUNT_BINARY          \
+       : LOOM_AMDGPU_INTEGER_RULE_INDEX_ADD_SGPR *                \
+                 LOOM_AMDGPU_INTEGER_GUARD_COUNT_BINARY +         \
+             ((rule) - LOOM_AMDGPU_INTEGER_RULE_INDEX_ADD_SGPR) * \
+                 LOOM_AMDGPU_INTEGER_GUARD_COUNT_ADDRESS_BINARY)
 
 static const loom_low_lower_guard_t kAmdgpuIntegerGuards[] = {
     [LOOM_AMDGPU_INTEGER_GUARD_START(
@@ -408,48 +478,41 @@ static const loom_low_lower_guard_t kAmdgpuIntegerGuards[] = {
             LOOM_AMDGPU_INTEGER_DIAGNOSTIC_I32_VGPR,
             LOOM_AMDGPU_DESCRIPTOR_ID_V_LSHRREV_B32),
     [LOOM_AMDGPU_INTEGER_GUARD_START(LOOM_AMDGPU_INTEGER_RULE_INDEX_ADD_SGPR)] =
-        LOOM_AMDGPU_INTEGER_GUARDS_SGPR_BINARY(
-            LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,
-            LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS,
+        LOOM_AMDGPU_INTEGER_GUARDS_SGPR_ADDRESS_BINARY(
             LOOM_AMDGPU_DESCRIPTOR_ID_S_ADD_U32),
     [LOOM_AMDGPU_INTEGER_GUARD_START(LOOM_AMDGPU_INTEGER_RULE_INDEX_ADD_VGPR)] =
-        LOOM_AMDGPU_INTEGER_GUARDS_VGPR_BINARY(
-            LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,
-            LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS,
+        LOOM_AMDGPU_INTEGER_GUARDS_VGPR_ADDRESS_BINARY(
             LOOM_AMDGPU_INTEGER_ADDRESS_VGPR_OPERAND0,
             LOOM_AMDGPU_INTEGER_ADDRESS_VGPR_OPERAND1,
-            LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS_VGPR,
             LOOM_AMDGPU_DESCRIPTOR_ID_V_ADD_U32),
     [LOOM_AMDGPU_INTEGER_GUARD_START(LOOM_AMDGPU_INTEGER_RULE_INDEX_SUB_SGPR)] =
-        LOOM_AMDGPU_INTEGER_GUARDS_SGPR_BINARY(
-            LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,
-            LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS,
+        LOOM_AMDGPU_INTEGER_GUARDS_SGPR_ADDRESS_BINARY(
             LOOM_AMDGPU_DESCRIPTOR_ID_S_SUB_U32),
     [LOOM_AMDGPU_INTEGER_GUARD_START(LOOM_AMDGPU_INTEGER_RULE_INDEX_SUB_VGPR)] =
-        LOOM_AMDGPU_INTEGER_GUARDS_VGPR_BINARY(
-            LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,
-            LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS,
+        LOOM_AMDGPU_INTEGER_GUARDS_VGPR_ADDRESS_BINARY(
             LOOM_AMDGPU_INTEGER_ADDRESS_VGPR_OPERAND0,
             LOOM_AMDGPU_INTEGER_ADDRESS_VGPR_OPERAND1,
-            LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS_VGPR,
             LOOM_AMDGPU_DESCRIPTOR_ID_V_SUB_U32),
     [LOOM_AMDGPU_INTEGER_GUARD_START(LOOM_AMDGPU_INTEGER_RULE_INDEX_MUL_VGPR)] =
-        LOOM_AMDGPU_INTEGER_GUARDS_VGPR_BINARY(
-            LOOM_AMDGPU_INTEGER_TYPE_ADDRESS,
-            LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS,
+        LOOM_AMDGPU_INTEGER_GUARDS_VGPR_ADDRESS_BINARY(
             LOOM_AMDGPU_INTEGER_ADDRESS_VGPR_OPERAND0,
             LOOM_AMDGPU_INTEGER_ADDRESS_VGPR_OPERAND1,
-            LOOM_AMDGPU_INTEGER_DIAGNOSTIC_ADDRESS_VGPR,
             LOOM_AMDGPU_DESCRIPTOR_ID_V_MUL_LO_U32),
 };
 
 static_assert(IREE_ARRAYSIZE(kAmdgpuIntegerGuards) ==
-                  LOOM_AMDGPU_INTEGER_RULE_COUNT_ *
-                      LOOM_AMDGPU_INTEGER_GUARD_COUNT_BINARY,
+                  LOOM_AMDGPU_INTEGER_RULE_INDEX_ADD_SGPR *
+                          LOOM_AMDGPU_INTEGER_GUARD_COUNT_BINARY +
+                      (LOOM_AMDGPU_INTEGER_RULE_COUNT_ -
+                       LOOM_AMDGPU_INTEGER_RULE_INDEX_ADD_SGPR) *
+                          LOOM_AMDGPU_INTEGER_GUARD_COUNT_ADDRESS_BINARY,
               "AMDGPU integer guard rows must align with rule rows");
 
+#undef LOOM_AMDGPU_INTEGER_GUARDS_VGPR_ADDRESS_BINARY
 #undef LOOM_AMDGPU_INTEGER_GUARDS_VGPR_BINARY
+#undef LOOM_AMDGPU_INTEGER_GUARDS_SGPR_ADDRESS_BINARY
 #undef LOOM_AMDGPU_INTEGER_GUARDS_SGPR_BINARY
+#undef LOOM_AMDGPU_INTEGER_GUARD_UNSIGNED_BIT_COUNT
 #undef LOOM_AMDGPU_INTEGER_GUARD_MATERIALIZABLE
 #undef LOOM_AMDGPU_INTEGER_GUARD_LOW_REG_CLASS
 #undef LOOM_AMDGPU_INTEGER_GUARD_DESCRIPTOR

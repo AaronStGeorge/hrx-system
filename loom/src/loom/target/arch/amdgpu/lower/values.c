@@ -98,10 +98,18 @@ static bool loom_amdgpu_select_index_constant_plan(
   IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_constant_plan_t){0};
   const loom_value_id_t result = loom_index_constant_result(source_op);
-  return loom_amdgpu_value_is_address_scalar(context, result) &&
-         loom_amdgpu_select_i32_constant_plan(
-             loom_index_constant_value(source_op), result,
-             LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32, out_plan);
+  const loom_attribute_t value = loom_index_constant_value(source_op);
+  if (!loom_amdgpu_value_is_address_scalar(context, result) ||
+      !loom_amdgpu_attr_is_u32_address_immediate(value)) {
+    return false;
+  }
+  *out_plan = (loom_amdgpu_constant_plan_t){
+      .result = result,
+      .descriptor_id = LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B32,
+      .lane_count = 1,
+      .bit_pattern = (uint32_t)value.i64,
+  };
+  return true;
 }
 
 static bool loom_amdgpu_select_scalar_constant_plan(

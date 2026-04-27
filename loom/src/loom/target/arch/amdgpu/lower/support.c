@@ -594,6 +594,11 @@ bool loom_amdgpu_attr_is_i32_immediate(loom_attribute_t value) {
          value.i64 <= INT32_MAX;
 }
 
+bool loom_amdgpu_attr_is_u32_address_immediate(loom_attribute_t value) {
+  return value.kind == LOOM_ATTR_I64 && value.i64 >= 0 &&
+         value.i64 <= UINT32_MAX;
+}
+
 bool loom_amdgpu_attr_is_f32_immediate(loom_attribute_t value) {
   return value.kind == LOOM_ATTR_F64;
 }
@@ -642,8 +647,10 @@ bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
 
 bool loom_amdgpu_value_can_materialize_as_vgpr_address(
     loom_low_lower_context_t* context, loom_value_id_t value_id) {
-  int64_t unused_value = 0;
-  return loom_amdgpu_value_prefers_vgpr(context, value_id) ||
-         loom_amdgpu_value_as_address_constant(context, value_id,
-                                               &unused_value);
+  if (loom_amdgpu_value_prefers_vgpr(context, value_id)) {
+    return true;
+  }
+  int64_t value = 0;
+  return loom_amdgpu_value_as_address_constant(context, value_id, &value) &&
+         value >= 0 && value <= UINT32_MAX;
 }

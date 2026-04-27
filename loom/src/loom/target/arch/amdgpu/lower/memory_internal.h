@@ -109,6 +109,13 @@ bool loom_amdgpu_descriptor_offset_immediate_info(
     loom_low_immediate_kind_t expected_kind,
     loom_amdgpu_descriptor_offset_immediate_info_t* out_info);
 
+// Returns true when the source memory byte offset selected for a 32-bit AMDGPU
+// packet operand is fully proven non-negative and u32 after adding the static
+// byte contribution named by the selected address form.
+bool loom_amdgpu_source_memory_offset_fits_u32(
+    const loom_low_source_memory_access_plan_t* source,
+    int64_t static_byte_offset);
+
 // Selects a complete AMDGPU memory access plan from source IR and facts.
 bool loom_amdgpu_memory_access_select(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,

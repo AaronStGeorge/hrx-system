@@ -213,6 +213,9 @@ bool loom_amdgpu_source_lds_layout_lookup_root(
 // Returns true when an attribute can encode as a signed 32-bit immediate.
 bool loom_amdgpu_attr_is_i32_immediate(loom_attribute_t value);
 
+// Returns true when an attribute can encode as an unsigned 32-bit address.
+bool loom_amdgpu_attr_is_u32_address_immediate(loom_attribute_t value);
+
 // Returns true when an attribute can encode as an f32 immediate payload.
 bool loom_amdgpu_attr_is_f32_immediate(loom_attribute_t value);
 

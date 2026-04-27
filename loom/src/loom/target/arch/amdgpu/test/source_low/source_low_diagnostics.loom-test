@@ -248,3 +248,41 @@ kernel.def @global_atomic_system_scope_rejected(%input: buffer) {
   view.atomic.reduce<addi> %one, %view[%tid] {ordering = release, scope = system} : i32, view<64xi32, #dense>
   kernel.return
 }
+
+// ====
+
+kernel.def @global_dynamic_offset_sum_rejected(%input: buffer) {
+  %x0 = kernel.workitem.id<x> : index
+  %base_x = index.constant 4294966000 : index
+  %x = index.add %x0, %base_x : index
+  %y0 = kernel.workitem.id<y> : index
+  %base_y = index.constant 2000 : index
+  %y = index.add %y0, %base_y : index
+  %zero = index.constant 0 : offset
+  %layout = encoding.layout.strided [1, 1] : encoding<layout>
+  %input_view = buffer.view %input[%zero] : buffer -> view<4294967296x4096xi8, %layout>
+  // ERROR@+1: BACKEND/001 "AMDGPU memory lowering requires dynamic byte offsets to be proven non-negative and 32-bit"
+  %loaded = vector.load %input_view[%x, %y] : view<4294967296x4096xi8, %layout> -> vector<4xi8>
+  kernel.return
+}
+
+// ====
+
+kernel.def @index_add_result_width_rejected() {
+  %x = kernel.workitem.id<x> : index
+  %base = index.constant 4294967000 : index
+  // ERROR@+1: BACKEND/001 "AMDGPU index lowering requires address results proven non-negative and 32-bit"
+  %sum = index.add %x, %base : index
+  kernel.return
+}
+
+// ====
+
+kernel.def @index_madd_result_width_rejected() {
+  %x = kernel.workitem.id<x> : index
+  %scale = index.constant 2 : index
+  %base = index.constant 4294967000 : index
+  // ERROR@+1: BACKEND/001 "AMDGPU index lowering requires address results proven non-negative and 32-bit"
+  %sum = index.madd %x, %scale, %base : index
+  kernel.return
+}
