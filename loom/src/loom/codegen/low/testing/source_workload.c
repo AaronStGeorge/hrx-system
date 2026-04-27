@@ -23,6 +23,14 @@
 #include "loom/ops/target/ops.h"
 #include "loom/ops/vector/ops.h"
 
+enum {
+  LOOM_LOW_SOURCE_WORKLOAD_INDEXED_VIEW_ELEMENT_COUNT = 16,
+  LOOM_LOW_SOURCE_WORKLOAD_INDEXED_VECTOR_ELEMENT_COUNT = 4,
+  LOOM_LOW_SOURCE_WORKLOAD_INDEXED_MAX_ORIGIN =
+      LOOM_LOW_SOURCE_WORKLOAD_INDEXED_VIEW_ELEMENT_COUNT -
+      LOOM_LOW_SOURCE_WORKLOAD_INDEXED_VECTOR_ELEMENT_COUNT,
+};
+
 //===----------------------------------------------------------------------===//
 // Types
 //===----------------------------------------------------------------------===//
@@ -80,7 +88,8 @@ static loom_type_t loom_low_source_workload_view4xi32_type(
 
 static loom_type_t loom_low_source_workload_view16xi32_type(
     loom_value_id_t layout_id) {
-  return loom_low_source_workload_viewxi32_type(16, layout_id);
+  return loom_low_source_workload_viewxi32_type(
+      LOOM_LOW_SOURCE_WORKLOAD_INDEXED_VIEW_ELEMENT_COUNT, layout_id);
 }
 
 static loom_type_t loom_low_source_workload_viewxf32_type(
@@ -100,7 +109,8 @@ static loom_type_t loom_low_source_workload_view4xf32_type(
 
 static loom_type_t loom_low_source_workload_view16xf32_type(
     loom_value_id_t layout_id) {
-  return loom_low_source_workload_viewxf32_type(16, layout_id);
+  return loom_low_source_workload_viewxf32_type(
+      LOOM_LOW_SOURCE_WORKLOAD_INDEXED_VIEW_ELEMENT_COUNT, layout_id);
 }
 
 //===----------------------------------------------------------------------===//
@@ -811,6 +821,30 @@ static iree_status_t loom_low_source_workload_allocate_dynamic_index_sentinel(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_source_workload_assume_index_range(
+    loom_builder_t* builder, loom_value_id_t source, int64_t minimum_value,
+    int64_t maximum_value, loom_value_id_t* out_bounded_index) {
+  IREE_ASSERT_ARGUMENT(out_bounded_index);
+  *out_bounded_index = LOOM_VALUE_ID_INVALID;
+  loom_predicate_t* predicate = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      builder->arena, 1, sizeof(*predicate), (void**)&predicate));
+  *predicate = (loom_predicate_t){
+      .kind = LOOM_PREDICATE_RANGE,
+      .arg_count = 3,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
+                   LOOM_PRED_ARG_CONST},
+      .args = {source, minimum_value, maximum_value},
+  };
+  loom_type_t result_type = loom_low_source_workload_index_type();
+  loom_op_t* assume_op = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_index_assume_build(builder, &source, 1, predicate, 1, &result_type,
+                              1, LOOM_LOCATION_UNKNOWN, &assume_op));
+  *out_bounded_index = loom_index_assume_results(assume_op).values[0];
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_source_workload_gen_vector4xi32_load(
     const loom_low_source_workload_hook_context_t* context,
     loom_low_source_workload_hook_result_t* out_result) {
@@ -904,7 +938,11 @@ static iree_status_t loom_low_source_workload_gen_vector4xi32_indexed_load(
     return iree_ok_status();
   }
 
-  const loom_value_id_t dynamic_indices[] = {index};
+  loom_value_id_t bounded_index = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_source_workload_assume_index_range(
+      context->builder, index, 0, LOOM_LOW_SOURCE_WORKLOAD_INDEXED_MAX_ORIGIN,
+      &bounded_index));
+  const loom_value_id_t dynamic_indices[] = {bounded_index};
   int64_t* static_indices = NULL;
   IREE_RETURN_IF_ERROR(loom_low_source_workload_allocate_dynamic_index_sentinel(
       context->builder, &static_indices));
@@ -932,7 +970,11 @@ static iree_status_t loom_low_source_workload_gen_vector4xi32_indexed_store(
     return iree_ok_status();
   }
 
-  const loom_value_id_t dynamic_indices[] = {index};
+  loom_value_id_t bounded_index = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_source_workload_assume_index_range(
+      context->builder, index, 0, LOOM_LOW_SOURCE_WORKLOAD_INDEXED_MAX_ORIGIN,
+      &bounded_index));
+  const loom_value_id_t dynamic_indices[] = {bounded_index};
   int64_t* static_indices = NULL;
   IREE_RETURN_IF_ERROR(loom_low_source_workload_allocate_dynamic_index_sentinel(
       context->builder, &static_indices));
@@ -957,7 +999,11 @@ static iree_status_t loom_low_source_workload_gen_vector4xf32_indexed_load(
     return iree_ok_status();
   }
 
-  const loom_value_id_t dynamic_indices[] = {index};
+  loom_value_id_t bounded_index = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_source_workload_assume_index_range(
+      context->builder, index, 0, LOOM_LOW_SOURCE_WORKLOAD_INDEXED_MAX_ORIGIN,
+      &bounded_index));
+  const loom_value_id_t dynamic_indices[] = {bounded_index};
   int64_t* static_indices = NULL;
   IREE_RETURN_IF_ERROR(loom_low_source_workload_allocate_dynamic_index_sentinel(
       context->builder, &static_indices));
@@ -985,7 +1031,11 @@ static iree_status_t loom_low_source_workload_gen_vector4xf32_indexed_store(
     return iree_ok_status();
   }
 
-  const loom_value_id_t dynamic_indices[] = {index};
+  loom_value_id_t bounded_index = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_source_workload_assume_index_range(
+      context->builder, index, 0, LOOM_LOW_SOURCE_WORKLOAD_INDEXED_MAX_ORIGIN,
+      &bounded_index));
+  const loom_value_id_t dynamic_indices[] = {bounded_index};
   int64_t* static_indices = NULL;
   IREE_RETURN_IF_ERROR(loom_low_source_workload_allocate_dynamic_index_sentinel(
       context->builder, &static_indices));

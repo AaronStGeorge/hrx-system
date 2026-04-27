@@ -454,6 +454,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::analysis::kernel_async_legality
+    loom::src::loom::analysis::vector_memory_footprint
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
@@ -466,6 +467,7 @@ loom_cc_library(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::ops::target
+    loom::src::loom::ops::type_registry
     loom::src::loom::target::low_legality
     loom::src::loom::target::types
     loom::src::loom::util::fact_table

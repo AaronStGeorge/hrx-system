@@ -96,6 +96,26 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    vector_memory_footprint
+  HDRS
+    "vector_memory_footprint.h"
+  SRCS
+    "vector_memory_footprint.c"
+  DEPS
+    ::symbolic_expr
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::type_registry
+    loom::src::loom::ops::vector
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     policy
   HDRS
     "policy.h"

@@ -1,6 +1,6 @@
 // RUN: roundtrip
 
-kernel.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+kernel.def workgroup_size(64, 1, 1) @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 512 : offset
@@ -17,7 +17,7 @@ kernel.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
+kernel.def workgroup_size(64, 1, 1) @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -34,7 +34,7 @@ kernel.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+kernel.def workgroup_size(64, 1, 1) @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 512 : offset
@@ -51,7 +51,7 @@ kernel.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
+kernel.def workgroup_size(64, 1, 1) @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset

@@ -441,14 +441,9 @@ loom_cc_library(
     "vector_memory_footprint.c"
   DEPS
     iree::base
-    loom::src::loom::analysis::symbolic_expr
-    loom::src::loom::error::error_defs
+    loom::src::loom::analysis::vector_memory_footprint
     loom::src::loom::ir
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::type_registry
-    loom::src::loom::ops::vector
     loom::src::loom::pass::types
-    loom::src::loom::util::fact_table
   PUBLIC
 )
 

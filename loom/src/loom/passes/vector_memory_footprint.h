@@ -4,12 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Vector memory footprint legality gate.
-//
-// This pass is a pre-lowering proof pass for view-based vector memory ops. It
-// keeps cheap structural checks in the ordinary verifier and proves dynamic
-// footprint inequalities with value facts, symbolic expressions, and view
-// region summaries immediately before lowering out of Loom IR.
+// Pass wrapper for the vector memory footprint legality analysis.
 
 #ifndef LOOM_PASSES_VECTOR_MEMORY_FOOTPRINT_H_
 #define LOOM_PASSES_VECTOR_MEMORY_FOOTPRINT_H_

@@ -1,7 +1,7 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_workgroup_indexed.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-kernel.def @workgroup_memory_workitem_x_b32() {
+kernel.def workgroup_size(64, 1, 1) @workgroup_memory_workitem_x_b32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -15,7 +15,7 @@ kernel.def @workgroup_memory_workitem_x_b32() {
 }
 
 // ----
-low.kernel.def target(@target) @workgroup_memory_workitem_x_b32() {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_memory_workitem_x_b32() {
   %m0 = low.live_in<amdgpu.m0> : reg<amdgpu.m0>
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>

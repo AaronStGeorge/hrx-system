@@ -1,7 +1,7 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/lookup_table.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-kernel.def @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
+kernel.def workgroup_size(2, 1, 1) @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %four = index.constant 4 : index
@@ -20,7 +20,7 @@ kernel.def @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) @f32_table_lookup_i8_codes() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(2, 1, 1) @f32_table_lookup_i8_codes() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %codes_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 32} : reg<amdgpu.sgpr x4>

@@ -1,7 +1,7 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_workgroup_packed16.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-kernel.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+kernel.def workgroup_size(64, 1, 1) @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 512 : offset
@@ -17,7 +17,7 @@ kernel.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) @lds_f16x4_b64_roundtrip() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_f16x4_b64_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
@@ -47,7 +47,7 @@ low.slot @lds_f16x4_b64_roundtrip__lds5 {align = 8, function = @lds_f16x4_b64_ro
 
 // ====
 
-kernel.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
+kernel.def workgroup_size(64, 1, 1) @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -63,7 +63,7 @@ kernel.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) @lds_f16x8_b128_roundtrip() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_f16x8_b128_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
@@ -93,7 +93,7 @@ low.slot @lds_f16x8_b128_roundtrip__lds5 {align = 16, function = @lds_f16x8_b128
 
 // ====
 
-kernel.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+kernel.def workgroup_size(64, 1, 1) @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 512 : offset
@@ -109,7 +109,7 @@ kernel.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) @lds_bf16x4_b64_roundtrip() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_bf16x4_b64_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x4>
@@ -139,7 +139,7 @@ low.slot @lds_bf16x4_b64_roundtrip__lds5 {align = 8, function = @lds_bf16x4_b64_
 
 // ====
 
-kernel.def @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
+kernel.def workgroup_size(64, 1, 1) @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -155,7 +155,7 @@ kernel.def @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) @lds_bf16x8_b128_roundtrip() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_bf16x8_b128_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>

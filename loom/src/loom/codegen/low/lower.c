@@ -8,6 +8,7 @@
 
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/kernel_async_legality.h"
+#include "loom/analysis/vector_memory_footprint.h"
 #include "loom/codegen/low/lower_internal.h"
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/ir/context.h"
@@ -20,6 +21,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/ops/type_registry.h"
 
 static bool loom_low_lower_type_is_none(loom_type_t type) {
   return loom_type_kind(type) == LOOM_TYPE_NONE;
@@ -1067,9 +1069,30 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
   iree_status_t status = loom_value_fact_table_initialize(
       &context.fact_table, &context.arena, module->values.count);
   context.fact_table.context.target_bundle = options->bundle;
+  loom_type_registry_configure_fact_context(&context.fact_table.context);
   if (iree_status_is_ok(status)) {
     status = loom_value_fact_table_compute(&context.fact_table, module,
                                            source_function);
+  }
+
+  loom_vector_memory_footprint_result_t footprint_result = {0};
+  if (iree_status_is_ok(status)) {
+    const loom_vector_memory_footprint_options_t footprint_options = {
+        .arena = &context.arena,
+        .fact_table = &context.fact_table,
+        .target_bundle = options->bundle,
+        .emitter = options->emitter,
+        .max_errors = options->max_errors,
+    };
+    status = loom_vector_memory_footprint_verify_function(
+        module, source_function, &footprint_options, &footprint_result);
+  }
+  if (iree_status_is_ok(status)) {
+    out_result->error_count += footprint_result.error_count;
+  }
+  if (iree_status_is_ok(status) && out_result->error_count != 0) {
+    iree_arena_deinitialize(&context.arena);
+    return iree_ok_status();
   }
 
   loom_kernel_async_legality_result_t async_legality_result = {0};

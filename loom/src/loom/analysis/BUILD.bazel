@@ -86,6 +86,23 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "vector_memory_footprint",
+    srcs = ["vector_memory_footprint.c"],
+    hdrs = ["vector_memory_footprint.h"],
+    deps = [
+        ":symbolic_expr",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:type_registry",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "policy",
     hdrs = ["policy.h"],
 )

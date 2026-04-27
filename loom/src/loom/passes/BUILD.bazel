@@ -392,14 +392,9 @@ loom_cc_library(
     srcs = ["vector_memory_footprint.c"],
     hdrs = ["vector_memory_footprint.h"],
     deps = [
-        "//loom/src/loom/analysis:symbolic_expr",
-        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/analysis:vector_memory_footprint",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops:type_registry",
-        "//loom/src/loom/ops/vector",
         "//loom/src/loom/pass:types",
-        "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
     ],
 )

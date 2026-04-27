@@ -1,6 +1,6 @@
 // RUN: roundtrip
 
-kernel.def @cache_system_bypass_load_device_writeback_store(%input: buffer, %output: buffer) {
+kernel.def workgroup_size(64, 1, 1) @cache_system_bypass_load_device_writeback_store(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>

@@ -1,6 +1,6 @@
 // RUN: roundtrip
 
-kernel.def @workgroup_memory_workitem_x_b32() {
+kernel.def workgroup_size(64, 1, 1) @workgroup_memory_workitem_x_b32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset

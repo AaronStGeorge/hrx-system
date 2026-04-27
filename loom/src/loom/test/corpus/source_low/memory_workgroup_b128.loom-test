@@ -1,6 +1,6 @@
 // RUN: roundtrip
 
-kernel.def @lds_b128_roundtrip(%input: buffer, %output: buffer) {
+kernel.def workgroup_size(64, 1, 1) @lds_b128_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
