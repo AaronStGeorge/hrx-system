@@ -101,7 +101,7 @@ class MovementTest : public ::testing::Test {
     loom_op_t* op = nullptr;
     IREE_CHECK_OK(loom_buffer_alloca_build(
         &builder_, byte_length_value, base_alignment,
-        LOOM_BUFFER_MEMORY_SPACE_WORKGROUP, loom_type_buffer(),
+        LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP, loom_type_buffer(),
         LOOM_LOCATION_UNKNOWN, &op));
     return loom_buffer_alloca_result(op);
   }

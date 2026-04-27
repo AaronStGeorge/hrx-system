@@ -22,6 +22,7 @@ from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dsl import (
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64_ARRAY,
+    FACT_IDENTITY,
     HINT,
     INDEX,
     PURE,
@@ -205,7 +206,7 @@ view_refine = Op(
         SameElementType("source", "result"),
         RanksMatch("source", "result"),
     ],
-    traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
+    traits=[PURE, REFINABLE_RESULT_TYPE_REFS, FACT_IDENTITY],
     verify="loom_view_refine_verify",
     facts="loom_view_refine_facts",
     type_transfer="loom_view_refine_type_transfer",

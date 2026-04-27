@@ -53,6 +53,9 @@ SnapshotCodegenFormat = EnumDef(
         EnumCase("wasm", 5, doc="WebAssembly module emission target."),
     ],
     doc="Primary codegen representation emitted for a target snapshot.",
+    c_type="loom_target_codegen_format_t",
+    c_const_prefix="LOOM_TARGET_CODEGEN_FORMAT",
+    c_include="loom/target/types.h",
 )
 
 _ARTIFACT_FORMAT_CASES = [
@@ -69,12 +72,18 @@ ArtifactFormatAttr = EnumDef(
     "ArtifactFormatAttr",
     _ARTIFACT_FORMAT_CASES,
     doc="Linkable or loadable artifact format produced for a snapshot.",
+    c_type="loom_target_artifact_format_t",
+    c_const_prefix="LOOM_TARGET_ARTIFACT_FORMAT",
+    c_include="loom/target/types.h",
 )
 
 ArtifactRecordFormatAttr = EnumDef(
     "ArtifactRecordFormatAttr",
     _ARTIFACT_FORMAT_CASES,
     doc="Linkable or loadable artifact format produced for an artifact.",
+    c_type="loom_target_artifact_format_t",
+    c_const_prefix="LOOM_TARGET_ARTIFACT_FORMAT",
+    c_include="loom/target/types.h",
 )
 
 ArtifactAbiKind = EnumDef(
@@ -88,6 +97,9 @@ ArtifactAbiKind = EnumDef(
         EnumCase("spirv_module", 5, doc="SPIR-V module packaging ABI."),
     ],
     doc="Runtime or linker packaging ABI used by a target artifact.",
+    c_type="loom_target_artifact_abi_kind_t",
+    c_const_prefix="LOOM_TARGET_ARTIFACT_ABI_KIND",
+    c_include="loom/target/types.h",
 )
 
 ExportAbiKind = EnumDef(
@@ -101,6 +113,9 @@ ExportAbiKind = EnumDef(
         EnumCase("wasm_function", 5, doc="WebAssembly module function ABI."),
     ],
     doc="Callable or package ABI used by an export plan.",
+    c_type="loom_target_abi_kind_t",
+    c_const_prefix="LOOM_TARGET_ABI",
+    c_include="loom/target/types.h",
 )
 
 ExportLinkage = EnumDef(
@@ -110,6 +125,9 @@ ExportLinkage = EnumDef(
         EnumCase("dso_local", 1, doc="DSO-local object linkage."),
     ],
     doc="ABI-required linkage for exported object functions or entry points.",
+    c_type="loom_target_linkage_t",
+    c_const_prefix="LOOM_TARGET_LINKAGE",
+    c_include="loom/target/types.h",
 )
 
 # ============================================================================

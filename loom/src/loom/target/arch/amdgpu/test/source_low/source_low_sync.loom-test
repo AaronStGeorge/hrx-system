@@ -7,7 +7,7 @@ func.def @workgroup_barrier() {
 }
 
 // ----
-low.func.def target(@target) @workgroup_barrier() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @workgroup_barrier() asm<amdgpu.gfx11.core> {
   s_barrier
   return
 }

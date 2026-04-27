@@ -30,7 +30,9 @@ from loom.assembly import (
     TypesOf,
     kw,
 )
+from loom.dialect.atomic import AtomicOrdering, AtomicScope
 from loom.dialect.cache import CacheScope, CacheTemporal
+from loom.dialect.memory import MemorySpace
 from loom.dialect.target.defs import ExportLinkage
 from loom.dsl import (
     ANY,
@@ -111,48 +113,9 @@ kernel_tensor_lds_descriptor_type = TypeDef(
 # Shared attrs
 # ============================================================================
 
-KernelScope = EnumDef(
-    "KernelScope",
-    [
-        EnumCase("thread", 0, doc="Current invocation or thread."),
-        EnumCase("subgroup", 1, doc="Current SIMD subgroup or wave."),
-        EnumCase("workgroup", 2, doc="Current workgroup or block."),
-        EnumCase("device", 3, doc="Current device."),
-        EnumCase("system", 4, doc="Whole system."),
-    ],
-    doc="Target-independent synchronization scope.",
-)
-
-KernelMemorySpace = EnumDef(
-    "KernelMemorySpace",
-    [
-        EnumCase("unknown", 0, doc="No target-independent memory space is known."),
-        EnumCase("global", 1, doc="Device-visible global storage."),
-        EnumCase("workgroup", 2, doc="Workgroup/shared storage."),
-        EnumCase("private", 3, doc="Invocation-private storage."),
-        EnumCase("constant", 4, doc="Read-only constant storage."),
-        EnumCase("host", 5, doc="Host-visible storage."),
-        EnumCase("descriptor", 6, doc="Descriptor-backed storage identity."),
-        EnumCase(
-            "generic",
-            7,
-            doc="Target-generic device storage fenced by a synchronization op.",
-        ),
-    ],
-    doc="Target-independent memory space fenced by a kernel synchronization op.",
-)
-
-KernelOrdering = EnumDef(
-    "KernelOrdering",
-    [
-        EnumCase("relaxed", 0, doc="Atomicity without inter-address synchronization."),
-        EnumCase("acquire", 1, doc="Acquire ordering."),
-        EnumCase("release", 2, doc="Release ordering."),
-        EnumCase("acq_rel", 3, doc="Acquire and release ordering."),
-        EnumCase("seq_cst", 4, doc="Sequentially consistent ordering."),
-    ],
-    doc="Target-independent memory ordering for kernel synchronization ops.",
-)
+KernelScope = AtomicScope
+KernelMemorySpace = MemorySpace
+KernelOrdering = AtomicOrdering
 
 KernelDimension = EnumDef(
     "KernelDimension",

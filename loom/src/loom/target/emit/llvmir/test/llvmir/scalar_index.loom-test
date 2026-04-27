@@ -52,3 +52,27 @@ entry:
   %extended = sext i32 %n to i64
   ret i64 %extended
 }
+
+// ====
+
+// Fact identity assumes refine analysis facts without emitting LLVMIR ops.
+func.def public @scalar_assume_identity(%value: i32) -> (i32) {
+  %refined = scalar.assume %value [range(%value, 0, 1024)] : i32
+  func.return %refined : i32
+}
+
+func.def public @index_assume_identity(%value: index) -> (index) {
+  %refined = index.assume %value [range(%value, 0, 1024)] : index
+  func.return %refined : index
+}
+
+// ----
+define dso_local i32 @scalar_assume_identity(i32 %value) {
+entry:
+  ret i32 %value
+}
+
+define dso_local i64 @index_assume_identity(i64 %value) {
+entry:
+  ret i64 %value
+}

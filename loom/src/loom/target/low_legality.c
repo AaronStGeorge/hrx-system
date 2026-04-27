@@ -13,8 +13,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
-#include "loom/ops/index/ops.h"
-#include "loom/ops/scalar/ops.h"
+#include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/type_registry.h"
 #include "loom/util/fact_table.h"
@@ -556,19 +555,10 @@ static iree_status_t loom_target_low_legality_reject_source_only_op(
   }
 }
 
-static bool loom_target_low_legality_op_is_fact_identity(loom_op_kind_t kind) {
-  switch (kind) {
-    case LOOM_OP_INDEX_ASSUME:
-    case LOOM_OP_SCALAR_ASSUME:
-      return true;
-    default:
-      return false;
-  }
-}
-
 static iree_status_t loom_target_low_legality_verify_op_class(
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
-  if (loom_target_low_legality_op_is_fact_identity(op->kind)) {
+  if (loom_traits_are_fact_identity(
+          loom_op_effective_traits(context->module, op))) {
     return iree_ok_status();
   }
   loom_op_semantics_t semantics = loom_op_semantics(context->module, op);

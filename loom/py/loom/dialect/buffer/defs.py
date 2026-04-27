@@ -17,18 +17,18 @@ from loom.assembly import (
     ResultType,
     TypeOf,
 )
+from loom.dialect.memory import MemorySpace
 from loom.dsl import (
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64,
     BUFFER,
+    FACT_IDENTITY,
     OFFSET,
     PURE,
     REFINABLE_RESULT_TYPE_REFS,
     VIEW,
     AttrDef,
     Dialect,
-    EnumCase,
-    EnumDef,
     Op,
     Operand,
     OpPhase,
@@ -44,29 +44,6 @@ buffer_ops = Dialect(
     dialect_id=0x0C,
     doc="Opaque storage roots and typed view construction.",
     default_phase=OpPhase.EXECUTABLE,
-)
-
-# ============================================================================
-# Shared attrs
-# ============================================================================
-
-MemorySpace = EnumDef(
-    "MemorySpace",
-    [
-        EnumCase("unknown", 0, doc="No target-independent memory space is known."),
-        EnumCase("global", 1, doc="Device-visible global storage."),
-        EnumCase("workgroup", 2, doc="Workgroup/shared storage."),
-        EnumCase("private", 3, doc="Invocation-private storage."),
-        EnumCase("constant", 4, doc="Read-only constant storage."),
-        EnumCase("host", 5, doc="Host-visible storage."),
-        EnumCase("descriptor", 6, doc="Descriptor-backed storage identity."),
-        EnumCase(
-            "generic",
-            7,
-            doc=("Target-generic device storage. Targets may lower this to a generic address space such as AMDGPU flat memory."),
-        ),
-    ],
-    doc="Target-independent memory space for buffer roots and derived views.",
 )
 
 # ============================================================================
@@ -139,7 +116,7 @@ buffer_assume_memory_space = Op(
             doc="Concrete memory space to assume.",
         ),
     ],
-    traits=[PURE],
+    traits=[PURE, FACT_IDENTITY],
     verify="loom_buffer_assume_memory_space_verify",
     facts="loom_buffer_assume_memory_space_facts",
     format=[

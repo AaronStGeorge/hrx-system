@@ -29,7 +29,7 @@ static bool loom_amdgpu_select_buffer_alloca_plan(
   IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_amdgpu_buffer_alloca_plan_t){0};
   if (loom_buffer_alloca_memory_space(source_op) !=
-      LOOM_BUFFER_MEMORY_SPACE_WORKGROUP) {
+      LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     return false;
   }
   const int64_t base_alignment = loom_buffer_alloca_base_alignment(source_op);
@@ -57,7 +57,6 @@ iree_status_t loom_amdgpu_select_buffer_plan(loom_low_lower_context_t* context,
                                              loom_low_lower_plan_t* out_plan) {
   IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = loom_low_lower_plan_empty();
-  bool selected = false;
   switch (source_op->kind) {
     case LOOM_OP_BUFFER_ALLOCA: {
       loom_amdgpu_buffer_alloca_plan_t* plan_data = NULL;
@@ -69,19 +68,14 @@ iree_status_t loom_amdgpu_select_buffer_plan(loom_low_lower_context_t* context,
       }
       return iree_ok_status();
     }
-    case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
-      selected = true;
-      break;
     case LOOM_OP_BUFFER_VIEW:
-      selected = loom_amdgpu_can_lower_buffer_view(context, source_op);
-      break;
+      if (loom_amdgpu_can_lower_buffer_view(context, source_op)) {
+        *out_plan = loom_low_lower_plan_make(source_op->kind, NULL);
+      }
+      return iree_ok_status();
     default:
       return iree_ok_status();
   }
-  if (selected) {
-    *out_plan = loom_low_lower_plan_make(source_op->kind, NULL);
-  }
-  return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_lower_buffer_alloca(
@@ -130,15 +124,6 @@ static iree_status_t loom_amdgpu_lower_buffer_view(
                                    low_buffer);
 }
 
-static iree_status_t loom_amdgpu_lower_buffer_assume_memory_space(
-    loom_low_lower_context_t* context, const loom_op_t* source_op) {
-  loom_value_id_t low_buffer = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_buffer_assume_memory_space_buffer(source_op), &low_buffer));
-  return loom_low_lower_bind_value(
-      context, loom_buffer_assume_memory_space_result(source_op), low_buffer);
-}
-
 iree_status_t loom_amdgpu_lower_buffer_op(loom_low_lower_context_t* context,
                                           const loom_op_t* source_op,
                                           loom_low_lower_plan_t plan) {
@@ -147,8 +132,6 @@ iree_status_t loom_amdgpu_lower_buffer_op(loom_low_lower_context_t* context,
       return loom_amdgpu_lower_buffer_alloca(
           context, source_op,
           (const loom_amdgpu_buffer_alloca_plan_t*)plan.target_data);
-    case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
-      return loom_amdgpu_lower_buffer_assume_memory_space(context, source_op);
     case LOOM_OP_BUFFER_VIEW:
       return loom_amdgpu_lower_buffer_view(context, source_op);
     default:

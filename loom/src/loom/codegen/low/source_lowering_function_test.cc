@@ -249,7 +249,7 @@ TEST_F(SourceLoweringFunctionTest, LowersScalarFunction) {
             loom::testing::FindModuleSymbolDefiningOp(module.get(),
                                                       IREE_SV("test_target")));
   EXPECT_EQ(loom_low_func_def_abi(lower_result.low_func_op),
-            LOOM_LOW_ABI_UNKNOWN);
+            LOOM_TARGET_ABI_OBJECT_FUNCTION);
   EXPECT_NE(
       loom::testing::FindLowFuncDescriptorOp(
           lower_result.low_func_op, TEST_LOW_CORE_DESCRIPTOR_ID_TEST_CONST_I32),
@@ -290,7 +290,7 @@ TEST_F(SourceLoweringFunctionTest, CarriesExplicitAbiAndExport) {
             lower_result.low_func_op);
   EXPECT_TRUE(loom_low_func_def_isa(lower_result.low_func_op));
   EXPECT_EQ(loom_low_func_def_abi(lower_result.low_func_op),
-            LOOM_LOW_ABI_VM_MODULE_FUNCTION);
+            LOOM_TARGET_ABI_VM_MODULE_FUNCTION);
   EXPECT_TRUE(loom::testing::ModuleStringEquals(
       module.get(), loom_low_func_def_export_symbol(lower_result.low_func_op),
       IREE_SV("add_const_export")));

@@ -15,7 +15,7 @@ func.def @generic_atomic_i32_static(%input: buffer) {
 }
 
 // ----
-low.func.def target(@target) @generic_atomic_i32_static() {
+low.func.def target(@target) abi(hal_kernel) @generic_atomic_i32_static() {
   %view = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %one = low.const<amdgpu.s_mov_b32> {imm32 = 1} : reg<amdgpu.sgpr>

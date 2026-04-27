@@ -13,6 +13,7 @@
 #define LOOM_OPS_FUNC_OPS_H_
 
 #include "loom/ops/op_defs.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,17 +51,6 @@ typedef enum loom_func_purity_e {
   LOOM_FUNC_PURITY_COUNT_ = 2,
 } loom_func_purity_t;
 
-// Callable or package ABI used by an export plan.
-typedef enum loom_func_abi_e {
-  LOOM_FUNC_ABI_UNKNOWN = 0,
-  LOOM_FUNC_ABI_OBJECT_FUNCTION = 1,
-  LOOM_FUNC_ABI_HAL_KERNEL = 2,
-  LOOM_FUNC_ABI_VM_MODULE_FUNCTION = 3,
-  LOOM_FUNC_ABI_SHADER_ENTRY_POINT = 4,
-  LOOM_FUNC_ABI_WASM_FUNCTION = 5,
-  LOOM_FUNC_ABI_COUNT_ = 6,
-} loom_func_abi_t;
-
 // LOOM_OP_FUNC_DEF: Function definition. Callable by name via func.call.
 // func.def @negate(%input: f32) -> (f32) {
 //   func.return %input : f32
@@ -72,7 +62,7 @@ LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_def_visibility, 1, loom_func_visibility_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_def_cc, 2, loom_func_cc_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_def_purity, 3, loom_func_purity_t)
 LOOM_DEFINE_ATTR_SYMBOL(loom_func_def_target, 5)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_def_abi, 6, loom_func_abi_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_def_abi, 6, loom_target_abi_kind_t)
 LOOM_DEFINE_ATTR_DICT(loom_func_def_abi_attrs, 7)
 LOOM_DEFINE_ATTR_STRING(loom_func_def_export_symbol, 8)
 LOOM_DEFINE_ATTR_DICT(loom_func_def_export_attrs, 9)
@@ -123,7 +113,7 @@ LOOM_DEFINE_ATTR_STRING(loom_func_decl_import_symbol, 3)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_decl_cc, 4, loom_func_cc_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_decl_purity, 5, loom_func_purity_t)
 LOOM_DEFINE_ATTR_SYMBOL(loom_func_decl_target, 6)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_decl_abi, 7, loom_func_abi_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_decl_abi, 7, loom_target_abi_kind_t)
 LOOM_DEFINE_ATTR_DICT(loom_func_decl_abi_attrs, 8)
 LOOM_DEFINE_ATTR_STRING(loom_func_decl_export_symbol, 9)
 LOOM_DEFINE_ATTR_DICT(loom_func_decl_export_attrs, 10)

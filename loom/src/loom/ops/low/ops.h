@@ -13,6 +13,7 @@
 #define LOOM_OPS_LOW_OPS_H_
 
 #include "loom/ops/op_defs.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,17 +41,6 @@ enum {
   LOOM_OP_LOW_LIVE_IN = LOOM_OP_KIND(LOOM_DIALECT_LOW, 18),
   LOOM_OP_LOW_COUNT_ = 19,
 };
-
-// Callable or package ABI used by an export plan.
-typedef enum loom_low_abi_e {
-  LOOM_LOW_ABI_UNKNOWN = 0,
-  LOOM_LOW_ABI_OBJECT_FUNCTION = 1,
-  LOOM_LOW_ABI_HAL_KERNEL = 2,
-  LOOM_LOW_ABI_VM_MODULE_FUNCTION = 3,
-  LOOM_LOW_ABI_SHADER_ENTRY_POINT = 4,
-  LOOM_LOW_ABI_WASM_FUNCTION = 5,
-  LOOM_LOW_ABI_COUNT_ = 6,
-} loom_low_abi_t;
 
 // Function visibility. Absent (0) means private (module-internal).
 typedef enum loom_low_visibility_e {
@@ -89,13 +79,6 @@ typedef enum loom_low_schedule_e {
   LOOM_LOW_SCHEDULE_COUNT_ = 4,
 } loom_low_schedule_t;
 
-// ABI-required linkage for exported object functions or entry points.
-typedef enum loom_low_kernel_def_export_linkage_e {
-  LOOM_LOW_KERNEL_DEF_EXPORT_LINKAGE_DEFAULT = 0,
-  LOOM_LOW_KERNEL_DEF_EXPORT_LINKAGE_DSO_LOCAL = 1,
-  LOOM_LOW_KERNEL_DEF_EXPORT_LINKAGE_COUNT_ = 2,
-} loom_low_kernel_def_export_linkage_t;
-
 // External code source kind for an imported low function declaration.
 typedef enum loom_low_func_decl_import_kind_e {
   LOOM_LOW_FUNC_DECL_IMPORT_KIND_VM = 1,
@@ -132,7 +115,7 @@ LOOM_DEFINE_ISA(loom_low_func_def_isa, LOOM_OP_LOW_FUNC_DEF)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_func_def_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_def_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_def_target, 1)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_abi, 2, loom_low_abi_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_abi, 2, loom_target_abi_kind_t)
 LOOM_DEFINE_ATTR_DICT(loom_low_func_def_abi_attrs, 3)
 LOOM_DEFINE_ATTR_STRING(loom_low_func_def_export_symbol, 4)
 LOOM_DEFINE_ATTR_DICT(loom_low_func_def_export_attrs, 5)
@@ -190,7 +173,7 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_target, 1)
 LOOM_DEFINE_ATTR_STRING(loom_low_kernel_def_export_symbol, 2)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_artifact, 3)
 LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_export_ordinal, 4)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_export_linkage, 5, loom_low_kernel_def_export_linkage_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_export_linkage, 5, loom_target_linkage_t)
 LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_x, 6)
 LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_y, 7)
 LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_z, 8)
@@ -240,7 +223,7 @@ LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_func_decl_args, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_func_decl_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_decl_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_decl_target, 1)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_abi, 2, loom_low_abi_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_abi, 2, loom_target_abi_kind_t)
 LOOM_DEFINE_ATTR_DICT(loom_low_func_decl_abi_attrs, 3)
 LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_export_symbol, 4)
 LOOM_DEFINE_ATTR_DICT(loom_low_func_decl_export_attrs, 5)

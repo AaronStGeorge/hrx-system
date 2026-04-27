@@ -162,7 +162,7 @@ TEST_F(SourceLoweringLinkTest,
       lower_result.low_func_op);
   EXPECT_TRUE(loom_low_func_def_isa(lower_result.low_func_op));
   EXPECT_EQ(loom_low_func_def_abi(lower_result.low_func_op),
-            LOOM_LOW_ABI_UNKNOWN);
+            LOOM_TARGET_ABI_OBJECT_FUNCTION);
 }
 
 }  // namespace

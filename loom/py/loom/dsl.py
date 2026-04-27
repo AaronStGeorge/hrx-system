@@ -796,6 +796,10 @@ REFINABLE_RESULT_TYPE_REFS = Trait("RefinableResultTypeRefs")
 # Op observes poison operands at a semantic boundary where poison can no longer
 # propagate as an ordinary SSA value.
 POISON_BOUNDARY = Trait("PoisonBoundary")
+# Op refines facts or static type information while preserving operand/result
+# value identity. Source-to-low lowering aliases each result to the lowered
+# operand at the same ordinal.
+FACT_IDENTITY = Trait("FactIdentity")
 
 
 # ============================================================================

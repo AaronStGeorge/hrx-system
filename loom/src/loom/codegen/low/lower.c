@@ -16,10 +16,8 @@
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
-#include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
-#include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/type_registry.h"
 
@@ -57,6 +55,17 @@ static bool loom_low_lower_function_attr_present(loom_func_like_t function,
     return false;
   }
   return !loom_attr_is_absent(loom_op_attrs(function.op)[attr_index]);
+}
+
+static loom_target_abi_kind_t loom_low_lower_function_abi(
+    const loom_low_lower_context_t* context) {
+  const uint8_t abi_attr_index =
+      context->source_function.vtable->abi_attr_index;
+  if (loom_low_lower_function_attr_present(context->source_function,
+                                           abi_attr_index)) {
+    return (loom_target_abi_kind_t)loom_func_like_abi(context->source_function);
+  }
+  return context->options->bundle->export_plan->abi_kind;
 }
 
 static iree_status_t loom_low_lower_map_direct_argument(
@@ -266,14 +275,21 @@ static iree_status_t loom_low_lower_check_function_signature(
   return iree_ok_status();
 }
 
-static bool loom_low_lower_op_is_structural(loom_op_kind_t kind) {
-  switch (kind) {
+static bool loom_low_lower_op_is_fact_identity(const loom_module_t* module,
+                                               const loom_op_t* op) {
+  return loom_traits_are_fact_identity(loom_op_effective_traits(module, op));
+}
+
+static bool loom_low_lower_op_is_structural(const loom_module_t* module,
+                                            const loom_op_t* op) {
+  if (loom_low_lower_op_is_fact_identity(module, op)) {
+    return true;
+  }
+  switch (op->kind) {
     case LOOM_OP_CFG_BR:
     case LOOM_OP_CFG_COND_BR:
     case LOOM_OP_FUNC_RETURN:
     case LOOM_OP_KERNEL_RETURN:
-    case LOOM_OP_INDEX_ASSUME:
-    case LOOM_OP_SCALAR_ASSUME:
       return true;
     default:
       return false;
@@ -294,9 +310,10 @@ static bool loom_low_lower_op_is_source_metadata(loom_op_kind_t kind) {
   }
 }
 
-static bool loom_low_lower_op_uses_policy(loom_op_kind_t kind) {
-  return !loom_low_lower_op_is_structural(kind) &&
-         !loom_low_lower_op_is_source_metadata(kind);
+static bool loom_low_lower_op_uses_policy(const loom_module_t* module,
+                                          const loom_op_t* op) {
+  return !loom_low_lower_op_is_structural(module, op) &&
+         !loom_low_lower_op_is_source_metadata(op->kind);
 }
 
 static iree_status_t loom_low_lower_prepare_plan(
@@ -307,7 +324,7 @@ static iree_status_t loom_low_lower_prepare_plan(
     loom_block_t* block = loom_region_block(source_body, block_index);
     loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
-      if (loom_low_lower_op_uses_policy(op->kind)) {
+      if (loom_low_lower_op_uses_policy(context->module, op)) {
         ++plan_capacity;
       }
     }
@@ -387,7 +404,7 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
         IREE_SV("nested regions must be lowered away before target-low "
                 "source lowering"));
   }
-  if (loom_low_lower_op_is_structural(source_op->kind)) {
+  if (loom_low_lower_op_is_structural(context->module, source_op)) {
     return iree_ok_status();
   }
   if (loom_low_lower_op_is_source_metadata(source_op->kind)) {
@@ -573,11 +590,7 @@ static iree_status_t loom_low_lower_create_func_op(
   uint8_t visibility = loom_func_like_visibility(context->source_function);
   uint8_t cc = loom_func_like_cc(context->source_function);
   uint8_t purity = loom_func_like_purity(context->source_function);
-  const bool has_explicit_abi = loom_low_lower_function_attr_present(
-      context->source_function,
-      context->source_function.vtable->abi_attr_index);
-  uint8_t abi =
-      has_explicit_abi ? loom_func_like_abi(context->source_function) : 0;
+  loom_target_abi_kind_t abi = loom_low_lower_function_abi(context);
   loom_named_attr_slice_t abi_attrs =
       loom_func_like_abi_attrs(context->source_function);
   loom_string_id_t export_symbol =
@@ -894,10 +907,10 @@ static iree_status_t loom_low_lower_structural_op(
     loom_low_lower_context_t* context, loom_region_t* source_body,
     const loom_op_t* source_op, bool* out_handled) {
   *out_handled = true;
+  if (loom_low_lower_op_is_fact_identity(context->module, source_op)) {
+    return loom_low_lower_bind_identity_results(context, source_op);
+  }
   switch (source_op->kind) {
-    case LOOM_OP_INDEX_ASSUME:
-    case LOOM_OP_SCALAR_ASSUME:
-      return loom_low_lower_bind_identity_results(context, source_op);
     case LOOM_OP_FUNC_RETURN: {
       loom_value_slice_t values = loom_func_return_operands(source_op);
       loom_value_id_t* low_values = NULL;

@@ -85,7 +85,7 @@ bool loom_amdgpu_source_lds_layout_lookup_root(
     loom_block_for_each_op(block, op) {
       if (!loom_buffer_alloca_isa(op) ||
           loom_buffer_alloca_memory_space(op) !=
-              LOOM_BUFFER_MEMORY_SPACE_WORKGROUP) {
+              LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
         continue;
       }
 

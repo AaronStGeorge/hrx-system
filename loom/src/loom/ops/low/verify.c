@@ -195,7 +195,7 @@ static bool loom_low_optional_attr_is_present(const loom_op_t* op,
 }
 
 static bool loom_low_function_explicit_abi(const loom_op_t* op,
-                                           uint8_t* out_abi,
+                                           loom_target_abi_kind_t* out_abi,
                                            uint16_t* out_abi_attr_index) {
   if (loom_low_func_def_isa(op) &&
       loom_low_optional_attr_is_present(op, loom_low_func_def_abi_ATTR_INDEX)) {
@@ -750,15 +750,16 @@ static iree_string_view_t loom_low_resource_export_abi_reason(uint8_t kind) {
   }
 }
 
-static bool loom_low_resource_matches_export_abi(uint8_t kind, uint8_t abi) {
+static bool loom_low_resource_matches_export_abi(uint8_t kind,
+                                                 loom_target_abi_kind_t abi) {
   switch (kind) {
     case LOOM_LOW_RESOURCE_IMPORT_KIND_NATIVE_POINTER:
-      return abi == LOOM_LOW_ABI_OBJECT_FUNCTION;
+      return abi == LOOM_TARGET_ABI_OBJECT_FUNCTION;
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_STATE:
     case LOOM_LOW_RESOURCE_IMPORT_KIND_VM_IMPORT:
-      return abi == LOOM_LOW_ABI_VM_MODULE_FUNCTION;
+      return abi == LOOM_TARGET_ABI_VM_MODULE_FUNCTION;
     case LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BUFFER_RESOURCE:
-      return abi == LOOM_LOW_ABI_HAL_KERNEL;
+      return abi == LOOM_TARGET_ABI_HAL_KERNEL;
     default:
       return false;
   }
@@ -766,8 +767,9 @@ static bool loom_low_resource_matches_export_abi(uint8_t kind, uint8_t abi) {
 
 static iree_status_t loom_low_verify_resource_function_abi(
     const loom_module_t* module, const loom_op_t* resource_op,
-    const loom_op_t* function_op, uint16_t function_abi_attr_index, uint8_t abi,
-    uint8_t kind, iree_diagnostic_emitter_t emitter) {
+    const loom_op_t* function_op, uint16_t function_abi_attr_index,
+    loom_target_abi_kind_t abi, uint8_t kind,
+    iree_diagnostic_emitter_t emitter) {
   if (loom_low_resource_matches_export_abi(kind, abi)) {
     return iree_ok_status();
   }
@@ -854,7 +856,7 @@ static iree_status_t loom_low_verify_resource_op(
         NULL, 0, emitter);
   }
 
-  uint8_t function_abi = 0;
+  loom_target_abi_kind_t function_abi = LOOM_TARGET_ABI_UNKNOWN;
   uint16_t function_abi_attr_index = 0;
   if (loom_low_function_explicit_abi(enclosing_func, &function_abi,
                                      &function_abi_attr_index)) {

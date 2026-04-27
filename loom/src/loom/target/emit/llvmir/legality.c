@@ -626,8 +626,12 @@ static iree_status_t loom_llvmir_target_legality_verify_provider_contract_op(
 }
 
 static bool loom_llvmir_target_legality_op_is_supported_core(
-    loom_op_kind_t kind) {
-  switch (kind) {
+    const loom_llvmir_target_legality_context_t* context, const loom_op_t* op) {
+  if (loom_traits_are_fact_identity(
+          loom_op_effective_traits(context->module, op))) {
+    return true;
+  }
+  switch (op->kind) {
     case LOOM_OP_SCALAR_ADDI:
     case LOOM_OP_SCALAR_SUBI:
     case LOOM_OP_SCALAR_MULI:
@@ -712,7 +716,6 @@ static bool loom_llvmir_target_legality_op_is_supported_core(
     case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
     case LOOM_OP_BUFFER_VIEW:
     case LOOM_OP_VIEW_SUBVIEW:
-    case LOOM_OP_VIEW_REFINE:
     case LOOM_OP_VIEW_LOAD:
     case LOOM_OP_VIEW_STORE:
     case LOOM_OP_VIEW_PREFETCH:
@@ -790,7 +793,7 @@ static iree_status_t loom_llvmir_target_legality_verify_op(
     default:
       break;
   }
-  if (loom_llvmir_target_legality_op_is_supported_core(op->kind)) {
+  if (loom_llvmir_target_legality_op_is_supported_core(context, op)) {
     return iree_ok_status();
   }
   return loom_llvmir_target_legality_fail(

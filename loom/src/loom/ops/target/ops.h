@@ -13,6 +13,7 @@
 #define LOOM_OPS_TARGET_OPS_H_
 
 #include "loom/ops/op_defs.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,36 +25,13 @@ enum {
   LOOM_OP_TARGET_COUNT_ = 2,
 };
 
-// Linkable or loadable artifact format produced for an artifact.
-typedef enum loom_target_artifact_artifact_format_e {
-  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_UNKNOWN = 0,
-  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_ELF = 1,
-  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_COFF = 2,
-  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_MACHO = 3,
-  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_SPIRV_BINARY = 4,
-  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_VM_BYTECODE = 5,
-  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_WASM_BINARY = 6,
-  LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_COUNT_ = 7,
-} loom_target_artifact_artifact_format_t;
-
-// Runtime or linker packaging ABI used by a target artifact.
-typedef enum loom_target_artifact_abi_e {
-  LOOM_TARGET_ARTIFACT_ABI_UNKNOWN = 0,
-  LOOM_TARGET_ARTIFACT_ABI_OBJECT_FILE = 1,
-  LOOM_TARGET_ARTIFACT_ABI_HAL_EXECUTABLE = 2,
-  LOOM_TARGET_ARTIFACT_ABI_VM_MODULE = 3,
-  LOOM_TARGET_ARTIFACT_ABI_WASM_MODULE = 4,
-  LOOM_TARGET_ARTIFACT_ABI_SPIRV_MODULE = 5,
-  LOOM_TARGET_ARTIFACT_ABI_COUNT_ = 6,
-} loom_target_artifact_abi_t;
-
 // LOOM_OP_TARGET_ARTIFACT: Packaging or compile-unit record. Entry functions are derived from function export facts that reference this artifact; the artifact itself never lists functions.
 // target.artifact @gfx11_kernels target(@gfx11) {artifact_format = elf, abi = hal_executable}
 LOOM_DEFINE_ISA(loom_target_artifact_isa, LOOM_OP_TARGET_ARTIFACT)
 LOOM_DEFINE_ATTR_SYMBOL(loom_target_artifact_symbol, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_target_artifact_target, 1)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_target_artifact_artifact_format, 2, loom_target_artifact_artifact_format_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_target_artifact_abi, 3, loom_target_artifact_abi_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_target_artifact_artifact_format, 2, loom_target_artifact_format_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_target_artifact_abi, 3, loom_target_artifact_abi_kind_t)
 enum loom_target_artifact_build_flag_bits_e {
   LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ARTIFACT_FORMAT = 1u << 0,
   LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ABI = 1u << 1,

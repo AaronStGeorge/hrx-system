@@ -25,6 +25,7 @@ from loom.assembly import (
 from loom.dsl import (
     ADDRESS,
     CONSTANT_LIKE,
+    FACT_IDENTITY,
     INDEX,
     PURE,
     SCALAR,
@@ -125,7 +126,7 @@ index_assume = Op(
     operands=[Operand("values", ADDRESS, variadic=True)],
     results=[Result("results", ADDRESS, variadic=True)],
     attrs=[AttrDef("predicates", "predicate_list")],
-    traits=[PURE],
+    traits=[PURE, FACT_IDENTITY],
     facts="loom_index_assume_facts",
     verify="loom_index_assume_verify",
     format=[

@@ -16,30 +16,6 @@
 #include "loom/target/emit/llvmir/intrinsics_builtin.h"
 #include "loom/target/emit/llvmir/lower/internal.h"
 
-static loom_value_fact_memory_space_t
-loom_llvmir_lowering_memory_space_from_buffer_attr(uint8_t value) {
-  switch ((loom_buffer_memory_space_t)value) {
-    case LOOM_BUFFER_MEMORY_SPACE_GLOBAL:
-      return LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL;
-    case LOOM_BUFFER_MEMORY_SPACE_WORKGROUP:
-      return LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP;
-    case LOOM_BUFFER_MEMORY_SPACE_PRIVATE:
-      return LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE;
-    case LOOM_BUFFER_MEMORY_SPACE_CONSTANT:
-      return LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT;
-    case LOOM_BUFFER_MEMORY_SPACE_HOST:
-      return LOOM_VALUE_FACT_MEMORY_SPACE_HOST;
-    case LOOM_BUFFER_MEMORY_SPACE_DESCRIPTOR:
-      return LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR;
-    case LOOM_BUFFER_MEMORY_SPACE_GENERIC:
-      return LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC;
-    case LOOM_BUFFER_MEMORY_SPACE_UNKNOWN:
-    case LOOM_BUFFER_MEMORY_SPACE_COUNT_:
-      return LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
-  }
-  return LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
-}
-
 static iree_status_t loom_llvmir_lowering_address_space_from_memory_space(
     const loom_llvmir_lowering_state_t* state,
     loom_value_fact_memory_space_t memory_space, uint32_t* out_address_space) {
@@ -560,8 +536,7 @@ iree_status_t loom_llvmir_lowering_lower_alloca(
       state, loom_buffer_alloca_byte_length(op), &byte_length));
 
   loom_value_fact_memory_space_t memory_space =
-      loom_llvmir_lowering_memory_space_from_buffer_attr(
-          loom_buffer_alloca_memory_space(op));
+      loom_buffer_alloca_memory_space(op);
   uint32_t address_space = UINT32_MAX;
   loom_llvmir_type_id_t pointer_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_memory_space_pointer_type(
@@ -603,8 +578,7 @@ iree_status_t loom_llvmir_lowering_lower_assume_memory_space(
       &source_alignment));
 
   loom_value_fact_memory_space_t memory_space =
-      loom_llvmir_lowering_memory_space_from_buffer_attr(
-          loom_buffer_assume_memory_space_memory_space(op));
+      loom_buffer_assume_memory_space_memory_space(op);
   uint32_t result_address_space = UINT32_MAX;
   loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_memory_space_pointer_type(
@@ -722,19 +696,6 @@ iree_status_t loom_llvmir_lowering_lower_subview(
   }
   return loom_llvmir_lowering_map_pointer_value(
       state, result_value_id, result, address_space, result_alignment);
-}
-
-iree_status_t loom_llvmir_lowering_lower_refine(
-    loom_llvmir_lowering_state_t* state, const loom_op_t* op) {
-  loom_value_id_t source_value_id = loom_view_refine_source(op);
-  loom_value_id_t result_value_id = loom_view_refine_result(op);
-  loom_llvmir_value_id_t source = LOOM_LLVMIR_VALUE_ID_INVALID;
-  uint32_t address_space = UINT32_MAX;
-  uint64_t alignment = 0;
-  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lookup_pointer(
-      state, source_value_id, &source, &address_space, &alignment));
-  return loom_llvmir_lowering_map_pointer_value(state, result_value_id, source,
-                                                address_space, alignment);
 }
 
 iree_status_t loom_llvmir_lowering_lower_view_load(

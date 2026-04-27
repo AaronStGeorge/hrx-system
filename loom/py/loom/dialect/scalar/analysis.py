@@ -14,7 +14,7 @@ identity (the output equals the input).
 
 from loom.assembly import COLON, PredicateList, Refs, TypesOf
 from loom.dialect.scalar.defs import scalar_ops
-from loom.dsl import INTEGER, PURE, AttrDef, Op, Operand, Result
+from loom.dsl import FACT_IDENTITY, INTEGER, PURE, AttrDef, Op, Operand, Result
 
 __all__ = [
     "scalar_assume",
@@ -32,7 +32,7 @@ scalar_assume = Op(
     operands=[Operand("values", INTEGER, variadic=True)],
     results=[Result("results", INTEGER, variadic=True)],
     attrs=[AttrDef("predicates", "predicate_list")],
-    traits=[PURE],
+    traits=[PURE, FACT_IDENTITY],
     facts="loom_scalar_assume_facts",
     verify="loom_scalar_assume_verify",
     format=[

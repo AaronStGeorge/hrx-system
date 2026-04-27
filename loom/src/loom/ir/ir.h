@@ -666,6 +666,11 @@ enum loom_trait_bits_e {
   // longer propagate as an ordinary SSA value. Examples include return-like
   // terminators and externally-visible boundary ops.
   LOOM_TRAIT_POISON_BOUNDARY = 1u << 18,
+  // Op refines facts or static type information while preserving a one-to-one
+  // SSA value identity between each operand and result. Source-to-target-low
+  // lowering binds each result to the lowered operand instead of asking a
+  // target policy to rediscover the identity op.
+  LOOM_TRAIT_FACT_IDENTITY = 1u << 19,
 };
 typedef uint32_t loom_trait_flags_t;
 
@@ -720,6 +725,12 @@ static inline bool loom_traits_are_safe_to_speculate(
 static inline bool loom_traits_have_refinable_result_type_refs(
     loom_trait_flags_t traits) {
   return (traits & LOOM_TRAIT_REFINABLE_RESULT_TYPE_REFS) != 0;
+}
+
+// Returns true when each result preserves the identity of the operand at the
+// same ordinal while carrying stronger facts or static type information.
+static inline bool loom_traits_are_fact_identity(loom_trait_flags_t traits) {
+  return (traits & LOOM_TRAIT_FACT_IDENTITY) != 0;
 }
 
 // Structural flags on the op vtable (shared by all instances of an op kind).

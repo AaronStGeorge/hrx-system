@@ -269,26 +269,6 @@ typedef struct loom_value_fact_encoding_summary_t {
   loom_value_fact_storage_schema_t storage_schema;
 } loom_value_fact_encoding_summary_t;
 
-// Target-independent storage space for buffer/view reference facts.
-typedef enum loom_value_fact_memory_space_e {
-  // No usable memory-space fact is known.
-  LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN = 0,
-  // Device-visible global storage.
-  LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL = 1,
-  // Workgroup/shared storage.
-  LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP = 2,
-  // Invocation-private storage.
-  LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE = 3,
-  // Read-only constant storage.
-  LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT = 4,
-  // Host-visible storage.
-  LOOM_VALUE_FACT_MEMORY_SPACE_HOST = 5,
-  // Descriptor-backed storage identity.
-  LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR = 6,
-  // Target-generic device storage.
-  LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC = 7,
-} loom_value_fact_memory_space_t;
-
 // Known reference nullability for storage-like values.
 typedef uint32_t loom_value_fact_reference_nullability_t;
 #define LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN \

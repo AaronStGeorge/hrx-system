@@ -135,7 +135,6 @@ iree_status_t loom_x86_select_avx512_op(void* user_data,
   IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = loom_low_lower_plan_empty();
   switch (source_op->kind) {
-    case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
     case LOOM_OP_BUFFER_VIEW:
       *out_plan = loom_low_lower_plan_make(source_op->kind, NULL);
       return iree_ok_status();
@@ -292,10 +291,6 @@ iree_status_t loom_x86_emit_avx512_op(void* user_data,
                                       loom_low_lower_plan_t plan) {
   (void)user_data;
   switch (plan.id) {
-    case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
-      return loom_x86_lower_buffer_alias(
-          context, loom_buffer_assume_memory_space_buffer(source_op),
-          loom_buffer_assume_memory_space_result(source_op));
     case LOOM_OP_BUFFER_VIEW:
       return loom_x86_lower_buffer_alias(context,
                                          loom_buffer_view_buffer(source_op),

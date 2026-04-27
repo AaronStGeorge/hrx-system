@@ -187,9 +187,7 @@ loom_cc_library(
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::func
-    loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
-    loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
     loom::src::loom::ops::type_registry
     loom::src::loom::util::fact_table

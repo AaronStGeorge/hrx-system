@@ -28,6 +28,7 @@ loom_cc_library(
         "//loom/src/loom/ops:function_contract_verify",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/target:types",
     ],
 )
 

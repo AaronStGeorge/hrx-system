@@ -322,7 +322,7 @@ static iree_status_t loom_kernel_verify_operand_i32(
 
 static bool loom_kernel_try_get_local_buffer_memory_space(
     const loom_module_t* module, loom_value_id_t buffer_id,
-    uint8_t* out_memory_space) {
+    loom_value_fact_memory_space_t* out_memory_space) {
   if (buffer_id >= module->values.count) return false;
   const loom_value_t* value = loom_module_value(module, buffer_id);
   if (loom_value_is_block_arg(value)) return false;
@@ -342,7 +342,7 @@ static bool loom_kernel_try_get_local_buffer_memory_space(
 
 static bool loom_kernel_try_get_local_view_memory_space(
     const loom_module_t* module, loom_value_id_t view_id,
-    uint8_t* out_memory_space) {
+    loom_value_fact_memory_space_t* out_memory_space) {
   for (uint8_t depth = 0; depth < 32; ++depth) {
     if (view_id >= module->values.count) return false;
     const loom_value_t* value = loom_module_value(module, view_id);
@@ -367,21 +367,24 @@ static bool loom_kernel_try_get_local_view_memory_space(
   return false;
 }
 
-static bool loom_kernel_memory_space_is_global_source(uint8_t memory_space) {
-  return memory_space == LOOM_BUFFER_MEMORY_SPACE_GLOBAL ||
-         memory_space == LOOM_BUFFER_MEMORY_SPACE_CONSTANT ||
-         memory_space == LOOM_BUFFER_MEMORY_SPACE_DESCRIPTOR;
+static bool loom_kernel_memory_space_is_global_source(
+    loom_value_fact_memory_space_t memory_space) {
+  return memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL ||
+         memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT ||
+         memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR;
 }
 
-static bool loom_kernel_memory_space_is_global_dest(uint8_t memory_space) {
-  return memory_space == LOOM_BUFFER_MEMORY_SPACE_GLOBAL ||
-         memory_space == LOOM_BUFFER_MEMORY_SPACE_DESCRIPTOR;
+static bool loom_kernel_memory_space_is_global_dest(
+    loom_value_fact_memory_space_t memory_space) {
+  return memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL ||
+         memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR;
 }
 
-static bool loom_kernel_view_memory_space_is(const loom_module_t* module,
-                                             loom_value_id_t view_id,
-                                             bool (*predicate)(uint8_t)) {
-  uint8_t memory_space = LOOM_BUFFER_MEMORY_SPACE_UNKNOWN;
+static bool loom_kernel_view_memory_space_is(
+    const loom_module_t* module, loom_value_id_t view_id,
+    bool (*predicate)(loom_value_fact_memory_space_t)) {
+  loom_value_fact_memory_space_t memory_space =
+      LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
   if (!loom_kernel_try_get_local_view_memory_space(module, view_id,
                                                    &memory_space)) {
     return false;
@@ -389,8 +392,9 @@ static bool loom_kernel_view_memory_space_is(const loom_module_t* module,
   return predicate(memory_space);
 }
 
-static bool loom_kernel_memory_space_is_workgroup(uint8_t memory_space) {
-  return memory_space == LOOM_BUFFER_MEMORY_SPACE_WORKGROUP;
+static bool loom_kernel_memory_space_is_workgroup(
+    loom_value_fact_memory_space_t memory_space) {
+  return memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP;
 }
 
 static bool loom_kernel_type_static_element_byte_count(
@@ -812,22 +816,23 @@ iree_status_t loom_kernel_barrier_verify(const loom_module_t* module,
                                          iree_diagnostic_emitter_t emitter) {
   (void)module;
 
-  uint8_t memory_space = loom_kernel_barrier_memory_space(op);
-  if (memory_space != LOOM_KERNEL_BARRIER_MEMORY_SPACE_WORKGROUP) {
+  loom_value_fact_memory_space_t memory_space =
+      loom_kernel_barrier_memory_space(op);
+  if (memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     return loom_kernel_emit_attribute_value_constraint(
         emitter, op, IREE_SV("memory_space"), memory_space,
         IREE_SV("workgroup memory space"));
   }
 
-  uint8_t ordering = loom_kernel_barrier_ordering(op);
-  if (ordering != LOOM_KERNEL_BARRIER_ORDERING_ACQ_REL) {
+  loom_atomic_ordering_t ordering = loom_kernel_barrier_ordering(op);
+  if (ordering != LOOM_ATOMIC_ORDERING_ACQ_REL) {
     return loom_kernel_emit_attribute_value_constraint(
         emitter, op, IREE_SV("ordering"), ordering,
         IREE_SV("acq_rel ordering"));
   }
 
-  uint8_t scope = loom_kernel_barrier_scope(op);
-  if (scope != LOOM_KERNEL_BARRIER_SCOPE_WORKGROUP) {
+  loom_atomic_scope_t scope = loom_kernel_barrier_scope(op);
+  if (scope != LOOM_ATOMIC_SCOPE_WORKGROUP) {
     return loom_kernel_emit_attribute_value_constraint(
         emitter, op, IREE_SV("scope"), scope, IREE_SV("workgroup scope"));
   }

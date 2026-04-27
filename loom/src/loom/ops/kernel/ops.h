@@ -13,7 +13,10 @@
 #define LOOM_OPS_KERNEL_OPS_H_
 
 #include "loom/ops/op_defs.h"
+#include "loom/ir/facts.h"
+#include "loom/ops/atomic.h"
 #include "loom/ops/cache.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,46 +57,6 @@ typedef enum loom_kernel_dimension_e {
   LOOM_KERNEL_DIMENSION_COUNT_ = 3,
 } loom_kernel_dimension_t;
 
-// ABI-required linkage for exported object functions or entry points.
-typedef enum loom_kernel_def_export_linkage_e {
-  LOOM_KERNEL_DEF_EXPORT_LINKAGE_DEFAULT = 0,
-  LOOM_KERNEL_DEF_EXPORT_LINKAGE_DSO_LOCAL = 1,
-  LOOM_KERNEL_DEF_EXPORT_LINKAGE_COUNT_ = 2,
-} loom_kernel_def_export_linkage_t;
-
-// Target-independent memory space fenced by a kernel synchronization op.
-typedef enum loom_kernel_barrier_memory_space_e {
-  LOOM_KERNEL_BARRIER_MEMORY_SPACE_UNKNOWN = 0,
-  LOOM_KERNEL_BARRIER_MEMORY_SPACE_GLOBAL = 1,
-  LOOM_KERNEL_BARRIER_MEMORY_SPACE_WORKGROUP = 2,
-  LOOM_KERNEL_BARRIER_MEMORY_SPACE_PRIVATE = 3,
-  LOOM_KERNEL_BARRIER_MEMORY_SPACE_CONSTANT = 4,
-  LOOM_KERNEL_BARRIER_MEMORY_SPACE_HOST = 5,
-  LOOM_KERNEL_BARRIER_MEMORY_SPACE_DESCRIPTOR = 6,
-  LOOM_KERNEL_BARRIER_MEMORY_SPACE_GENERIC = 7,
-  LOOM_KERNEL_BARRIER_MEMORY_SPACE_COUNT_ = 8,
-} loom_kernel_barrier_memory_space_t;
-
-// Target-independent memory ordering for kernel synchronization ops.
-typedef enum loom_kernel_barrier_ordering_e {
-  LOOM_KERNEL_BARRIER_ORDERING_RELAXED = 0,
-  LOOM_KERNEL_BARRIER_ORDERING_ACQUIRE = 1,
-  LOOM_KERNEL_BARRIER_ORDERING_RELEASE = 2,
-  LOOM_KERNEL_BARRIER_ORDERING_ACQ_REL = 3,
-  LOOM_KERNEL_BARRIER_ORDERING_SEQ_CST = 4,
-  LOOM_KERNEL_BARRIER_ORDERING_COUNT_ = 5,
-} loom_kernel_barrier_ordering_t;
-
-// Target-independent synchronization scope.
-typedef enum loom_kernel_barrier_scope_e {
-  LOOM_KERNEL_BARRIER_SCOPE_THREAD = 0,
-  LOOM_KERNEL_BARRIER_SCOPE_SUBGROUP = 1,
-  LOOM_KERNEL_BARRIER_SCOPE_WORKGROUP = 2,
-  LOOM_KERNEL_BARRIER_SCOPE_DEVICE = 3,
-  LOOM_KERNEL_BARRIER_SCOPE_SYSTEM = 4,
-  LOOM_KERNEL_BARRIER_SCOPE_COUNT_ = 5,
-} loom_kernel_barrier_scope_t;
-
 // LOOM_OP_KERNEL_DEF: Dispatchable source-level kernel entry. Kernel entries own launch and export contracts; ordinary func.def bodies remain helper/callable code.
 // kernel.def @entry(%buffer: buffer) {
 //   kernel.return
@@ -104,7 +67,7 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_kernel_def_target, 1)
 LOOM_DEFINE_ATTR_STRING(loom_kernel_def_export_symbol, 2)
 LOOM_DEFINE_ATTR_SYMBOL(loom_kernel_def_artifact, 3)
 LOOM_DEFINE_ATTR_I64(loom_kernel_def_export_ordinal, 4)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_def_export_linkage, 5, loom_kernel_def_export_linkage_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_def_export_linkage, 5, loom_target_linkage_t)
 LOOM_DEFINE_ATTR_I64(loom_kernel_def_workgroup_size_x, 6)
 LOOM_DEFINE_ATTR_I64(loom_kernel_def_workgroup_size_y, 7)
 LOOM_DEFINE_ATTR_I64(loom_kernel_def_workgroup_size_z, 8)
@@ -153,14 +116,14 @@ iree_status_t loom_kernel_return_build(
 // LOOM_OP_KERNEL_BARRIER: Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The supported kernel barrier is a workgroup execution barrier over workgroup memory with acquire-release ordering. Async-copy completion is modeled by kernel.async.wait; use kernel.barrier only when invocations must rendezvous before consuming shared memory.
 // kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
 LOOM_DEFINE_ISA(loom_kernel_barrier_isa, LOOM_OP_KERNEL_BARRIER)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_memory_space, 0, loom_kernel_barrier_memory_space_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_ordering, 1, loom_kernel_barrier_ordering_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_scope, 2, loom_kernel_barrier_scope_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_memory_space, 0, loom_value_fact_memory_space_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_ordering, 1, loom_atomic_ordering_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_barrier_scope, 2, loom_atomic_scope_t)
 iree_status_t loom_kernel_barrier_build(
     loom_builder_t* builder,
-    loom_kernel_barrier_memory_space_t memory_space,
-    loom_kernel_barrier_ordering_t ordering,
-    loom_kernel_barrier_scope_t scope,
+    loom_value_fact_memory_space_t memory_space,
+    loom_atomic_ordering_t ordering,
+    loom_atomic_scope_t scope,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_kernel_barrier_verify(

@@ -146,9 +146,8 @@ class LlvmIrLegalityTest : public ::testing::Test {
         &module_builder_,
         LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ARTIFACT_FORMAT |
             LOOM_TARGET_ARTIFACT_BUILD_FLAG_HAS_ABI,
-        artifact_symbol, profile_symbol,
-        LOOM_TARGET_ARTIFACT_ARTIFACT_FORMAT_ELF,
-        LOOM_TARGET_ARTIFACT_ABI_OBJECT_FILE, LOOM_LOCATION_UNKNOWN,
+        artifact_symbol, profile_symbol, LOOM_TARGET_ARTIFACT_FORMAT_ELF,
+        LOOM_TARGET_ARTIFACT_ABI_KIND_OBJECT_FILE, LOOM_LOCATION_UNKNOWN,
         &artifact_op));
     ASSERT_NE(artifact_op, nullptr);
   }

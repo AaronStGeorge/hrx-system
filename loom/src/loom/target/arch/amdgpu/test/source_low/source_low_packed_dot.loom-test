@@ -8,7 +8,7 @@ func.def @dot4i_s8s8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>
 }
 
 // ----
-low.func.def target(@target) @dot4i_s8s8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @dot4i_s8s8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %dot = v_dot4_i32_i8 %lhs, %rhs, %acc
   return %dot
 }
@@ -22,7 +22,7 @@ func.def @dot4i_u8u8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>
 }
 
 // ----
-low.func.def target(@target) @dot4i_u8u8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @dot4i_u8u8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %dot = v_dot4_u32_u8 %lhs, %rhs, %acc
   return %dot
 }
@@ -36,7 +36,7 @@ func.def @dot8i4_u4u4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi
 }
 
 // ----
-low.func.def target(@target) @dot8i4_u4u4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @dot8i4_u4u4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %dot = v_dot8_u32_u4 %lhs, %rhs, %acc
   return %dot
 }
@@ -50,7 +50,7 @@ func.def @dot4i_u8s8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>
 }
 
 // ----
-low.func.def target(@target) @dot4i_u8s8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@target) abi(hal_kernel) @dot4i_u8s8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %dot = low.op<amdgpu.v_dot4_i32_iu8.u8s8>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %dot : reg<amdgpu.vgpr>
 }
@@ -64,7 +64,7 @@ func.def @dot4i_s8u8(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>
 }
 
 // ----
-low.func.def target(@target) @dot4i_s8u8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@target) abi(hal_kernel) @dot4i_s8u8(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %dot = low.op<amdgpu.v_dot4_i32_iu8.s8u8>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %dot : reg<amdgpu.vgpr>
 }
@@ -78,7 +78,7 @@ func.def @dot8i4_s4s4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi
 }
 
 // ----
-low.func.def target(@target) @dot8i4_s4s4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @dot8i4_s4s4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   %dot = v_dot8_i32_i4 %lhs, %rhs, %acc
   return %dot
 }
@@ -92,7 +92,7 @@ func.def @dot8i4_u4s4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi
 }
 
 // ----
-low.func.def target(@target) @dot8i4_u4s4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@target) abi(hal_kernel) @dot8i4_u4s4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %dot = low.op<amdgpu.v_dot8_i32_iu4.u4s4>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %dot : reg<amdgpu.vgpr>
 }
@@ -106,7 +106,7 @@ func.def @dot8i4_s4u4(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xi
 }
 
 // ----
-low.func.def target(@target) @dot8i4_s4u4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+low.func.def target(@target) abi(hal_kernel) @dot8i4_s4u4(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
   %dot = low.op<amdgpu.v_dot8_i32_iu4.s4u4>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %dot : reg<amdgpu.vgpr>
 }

@@ -12,7 +12,7 @@ func.def @i32_bitfield_extractu(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) @i32_bitfield_extractu() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extractu() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
@@ -42,7 +42,7 @@ func.def @i32_bitfield_extracts(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) @i32_bitfield_extracts() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extracts() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
@@ -74,7 +74,7 @@ func.def @i32_bitfield_insert(%field_buffer: buffer, %base_buffer: buffer, %outp
 }
 
 // ----
-low.func.def target(@target) @i32_bitfield_insert() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32_bitfield_insert() asm<amdgpu.gfx11.core> {
   %field_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %base_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 2, semantic_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x4>
@@ -115,7 +115,7 @@ func.def @i32_bitfield_b128_shape(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) @i32_bitfield_b128_shape() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0

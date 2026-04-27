@@ -25,6 +25,7 @@ loom_cc_library(
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ir::facts
+    loom::src::loom::ops::atomic
     loom::src::loom::ops::buffer
     loom::src::loom::ops::cache
     loom::src::loom::ops::func_symbol_facts

@@ -6,6 +6,7 @@
 
 """Tests for the kernel dialect declarations."""
 
+from loom.dialect.atomic import AtomicOrdering, AtomicScope
 from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.kernel import (
     ALL_KERNEL_OPS,
@@ -36,6 +37,7 @@ from loom.dialect.kernel import (
     kernel_workgroup_id,
     kernel_workitem_id,
 )
+from loom.dialect.memory import MemorySpace
 from loom.dsl import ANY, ATTR_TYPE_ENUM, ATTR_TYPE_I64, I1, INDEX, INTEGER, PURE, UNKNOWN_EFFECTS, VECTOR, VIEW, HasAncestor, Op
 
 
@@ -381,6 +383,7 @@ class TestKernelDialect:
         ]
 
     def test_enum_values_match_memory_fact_conventions(self) -> None:
+        assert KernelMemorySpace is MemorySpace
         assert [(case.keyword, case.value) for case in KernelMemorySpace.cases] == [
             ("unknown", 0),
             ("global", 1),
@@ -393,6 +396,7 @@ class TestKernelDialect:
         ]
 
     def test_scope_values_match_atomic_scope_conventions(self) -> None:
+        assert KernelScope is AtomicScope
         assert [(case.keyword, case.value) for case in KernelScope.cases] == [
             ("thread", 0),
             ("subgroup", 1),
@@ -402,6 +406,7 @@ class TestKernelDialect:
         ]
 
     def test_ordering_values_match_atomic_ordering_conventions(self) -> None:
+        assert KernelOrdering is AtomicOrdering
         assert [(case.keyword, case.value) for case in KernelOrdering.cases] == [
             ("relaxed", 0),
             ("acquire", 1),

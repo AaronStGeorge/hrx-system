@@ -11,7 +11,7 @@ func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
 }
 
 // ----
-low.func.def target(@target) @global_saddr_fallback() asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @global_saddr_fallback() asm<amdgpu.gfx11.core> {
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 20} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 20} : reg<amdgpu.sgpr x4>
   %base = s_mov_b32 4

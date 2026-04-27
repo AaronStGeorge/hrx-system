@@ -13,6 +13,7 @@
 #define LOOM_OPS_BUFFER_OPS_H_
 
 #include "loom/ops/op_defs.h"
+#include "loom/ir/facts.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,31 +26,18 @@ enum {
   LOOM_OP_BUFFER_COUNT_ = 3,
 };
 
-// Target-independent memory space for buffer roots and derived views.
-typedef enum loom_buffer_memory_space_e {
-  LOOM_BUFFER_MEMORY_SPACE_UNKNOWN = 0,
-  LOOM_BUFFER_MEMORY_SPACE_GLOBAL = 1,
-  LOOM_BUFFER_MEMORY_SPACE_WORKGROUP = 2,
-  LOOM_BUFFER_MEMORY_SPACE_PRIVATE = 3,
-  LOOM_BUFFER_MEMORY_SPACE_CONSTANT = 4,
-  LOOM_BUFFER_MEMORY_SPACE_HOST = 5,
-  LOOM_BUFFER_MEMORY_SPACE_DESCRIPTOR = 6,
-  LOOM_BUFFER_MEMORY_SPACE_GENERIC = 7,
-  LOOM_BUFFER_MEMORY_SPACE_COUNT_ = 8,
-} loom_buffer_memory_space_t;
-
 // LOOM_OP_BUFFER_ALLOCA: Create a fixed-frame scratch buffer root in workgroup or private memory. Each execution produces a distinct storage identity; identical allocas must not be commoned. The byte length is a physical byte count, and base_alignment is the minimum byte alignment of the root storage base.
 // %scratch = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer
 LOOM_DEFINE_ISA(loom_buffer_alloca_isa, LOOM_OP_BUFFER_ALLOCA)
 LOOM_DEFINE_OPERAND(loom_buffer_alloca_byte_length, 0)
 LOOM_DEFINE_RESULT(loom_buffer_alloca_result, 0)
 LOOM_DEFINE_ATTR_I64(loom_buffer_alloca_base_alignment, 0)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_buffer_alloca_memory_space, 1, loom_buffer_memory_space_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_buffer_alloca_memory_space, 1, loom_value_fact_memory_space_t)
 iree_status_t loom_buffer_alloca_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t byte_length,
     int64_t base_alignment,
-    loom_buffer_memory_space_t memory_space,
+    loom_value_fact_memory_space_t memory_space,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -67,11 +55,11 @@ iree_status_t loom_buffer_alloca_verify(
 LOOM_DEFINE_ISA(loom_buffer_assume_memory_space_isa, LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE)
 LOOM_DEFINE_OPERAND(loom_buffer_assume_memory_space_buffer, 0)
 LOOM_DEFINE_RESULT(loom_buffer_assume_memory_space_result, 0)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_buffer_assume_memory_space_memory_space, 0, loom_buffer_memory_space_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_buffer_assume_memory_space_memory_space, 0, loom_value_fact_memory_space_t)
 iree_status_t loom_buffer_assume_memory_space_build(
     loom_builder_t* builder,
     loom_value_id_t buffer,
-    loom_buffer_memory_space_t memory_space,
+    loom_value_fact_memory_space_t memory_space,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

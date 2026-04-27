@@ -72,16 +72,17 @@ static iree_status_t loom_buffer_emit_attribute_value_constraint(
 
 static iree_status_t loom_buffer_verify_concrete_memory_space(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
-    iree_string_view_t attr_name, uint8_t value) {
-  if (value != LOOM_BUFFER_MEMORY_SPACE_UNKNOWN) return iree_ok_status();
+    iree_string_view_t attr_name, loom_value_fact_memory_space_t value) {
+  if (value != LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) return iree_ok_status();
   return loom_buffer_emit_attribute_value_constraint(
       emitter, op, attr_name, value, IREE_SV("concrete memory space"));
 }
 
 static iree_status_t loom_buffer_verify_scratch_memory_space(
-    iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint8_t value) {
-  if (value == LOOM_BUFFER_MEMORY_SPACE_WORKGROUP ||
-      value == LOOM_BUFFER_MEMORY_SPACE_PRIVATE) {
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    loom_value_fact_memory_space_t value) {
+  if (value == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP ||
+      value == LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE) {
     return iree_ok_status();
   }
   return loom_buffer_emit_attribute_value_constraint(
@@ -91,7 +92,7 @@ static iree_status_t loom_buffer_verify_scratch_memory_space(
 
 static bool loom_buffer_try_get_local_memory_space_fact(
     const loom_module_t* module, loom_value_id_t value_id,
-    uint8_t* out_memory_space) {
+    loom_value_fact_memory_space_t* out_memory_space) {
   const loom_value_t* value = loom_module_value(module, value_id);
   if (loom_value_is_block_arg(value)) return false;
 
@@ -112,14 +113,15 @@ static bool loom_buffer_try_get_local_memory_space_fact(
 
 static iree_status_t loom_buffer_verify_memory_space_refinement(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
-    const loom_op_t* op, uint8_t value) {
-  uint8_t existing_memory_space = LOOM_BUFFER_MEMORY_SPACE_UNKNOWN;
+    const loom_op_t* op, loom_value_fact_memory_space_t value) {
+  loom_value_fact_memory_space_t existing_memory_space =
+      LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
   if (!loom_buffer_try_get_local_memory_space_fact(
           module, loom_buffer_assume_memory_space_buffer(op),
           &existing_memory_space)) {
     return iree_ok_status();
   }
-  if (existing_memory_space == LOOM_BUFFER_MEMORY_SPACE_UNKNOWN) {
+  if (existing_memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) {
     return iree_ok_status();
   }
   if (existing_memory_space == value) return iree_ok_status();

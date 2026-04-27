@@ -4,9 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Shared atomic operation vocabulary used by scalar view atomics and vector
-// atomics. Generated dialect APIs alias these enum types directly so
-// verification, lowering, and builders use one semantic domain.
+// Shared atomic and synchronization vocabulary used by scalar view atomics,
+// vector atomics, and kernel barriers. Generated dialect APIs alias these enum
+// types directly so verification, lowering, and builders use one semantic
+// domain.
 
 #ifndef LOOM_OPS_ATOMIC_H_
 #define LOOM_OPS_ATOMIC_H_
@@ -54,7 +55,7 @@ typedef enum loom_atomic_kind_e {
   LOOM_ATOMIC_KIND_COUNT_,
 } loom_atomic_kind_t;
 
-// Memory ordering for view and vector atomics.
+// Memory ordering for atomic operations and explicit synchronization fences.
 typedef enum loom_atomic_ordering_e {
   // No ordering constraints beyond atomicity.
   LOOM_ATOMIC_ORDERING_RELAXED = 0,
@@ -69,7 +70,8 @@ typedef enum loom_atomic_ordering_e {
   LOOM_ATOMIC_ORDERING_COUNT_,
 } loom_atomic_ordering_t;
 
-// Synchronization scope for atomic memory effects.
+// Synchronization scope for atomic operations and explicit synchronization
+// fences.
 typedef enum loom_atomic_scope_e {
   // Current invocation or thread.
   LOOM_ATOMIC_SCOPE_THREAD = 0,

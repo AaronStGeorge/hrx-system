@@ -52,6 +52,8 @@ static const loom_pass_trait_name_t kLoomPassTraitNames[] = {
      LOOM_TRAIT_REFINABLE_RESULT_TYPE_REFS},
     {IREE_SVL("refinable-result-type-refs"),
      LOOM_TRAIT_REFINABLE_RESULT_TYPE_REFS},
+    {IREE_SVL("FactIdentity"), LOOM_TRAIT_FACT_IDENTITY},
+    {IREE_SVL("fact-identity"), LOOM_TRAIT_FACT_IDENTITY},
 };
 
 bool loom_pass_predicate_lookup_trait(iree_string_view_t name,

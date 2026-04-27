@@ -221,9 +221,6 @@ iree_status_t loom_llvmir_lowering_lower_subview(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);
 
-iree_status_t loom_llvmir_lowering_lower_refine(
-    loom_llvmir_lowering_state_t* state, const loom_op_t* op);
-
 iree_status_t loom_llvmir_lowering_lower_view_load(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);

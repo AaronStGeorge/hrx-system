@@ -321,24 +321,25 @@ bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,
     return false;
   }
 
+  if (loom_traits_are_fact_identity(
+          loom_op_effective_traits(module, defining_op))) {
+    const uint16_t result_index = loom_value_def_index(value);
+    if (result_index >= defining_op->operand_count) {
+      return false;
+    }
+    const loom_value_id_t source_identity_value_id =
+        loom_op_const_operands(defining_op)[result_index];
+    if (source_identity_value_id == source_value_id) {
+      return false;
+    }
+    return loom_amdgpu_module_value_prefers_vgpr(module,
+                                                 source_identity_value_id);
+  }
+
   switch (defining_op->kind) {
     case LOOM_OP_KERNEL_WORKITEM_ID:
       return loom_kernel_workitem_id_dimension(defining_op) <
              LOOM_KERNEL_DIMENSION_COUNT_;
-    case LOOM_OP_INDEX_ASSUME:
-    case LOOM_OP_SCALAR_ASSUME: {
-      const uint16_t result_index = loom_value_def_index(value);
-      if (result_index >= defining_op->operand_count) {
-        return false;
-      }
-      const loom_value_id_t assumed_source_value_id =
-          loom_op_const_operands(defining_op)[result_index];
-      if (assumed_source_value_id == source_value_id) {
-        return false;
-      }
-      return loom_amdgpu_module_value_prefers_vgpr(module,
-                                                   assumed_source_value_id);
-    }
     case LOOM_OP_INDEX_ADD:
       return loom_amdgpu_module_value_prefers_vgpr(
                  module, loom_index_add_lhs(defining_op)) ||

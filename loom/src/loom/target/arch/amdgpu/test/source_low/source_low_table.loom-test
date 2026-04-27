@@ -101,7 +101,7 @@ func.def @f32_table_lookup_i32_codes(%codes: vector<2xi32>) -> (vector<2xf32>) {
 }
 
 // ----
-low.func.def target(@target) @f32_table_lookup_i32_codes(%codes: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
+low.func.def target(@target) abi(hal_kernel) @f32_table_lookup_i32_codes(%codes: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.gfx11.core> {
   %g0 = v_mov_b32 1073741824
   %g1 = v_mov_b32 3225419776
   %g2 = v_mov_b32 1084227584
