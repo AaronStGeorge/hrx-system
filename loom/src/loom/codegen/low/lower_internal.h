@@ -22,6 +22,7 @@ extern "C" {
 #define LOOM_LOW_LOWER_VALUE_ID_ELIDED ((loom_value_id_t)(UINT32_MAX - 1))
 
 typedef struct loom_low_lower_rule_t loom_low_lower_rule_t;
+typedef struct loom_low_lower_resolved_emit_t loom_low_lower_resolved_emit_t;
 
 typedef struct loom_low_lower_selected_plan_t {
   // Source op this selected plan lowers.
@@ -32,6 +33,8 @@ typedef struct loom_low_lower_selected_plan_t {
   const loom_low_lower_rule_set_t* rule_set;
   // Table rule selected during planning, or NULL for target-owned callbacks.
   const loom_low_lower_rule_t* rule;
+  // Resolved emit rows for |rule|, or NULL for target-owned callbacks.
+  const loom_low_lower_resolved_emit_t* resolved_emits;
   // Target-owned plan selected during planning, or empty for table rules.
   loom_low_lower_plan_t plan;
 } loom_low_lower_selected_plan_t;

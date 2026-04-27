@@ -363,6 +363,13 @@ typedef struct loom_low_lower_emit_t {
   uint16_t tied_result_count;
 } loom_low_lower_emit_t;
 
+typedef struct loom_low_lower_resolved_emit_t {
+  // Static emit-program row selected by planning.
+  const loom_low_lower_emit_t* emit;
+  // Descriptor row referenced by |emit| and resolved during planning.
+  loom_low_lower_resolved_descriptor_t descriptor;
+} loom_low_lower_resolved_emit_t;
+
 typedef struct loom_low_lower_rule_t {
   // Source op kind this rule accepts.
   loom_op_kind_t source_op_kind;
@@ -490,11 +497,21 @@ iree_status_t loom_low_lower_rule_set_select_op(
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     const loom_low_lower_rule_t** out_rule);
 
+// Resolves descriptor-backed emit rows for |rule| after selection. The returned
+// rows are arena-owned by |context| and remain valid for the current lowering
+// run.
+iree_status_t loom_low_lower_rule_set_resolve_emit_program(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_rule_set_t* rule_set,
+    const loom_low_lower_rule_t* rule,
+    const loom_low_lower_resolved_emit_t** out_resolved_emits);
+
 // Emits target-low packets for |source_op| using a previously selected rule.
 iree_status_t loom_low_lower_rule_set_emit_rule(
     loom_low_lower_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
-    const loom_low_lower_rule_t* rule);
+    const loom_low_lower_rule_t* rule,
+    const loom_low_lower_resolved_emit_t* resolved_emits);
 
 #ifdef __cplusplus
 }  // extern "C"

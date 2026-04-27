@@ -420,6 +420,9 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_select(
         context, rule_set, source_op, &rule_selection));
     if (rule_selection.rule != NULL) {
+      const loom_low_lower_resolved_emit_t* resolved_emits = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_rule_set_resolve_emit_program(
+          context, rule_set, rule_selection.rule, &resolved_emits));
       IREE_ASSERT_LE(i, UINT16_MAX);
       return loom_low_lower_record_selected_plan(
           context, (loom_low_lower_selected_plan_t){
@@ -427,6 +430,7 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
                        .rule_set_index = (uint16_t)i,
                        .rule_set = rule_set,
                        .rule = rule_selection.rule,
+                       .resolved_emits = resolved_emits,
                        .plan = loom_low_lower_plan_empty(),
                    });
     }
@@ -988,7 +992,8 @@ static iree_status_t loom_low_lower_emit_selected_plan(
   if (selected_plan.rule != NULL) {
     IREE_ASSERT(selected_plan.rule_set != NULL);
     status = loom_low_lower_rule_set_emit_rule(context, selected_plan.rule_set,
-                                               source_op, selected_plan.rule);
+                                               source_op, selected_plan.rule,
+                                               selected_plan.resolved_emits);
   } else {
     IREE_ASSERT_FALSE(loom_low_lower_plan_is_empty(selected_plan.plan));
     IREE_ASSERT(context->policy->emit_op.fn != NULL);

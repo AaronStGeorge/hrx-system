@@ -364,6 +364,13 @@ typedef struct loom_low_lower_result_t {
   iree_host_size_t report_row_total_count;
 } loom_low_lower_result_t;
 
+typedef struct loom_low_lower_resolved_descriptor_t {
+  // Descriptor row selected from the active descriptor set.
+  const loom_low_descriptor_t* descriptor;
+  // Module string ID for the selected descriptor key.
+  loom_string_id_t opcode_id;
+} loom_low_lower_resolved_descriptor_t;
+
 // Lowers one func.def-like source function into a target-low function in place.
 //
 // User IR failures are emitted through |options->emitter| and counted in
@@ -482,13 +489,21 @@ iree_status_t loom_low_lower_make_register_type(
     loom_low_lower_context_t* context, uint16_t reg_class_id,
     uint32_t unit_count, loom_type_t* out_type);
 
+// Resolves a stable descriptor ID against the selected descriptor set.
+//
+// Planning paths should resolve once and store the resulting row in their
+// selected plan instead of making emission perform descriptor lookup.
+iree_status_t loom_low_lower_resolve_descriptor(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    loom_low_lower_resolved_descriptor_t* out_descriptor);
+
 // Emits a descriptor-backed low.op selected by stable descriptor ID.
 //
 // The selected descriptor set on |context| is the authority for converting the
-// durable ID into the packet's textual descriptor spelling. Source lowerings
-// should pass generated descriptor ID constants or target selector results here
-// instead of interning descriptor key strings and relying on builders to hash
-// them back into IDs.
+// durable ID into the packet's textual descriptor spelling. This is for
+// construction paths that naturally only have a descriptor ID at the emission
+// boundary; planned source lowerings should prefer resolve_descriptor followed
+// by the resolved emit helpers.
 iree_status_t loom_low_lower_emit_descriptor_op(
     loom_low_lower_context_t* context, uint64_t descriptor_id,
     const loom_value_id_t* operands, iree_host_size_t operand_count,
@@ -500,6 +515,25 @@ iree_status_t loom_low_lower_emit_descriptor_op(
 // Emits a descriptor-backed low.const selected by stable descriptor ID.
 iree_status_t loom_low_lower_emit_descriptor_const(
     loom_low_lower_context_t* context, uint64_t descriptor_id,
+    loom_named_attr_slice_t attrs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
+// Emits a descriptor-backed low.op from a descriptor row resolved during
+// selection.
+iree_status_t loom_low_lower_emit_resolved_descriptor_op(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_resolved_descriptor_t* descriptor,
+    const loom_value_id_t* operands, iree_host_size_t operand_count,
+    loom_named_attr_slice_t attrs, const loom_type_t* result_types,
+    iree_host_size_t result_count, const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count, loom_location_id_t location,
+    loom_op_t** out_op);
+
+// Emits a descriptor-backed low.const from a descriptor row resolved during
+// selection.
+iree_status_t loom_low_lower_emit_resolved_descriptor_const(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_resolved_descriptor_t* descriptor,
     loom_named_attr_slice_t attrs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 

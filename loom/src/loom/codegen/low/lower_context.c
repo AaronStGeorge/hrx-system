@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <inttypes.h>
+
 #include "loom/codegen/low/lower_internal.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
@@ -197,6 +199,53 @@ iree_status_t loom_low_lower_make_register_type(
                                       reg_class_id, unit_count, out_type);
 }
 
+iree_status_t loom_low_lower_resolve_descriptor(
+    loom_low_lower_context_t* context, uint64_t descriptor_id,
+    loom_low_lower_resolved_descriptor_t* out_descriptor) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(out_descriptor);
+  *out_descriptor = (loom_low_lower_resolved_descriptor_t){
+      .descriptor = NULL,
+      .opcode_id = LOOM_STRING_ID_INVALID,
+  };
+  if (descriptor_id == LOOM_LOW_DESCRIPTOR_ID_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low descriptor ID is required");
+  }
+
+  const uint32_t descriptor_ordinal =
+      loom_low_descriptor_set_lookup_descriptor_by_id(context->descriptor_set,
+                                                      descriptor_id);
+  if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low descriptor ID 0x%016" PRIx64
+                            " is not present in the selected descriptor set",
+                            descriptor_id);
+  }
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(context->descriptor_set,
+                                            descriptor_ordinal);
+  IREE_ASSERT(descriptor != NULL);
+
+  iree_string_view_t key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+      context->descriptor_set, descriptor->key_string_offset, &key));
+  if (iree_string_view_is_empty(key)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "target-low descriptor ID 0x%016" PRIx64
+                            " has no descriptor key",
+                            descriptor->stable_id);
+  }
+  loom_string_id_t opcode_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(context->module, key, &opcode_id));
+  *out_descriptor = (loom_low_lower_resolved_descriptor_t){
+      .descriptor = descriptor,
+      .opcode_id = opcode_id,
+  };
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_lower_emit_descriptor_op(
     loom_low_lower_context_t* context, uint64_t descriptor_id,
     const loom_value_id_t* operands, iree_host_size_t operand_count,
@@ -219,6 +268,34 @@ iree_status_t loom_low_lower_emit_descriptor_const(
   return loom_low_build_descriptor_const(&context->builder,
                                          context->descriptor_set, descriptor_id,
                                          attrs, result_type, location, out_op);
+}
+
+iree_status_t loom_low_lower_emit_resolved_descriptor_op(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_resolved_descriptor_t* descriptor,
+    const loom_value_id_t* operands, iree_host_size_t operand_count,
+    loom_named_attr_slice_t attrs, const loom_type_t* result_types,
+    iree_host_size_t result_count, const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count, loom_location_id_t location,
+    loom_op_t** out_op) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(descriptor);
+  return loom_low_build_resolved_descriptor_op(
+      &context->builder, context->descriptor_set, descriptor->descriptor,
+      descriptor->opcode_id, operands, operand_count, attrs, result_types,
+      result_count, tied_results, tied_result_count, location, out_op);
+}
+
+iree_status_t loom_low_lower_emit_resolved_descriptor_const(
+    loom_low_lower_context_t* context,
+    const loom_low_lower_resolved_descriptor_t* descriptor,
+    loom_named_attr_slice_t attrs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(descriptor);
+  return loom_low_build_resolved_descriptor_const(
+      &context->builder, context->descriptor_set, descriptor->descriptor,
+      descriptor->opcode_id, attrs, result_type, location, out_op);
 }
 
 iree_status_t loom_low_lower_map_type(loom_low_lower_context_t* context,
