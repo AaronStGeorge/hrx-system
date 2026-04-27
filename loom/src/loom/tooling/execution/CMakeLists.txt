@@ -97,6 +97,7 @@ loom_cc_library(
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::target::compile_report
+    loom::src::loom::target::types
     loom::src::loom::verify
   PUBLIC
 )
@@ -154,6 +155,8 @@ loom_cc_library(
     iree::base
     iree::hal
     iree::modules::hal::types
+    loom::src::loom::target::launch
+    loom::src::loom::target::types
     iree::tooling::comparison
     iree::tooling::function_io
     iree::tooling::function_util
@@ -238,6 +241,7 @@ loom_cc_test(
     iree::base
     loom::src::loom::ops::func
     loom::src::loom::target::low_descriptor_registry_core_test
+    loom::src::loom::target::types
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -276,6 +280,7 @@ loom_cc_test(
     ::hal_invocation
     ::hal_runtime
     iree::base
+    loom::src::loom::target::types
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm

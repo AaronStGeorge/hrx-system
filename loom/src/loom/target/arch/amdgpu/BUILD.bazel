@@ -677,6 +677,7 @@ loom_cc_library(
     srcs = ["execution/amdgpu_hal_backend.c"],
     hdrs = ["execution/amdgpu_hal_backend.h"],
     deps = [
+        ":low_registry",
         ":target_info",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target/emit/native/amdgpu:hal_executable",

@@ -18,6 +18,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
 #include "loom/target/compile_report.h"
+#include "loom/target/types.h"
 #include "loom/verify/verify.h"
 
 #ifdef __cplusplus
@@ -31,6 +32,8 @@ typedef struct loom_run_hal_runtime_t loom_run_hal_runtime_t;
 typedef struct loom_run_hal_selected_target_t {
   // Backend-owned target payload. Usually points at static target info.
   const void* data;
+  // Target-neutral bundle resolved for the selected backend target.
+  const loom_target_bundle_t* target_bundle;
   // Preset key that aliases the selected target, if the backend has one.
   iree_string_view_t preset_key;
 } loom_run_hal_selected_target_t;
@@ -39,6 +42,8 @@ typedef struct loom_run_hal_selected_target_t {
 typedef struct loom_run_hal_executable_t {
   // HAL executable format string consumed by the selected HAL loader.
   iree_string_view_t executable_format;
+  // Target-neutral bundle resolved for the executable, when available.
+  const loom_target_bundle_t* target_bundle;
   // Backend-owned executable container bytes.
   iree_const_byte_span_t executable_data;
   // Backend-owned storage released by |deinitialize_executable|.

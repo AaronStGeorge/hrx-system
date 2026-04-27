@@ -64,6 +64,11 @@ iree_status_t loom_run_hal_candidate_compile(
         options->entry_symbol, options->diagnostic_sink,
         options->source_resolver, options->max_errors,
         &out_candidate->compile_report, allocator, &out_candidate->executable);
+    if (iree_status_is_ok(status) &&
+        out_candidate->executable.target_bundle == NULL) {
+      out_candidate->executable.target_bundle =
+          out_candidate->target.target_bundle;
+    }
   }
   out_candidate->compile_report.artifact_kind =
       LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;

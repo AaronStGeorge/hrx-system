@@ -10,6 +10,7 @@
 #include "iree/tooling/comparison.h"
 #include "iree/tooling/function_io.h"
 #include "iree/tooling/function_util.h"
+#include "loom/target/launch.h"
 
 enum {
   LOOM_RUN_HAL_DEFAULT_MAX_OUTPUT_ELEMENT_COUNT = 1024,
@@ -128,6 +129,9 @@ iree_status_t loom_run_hal_prepared_candidate_prepare(
   loom_run_hal_prepared_candidate_initialize(out_candidate);
   iree_status_t status = loom_run_hal_executable_prepare(
       runtime, executable, &out_candidate->executable);
+  if (iree_status_is_ok(status)) {
+    out_candidate->target_bundle = executable->target_bundle;
+  }
   if (!iree_status_is_ok(status)) {
     loom_run_hal_prepared_candidate_deinitialize(out_candidate);
   }
@@ -382,6 +386,35 @@ static iree_status_t loom_run_hal_invocation_plan_validate(
   return iree_ok_status();
 }
 
+static iree_status_t loom_run_hal_prepared_candidate_validate_dispatch(
+    const loom_run_hal_prepared_candidate_t* candidate,
+    const loom_run_hal_invocation_plan_t* plan) {
+  IREE_ASSERT_ARGUMENT(candidate);
+  IREE_ASSERT_ARGUMENT(plan);
+  const loom_target_bundle_t* target_bundle = candidate->target_bundle;
+  if (target_bundle == NULL) {
+    return iree_ok_status();
+  }
+  if (target_bundle->snapshot == NULL || target_bundle->export_plan == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL prepared candidate target bundle is missing "
+                            "snapshot or export plan");
+  }
+  if (target_bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL prepared candidate target bundle must use HAL kernel ABI");
+  }
+  const loom_target_dispatch_workgroup_count_t workgroup_count = {
+      .x = plan->options.workgroup_count[0],
+      .y = plan->options.workgroup_count[1],
+      .z = plan->options.workgroup_count[2],
+  };
+  return loom_target_validate_hal_dispatch_workgroup_count(
+      target_bundle->snapshot, &target_bundle->export_plan->hal_kernel,
+      &workgroup_count);
+}
+
 iree_status_t loom_run_hal_invocation_plan_prepare_from_specs(
     const loom_run_hal_runtime_t* runtime,
     const loom_run_hal_invocation_options_t* options,
@@ -448,6 +481,8 @@ iree_status_t loom_run_hal_invocation_dispatch_plan(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "HAL prepared candidate requires an executable");
   }
+  IREE_RETURN_IF_ERROR(
+      loom_run_hal_prepared_candidate_validate_dispatch(candidate, plan));
   if (runtime->device == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "HAL runtime is not initialized");

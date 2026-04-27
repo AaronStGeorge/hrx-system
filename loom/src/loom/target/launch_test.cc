@@ -17,6 +17,9 @@ loom_target_snapshot_t TestSnapshot() {
       .name = IREE_SV("test-target"),
       .max_workgroup_size = {.x = 1024, .y = 1024, .z = 1024},
       .max_flat_workgroup_size = 1024,
+      .max_grid_size = {.x = 4096, .y = 2048, .z = 1024},
+      .max_flat_grid_size = 8388608,
+      .max_workgroup_count = {.x = 4096, .y = 2048, .z = 1024},
   };
 }
 
@@ -63,6 +66,17 @@ TEST(TargetLaunchTest, RejectsRequiredFlatWorkgroupSizeAboveLimit) {
       loom_target_validate_hal_kernel_launch(&snapshot, &hal_kernel));
 }
 
+TEST(TargetLaunchTest, RejectsRequiredFlatWorkgroupSizeOverflow) {
+  loom_target_snapshot_t snapshot = TestSnapshot();
+  snapshot.max_workgroup_size = {.x = 0, .y = 0, .z = 0};
+  loom_target_hal_kernel_abi_t hal_kernel =
+      TestHalKernelAbi({.x = UINT32_MAX, .y = UINT32_MAX, .z = UINT32_MAX});
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
+      loom_target_validate_hal_kernel_launch(&snapshot, &hal_kernel));
+}
+
 TEST(TargetLaunchTest, ValidatesSelectedFlatWorkgroupRange) {
   loom_target_snapshot_t snapshot = TestSnapshot();
   loom_target_hal_kernel_abi_t hal_kernel =
@@ -96,6 +110,101 @@ TEST(TargetLaunchTest, RequiresConcreteLaunchForConcreteConsumers) {
       loom_target_workgroup_size_t{.x = 64, .y = 1, .z = 1};
   IREE_EXPECT_OK(loom_target_require_concrete_hal_kernel_launch(
       &hal_kernel, IREE_SV("test consumer")));
+}
+
+TEST(TargetLaunchTest, ValidatesDispatchCountAgainstCountLimits) {
+  loom_target_snapshot_t snapshot = TestSnapshot();
+  loom_target_hal_kernel_abi_t hal_kernel =
+      TestHalKernelAbi({.x = 0, .y = 0, .z = 0});
+  loom_target_dispatch_workgroup_count_t valid = {
+      .x = 4096,
+      .y = 2048,
+      .z = 1,
+  };
+  loom_target_dispatch_workgroup_count_t exceeds_x = {
+      .x = 4097,
+      .y = 1,
+      .z = 1,
+  };
+  loom_target_dispatch_workgroup_count_t partial = {
+      .x = 0,
+      .y = 1,
+      .z = 1,
+  };
+
+  IREE_EXPECT_OK(loom_target_validate_hal_dispatch_workgroup_count(
+      &snapshot, &hal_kernel, &valid));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_target_validate_hal_dispatch_workgroup_count(
+                            &snapshot, &hal_kernel, &exceeds_x));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_target_validate_hal_dispatch_workgroup_count(
+                            &snapshot, &hal_kernel, &partial));
+}
+
+TEST(TargetLaunchTest, DynamicLocalWorkgroupChecksGridLowerBoundOnly) {
+  loom_target_snapshot_t snapshot = TestSnapshot();
+  snapshot.max_workgroup_count = {.x = 4096, .y = 5000, .z = 5000};
+  loom_target_hal_kernel_abi_t hal_kernel =
+      TestHalKernelAbi({.x = 0, .y = 0, .z = 0});
+  loom_target_dispatch_workgroup_count_t valid = {
+      .x = 4096,
+      .y = 1,
+      .z = 1,
+  };
+
+  IREE_EXPECT_OK(loom_target_validate_hal_dispatch_workgroup_count(
+      &snapshot, &hal_kernel, &valid));
+}
+
+TEST(TargetLaunchTest, ConcreteLocalWorkgroupValidatesGridLimits) {
+  loom_target_snapshot_t snapshot = TestSnapshot();
+  loom_target_hal_kernel_abi_t hal_kernel =
+      TestHalKernelAbi({.x = 4, .y = 2, .z = 1});
+  loom_target_dispatch_workgroup_count_t valid = {
+      .x = 1024,
+      .y = 1024,
+      .z = 1,
+  };
+  loom_target_dispatch_workgroup_count_t exceeds_grid_x = {
+      .x = 1025,
+      .y = 1,
+      .z = 1,
+  };
+  loom_target_dispatch_workgroup_count_t exceeds_flat_grid = {
+      .x = 1024,
+      .y = 1024,
+      .z = 2,
+  };
+
+  IREE_EXPECT_OK(loom_target_validate_hal_dispatch_workgroup_count(
+      &snapshot, &hal_kernel, &valid));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_target_validate_hal_dispatch_workgroup_count(
+                            &snapshot, &hal_kernel, &exceeds_grid_x));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_target_validate_hal_dispatch_workgroup_count(
+                            &snapshot, &hal_kernel, &exceeds_flat_grid));
+}
+
+TEST(TargetLaunchTest, RejectsFlatGridOverflow) {
+  loom_target_snapshot_t snapshot = TestSnapshot();
+  snapshot.max_workgroup_size = {.x = 0, .y = 0, .z = 0};
+  snapshot.max_flat_workgroup_size = 0;
+  snapshot.max_grid_size = {.x = 0, .y = 0, .z = 0};
+  snapshot.max_flat_grid_size = 0;
+  snapshot.max_workgroup_count = {.x = 0, .y = 0, .z = 0};
+  loom_target_hal_kernel_abi_t hal_kernel =
+      TestHalKernelAbi({.x = UINT32_MAX, .y = UINT32_MAX, .z = UINT32_MAX});
+  loom_target_dispatch_workgroup_count_t workgroup_count = {
+      .x = UINT32_MAX,
+      .y = UINT32_MAX,
+      .z = UINT32_MAX,
+  };
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_target_validate_hal_dispatch_workgroup_count(
+                            &snapshot, &hal_kernel, &workgroup_count));
 }
 
 }  // namespace

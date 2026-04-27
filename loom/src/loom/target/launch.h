@@ -33,10 +33,6 @@ bool loom_target_workgroup_size_is_concrete(
 bool loom_target_workgroup_size_is_partial(
     const loom_target_workgroup_size_t* size);
 
-// Multiplies workgroup dimensions using 64-bit arithmetic.
-uint64_t loom_target_workgroup_size_flat_product(
-    const loom_target_workgroup_size_t* size);
-
 // Validates HAL kernel launch facts against the target capability envelope.
 //
 // An empty required workgroup size is valid and means launch selection remains
@@ -52,6 +48,19 @@ iree_status_t loom_target_validate_hal_kernel_launch(
 iree_status_t loom_target_require_concrete_hal_kernel_launch(
     const loom_target_hal_kernel_abi_t* hal_kernel,
     iree_string_view_t consumer_name);
+
+// Validates a final HAL dispatch workgroup count against target limits.
+//
+// Dispatch counts must be concrete because this is the final runtime launch
+// shape, not the compile-time local-workgroup selection. Per-dimension
+// workgroup-count limits are always checked when present. Grid-size limits are
+// checked as a necessary lower-bound even with dynamic local workgroup size,
+// then checked exactly when |hal_kernel| carries a concrete required workgroup
+// size.
+iree_status_t loom_target_validate_hal_dispatch_workgroup_count(
+    const loom_target_snapshot_t* snapshot,
+    const loom_target_hal_kernel_abi_t* hal_kernel,
+    const loom_target_dispatch_workgroup_count_t* workgroup_count);
 
 #ifdef __cplusplus
 }  // extern "C"

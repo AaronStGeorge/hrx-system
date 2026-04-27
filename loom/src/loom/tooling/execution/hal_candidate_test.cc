@@ -44,6 +44,18 @@ constexpr char kHalSource[] =
 int kFakeHalTarget = 0;
 int kFakeHalRuntime = 0;
 const uint8_t kFakeHalExecutableData[] = {0x7F, 'E', 'L', 'F'};
+static const loom_target_snapshot_t kFakeSnapshot = {
+    .name = IREE_SVL("fake-snapshot"),
+};
+static const loom_target_export_plan_t kFakeExportPlan = {
+    .name = IREE_SVL("fake-export"),
+    .abi_kind = LOOM_TARGET_ABI_HAL_KERNEL,
+};
+static const loom_target_bundle_t kFakeTargetBundle = {
+    .name = IREE_SVL("fake-bundle"),
+    .snapshot = &kFakeSnapshot,
+    .export_plan = &kFakeExportPlan,
+};
 
 const loom_run_hal_runtime_t* FakeHalRuntime() {
   return reinterpret_cast<const loom_run_hal_runtime_t*>(&kFakeHalRuntime);
@@ -58,6 +70,7 @@ iree_status_t FakeHalSelectTarget(const loom_run_hal_backend_t* backend,
   (void)allocator;
   *out_target = (loom_run_hal_selected_target_t){
       .data = &kFakeHalTarget,
+      .target_bundle = &kFakeTargetBundle,
       .preset_key = IREE_SVL("fake-hal"),
   };
   return iree_ok_status();
@@ -168,6 +181,8 @@ TEST_F(HalCandidateTest, CompileHalExecutableCandidate) {
       iree_allocator_system(), &candidate));
   EXPECT_EQ(candidate.backend, &kFakeHalBackend);
   EXPECT_EQ(candidate.target.data, &kFakeHalTarget);
+  EXPECT_EQ(candidate.target.target_bundle, &kFakeTargetBundle);
+  EXPECT_EQ(candidate.executable.target_bundle, &kFakeTargetBundle);
   EXPECT_TRUE(iree_string_view_equal(candidate.executable.executable_format,
                                      IREE_SV("fake-hal-format")));
   EXPECT_EQ(candidate.executable.executable_data.data, kFakeHalExecutableData);

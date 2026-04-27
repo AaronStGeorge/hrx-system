@@ -204,6 +204,52 @@ TEST_F(HalInvocationTest, DispatchPlanRejectsMissingPreparedExecutable) {
   loom_run_hal_invocation_plan_deinitialize(&plan);
 }
 
+TEST_F(HalInvocationTest,
+       DispatchPlanRejectsTargetLimitViolationBeforeDeviceUse) {
+  static const loom_target_snapshot_t snapshot = {
+      .name = IREE_SVL("test-snapshot"),
+      .max_workgroup_count = {.x = 4, .y = 4, .z = 4},
+  };
+  static const loom_target_export_plan_t export_plan = {
+      .name = IREE_SVL("test-export"),
+      .abi_kind = LOOM_TARGET_ABI_HAL_KERNEL,
+      .hal_kernel =
+          {
+              .binding_alignment = 16,
+              .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
+          },
+  };
+  static const loom_target_bundle_t target_bundle = {
+      .name = IREE_SVL("test-bundle"),
+      .snapshot = &snapshot,
+      .export_plan = &export_plan,
+  };
+
+  loom_run_hal_runtime_t runtime = {};
+  loom_run_hal_prepared_candidate_t candidate = {
+      .target_bundle = &target_bundle,
+      .executable = reinterpret_cast<iree_hal_executable_t*>(1),
+  };
+  loom_run_hal_invocation_plan_t plan = {};
+  loom_run_hal_invocation_plan_initialize(&plan);
+  plan.options.workgroup_count[0] = 5;
+
+  const iree_vm_type_def_t value_type =
+      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
+  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
+                                     &plan.bindings));
+
+  loom_run_hal_iteration_t iteration = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
+      loom_run_hal_invocation_dispatch_plan(
+          &runtime, &candidate, &plan, iree_allocator_system(), &iteration));
+
+  candidate.executable = nullptr;
+  loom_run_hal_iteration_deinitialize(&iteration);
+  loom_run_hal_invocation_plan_deinitialize(&plan);
+}
+
 TEST_F(HalInvocationTest, CollectResultsRejectsMissingIterationBindings) {
   loom_run_hal_runtime_t runtime = {};
   loom_run_hal_invocation_plan_t plan = {};

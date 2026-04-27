@@ -557,6 +557,7 @@ loom_cc_library(
   SRCS
     "execution/amdgpu_hal_backend.c"
   DEPS
+    ::low_registry
     ::target_info
     iree::base
     loom::src::loom::ops::target

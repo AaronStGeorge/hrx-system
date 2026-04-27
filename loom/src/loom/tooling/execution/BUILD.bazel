@@ -84,6 +84,7 @@ loom_cc_library(
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ir",
         "//loom/src/loom/target:compile_report",
+        "//loom/src/loom/target:types",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
     ],
@@ -130,6 +131,8 @@ loom_cc_library(
     deps = [
         ":hal_backend",
         ":hal_runtime",
+        "//loom/src/loom/target:launch",
+        "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/modules/hal:types",
@@ -202,6 +205,7 @@ loom_cc_test(
         ":session",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/target:low_descriptor_registry_core_test",
+        "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -237,6 +241,7 @@ loom_cc_test(
     deps = [
         ":hal_invocation",
         ":hal_runtime",
+        "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

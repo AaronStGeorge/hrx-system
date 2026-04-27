@@ -106,6 +106,15 @@ typedef struct loom_target_workgroup_count_limit_t {
   uint32_t z;
 } loom_target_workgroup_count_limit_t;
 
+typedef struct loom_target_dispatch_workgroup_count_t {
+  // Dispatch workgroup count along the x dimension.
+  uint32_t x;
+  // Dispatch workgroup count along the y dimension.
+  uint32_t y;
+  // Dispatch workgroup count along the z dimension.
+  uint32_t z;
+} loom_target_dispatch_workgroup_count_t;
+
 typedef struct loom_target_snapshot_t {
   // Stable snapshot name for diagnostics and tests.
   iree_string_view_t name;
