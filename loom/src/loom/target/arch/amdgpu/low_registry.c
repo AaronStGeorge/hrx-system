@@ -12,6 +12,7 @@
 #include "loom/target/arch/amdgpu/gfx1250_descriptors.h"
 #include "loom/target/arch/amdgpu/gfx12_descriptors.h"
 #include "loom/target/arch/amdgpu/gfx950_descriptors.h"
+#include "loom/target/arch/amdgpu/target_info_defs.h"
 
 #define LOOM_AMDGPU_TARGET_TRIPLE IREE_SVL("amdgcn-amd-amdhsa")
 #define LOOM_AMDGPU_DATA_LAYOUT                              \
@@ -81,7 +82,7 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
             .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
             .flat_workgroup_size_min = 0,
             .flat_workgroup_size_max = 0,
-            .buffer_resource_flags = 159744,
+            .buffer_resource_flags = LOOM_AMDGPU_HAL_BUFFER_RESOURCE_FLAGS,
         },
 };
 

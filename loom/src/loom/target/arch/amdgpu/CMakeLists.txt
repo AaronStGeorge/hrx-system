@@ -459,6 +459,7 @@ loom_cc_library(
     ::gfx1250_descriptors
     ::gfx12_descriptors
     ::gfx950_descriptors
+    ::target_info_defs
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::target::low_descriptor_registry

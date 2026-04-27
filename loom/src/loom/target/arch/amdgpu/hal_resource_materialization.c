@@ -341,22 +341,6 @@ static iree_status_t loom_amdgpu_hal_resource_build_descriptor_pointer(
   uint32_t cache_swizzle_stride = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_cache_swizzle_stride(
       resource_op, &has_cache_swizzle, &cache_swizzle_stride));
-  if (!has_cache_swizzle) {
-    *out_pointer = loaded_pointer;
-    return iree_ok_status();
-  }
-
-  loom_amdgpu_buffer_resource_cache_swizzle_t cache_swizzle_kind =
-      LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_cache_swizzle_kind(
-      descriptor_set, &cache_swizzle_kind));
-  if (cache_swizzle_kind !=
-      LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU HAL resource cache swizzle is not supported by target '%.*s'",
-        (int)target_bundle->name.size, target_bundle->name.data);
-  }
 
   loom_value_id_t pointer_low = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_low_slice(
@@ -375,21 +359,37 @@ static iree_status_t loom_amdgpu_hal_resource_build_descriptor_pointer(
       pointer_high, pointer_high_mask, sgpr_type, location,
       &masked_pointer_high));
 
-  const uint32_t cache_swizzle_word =
-      ((cache_swizzle_stride |
-        LOOM_AMDGPU_HAL_RESOURCE_CACHE_SWIZZLE_ENABLE_BIT)
-       << LOOM_AMDGPU_HAL_RESOURCE_CACHE_SWIZZLE_WORD_SHIFT);
-  loom_value_id_t cache_swizzle = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_mov_b32(
-      rewriter, descriptor_set, cache_swizzle_word, sgpr_type, location,
-      &cache_swizzle));
-  loom_value_id_t swizzled_pointer_high = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_binary_b32(
-      rewriter, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_S_OR_B32,
-      masked_pointer_high, cache_swizzle, sgpr_type, location,
-      &swizzled_pointer_high));
+  loom_value_id_t descriptor_pointer_high = masked_pointer_high;
+  if (has_cache_swizzle) {
+    loom_amdgpu_buffer_resource_cache_swizzle_t cache_swizzle_kind =
+        LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_cache_swizzle_kind(
+        descriptor_set, &cache_swizzle_kind));
+    if (cache_swizzle_kind !=
+        LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT) {
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "AMDGPU HAL resource cache swizzle is not supported by target '%.*s'",
+          (int)target_bundle->name.size, target_bundle->name.data);
+    }
 
-  const loom_value_id_t sources[] = {pointer_low, swizzled_pointer_high};
+    const uint32_t cache_swizzle_word =
+        ((cache_swizzle_stride |
+          LOOM_AMDGPU_HAL_RESOURCE_CACHE_SWIZZLE_ENABLE_BIT)
+         << LOOM_AMDGPU_HAL_RESOURCE_CACHE_SWIZZLE_WORD_SHIFT);
+    loom_value_id_t cache_swizzle = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_mov_b32(
+        rewriter, descriptor_set, cache_swizzle_word, sgpr_type, location,
+        &cache_swizzle));
+    loom_value_id_t swizzled_pointer_high = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_resource_build_s_binary_b32(
+        rewriter, descriptor_set, LOOM_AMDGPU_DESCRIPTOR_ID_S_OR_B32,
+        masked_pointer_high, cache_swizzle, sgpr_type, location,
+        &swizzled_pointer_high));
+    descriptor_pointer_high = swizzled_pointer_high;
+  }
+
+  const loom_value_id_t sources[] = {pointer_low, descriptor_pointer_high};
   loom_op_t* concat_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_concat_build(
       &rewriter->builder, sources, IREE_ARRAYSIZE(sources), sgpr_x2_type,

@@ -51,6 +51,7 @@ loom_cc_library(
     hdrs = ["target_env.h"],
     deps = [
         "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/amdgpu:target_info_defs",
         "//loom/src/loom/target/emit/llvmir:target_presets",
         "//runtime/src/iree/base",
     ],

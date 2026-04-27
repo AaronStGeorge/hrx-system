@@ -61,6 +61,7 @@ loom_cc_library(
     "target_env.c"
   DEPS
     iree::base
+    loom::src::loom::target::arch::amdgpu::target_info_defs
     loom::src::loom::target::emit::llvmir::target_presets
     loom::src::loom::target::types
   PUBLIC

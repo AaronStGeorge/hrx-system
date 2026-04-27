@@ -26,6 +26,14 @@ extern "C" {
 // Stable target-family identity for AMDGPU low descriptor sets.
 #define LOOM_AMDGPU_TARGET_STABLE_ID UINT64_C(0x6c46df5542915cc5)
 
+// Default raw buffer-resource descriptor control word for global HAL bindings.
+//
+// This is the final descriptor word consumed by MUBUF/MTBUF packets. It matches
+// the word emitted by LLVM/IREE for amdgcn-amd-amdhsa raw buffers with 32-bit
+// element format, resource-level OOB behavior, and the standard memory
+// properties used for HAL binding resources.
+#define LOOM_AMDGPU_HAL_BUFFER_RESOURCE_FLAGS UINT32_C(0x31027000)
+
 typedef enum loom_amdgpu_kernel_descriptor_profile_e {
   // No kernel descriptor writer is implemented for this processor yet.
   LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE = 0,
