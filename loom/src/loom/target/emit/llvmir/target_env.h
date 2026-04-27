@@ -86,11 +86,12 @@ typedef struct loom_llvmir_target_env_t {
 typedef struct loom_llvmir_amdgpu_hal_abi_t {
   // ABI-required byte alignment for HAL binding pointer parameters.
   uint32_t binding_alignment;
-  // ABI-required fixed workgroup size attached to each kernel entry point.
+  // ABI-selected fixed workgroup size attached to each kernel entry point, or
+  // zero when launch selection remains dynamic.
   loom_llvmir_workgroup_size_t required_workgroup_size;
-  // Optimization default lower flat workgroup size advertised to LLVM.
+  // Lower flat workgroup size bound advertised to LLVM.
   uint32_t flat_workgroup_size_min;
-  // Optimization default upper flat workgroup size advertised to LLVM.
+  // Upper flat workgroup size bound advertised to LLVM.
   uint32_t flat_workgroup_size_max;
   // ABI-required raw buffer resource flags for global binding resources.
   uint32_t buffer_resource_flags;
@@ -114,7 +115,7 @@ typedef struct loom_llvmir_target_profile_t {
   loom_llvmir_linkage_t exported_linkage;
   // ABI-required calling convention for kernel entry points.
   loom_llvmir_calling_convention_t kernel_calling_convention;
-  // ABI-required metadata attachment name for fixed workgroup size.
+  // Metadata attachment name for selected fixed workgroup size.
   iree_string_view_t required_workgroup_size_metadata_name;
   // AMDGPU HAL-specific ABI parameters.
   loom_llvmir_amdgpu_hal_abi_t amdgpu_hal;
@@ -171,8 +172,7 @@ iree_status_t loom_llvmir_target_profile_add_kernel_attr_group(
     loom_llvmir_module_t* module, const loom_llvmir_target_profile_t* profile,
     loom_llvmir_attr_group_id_t* out_group_id);
 
-// Attaches the fixed-workgroup-size metadata required by a HAL kernel entry
-// point.
+// Attaches fixed-workgroup-size metadata when the profile selected one.
 iree_status_t loom_llvmir_target_profile_attach_kernel_metadata(
     loom_llvmir_function_t* function,
     const loom_llvmir_target_profile_t* profile);

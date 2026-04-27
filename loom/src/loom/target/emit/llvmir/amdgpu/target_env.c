@@ -84,9 +84,9 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
     .hal_kernel =
         {
             .binding_alignment = 16,
-            .required_workgroup_size = {.x = 64, .y = 1, .z = 1},
-            .flat_workgroup_size_min = 64,
-            .flat_workgroup_size_max = 64,
+            .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
+            .flat_workgroup_size_min = 0,
+            .flat_workgroup_size_max = 0,
             .buffer_resource_flags = 159744,
         },
 };
@@ -114,9 +114,9 @@ static const loom_llvmir_target_profile_t kAmdgpuHalProfile = {
     .amdgpu_hal =
         {
             .binding_alignment = 16,
-            .required_workgroup_size = {.x = 64, .y = 1, .z = 1},
-            .flat_workgroup_size_min = 64,
-            .flat_workgroup_size_max = 64,
+            .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
+            .flat_workgroup_size_min = 1,
+            .flat_workgroup_size_max = 1024,
             .buffer_resource_flags = 159744,
         },
 };

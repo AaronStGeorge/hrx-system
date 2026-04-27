@@ -85,7 +85,7 @@ func.def public device @dispatch() {
 }
 
 // ----
-define amdgpu_kernel void @dispatch() #0 !reqd_work_group_size !0 {
+define amdgpu_kernel void @dispatch() #0 {
 entry:
   %tid_x = call i32 @llvm.amdgcn.workitem.id.x()
   %tid_y = call i32 @llvm.amdgcn.workitem.id.y()
@@ -99,9 +99,7 @@ declare i32 @llvm.amdgcn.workitem.id.y()
 
 declare i32 @llvm.amdgcn.workitem.id.z()
 
-attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="64,64" "uniform-work-group-size" }
-
-!0 = !{i32 64, i32 1, i32 1}
+attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="1,1024" "uniform-work-group-size" }
 
 // ====
 
@@ -113,14 +111,12 @@ func.def public device @dispatch_with_bindings(%input: buffer, %output: buffer, 
 }
 
 // ----
-define amdgpu_kernel void @dispatch_with_bindings(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %n) #0 !reqd_work_group_size !0 {
+define amdgpu_kernel void @dispatch_with_bindings(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %n) #0 {
 entry:
   ret void
 }
 
-attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="64,64" "uniform-work-group-size" }
-
-!0 = !{i32 64, i32 1, i32 1}
+attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="1,1024" "uniform-work-group-size" }
 
 // ====
 
@@ -141,22 +137,20 @@ func.def public device @vector_hal_kernel(%input: buffer, %output: buffer, %base
 }
 
 // ----
-define amdgpu_kernel void @vector_hal_kernel(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %base) #0 !reqd_work_group_size !0 {
+define amdgpu_kernel void @vector_hal_kernel(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %base) #0 {
 entry:
   %tid_x = call i32 @llvm.amdgcn.workitem.id.x()
   %element = add i32 %base, %tid_x
   %input_view = getelementptr i8, ptr addrspace(1) %input, i64 0
   %output_view = getelementptr i8, ptr addrspace(1) %output, i64 0
-  %v11 = getelementptr float, ptr addrspace(1) %input_view, i32 %element
-  %loaded = load <4 x float>, ptr addrspace(1) %v11, align 4
+  %v8 = getelementptr float, ptr addrspace(1) %input_view, i32 %element
+  %loaded = load <4 x float>, ptr addrspace(1) %v8, align 4
   %doubled = fadd nnan <4 x float> %loaded, %loaded
-  %v14 = getelementptr float, ptr addrspace(1) %output_view, i32 %element
-  store <4 x float> %doubled, ptr addrspace(1) %v14, align 4
+  %v11 = getelementptr float, ptr addrspace(1) %output_view, i32 %element
+  store <4 x float> %doubled, ptr addrspace(1) %v11, align 4
   ret void
 }
 
 declare i32 @llvm.amdgcn.workitem.id.x()
 
-attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="64,64" "uniform-work-group-size" }
-
-!0 = !{i32 64, i32 1, i32 1}
+attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="1,1024" "uniform-work-group-size" }

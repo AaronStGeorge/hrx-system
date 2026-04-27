@@ -9,6 +9,8 @@
 #include <limits.h>
 #include <stdio.h>
 
+#include "loom/target/launch.h"
+
 iree_status_t loom_llvmir_target_env_module_config(
     const loom_llvmir_target_env_t* target_env, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config) {
@@ -105,21 +107,47 @@ static iree_status_t loom_llvmir_validate_hal_kernel_export_plan(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "HAL kernel binding alignment must be non-zero");
   }
-  if (export_plan->hal_kernel.required_workgroup_size.x == 0 ||
-      export_plan->hal_kernel.required_workgroup_size.y == 0 ||
-      export_plan->hal_kernel.required_workgroup_size.z == 0) {
+  IREE_RETURN_IF_ERROR(loom_target_validate_hal_kernel_launch(
+      snapshot, &export_plan->hal_kernel));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_resolve_hal_kernel_flat_workgroup_range(
+    const loom_target_snapshot_t* snapshot,
+    const loom_target_hal_kernel_abi_t* hal_kernel, uint32_t* out_min,
+    uint32_t* out_max) {
+  IREE_ASSERT_ARGUMENT(snapshot);
+  IREE_ASSERT_ARGUMENT(hal_kernel);
+  IREE_ASSERT_ARGUMENT(out_min);
+  IREE_ASSERT_ARGUMENT(out_max);
+  *out_min = 0;
+  *out_max = 0;
+
+  const uint32_t flat_min = hal_kernel->flat_workgroup_size_min;
+  const uint32_t flat_max = hal_kernel->flat_workgroup_size_max;
+  if ((flat_min == 0) != (flat_max == 0)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "HAL kernel required workgroup dimensions must be non-zero");
+        "HAL kernel flat workgroup size range must be both zero or both "
+        "non-zero");
   }
-  if (export_plan->hal_kernel.flat_workgroup_size_min == 0 ||
-      export_plan->hal_kernel.flat_workgroup_size_max == 0 ||
-      export_plan->hal_kernel.flat_workgroup_size_min >
-          export_plan->hal_kernel.flat_workgroup_size_max) {
+  if (flat_min != 0) {
+    if (flat_min > flat_max) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "HAL kernel flat workgroup size range must be ordered");
+    }
+    *out_min = flat_min;
+    *out_max = flat_max;
+    return iree_ok_status();
+  }
+  if (snapshot->max_flat_workgroup_size == 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "HAL kernel flat workgroup size range must be non-zero and ordered");
+        "LLVMIR AMDGPU HAL kernel requires a flat workgroup size limit");
   }
+  *out_min = 1;
+  *out_max = snapshot->max_flat_workgroup_size;
   return iree_ok_status();
 }
 
@@ -188,6 +216,11 @@ iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
   if (export_plan->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
     IREE_RETURN_IF_ERROR(
         loom_llvmir_validate_hal_kernel_export_plan(snapshot, export_plan));
+    uint32_t flat_workgroup_size_min = 0;
+    uint32_t flat_workgroup_size_max = 0;
+    IREE_RETURN_IF_ERROR(loom_llvmir_resolve_hal_kernel_flat_workgroup_range(
+        snapshot, &export_plan->hal_kernel, &flat_workgroup_size_min,
+        &flat_workgroup_size_max));
     out_storage->profile.kind = LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL;
     out_storage->profile.kernel_calling_convention =
         LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL;
@@ -201,10 +234,8 @@ iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
                 .y = export_plan->hal_kernel.required_workgroup_size.y,
                 .z = export_plan->hal_kernel.required_workgroup_size.z,
             },
-        .flat_workgroup_size_min =
-            export_plan->hal_kernel.flat_workgroup_size_min,
-        .flat_workgroup_size_max =
-            export_plan->hal_kernel.flat_workgroup_size_max,
+        .flat_workgroup_size_min = flat_workgroup_size_min,
+        .flat_workgroup_size_max = flat_workgroup_size_max,
         .buffer_resource_flags = export_plan->hal_kernel.buffer_resource_flags,
     };
     return iree_ok_status();
@@ -383,18 +414,24 @@ iree_status_t loom_llvmir_target_profile_attach_kernel_metadata(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM target profile is required");
   }
+  const loom_target_workgroup_size_t required_workgroup_size = {
+      .x = profile->amdgpu_hal.required_workgroup_size.x,
+      .y = profile->amdgpu_hal.required_workgroup_size.y,
+      .z = profile->amdgpu_hal.required_workgroup_size.z,
+  };
+  if (loom_target_workgroup_size_is_empty(&required_workgroup_size)) {
+    return iree_ok_status();
+  }
+  if (loom_target_workgroup_size_is_partial(&required_workgroup_size)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM target profile workgroup size must be all zero or all non-zero");
+  }
   if (iree_string_view_is_empty(
           profile->required_workgroup_size_metadata_name)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "LLVM target profile has no required workgroup size metadata");
-  }
-  if (profile->amdgpu_hal.required_workgroup_size.x == 0 ||
-      profile->amdgpu_hal.required_workgroup_size.y == 0 ||
-      profile->amdgpu_hal.required_workgroup_size.z == 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "LLVM target profile workgroup size dimensions must be non-zero");
   }
   if (profile->amdgpu_hal.required_workgroup_size.x > INT32_MAX ||
       profile->amdgpu_hal.required_workgroup_size.y > INT32_MAX ||

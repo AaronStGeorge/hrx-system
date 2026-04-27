@@ -266,11 +266,11 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
   EXPECT_EQ(profile->kernel_calling_convention,
             LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL);
   EXPECT_EQ(profile->amdgpu_hal.binding_alignment, 16u);
-  EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.x, 64u);
-  EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.y, 1u);
-  EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.z, 1u);
-  EXPECT_EQ(profile->amdgpu_hal.flat_workgroup_size_min, 64u);
-  EXPECT_EQ(profile->amdgpu_hal.flat_workgroup_size_max, 64u);
+  EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.x, 0u);
+  EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.y, 0u);
+  EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.z, 0u);
+  EXPECT_EQ(profile->amdgpu_hal.flat_workgroup_size_min, 1u);
+  EXPECT_EQ(profile->amdgpu_hal.flat_workgroup_size_max, 1024u);
   EXPECT_EQ(profile->amdgpu_hal.buffer_resource_flags, 159744u);
 
   loom_llvmir_attr_t
@@ -306,16 +306,14 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileHasGenericTargetBundle) {
   EXPECT_EQ(bundle->export_plan->linkage, LOOM_TARGET_LINKAGE_DEFAULT);
   EXPECT_EQ(bundle->export_plan->hal_kernel.binding_alignment,
             profile->amdgpu_hal.binding_alignment);
-  EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.x,
-            profile->amdgpu_hal.required_workgroup_size.x);
-  EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.y,
-            profile->amdgpu_hal.required_workgroup_size.y);
-  EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.z,
-            profile->amdgpu_hal.required_workgroup_size.z);
-  EXPECT_EQ(bundle->export_plan->hal_kernel.flat_workgroup_size_min,
-            profile->amdgpu_hal.flat_workgroup_size_min);
-  EXPECT_EQ(bundle->export_plan->hal_kernel.flat_workgroup_size_max,
-            profile->amdgpu_hal.flat_workgroup_size_max);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.x, 0u);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.y, 0u);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.z, 0u);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.flat_workgroup_size_min, 0u);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.flat_workgroup_size_max, 0u);
+  EXPECT_EQ(profile->amdgpu_hal.flat_workgroup_size_min, 1u);
+  EXPECT_EQ(profile->amdgpu_hal.flat_workgroup_size_max,
+            bundle->snapshot->max_flat_workgroup_size);
   EXPECT_EQ(bundle->export_plan->hal_kernel.buffer_resource_flags,
             profile->amdgpu_hal.buffer_resource_flags);
   ASSERT_NE(bundle->config, nullptr);
@@ -337,6 +335,29 @@ TEST(LlvmIrTargetEnvTest, RejectsMalformedDerivedAmdgpuHalProfile) {
   loom_target_export_plan_t export_plan = *fixture_bundle->export_plan;
   loom_target_config_t config = *fixture_bundle->config;
   export_plan.hal_kernel.required_workgroup_size.x = 0;
+  export_plan.hal_kernel.required_workgroup_size.y = 1;
+  export_plan.hal_kernel.required_workgroup_size.z = 1;
+
+  loom_target_bundle_t broken_bundle = {};
+  broken_bundle.name = fixture_bundle->name;
+  broken_bundle.snapshot = &snapshot;
+  broken_bundle.export_plan = &export_plan;
+  broken_bundle.config = &config;
+
+  loom_llvmir_target_profile_storage_t storage = {};
+  iree_status_t status =
+      loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
+                                                                &storage);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LlvmIrTargetEnvTest, RejectsDerivedAmdgpuHalProfileWithoutFlatLimit) {
+  const loom_target_bundle_t* fixture_bundle =
+      loom_llvmir_target_bundle_amdgpu_hal();
+  loom_target_snapshot_t snapshot = *fixture_bundle->snapshot;
+  loom_target_export_plan_t export_plan = *fixture_bundle->export_plan;
+  loom_target_config_t config = *fixture_bundle->config;
+  snapshot.max_flat_workgroup_size = 0;
 
   loom_target_bundle_t broken_bundle = {};
   broken_bundle.name = fixture_bundle->name;
@@ -475,6 +496,12 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileMaterializesKernelDecorations) {
       loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
   IREE_ASSERT_OK(loom_llvmir_build_ret_void(entry));
   IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
+
+  std::string text = WriteText(module_ptr.get());
+  EXPECT_NE(text.find("\"amdgpu-flat-work-group-size\"=\"1,1024\""),
+            std::string::npos)
+      << text;
+  EXPECT_EQ(text.find("!reqd_work_group_size"), std::string::npos) << text;
 }
 
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileCopyControlsKernelDecorations) {
@@ -616,6 +643,8 @@ TEST(LlvmIrTargetEnvTest, RejectsInvalidAmdgpuHalProfileValues) {
   IREE_ASSERT_OK(loom_llvmir_module_add_function(module_ptr.get(),
                                                  &function_desc, &function));
   profile.amdgpu_hal.required_workgroup_size.x = 0;
+  profile.amdgpu_hal.required_workgroup_size.y = 1;
+  profile.amdgpu_hal.required_workgroup_size.z = 1;
   status =
       loom_llvmir_target_profile_attach_kernel_metadata(function, &profile);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);

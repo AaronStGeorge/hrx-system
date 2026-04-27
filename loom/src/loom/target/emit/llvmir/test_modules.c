@@ -1620,6 +1620,7 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   const loom_llvmir_target_profile_t* profile =
       loom_llvmir_target_profile_amdgpu_hal();
   const loom_llvmir_target_env_t* target_env = profile->target_env;
+  const uint64_t resource_record_count = 64;
 
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i16_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -1714,8 +1715,7 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
       module, i16_type, 0, &stride_zero));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
-      module, i64_type, profile->amdgpu_hal.required_workgroup_size.x,
-      &records));
+      module, i64_type, resource_record_count, &records));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
       module, i32_type, profile->amdgpu_hal.buffer_resource_flags, &flags));
 
@@ -2063,8 +2063,7 @@ static const char kAmdgpuIntrinsicsText[] =
     "define amdgpu_kernel void @add_dispatch(ptr addrspace(1) inreg "
     "noalias noundef nonnull align 16 %x, ptr addrspace(1) inreg "
     "noalias noundef nonnull align 16 %y, ptr addrspace(1) inreg "
-    "noalias noundef nonnull align 16 %z) #0 !reqd_work_group_size "
-    "!0 {\n"
+    "noalias noundef nonnull align 16 %z) #0 {\n"
     "entry:\n"
     "  %tid = call range(i32 0, 64) i32 "
     "@llvm.amdgcn.workitem.id.x()\n"
@@ -2099,10 +2098,8 @@ static const char kAmdgpuIntrinsicsText[] =
     "ptr addrspace(1) readnone, i16, i64, i32)\n"
     "\n"
     "attributes #0 = { alwaysinline "
-    "\"amdgpu-flat-work-group-size\"=\"64,64\" "
-    "\"uniform-work-group-size\" }\n"
-    "\n"
-    "!0 = !{i32 64, i32 1, i32 1}\n";
+    "\"amdgpu-flat-work-group-size\"=\"1,1024\" "
+    "\"uniform-work-group-size\" }\n";
 
 iree_host_size_t loom_llvmir_test_module_scenario_count(void) {
   return LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT;

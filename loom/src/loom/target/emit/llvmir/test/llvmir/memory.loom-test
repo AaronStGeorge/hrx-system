@@ -172,17 +172,15 @@ func.def public device @vector_dispatch(%input: buffer, %output: buffer, %base: 
 }
 
 // ----
-define amdgpu_kernel void @vector_dispatch(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %base) #0 !reqd_work_group_size !0 {
+define amdgpu_kernel void @vector_dispatch(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %base) #0 {
 entry:
   %input_view = getelementptr i8, ptr addrspace(1) %input, i64 0
   %output_view = getelementptr i8, ptr addrspace(1) %output, i64 0
-  %v9 = getelementptr float, ptr addrspace(1) %input_view, i32 %base
-  %loaded = load <4 x float>, ptr addrspace(1) %v9, align 4
-  %v11 = getelementptr float, ptr addrspace(1) %output_view, i32 %base
-  store <4 x float> %loaded, ptr addrspace(1) %v11, align 4
+  %v6 = getelementptr float, ptr addrspace(1) %input_view, i32 %base
+  %loaded = load <4 x float>, ptr addrspace(1) %v6, align 4
+  %v8 = getelementptr float, ptr addrspace(1) %output_view, i32 %base
+  store <4 x float> %loaded, ptr addrspace(1) %v8, align 4
   ret void
 }
 
-attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="64,64" "uniform-work-group-size" }
-
-!0 = !{i32 64, i32 1, i32 1}
+attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="1,1024" "uniform-work-group-size" }
