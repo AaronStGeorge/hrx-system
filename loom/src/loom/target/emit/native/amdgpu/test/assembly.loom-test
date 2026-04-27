@@ -205,6 +205,25 @@ low.func.def target(@gfx11_target) @gfx11_global_saddr(%addr: reg<amdgpu.vgpr>, 
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_ds_load_u16_d16_pair waits=none
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_ds_load_u16_d16_pair(%addr: reg<amdgpu.vgpr>) {
+  %low = low.op<amdgpu.ds_load_u16_d16>(%addr) {offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %full = low.op<amdgpu.ds_load_u16_d16_hi>(%low, %addr) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> %low as reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_write_b32>(%addr, %full) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>)
+  low.return
+}
+
+// ----
+.Lbb0:
+  ds_load_u16_d16 v1, v0 offset:0
+  ds_load_u16_d16_hi v1, v0 offset:0
+  ds_write_b32 v0, v1 offset:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx950_global_load_lds waits=none
 target.profile @gfx950_target preset("amdgpu-gfx950")
 

@@ -356,6 +356,31 @@ static iree_status_t loom_amdgpu_append_result_operand_list(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_lookup_canonical_asm_form(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_asm_form_t** out_form) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  if (descriptor->canonical_asm_form_ordinal ==
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
+    iree_string_view_t key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_key(context, &key));
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "AMDGPU assembly descriptor '%.*s' has no canonical asm form",
+        (int)key.size, key.data);
+  }
+  *out_form = loom_low_descriptor_set_asm_form_at(
+      descriptor_set, descriptor->canonical_asm_form_ordinal);
+  if (*out_form == NULL) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU assembly canonical asm form is out of "
+                            "range");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_append_descriptor_value_list(
     const loom_native_assembly_packet_context_t* context) {
   const loom_low_descriptor_set_t* descriptor_set =
@@ -546,22 +571,8 @@ static iree_status_t loom_amdgpu_append_canonical_asm_form_packet(
   const loom_low_descriptor_set_t* descriptor_set =
       context->schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
-  if (descriptor->canonical_asm_form_ordinal ==
-      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
-    iree_string_view_t key = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_key(context, &key));
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU assembly descriptor '%.*s' has no canonical asm form",
-        (int)key.size, key.data);
-  }
-  const loom_low_asm_form_t* form = loom_low_descriptor_set_asm_form_at(
-      descriptor_set, descriptor->canonical_asm_form_ordinal);
-  if (form == NULL) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "AMDGPU assembly canonical asm form is out of "
-                            "range");
-  }
+  const loom_low_asm_form_t* form = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_canonical_asm_form(context, &form));
   iree_string_view_t mnemonic = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
       descriptor_set, form->mnemonic_string_offset, &mnemonic));
@@ -628,8 +639,29 @@ static iree_status_t loom_amdgpu_append_memory_immediate_suffixes(
 
 static iree_status_t loom_amdgpu_append_memory_packet(
     const loom_native_assembly_packet_context_t* context) {
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_value_list(context));
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  if (descriptor->canonical_asm_form_ordinal ==
+      LOOM_LOW_ASM_FORM_ORDINAL_NONE) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_value_list(context));
+  } else {
+    const loom_low_asm_form_t* form = NULL;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_canonical_asm_form(context, &form));
+    iree_string_view_t mnemonic = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_native_assembly_descriptor_string(
+        descriptor_set, form->mnemonic_string_offset, &mnemonic));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_string(context->builder, mnemonic));
+    bool in_list = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_asm_form_values(
+        context, descriptor, form->result_operand_index_start,
+        form->result_operand_index_count, /*is_result=*/true, &in_list));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_asm_form_values(
+        context, descriptor, form->operand_index_start,
+        form->operand_index_count, /*is_result=*/false, &in_list));
+  }
   return loom_amdgpu_append_memory_immediate_suffixes(context);
 }
 
