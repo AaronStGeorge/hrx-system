@@ -1,8 +1,10 @@
 // RUN: roundtrip
 
-kernel.def workgroup_size(4, 4, 1) @index_madd_global_b32(%input: buffer, %output: buffer) {
-  %x = kernel.workitem.id<x> : index
-  %y = kernel.workitem.id<y> : index
+kernel.def @index_madd_global_b32(%input: buffer, %output: buffer) {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 0, 3)] : index
+  %y0 = kernel.workitem.id<y> : index
+  %y = index.assume %y0 [range(%y0, 0, 3)] : index
   %zero = index.constant 0 : offset
   %row_stride = index.constant 4 : index
   %linear = index.madd %y, %row_stride, %x : index
@@ -15,8 +17,9 @@ kernel.def workgroup_size(4, 4, 1) @index_madd_global_b32(%input: buffer, %outpu
 
 // ====
 
-kernel.def workgroup_size(1, 64, 1) @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
-  %y = kernel.workitem.id<y> : index
+kernel.def @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
+  %y0 = kernel.workitem.id<y> : index
+  %y = index.assume %y0 [range(%y0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer

@@ -11,6 +11,7 @@
 #include "iree/base/api.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
@@ -70,11 +71,38 @@ static bool loom_low_source_memory_access_exact_i64(loom_value_facts_t facts,
   return true;
 }
 
+static loom_value_id_t loom_low_source_memory_access_identity_source_value(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  while (value_id < module->values.count) {
+    const loom_value_t* value = loom_module_value(module, value_id);
+    if (loom_value_is_block_arg(value)) {
+      return value_id;
+    }
+    const loom_op_t* defining_op = loom_value_def_op(value);
+    if (!defining_op || !loom_index_assume_isa(defining_op)) {
+      return value_id;
+    }
+    const uint16_t result_index = loom_value_def_index(value);
+    if (result_index >= defining_op->operand_count) {
+      return value_id;
+    }
+    const loom_value_id_t source_value_id =
+        loom_op_const_operands(defining_op)[result_index];
+    if (source_value_id == value_id) {
+      return value_id;
+    }
+    value_id = source_value_id;
+  }
+  return value_id;
+}
+
 static bool loom_low_source_memory_access_value_as_workitem_id(
     const loom_module_t* module, loom_value_id_t value_id,
     loom_kernel_dimension_t* out_dimension) {
   IREE_ASSERT_ARGUMENT(out_dimension);
   *out_dimension = LOOM_KERNEL_DIMENSION_COUNT_;
+  value_id =
+      loom_low_source_memory_access_identity_source_value(module, value_id);
   if (value_id >= module->values.count) {
     return false;
   }
@@ -100,6 +128,8 @@ static bool loom_low_source_memory_access_value_as_workgroup_id(
     loom_kernel_dimension_t* out_dimension) {
   IREE_ASSERT_ARGUMENT(out_dimension);
   *out_dimension = LOOM_KERNEL_DIMENSION_COUNT_;
+  value_id =
+      loom_low_source_memory_access_identity_source_value(module, value_id);
   if (value_id >= module->values.count) {
     return false;
   }

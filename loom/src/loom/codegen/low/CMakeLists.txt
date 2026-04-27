@@ -485,6 +485,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::ir
     loom::src::loom::ir::facts
+    loom::src::loom::ops::index
     loom::src::loom::ops::kernel
     loom::src::loom::ops::vector
     loom::src::loom::ops::view

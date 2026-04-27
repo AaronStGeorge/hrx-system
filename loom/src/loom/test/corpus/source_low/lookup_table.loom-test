@@ -1,7 +1,8 @@
 // RUN: roundtrip
 
-kernel.def workgroup_size(2, 1, 1) @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 1)] : index
   %zero = index.constant 0 : offset
   %four = index.constant 4 : index
   %base = index.mul %tid, %four : index

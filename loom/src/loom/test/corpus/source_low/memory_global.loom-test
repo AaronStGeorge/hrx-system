@@ -11,8 +11,9 @@ func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @i32_b128(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @i32_b128(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
@@ -27,9 +28,11 @@ kernel.def workgroup_size(64, 1, 1) @i32_b128(%input: buffer, %output: buffer) {
 
 // ====
 
-kernel.def workgroup_size(8, 4, 1) @i32_scalar_2d_store(%input: buffer, %output: buffer) {
-  %x = kernel.workitem.id<x> : index
-  %y = kernel.workitem.id<y> : index
+kernel.def @i32_scalar_2d_store(%input: buffer, %output: buffer) {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 0, 7)] : index
+  %y0 = kernel.workitem.id<y> : index
+  %y = index.assume %y0 [range(%y0, 0, 3)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4x8xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<4x8xi32, #dense>
@@ -40,8 +43,9 @@ kernel.def workgroup_size(8, 4, 1) @i32_scalar_2d_store(%input: buffer, %output:
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @i32_dynamic_constant_index(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @i32_dynamic_constant_index(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero_offset = index.constant 0 : offset
   %zero = index.constant 0 : index
   %input_view = buffer.view %input[%zero_offset] : buffer -> view<64x1x4xi32, #dense>
@@ -53,8 +57,9 @@ kernel.def workgroup_size(64, 1, 1) @i32_dynamic_constant_index(%input: buffer, 
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @f16x2_b32(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @f16x2_b32(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x2xf16, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x2xf16, #dense>
@@ -65,8 +70,9 @@ kernel.def workgroup_size(64, 1, 1) @f16x2_b32(%input: buffer, %output: buffer) 
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @f16x4_b64(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @f16x4_b64(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xf16, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x4xf16, #dense>
@@ -77,8 +83,9 @@ kernel.def workgroup_size(64, 1, 1) @f16x4_b64(%input: buffer, %output: buffer) 
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @bf16x2_b32(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @bf16x2_b32(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x2xbf16, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x2xbf16, #dense>
@@ -89,8 +96,9 @@ kernel.def workgroup_size(64, 1, 1) @bf16x2_b32(%input: buffer, %output: buffer)
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @bf16x4_b64(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @bf16x4_b64(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xbf16, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x4xbf16, #dense>

@@ -1,7 +1,8 @@
 // RUN: roundtrip
 
-kernel.def workgroup_size(64, 1, 1) @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>
   %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>
@@ -16,8 +17,9 @@ kernel.def workgroup_size(64, 1, 1) @f32_arith(%lhs_buffer: buffer, %rhs_buffer:
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>
   %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64xf32, #dense>
@@ -33,8 +35,9 @@ kernel.def workgroup_size(64, 1, 1) @f32_fma(%lhs_buffer: buffer, %rhs_buffer: b
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64x4xf32, #dense>
   %rhs_view = buffer.view %rhs_buffer[%zero] : buffer -> view<64x4xf32, #dense>

@@ -1,8 +1,9 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_workgroup_b128.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-kernel.def workgroup_size(64, 1, 1) @lds_b128_roundtrip(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @lds_b128_roundtrip(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
@@ -17,30 +18,30 @@ kernel.def workgroup_size(64, 1, 1) @lds_b128_roundtrip(%input: buffer, %output:
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @lds_b128_roundtrip() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_b128_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 1024
-  %scratch_view = frame_index @lds_b128_roundtrip__lds5 {offset = 0} : reg<amdgpu.vgpr>
-  %17 = v_mov_b32 4
-  %18 = v_lshlrev_b32 %17, %tid
-  %19 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b128 %18, %19 {offset = 0}
-  %21 = v_mov_b32 4
-  %22 = v_lshlrev_b32 %21, %tid
-  %23 = v_add_u32 %scratch_view, %22
-  ds_write_b128 %23, %loaded {offset = 0}
-  %24 = v_mov_b32 4
-  %25 = v_lshlrev_b32 %24, %tid
-  %26 = v_add_u32 %scratch_view, %25
-  %roundtrip = ds_read_b128 %26 {offset = 0}
-  %28 = v_mov_b32 4
-  %29 = v_lshlrev_b32 %28, %tid
-  %30 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %29, %roundtrip, %30 {offset = 0}
+  %scratch_view = frame_index @lds_b128_roundtrip__lds6 {offset = 0} : reg<amdgpu.vgpr>
+  %18 = v_mov_b32 4
+  %19 = v_lshlrev_b32 %18, %tid
+  %20 = slice %input_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %loaded = global_load_b128 %19, %20 {offset = 0}
+  %22 = v_mov_b32 4
+  %23 = v_lshlrev_b32 %22, %tid
+  %24 = v_add_u32 %scratch_view, %23
+  ds_write_b128 %24, %loaded {offset = 0}
+  %25 = v_mov_b32 4
+  %26 = v_lshlrev_b32 %25, %tid
+  %27 = v_add_u32 %scratch_view, %26
+  %roundtrip = ds_read_b128 %27 {offset = 0}
+  %29 = v_mov_b32 4
+  %30 = v_lshlrev_b32 %29, %tid
+  %31 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %30, %roundtrip, %31 {offset = 0}
   return
 }
 
-low.slot @lds_b128_roundtrip__lds5 {align = 16, function = @lds_b128_roundtrip, size = 1024, space = lds}
+low.slot @lds_b128_roundtrip__lds6 {align = 16, function = @lds_b128_roundtrip, size = 1024, space = lds}

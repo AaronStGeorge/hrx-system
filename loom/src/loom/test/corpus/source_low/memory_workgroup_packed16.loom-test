@@ -1,7 +1,8 @@
 // RUN: roundtrip
 
-kernel.def workgroup_size(64, 1, 1) @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 512 : offset
   %scratch = buffer.alloca %bytes {base_alignment = 8, memory_space = workgroup} : buffer
@@ -17,8 +18,9 @@ kernel.def workgroup_size(64, 1, 1) @lds_f16x4_b64_roundtrip(%input: buffer, %ou
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
@@ -34,8 +36,9 @@ kernel.def workgroup_size(64, 1, 1) @lds_f16x8_b128_roundtrip(%input: buffer, %o
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 512 : offset
   %scratch = buffer.alloca %bytes {base_alignment = 8, memory_space = workgroup} : buffer
@@ -51,8 +54,9 @@ kernel.def workgroup_size(64, 1, 1) @lds_bf16x4_b64_roundtrip(%input: buffer, %o
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer

@@ -1,8 +1,9 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_workgroup_indexed.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-kernel.def workgroup_size(64, 1, 1) @workgroup_memory_workitem_x_b32() {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @workgroup_memory_workitem_x_b32() {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
@@ -15,12 +16,12 @@ kernel.def workgroup_size(64, 1, 1) @workgroup_memory_workitem_x_b32() {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_memory_workitem_x_b32() {
+low.kernel.def target(@target) @workgroup_memory_workitem_x_b32() {
   %m0 = low.live_in<amdgpu.m0> : reg<amdgpu.m0>
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %bytes = low.const<amdgpu.s_mov_b32> {imm32 = 256} : reg<amdgpu.sgpr>
-  %scratch_view = low.frame_index @workgroup_memory_workitem_x_b32__lds3 {offset = 0} : reg<amdgpu.vgpr>
+  %scratch_view = low.frame_index @workgroup_memory_workitem_x_b32__lds4 {offset = 0} : reg<amdgpu.vgpr>
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
   low.op<amdgpu.ds_write_addtid_b32>(%one, %m0) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
   %loaded = low.op<amdgpu.ds_read_addtid_b32>(%m0) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
@@ -28,4 +29,4 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_memory_workit
   low.return
 }
 
-low.slot @workgroup_memory_workitem_x_b32__lds3 {align = 16, function = @workgroup_memory_workitem_x_b32, size = 256, space = lds}
+low.slot @workgroup_memory_workitem_x_b32__lds4 {align = 16, function = @workgroup_memory_workitem_x_b32, size = 256, space = lds}

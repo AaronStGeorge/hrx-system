@@ -1,8 +1,9 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/lookup_table.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-kernel.def workgroup_size(2, 1, 1) @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 1)] : index
   %zero = index.constant 0 : offset
   %four = index.constant 4 : index
   %base = index.mul %tid, %four : index
@@ -20,71 +21,71 @@ kernel.def workgroup_size(2, 1, 1) @f32_table_lookup_i8_codes(%codes_buffer: buf
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(2, 1, 1) @f32_table_lookup_i8_codes() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @f32_table_lookup_i8_codes() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %codes_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 8} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 32} : reg<amdgpu.sgpr x4>
   %zero = s_mov_b32 0
   %four = s_mov_b32 4
-  %20 = v_mov_b32 4
-  %base = v_mul_lo_u32 %tid, %20
-  %22 = slice %codes_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  %codes = global_load_b32 %base, %22 {offset = 0}
+  %21 = v_mov_b32 4
+  %base = v_mul_lo_u32 %tid, %21
+  %23 = slice %codes_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  %codes = global_load_b32 %base, %23 {offset = 0}
   %g0 = v_mov_b32 3212836864
   %g1 = v_mov_b32 3204448256
   %g2 = v_mov_b32 1056964608
   %g3 = v_mov_b32 1069547520
   %grid = concat(%g0, %g1, %g2, %g3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %29 = slice %grid[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %30 = slice %grid[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %31 = v_mov_b32 1
-  %32 = slice %grid[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %33 = v_mov_b32 2
-  %34 = slice %grid[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %35 = v_mov_b32 3
-  %36 = v_mov_b32 255
-  %37 = v_and_b32 %codes, %36
-  %38 = v_cmp_eq_i32 %37, %31
-  %39 = v_cndmask_b32 %29, %30, %38
-  %40 = v_cmp_eq_i32 %37, %33
-  %41 = v_cndmask_b32 %39, %32, %40
-  %42 = v_cmp_eq_i32 %37, %35
-  %43 = v_cndmask_b32 %41, %34, %42
-  %44 = v_mov_b32 8
-  %45 = v_lshrrev_b32 %44, %codes
-  %46 = v_mov_b32 255
-  %47 = v_and_b32 %45, %46
-  %48 = v_cmp_eq_i32 %47, %31
-  %49 = v_cndmask_b32 %29, %30, %48
-  %50 = v_cmp_eq_i32 %47, %33
-  %51 = v_cndmask_b32 %49, %32, %50
-  %52 = v_cmp_eq_i32 %47, %35
-  %53 = v_cndmask_b32 %51, %34, %52
-  %54 = v_mov_b32 16
-  %55 = v_lshrrev_b32 %54, %codes
-  %56 = v_mov_b32 255
-  %57 = v_and_b32 %55, %56
-  %58 = v_cmp_eq_i32 %57, %31
-  %59 = v_cndmask_b32 %29, %30, %58
-  %60 = v_cmp_eq_i32 %57, %33
-  %61 = v_cndmask_b32 %59, %32, %60
-  %62 = v_cmp_eq_i32 %57, %35
-  %63 = v_cndmask_b32 %61, %34, %62
-  %64 = v_mov_b32 24
-  %65 = v_lshrrev_b32 %64, %codes
-  %66 = v_mov_b32 255
-  %67 = v_and_b32 %65, %66
-  %68 = v_cmp_eq_i32 %67, %31
-  %69 = v_cndmask_b32 %29, %30, %68
-  %70 = v_cmp_eq_i32 %67, %33
-  %71 = v_cndmask_b32 %69, %32, %70
-  %72 = v_cmp_eq_i32 %67, %35
-  %73 = v_cndmask_b32 %71, %34, %72
-  %decoded = concat(%43, %53, %63, %73) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %75 = v_mov_b32 2
-  %76 = v_lshlrev_b32 %75, %base
-  %77 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
-  global_store_b128 %76, %decoded, %77 {offset = 0}
+  %30 = slice %grid[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %31 = slice %grid[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %32 = v_mov_b32 1
+  %33 = slice %grid[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %34 = v_mov_b32 2
+  %35 = slice %grid[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %36 = v_mov_b32 3
+  %37 = v_mov_b32 255
+  %38 = v_and_b32 %codes, %37
+  %39 = v_cmp_eq_i32 %38, %32
+  %40 = v_cndmask_b32 %30, %31, %39
+  %41 = v_cmp_eq_i32 %38, %34
+  %42 = v_cndmask_b32 %40, %33, %41
+  %43 = v_cmp_eq_i32 %38, %36
+  %44 = v_cndmask_b32 %42, %35, %43
+  %45 = v_mov_b32 8
+  %46 = v_lshrrev_b32 %45, %codes
+  %47 = v_mov_b32 255
+  %48 = v_and_b32 %46, %47
+  %49 = v_cmp_eq_i32 %48, %32
+  %50 = v_cndmask_b32 %30, %31, %49
+  %51 = v_cmp_eq_i32 %48, %34
+  %52 = v_cndmask_b32 %50, %33, %51
+  %53 = v_cmp_eq_i32 %48, %36
+  %54 = v_cndmask_b32 %52, %35, %53
+  %55 = v_mov_b32 16
+  %56 = v_lshrrev_b32 %55, %codes
+  %57 = v_mov_b32 255
+  %58 = v_and_b32 %56, %57
+  %59 = v_cmp_eq_i32 %58, %32
+  %60 = v_cndmask_b32 %30, %31, %59
+  %61 = v_cmp_eq_i32 %58, %34
+  %62 = v_cndmask_b32 %60, %33, %61
+  %63 = v_cmp_eq_i32 %58, %36
+  %64 = v_cndmask_b32 %62, %35, %63
+  %65 = v_mov_b32 24
+  %66 = v_lshrrev_b32 %65, %codes
+  %67 = v_mov_b32 255
+  %68 = v_and_b32 %66, %67
+  %69 = v_cmp_eq_i32 %68, %32
+  %70 = v_cndmask_b32 %30, %31, %69
+  %71 = v_cmp_eq_i32 %68, %34
+  %72 = v_cndmask_b32 %70, %33, %71
+  %73 = v_cmp_eq_i32 %68, %36
+  %74 = v_cndmask_b32 %72, %35, %73
+  %decoded = concat(%44, %54, %64, %74) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %76 = v_mov_b32 2
+  %77 = v_lshlrev_b32 %76, %base
+  %78 = slice %output_view[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr x2>
+  global_store_b128 %77, %decoded, %78 {offset = 0}
   return
 }
 

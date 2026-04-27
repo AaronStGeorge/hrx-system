@@ -1,7 +1,8 @@
 // RUN: roundtrip
 
-kernel.def workgroup_size(64, 1, 1) @i32_bitwise(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @i32_bitwise(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
@@ -17,8 +18,9 @@ kernel.def workgroup_size(64, 1, 1) @i32_bitwise(%input: buffer, %output: buffer
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @i32_shift(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @i32_shift(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
@@ -35,8 +37,9 @@ kernel.def workgroup_size(64, 1, 1) @i32_shift(%input: buffer, %output: buffer) 
 
 // ====
 
-kernel.def workgroup_size(64, 1, 1) @i32_scalarized(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @i32_scalarized(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>

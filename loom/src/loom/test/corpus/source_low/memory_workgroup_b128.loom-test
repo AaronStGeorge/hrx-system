@@ -1,7 +1,8 @@
 // RUN: roundtrip
 
-kernel.def workgroup_size(64, 1, 1) @lds_b128_roundtrip(%input: buffer, %output: buffer) {
-  %tid = kernel.workitem.id<x> : index
+kernel.def @lds_b128_roundtrip(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
   %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
