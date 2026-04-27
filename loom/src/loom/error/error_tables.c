@@ -2992,6 +2992,28 @@ static const loom_error_def_t loom_err_lowering_018 = {
     .param_count = 5,
 };
 
+static const loom_error_param_def_t loom_err_lowering_019_params[] = {
+    {"function_name", LOOM_PARAM_STRING}, {"op_name", LOOM_PARAM_STRING},
+    {"field_name", LOOM_PARAM_STRING},    {"required_mask", LOOM_PARAM_U64},
+    {"defined_mask", LOOM_PARAM_U64},
+};
+static const loom_error_def_t loom_err_lowering_019 = {
+    .error_id = "ERR_LOWERING_019",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 19,
+    .summary = "Low operation reads an undefined register part.",
+    .message_template =
+        "low function '@{function_name}' op '{op_name}' operand '{field_name}' "
+        "requires register part mask {required_mask}, but the value defines "
+        "only mask {defined_mask}",
+    .fix_hint_template =
+        "Compose the missing register part with an explicitly tied partial "
+        "write before using the value as a full-register operand",
+    .param_defs = loom_err_lowering_019_params,
+    .param_count = 5,
+};
+
 static const loom_error_param_def_t loom_err_backend_001_params[] = {
     {"target_key", LOOM_PARAM_STRING},   {"export_name", LOOM_PARAM_STRING},
     {"config_key", LOOM_PARAM_STRING},   {"function_name", LOOM_PARAM_STRING},
@@ -3525,13 +3547,13 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_009,  &loom_err_lowering_010,  &loom_err_lowering_011,
     &loom_err_lowering_012,  &loom_err_lowering_013,  &loom_err_lowering_014,
     &loom_err_lowering_015,  &loom_err_lowering_016,  &loom_err_lowering_017,
-    &loom_err_lowering_018,  &loom_err_backend_001,   &loom_err_backend_002,
-    &loom_err_backend_003,   &loom_err_backend_004,   &loom_err_backend_005,
-    &loom_err_backend_006,   &loom_err_backend_007,   &loom_err_backend_008,
-    &loom_err_backend_009,   &loom_err_backend_010,   &loom_err_backend_011,
-    &loom_err_backend_012,   &loom_err_backend_013,   &loom_err_backend_014,
-    &loom_err_backend_015,   &loom_err_backend_016,   &loom_err_backend_017,
-    &loom_err_backend_018,
+    &loom_err_lowering_018,  &loom_err_lowering_019,  &loom_err_backend_001,
+    &loom_err_backend_002,   &loom_err_backend_003,   &loom_err_backend_004,
+    &loom_err_backend_005,   &loom_err_backend_006,   &loom_err_backend_007,
+    &loom_err_backend_008,   &loom_err_backend_009,   &loom_err_backend_010,
+    &loom_err_backend_011,   &loom_err_backend_012,   &loom_err_backend_013,
+    &loom_err_backend_014,   &loom_err_backend_015,   &loom_err_backend_016,
+    &loom_err_backend_017,   &loom_err_backend_018,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

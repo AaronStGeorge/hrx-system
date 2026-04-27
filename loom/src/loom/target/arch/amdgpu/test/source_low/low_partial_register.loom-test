@@ -1,0 +1,19 @@
+// RUN: verify
+
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @d16_pair(%addr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %low = low.op<amdgpu.ds_load_u16_d16>(%addr) {offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %full = low.op<amdgpu.ds_load_u16_d16_hi>(%low, %addr) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> %low as reg<amdgpu.vgpr>
+  low.return %full : reg<amdgpu.vgpr>
+}
+
+// ====
+
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @d16_low_is_not_full(%addr: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) {
+  %low = low.op<amdgpu.ds_load_u16_d16>(%addr) {offset = 0} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  // ERROR@+1: LOWERING/019 "low.return" "operand"
+  low.return %low : reg<amdgpu.vgpr>
+}

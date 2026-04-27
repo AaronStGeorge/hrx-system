@@ -56,6 +56,7 @@ from loom.target.low_descriptors import (
     RegClassAlt,
     RegClassAltFlag,
     RegClassFlag,
+    RegisterPart,
     Resource,
     ResourceKind,
     ScheduleClass,
@@ -68,6 +69,10 @@ _REG_VGPR = "amdgpu.vgpr"
 _REG_AGPR = "amdgpu.agpr"
 _REG_M0 = "amdgpu.m0"
 _REG_SCC = "amdgpu.scc"
+
+_REG_PART_VGPR_LOW16 = "amdgpu.vgpr.low16"
+_REG_PART_VGPR_HIGH16 = "amdgpu.vgpr.high16"
+_REG_PART_VGPR_FULL32_MASK = 0x3
 
 _RESOURCE_SALU = "amdgpu.salu"
 _RESOURCE_VALU = "amdgpu.valu"
@@ -197,6 +202,11 @@ _VGPR_AGPR_CONST_ALT = (
 )
 _M0_ALT = (RegClassAlt(_REG_M0, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 _SCC_ALT = (RegClassAlt(_REG_SCC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
+
+_VGPR_REGISTER_PARTS = (
+    RegisterPart(_REG_PART_VGPR_LOW16, _REG_VGPR, 0x1),
+    RegisterPart(_REG_PART_VGPR_HIGH16, _REG_VGPR, 0x2),
+)
 
 
 class AmdgpuAtomicMemorySpace(CEnum):
@@ -490,12 +500,28 @@ def _scc_clobber(field_name: str = "scc") -> Operand:
     )
 
 
-def _vgpr_result(field_name: str = "dst", *, units: int = 1) -> Operand:
-    return Operand(field_name, OperandRole.RESULT, _VGPR_ALT, unit_count=units)
+def _vgpr_result(
+    field_name: str = "dst", *, units: int = 1, register_part: str | None = None
+) -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.RESULT,
+        _VGPR_ALT,
+        unit_count=units,
+        register_part=register_part,
+    )
 
 
-def _vgpr_operand(field_name: str, *, units: int = 1) -> Operand:
-    return Operand(field_name, OperandRole.OPERAND, _VGPR_ALT, unit_count=units)
+def _vgpr_operand(
+    field_name: str, *, units: int = 1, register_part: str | None = None
+) -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.OPERAND,
+        _VGPR_ALT,
+        unit_count=units,
+        register_part=register_part,
+    )
 
 
 def _sgpr_vgpr_operand(field_name: str, *, units: int = 1) -> Operand:
@@ -3477,6 +3503,66 @@ def _ds_read_overlay(
     )
 
 
+def _ds_load_u16_d16_overlays(
+    *,
+    encoding_name: str = "ENC_DS",
+    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.ds_load_u16_d16",
+            instruction_name="DS_LOAD_U16_D16",
+            mnemonic="ds_load_u16_d16",
+            encoding_name=encoding_name,
+            semantic_tag="memory.workgroup.load.u16.d16.low",
+            schedule_class=_SCHEDULE_LDS_LOAD,
+            operands=(
+                AmdgpuOperandOverlay(
+                    "VDST",
+                    _vgpr_result(register_part=_REG_PART_VGPR_LOW16),
+                ),
+                AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+            ),
+            implicit_operands=(_ignore_workgroup_memory(width_bits=16, is_input=True),),
+            immediate_fields=("OFFSET0",),
+            immediates=(_offset_immediate(8),),
+            fixed_encoding_fields=fixed_encoding_fields,
+            effects=(_workgroup_memory_effect(EffectKind.READ, 16),),
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.ds_load_u16_d16_hi",
+            instruction_name="DS_LOAD_U16_D16_HI",
+            mnemonic="ds_load_u16_d16_hi",
+            encoding_name=encoding_name,
+            semantic_tag="memory.workgroup.load.u16.d16.high",
+            schedule_class=_SCHEDULE_LDS_LOAD,
+            operands=(
+                AmdgpuOperandOverlay(
+                    "VDST",
+                    _vgpr_result(register_part=_REG_PART_VGPR_HIGH16),
+                ),
+                AmdgpuOperandOverlay(
+                    "VDST",
+                    _vgpr_operand("src", register_part=_REG_PART_VGPR_LOW16),
+                    role_exception_reason=(
+                        "the encoded destination register is also the tied "
+                        "source value carrying the low 16 bits"
+                    ),
+                ),
+                AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
+            ),
+            implicit_operands=(_ignore_workgroup_memory(width_bits=16, is_input=True),),
+            immediate_fields=("OFFSET0",),
+            immediates=(_offset_immediate(8),),
+            fixed_encoding_fields=fixed_encoding_fields,
+            effects=(_workgroup_memory_effect(EffectKind.READ, 16),),
+            constraints=(Constraint(ConstraintKind.TIED, 0, 1),),
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+    )
+
+
 def _ds_write_overlay(
     *,
     width_bits: int,
@@ -4097,6 +4183,7 @@ def _ds_memory_overlays(
     encoding_name: str = "ENC_DS",
     fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
     include_packed_half_atomic_add: bool = False,
+    include_u16_d16_loads: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     widths = ((32, 1), (64, 2), (96, 3), (128, 4))
     two_addr_widths = ((32, 1), (64, 2))
@@ -4126,6 +4213,14 @@ def _ds_memory_overlays(
             encoding_name=encoding_name,
             fixed_encoding_fields=fixed_encoding_fields,
             include_packed_half_add=include_packed_half_atomic_add,
+        ),
+        *(
+            _ds_load_u16_d16_overlays(
+                encoding_name=encoding_name,
+                fixed_encoding_fields=fixed_encoding_fields,
+            )
+            if include_u16_d16_loads
+            else ()
         ),
         *(
             _ds_read2_overlay(
@@ -5220,7 +5315,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             cache_fields=_GFX9_11_VECTOR_CACHE_FIELDS,
             implicit_flat_scratch=True,
         ),
-        *_ds_memory_overlays(),
+        *_ds_memory_overlays(include_u16_d16_loads=True),
         *_ds_crosslane_overlays(),
         _v_dot2_f32_f16_overlay(),
         _v_dot2_f32_bf16_overlay(),
@@ -5394,6 +5489,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             encoding_name="ENC_VDS",
             fixed_encoding_fields=(("OFFSET1", 0),),
             include_packed_half_atomic_add=True,
+            include_u16_d16_loads=True,
         ),
         *_ds_crosslane_overlays(
             encoding_name="ENC_VDS",
@@ -5576,6 +5672,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             encoding_name="ENC_VDS",
             fixed_encoding_fields=(("OFFSET1", 0),),
             include_packed_half_atomic_add=True,
+            include_u16_d16_loads=True,
         ),
         *_ds_crosslane_overlays(
             encoding_name="ENC_VDS",
@@ -5646,6 +5743,7 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=1024,
+            full_register_part_mask=_REG_PART_VGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_SCC,
@@ -5669,6 +5767,7 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             physical_count=1,
         ),
     ),
+    register_parts=_VGPR_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_MFMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -5744,6 +5843,7 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=1024,
+            full_register_part_mask=_REG_PART_VGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_SCC,
@@ -5760,6 +5860,7 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             physical_count=1,
         ),
     ),
+    register_parts=_VGPR_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -5849,6 +5950,7 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=1024,
+            full_register_part_mask=_REG_PART_VGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_SCC,
@@ -5865,6 +5967,7 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             physical_count=1,
         ),
     ),
+    register_parts=_VGPR_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
@@ -5972,6 +6075,7 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             SpillSlotSpace.SCRATCH,
             flags=(RegClassFlag.PHYSICAL,),
             physical_count=1024,
+            full_register_part_mask=_REG_PART_VGPR_FULL32_MASK,
         ),
         RegClass(
             _REG_SCC,
@@ -5988,6 +6092,7 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             physical_count=1,
         ),
     ),
+    register_parts=_VGPR_REGISTER_PARTS,
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),

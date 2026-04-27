@@ -4086,6 +4086,44 @@
     "fix_hint_template": "Use a register class and allocation-unit count accepted by the selected low descriptor set"
   },
   {
+    "error_id": "ERR_LOWERING_019",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 19,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low operation reads an undefined register part.",
+    "message_template": "low function '@{function_name}' op '{op_name}' operand '{field_name}' requires register part mask {required_mask}, but the value defines only mask {defined_mask}",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "required_mask",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "defined_mask",
+        "kind": 5,
+        "kind_name": "U64"
+      }
+    ],
+    "fix_hint_template": "Compose the missing register part with an explicitly tied partial write before using the value as a full-register operand"
+  },
+  {
     "error_id": "ERR_BACKEND_001",
     "domain": 11,
     "domain_name": "BACKEND",

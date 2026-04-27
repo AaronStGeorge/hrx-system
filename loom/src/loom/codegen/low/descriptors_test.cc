@@ -104,6 +104,12 @@ struct TestTables {
 
 void InitializeTestTables(TestTables* tables) {
   *tables = {};
+  for (loom_low_operand_t& operand : tables->operands) {
+    operand.register_part_id = LOOM_LOW_REGISTER_PART_NONE;
+  }
+  for (loom_low_reg_class_t& reg_class : tables->reg_classes) {
+    reg_class.full_register_part_mask = 1;
+  }
   tables->reg_classes[0].name_string_offset = TEST_STRING_OFFSET(reg_gpr);
   tables->reg_classes[0].flags = LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY;
   tables->reg_classes[0].alloc_unit_bits = 32;

@@ -49,6 +49,7 @@ from loom.target.low_descriptors import (
     PressureDelta,
     RegClass,
     RegClassAltFlag,
+    RegisterPart,
     Resource,
     ScheduleClass,
     descriptor_stable_id,
@@ -120,10 +121,12 @@ class _CompiledDescriptorSet:
     spec: DescriptorSet
     descriptors: list[Descriptor]
     reg_classes: list[RegClass]
+    register_parts: list[RegisterPart]
     resources: list[Resource]
     schedule_classes: list[ScheduleClass]
     enum_domains: list[EnumDomain]
     reg_class_ids: dict[str, int]
+    register_part_ids: dict[str, int]
     resource_ids: dict[str, int]
     schedule_class_ids: dict[str, int]
     enum_domain_ids: dict[str, int]
@@ -233,6 +236,20 @@ def _reg_class_id_constant_name(c_enum_prefix: str, reg_class_name: str) -> str:
 
 def _reg_class_id_define(c_enum_prefix: str, reg_class_name: str, reg_class_id: int) -> str:
     return f"#define {_reg_class_id_constant_name(c_enum_prefix, reg_class_name)} {reg_class_id}u"
+
+
+def _register_part_id_constant_name(c_enum_prefix: str, part_name: str) -> str:
+    return f"{c_enum_prefix}_REGISTER_PART_ID_{_c_identifier(part_name).upper()}"
+
+
+def _register_part_id_define(c_enum_prefix: str, part_name: str, part_id: int) -> str:
+    return f"#define {_register_part_id_constant_name(c_enum_prefix, part_name)} {part_id}u"
+
+
+def _register_part_id_expr(compiled: _CompiledDescriptorSet, part_name: str | None) -> str:
+    if part_name is None:
+        return "LOOM_LOW_REGISTER_PART_NONE"
+    return str(compiled.register_part_ids[part_name])
 
 
 def _encoding_id_expr(value: int) -> str:
@@ -354,6 +371,13 @@ def _validate_descriptor_operands(descriptor: Descriptor) -> int:
             if operand.role is OperandRole.IMPLICIT and state_flags != {OperandFlag.STATE_WRITE}:
                 raise ValueError(f"descriptor '{descriptor.key}' implicit state operand '{operand.field_name}' must be a write-only clobber")
     return result_count
+
+
+def _validate_register_part(part: RegisterPart) -> None:
+    if part.mask == 0:
+        raise ValueError(f"register part '{part.name}' has an empty mask")
+    if part.mask < 0 or part.mask > (2**64) - 1:
+        raise ValueError(f"register part '{part.name}' mask does not fit u64")
 
 
 def _descriptor_has_tied_constraint(
@@ -586,6 +610,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     if spec.generator_version == 0:
         raise ValueError(f"descriptor set '{spec.key}' has zero generator version")
     reg_class_inputs = _dedupe_by_name(spec.reg_classes, lambda item: item.name)
+    register_part_inputs = _dedupe_by_name(spec.register_parts, lambda item: item.name)
     resource_inputs = _dedupe_by_name(spec.resources, lambda item: item.name)
     schedule_inputs = _dedupe_by_name(spec.schedule_classes, lambda item: item.name)
     enum_domain_inputs = _dedupe_by_name(spec.enum_domains, lambda item: item.name)
@@ -594,11 +619,17 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     selected_descriptors = _select_descriptors(spec, allowlist)
     if not selected_descriptors:
         raise ValueError(f"descriptor set '{spec.key}' selected no descriptors")
+    for reg_class in spec.reg_classes:
+        if reg_class.full_register_part_mask == 0:
+            raise ValueError(f"register class '{reg_class.name}' has an empty full register-part mask")
+        if reg_class.full_register_part_mask < 0 or reg_class.full_register_part_mask > (2**64) - 1:
+            raise ValueError(f"register class '{reg_class.name}' full register-part mask does not fit u64")
 
     # Register classes are target vocabulary, not just descriptor closure:
     # low function signatures and allocation diagnostics may reference classes
     # that a tiny allowlisted descriptor slice does not happen to use.
     used_reg_class_names: set[str] = set(reg_class_inputs)
+    used_register_part_names: set[str] = set()
     used_resource_names: set[str] = set()
     used_schedule_names: set[str] = set()
     used_enum_domain_names: set[str] = set()
@@ -642,6 +673,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
                 operand.encoding_field_id,
                 f"descriptor '{descriptor.key}' operand '{operand.field_name}' encoding field id",
             )
+            concrete_reg_alt_count = 0
             for reg_alt in operand.reg_alts:
                 if reg_alt.reg_class is None:
                     if RegClassAltFlag.IMMEDIATE not in reg_alt.flags:
@@ -650,6 +682,22 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
                 if reg_alt.reg_class not in reg_class_inputs:
                     raise ValueError(f"descriptor '{descriptor.key}' operand '{operand.field_name}' references unknown register class '{reg_alt.reg_class}'")
                 used_reg_class_names.add(reg_alt.reg_class)
+                concrete_reg_alt_count += 1
+            if operand.register_part is not None:
+                if operand.register_part not in register_part_inputs:
+                    raise ValueError(f"descriptor '{descriptor.key}' operand '{operand.field_name}' references unknown register part '{operand.register_part}'")
+                if concrete_reg_alt_count != 1:
+                    raise ValueError(f"descriptor '{descriptor.key}' operand '{operand.field_name}' with a register part must name exactly one concrete register class alternative")
+                register_part = register_part_inputs[operand.register_part]
+                _validate_register_part(register_part)
+                if register_part.reg_class not in reg_class_inputs:
+                    raise ValueError(f"register part '{register_part.name}' references unknown register class '{register_part.reg_class}'")
+                if not any(reg_alt.reg_class == register_part.reg_class for reg_alt in operand.reg_alts):
+                    raise ValueError(
+                        f"descriptor '{descriptor.key}' operand '{operand.field_name}' uses register part '{register_part.name}' for register class '{register_part.reg_class}' but the operand does not accept that class"
+                    )
+                used_register_part_names.add(operand.register_part)
+                used_reg_class_names.add(register_part.reg_class)
         seen_fixed_encoding_fields: set[int] = set()
         for field_value in descriptor.encoding_field_values:
             _validate_u16(
@@ -718,12 +766,20 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
                     used_reg_class_names.add(spill_class)
                     changed = True
 
+    for part_name in list(used_register_part_names):
+        register_part = register_part_inputs[part_name]
+        reg_class = reg_class_inputs[register_part.reg_class]
+        if register_part.mask & ~reg_class.full_register_part_mask:
+            raise ValueError(f"register part '{part_name}' mask 0x{register_part.mask:x} exceeds full mask 0x{reg_class.full_register_part_mask:x} for register class '{reg_class.name}'")
+
     reg_classes = [reg_class for reg_class in spec.reg_classes if reg_class.name in used_reg_class_names]
+    register_parts = [part for part in spec.register_parts if part.name in used_register_part_names]
     resources = [resource for resource in spec.resources if resource.name in used_resource_names]
     schedule_classes = [schedule_class for schedule_class in spec.schedule_classes if schedule_class.name in used_schedule_names]
     enum_domains = [domain for domain in spec.enum_domains if domain.name in used_enum_domain_names]
 
     reg_class_ids = {reg_class.name: i for i, reg_class in enumerate(reg_classes)}
+    register_part_ids = {part.name: i for i, part in enumerate(register_parts)}
     resource_ids = {resource.name: i for i, resource in enumerate(resources)}
     schedule_class_ids = {schedule_class.name: i for i, schedule_class in enumerate(schedule_classes)}
     enum_domain_ids = {domain.name: i for i, domain in enumerate(enum_domains)}
@@ -737,6 +793,8 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         string_pool.intern("feature_key", spec.feature_key)
     for reg_class in reg_classes:
         string_pool.intern(f"reg_{reg_class.name}", reg_class.name)
+    for part in register_parts:
+        string_pool.intern(f"register_part_{part.name}", part.name)
     for resource in resources:
         string_pool.intern(f"resource_{resource.name}", resource.name)
     for schedule_class in schedule_classes:
@@ -893,10 +951,12 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         spec=spec,
         descriptors=selected_descriptors,
         reg_classes=reg_classes,
+        register_parts=register_parts,
         resources=resources,
         schedule_classes=schedule_classes,
         enum_domains=enum_domains,
         reg_class_ids=reg_class_ids,
+        register_part_ids=register_part_ids,
         resource_ids=resource_ids,
         schedule_class_ids=schedule_class_ids,
         enum_domain_ids=enum_domain_ids,
@@ -950,6 +1010,9 @@ def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
     if compiled.reg_classes:
         lines.append("")
         lines.extend(_reg_class_id_define(spec.c_enum_prefix, reg_class.name, i) for i, reg_class in enumerate(compiled.reg_classes))
+    if compiled.register_parts:
+        lines.append("")
+        lines.extend(_register_part_id_define(spec.c_enum_prefix, part.name, i) for i, part in enumerate(compiled.register_parts))
     lines.append("")
     lines.extend(
         [
@@ -1067,9 +1130,25 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".physical_count = {reg_class.physical_count},",
                 f".alias_set_id = {reg_class.alias_set_id},",
                 ".spill_class_id = " + ("LOOM_LOW_REG_CLASS_NONE" if reg_class.spill_class is None else str(compiled.reg_class_ids[reg_class.spill_class])) + ",",
+                f".full_register_part_mask = {_hex_u64_literal(reg_class.full_register_part_mask)},",
                 f".spill_slot_space = {reg_class.spill_slot_space.c_name},",
             ]
             for reg_class in compiled.reg_classes
+        ],
+    )
+    _emit_array(
+        lines,
+        "loom_low_register_part_t",
+        spec.c_table_prefix,
+        "RegisterParts",
+        [
+            [
+                f".name_string_offset = {pool.ref(f'register_part_{part.name}')},",
+                f".reg_class_id = {compiled.reg_class_ids[part.reg_class]},",
+                ".reserved = 0,",
+                f".mask = {_hex_u64_literal(part.mask)},",
+            ]
+            for part in compiled.register_parts
         ],
     )
     _emit_array(
@@ -1100,6 +1179,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
                 f".unit_count = {operand.unit_count},",
                 f".encoding_field_id = {operand.encoding_field_id},",
                 f".data_format_id = {operand.data_format_id},",
+                f".register_part_id = {_register_part_id_expr(compiled, operand.register_part)},",
                 f".read_stage = {operand.read_stage},",
                 f".ready_stage = {operand.ready_stage},",
             ]
@@ -1419,6 +1499,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         "effects": "effect_count",
         "constraints": "constraint_count",
         "reg_classes": "reg_class_count",
+        "register_parts": "register_part_count",
         "reg_class_alts": "reg_class_alt_count",
         "schedule_classes": "schedule_class_count",
         "issue_uses": "issue_use_count",
@@ -1444,6 +1525,7 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
     append_optional_table("effects", "Effects")
     append_optional_table("constraints", "Constraints")
     append_optional_table("reg_classes", "RegClasses")
+    append_optional_table("register_parts", "RegisterParts")
     append_optional_table("reg_class_alts", "RegClassAlts")
     append_optional_table("schedule_classes", "ScheduleClasses")
     append_optional_table("issue_uses", "IssueUses")
@@ -1536,6 +1618,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
             "effects": len(compiled.effects),
             "constraints": len(compiled.constraints),
             "reg_classes": len(compiled.reg_classes),
+            "register_parts": len(compiled.register_parts),
             "reg_class_alts": len(compiled.reg_class_alts),
             "schedule_classes": len(compiled.schedule_classes),
             "issue_uses": len(compiled.issue_uses),

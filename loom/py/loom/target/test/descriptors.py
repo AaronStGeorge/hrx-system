@@ -35,6 +35,7 @@ from loom.target.low_descriptors import (
     RegClass,
     RegClassAlt,
     RegClassFlag,
+    RegisterPart,
     Resource,
     ResourceKind,
     ScheduleClass,
@@ -51,6 +52,9 @@ _REG_PHYS = "test.phys"
 _REG_SPECIAL = "test.special"
 _REG_ALIAS32 = "test.alias32"
 _REG_ALIAS64 = "test.alias64"
+
+_REG_PART_I32_LOW16 = "test.i32.low16"
+_REG_PART_I32_HIGH16 = "test.i32.high16"
 
 _RESOURCE_SCALAR = "test.scalar"
 _RESOURCE_VECTOR = "test.vector"
@@ -103,6 +107,24 @@ def _i32_result(field_name: str = "dst") -> Operand:
 
 def _i32_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _I32_ALT)
+
+
+def _i32_low16_result(field_name: str = "dst") -> Operand:
+    return Operand(
+        field_name, OperandRole.RESULT, _I32_ALT, register_part=_REG_PART_I32_LOW16
+    )
+
+
+def _i32_low16_operand(field_name: str) -> Operand:
+    return Operand(
+        field_name, OperandRole.OPERAND, _I32_ALT, register_part=_REG_PART_I32_LOW16
+    )
+
+
+def _i32_high16_result(field_name: str = "dst") -> Operand:
+    return Operand(
+        field_name, OperandRole.RESULT, _I32_ALT, register_part=_REG_PART_I32_HIGH16
+    )
 
 
 def _i32_i64_result(field_name: str = "dst") -> Operand:
@@ -243,7 +265,11 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
     generator_version=1,
     reg_classes=(
         RegClass(
-            _REG_I32, 32, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+            _REG_I32,
+            32,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.VIRTUAL_ONLY,),
+            full_register_part_mask=0x3,
         ),
         RegClass(
             _REG_I8, 8, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
@@ -287,6 +313,10 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             physical_count=1,
             alias_set_id=1,
         ),
+    ),
+    register_parts=(
+        RegisterPart(_REG_PART_I32_LOW16, _REG_I32, 0x1),
+        RegisterPart(_REG_PART_I32_HIGH16, _REG_I32, 0x2),
     ),
     resources=(
         Resource(_RESOURCE_SCALAR, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
@@ -439,6 +469,31 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             asm_forms=_asm(results=("dst",), operands=("src",)),
             schedule_class=_SCHEDULE_SCALAR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.write.low16.i32",
+            mnemonic="test.write.low16.i32",
+            semantic_tag="test.write.low16.i32",
+            operands=(_i32_low16_result(), _ptr_resource("address")),
+            asm_forms=_asm(results=("dst",), operands=("address",)),
+            effects=(_LOAD_EFFECT,),
+            schedule_class=_SCHEDULE_LOAD,
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        Descriptor(
+            key="test.write.high16.i32",
+            mnemonic="test.write.high16.i32",
+            semantic_tag="test.write.high16.i32",
+            operands=(
+                _i32_high16_result(),
+                _i32_low16_operand("src"),
+                _ptr_resource("address"),
+            ),
+            constraints=(Constraint(ConstraintKind.TIED, 0, 1),),
+            asm_forms=_asm(results=("dst",), operands=("src", "address")),
+            effects=(_LOAD_EFFECT,),
+            schedule_class=_SCHEDULE_LOAD,
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
         ),
         Descriptor(
             key="test.spv.op_iadd.i32",

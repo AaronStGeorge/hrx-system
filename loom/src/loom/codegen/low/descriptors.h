@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 15u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 16u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -50,6 +50,9 @@ extern "C" {
 
 // Sentinel for absent register classes.
 #define LOOM_LOW_REG_CLASS_NONE UINT16_MAX
+
+// Sentinel for absent register parts.
+#define LOOM_LOW_REGISTER_PART_NONE UINT16_MAX
 
 // Sentinel for absent enum immediate domains.
 #define LOOM_LOW_ENUM_DOMAIN_NONE UINT16_MAX
@@ -103,6 +106,9 @@ typedef uint16_t loom_low_reg_class_alt_flags_t;
 
 // Bitset of register-class flags.
 typedef uint16_t loom_low_reg_class_flags_t;
+
+// Register-part definedness mask within one allocation unit.
+typedef uint64_t loom_low_register_part_mask_t;
 
 // Register class is virtual-only and has no physical register inventory.
 #define LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY ((uint16_t)1u << 0)
@@ -325,9 +331,22 @@ typedef struct loom_low_reg_class_t {
   uint16_t alias_set_id;
   // Register class used for spill/reload values, or LOOM_LOW_REG_CLASS_NONE.
   uint16_t spill_class_id;
+  // Bits defined by ordinary full-register writes for one allocation unit.
+  loom_low_register_part_mask_t full_register_part_mask;
   // Storage space used when values from this class are spilled.
   uint8_t spill_slot_space;
 } loom_low_reg_class_t;
+
+typedef struct loom_low_register_part_t {
+  // String-table offset for the stable register-part name.
+  loom_bstring_table_offset_t name_string_offset;
+  // Register-class table identifier this part belongs to.
+  uint16_t reg_class_id;
+  // Reserved for future register-part flags.
+  uint16_t reserved;
+  // Bits read or written by this part within one allocation unit.
+  loom_low_register_part_mask_t mask;
+} loom_low_register_part_t;
 
 typedef struct loom_low_reg_class_alt_t {
   // Register-class table identifier, or LOOM_LOW_REG_CLASS_NONE for literals.
@@ -354,6 +373,8 @@ typedef struct loom_low_operand_t {
   uint16_t unit_count;
   // Target-owned data-format identifier.
   uint16_t data_format_id;
+  // Register part read or written by this operand, or NONE for full register.
+  uint16_t register_part_id;
   // Scheduling stage where the operand is read.
   uint16_t read_stage;
   // Scheduling stage where the operand result becomes ready.
@@ -671,6 +692,10 @@ typedef struct loom_low_descriptor_set_t {
   const loom_low_reg_class_t* reg_classes;
   // Number of register classes owned by this set.
   uint32_t reg_class_count;
+  // Dense register parts referenced by descriptor operands.
+  const loom_low_register_part_t* register_parts;
+  // Number of register parts owned by this set.
+  uint32_t register_part_count;
   // Dense register-class alternative rows referenced by operands.
   const loom_low_reg_class_alt_t* reg_class_alts;
   // Number of register-class alternative rows owned by this set.

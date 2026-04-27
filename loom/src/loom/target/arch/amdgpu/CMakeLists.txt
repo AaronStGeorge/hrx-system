@@ -807,6 +807,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "low_partial_register"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_partial_register.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_addtid"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_addtid.loom-test"

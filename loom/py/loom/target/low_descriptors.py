@@ -14,7 +14,7 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 15
+LOW_DESCRIPTOR_SET_ABI_VERSION = 16
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 
@@ -174,6 +174,14 @@ class RegClass:
     physical_count: int = 0
     alias_set_id: int = 0
     spill_class: str | None = None
+    full_register_part_mask: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class RegisterPart:
+    name: str
+    reg_class: str
+    mask: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +199,7 @@ class Operand:
     unit_count: int = 1
     encoding_field_id: int = 0
     data_format_id: int = 0
+    register_part: str | None = None
     read_stage: int = 0
     ready_stage: int = 0
 
@@ -341,4 +350,5 @@ class DescriptorSet:
     resources: tuple[Resource, ...]
     schedule_classes: tuple[ScheduleClass, ...]
     descriptors: tuple[Descriptor, ...]
+    register_parts: tuple[RegisterPart, ...] = ()
     enum_domains: tuple[EnumDomain, ...] = ()

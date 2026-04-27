@@ -887,6 +887,7 @@ loom_check_test_suite(
     srcs = [
         "test/source_low/low_hal_structural.loom-test",
         "test/source_low/low_packet_diagnostics.loom-test",
+        "test/source_low/low_partial_register.loom-test",
         "test/source_low/source_low_addtid.loom-test",
         "test/source_low/source_low_async.loom-test",
         "test/source_low/source_low_async_diagnostics.loom-test",
