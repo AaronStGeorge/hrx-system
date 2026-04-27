@@ -1,6 +1,6 @@
 // RUN: roundtrip
 
-func.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+kernel.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 512 : offset
@@ -12,12 +12,12 @@ func.def @lds_f16x4_b64_roundtrip(%input: buffer, %output: buffer) {
   vector.store %loaded, %scratch_view[%tid, 0] : vector<4xf16>, view<64x4xf16, #dense>
   %roundtrip = vector.load %scratch_view[%tid, 0] : view<64x4xf16, #dense> -> vector<4xf16>
   vector.store %roundtrip, %output_view[%tid, 0] : vector<4xf16>, view<64x4xf16, #dense>
-  func.return
+  kernel.return
 }
 
 // ====
 
-func.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
+kernel.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -29,12 +29,12 @@ func.def @lds_f16x8_b128_roundtrip(%input: buffer, %output: buffer) {
   vector.store %loaded, %scratch_view[%tid, 0] : vector<8xf16>, view<64x8xf16, #dense>
   %roundtrip = vector.load %scratch_view[%tid, 0] : view<64x8xf16, #dense> -> vector<8xf16>
   vector.store %roundtrip, %output_view[%tid, 0] : vector<8xf16>, view<64x8xf16, #dense>
-  func.return
+  kernel.return
 }
 
 // ====
 
-func.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
+kernel.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 512 : offset
@@ -46,12 +46,12 @@ func.def @lds_bf16x4_b64_roundtrip(%input: buffer, %output: buffer) {
   vector.store %loaded, %scratch_view[%tid, 0] : vector<4xbf16>, view<64x4xbf16, #dense>
   %roundtrip = vector.load %scratch_view[%tid, 0] : view<64x4xbf16, #dense> -> vector<4xbf16>
   vector.store %roundtrip, %output_view[%tid, 0] : vector<4xbf16>, view<64x4xbf16, #dense>
-  func.return
+  kernel.return
 }
 
 // ====
 
-func.def @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
+kernel.def @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -63,5 +63,5 @@ func.def @lds_bf16x8_b128_roundtrip(%input: buffer, %output: buffer) {
   vector.store %loaded, %scratch_view[%tid, 0] : vector<8xbf16>, view<64x8xbf16, #dense>
   %roundtrip = vector.load %scratch_view[%tid, 0] : view<64x8xbf16, #dense> -> vector<8xbf16>
   vector.store %roundtrip, %output_view[%tid, 0] : vector<8xbf16>, view<64x8xbf16, #dense>
-  func.return
+  kernel.return
 }

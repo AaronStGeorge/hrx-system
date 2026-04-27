@@ -26,7 +26,7 @@ func.def @async_copy_transfer_rejected(%input: buffer) {
 
 // ====
 
-func.def @async_gather_destination_read_before_wait(%input: buffer) {
+kernel.def @async_gather_destination_read_before_wait(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -40,5 +40,5 @@ func.def @async_gather_destination_read_before_wait(%input: buffer) {
   // ERROR@+1: LOWERING/001 "view.load" "source-low" "synchronous read may observe a pending async destination before wait"
   %loaded = view.load %dest[0, 0, 0] : view<64x1x4xi8, #dense> -> i8
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-  func.return
+  kernel.return
 }

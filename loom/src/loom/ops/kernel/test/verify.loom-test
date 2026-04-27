@@ -18,6 +18,22 @@ kernel.def workgroup_size(0, 1, 1) @kernel_rejects_zero_workgroup_size() {
 
 // ====
 
+func.def @workitem_id_requires_kernel_def() {
+  // ERROR@+1: STRUCTURE/029 "kernel.workitem.id" "required" "kernel.def" "func.def"
+  %tid = kernel.workitem.id<x> : index
+  func.return
+}
+
+// ====
+
+func.def @workgroup_id_requires_kernel_def() {
+  // ERROR@+1: STRUCTURE/029 "kernel.workgroup.id" "required" "kernel.def" "func.def"
+  %gid = kernel.workgroup.id<x> : index
+  func.return
+}
+
+// ====
+
 func.def @barrier_rejects_global_memory_space() {
   // ERROR@+1: STRUCTURE/014 "memory_space" "1" "workgroup memory space"
   kernel.barrier {memory_space = global, ordering = acq_rel, scope = workgroup}

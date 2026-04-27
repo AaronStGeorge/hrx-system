@@ -1,6 +1,6 @@
 // RUN: roundtrip
 
-func.def @i32_bitwise(%input: buffer, %output: buffer) {
+kernel.def @i32_bitwise(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
@@ -12,12 +12,12 @@ func.def @i32_bitwise(%input: buffer, %output: buffer) {
   %with_tag = vector.ori %masked, %tag : vector<1xi32>
   %result = vector.xori %with_tag, %loaded : vector<1xi32>
   vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
-  func.return
+  kernel.return
 }
 
 // ====
 
-func.def @i32_shift(%input: buffer, %output: buffer) {
+kernel.def @i32_shift(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
@@ -30,12 +30,12 @@ func.def @i32_shift(%input: buffer, %output: buffer) {
   %joined = vector.ori %left, %logical : vector<1xi32>
   %result = vector.xori %joined, %arithmetic : vector<1xi32>
   vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
-  func.return
+  kernel.return
 }
 
 // ====
 
-func.def @i32_scalarized(%input: buffer, %output: buffer) {
+kernel.def @i32_scalarized(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
@@ -53,5 +53,5 @@ func.def @i32_scalarized(%input: buffer, %output: buffer) {
   %lane3 = vector.extract %loaded[3] : vector<4xi32> -> i32
   %result = vector.from_elements %mixed, %logical, %lane2, %lane3 : vector<4xi32>
   vector.store %result, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
-  func.return
+  kernel.return
 }

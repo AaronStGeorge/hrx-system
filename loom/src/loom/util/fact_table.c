@@ -2039,8 +2039,11 @@ typedef struct loom_value_fact_region_frame_t {
 iree_status_t loom_value_fact_table_compute(loom_value_fact_table_t* table,
                                             const loom_module_t* module,
                                             loom_func_like_t function) {
+  table->context.function = function;
   loom_region_t* body = loom_func_like_body(function);
-  if (!body) return iree_ok_status();
+  if (!body) {
+    return iree_ok_status();
+  }
 
   // Iterative DFS over all regions in the function (same pattern as
   // loom_rewriter_seed_function). Visits ops in dominance order so

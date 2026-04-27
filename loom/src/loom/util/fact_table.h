@@ -352,6 +352,10 @@ struct loom_fact_context_t {
   // inference helpers.
   loom_value_fact_table_t* table;
 
+  // Function-like op whose body is currently being analyzed. Empty when facts
+  // are computed for individual detached ops instead of a full function body.
+  loom_func_like_t function;
+
   // Optional selected target bundle for target/profile-sensitive fact
   // inference. Generic analyses leave this NULL and receive source-level facts.
   const loom_target_bundle_t* target_bundle;

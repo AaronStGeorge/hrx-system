@@ -52,6 +52,7 @@ from loom.dsl import (
     EnumCase,
     EnumDef,
     FuncLikeInterface,
+    HasAncestor,
     Op,
     Operand,
     OpPhase,
@@ -362,7 +363,7 @@ kernel_workitem_id = Op(
             doc="Coordinate axis to read.",
         ),
     ],
-    traits=[PURE],
+    traits=[PURE, HasAncestor("kernel.def")],
     facts="loom_kernel_workitem_id_facts",
     format=[
         TemplateParam("dimension"),
@@ -400,7 +401,7 @@ kernel_workgroup_id = Op(
             doc="Coordinate axis to read.",
         ),
     ],
-    traits=[PURE],
+    traits=[PURE, HasAncestor("kernel.def")],
     facts="loom_kernel_workgroup_id_facts",
     format=[
         TemplateParam("dimension"),

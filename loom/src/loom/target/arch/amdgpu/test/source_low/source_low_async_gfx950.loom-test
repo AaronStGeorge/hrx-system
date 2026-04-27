@@ -1,7 +1,7 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/async_gather.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx950 output=low
 
-func.def @async_gather_dword(%input: buffer) {
+kernel.def @async_gather_dword(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -13,11 +13,11 @@ func.def @async_gather_dword(%input: buffer) {
   %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x4xi8, #dense> to view<64x1x4xi8, #dense> -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @async_gather_dword() {
+low.kernel.def target(@target) @async_gather_dword() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -37,7 +37,7 @@ low.slot @async_gather_dword__lds7 {align = 16, function = @async_gather_dword, 
 
 // ====
 
-func.def @async_gather_b128(%input: buffer) {
+kernel.def @async_gather_b128(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -49,11 +49,11 @@ func.def @async_gather_b128(%input: buffer) {
   %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x16xi8, #dense> to view<64x1x16xi8, #dense> -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @async_gather_b128() {
+low.kernel.def target(@target) @async_gather_b128() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -73,7 +73,7 @@ low.slot @async_gather_b128__lds7 {align = 16, function = @async_gather_b128, si
 
 // ====
 
-func.def @async_gather_two_stage(%input: buffer) {
+kernel.def @async_gather_two_stage(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 2048 : offset
@@ -90,11 +90,11 @@ func.def @async_gather_two_stage(%input: buffer) {
   %load1 = kernel.async.group %copy1 : kernel.async.token -> kernel.async.group
   kernel.async.wait %load0 {newer_groups = 1} : kernel.async.group
   kernel.async.wait %load1 {newer_groups = 0} : kernel.async.group
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @async_gather_two_stage() {
+low.kernel.def target(@target) @async_gather_two_stage() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -121,7 +121,7 @@ low.slot @async_gather_two_stage__lds7 {align = 16, function = @async_gather_two
 
 // ====
 
-func.def @async_gather_multi_packet_newer_group(%input: buffer) {
+kernel.def @async_gather_multi_packet_newer_group(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 3072 : offset
@@ -140,11 +140,11 @@ func.def @async_gather_multi_packet_newer_group(%input: buffer) {
   %load1 = kernel.async.group %copy1a, %copy1b : kernel.async.token, kernel.async.token -> kernel.async.group
   kernel.async.wait %load0 {newer_groups = 1} : kernel.async.group
   kernel.async.wait %load1 {newer_groups = 0} : kernel.async.group
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @async_gather_multi_packet_newer_group() {
+low.kernel.def target(@target) @async_gather_multi_packet_newer_group() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
@@ -177,7 +177,7 @@ low.slot @async_gather_multi_packet_newer_group__lds7 {align = 16, function = @a
 
 // ====
 
-func.def @async_gather_second_lds_slot(%input: buffer) {
+kernel.def @async_gather_second_lds_slot(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %pad_bytes = index.constant 256 : offset
@@ -191,11 +191,11 @@ func.def @async_gather_second_lds_slot(%input: buffer) {
   %copy = kernel.async.gather %source to %dest {cache_scope = device, cache_temporal = regular} : view<1x16xi8, #dense> to view<64x1x16xi8, #dense> -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @async_gather_second_lds_slot() {
+low.kernel.def target(@target) @async_gather_second_lds_slot() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %source = low.resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer} : reg<amdgpu.sgpr x4>
   %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>

@@ -1,6 +1,6 @@
 // RUN: roundtrip
 
-func.def @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
+kernel.def @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %four = index.constant 4 : index
@@ -15,7 +15,7 @@ func.def @f32_table_lookup_i8_codes(%codes_buffer: buffer, %output: buffer) {
   %grid = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xf32>
   %decoded = vector.table.lookup %grid[%codes] : vector<4xf32>, vector<4xi8> -> vector<4xf32>
   vector.store %decoded, %output_view[%base] : vector<4xf32>, view<8xf32, #dense>
-  func.return
+  kernel.return
 }
 
 // ====

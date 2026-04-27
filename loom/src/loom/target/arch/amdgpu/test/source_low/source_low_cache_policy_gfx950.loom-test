@@ -1,18 +1,18 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_cache_policy_non_temporal.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx950 output=low
 
-func.def @cache_device_non_temporal_load_store(%input: buffer, %output: buffer) {
+kernel.def @cache_device_non_temporal_load_store(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
   %loaded = vector.load %input_view[%tid, 0] {cache_scope = device, cache_temporal = non_temporal} : view<64x4xi32, #dense> -> vector<4xi32>
   vector.store %loaded, %output_view[%tid, 0] {cache_scope = device, cache_temporal = non_temporal} : vector<4xi32>, view<64x4xi32, #dense>
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @cache_device_non_temporal_load_store() asm<amdgpu.gfx950.core> {
+low.kernel.def target(@target) @cache_device_non_temporal_load_store() asm<amdgpu.gfx950.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>

@@ -9,11 +9,11 @@ func.def @prefetch_static(%input: buffer) {
 
 // ====
 
-func.def @prefetch_workgroup_id(%input: buffer) {
+kernel.def @prefetch_workgroup_id(%input: buffer) {
   %gid = kernel.workgroup.id<x> : index
   %bounded_gid = index.assume %gid [range(%gid, 0, 1024)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
   view.prefetch %input_view[%bounded_gid] {intent = read, locality = l2} : view<64xi32, #dense>
-  func.return
+  kernel.return
 }

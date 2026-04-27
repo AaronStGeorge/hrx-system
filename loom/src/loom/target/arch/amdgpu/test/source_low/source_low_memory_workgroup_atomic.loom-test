@@ -1,7 +1,7 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_workgroup_atomic.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-func.def @lds_atomic_add_i32() {
+kernel.def @lds_atomic_add_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -10,11 +10,11 @@ func.def @lds_atomic_add_i32() {
   %one = scalar.constant 1 : i32
   view.atomic.reduce<addi> %one, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
   %old = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @lds_atomic_add_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_atomic_add_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -37,7 +37,7 @@ low.slot @lds_atomic_add_i32__lds3 {align = 4, function = @lds_atomic_add_i32, s
 
 // ====
 
-func.def @lds_atomic_ordering_i32() {
+kernel.def @lds_atomic_ordering_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -49,11 +49,11 @@ func.def @lds_atomic_ordering_i32() {
   %old_release = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = release, scope = workgroup} : i32, view<64xi32, #dense> -> i32
   %old_acq_rel = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = acq_rel, scope = workgroup} : i32, view<64xi32, #dense> -> i32
   %old_seq_cst = view.atomic.rmw<addi> %one, %scratch_view[%tid] {ordering = seq_cst, scope = workgroup} : i32, view<64xi32, #dense> -> i32
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @lds_atomic_ordering_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_atomic_ordering_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -91,7 +91,7 @@ low.slot @lds_atomic_ordering_i32__lds3 {align = 4, function = @lds_atomic_order
 
 // ====
 
-func.def @lds_atomic_add_f32() {
+kernel.def @lds_atomic_add_f32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -100,11 +100,11 @@ func.def @lds_atomic_add_f32() {
   %one = scalar.constant 1.0 : f32
   view.atomic.reduce<addf> %one, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense>
   %old = view.atomic.rmw<addf> %one, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense> -> f32
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @lds_atomic_add_f32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_atomic_add_f32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -125,7 +125,7 @@ low.slot @lds_atomic_add_f32__lds3 {align = 4, function = @lds_atomic_add_f32, s
 
 // ====
 
-func.def @lds_atomic_minnum_maxnum_f32() {
+kernel.def @lds_atomic_minnum_maxnum_f32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -136,11 +136,11 @@ func.def @lds_atomic_minnum_maxnum_f32() {
   view.atomic.reduce<maxnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense>
   %old_min = view.atomic.rmw<minnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense> -> f32
   %old_max = view.atomic.rmw<maxnumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense> -> f32
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @lds_atomic_minnum_maxnum_f32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_atomic_minnum_maxnum_f32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -169,7 +169,7 @@ low.slot @lds_atomic_minnum_maxnum_f32__lds3 {align = 4, function = @lds_atomic_
 
 // ====
 
-func.def @lds_atomic_bitwise_i32() {
+kernel.def @lds_atomic_bitwise_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -182,11 +182,11 @@ func.def @lds_atomic_bitwise_i32() {
   %old_and = view.atomic.rmw<andi> %mask, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
   %old_or = view.atomic.rmw<ori> %mask, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
   %old_xor = view.atomic.rmw<xori> %mask, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @lds_atomic_bitwise_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_atomic_bitwise_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -229,7 +229,7 @@ low.slot @lds_atomic_bitwise_i32__lds3 {align = 4, function = @lds_atomic_bitwis
 
 // ====
 
-func.def @lds_atomic_sub_i32() {
+kernel.def @lds_atomic_sub_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -238,11 +238,11 @@ func.def @lds_atomic_sub_i32() {
   %delta = scalar.constant 1 : i32
   view.atomic.reduce<subi> %delta, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense>
   %old_sub = view.atomic.rmw<subi> %delta, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @lds_atomic_sub_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_atomic_sub_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -265,7 +265,7 @@ low.slot @lds_atomic_sub_i32__lds3 {align = 4, function = @lds_atomic_sub_i32, s
 
 // ====
 
-func.def @lds_atomic_exchange_i32() {
+kernel.def @lds_atomic_exchange_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -273,11 +273,11 @@ func.def @lds_atomic_exchange_i32() {
   %scratch_view = buffer.view %scratch[%zero] : buffer -> view<64xi32, #dense>
   %value = scalar.constant 7 : i32
   %old = view.atomic.rmw<xchgi> %value, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @lds_atomic_exchange_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_atomic_exchange_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -295,7 +295,7 @@ low.slot @lds_atomic_exchange_i32__lds3 {align = 4, function = @lds_atomic_excha
 
 // ====
 
-func.def @lds_atomic_cmpxchg_i32() {
+kernel.def @lds_atomic_cmpxchg_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -304,11 +304,11 @@ func.def @lds_atomic_cmpxchg_i32() {
   %expected = scalar.constant 7 : i32
   %replacement = scalar.constant 9 : i32
   %old = view.atomic.cmpxchg %expected, %replacement, %scratch_view[%tid] {failure_ordering = relaxed, scope = workgroup, success_ordering = relaxed} : i32, view<64xi32, #dense> -> i32
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @lds_atomic_cmpxchg_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_atomic_cmpxchg_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256
@@ -328,7 +328,7 @@ low.slot @lds_atomic_cmpxchg_i32__lds3 {align = 4, function = @lds_atomic_cmpxch
 
 // ====
 
-func.def @lds_atomic_minmax_i32() {
+kernel.def @lds_atomic_minmax_i32() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -343,11 +343,11 @@ func.def @lds_atomic_minmax_i32() {
   %old_maxsi = view.atomic.rmw<maxsi> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
   %old_minui = view.atomic.rmw<minui> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
   %old_maxui = view.atomic.rmw<maxui> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : i32, view<64xi32, #dense> -> i32
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @lds_atomic_minmax_i32() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_atomic_minmax_i32() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %zero = s_mov_b32 0
   %bytes = s_mov_b32 256

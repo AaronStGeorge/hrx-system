@@ -10,7 +10,7 @@
 
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
-#include "loom/ops/func/ops.h"
+#include "loom/ops/op_defs.h"
 
 typedef struct loom_check_template_sync_case_t {
   // Arena-owned function symbol name used as the case key.
@@ -227,24 +227,25 @@ static iree_status_t loom_check_template_sync_extract_case_key(
   }
 
   iree_string_view_t key = iree_string_view_empty();
-  iree_host_size_t func_def_count = 0;
+  iree_host_size_t func_like_count = 0;
   if (iree_status_is_ok(status)) {
     for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
       const loom_symbol_t* symbol = &module->symbols.entries[i];
-      if (!symbol->defining_op || !loom_func_def_isa(symbol->defining_op)) {
+      loom_func_like_t func = loom_func_like_cast(module, symbol->defining_op);
+      if (!loom_func_like_isa(func) || !loom_func_like_body(func)) {
         continue;
       }
-      ++func_def_count;
+      ++func_like_count;
       if (symbol->name_id < module->strings.count) {
         key = module->strings.entries[symbol->name_id];
       }
     }
-    if (func_def_count != 1 || iree_string_view_is_empty(key)) {
+    if (func_like_count != 1 || iree_string_view_is_empty(key)) {
       status = iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "template synchronization requires each case to contain exactly one "
-          "func.def, got %" PRIhsz,
-          func_def_count);
+          "func-like definition, got %" PRIhsz,
+          func_like_count);
     }
   }
   if (iree_status_is_ok(status)) {
@@ -292,7 +293,8 @@ static iree_status_t loom_check_template_sync_collect_cases(
       if (iree_string_view_equal(cases[j].key, key)) {
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
-            "duplicate template-synchronized case for func @%.*s",
+            "duplicate template-synchronized case for func-like definition "
+            "@%.*s",
             (int)key.size, key.data);
       }
     }

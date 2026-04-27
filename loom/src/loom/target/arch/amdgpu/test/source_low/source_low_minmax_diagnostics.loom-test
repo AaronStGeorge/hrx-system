@@ -16,7 +16,7 @@ func.def @vector_ieee_maximum_rejected(%lhs: vector<2xf32>, %rhs: vector<2xf32>)
 
 // ====
 
-func.def @global_atomic_ieee_minimum_rejected(%input: buffer) {
+kernel.def @global_atomic_ieee_minimum_rejected(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %global = buffer.assume.memory_space %input {memory_space = global} : buffer
@@ -24,12 +24,12 @@ func.def @global_atomic_ieee_minimum_rejected(%input: buffer) {
   %limit = scalar.constant 1.0 : f32
   // ERROR@+1: BACKEND/001
   view.atomic.reduce<minimumf> %limit, %view[%tid] {ordering = relaxed, scope = device} : f32, view<64xf32, #dense>
-  func.return
+  kernel.return
 }
 
 // ====
 
-func.def @lds_atomic_ieee_maximum_rejected() {
+kernel.def @lds_atomic_ieee_maximum_rejected() {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 256 : offset
@@ -38,5 +38,5 @@ func.def @lds_atomic_ieee_maximum_rejected() {
   %limit = scalar.constant 1.0 : f32
   // ERROR@+1: BACKEND/001
   view.atomic.reduce<maximumf> %limit, %scratch_view[%tid] {ordering = relaxed, scope = workgroup} : f32, view<64xf32, #dense>
-  func.return
+  kernel.return
 }

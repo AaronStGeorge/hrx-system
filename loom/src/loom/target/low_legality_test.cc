@@ -214,11 +214,11 @@ TEST_F(TargetLowLegalityTest, AcceptsVectorCfgSourceFunction) {
   EXPECT_TRUE(collector.emissions.empty());
 }
 
-TEST_F(TargetLowLegalityTest, AcceptsKernelWorkitemIdSourceFunction) {
+TEST_F(TargetLowLegalityTest, AcceptsKernelWorkitemIdSourceKernel) {
   ModulePtr module = ParseSource(
-      "func.def @kernel_coordinate() -> (index) {\n"
+      "kernel.def @kernel_coordinate() {\n"
       "  %tid = kernel.workitem.id<x> : index\n"
-      "  func.return %tid : index\n"
+      "  kernel.return\n"
       "}\n");
 
   EmissionCollector collector;

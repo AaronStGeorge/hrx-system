@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/tools/loom-check/check.h"
 
@@ -37,6 +38,8 @@ class TemplateSyncTest : public ::testing::Test {
     loom_context_initialize(iree_allocator_system(), &context_);
     IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_FUNC,
                                    loom_func_dialect_vtables));
+    IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_KERNEL,
+                                   loom_kernel_dialect_vtables));
     IREE_ASSERT_OK(RegisterDialect(&context_, LOOM_DIALECT_SCALAR,
                                    loom_scalar_dialect_vtables));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
@@ -157,6 +160,43 @@ TEST_F(TemplateSyncTest, PreservesMatchingTargetEvidenceAndDirectives) {
   EXPECT_NE(result.find("func.def @beta()"), std::string::npos);
   EXPECT_EQ(result.find("func.def @stale()"), std::string::npos);
   EXPECT_EQ(result.find("stale target evidence"), std::string::npos);
+}
+
+TEST_F(TemplateSyncTest, UsesKernelDefAsCaseSymbol) {
+  std::string result;
+  bool changed = false;
+  IREE_ASSERT_OK(Build(
+      "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
+      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "\n",
+      "// RUN: roundtrip\n"
+      "\n"
+      "kernel.def @entry() {\n"
+      "  kernel.return\n"
+      "}\n",
+      &result, &changed));
+
+  EXPECT_TRUE(changed);
+  EXPECT_NE(result.find("kernel.def @entry()"), std::string::npos);
+}
+
+TEST_F(TemplateSyncTest, IgnoresFuncDeclWhenSelectingCaseSymbol) {
+  std::string result;
+  bool changed = false;
+  IREE_ASSERT_OK(Build(
+      "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"
+      "// RUN: emit source-low target-preset=test-low output=module\n"
+      "\n",
+      "// RUN: roundtrip\n"
+      "\n"
+      "func.decl @callee()\n"
+      "func.def @entry() {\n"
+      "}\n",
+      &result, &changed));
+
+  EXPECT_TRUE(changed);
+  EXPECT_NE(result.find("func.decl @callee()"), std::string::npos);
+  EXPECT_NE(result.find("func.def @entry()"), std::string::npos);
 }
 
 TEST_F(TemplateSyncTest, PreservesTargetAnnotationsAtAnchoredInputLines) {

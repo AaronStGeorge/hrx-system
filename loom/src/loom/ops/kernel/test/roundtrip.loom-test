@@ -23,20 +23,20 @@ func.def @workgroup_barrier() {
 
 // ====
 
-func.def @workitem_coordinates() -> (index, index, index) {
+kernel.def @workitem_coordinates() {
   %x = kernel.workitem.id<x> : index
   %y = kernel.workitem.id<y> : index
   %z = kernel.workitem.id<z> : index
-  func.return %x, %y, %z : index, index, index
+  kernel.return
 }
 
 // ====
 
-func.def @workgroup_coordinates() -> (index, index, index) {
+kernel.def @workgroup_coordinates() {
   %x = kernel.workgroup.id<x> : index
   %y = kernel.workgroup.id<y> : index
   %z = kernel.workgroup.id<z> : index
-  func.return %x, %y, %z : index, index, index
+  kernel.return
 }
 
 // ====

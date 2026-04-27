@@ -1,7 +1,7 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/numeric_f32_memory.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-func.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+kernel.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>
@@ -12,11 +12,11 @@ func.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %sum = vector.addf %lhs, %rhs : vector<1xf32>
   %product = vector.mulf %sum, %rhs : vector<1xf32>
   vector.store %product, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @f32_arith() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @f32_arith() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -41,7 +41,7 @@ low.func.def target(@target) @f32_arith() asm<amdgpu.gfx11.core> {
 
 // ====
 
-func.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+kernel.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64xf32, #dense>
@@ -53,11 +53,11 @@ func.def @f32_fma(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %fma = vector.fmaf %lhs, %rhs, %bias : vector<1xf32>
   %result = vector.subf %fma, %bias : vector<1xf32>
   vector.store %result, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @f32_fma() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @f32_fma() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x4>
@@ -83,7 +83,7 @@ low.func.def target(@target) @f32_fma() asm<amdgpu.gfx11.core> {
 
 // ====
 
-func.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
+kernel.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs_buffer[%zero] : buffer -> view<64x4xf32, #dense>
@@ -106,11 +106,11 @@ func.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buff
   %lane3 = scalar.fmaf %lhs3, %rhs3, %bias : f32
   %result = vector.from_elements %lane0, %lane1, %lane2, %lane3 : vector<4xf32>
   vector.store %result, %output_view[%tid, 0] : vector<4xf32>, view<64x4xf32, #dense>
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @f32_scalarized() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @f32_scalarized() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %lhs_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %rhs_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>

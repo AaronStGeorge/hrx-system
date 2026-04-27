@@ -11,7 +11,7 @@ func.def @unknown_atomic_is_not_flat(%input: buffer) {
 
 // ====
 
-func.def @generic_dynamic_atomic_rejected(%input: buffer) {
+kernel.def @generic_dynamic_atomic_rejected(%input: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %generic = buffer.assume.memory_space %input {memory_space = generic} : buffer
@@ -19,5 +19,5 @@ func.def @generic_dynamic_atomic_rejected(%input: buffer) {
   %one = scalar.constant 1 : i32
   // ERROR@+1: BACKEND/001 "AMDGPU flat memory lowering currently requires a static source address"
   view.atomic.reduce<addi> %one, %view[%tid] {ordering = relaxed, scope = device} : i32, view<64xi32, #dense>
-  func.return
+  kernel.return
 }

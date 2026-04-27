@@ -1,7 +1,7 @@
 // TEMPLATE: loom/src/loom/test/corpus/source_low/memory_workgroup_b128.loom-test
 // RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-func.def @lds_b128_roundtrip(%input: buffer, %output: buffer) {
+kernel.def @lds_b128_roundtrip(%input: buffer, %output: buffer) {
   %tid = kernel.workitem.id<x> : index
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
@@ -13,11 +13,11 @@ func.def @lds_b128_roundtrip(%input: buffer, %output: buffer) {
   vector.store %loaded, %scratch_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
   %roundtrip = vector.load %scratch_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
   vector.store %roundtrip, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
-  func.return
+  kernel.return
 }
 
 // ----
-low.func.def target(@target) @lds_b128_roundtrip() asm<amdgpu.gfx11.core> {
+low.kernel.def target(@target) @lds_b128_roundtrip() asm<amdgpu.gfx11.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_buffer_resource> {index = 0, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>
   %output_view = resource<hal_buffer_resource> {index = 1, semantic_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x4>

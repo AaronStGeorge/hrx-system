@@ -62,15 +62,15 @@ static uint32_t loom_kernel_workgroup_count_dim(
 
 static uint32_t loom_kernel_max_workgroup_count(
     const loom_target_snapshot_t* snapshot,
-    const loom_target_export_plan_t* export_plan,
+    const loom_target_workgroup_size_t* required_workgroup_size,
     loom_kernel_dimension_t dimension) {
   uint32_t max_count = loom_kernel_workgroup_count_dim(
       &snapshot->max_workgroup_count, dimension);
   const uint32_t max_grid_size =
       loom_kernel_grid_size_dim(&snapshot->max_grid_size, dimension);
   if (max_grid_size != 0) {
-    uint32_t workgroup_size = loom_kernel_workgroup_size_dim(
-        &export_plan->hal_kernel.required_workgroup_size, dimension);
+    uint32_t workgroup_size =
+        loom_kernel_workgroup_size_dim(required_workgroup_size, dimension);
     if (workgroup_size == 0) {
       workgroup_size = 1;
     }
@@ -93,16 +93,43 @@ static const loom_target_bundle_t* loom_kernel_target_bundle(
   return bundle;
 }
 
+static bool loom_kernel_context_required_workgroup_size(
+    const loom_fact_context_t* context,
+    loom_target_workgroup_size_t* out_size) {
+  *out_size = (loom_target_workgroup_size_t){0};
+
+  uint32_t x = 0;
+  uint32_t y = 0;
+  uint32_t z = 0;
+  if (context && loom_kernel_def_isa(context->function.op) &&
+      loom_func_like_workgroup_size(context->function, &x, &y, &z)) {
+    *out_size = (loom_target_workgroup_size_t){.x = x, .y = y, .z = z};
+    return true;
+  }
+
+  const loom_target_bundle_t* bundle = loom_kernel_target_bundle(context);
+  if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
+    return false;
+  }
+  *out_size = bundle->export_plan->hal_kernel.required_workgroup_size;
+  return out_size->x != 0 || out_size->y != 0 || out_size->z != 0;
+}
+
 static loom_value_facts_t loom_kernel_workitem_id_target_facts(
     const loom_fact_context_t* context, loom_kernel_dimension_t dimension) {
+  loom_target_workgroup_size_t required_workgroup_size = {0};
+  if (loom_kernel_context_required_workgroup_size(context,
+                                                  &required_workgroup_size)) {
+    const uint32_t fixed_workgroup_size =
+        loom_kernel_workgroup_size_dim(&required_workgroup_size, dimension);
+    if (fixed_workgroup_size != 0) {
+      return loom_value_facts_make(0, (int64_t)fixed_workgroup_size - 1, 1);
+    }
+  }
+
   const loom_target_bundle_t* bundle = loom_kernel_target_bundle(context);
   if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
     return loom_kernel_hal_coordinate_facts();
-  }
-  const uint32_t fixed_workgroup_size = loom_kernel_workgroup_size_dim(
-      &bundle->export_plan->hal_kernel.required_workgroup_size, dimension);
-  if (fixed_workgroup_size != 0) {
-    return loom_value_facts_make(0, (int64_t)fixed_workgroup_size - 1, 1);
   }
   const uint32_t max_workgroup_size = loom_kernel_workgroup_size_dim(
       &bundle->snapshot->max_workgroup_size, dimension);
@@ -118,8 +145,14 @@ static loom_value_facts_t loom_kernel_workgroup_id_target_facts(
   if (!bundle || bundle->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
     return loom_kernel_hal_coordinate_facts();
   }
+  loom_target_workgroup_size_t required_workgroup_size = {0};
+  if (!loom_kernel_context_required_workgroup_size(context,
+                                                   &required_workgroup_size)) {
+    required_workgroup_size =
+        bundle->export_plan->hal_kernel.required_workgroup_size;
+  }
   const uint32_t max_workgroup_count = loom_kernel_max_workgroup_count(
-      bundle->snapshot, bundle->export_plan, dimension);
+      bundle->snapshot, &required_workgroup_size, dimension);
   if (max_workgroup_count == 0) {
     return loom_kernel_hal_coordinate_facts();
   }

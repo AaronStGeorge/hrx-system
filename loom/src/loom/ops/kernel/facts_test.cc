@@ -155,12 +155,12 @@ class KernelFactsTest : public ::testing::Test {
 
 TEST_F(KernelFactsTest, TargetBundleRefinesCoordinateFactsBeforePropagation) {
   ModulePtr module = ParseModule(R"(
-func.def @kernel_coords() -> (index, index, index) {
+kernel.def @kernel_coords() {
   %tid_x = kernel.workitem.id<x> : index
   %wg_y = kernel.workgroup.id<y> : index
   %c4 = index.constant 4 : index
   %byte_offset = index.mul %tid_x, %c4 : index
-  func.return %tid_x, %wg_y, %byte_offset : index, index, index
+  kernel.return
 }
 )");
   loom_func_like_t function =
@@ -192,10 +192,10 @@ func.def @kernel_coords() -> (index, index, index) {
 
 TEST_F(KernelFactsTest, OpenTargetUsesCapabilityBoundsWithoutFixedWorkgroup) {
   ModulePtr module = ParseModule(R"(
-func.def @kernel_coords() -> (index, index) {
+kernel.def @kernel_coords() {
   %tid_y = kernel.workitem.id<y> : index
   %wg_y = kernel.workgroup.id<y> : index
-  func.return %tid_y, %wg_y : index, index
+  kernel.return
 }
 )");
   loom_func_like_t function =
