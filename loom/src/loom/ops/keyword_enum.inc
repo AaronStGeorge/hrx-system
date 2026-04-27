@@ -63,3 +63,7 @@
   LOOM_KW_RTOL = 54,  // "rtol"
   LOOM_KW_SHAPE = 55,  // "shape"
   LOOM_KW_VALUES = 56,  // "values"
+  LOOM_KW_ARTIFACT = 57,  // "artifact"
+  LOOM_KW_ORDINAL = 58,  // "ordinal"
+  LOOM_KW_LINKAGE = 59,  // "linkage"
+  LOOM_KW_WORKGROUP_SIZE = 60,  // "workgroup_size"

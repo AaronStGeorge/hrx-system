@@ -1,5 +1,23 @@
 // RUN: verify
 
+target.profile @test_target preset("test-low")
+
+target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
+
+// ERROR@+1: STRUCTURE/014 "export" "0" "present when artifact, ordinal, or linkage is present"
+kernel.def target(@test_target) artifact(@test_artifact) @kernel_artifact_requires_export() {
+  kernel.return
+}
+
+// ====
+
+// ERROR@+1: STRUCTURE/014 "workgroup_size_x" "0" "positive u32"
+kernel.def workgroup_size(0, 1, 1) @kernel_rejects_zero_workgroup_size() {
+  kernel.return
+}
+
+// ====
+
 func.def @barrier_rejects_global_memory_space() {
   // ERROR@+1: STRUCTURE/014 "memory_space" "1" "workgroup memory space"
   kernel.barrier {memory_space = global, ordering = acq_rel, scope = workgroup}

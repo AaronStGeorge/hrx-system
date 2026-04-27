@@ -47,7 +47,7 @@ from loom.assembly import (
     kw,
 )
 from loom.dialect.func.defs import CallingConv, Purity, Visibility
-from loom.dialect.target.defs import ExportAbiKind
+from loom.dialect.target.defs import ExportAbiKind, ExportLinkage
 from loom.dsl import (
     ANY,
     ATTR_TYPE_ENUM,
@@ -67,7 +67,6 @@ from loom.dsl import (
     EnumCase,
     EnumDef,
     FuncLikeInterface,
-    HasAncestor,
     NoAncestor,
     Op,
     Operand,
@@ -215,6 +214,30 @@ _FUNC_COMMON_ATTRS = [
     AttrDef("predicates", "predicate_list", optional=True),
 ]
 
+_KERNEL_COMMON_ATTRS = [
+    AttrDef("callee", "symbol"),
+    AttrDef(
+        "target",
+        "symbol",
+        symbol_ref=SymbolReference("record", ["record"]),
+    ),
+    AttrDef("export_symbol", "string", optional=True),
+    AttrDef(
+        "artifact",
+        "symbol",
+        optional=True,
+        symbol_ref=SymbolReference("target artifact", ["record"]),
+    ),
+    AttrDef("export_ordinal", ATTR_TYPE_I64, optional=True),
+    AttrDef("export_linkage", "enum", enum_def=ExportLinkage, optional=True),
+    AttrDef("workgroup_size_x", ATTR_TYPE_I64, optional=True),
+    AttrDef("workgroup_size_y", ATTR_TYPE_I64, optional=True),
+    AttrDef("workgroup_size_z", ATTR_TYPE_I64, optional=True),
+    AttrDef("allocation", "enum", enum_def=LowAllocationMode, optional=True),
+    AttrDef("schedule", "enum", enum_def=LowScheduleMode, optional=True),
+    AttrDef("predicates", "predicate_list", optional=True),
+]
+
 _FUNC_DECL_IMPORT_ATTRS = [
     AttrDef("import_kind", "enum", enum_def=LowCodeImportKind, optional=True),
     AttrDef("code_symbol", "string", optional=True),
@@ -224,6 +247,17 @@ _FUNC_MODIFIER_FORMAT: list[FormatElement] = [
     OptionalGroup([Attr("visibility")], anchor="visibility"),
     OptionalGroup([Attr("cc")], anchor="cc"),
     OptionalGroup([Attr("purity")], anchor="purity"),
+    OptionalGroup(
+        [kw("allocation"), GLUE, LPAREN, Attr("allocation"), GLUE, RPAREN],
+        anchor="allocation",
+    ),
+    OptionalGroup(
+        [kw("schedule"), GLUE, LPAREN, Attr("schedule"), GLUE, RPAREN],
+        anchor="schedule",
+    ),
+]
+
+_LOW_EXACTNESS_FORMAT: list[FormatElement] = [
     OptionalGroup(
         [kw("allocation"), GLUE, LPAREN, Attr("allocation"), GLUE, RPAREN],
         anchor="allocation",
@@ -273,6 +307,43 @@ _FUNC_EXPORT_FORMAT: list[FormatElement] = [
     ),
 ]
 
+_KERNEL_EXPORT_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [kw("export"), GLUE, LPAREN, Attr("export_symbol"), GLUE, RPAREN],
+        anchor="export_symbol",
+    ),
+    OptionalGroup(
+        [kw("artifact"), GLUE, LPAREN, SymbolRef("artifact"), GLUE, RPAREN],
+        anchor="artifact",
+    ),
+    OptionalGroup(
+        [kw("ordinal"), GLUE, LPAREN, Attr("export_ordinal"), GLUE, RPAREN],
+        anchor="export_ordinal",
+    ),
+    OptionalGroup(
+        [kw("linkage"), GLUE, LPAREN, Attr("export_linkage"), GLUE, RPAREN],
+        anchor="export_linkage",
+    ),
+]
+
+_KERNEL_WORKGROUP_SIZE_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [
+            kw("workgroup_size"),
+            GLUE,
+            LPAREN,
+            Attr("workgroup_size_x"),
+            COMMA,
+            Attr("workgroup_size_y"),
+            COMMA,
+            Attr("workgroup_size_z"),
+            GLUE,
+            RPAREN,
+        ],
+        anchor="workgroup_size_x",
+    ),
+]
+
 _FUNC_IMPORT_FORMAT: list[FormatElement] = [
     OptionalGroup(
         [
@@ -306,6 +377,19 @@ _FUNC_SIGNATURE_FORMAT: list[FormatElement] = [
     ),
 ]
 
+_KERNEL_SIGNATURE_FORMAT: list[FormatElement] = [
+    SymbolRef("callee"),
+    Scope(
+        [
+            FuncArgs("args"),
+            OptionalGroup(
+                [kw("where"), PredicateList("predicates")],
+                anchor="predicates",
+            ),
+        ]
+    ),
+]
+
 _FUNC_LIKE_COMMON: dict[str, Any] = dict(
     callee="callee",
     target="target",
@@ -316,6 +400,13 @@ _FUNC_LIKE_COMMON: dict[str, Any] = dict(
     visibility="visibility",
     cc="cc",
     purity="purity",
+    predicates="predicates",
+)
+
+_KERNEL_FUNC_LIKE_COMMON: dict[str, Any] = dict(
+    callee="callee",
+    target="target",
+    export_symbol="export_symbol",
     predicates="predicates",
 )
 
@@ -357,6 +448,42 @@ low_func_def = Op(
     examples=[
         "low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n  %sum = low.op<amdgpu.v_add_u32>(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> reg<amdgpu.vgpr x1>\n  low.return %sum : reg<amdgpu.vgpr x1>\n}",
         "low.func.def allocation(fixed) schedule(locked) target(@gfx1100) @agent_authored(%lhs: reg<amdgpu.vgpr x1>) {\n  low.return\n}",
+    ],
+)
+
+# ============================================================================
+# low.kernel.def — target-bound low kernel entry definition
+# ============================================================================
+
+low_kernel_def = Op(
+    "low.kernel.def",
+    group=low_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Target-bound low kernel entry with register-typed launch ABI values. Helper calls stay in low.func.def; kernel launch/export contracts live on this entry op."),
+    traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
+    attrs=list(_KERNEL_COMMON_ATTRS),
+    symbol_def=SymbolDefinition(
+        field="callee",
+        name="function",
+        interfaces=["func_like"],
+        bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
+    ),
+    regions=[RegionDef("body", doc="Low kernel body.", terminator="low.return")],
+    interfaces=[FuncLikeInterface(**_KERNEL_FUNC_LIKE_COMMON, body="body")],
+    verify="loom_low_kernel_def_verify",
+    constraints=[
+        BlockArgsSatisfy("body", REGISTER),
+    ],
+    format=[
+        *_LOW_EXACTNESS_FORMAT,
+        *_FUNC_TARGET_FORMAT,
+        *_KERNEL_EXPORT_FORMAT,
+        *_KERNEL_WORKGROUP_SIZE_FORMAT,
+        *_KERNEL_SIGNATURE_FORMAT,
+        Region("body", syntax="low.asm.optional"),
+    ],
+    examples=[
+        'low.kernel.def target(@gfx1100) export("matmul") artifact(@gfx_hsaco) workgroup_size(16, 4, 1) @matmul(%lhs: reg<amdgpu.sgpr x4>, %rhs: reg<amdgpu.sgpr x4>, %out: reg<amdgpu.sgpr x4>) {\n  low.return\n}',
     ],
 )
 
@@ -437,7 +564,7 @@ low_func_call = Op(
         AttrDef("purity", "enum", enum_def=Purity, optional=True),
     ],
     results=[Result("results", REGISTER, variadic=True)],
-    traits=[UNKNOWN_EFFECTS, HasAncestor("low.func.def")],
+    traits=[UNKNOWN_EFFECTS],
     interfaces=[
         CallLikeInterface(
             callee="callee",
@@ -917,7 +1044,11 @@ low_invoke = Op(
         AttrDef("purity", "enum", enum_def=Purity, optional=True),
     ],
     results=[Result("results", ANY, variadic=True)],
-    traits=[UNKNOWN_EFFECTS, NoAncestor("low.func.def")],
+    traits=[
+        UNKNOWN_EFFECTS,
+        NoAncestor("low.func.def"),
+        NoAncestor("low.kernel.def"),
+    ],
     interfaces=[
         CallLikeInterface(
             callee="callee",
@@ -954,6 +1085,7 @@ low_invoke = Op(
 
 ALL_LOW_OPS: tuple[Op, ...] = (
     low_func_def,
+    low_kernel_def,
     low_func_decl,
     low_return,
     low_func_call,

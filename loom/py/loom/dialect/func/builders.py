@@ -26,7 +26,7 @@ class FuncBuilders:
         visibility: str | None = None,
         cc: str | None = None,
         purity: str | None = None,
-        target: str,
+        target: str | None = None,
         abi: str | None = None,
         abi_attrs: Mapping[str, Any] | None = None,
         export_symbol: str | None = None,
@@ -54,7 +54,8 @@ class FuncBuilders:
             _attributes["cc"] = cc
         if purity is not None:
             _attributes["purity"] = purity
-        _attributes["target"] = target
+        if target is not None:
+            _attributes["target"] = target
         if abi is not None:
             _attributes["abi"] = abi
         if abi_attrs is not None:
@@ -80,7 +81,7 @@ class FuncBuilders:
         import_symbol: str | None = None,
         cc: str | None = None,
         purity: str | None = None,
-        target: str,
+        target: str | None = None,
         abi: str | None = None,
         abi_attrs: Mapping[str, Any] | None = None,
         export_symbol: str | None = None,
@@ -109,7 +110,8 @@ class FuncBuilders:
             _attributes["cc"] = cc
         if purity is not None:
             _attributes["purity"] = purity
-        _attributes["target"] = target
+        if target is not None:
+            _attributes["target"] = target
         if abi is not None:
             _attributes["abi"] = abi
         if abi_attrs is not None:

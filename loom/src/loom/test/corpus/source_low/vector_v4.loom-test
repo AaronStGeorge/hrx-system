@@ -108,11 +108,12 @@ func.def @i32x4_memory_copy(%input: buffer, %output: buffer) {
 // ====
 
 func.def @i32x4_memory_indexed(%input: buffer, %output: buffer, %i: index) {
+  %bounded_i = index.assume %i [range(%i, 0, 12)] : index
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<16xi32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<16xi32, #dense>
-  %loaded = vector.load %input_view[%i] : view<16xi32, #dense> -> vector<4xi32>
-  vector.store %loaded, %output_view[%i] : vector<4xi32>, view<16xi32, #dense>
+  %loaded = vector.load %input_view[%bounded_i] : view<16xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[%bounded_i] : vector<4xi32>, view<16xi32, #dense>
   func.return
 }
 
@@ -130,13 +131,14 @@ func.def @f32x4_memory_copy(%input: buffer, %output: buffer) {
 // ====
 
 func.def @f32x4_memory_indexed_add(%lhs: buffer, %rhs: buffer, %output: buffer, %i: index) {
+  %bounded_i = index.assume %i [range(%i, 0, 12)] : index
   %zero = index.constant 0 : offset
   %lhs_view = buffer.view %lhs[%zero] : buffer -> view<16xf32, #dense>
   %rhs_view = buffer.view %rhs[%zero] : buffer -> view<16xf32, #dense>
   %output_view = buffer.view %output[%zero] : buffer -> view<16xf32, #dense>
-  %lhs_v = vector.load %lhs_view[%i] : view<16xf32, #dense> -> vector<4xf32>
-  %rhs_v = vector.load %rhs_view[%i] : view<16xf32, #dense> -> vector<4xf32>
+  %lhs_v = vector.load %lhs_view[%bounded_i] : view<16xf32, #dense> -> vector<4xf32>
+  %rhs_v = vector.load %rhs_view[%bounded_i] : view<16xf32, #dense> -> vector<4xf32>
   %sum = vector.addf %lhs_v, %rhs_v : vector<4xf32>
-  vector.store %sum, %output_view[%i] : vector<4xf32>, view<16xf32, #dense>
+  vector.store %sum, %output_view[%bounded_i] : vector<4xf32>, view<16xf32, #dense>
   func.return
 }

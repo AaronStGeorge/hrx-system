@@ -151,6 +151,10 @@ KEYWORD_MAP: dict[str, str] = {
     "rtol": "LOOM_KW_RTOL",
     "shape": "LOOM_KW_SHAPE",
     "values": "LOOM_KW_VALUES",
+    "artifact": "LOOM_KW_ARTIFACT",
+    "ordinal": "LOOM_KW_ORDINAL",
+    "linkage": "LOOM_KW_LINKAGE",
+    "workgroup_size": "LOOM_KW_WORKGROUP_SIZE",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The

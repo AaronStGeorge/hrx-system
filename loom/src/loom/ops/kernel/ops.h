@@ -20,21 +20,23 @@ extern "C" {
 #endif
 
 enum {
-  LOOM_OP_KERNEL_BARRIER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 0),
-  LOOM_OP_KERNEL_ASYNC_COPY = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 1),
-  LOOM_OP_KERNEL_ASYNC_COPY_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 2),
-  LOOM_OP_KERNEL_ASYNC_GATHER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 3),
-  LOOM_OP_KERNEL_ASYNC_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 4),
-  LOOM_OP_KERNEL_ASYNC_GROUP = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 5),
-  LOOM_OP_KERNEL_ASYNC_WAIT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 6),
-  LOOM_OP_KERNEL_TENSOR_LDS_DESCRIPTOR = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 7),
-  LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 8),
-  LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 9),
-  LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 10),
-  LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 11),
-  LOOM_OP_KERNEL_WORKITEM_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 12),
-  LOOM_OP_KERNEL_WORKGROUP_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 13),
-  LOOM_OP_KERNEL_COUNT_ = 14,
+  LOOM_OP_KERNEL_DEF = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 0),
+  LOOM_OP_KERNEL_RETURN = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 1),
+  LOOM_OP_KERNEL_BARRIER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 2),
+  LOOM_OP_KERNEL_ASYNC_COPY = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 3),
+  LOOM_OP_KERNEL_ASYNC_COPY_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 4),
+  LOOM_OP_KERNEL_ASYNC_GATHER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 5),
+  LOOM_OP_KERNEL_ASYNC_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 6),
+  LOOM_OP_KERNEL_ASYNC_GROUP = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 7),
+  LOOM_OP_KERNEL_ASYNC_WAIT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 8),
+  LOOM_OP_KERNEL_TENSOR_LDS_DESCRIPTOR = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 9),
+  LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 10),
+  LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 11),
+  LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 12),
+  LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 13),
+  LOOM_OP_KERNEL_WORKITEM_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 14),
+  LOOM_OP_KERNEL_WORKGROUP_ID = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 15),
+  LOOM_OP_KERNEL_COUNT_ = 16,
 };
 
 // Required async copy direction.
@@ -51,6 +53,13 @@ typedef enum loom_kernel_dimension_e {
   LOOM_KERNEL_DIMENSION_Z = 2,
   LOOM_KERNEL_DIMENSION_COUNT_ = 3,
 } loom_kernel_dimension_t;
+
+// ABI-required linkage for exported object functions or entry points.
+typedef enum loom_kernel_def_export_linkage_e {
+  LOOM_KERNEL_DEF_EXPORT_LINKAGE_DEFAULT = 0,
+  LOOM_KERNEL_DEF_EXPORT_LINKAGE_DSO_LOCAL = 1,
+  LOOM_KERNEL_DEF_EXPORT_LINKAGE_COUNT_ = 2,
+} loom_kernel_def_export_linkage_t;
 
 // Target-independent memory space fenced by a kernel synchronization op.
 typedef enum loom_kernel_barrier_memory_space_e {
@@ -84,6 +93,62 @@ typedef enum loom_kernel_barrier_scope_e {
   LOOM_KERNEL_BARRIER_SCOPE_SYSTEM = 4,
   LOOM_KERNEL_BARRIER_SCOPE_COUNT_ = 5,
 } loom_kernel_barrier_scope_t;
+
+// LOOM_OP_KERNEL_DEF: Dispatchable source-level kernel entry. Kernel entries own launch and export contracts; ordinary func.def bodies remain helper/callable code.
+// kernel.def @entry(%buffer: buffer) {
+//   kernel.return
+// }
+LOOM_DEFINE_ISA(loom_kernel_def_isa, LOOM_OP_KERNEL_DEF)
+LOOM_DEFINE_ATTR_SYMBOL(loom_kernel_def_callee, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_kernel_def_target, 1)
+LOOM_DEFINE_ATTR_STRING(loom_kernel_def_export_symbol, 2)
+LOOM_DEFINE_ATTR_SYMBOL(loom_kernel_def_artifact, 3)
+LOOM_DEFINE_ATTR_I64(loom_kernel_def_export_ordinal, 4)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_def_export_linkage, 5, loom_kernel_def_export_linkage_t)
+LOOM_DEFINE_ATTR_I64(loom_kernel_def_workgroup_size_x, 6)
+LOOM_DEFINE_ATTR_I64(loom_kernel_def_workgroup_size_y, 7)
+LOOM_DEFINE_ATTR_I64(loom_kernel_def_workgroup_size_z, 8)
+LOOM_DEFINE_REGION(loom_kernel_def_body, 0)
+enum loom_kernel_def_build_flag_bits_e {
+  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_TARGET = 1u << 0,
+  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 1,
+  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_ARTIFACT = 1u << 2,
+  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_ORDINAL = 1u << 3,
+  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_LINKAGE = 1u << 4,
+  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_X = 1u << 5,
+  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Y = 1u << 6,
+  LOOM_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Z = 1u << 7,
+};
+typedef uint32_t loom_kernel_def_build_flags_t;
+iree_status_t loom_kernel_def_build(
+    loom_builder_t* builder,
+    loom_kernel_def_build_flags_t build_flags,
+    loom_optional loom_symbol_ref_t target,
+    loom_optional loom_string_id_t export_symbol,
+    loom_optional loom_symbol_ref_t artifact,
+    loom_optional int64_t export_ordinal,
+    loom_optional uint8_t export_linkage,
+    loom_optional int64_t workgroup_size_x,
+    loom_optional int64_t workgroup_size_y,
+    loom_optional int64_t workgroup_size_z,
+    loom_symbol_ref_t callee,
+    const loom_type_t* arg_types,
+    iree_host_size_t arg_types_count,
+    loom_optional const loom_predicate_t* predicates,
+    iree_host_size_t predicates_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_def_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_RETURN: Return from a dispatchable kernel entry.
+// kernel.return
+LOOM_DEFINE_ISA(loom_kernel_return_isa, LOOM_OP_KERNEL_RETURN)
+iree_status_t loom_kernel_return_build(
+    loom_builder_t* builder,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 
 // LOOM_OP_KERNEL_BARRIER: Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The supported kernel barrier is a workgroup execution barrier over workgroup memory with acquire-release ordering. Async-copy completion is modeled by kernel.async.wait; use kernel.barrier only when invocations must rendezvous before consuming shared memory.
 // kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}

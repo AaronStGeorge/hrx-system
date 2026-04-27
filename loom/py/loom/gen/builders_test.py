@@ -13,9 +13,11 @@ from loom.assembly import (
     Clause,
     IndexList,
     OperandDict,
+    OptionalGroup,
     Ref,
     ResultType,
     ResultTypeList,
+    SymbolRef,
 )
 from loom.dsl import ANY, ATTR_TYPE_I64_ARRAY, AttrDef, EnumCase, EnumDef, Op, Operand, Result, Successor
 from loom.gen.builders import generate_builders
@@ -88,6 +90,30 @@ def test_builder_params_include_attrs_from_inline_attr_dict() -> None:
     assert "def atomic(self, *, value: ValueRef, ordering: str, scope: str) -> None:" in generated
     assert '_attributes["ordering"] = ordering' in generated
     assert '_attributes["scope"] = scope' in generated
+
+
+def test_builder_params_preserve_optional_symbol_refs() -> None:
+    generated = generate_builders(
+        [
+            Op(
+                "test.callable",
+                attrs=[
+                    AttrDef("target", "symbol", optional=True),
+                    AttrDef("callee", "symbol"),
+                ],
+                format=[
+                    OptionalGroup([SymbolRef("target")], anchor="target"),
+                    SymbolRef("callee"),
+                ],
+            ),
+        ],
+        "TestBuilders",
+    )
+
+    assert "def callable(self, *, target: str | None = None, callee: str) -> None:" in generated
+    assert "if target is not None:" in generated
+    assert '_attributes["target"] = target' in generated
+    assert '_attributes["callee"] = callee' in generated
 
 
 def test_builder_params_descend_into_clauses() -> None:

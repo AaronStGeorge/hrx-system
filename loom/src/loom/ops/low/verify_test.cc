@@ -326,8 +326,7 @@ TEST_F(LowVerifyTest, LiveInRejectsNonEntryBlock) {
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.live_in");
   EXPECT_EQ(GetStringParam(*diagnostic, 1), "position");
   EXPECT_EQ(GetStringParam(*diagnostic, 2),
-            "live-ins and resources must appear in the low function entry "
-            "block");
+            "live-ins and resources must appear in the low entry block");
 }
 
 TEST_F(LowVerifyTest, ImportedDeclContractsAreLocalToDecl) {
@@ -534,14 +533,15 @@ TEST_F(LowVerifyTest, FuncCallRequiresLowFunctionBody) {
   EXPECT_GT(result.error_count, 0u);
 
   const loom_error_def_t* error =
-      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 29);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
   const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
   ASSERT_NE(diagnostic, nullptr);
   ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.func.call");
-  EXPECT_EQ(GetStringParam(*diagnostic, 1), "required");
-  EXPECT_EQ(GetStringParam(*diagnostic, 2), "low.func.def");
-  EXPECT_EQ(GetStringParam(*diagnostic, 3), "func.def");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "enclosing low entry");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "low.func.call must be nested under a low function or low kernel "
+            "body");
 }
 
 TEST_F(LowVerifyTest, InvokeRejectsLowFunctionBody) {
@@ -617,7 +617,7 @@ TEST_F(LowVerifyTest, FuncCallRejectsCrossTargetCallee) {
   EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.func.call");
   EXPECT_EQ(GetStringParam(*diagnostic, 1), "callee");
   EXPECT_EQ(GetStringParam(*diagnostic, 2),
-            "callee target must match enclosing low function target");
+            "callee target must match enclosing low entry target");
 }
 
 TEST_F(LowVerifyTest, FuncCallRejectsOperandCountMismatch) {

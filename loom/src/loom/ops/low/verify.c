@@ -153,9 +153,16 @@ static bool loom_low_function_isa(const loom_op_t* op) {
   return loom_low_func_def_isa(op) || loom_low_func_decl_isa(op);
 }
 
+static bool loom_low_executable_def_isa(const loom_op_t* op) {
+  return loom_low_func_def_isa(op) || loom_low_kernel_def_isa(op);
+}
+
 static loom_symbol_ref_t loom_low_function_symbol(const loom_op_t* op) {
   if (loom_low_func_def_isa(op)) {
     return loom_low_func_def_callee(op);
+  }
+  if (loom_low_kernel_def_isa(op)) {
+    return loom_low_kernel_def_callee(op);
   }
   if (loom_low_func_decl_isa(op)) {
     return loom_low_func_decl_callee(op);
@@ -166,6 +173,9 @@ static loom_symbol_ref_t loom_low_function_symbol(const loom_op_t* op) {
 static loom_symbol_ref_t loom_low_function_target(const loom_op_t* op) {
   if (loom_low_func_def_isa(op)) {
     return loom_low_func_def_target(op);
+  }
+  if (loom_low_kernel_def_isa(op)) {
+    return loom_low_kernel_def_target(op);
   }
   if (loom_low_func_decl_isa(op)) {
     return loom_low_func_decl_target(op);
@@ -262,32 +272,137 @@ static iree_status_t loom_low_verify_optional_enum_is_named(
                                                contract_name, reason, emitter);
 }
 
+static iree_status_t loom_low_verify_contract_attr_present(
+    const loom_module_t* module, const loom_op_t* op, uint16_t attr_index,
+    iree_string_view_t contract_name, iree_string_view_t reason,
+    iree_diagnostic_emitter_t emitter) {
+  if (loom_low_optional_attr_is_present(op, attr_index)) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_function_contract_error(module, op, attr_index,
+                                               contract_name, reason, emitter);
+}
+
+static iree_status_t loom_low_verify_positive_u32_attr(
+    const loom_module_t* module, const loom_op_t* op, uint16_t attr_index,
+    int64_t value, iree_string_view_t contract_name,
+    iree_diagnostic_emitter_t emitter) {
+  if (!loom_low_optional_attr_is_present(op, attr_index)) {
+    return iree_ok_status();
+  }
+  if (value > 0 && value <= UINT32_MAX) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_function_contract_error(
+      module, op, attr_index, contract_name, IREE_SV("positive u32"), emitter);
+}
+
+static iree_status_t loom_low_verify_kernel_contract(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  const bool has_export_symbol = loom_low_optional_attr_is_present(
+      op, loom_low_kernel_def_export_symbol_ATTR_INDEX);
+  const bool has_artifact = loom_low_optional_attr_is_present(
+      op, loom_low_kernel_def_artifact_ATTR_INDEX);
+  const bool has_export_ordinal = loom_low_optional_attr_is_present(
+      op, loom_low_kernel_def_export_ordinal_ATTR_INDEX);
+  const bool has_export_linkage = loom_low_optional_attr_is_present(
+      op, loom_low_kernel_def_export_linkage_ATTR_INDEX);
+  if (!has_export_symbol &&
+      (has_artifact || has_export_ordinal || has_export_linkage)) {
+    return loom_low_verify_contract_attr_present(
+        module, op, loom_low_kernel_def_export_symbol_ATTR_INDEX,
+        IREE_SV("export"),
+        IREE_SV("present when artifact, ordinal, or linkage is present"),
+        emitter);
+  }
+  if (!has_artifact && (has_export_ordinal || has_export_linkage)) {
+    return loom_low_verify_contract_attr_present(
+        module, op, loom_low_kernel_def_artifact_ATTR_INDEX,
+        IREE_SV("artifact"),
+        IREE_SV("present when ordinal or linkage is present"), emitter);
+  }
+  if (has_artifact) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_contract_attr_present(
+        module, op, loom_low_kernel_def_target_ATTR_INDEX, IREE_SV("target"),
+        IREE_SV("present when artifact is present"), emitter));
+  }
+
+  const bool has_workgroup_size_x = loom_low_optional_attr_is_present(
+      op, loom_low_kernel_def_workgroup_size_x_ATTR_INDEX);
+  const bool has_workgroup_size_y = loom_low_optional_attr_is_present(
+      op, loom_low_kernel_def_workgroup_size_y_ATTR_INDEX);
+  const bool has_workgroup_size_z = loom_low_optional_attr_is_present(
+      op, loom_low_kernel_def_workgroup_size_z_ATTR_INDEX);
+  if (has_workgroup_size_x || has_workgroup_size_y || has_workgroup_size_z) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_contract_attr_present(
+        module, op, loom_low_kernel_def_workgroup_size_x_ATTR_INDEX,
+        IREE_SV("workgroup_size_x"),
+        IREE_SV("present with workgroup_size_y and workgroup_size_z"),
+        emitter));
+    IREE_RETURN_IF_ERROR(loom_low_verify_contract_attr_present(
+        module, op, loom_low_kernel_def_workgroup_size_y_ATTR_INDEX,
+        IREE_SV("workgroup_size_y"),
+        IREE_SV("present with workgroup_size_x and workgroup_size_z"),
+        emitter));
+    IREE_RETURN_IF_ERROR(loom_low_verify_contract_attr_present(
+        module, op, loom_low_kernel_def_workgroup_size_z_ATTR_INDEX,
+        IREE_SV("workgroup_size_z"),
+        IREE_SV("present with workgroup_size_x and workgroup_size_y"),
+        emitter));
+    IREE_RETURN_IF_ERROR(loom_low_verify_positive_u32_attr(
+        module, op, loom_low_kernel_def_workgroup_size_x_ATTR_INDEX,
+        loom_low_kernel_def_workgroup_size_x(op), IREE_SV("workgroup_size_x"),
+        emitter));
+    IREE_RETURN_IF_ERROR(loom_low_verify_positive_u32_attr(
+        module, op, loom_low_kernel_def_workgroup_size_y_ATTR_INDEX,
+        loom_low_kernel_def_workgroup_size_y(op), IREE_SV("workgroup_size_y"),
+        emitter));
+    IREE_RETURN_IF_ERROR(loom_low_verify_positive_u32_attr(
+        module, op, loom_low_kernel_def_workgroup_size_z_ATTR_INDEX,
+        loom_low_kernel_def_workgroup_size_z(op), IREE_SV("workgroup_size_z"),
+        emitter));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_exactness_modes(
+    const loom_module_t* module, const loom_op_t* op,
+    uint16_t allocation_attr_index, uint8_t allocation,
+    uint16_t schedule_attr_index, uint8_t schedule,
+    iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+      module, op, allocation_attr_index, allocation, IREE_SV("allocation"),
+      IREE_SV("explicit allocation mode must name virtual, assigned, or fixed"),
+      emitter));
+  return loom_low_verify_optional_enum_is_named(
+      module, op, schedule_attr_index, schedule, IREE_SV("schedule"),
+      IREE_SV("explicit schedule mode must name free, constrained, or locked"),
+      emitter);
+}
+
 static iree_status_t loom_low_verify_function_exactness_modes(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter) {
   if (loom_low_func_def_isa(op)) {
-    IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+    return loom_low_verify_exactness_modes(
         module, op, loom_low_func_def_allocation_ATTR_INDEX,
-        loom_low_func_def_allocation(op), IREE_SV("allocation"),
-        IREE_SV("explicit allocation mode must name virtual, assigned, or "
-                "fixed"),
-        emitter));
-    return loom_low_verify_optional_enum_is_named(
-        module, op, loom_low_func_def_schedule_ATTR_INDEX,
-        loom_low_func_def_schedule(op), IREE_SV("schedule"),
-        IREE_SV("explicit schedule mode must name free, constrained, or "
-                "locked"),
-        emitter);
+        loom_low_func_def_allocation(op), loom_low_func_def_schedule_ATTR_INDEX,
+        loom_low_func_def_schedule(op), emitter);
   }
-  IREE_RETURN_IF_ERROR(loom_low_verify_optional_enum_is_named(
+  return loom_low_verify_exactness_modes(
       module, op, loom_low_func_decl_allocation_ATTR_INDEX,
-      loom_low_func_decl_allocation(op), IREE_SV("allocation"),
-      IREE_SV("explicit allocation mode must name virtual, assigned, or fixed"),
-      emitter));
-  return loom_low_verify_optional_enum_is_named(
-      module, op, loom_low_func_decl_schedule_ATTR_INDEX,
-      loom_low_func_decl_schedule(op), IREE_SV("schedule"),
-      IREE_SV("explicit schedule mode must name free, constrained, or locked"),
+      loom_low_func_decl_allocation(op), loom_low_func_decl_schedule_ATTR_INDEX,
+      loom_low_func_decl_schedule(op), emitter);
+}
+
+static iree_status_t loom_low_verify_kernel_exactness_modes(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_low_verify_exactness_modes(
+      module, op, loom_low_kernel_def_allocation_ATTR_INDEX,
+      loom_low_kernel_def_allocation(op),
+      loom_low_kernel_def_schedule_ATTR_INDEX, loom_low_kernel_def_schedule(op),
       emitter);
 }
 
@@ -491,11 +606,11 @@ static iree_status_t loom_low_verify_slice_register_range(
   return iree_ok_status();
 }
 
-static const loom_op_t* loom_low_find_enclosing_low_func_def(
+static const loom_op_t* loom_low_find_enclosing_low_executable_def(
     const loom_module_t* module, const loom_op_t* nested_op) {
   const loom_op_t* parent = nested_op->parent_op;
   while (parent) {
-    if (loom_low_func_def_isa(parent)) {
+    if (loom_low_executable_def_isa(parent)) {
       return parent;
     }
     loom_func_like_t func = loom_func_like_cast(module, (loom_op_t*)parent);
@@ -516,12 +631,12 @@ static iree_status_t loom_low_verify_slot_function(
   if (!symbol) {
     return iree_ok_status();
   }
-  if (loom_low_func_def_isa(symbol->defining_op)) {
+  if (loom_low_executable_def_isa(symbol->defining_op)) {
     return iree_ok_status();
   }
   return loom_low_emit_symbol_kind_mismatch(
       module, op, function_ref, attr_index, symbol,
-      IREE_SV("low function definition"), emitter);
+      IREE_SV("low function or low kernel definition"), emitter);
 }
 
 static iree_status_t loom_low_load_slot(const loom_module_t* module,
@@ -557,17 +672,18 @@ static iree_status_t loom_low_verify_slot_use(
   }
 
   const loom_op_t* enclosing_func =
-      loom_low_find_enclosing_low_func_def(module, op);
+      loom_low_find_enclosing_low_executable_def(module, op);
   if (!enclosing_func) {
     return loom_low_emit_structural_storage_error(
         module, op, loom_diagnostic_field_ref_none(),
         IREE_SV("enclosing function"),
-        IREE_SV("slot traffic must be nested under a low function body"), NULL,
-        0, emitter);
+        IREE_SV("slot traffic must be nested under a low function or low "
+                "kernel body"),
+        NULL, 0, emitter);
   }
 
   if (!loom_low_symbol_ref_equal(loom_low_slot_function(slot_op),
-                                 loom_low_func_def_callee(enclosing_func))) {
+                                 loom_low_function_symbol(enclosing_func))) {
     loom_diagnostic_related_op_t related[] = {{
         .label = IREE_SV("slot defined here"),
         .op = slot_op,
@@ -577,7 +693,7 @@ static iree_status_t loom_low_verify_slot_use(
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
                                   slot_attr_index),
         IREE_SV("slot"),
-        IREE_SV("slot owner must match the enclosing low function"), related,
+        IREE_SV("slot owner must match the enclosing low entry"), related,
         IREE_ARRAYSIZE(related), emitter);
   }
 
@@ -728,12 +844,13 @@ static iree_status_t loom_low_verify_resource_op(
   }
 
   const loom_op_t* enclosing_func =
-      loom_low_find_enclosing_low_func_def(module, op);
+      loom_low_find_enclosing_low_executable_def(module, op);
   if (!enclosing_func) {
     return loom_low_emit_structural_storage_error(
         module, op, loom_diagnostic_field_ref_none(),
         IREE_SV("enclosing function"),
-        IREE_SV("resource imports must be nested under a low function body"),
+        IREE_SV("resource imports must be nested under a low function or low "
+                "kernel body"),
         NULL, 0, emitter);
   }
 
@@ -752,7 +869,12 @@ static iree_status_t loom_low_verify_resource_op(
 static iree_status_t loom_low_verify_function_preamble(
     const loom_module_t* module, const loom_op_t* function_op,
     iree_diagnostic_emitter_t emitter) {
-  loom_region_t* body = loom_low_func_def_body(function_op);
+  loom_region_t* body = NULL;
+  if (loom_low_func_def_isa(function_op)) {
+    body = loom_low_func_def_body(function_op);
+  } else if (loom_low_kernel_def_isa(function_op)) {
+    body = loom_low_kernel_def_body(function_op);
+  }
   if (body == NULL || body->block_count == 0) {
     return iree_ok_status();
   }
@@ -786,9 +908,33 @@ static iree_status_t loom_low_verify_function_preamble(
       return loom_low_emit_structural_storage_error(
           module, nested_op, loom_diagnostic_field_ref_none(),
           IREE_SV("position"),
-          IREE_SV("live-ins and resources must appear in the low function "
-                  "entry block"),
+          IREE_SV("live-ins and resources must appear in the low entry block"),
           NULL, 0, emitter);
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_kernel_returns(
+    const loom_module_t* module, const loom_op_t* kernel_op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_region_t* body = loom_low_kernel_def_body(kernel_op);
+  if (body == NULL) {
+    return iree_ok_status();
+  }
+  loom_block_t* block = NULL;
+  loom_region_for_each_block(body, block) {
+    loom_op_t* nested_op = NULL;
+    loom_block_for_each_op(block, nested_op) {
+      if (!loom_low_return_isa(nested_op) || nested_op->operand_count == 0) {
+        continue;
+      }
+      return loom_low_emit_structural_storage_error(
+          module, nested_op,
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, 0),
+          IREE_SV("values"),
+          IREE_SV("low kernel entries must return no values"), NULL, 0,
+          emitter);
     }
   }
   return iree_ok_status();
@@ -1000,9 +1146,14 @@ static iree_status_t loom_low_verify_func_call_context(
     const loom_low_callee_signature_t* callee_signature,
     iree_diagnostic_emitter_t emitter) {
   const loom_op_t* caller_op =
-      loom_low_find_enclosing_low_func_def(module, call_op);
+      loom_low_find_enclosing_low_executable_def(module, call_op);
   if (!caller_op) {
-    return iree_ok_status();
+    return loom_low_emit_structural_storage_error(
+        module, call_op, loom_diagnostic_field_ref_none(),
+        IREE_SV("enclosing low entry"),
+        IREE_SV("low.func.call must be nested under a low function or low "
+                "kernel body"),
+        NULL, 0, emitter);
   }
 
   loom_symbol_ref_t caller_target = loom_low_function_target(caller_op);
@@ -1020,8 +1171,8 @@ static iree_status_t loom_low_verify_func_call_context(
       loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
                                 loom_low_func_call_callee_ATTR_INDEX),
       IREE_SV("callee"),
-      IREE_SV("callee target must match enclosing low function target"),
-      related, IREE_ARRAYSIZE(related), emitter);
+      IREE_SV("callee target must match enclosing low entry target"), related,
+      IREE_ARRAYSIZE(related), emitter);
 }
 
 iree_status_t loom_low_op_verify(const loom_module_t* module,
@@ -1078,13 +1229,14 @@ iree_status_t loom_low_live_in_verify(const loom_module_t* module,
   }
 
   const loom_op_t* enclosing_func =
-      loom_low_find_enclosing_low_func_def(module, op);
+      loom_low_find_enclosing_low_executable_def(module, op);
   if (!enclosing_func) {
     return loom_low_emit_structural_storage_error(
         module, op, loom_diagnostic_field_ref_none(),
         IREE_SV("enclosing function"),
-        IREE_SV("live-ins must be nested under a low function body"), NULL, 0,
-        emitter);
+        IREE_SV("live-ins must be nested under a low function or low kernel "
+                "body"),
+        NULL, 0, emitter);
   }
   return iree_ok_status();
 }
@@ -1115,6 +1267,16 @@ iree_status_t loom_low_func_def_verify(const loom_module_t* module,
   IREE_RETURN_IF_ERROR(loom_function_contract_verify(module, op, emitter));
   IREE_RETURN_IF_ERROR(
       loom_low_verify_function_exactness_modes(module, op, emitter));
+  return loom_low_verify_function_preamble(module, op, emitter);
+}
+
+iree_status_t loom_low_kernel_def_verify(const loom_module_t* module,
+                                         const loom_op_t* op,
+                                         iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_low_verify_kernel_contract(module, op, emitter));
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_kernel_exactness_modes(module, op, emitter));
+  IREE_RETURN_IF_ERROR(loom_low_verify_kernel_returns(module, op, emitter));
   return loom_low_verify_function_preamble(module, op, emitter);
 }
 

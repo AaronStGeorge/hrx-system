@@ -8,7 +8,7 @@ import builtins
 from typing import Any, cast
 
 from loom.builder import IRBuilder, TiedResultSpec, ValueRef
-from loom.ir import Region, Type
+from loom.ir import Predicate, Region, Type
 
 
 class KernelBuilders:
@@ -18,6 +18,69 @@ class KernelBuilders:
 
     def __init__(self, builder: IRBuilder) -> None:
         self._b = builder
+
+    def def_(
+        self,
+        *,
+        target: str | None = None,
+        export_symbol: str | None = None,
+        artifact: str | None = None,
+        export_ordinal: int | None = None,
+        export_linkage: str | None = None,
+        workgroup_size_x: int | None = None,
+        workgroup_size_y: int | None = None,
+        workgroup_size_z: int | None = None,
+        callee: str,
+        args: list[ValueRef] | None = None,
+        predicates: list[Predicate] | None = None,
+        body: Region | None = None,
+    ) -> None:
+        """Dispatchable source-level kernel entry. Kernel entries own launch and export contracts; ordinary func.def bodies remain helper/callable code.
+
+        Example::
+            kernel.def @entry(%buffer: buffer) {
+              kernel.return
+            }
+        """
+        _operands: list[ValueRef | int] = []
+        _func_args: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if target is not None:
+            _attributes["target"] = target
+        if export_symbol is not None:
+            _attributes["export_symbol"] = export_symbol
+        if artifact is not None:
+            _attributes["artifact"] = artifact
+        if export_ordinal is not None:
+            _attributes["export_ordinal"] = export_ordinal
+        if export_linkage is not None:
+            _attributes["export_linkage"] = export_linkage
+        if workgroup_size_x is not None:
+            _attributes["workgroup_size_x"] = workgroup_size_x
+        if workgroup_size_y is not None:
+            _attributes["workgroup_size_y"] = workgroup_size_y
+        if workgroup_size_z is not None:
+            _attributes["workgroup_size_z"] = workgroup_size_z
+        _attributes["callee"] = callee
+        if args is not None:
+            _func_args.extend(args)
+        if predicates:
+            _attributes["predicates"] = predicates
+        if body is not None:
+            _regions.append(body)
+        self._b.build("kernel.def", _operands, func_args=_func_args, attributes=_attributes, regions=_regions)
+
+    def return_(self) -> None:
+        """Return from a dispatchable kernel entry.
+
+        Example::
+            kernel.return
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        self._b.build("kernel.return", _operands, attributes=_attributes, regions=_regions)
 
     def barrier(self, *, memory_space: str, ordering: str, scope: str) -> None:
         """Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The supported kernel barrier is a workgroup execution barrier over workgroup memory with acquire-release ordering. Async-copy completion is modeled by kernel.async.wait; use kernel.barrier only when invocations must rendezvous before consuming shared memory.

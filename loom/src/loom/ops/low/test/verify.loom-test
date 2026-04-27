@@ -1,0 +1,28 @@
+// RUN: verify
+
+target.profile @test_target preset("test-low")
+
+target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
+
+// ERROR@+1: LOWERING/016 "kernel_artifact_requires_export" "export" "present when artifact, ordinal, or linkage is present"
+low.kernel.def target(@test_target) artifact(@test_artifact) @kernel_artifact_requires_export() {
+  low.return
+}
+
+// ====
+
+target.profile @test_target preset("test-low")
+
+// ERROR@+1: LOWERING/016 "kernel_rejects_zero_workgroup_size" "workgroup_size_x" "positive u32"
+low.kernel.def target(@test_target) workgroup_size(0, 1, 1) @kernel_rejects_zero_workgroup_size() {
+  low.return
+}
+
+// ====
+
+target.profile @test_target preset("test-low")
+
+low.kernel.def target(@test_target) @kernel_return_rejects_values(%value: reg<test.i32>) {
+  // ERROR@+1: LOWERING/017 "low.return" "values" "low kernel entries must return no values"
+  low.return %value : reg<test.i32>
+}

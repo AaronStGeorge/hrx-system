@@ -159,15 +159,7 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                     append_attr_param(name)
 
                 case SymbolRef(field=name):
-                    params.append(
-                        {
-                            "name": name,
-                            "kind": "attr",
-                            "type_hint": "str",
-                            "doc": f"Symbol reference: {name}",
-                        }
-                    )
-                    covered_attrs.add(name)
+                    append_attr_param(name)
 
                 case IndexList(dynamic=dynamic_field, static=static_field):
                     params.append(

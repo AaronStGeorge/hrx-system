@@ -13,17 +13,25 @@ from loom.assembly import (
     GLUE,
     LPAREN,
     RPAREN,
+    Attr,
     AttrDict,
+    FormatElement,
+    FuncArgs,
     OptionalGroup,
+    PredicateList,
     Ref,
     Refs,
+    Region,
     ResultType,
+    Scope,
+    SymbolRef,
     TemplateParam,
     TypeOf,
     TypesOf,
     kw,
 )
 from loom.dialect.cache import CacheScope, CacheTemporal
+from loom.dialect.target.defs import ExportLinkage
 from loom.dsl import (
     ANY,
     ATTR_TYPE_ENUM,
@@ -31,7 +39,10 @@ from loom.dsl import (
     I1,
     INDEX,
     INTEGER,
+    ISOLATED_FROM_ABOVE,
     PURE,
+    SYMBOL_DEFINE,
+    TERMINATOR,
     UNKNOWN_EFFECTS,
     VECTOR,
     VIEW,
@@ -40,11 +51,15 @@ from loom.dsl import (
     Dialect,
     EnumCase,
     EnumDef,
+    FuncLikeInterface,
     Op,
     Operand,
     OpPhase,
     Reads,
+    RegionDef,
     Result,
+    SymbolDefinition,
+    SymbolReference,
     TypeDef,
     TypeSemantic,
     Writes,
@@ -163,6 +178,138 @@ KernelAsyncDirection = EnumDef(
         ),
     ],
     doc="Required async copy direction.",
+)
+
+# ============================================================================
+# Shared format fragments
+# ============================================================================
+
+_ENTRY_TARGET_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [kw("target"), GLUE, LPAREN, SymbolRef("target"), GLUE, RPAREN],
+        anchor="target",
+    ),
+]
+
+_ENTRY_EXPORT_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [kw("export"), GLUE, LPAREN, Attr("export_symbol"), GLUE, RPAREN],
+        anchor="export_symbol",
+    ),
+    OptionalGroup(
+        [kw("artifact"), GLUE, LPAREN, SymbolRef("artifact"), GLUE, RPAREN],
+        anchor="artifact",
+    ),
+    OptionalGroup(
+        [kw("ordinal"), GLUE, LPAREN, Attr("export_ordinal"), GLUE, RPAREN],
+        anchor="export_ordinal",
+    ),
+    OptionalGroup(
+        [kw("linkage"), GLUE, LPAREN, Attr("export_linkage"), GLUE, RPAREN],
+        anchor="export_linkage",
+    ),
+]
+
+_ENTRY_WORKGROUP_SIZE_FORMAT: list[FormatElement] = [
+    OptionalGroup(
+        [
+            kw("workgroup_size"),
+            GLUE,
+            LPAREN,
+            Attr("workgroup_size_x"),
+            COMMA,
+            Attr("workgroup_size_y"),
+            COMMA,
+            Attr("workgroup_size_z"),
+            GLUE,
+            RPAREN,
+        ],
+        anchor="workgroup_size_x",
+    ),
+]
+
+_ENTRY_SIGNATURE_FORMAT: list[FormatElement] = [
+    SymbolRef("callee"),
+    Scope(
+        [
+            FuncArgs("args"),
+            OptionalGroup(
+                [kw("where"), PredicateList("predicates")],
+                anchor="predicates",
+            ),
+        ]
+    ),
+]
+
+_ENTRY_ATTRS = [
+    AttrDef("callee", "symbol"),
+    AttrDef(
+        "target",
+        "symbol",
+        optional=True,
+        symbol_ref=SymbolReference("target profile", ["record"]),
+    ),
+    AttrDef("export_symbol", "string", optional=True),
+    AttrDef(
+        "artifact",
+        "symbol",
+        optional=True,
+        symbol_ref=SymbolReference("target artifact", ["record"]),
+    ),
+    AttrDef("export_ordinal", ATTR_TYPE_I64, optional=True),
+    AttrDef("export_linkage", "enum", enum_def=ExportLinkage, optional=True),
+    AttrDef("workgroup_size_x", ATTR_TYPE_I64, optional=True),
+    AttrDef("workgroup_size_y", ATTR_TYPE_I64, optional=True),
+    AttrDef("workgroup_size_z", ATTR_TYPE_I64, optional=True),
+    AttrDef("predicates", "predicate_list", optional=True),
+]
+
+
+kernel_def = Op(
+    "kernel.def",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=("Dispatchable source-level kernel entry. Kernel entries own launch and export contracts; ordinary func.def bodies remain helper/callable code."),
+    traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
+    attrs=list(_ENTRY_ATTRS),
+    symbol_def=SymbolDefinition(
+        field="callee",
+        name="function",
+        interfaces=["func_like"],
+        bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
+    ),
+    regions=[RegionDef("body", doc="Kernel body.", terminator="kernel.return")],
+    interfaces=[
+        FuncLikeInterface(
+            callee="callee",
+            target="target",
+            export_symbol="export_symbol",
+            predicates="predicates",
+            body="body",
+        )
+    ],
+    verify="loom_kernel_def_verify",
+    format=[
+        *_ENTRY_TARGET_FORMAT,
+        *_ENTRY_EXPORT_FORMAT,
+        *_ENTRY_WORKGROUP_SIZE_FORMAT,
+        *_ENTRY_SIGNATURE_FORMAT,
+        Region("body"),
+    ],
+    examples=[
+        "kernel.def @entry(%buffer: buffer) {\n  kernel.return\n}",
+        'kernel.def target(@gfx1100) export("matmul") artifact(@gfx_hsaco) workgroup_size(16, 4, 1) @matmul(%lhs: buffer, %rhs: buffer, %out: buffer) {\n  kernel.return\n}',
+    ],
+)
+
+
+kernel_return = Op(
+    "kernel.return",
+    group=kernel_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Return from a dispatchable kernel entry.",
+    traits=[TERMINATOR],
+    examples=["kernel.return"],
 )
 
 
@@ -848,6 +995,8 @@ ALL_KERNEL_TYPES: tuple[TypeDef, ...] = (
 )
 
 ALL_KERNEL_OPS: tuple[Op, ...] = (
+    kernel_def,
+    kernel_return,
     kernel_barrier,
     kernel_async_copy,
     kernel_async_copy_mask,

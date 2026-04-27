@@ -1,0 +1,20 @@
+// RUN: roundtrip
+
+target.profile @test_target preset("test-low")
+
+target.artifact @test_artifact target(@test_target) {abi = hal_executable, artifact_format = elf}
+
+low.kernel.def target(@test_target) export("entry") artifact(@test_artifact) ordinal(0) linkage(dso_local) workgroup_size(16, 4, 1) @entry(%buffer: reg<test.ptr>) {
+  low.return
+}
+
+// ====
+
+target.profile @test_target preset("test-low")
+
+low.func.decl target(@test_target) @add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>)
+
+low.kernel.def allocation(fixed) schedule(locked) target(@test_target) @helper_entry(%lhs: reg<test.i32>, %rhs: reg<test.i32>) {
+  %sum = low.func.call @add(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> (reg<test.i32>)
+  low.return
+}

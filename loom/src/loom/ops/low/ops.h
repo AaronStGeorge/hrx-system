@@ -20,24 +20,25 @@ extern "C" {
 
 enum {
   LOOM_OP_LOW_FUNC_DEF = LOOM_OP_KIND(LOOM_DIALECT_LOW, 0),
-  LOOM_OP_LOW_FUNC_DECL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 1),
-  LOOM_OP_LOW_RETURN = LOOM_OP_KIND(LOOM_DIALECT_LOW, 2),
-  LOOM_OP_LOW_FUNC_CALL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 3),
-  LOOM_OP_LOW_OP = LOOM_OP_KIND(LOOM_DIALECT_LOW, 4),
-  LOOM_OP_LOW_CONST = LOOM_OP_KIND(LOOM_DIALECT_LOW, 5),
-  LOOM_OP_LOW_COPY = LOOM_OP_KIND(LOOM_DIALECT_LOW, 6),
-  LOOM_OP_LOW_SLICE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 7),
-  LOOM_OP_LOW_CONCAT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 8),
-  LOOM_OP_LOW_INVOKE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 9),
-  LOOM_OP_LOW_SLOT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 10),
-  LOOM_OP_LOW_SPILL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 11),
-  LOOM_OP_LOW_RELOAD = LOOM_OP_KIND(LOOM_DIALECT_LOW, 12),
-  LOOM_OP_LOW_FRAME_INDEX = LOOM_OP_KIND(LOOM_DIALECT_LOW, 13),
-  LOOM_OP_LOW_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 14),
-  LOOM_OP_LOW_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 15),
-  LOOM_OP_LOW_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 16),
-  LOOM_OP_LOW_LIVE_IN = LOOM_OP_KIND(LOOM_DIALECT_LOW, 17),
-  LOOM_OP_LOW_COUNT_ = 18,
+  LOOM_OP_LOW_KERNEL_DEF = LOOM_OP_KIND(LOOM_DIALECT_LOW, 1),
+  LOOM_OP_LOW_FUNC_DECL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 2),
+  LOOM_OP_LOW_RETURN = LOOM_OP_KIND(LOOM_DIALECT_LOW, 3),
+  LOOM_OP_LOW_FUNC_CALL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 4),
+  LOOM_OP_LOW_OP = LOOM_OP_KIND(LOOM_DIALECT_LOW, 5),
+  LOOM_OP_LOW_CONST = LOOM_OP_KIND(LOOM_DIALECT_LOW, 6),
+  LOOM_OP_LOW_COPY = LOOM_OP_KIND(LOOM_DIALECT_LOW, 7),
+  LOOM_OP_LOW_SLICE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 8),
+  LOOM_OP_LOW_CONCAT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 9),
+  LOOM_OP_LOW_INVOKE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 10),
+  LOOM_OP_LOW_SLOT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 11),
+  LOOM_OP_LOW_SPILL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 12),
+  LOOM_OP_LOW_RELOAD = LOOM_OP_KIND(LOOM_DIALECT_LOW, 13),
+  LOOM_OP_LOW_FRAME_INDEX = LOOM_OP_KIND(LOOM_DIALECT_LOW, 14),
+  LOOM_OP_LOW_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 15),
+  LOOM_OP_LOW_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 16),
+  LOOM_OP_LOW_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 17),
+  LOOM_OP_LOW_LIVE_IN = LOOM_OP_KIND(LOOM_DIALECT_LOW, 18),
+  LOOM_OP_LOW_COUNT_ = 19,
 };
 
 // Callable or package ABI used by an export plan.
@@ -87,6 +88,13 @@ typedef enum loom_low_schedule_e {
   LOOM_LOW_SCHEDULE_LOCKED = 3,
   LOOM_LOW_SCHEDULE_COUNT_ = 4,
 } loom_low_schedule_t;
+
+// ABI-required linkage for exported object functions or entry points.
+typedef enum loom_low_kernel_def_export_linkage_e {
+  LOOM_LOW_KERNEL_DEF_EXPORT_LINKAGE_DEFAULT = 0,
+  LOOM_LOW_KERNEL_DEF_EXPORT_LINKAGE_DSO_LOCAL = 1,
+  LOOM_LOW_KERNEL_DEF_EXPORT_LINKAGE_COUNT_ = 2,
+} loom_low_kernel_def_export_linkage_t;
 
 // External code source kind for an imported low function declaration.
 typedef enum loom_low_func_decl_import_kind_e {
@@ -169,6 +177,59 @@ iree_status_t loom_low_func_def_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_low_func_def_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_KERNEL_DEF: Target-bound low kernel entry with register-typed launch ABI values. Helper calls stay in low.func.def; kernel launch/export contracts live on this entry op.
+// low.kernel.def target(@gfx1100) export("matmul") artifact(@gfx_hsaco) workgroup_size(16, 4, 1) @matmul(%lhs: reg<amdgpu.sgpr x4>, %rhs: reg<amdgpu.sgpr x4>, %out: reg<amdgpu.sgpr x4>) {
+//   low.return
+// }
+LOOM_DEFINE_ISA(loom_low_kernel_def_isa, LOOM_OP_LOW_KERNEL_DEF)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_callee, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_target, 1)
+LOOM_DEFINE_ATTR_STRING(loom_low_kernel_def_export_symbol, 2)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_kernel_def_artifact, 3)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_export_ordinal, 4)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_export_linkage, 5, loom_low_kernel_def_export_linkage_t)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_x, 6)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_y, 7)
+LOOM_DEFINE_ATTR_I64(loom_low_kernel_def_workgroup_size_z, 8)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_allocation, 9, loom_low_allocation_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_kernel_def_schedule, 10, loom_low_schedule_t)
+LOOM_DEFINE_REGION(loom_low_kernel_def_body, 0)
+enum loom_low_kernel_def_build_flag_bits_e {
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_ALLOCATION = 1u << 0,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_SCHEDULE = 1u << 1,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 2,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_ARTIFACT = 1u << 3,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_ORDINAL = 1u << 4,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_EXPORT_LINKAGE = 1u << 5,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_X = 1u << 6,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Y = 1u << 7,
+  LOOM_LOW_KERNEL_DEF_BUILD_FLAG_HAS_WORKGROUP_SIZE_Z = 1u << 8,
+};
+typedef uint32_t loom_low_kernel_def_build_flags_t;
+iree_status_t loom_low_kernel_def_build(
+    loom_builder_t* builder,
+    loom_low_kernel_def_build_flags_t build_flags,
+    loom_optional uint8_t allocation,
+    loom_optional uint8_t schedule,
+    loom_symbol_ref_t target,
+    loom_optional loom_string_id_t export_symbol,
+    loom_optional loom_symbol_ref_t artifact,
+    loom_optional int64_t export_ordinal,
+    loom_optional uint8_t export_linkage,
+    loom_optional int64_t workgroup_size_x,
+    loom_optional int64_t workgroup_size_y,
+    loom_optional int64_t workgroup_size_z,
+    loom_symbol_ref_t callee,
+    const loom_type_t* arg_types,
+    iree_host_size_t arg_types_count,
+    loom_optional const loom_predicate_t* predicates,
+    iree_host_size_t predicates_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_kernel_def_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

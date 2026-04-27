@@ -63,3 +63,7 @@
     [LOOM_KW_RTOL] = (const uint8_t*)"\x04" "rtol",
     [LOOM_KW_SHAPE] = (const uint8_t*)"\x05" "shape",
     [LOOM_KW_VALUES] = (const uint8_t*)"\x06" "values",
+    [LOOM_KW_ARTIFACT] = (const uint8_t*)"\x08" "artifact",
+    [LOOM_KW_ORDINAL] = (const uint8_t*)"\x07" "ordinal",
+    [LOOM_KW_LINKAGE] = (const uint8_t*)"\x07" "linkage",
+    [LOOM_KW_WORKGROUP_SIZE] = (const uint8_t*)"\x0e" "workgroup_size",

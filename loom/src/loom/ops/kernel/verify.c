@@ -50,6 +50,96 @@ static iree_status_t loom_kernel_emit_attribute_value_constraint(
       emitter, op, attr_name, actual_value, expected_constraint);
 }
 
+static bool loom_kernel_optional_attr_is_present(const loom_op_t* op,
+                                                 uint16_t attr_index) {
+  return attr_index < op->attribute_count &&
+         !loom_attr_is_absent(loom_op_attrs(op)[attr_index]);
+}
+
+static iree_status_t loom_kernel_verify_contract_attr_present(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint16_t attr_index,
+    iree_string_view_t attr_name, iree_string_view_t expected_constraint) {
+  if (loom_kernel_optional_attr_is_present(op, attr_index)) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_attribute_value_constraint(
+      emitter, op, attr_name, /*actual_value=*/0, expected_constraint);
+}
+
+static iree_status_t loom_kernel_verify_positive_u32_attr(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint16_t attr_index,
+    int64_t value, iree_string_view_t attr_name) {
+  if (!loom_kernel_optional_attr_is_present(op, attr_index)) {
+    return iree_ok_status();
+  }
+  if (value > 0 && value <= UINT32_MAX) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_attribute_value_constraint(
+      emitter, op, attr_name, value, IREE_SV("positive u32"));
+}
+
+static iree_status_t loom_kernel_verify_def_contract(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op) {
+  const bool has_export_symbol = loom_kernel_optional_attr_is_present(
+      op, loom_kernel_def_export_symbol_ATTR_INDEX);
+  const bool has_artifact = loom_kernel_optional_attr_is_present(
+      op, loom_kernel_def_artifact_ATTR_INDEX);
+  const bool has_export_ordinal = loom_kernel_optional_attr_is_present(
+      op, loom_kernel_def_export_ordinal_ATTR_INDEX);
+  const bool has_export_linkage = loom_kernel_optional_attr_is_present(
+      op, loom_kernel_def_export_linkage_ATTR_INDEX);
+  const bool has_workgroup_size_x = loom_kernel_optional_attr_is_present(
+      op, loom_kernel_def_workgroup_size_x_ATTR_INDEX);
+  const bool has_workgroup_size_y = loom_kernel_optional_attr_is_present(
+      op, loom_kernel_def_workgroup_size_y_ATTR_INDEX);
+  const bool has_workgroup_size_z = loom_kernel_optional_attr_is_present(
+      op, loom_kernel_def_workgroup_size_z_ATTR_INDEX);
+  const bool has_any_workgroup_size =
+      has_workgroup_size_x || has_workgroup_size_y || has_workgroup_size_z;
+  if (!has_export_symbol &&
+      (has_artifact || has_export_ordinal || has_export_linkage)) {
+    return loom_kernel_verify_contract_attr_present(
+        emitter, op, loom_kernel_def_export_symbol_ATTR_INDEX,
+        IREE_SV("export"),
+        IREE_SV("present when artifact, ordinal, or linkage is present"));
+  }
+  if (!has_artifact && (has_export_ordinal || has_export_linkage)) {
+    return loom_kernel_verify_contract_attr_present(
+        emitter, op, loom_kernel_def_artifact_ATTR_INDEX, IREE_SV("artifact"),
+        IREE_SV("present when ordinal or linkage is present"));
+  }
+  if (has_artifact) {
+    IREE_RETURN_IF_ERROR(loom_kernel_verify_contract_attr_present(
+        emitter, op, loom_kernel_def_target_ATTR_INDEX, IREE_SV("target"),
+        IREE_SV("present when artifact is present")));
+  }
+  if (has_any_workgroup_size) {
+    IREE_RETURN_IF_ERROR(loom_kernel_verify_contract_attr_present(
+        emitter, op, loom_kernel_def_workgroup_size_x_ATTR_INDEX,
+        IREE_SV("workgroup_size_x"),
+        IREE_SV("present with workgroup_size_y and workgroup_size_z")));
+    IREE_RETURN_IF_ERROR(loom_kernel_verify_contract_attr_present(
+        emitter, op, loom_kernel_def_workgroup_size_y_ATTR_INDEX,
+        IREE_SV("workgroup_size_y"),
+        IREE_SV("present with workgroup_size_x and workgroup_size_z")));
+    IREE_RETURN_IF_ERROR(loom_kernel_verify_contract_attr_present(
+        emitter, op, loom_kernel_def_workgroup_size_z_ATTR_INDEX,
+        IREE_SV("workgroup_size_z"),
+        IREE_SV("present with workgroup_size_x and workgroup_size_y")));
+    IREE_RETURN_IF_ERROR(loom_kernel_verify_positive_u32_attr(
+        emitter, op, loom_kernel_def_workgroup_size_x_ATTR_INDEX,
+        loom_kernel_def_workgroup_size_x(op), IREE_SV("workgroup_size_x")));
+    IREE_RETURN_IF_ERROR(loom_kernel_verify_positive_u32_attr(
+        emitter, op, loom_kernel_def_workgroup_size_y_ATTR_INDEX,
+        loom_kernel_def_workgroup_size_y(op), IREE_SV("workgroup_size_y")));
+    IREE_RETURN_IF_ERROR(loom_kernel_verify_positive_u32_attr(
+        emitter, op, loom_kernel_def_workgroup_size_z_ATTR_INDEX,
+        loom_kernel_def_workgroup_size_z(op), IREE_SV("workgroup_size_z")));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_kernel_emit_operand_constraint(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     iree_string_view_t operand_name, loom_type_t actual_type,
@@ -708,6 +798,13 @@ static iree_status_t loom_kernel_verify_async_tensor_like(
       emitter, op, cache_scope, cache_temporal,
       direction == LOOM_KERNEL_DIRECTION_WORKGROUP_TO_GLOBAL));
   return loom_kernel_verify_copy_token_group_use(module, emitter, op, token_id);
+}
+
+iree_status_t loom_kernel_def_verify(const loom_module_t* module,
+                                     const loom_op_t* op,
+                                     iree_diagnostic_emitter_t emitter) {
+  (void)module;
+  return loom_kernel_verify_def_contract(emitter, op);
 }
 
 iree_status_t loom_kernel_barrier_verify(const loom_module_t* module,
