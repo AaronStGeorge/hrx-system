@@ -197,8 +197,8 @@ static const loom_amdgpu_memory_access_rejection_detail_t
             .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_RANGE,
             .detail = IREE_SVL(
-                "AMDGPU buffer memory static byte offset is outside the "
-                "selected descriptor's immediate plus scalar SOFFSET range"),
+                "AMDGPU memory static byte offset is outside the "
+                "selected descriptor's immediate/address operand range"),
         },
         {
             .rejection_bit = LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_MEMORY_SPACE,

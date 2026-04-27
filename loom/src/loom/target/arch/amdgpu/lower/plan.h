@@ -198,6 +198,8 @@ typedef struct loom_amdgpu_memory_access_plan_t {
   int64_t immediate_offset;
   // Static offset value encoded in the descriptor's second offset immediate.
   int64_t secondary_immediate_offset;
+  // Static byte offset materialized through the VGPR VADDR operand.
+  uint32_t vaddr_static_byte_offset;
   // Static byte offset materialized through the scalar SOFFSET operand.
   uint32_t scalar_byte_offset;
   // Number of 32-bit VGPR lanes moved by the selected memory packet.

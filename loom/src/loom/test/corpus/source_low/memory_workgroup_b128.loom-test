@@ -15,3 +15,22 @@ kernel.def @lds_b128_roundtrip(%input: buffer, %output: buffer) {
   vector.store %roundtrip, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
   kernel.return
 }
+
+// ====
+
+kernel.def @lds_b128_large_static_offset_roundtrip(%input: buffer, %output: buffer) {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %zero = index.constant 0 : offset
+  %large = index.constant 1024 : offset
+  %bytes = index.constant 4096 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %input_view = buffer.view %input[%zero] : buffer -> view<64x4xi32, #dense>
+  %scratch_view = buffer.view %scratch[%large] : buffer -> view<64x4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64x4xi32, #dense>
+  %loaded = vector.load %input_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %scratch_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  %roundtrip = vector.load %scratch_view[%tid, 0] : view<64x4xi32, #dense> -> vector<4xi32>
+  vector.store %roundtrip, %output_view[%tid, 0] : vector<4xi32>, view<64x4xi32, #dense>
+  kernel.return
+}

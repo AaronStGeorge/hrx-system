@@ -824,6 +824,43 @@ static bool loom_amdgpu_memory_access_split_static_offset(
   return true;
 }
 
+static bool loom_amdgpu_memory_access_split_lds_default_static_offset(
+    loom_amdgpu_memory_access_plan_t* access, uint32_t offset_unit_byte_count,
+    uint64_t offset_unsigned_max,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  if (access->source.static_byte_offset < 0) {
+    diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_NEGATIVE_STATIC_OFFSET;
+    return false;
+  }
+  if (offset_unit_byte_count == 0) {
+    diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_IMMEDIATE;
+    return false;
+  }
+  if (!loom_amdgpu_source_memory_offset_fits_u32(
+          &access->source, access->source.static_byte_offset)) {
+    diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_OFFSET_RANGE;
+    return false;
+  }
+
+  const uint64_t static_byte_offset =
+      (uint64_t)access->source.static_byte_offset;
+  const bool static_fits_immediate =
+      (static_byte_offset % offset_unit_byte_count) == 0 &&
+      (static_byte_offset / offset_unit_byte_count) <= offset_unsigned_max;
+  access->immediate_offset =
+      static_fits_immediate
+          ? (int64_t)(static_byte_offset / offset_unit_byte_count)
+          : 0;
+  access->secondary_immediate_offset = 0;
+  access->vaddr_static_byte_offset =
+      static_fits_immediate ? 0 : (uint32_t)static_byte_offset;
+  access->scalar_byte_offset = 0;
+  return true;
+}
+
 static bool loom_amdgpu_memory_access_split_global_saddr_static_offset(
     loom_amdgpu_memory_access_plan_t* access,
     const loom_amdgpu_descriptor_offset_immediate_info_t* offset_info,
@@ -1142,7 +1179,7 @@ static bool loom_amdgpu_memory_access_plan_try_select_lds_default(
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_IMMEDIATE;
     return false;
   }
-  return loom_amdgpu_memory_access_split_static_offset(
+  return loom_amdgpu_memory_access_split_lds_default_static_offset(
       access, offset_info.unit_byte_count, offset_info.unsigned_max,
       diagnostic);
 }
