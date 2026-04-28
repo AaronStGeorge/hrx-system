@@ -3626,7 +3626,13 @@ def _ds_load_u16_d16_overlays(
                 ),
                 AmdgpuOperandOverlay(
                     "VDST",
-                    _vgpr_operand("src", register_part=_REG_PART_VGPR_LOW16),
+                    Operand(
+                        "src",
+                        OperandRole.OPERAND,
+                        _VGPR_ALT,
+                        flags=(OperandFlag.IMPLICIT,),
+                        register_part=_REG_PART_VGPR_LOW16,
+                    ),
                     role_exception_reason=(
                         "the encoded destination register is also the tied "
                         "source value carrying the low 16 bits"
@@ -3640,7 +3646,7 @@ def _ds_load_u16_d16_overlays(
             fixed_encoding_fields=fixed_encoding_fields,
             asm_forms=_asm(
                 results=("dst",),
-                operands=("addr",),
+                operands=("src", "addr"),
                 immediates=("offset",),
                 named_immediates=True,
             ),

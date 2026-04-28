@@ -549,8 +549,6 @@ def _compile_asm_form(
         operand = descriptor.operands[operand_index]
         if operand.role not in packet_operand_roles:
             raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' operand field '{field_name}' does not name an explicit packet operand")
-        if OperandFlag.IMPLICIT in operand.flags:
-            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' operand field '{field_name}' is marked implicit")
         operand_order.append(operand_index)
 
     immediate_order = []

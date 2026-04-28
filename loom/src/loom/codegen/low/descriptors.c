@@ -382,9 +382,7 @@ static iree_status_t loom_low_verify_asm_operand_indices(
                                 " does not name a descriptor result",
                                 descriptor_index, operand_index);
       }
-    } else if (!loom_low_operand_role_is_packet_operand(operand->role) ||
-               iree_all_bits_set(operand->flags,
-                                 LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
+    } else if (!loom_low_operand_role_is_packet_operand(operand->role)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "low asm form for descriptor %" PRIu32
                               " operand %" PRIu16

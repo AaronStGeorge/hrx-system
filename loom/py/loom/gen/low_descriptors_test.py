@@ -35,6 +35,7 @@ from loom.target.low_descriptors import (
     HazardKind,
     ImmediateFlag,
     ImmediateKind,
+    OperandFlag,
     OperandRole,
 )
 from loom.target.test.descriptors import TEST_LOW_CORE_DESCRIPTOR_SET
@@ -334,6 +335,25 @@ def test_generator_rejects_asm_form_result_with_operand_role() -> None:
         match=("descriptor 'iree.vm.add.i32' asm form 'vm.add.i32' result field 'lhs' names a non-result operand"),
     ):
         generate_descriptor_set(descriptor_set)
+
+
+def test_generator_accepts_asm_form_implicit_packet_operand() -> None:
+    base_descriptor = IREEVM_CORE_DESCRIPTOR_SET.descriptors[1]
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            base_descriptor.operands[0],
+            replace(base_descriptor.operands[1], flags=(OperandFlag.IMPLICIT,)),
+            *base_descriptor.operands[2:],
+        ),
+        asm_forms=(AsmForm(results=("dst",), operands=("lhs", "rhs")),),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    generated = generate_descriptor_set(descriptor_set)
+    manifest = json.loads(generated.manifest_json)
+
+    assert manifest["asm_forms"][0]["operands"] == ["lhs", "rhs"]
 
 
 def test_generator_rejects_ambiguous_asm_mnemonics() -> None:

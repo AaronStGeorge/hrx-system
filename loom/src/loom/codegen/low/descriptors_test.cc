@@ -723,6 +723,15 @@ TEST(LowDescriptorsTest, AcceptsImplicitRowsWithImplicitFlag) {
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
 }
 
+TEST(LowDescriptorsTest, AcceptsAsmFormImplicitFlagPacketOperands) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+  tables.operands[2].flags = LOOM_LOW_OPERAND_FLAG_IMPLICIT;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
 TEST(LowDescriptorsTest, AcceptsTiedResultOperandConstraint) {
   TestTables tables;
   InitializeTestTables(&tables);
