@@ -12,6 +12,7 @@
 
 #include "loom/codegen/low/lower.h"
 #include "loom/target/low_descriptor_registry.h"
+#include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,6 +23,11 @@ void loom_all_low_descriptor_registry_initialize(
 
 void loom_all_low_lower_policy_registry_initialize(
     loom_low_lower_policy_registry_t* out_registry);
+
+// Returns every target-specific source-to-low legality provider linked into the
+// all-target developer registry.
+loom_target_low_legality_provider_list_t loom_all_low_legality_provider_list(
+    void);
 
 #ifdef __cplusplus
 }  // extern "C"

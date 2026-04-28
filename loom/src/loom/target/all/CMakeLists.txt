@@ -38,6 +38,7 @@ loom_cc_library(
     loom::src::loom::target::emit::ireevm::lower
     loom::src::loom::target::emit::wasm::lower
     loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::target::low_legality
     loom::src::loom::target::types
   PUBLIC
 )

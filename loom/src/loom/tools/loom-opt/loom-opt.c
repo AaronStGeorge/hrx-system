@@ -649,12 +649,14 @@ static iree_status_t loom_opt_run_passes(
 
   loom_low_lower_policy_registry_t low_lower_policy_registry = {0};
   loom_all_low_lower_policy_registry_initialize(&low_lower_policy_registry);
+  const loom_target_low_legality_provider_list_t low_legality_provider_list =
+      loom_all_low_legality_provider_list();
   loom_low_pass_environment_storage_t low_pass_environment_storage;
   loom_pass_tool_run_options_t run_options = {
       .registry = loom_pass_builtin_registry(),
       .environment = loom_low_pass_environment_storage_initialize(
-          &low_registry->registry, &low_lower_policy_registry, NULL,
-          &low_pass_environment_storage),
+          &low_registry->registry, &low_lower_policy_registry,
+          &low_legality_provider_list, &low_pass_environment_storage),
       .block_pool = block_pool,
       .diagnostic_emitter = {.fn = loom_opt_diagnostic_emitter_emit,
                              .user_data = &pass_emitter},

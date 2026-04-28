@@ -45,6 +45,12 @@ static const loom_target_bundle_t* const kLowTargetBundles[] = {
     &loom_amdgpu_low_target_bundle_gfx1250_core,
 };
 
+static const loom_target_low_legality_provider_t* const
+    kLowLegalityProviders[] = {
+        &loom_x86_low_legality_provider_storage,
+        &loom_amdgpu_low_legality_provider_storage,
+};
+
 void loom_all_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry) {
   loom_target_low_descriptor_registry_initialize_from_tables(
@@ -76,4 +82,10 @@ void loom_all_low_lower_policy_registry_initialize(
   loom_low_lower_policy_registry_initialize_from_entries(
       out_registry, kLowLowerPolicyEntries,
       IREE_ARRAYSIZE(kLowLowerPolicyEntries));
+}
+
+loom_target_low_legality_provider_list_t loom_all_low_legality_provider_list(
+    void) {
+  return loom_target_low_legality_provider_list_make(
+      kLowLegalityProviders, IREE_ARRAYSIZE(kLowLegalityProviders));
 }

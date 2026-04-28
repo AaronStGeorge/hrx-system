@@ -52,6 +52,19 @@
 // ALL-PASSES: func.return %x : i32
 
 // RUN: printf '%%s\n' \
+// RUN:   'target.profile @target preset("amdgpu-gfx11")' \
+// RUN:   '' \
+// RUN:   'kernel.def target(@target) workgroup_size(1, 1, 1) @target_legality_provider() {' \
+// RUN:   '  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}' \
+// RUN:   '  kernel.return' \
+// RUN:   '}' \
+// RUN:   | loom-opt --pass=source-to-low \
+// RUN:   | FileCheck --check-prefix=SOURCE-LOW-LEGALITY %s
+// SOURCE-LOW-LEGALITY: low.kernel.def target(@target) workgroup_size(1, 1, 1) @target_legality_provider() {
+// SOURCE-LOW-LEGALITY: low.op<amdgpu.s_barrier>() : ()
+// SOURCE-LOW-LEGALITY: low.return
+
+// RUN: printf '%%s\n' \
 // RUN:   'func.def @dce_single(%x: i32) -> (i32) {' \
 // RUN:   '  %dead = scalar.constant 42 : i32' \
 // RUN:   '  func.return %x : i32' \
