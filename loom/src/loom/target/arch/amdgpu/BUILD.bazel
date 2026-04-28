@@ -258,6 +258,7 @@ _AMDGPU_DESCRIPTOR_GENERATOR_DEPS = [
     "//loom/py/loom:target/arch/amdgpu/descriptors.py",
     "//loom/py/loom:target/arch/amdgpu/encoding.py",
     "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
+    "//loom/py/loom:target/arch/amdgpu/target_info.py",
     "//loom/py/loom:target/low_descriptors.py",
 ]
 
@@ -271,6 +272,7 @@ _AMDGPU_DESCRIPTOR_ID_GENERATOR_DEPS = [
     "//loom/py/loom:target/arch/amdgpu/descriptors.py",
     "//loom/py/loom:target/arch/amdgpu/encoding.py",
     "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
+    "//loom/py/loom:target/arch/amdgpu/target_info.py",
     "//loom/py/loom:target/low_descriptors.py",
 ]
 
@@ -285,6 +287,7 @@ _AMDGPU_ATOMIC_CANDIDATE_GENERATOR_DEPS = [
     "//loom/py/loom:target/arch/amdgpu/descriptors.py",
     "//loom/py/loom:target/arch/amdgpu/encoding.py",
     "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
+    "//loom/py/loom:target/arch/amdgpu/target_info.py",
     "//loom/py/loom:target/low_descriptors.py",
 ]
 
@@ -296,6 +299,7 @@ _AMDGPU_ENCODING_TABLE_GENERATOR_DEPS = [
     "//loom/py/loom:gen/amdgpu_encoding_tables.py",
     "//loom/py/loom:target/arch/amdgpu/encoding.py",
     "//loom/py/loom:target/arch/amdgpu/isa_xml.py",
+    "//loom/py/loom:target/arch/amdgpu/target_info.py",
 ]
 
 loom_cc_library(

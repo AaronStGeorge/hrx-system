@@ -51,6 +51,7 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AmdgpuProcessorInfo,
     sorted_descriptor_set_infos,
     sorted_processor_infos,
+    validate_amdgpu_descriptor_set_isa_xml,
 )
 from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
 
@@ -168,6 +169,7 @@ def _materialize_descriptor_set_rows(
         spec = isa_specs.get(info.isa_xml_key)
         if spec is None:
             raise ValueError(f"AMDGPU descriptor set {info.key} references missing ISA XML key '{info.isa_xml_key}'")
+        validate_amdgpu_descriptor_set_isa_xml(info, spec)
         rows.append(
             _AmdgpuDescriptorSetRow(
                 info=info,
@@ -188,13 +190,22 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
     stable_ids = [descriptor_stable_id(key) for key in keys]
     if len(stable_ids) != len(set(stable_ids)):
         raise ValueError("AMDGPU descriptor-set target-info stable IDs must be unique")
+    generator_targets = [info.generator_target for info in descriptor_sets]
+    if len(generator_targets) != len(set(generator_targets)):
+        raise ValueError("AMDGPU descriptor generator targets must be unique")
     for info in descriptor_sets:
+        if not info.generator_target:
+            raise ValueError("AMDGPU descriptor generator target is required")
         if not info.key:
             raise ValueError("AMDGPU descriptor-set key is required")
         if not info.low_preset_key:
             raise ValueError(f"AMDGPU low preset key is required for {info.key}")
         if not info.isa_xml_key:
             raise ValueError(f"AMDGPU ISA XML key is required for {info.key}")
+        if not info.isa_architecture_name:
+            raise ValueError(f"AMDGPU ISA XML architecture name is required for {info.key}")
+        if info.isa_architecture_id <= 0:
+            raise ValueError(f"AMDGPU ISA XML architecture id is required for {info.key}")
         _buffer_resource_cache_swizzle_expr(info.buffer_resource_cache_swizzle)
         _vector_memory_cache_policy_encoding_expr(info.vector_memory_cache_policy_encoding)
 

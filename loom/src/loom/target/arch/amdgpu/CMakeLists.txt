@@ -132,6 +132,7 @@ loom_target_table_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
 )
 
@@ -153,6 +154,7 @@ loom_target_table_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
   DEPS
     ::descriptor_ids
@@ -180,6 +182,7 @@ loom_target_table_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -206,6 +209,7 @@ loom_target_table_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -232,6 +236,7 @@ loom_target_table_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -258,6 +263,7 @@ loom_target_table_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/gen/amdgpu_encoding_tables.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "loom_amdgpu_isa_xml"
   DEPS
@@ -301,6 +307,7 @@ loom_low_descriptor_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna3.xml"
     "loom_amdgpu_isa_xml"
@@ -344,6 +351,7 @@ loom_low_descriptor_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
@@ -385,6 +393,7 @@ loom_low_descriptor_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
     "loom_amdgpu_isa_xml"
@@ -425,6 +434,7 @@ loom_low_descriptor_cc_library(
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/descriptors.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/encoding.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/isa_xml.py"
+    "${PROJECT_SOURCE_DIR}/loom/py/loom/target/arch/amdgpu/target_info.py"
     "${PROJECT_SOURCE_DIR}/loom/py/loom/target/low_descriptors.py"
     "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_cdna4.xml"
     "loom_amdgpu_isa_xml"

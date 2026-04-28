@@ -39,6 +39,10 @@ from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
     AmdgpuIsaInstruction,
     parse_amdgpu_isa_xml_path,
 )
+from loom.target.arch.amdgpu.target_info import (  # noqa: E402
+    amdgpu_descriptor_set_info_by_generator_target,
+    validate_amdgpu_descriptor_set_isa_xml,
+)
 from loom.target.low_descriptors import descriptor_stable_id  # noqa: E402
 
 
@@ -366,6 +370,10 @@ def _parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_arguments(argv)
     spec = parse_amdgpu_isa_xml_path(args.xml)
+    descriptor_set_info = amdgpu_descriptor_set_info_by_generator_target(args.target)
+    if descriptor_set_info.key != args.descriptor_set_key:
+        raise ValueError(f"AMDGPU encoding target {args.target} expects descriptor set '{descriptor_set_info.key}', found '{args.descriptor_set_key}'")
+    validate_amdgpu_descriptor_set_isa_xml(descriptor_set_info, spec)
     source_literal = spec.operand_predefined_value("OPR_SRC", "SRC_LITERAL")
     scalar_source_literal = spec.operand_predefined_value("OPR_SSRC", "SRC_LITERAL")
     if scalar_source_literal != source_literal:

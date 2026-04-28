@@ -30,6 +30,10 @@ from loom.target.arch.amdgpu.isa_xml import (
     AmdgpuIsaFactSource,
     parse_amdgpu_isa_xml_path,
 )
+from loom.target.arch.amdgpu.target_info import (
+    amdgpu_descriptor_set_info_by_generator_target,
+    validate_amdgpu_descriptor_set_isa_xml,
+)
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
     AsmForm,
@@ -6993,6 +6997,9 @@ def build_amdgpu_gfx950_core_descriptor_set(
     xml_path: str | Path,
 ) -> DescriptorSet:
     spec = parse_amdgpu_isa_xml_path(xml_path)
+    validate_amdgpu_descriptor_set_isa_xml(
+        amdgpu_descriptor_set_info_by_generator_target("gfx950"), spec
+    )
     return _with_overlay_descriptors(
         _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE,
         spec,
@@ -7004,6 +7011,9 @@ def build_amdgpu_gfx11_core_descriptor_set(
     xml_path: str | Path,
 ) -> DescriptorSet:
     spec = parse_amdgpu_isa_xml_path(xml_path)
+    validate_amdgpu_descriptor_set_isa_xml(
+        amdgpu_descriptor_set_info_by_generator_target("gfx11"), spec
+    )
     return _with_overlay_descriptors(
         _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE,
         spec,
@@ -7015,6 +7025,9 @@ def build_amdgpu_gfx12_core_descriptor_set(
     xml_path: str | Path,
 ) -> DescriptorSet:
     spec = parse_amdgpu_isa_xml_path(xml_path)
+    validate_amdgpu_descriptor_set_isa_xml(
+        amdgpu_descriptor_set_info_by_generator_target("gfx12"), spec
+    )
     return _with_overlay_descriptors(
         _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE,
         spec,
@@ -7026,6 +7039,9 @@ def build_amdgpu_gfx1250_core_descriptor_set(
     xml_path: str | Path,
 ) -> DescriptorSet:
     spec = parse_amdgpu_isa_xml_path(xml_path)
+    validate_amdgpu_descriptor_set_isa_xml(
+        amdgpu_descriptor_set_info_by_generator_target("gfx1250"), spec
+    )
     return _with_overlay_descriptors(
         _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE,
         spec,

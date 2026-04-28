@@ -74,6 +74,7 @@ py_binary(
         "target/arch/amdgpu/descriptors.py",
         "target/arch/amdgpu/encoding.py",
         "target/arch/amdgpu/isa_xml.py",
+        "target/arch/amdgpu/target_info.py",
     ],
     main = "gen/amdgpu_atomic_candidates.py",
 )
@@ -89,6 +90,7 @@ py_binary(
         "target/arch/amdgpu/descriptors.py",
         "target/arch/amdgpu/encoding.py",
         "target/arch/amdgpu/isa_xml.py",
+        "target/arch/amdgpu/target_info.py",
     ],
     main = "gen/amdgpu_descriptor_ids.py",
 )
@@ -104,6 +106,7 @@ py_binary(
         "target/arch/amdgpu/descriptors.py",
         "target/arch/amdgpu/encoding.py",
         "target/arch/amdgpu/isa_xml.py",
+        "target/arch/amdgpu/target_info.py",
     ],
     main = "gen/amdgpu_descriptors.py",
 )
@@ -116,6 +119,7 @@ py_binary(
         "target/arch/amdgpu/__init__.py",
         "target/arch/amdgpu/encoding.py",
         "target/arch/amdgpu/isa_xml.py",
+        "target/arch/amdgpu/target_info.py",
     ],
     main = "gen/amdgpu_encoding_tables.py",
 )

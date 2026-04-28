@@ -14,6 +14,7 @@ Python input rows consumed by the table generator, not emitted C ABI shapes.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 AMDGPU_AMDHSA_TARGET_TRIPLE = "amdgcn-amd-amdhsa"
 
@@ -40,9 +41,12 @@ AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = "gfx950_nt_sc0_sc
 
 @dataclass(frozen=True, slots=True)
 class AmdgpuDescriptorSetInfo:
+    generator_target: str
     key: str
     low_preset_key: str
     isa_xml_key: str
+    isa_architecture_name: str
+    isa_architecture_id: int
     supports_descriptor_packet_encoding: bool
     buffer_resource_cache_swizzle: str = AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE
     vector_memory_cache_policy_encoding: str = (
@@ -66,6 +70,17 @@ class AmdgpuProcessorInfo:
     kernel_descriptor_uses_gfx10_sgpr_encoding: bool = False
     kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False
     kernel_descriptor_has_packed_workitem_id: bool = False
+
+
+class AmdgpuIsaArchitectureInfo(Protocol):
+    @property
+    def source_name(self) -> str: ...
+
+    @property
+    def architecture_name(self) -> str: ...
+
+    @property
+    def architecture_id(self) -> int: ...
 
 
 def gfx11_processor_info(
@@ -105,30 +120,42 @@ def gfx1170_processor_info() -> AmdgpuProcessorInfo:
 
 AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
     AmdgpuDescriptorSetInfo(
+        generator_target="gfx1250",
         key="amdgpu.gfx1250.core",
         low_preset_key="amdgpu-gfx1250",
         isa_xml_key="rdna4",
+        isa_architecture_name="AMD RDNA 4",
+        isa_architecture_id=10,
         supports_descriptor_packet_encoding=True,
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     ),
     AmdgpuDescriptorSetInfo(
+        generator_target="gfx11",
         key="amdgpu.gfx11.core",
         low_preset_key="amdgpu-gfx11",
         isa_xml_key="rdna3",
+        isa_architecture_name="AMD RDNA 3",
+        isa_architecture_id=8,
         supports_descriptor_packet_encoding=True,
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC,
     ),
     AmdgpuDescriptorSetInfo(
+        generator_target="gfx12",
         key="amdgpu.gfx12.core",
         low_preset_key="amdgpu-gfx12",
         isa_xml_key="rdna4",
+        isa_architecture_name="AMD RDNA 4",
+        isa_architecture_id=10,
         supports_descriptor_packet_encoding=True,
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     ),
     AmdgpuDescriptorSetInfo(
+        generator_target="gfx950",
         key="amdgpu.gfx950.core",
         low_preset_key="amdgpu-gfx950",
         isa_xml_key="cdna4",
+        isa_architecture_name="AMD CDNA 4",
+        isa_architecture_id=3,
         supports_descriptor_packet_encoding=True,
         buffer_resource_cache_swizzle=AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT,
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1,
@@ -275,3 +302,28 @@ def sorted_descriptor_set_infos() -> tuple[AmdgpuDescriptorSetInfo, ...]:
 
 def sorted_processor_infos() -> tuple[AmdgpuProcessorInfo, ...]:
     return tuple(sorted(AMDGPU_PROCESSOR_INFOS, key=lambda info: info.target_cpu))
+
+
+def amdgpu_descriptor_set_info_by_generator_target(
+    generator_target: str,
+) -> AmdgpuDescriptorSetInfo:
+    for info in AMDGPU_DESCRIPTOR_SET_INFOS:
+        if info.generator_target == generator_target:
+            return info
+    raise ValueError(f"unknown AMDGPU descriptor generator target '{generator_target}'")
+
+
+def validate_amdgpu_descriptor_set_isa_xml(
+    info: AmdgpuDescriptorSetInfo,
+    spec: AmdgpuIsaArchitectureInfo,
+) -> None:
+    if (
+        spec.architecture_name == info.isa_architecture_name
+        and spec.architecture_id == info.isa_architecture_id
+    ):
+        return
+    raise ValueError(
+        f"{spec.source_name}: AMDGPU descriptor set {info.key} expects "
+        f"{info.isa_architecture_name} architecture id {info.isa_architecture_id}, "
+        f"found {spec.architecture_name} architecture id {spec.architecture_id}"
+    )
