@@ -973,7 +973,7 @@ TEST_F(AmdgpuEncodingTest, SequencesOverlappingCopyBeforeClobber) {
   iree_arena_deinitialize(&arena);
 }
 
-TEST_F(AmdgpuEncodingTest, EncodesConcatRegisterCopies) {
+TEST_F(AmdgpuEncodingTest, EncodesCoalescedConcatWithoutRegisterCopies) {
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
   loom_low_packetization_t packetization = {};
@@ -1008,7 +1008,7 @@ TEST_F(AmdgpuEncodingTest, EncodesConcatRegisterCopies) {
   for (iree_host_size_t i = 0; i < text.data_length; i += 4) {
     saw_concat_copy |= IsSop1SMovB32(ReadU32LE(text.data + i));
   }
-  EXPECT_TRUE(saw_concat_copy);
+  EXPECT_FALSE(saw_concat_copy);
   EXPECT_EQ(ReadU32LE(text.data + text.data_length - 4), UINT32_C(0xBFB00000));
   iree_arena_deinitialize(&arena);
 }

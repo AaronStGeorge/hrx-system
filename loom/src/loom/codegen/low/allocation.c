@@ -282,6 +282,17 @@ static bool loom_low_allocation_location_range_overlaps(uint32_t lhs_base,
   return lhs_base < rhs_end && rhs_base < lhs_end;
 }
 
+static bool loom_low_allocation_value_id_is_ignored(
+    loom_value_id_t value_id, const loom_value_id_t* ignored_value_ids,
+    uint16_t ignored_value_count) {
+  for (uint16_t i = 0; i < ignored_value_count; ++i) {
+    if (ignored_value_ids[i] == value_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool loom_low_allocation_interval_is_allocatable(
     const loom_liveness_interval_t* interval) {
   return interval->value_class.type_kind == LOOM_TYPE_REGISTER &&
@@ -755,11 +766,13 @@ static bool loom_low_allocation_fixed_value_conflicts(
     const loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval, uint16_t reg_class_id,
     loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
-    uint32_t location_count, loom_value_id_t ignored_value_id) {
+    uint32_t location_count, const loom_value_id_t* ignored_value_ids,
+    uint16_t ignored_value_count) {
   for (iree_host_size_t i = 0; i < state->resolved_fixed_value_count; ++i) {
     const loom_low_allocation_resolved_fixed_value_t* fixed_value =
         &state->resolved_fixed_values[i];
-    if (fixed_value->value_id == ignored_value_id) {
+    if (loom_low_allocation_value_id_is_ignored(
+            fixed_value->value_id, ignored_value_ids, ignored_value_count)) {
       continue;
     }
     if (fixed_value->location_kind != location_kind) {
@@ -811,7 +824,8 @@ static bool loom_low_allocation_candidate_conflicts(
     const loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval, uint16_t reg_class_id,
     loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
-    uint32_t location_count, loom_value_id_t ignored_value_id) {
+    uint32_t location_count, const loom_value_id_t* ignored_value_ids,
+    uint16_t ignored_value_count) {
   loom_low_allocation_assignment_t candidate = {
       .value_id = interval->value_id,
       .value_class = interval->value_class,
@@ -825,7 +839,8 @@ static bool loom_low_allocation_candidate_conflicts(
   };
   for (iree_host_size_t i = 0; i < state->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* existing = &state->assignments[i];
-    if (existing->value_id == ignored_value_id) {
+    if (loom_low_allocation_value_id_is_ignored(
+            existing->value_id, ignored_value_ids, ignored_value_count)) {
       continue;
     }
     if (existing->location_kind != location_kind) {
@@ -845,7 +860,7 @@ static bool loom_low_allocation_candidate_conflicts(
   }
   if (loom_low_allocation_fixed_value_conflicts(
           state, interval, reg_class_id, location_kind, location_base,
-          location_count, ignored_value_id)) {
+          location_count, ignored_value_ids, ignored_value_count)) {
     return true;
   }
   if (loom_low_allocation_reserved_range_conflicts(
@@ -942,7 +957,7 @@ static bool loom_low_allocation_find_location(
     if (!loom_low_allocation_candidate_conflicts(
             state, interval, capacity.descriptor_reg_class_id,
             capacity.location_kind, base, interval->unit_count,
-            LOOM_VALUE_ID_INVALID)) {
+            /*ignored_value_ids=*/NULL, /*ignored_value_count=*/0)) {
       *out_base = base;
       return true;
     }
@@ -1172,7 +1187,8 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
   if (loom_low_allocation_candidate_conflicts(
           state, interval, operand_assignment->descriptor_reg_class_id,
           operand_assignment->location_kind, operand_assignment->location_base,
-          operand_assignment->location_count, tied_operand_id)) {
+          operand_assignment->location_count, &tied_operand_id,
+          /*ignored_value_count=*/1)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "low tied result cannot share the operand location without "
@@ -1212,7 +1228,8 @@ static iree_status_t loom_low_allocation_assign_fixed_interval(
   if (loom_low_allocation_candidate_conflicts(
           state, interval, fixed_value->descriptor_reg_class_id,
           fixed_value->location_kind, fixed_value->location_base,
-          fixed_value->location_count, interval->value_id)) {
+          fixed_value->location_count, &interval->value_id,
+          /*ignored_value_count=*/1)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "low fixed value cannot occupy its required location without "
@@ -1232,6 +1249,168 @@ static iree_status_t loom_low_allocation_assign_fixed_interval(
           .location_count = fixed_value->location_count,
       };
   *out_assigned = true;
+  return iree_ok_status();
+}
+
+static bool loom_low_allocation_assignment_unit_span_fits(
+    const loom_low_allocation_assignment_t* assignment, uint32_t unit_offset,
+    uint32_t unit_count) {
+  return unit_offset <= assignment->location_count &&
+         unit_count <= assignment->location_count - unit_offset &&
+         assignment->location_base <= UINT32_MAX - unit_offset;
+}
+
+static iree_status_t loom_low_allocation_append_interval_at_location(
+    loom_low_allocation_build_state_t* state,
+    const loom_liveness_interval_t* interval, uint16_t descriptor_reg_class_id,
+    loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
+    uint32_t unit_count, const loom_value_id_t* ignored_value_ids,
+    uint16_t ignored_value_count, bool* out_assigned) {
+  *out_assigned = false;
+  if (location_base > UINT32_MAX - unit_count) {
+    return iree_ok_status();
+  }
+  const uint32_t alignment = loom_low_allocation_interval_alignment(interval);
+  if (location_base % alignment != 0) {
+    return iree_ok_status();
+  }
+  if (loom_low_allocation_candidate_conflicts(
+          state, interval, descriptor_reg_class_id, location_kind,
+          location_base, unit_count, ignored_value_ids, ignored_value_count)) {
+    return iree_ok_status();
+  }
+
+  state->assignments[state->assignment_count++] =
+      (loom_low_allocation_assignment_t){
+          .value_id = interval->value_id,
+          .value_class = interval->value_class,
+          .descriptor_reg_class_id = descriptor_reg_class_id,
+          .start_point = interval->start_point,
+          .end_point = interval->end_point,
+          .unit_count = interval->unit_count,
+          .location_kind = location_kind,
+          .location_base = location_base,
+          .location_count = unit_count,
+      };
+  *out_assigned = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_append_coalesced_interval(
+    loom_low_allocation_build_state_t* state,
+    const loom_liveness_interval_t* interval,
+    const loom_low_allocation_assignment_t* storage_assignment,
+    uint32_t storage_offset, uint32_t unit_count,
+    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count,
+    bool* out_assigned) {
+  *out_assigned = false;
+  if (!loom_low_allocation_assignment_is_coalescable(storage_assignment) ||
+      !loom_low_allocation_assignment_unit_span_fits(
+          storage_assignment, storage_offset, unit_count)) {
+    return iree_ok_status();
+  }
+  return loom_low_allocation_append_interval_at_location(
+      state, interval, storage_assignment->descriptor_reg_class_id,
+      storage_assignment->location_kind,
+      storage_assignment->location_base + storage_offset, unit_count,
+      ignored_value_ids, ignored_value_count, out_assigned);
+}
+
+static iree_status_t loom_low_allocation_assign_slice_interval(
+    loom_low_allocation_build_state_t* state,
+    const loom_liveness_interval_t* interval, const loom_op_t* op,
+    bool* out_assigned) {
+  *out_assigned = false;
+  const int64_t offset = loom_low_slice_offset(op);
+  if (offset < 0 || offset > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "low allocation saw malformed low.slice offset");
+  }
+  const uint32_t source_offset = (uint32_t)offset;
+  uint32_t source_assignment_index = 0;
+  const loom_value_id_t source_value_id = loom_low_slice_source(op);
+  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+      state, source_value_id, &source_assignment_index));
+  const loom_low_allocation_assignment_t* source_assignment =
+      &state->assignments[source_assignment_index];
+  return loom_low_allocation_append_coalesced_interval(
+      state, interval, source_assignment, source_offset, interval->unit_count,
+      &source_value_id, /*ignored_value_count=*/1, out_assigned);
+}
+
+static iree_status_t loom_low_allocation_assign_concat_interval(
+    loom_low_allocation_build_state_t* state,
+    const loom_liveness_interval_t* interval, const loom_op_t* op,
+    bool* out_assigned) {
+  *out_assigned = false;
+  loom_value_slice_t sources = loom_low_concat_sources(op);
+  if (sources.count == 0) {
+    return iree_ok_status();
+  }
+
+  uint32_t first_assignment_index = 0;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+      state, sources.values[0], &first_assignment_index));
+  const loom_low_allocation_assignment_t* first_assignment =
+      &state->assignments[first_assignment_index];
+  if (!loom_low_allocation_assignment_is_coalescable(first_assignment)) {
+    return iree_ok_status();
+  }
+  uint32_t expected_base = first_assignment->location_base;
+  uint32_t coalesced_unit_count = 0;
+  for (uint16_t i = 0; i < sources.count; ++i) {
+    uint32_t source_assignment_index = 0;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+        state, sources.values[i], &source_assignment_index));
+    const loom_low_allocation_assignment_t* source_assignment =
+        &state->assignments[source_assignment_index];
+    if (!loom_low_allocation_assignment_is_coalescable(source_assignment) ||
+        source_assignment->location_kind != first_assignment->location_kind ||
+        source_assignment->descriptor_reg_class_id !=
+            first_assignment->descriptor_reg_class_id ||
+        source_assignment->location_base != expected_base) {
+      return iree_ok_status();
+    }
+    if (source_assignment->location_count > UINT32_MAX - coalesced_unit_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low.concat coalesced unit count exceeds u32");
+    }
+    coalesced_unit_count += source_assignment->location_count;
+    if (expected_base > UINT32_MAX - source_assignment->location_count) {
+      return iree_ok_status();
+    }
+    expected_base += source_assignment->location_count;
+  }
+  if (coalesced_unit_count != interval->unit_count) {
+    return iree_ok_status();
+  }
+  return loom_low_allocation_append_interval_at_location(
+      state, interval, first_assignment->descriptor_reg_class_id,
+      first_assignment->location_kind, first_assignment->location_base,
+      interval->unit_count, sources.values, sources.count, out_assigned);
+}
+
+static iree_status_t loom_low_allocation_assign_structural_interval(
+    loom_low_allocation_build_state_t* state,
+    const loom_liveness_interval_t* interval, bool* out_assigned) {
+  *out_assigned = false;
+  const loom_value_t* value =
+      loom_module_value(state->module, interval->value_id);
+  if (loom_value_is_block_arg(value)) {
+    return iree_ok_status();
+  }
+  const loom_op_t* op = loom_value_def_op(value);
+  if (!op) {
+    return iree_ok_status();
+  }
+  if (loom_low_slice_isa(op)) {
+    return loom_low_allocation_assign_slice_interval(state, interval, op,
+                                                     out_assigned);
+  }
+  if (loom_low_concat_isa(op)) {
+    return loom_low_allocation_assign_concat_interval(state, interval, op,
+                                                      out_assigned);
+  }
   return iree_ok_status();
 }
 
@@ -2000,6 +2179,13 @@ static iree_status_t loom_low_allocation_assign_intervals(
       continue;
     }
 
+    bool assigned_structural_interval = false;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assign_structural_interval(
+        state, interval, &assigned_structural_interval));
+    if (assigned_structural_interval) {
+      continue;
+    }
+
     loom_low_allocation_class_capacity_t capacity = {0};
     IREE_RETURN_IF_ERROR(loom_low_allocation_class_capacity(
         state, interval->value_class, &capacity));
@@ -2136,6 +2322,124 @@ static iree_status_t loom_low_allocation_values_are_tied(
       }
     }
   }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_slice_pair_is_structural_alias(
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs, const loom_op_t* op,
+    bool* out_is_alias) {
+  *out_is_alias = false;
+  const int64_t offset = loom_low_slice_offset(op);
+  if (offset < 0 || offset > UINT32_MAX) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation sidecar saw malformed low.slice offset");
+  }
+  const uint32_t source_offset = (uint32_t)offset;
+  const loom_value_id_t source_id = loom_low_slice_source(op);
+  const loom_value_id_t result_id = loom_low_slice_result(op);
+  const loom_low_allocation_assignment_t* source_assignment = NULL;
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  if (lhs->value_id == source_id && rhs->value_id == result_id) {
+    source_assignment = lhs;
+    result_assignment = rhs;
+  } else if (rhs->value_id == source_id && lhs->value_id == result_id) {
+    source_assignment = rhs;
+    result_assignment = lhs;
+  } else {
+    return iree_ok_status();
+  }
+  *out_is_alias = loom_low_allocation_assignment_subranges_match(
+      result_assignment, /*lhs_start=*/0, source_assignment, source_offset,
+      result_assignment->location_count);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_concat_pair_is_structural_alias(
+    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs, const loom_op_t* op,
+    bool* out_is_alias) {
+  *out_is_alias = false;
+  const loom_value_id_t result_id = loom_low_concat_result(op);
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  const loom_low_allocation_assignment_t* source_assignment = NULL;
+  if (lhs->value_id == result_id) {
+    result_assignment = lhs;
+    source_assignment = rhs;
+  } else if (rhs->value_id == result_id) {
+    result_assignment = rhs;
+    source_assignment = lhs;
+  } else {
+    return iree_ok_status();
+  }
+
+  uint32_t result_offset = 0;
+  loom_value_slice_t sources = loom_low_concat_sources(op);
+  for (uint16_t i = 0; i < sources.count; ++i) {
+    const loom_value_id_t source_id = sources.values[i];
+    if (source_id == source_assignment->value_id) {
+      *out_is_alias = loom_low_allocation_assignment_subranges_match(
+          result_assignment, result_offset, source_assignment,
+          /*rhs_start=*/0, source_assignment->location_count);
+      return iree_ok_status();
+    }
+    uint32_t previous_assignment_index = 0;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_in_sidecar(
+        sidecar, source_id, &previous_assignment_index));
+    const loom_low_allocation_assignment_t* previous_assignment =
+        &sidecar->assignments[previous_assignment_index];
+    if (previous_assignment->location_count > UINT32_MAX - result_offset) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low.concat structural offset exceeds u32");
+    }
+    result_offset += previous_assignment->location_count;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_pair_is_structural_alias(
+    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs, bool* out_is_alias) {
+  *out_is_alias = false;
+  const loom_value_t* lhs_value =
+      loom_module_value(sidecar->module, lhs->value_id);
+  const loom_value_t* rhs_value =
+      loom_module_value(sidecar->module, rhs->value_id);
+  const loom_op_t* lhs_def =
+      loom_value_is_block_arg(lhs_value) ? NULL : loom_value_def_op(lhs_value);
+  const loom_op_t* rhs_def =
+      loom_value_is_block_arg(rhs_value) ? NULL : loom_value_def_op(rhs_value);
+  bool lhs_alias = false;
+  if (lhs_def && loom_low_slice_isa(lhs_def)) {
+    IREE_RETURN_IF_ERROR(loom_low_allocation_slice_pair_is_structural_alias(
+        lhs, rhs, lhs_def, &lhs_alias));
+    if (lhs_alias) {
+      *out_is_alias = true;
+      return iree_ok_status();
+    }
+  } else if (lhs_def && loom_low_concat_isa(lhs_def)) {
+    IREE_RETURN_IF_ERROR(loom_low_allocation_concat_pair_is_structural_alias(
+        sidecar, lhs, rhs, lhs_def, &lhs_alias));
+    if (lhs_alias) {
+      *out_is_alias = true;
+      return iree_ok_status();
+    }
+  }
+  if (rhs_def == lhs_def) {
+    return iree_ok_status();
+  }
+  bool rhs_alias = false;
+  if (rhs_def && loom_low_slice_isa(rhs_def)) {
+    IREE_RETURN_IF_ERROR(loom_low_allocation_slice_pair_is_structural_alias(
+        lhs, rhs, rhs_def, &rhs_alias));
+  } else if (rhs_def && loom_low_concat_isa(rhs_def)) {
+    IREE_RETURN_IF_ERROR(loom_low_allocation_concat_pair_is_structural_alias(
+        sidecar, lhs, rhs, rhs_def, &rhs_alias));
+  }
+  *out_is_alias = rhs_alias;
   return iree_ok_status();
 }
 
@@ -2554,6 +2858,12 @@ iree_status_t loom_low_allocation_verify_sidecar(
       IREE_RETURN_IF_ERROR(loom_low_allocation_values_are_tied(
           body, lhs->value_id, rhs->value_id, &pair_is_tied));
       if (pair_is_tied) {
+        continue;
+      }
+      bool pair_is_structural_alias = false;
+      IREE_RETURN_IF_ERROR(loom_low_allocation_pair_is_structural_alias(
+          sidecar, lhs, rhs, &pair_is_structural_alias));
+      if (pair_is_structural_alias) {
         continue;
       }
       return iree_make_status(

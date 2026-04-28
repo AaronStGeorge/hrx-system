@@ -89,6 +89,30 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
     loom_low_move_location_t* temporary_locations,
     iree_host_size_t temporary_location_count);
 
+// Counts scalar unit moves required to materialize one low.slice. Coalesced
+// structural slices require zero moves.
+iree_status_t loom_low_move_sequence_count_slice_units(
+    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    iree_host_size_t* out_move_count);
+
+// Populates |moves| from one low.slice. |move_count| must match
+// loom_low_move_sequence_count_slice_units.
+iree_status_t loom_low_move_sequence_populate_slice_units(
+    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    loom_low_move_t* moves, iree_host_size_t move_count);
+
+// Counts scalar unit moves required to materialize one low.concat. Coalesced
+// structural concats require zero moves.
+iree_status_t loom_low_move_sequence_count_concat_units(
+    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    iree_host_size_t* out_move_count);
+
+// Populates |moves| from one low.concat. |move_count| must match
+// loom_low_move_sequence_count_concat_units.
+iree_status_t loom_low_move_sequence_populate_concat_units(
+    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    loom_low_move_t* moves, iree_host_size_t move_count);
+
 // Emits |moves| as a sequential move list that preserves parallel-copy
 // semantics. Identity moves are elided. Acyclic overlap is handled by choosing
 // a safe order. Cycles use a matching storage-class entry in

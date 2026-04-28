@@ -119,6 +119,35 @@ low.func.def target(@test_target) @copy_coalesced(%value: reg<test.i32>) -> (reg
 
 // ====
 
+// RUN: emit low-allocation-json @structural_concat
+
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @structural_concat(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32 x2>, reg<test.i32>) asm<test.low.core> {
+  %pair = concat(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+  %sum = test.add.i32 %lhs, %rhs
+  return %pair, %sum
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"structural_concat","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":4,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"lhs","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":0,"end_point":2,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}},{"index":1,"value":{"id":1,"name":"rhs","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":0,"end_point":2,"unit_count":1,"location":{"kind":"target_id","base":1,"count":1}},{"index":2,"value":{"id":4,"name":"pair","type":"reg<test.i32 x2>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":1,"end_point":3,"unit_count":2,"location":{"kind":"target_id","base":0,"count":2}},{"index":3,"value":{"id":5,"name":"sum","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":2,"end_point":3,"unit_count":1,"location":{"kind":"target_id","base":2,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
+
+// ====
+
+// RUN: emit low-allocation-json @structural_slice
+
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @structural_slice(%input: reg<test.i32 x4>) -> (reg<test.i32>, reg<test.i32 x4>) asm<test.low.core> {
+  %lane = slice %input[2] : reg<test.i32 x4> -> reg<test.i32>
+  return %lane, %input
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"structural_slice","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":2,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"input","type":"reg<test.i32 x4>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":0,"end_point":2,"unit_count":4,"location":{"kind":"target_id","base":0,"count":4}},{"index":1,"value":{"id":3,"name":"lane","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":1,"end_point":2,"unit_count":1,"location":{"kind":"target_id","base":2,"count":1}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
+
+// ====
+
 // RUN: emit low-allocation-json @assigned
 
 // ERROR@+1: LOWERING/001 "FAILED_PRECONDITION"

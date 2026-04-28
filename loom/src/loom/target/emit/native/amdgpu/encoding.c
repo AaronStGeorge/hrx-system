@@ -807,91 +807,43 @@ static iree_status_t loom_amdgpu_encode_copy_packet(
 static iree_status_t loom_amdgpu_encode_slice_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   const loom_op_t* op = packet->node->op;
-  const loom_low_allocation_assignment_t* source_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      state->allocation, loom_low_slice_source(op), &source_assignment));
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      state->allocation, loom_low_slice_result(op), &result_assignment));
-  const int64_t offset = loom_low_slice_offset(op);
-  if (offset < 0 || offset > UINT32_MAX) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU native encoding slice offset must fit a non-negative uint32_t");
-  }
-  const uint32_t source_offset = (uint32_t)offset;
-  if (source_offset > source_assignment->location_count ||
-      result_assignment->location_count >
-          source_assignment->location_count - source_offset) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU native encoding slice result range exceeds the source range");
+  iree_host_size_t move_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_count_slice_units(
+      state->allocation, op, &move_count));
+  if (move_count == 0) {
+    return iree_ok_status();
   }
 
-  const uint32_t move_count = result_assignment->location_count;
   loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
   loom_low_move_t* moves = inline_moves;
   if (move_count > IREE_ARRAYSIZE(inline_moves)) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->arena, move_count, sizeof(*moves), (void**)&moves));
   }
-  for (uint32_t i = 0; i < move_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
-        result_assignment, i, &moves[i].destination));
-    IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
-        source_assignment, source_offset + i, &moves[i].source));
-  }
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_populate_slice_units(
+      state->allocation, op, moves, move_count));
   return loom_amdgpu_encode_move_sequence(state, moves, move_count, NULL, 0);
 }
 
 static iree_status_t loom_amdgpu_encode_concat_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   const loom_op_t* op = packet->node->op;
-  const loom_low_allocation_assignment_t* result_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      state->allocation, loom_low_concat_result(op), &result_assignment));
-  loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
-  loom_low_move_t* moves = inline_moves;
-  if (result_assignment->location_count > IREE_ARRAYSIZE(inline_moves)) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        state->arena, result_assignment->location_count, sizeof(*moves),
-        (void**)&moves));
+  iree_host_size_t move_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_count_concat_units(
+      state->allocation, op, &move_count));
+  if (move_count == 0) {
+    return iree_ok_status();
   }
 
-  uint32_t result_register_index = 0;
-  loom_value_slice_t sources = loom_low_concat_sources(op);
-  for (uint16_t i = 0; i < sources.count; ++i) {
-    const loom_low_allocation_assignment_t* source_assignment = NULL;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-        state->allocation, sources.values[i], &source_assignment));
-    if (result_register_index > result_assignment->location_count ||
-        source_assignment->location_count >
-            result_assignment->location_count - result_register_index) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU native encoding concat source ranges exceed the result "
-          "range");
-    }
-    for (uint32_t source_register_index = 0;
-         source_register_index < source_assignment->location_count;
-         ++source_register_index) {
-      IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
-          result_assignment, result_register_index,
-          &moves[result_register_index].destination));
-      IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
-          source_assignment, source_register_index,
-          &moves[result_register_index].source));
-      ++result_register_index;
-    }
+  loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
+  loom_low_move_t* moves = inline_moves;
+  if (move_count > IREE_ARRAYSIZE(inline_moves)) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->arena, move_count, sizeof(*moves), (void**)&moves));
   }
-  if (result_register_index != result_assignment->location_count) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU native encoding concat source ranges do not fill the result "
-        "range");
-  }
-  return loom_amdgpu_encode_move_sequence(
-      state, moves, result_assignment->location_count, NULL, 0);
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_populate_concat_units(
+      state->allocation, op, moves, move_count));
+  return loom_amdgpu_encode_move_sequence(state, moves, move_count, NULL, 0);
 }
 
 static iree_status_t loom_amdgpu_encode_sopp_simm16(

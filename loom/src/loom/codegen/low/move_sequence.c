@@ -9,6 +9,8 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/ops/low/ops.h"
+
 bool loom_low_move_locations_equal(const loom_low_move_location_t* lhs,
                                    const loom_low_move_location_t* rhs) {
   return lhs->location_kind == rhs->location_kind &&
@@ -62,6 +64,45 @@ static void loom_low_move_location_from_edge_copy_temporary(
       .descriptor_reg_class_id = temporary->descriptor_reg_class_id,
       .location = temporary->location,
   };
+}
+
+static const loom_low_allocation_assignment_t*
+loom_low_move_sequence_find_assignment(
+    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id) {
+  for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
+    if (allocation->assignments[i].value_id == value_id) {
+      return &allocation->assignments[i];
+    }
+  }
+  return NULL;
+}
+
+static iree_status_t loom_low_move_sequence_require_assignment(
+    const loom_low_allocation_sidecar_t* allocation, loom_value_id_t value_id,
+    const loom_low_allocation_assignment_t** out_assignment) {
+  IREE_ASSERT_ARGUMENT(out_assignment);
+  *out_assignment =
+      loom_low_move_sequence_find_assignment(allocation, value_id);
+  if (!*out_assignment) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "structural move references value %u without an "
+                            "allocation assignment",
+                            (unsigned)value_id);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_move_sequence_require_same_storage_class(
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs,
+    iree_string_view_t structural_op) {
+  if (!loom_low_allocation_assignments_share_storage(lhs, rhs)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "%.*s structural move crosses allocation storage classes",
+        (int)structural_op.size, structural_op.data);
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_low_move_sequence_count_edge_copy_units(
@@ -172,6 +213,213 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_temporaries(
     loom_low_move_location_from_edge_copy_temporary(
         &allocation->edge_copy_temporaries[group->temporary_start + i],
         &temporary_locations[i]);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_move_sequence_slice_assignments(
+    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_assignment_t** out_source_assignment,
+    const loom_low_allocation_assignment_t** out_result_assignment,
+    uint32_t* out_source_offset) {
+  IREE_ASSERT_ARGUMENT(out_source_assignment);
+  IREE_ASSERT_ARGUMENT(out_result_assignment);
+  IREE_ASSERT_ARGUMENT(out_source_offset);
+  *out_source_assignment = NULL;
+  *out_result_assignment = NULL;
+  *out_source_offset = 0;
+  if (!loom_low_slice_isa(op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "expected low.slice");
+  }
+  const int64_t offset = loom_low_slice_offset(op);
+  if (offset < 0 || offset > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "low.slice offset is outside uint32_t range");
+  }
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_assignment(
+      allocation, loom_low_slice_source(op), out_source_assignment));
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_assignment(
+      allocation, loom_low_slice_result(op), out_result_assignment));
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_same_storage_class(
+      *out_source_assignment, *out_result_assignment, IREE_SV("low.slice")));
+  const uint32_t source_offset = (uint32_t)offset;
+  if (source_offset > (*out_source_assignment)->location_count ||
+      (*out_result_assignment)->location_count >
+          (*out_source_assignment)->location_count - source_offset) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low.slice structural move range exceeds source assignment");
+  }
+  *out_source_offset = source_offset;
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_move_sequence_count_slice_units(
+    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    iree_host_size_t* out_move_count) {
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(op);
+  IREE_ASSERT_ARGUMENT(out_move_count);
+  *out_move_count = 0;
+  const loom_low_allocation_assignment_t* source_assignment = NULL;
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  uint32_t source_offset = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_slice_assignments(
+      allocation, op, &source_assignment, &result_assignment, &source_offset));
+  if (loom_low_allocation_assignment_subranges_match(
+          result_assignment, /*lhs_start=*/0, source_assignment, source_offset,
+          result_assignment->location_count)) {
+    return iree_ok_status();
+  }
+  *out_move_count = result_assignment->location_count;
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_move_sequence_populate_slice_units(
+    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    loom_low_move_t* moves, iree_host_size_t move_count) {
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(op);
+  if (move_count != 0) {
+    IREE_ASSERT_ARGUMENT(moves);
+  }
+  const loom_low_allocation_assignment_t* source_assignment = NULL;
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  uint32_t source_offset = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_slice_assignments(
+      allocation, op, &source_assignment, &result_assignment, &source_offset));
+  const bool coalesced = loom_low_allocation_assignment_subranges_match(
+      result_assignment, /*lhs_start=*/0, source_assignment, source_offset,
+      result_assignment->location_count);
+  const iree_host_size_t expected_move_count =
+      coalesced ? 0 : result_assignment->location_count;
+  if (move_count != expected_move_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low.slice move storage has %zu entries but needs "
+                            "%zu",
+                            move_count, expected_move_count);
+  }
+  if (move_count == 0) {
+    return iree_ok_status();
+  }
+  for (uint32_t i = 0; i < result_assignment->location_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
+        result_assignment, i, &moves[i].destination));
+    IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
+        source_assignment, source_offset + i, &moves[i].source));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_move_sequence_concat_assignments(
+    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    const loom_low_allocation_assignment_t** out_result_assignment,
+    bool* out_coalesced, iree_host_size_t* out_move_count) {
+  IREE_ASSERT_ARGUMENT(out_result_assignment);
+  IREE_ASSERT_ARGUMENT(out_coalesced);
+  IREE_ASSERT_ARGUMENT(out_move_count);
+  *out_result_assignment = NULL;
+  *out_coalesced = true;
+  *out_move_count = 0;
+  if (!loom_low_concat_isa(op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected low.concat");
+  }
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_assignment(
+      allocation, loom_low_concat_result(op), out_result_assignment));
+  uint32_t result_offset = 0;
+  loom_value_slice_t sources = loom_low_concat_sources(op);
+  for (uint16_t i = 0; i < sources.count; ++i) {
+    const loom_low_allocation_assignment_t* source_assignment = NULL;
+    IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_assignment(
+        allocation, sources.values[i], &source_assignment));
+    IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_same_storage_class(
+        *out_result_assignment, source_assignment, IREE_SV("low.concat")));
+    if (result_offset > (*out_result_assignment)->location_count ||
+        source_assignment->location_count >
+            (*out_result_assignment)->location_count - result_offset) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low.concat structural move source ranges exceed result assignment");
+    }
+    if (!loom_low_allocation_assignment_subranges_match(
+            *out_result_assignment, result_offset, source_assignment,
+            /*rhs_start=*/0, source_assignment->location_count)) {
+      *out_coalesced = false;
+    }
+    if (source_assignment->location_count >
+        IREE_HOST_SIZE_MAX - *out_move_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low.concat move count exceeds host size");
+    }
+    *out_move_count += source_assignment->location_count;
+    result_offset += source_assignment->location_count;
+  }
+  if (result_offset != (*out_result_assignment)->location_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low.concat structural move sources do not fill result assignment");
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_move_sequence_count_concat_units(
+    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    iree_host_size_t* out_move_count) {
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(op);
+  IREE_ASSERT_ARGUMENT(out_move_count);
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  bool coalesced = false;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_concat_assignments(
+      allocation, op, &result_assignment, &coalesced, out_move_count));
+  if (coalesced) {
+    *out_move_count = 0;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_move_sequence_populate_concat_units(
+    const loom_low_allocation_sidecar_t* allocation, const loom_op_t* op,
+    loom_low_move_t* moves, iree_host_size_t move_count) {
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(op);
+  if (move_count != 0) {
+    IREE_ASSERT_ARGUMENT(moves);
+  }
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
+  bool coalesced = false;
+  iree_host_size_t expected_move_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_concat_assignments(
+      allocation, op, &result_assignment, &coalesced, &expected_move_count));
+  if (coalesced) {
+    expected_move_count = 0;
+  }
+  if (move_count != expected_move_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low.concat move storage has %zu entries but needs %zu", move_count,
+        expected_move_count);
+  }
+  if (move_count == 0) {
+    return iree_ok_status();
+  }
+  uint32_t result_offset = 0;
+  iree_host_size_t move_index = 0;
+  loom_value_slice_t sources = loom_low_concat_sources(op);
+  for (uint16_t i = 0; i < sources.count; ++i) {
+    const loom_low_allocation_assignment_t* source_assignment = NULL;
+    IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_assignment(
+        allocation, sources.values[i], &source_assignment));
+    for (uint32_t source_unit = 0;
+         source_unit < source_assignment->location_count; ++source_unit) {
+      IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
+          result_assignment, result_offset, &moves[move_index].destination));
+      IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
+          source_assignment, source_unit, &moves[move_index].source));
+      ++result_offset;
+      ++move_index;
+    }
   }
   return iree_ok_status();
 }

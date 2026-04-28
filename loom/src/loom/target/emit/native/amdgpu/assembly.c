@@ -1157,48 +1157,20 @@ static iree_status_t loom_amdgpu_append_slice_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
   const loom_op_t* op = context->packet->node->op;
-  const loom_low_allocation_assignment_t* source_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
-      context, loom_low_slice_source(op), &source_assignment));
+  iree_host_size_t move_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_count_slice_units(
+      context->allocation, op, &move_count));
+  if (move_count == 0) {
+    return iree_ok_status();
+  }
+
   const loom_low_allocation_assignment_t* result_assignment = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
       context, loom_low_slice_result(op), &result_assignment));
-  const int64_t offset = loom_low_slice_offset(op);
-  if (offset < 0 || offset > UINT32_MAX) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU assembly slice offset must fit a non-negative uint32_t");
-  }
-  const uint32_t source_offset = (uint32_t)offset;
-  if (source_offset > source_assignment->location_count ||
-      result_assignment->location_count >
-          source_assignment->location_count - source_offset) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU assembly slice result range exceeds the source range");
-  }
-
-  if (source_assignment->descriptor_reg_class_id !=
-      result_assignment->descriptor_reg_class_id) {
-    iree_string_view_t source_register_class = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
-        context->allocation, source_assignment, &source_register_class));
-    iree_string_view_t result_register_class = iree_string_view_empty();
-    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
-        context->allocation, result_assignment, &result_register_class));
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "AMDGPU assembly slice between register classes '%.*s' and '%.*s' is "
-        "unsupported",
-        (int)source_register_class.size, source_register_class.data,
-        (int)result_register_class.size, result_register_class.data);
-  }
-
   iree_string_view_t mnemonic = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_amdgpu_copy_mnemonic(
       result_assignment->descriptor_reg_class_id, &mnemonic));
 
-  const uint32_t move_count = result_assignment->location_count;
   loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
   loom_low_move_t* moves = inline_moves;
   iree_status_t status = iree_ok_status();
@@ -1207,14 +1179,9 @@ static iree_status_t loom_amdgpu_append_slice_packet(
         iree_allocator_malloc_array(context->builder->allocator, move_count,
                                     sizeof(*moves), (void**)&moves);
   }
-  for (uint32_t i = 0; i < move_count && iree_status_is_ok(status); ++i) {
-    status = loom_low_move_location_from_assignment_unit(result_assignment, i,
-                                                         &moves[i].destination);
-    if (!iree_status_is_ok(status)) {
-      break;
-    }
-    status = loom_low_move_location_from_assignment_unit(
-        source_assignment, source_offset + i, &moves[i].source);
+  if (iree_status_is_ok(status)) {
+    status = loom_low_move_sequence_populate_slice_units(context->allocation,
+                                                         op, moves, move_count);
   }
   if (iree_status_is_ok(status)) {
     status =
@@ -1230,6 +1197,13 @@ static iree_status_t loom_amdgpu_append_concat_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
   const loom_op_t* op = context->packet->node->op;
+  iree_host_size_t move_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_move_sequence_count_concat_units(
+      context->allocation, op, &move_count));
+  if (move_count == 0) {
+    return iree_ok_status();
+  }
+
   const loom_low_allocation_assignment_t* result_assignment = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_find_assignment(
       context, loom_low_concat_result(op), &result_assignment));
@@ -1237,7 +1211,6 @@ static iree_status_t loom_amdgpu_append_concat_packet(
   IREE_RETURN_IF_ERROR(loom_amdgpu_copy_mnemonic(
       result_assignment->descriptor_reg_class_id, &mnemonic));
 
-  const uint32_t move_count = result_assignment->location_count;
   loom_low_move_t inline_moves[LOOM_AMDGPU_INLINE_MOVE_COUNT];
   loom_low_move_t* moves = inline_moves;
   iree_status_t status = iree_ok_status();
@@ -1246,69 +1219,9 @@ static iree_status_t loom_amdgpu_append_concat_packet(
         iree_allocator_malloc_array(context->builder->allocator, move_count,
                                     sizeof(*moves), (void**)&moves);
   }
-
-  uint32_t result_register_index = 0;
-  loom_value_slice_t sources = loom_low_concat_sources(op);
-  for (uint16_t i = 0; i < sources.count && iree_status_is_ok(status); ++i) {
-    const loom_low_allocation_assignment_t* source_assignment = NULL;
-    status = loom_amdgpu_find_assignment(context, sources.values[i],
-                                         &source_assignment);
-    if (!iree_status_is_ok(status)) {
-      break;
-    }
-    if (source_assignment->descriptor_reg_class_id !=
-        result_assignment->descriptor_reg_class_id) {
-      iree_string_view_t source_register_class = iree_string_view_empty();
-      status = loom_low_allocation_assignment_register_class_name(
-          context->allocation, source_assignment, &source_register_class);
-      if (!iree_status_is_ok(status)) {
-        break;
-      }
-      iree_string_view_t result_register_class = iree_string_view_empty();
-      status = loom_low_allocation_assignment_register_class_name(
-          context->allocation, result_assignment, &result_register_class);
-      if (!iree_status_is_ok(status)) {
-        break;
-      }
-      status = iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "AMDGPU assembly concat between register classes '%.*s' and '%.*s' "
-          "is unsupported",
-          (int)source_register_class.size, source_register_class.data,
-          (int)result_register_class.size, result_register_class.data);
-      break;
-    }
-    if (result_register_index > result_assignment->location_count ||
-        source_assignment->location_count >
-            result_assignment->location_count - result_register_index) {
-      status = iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "AMDGPU assembly concat source ranges exceed the result range");
-      break;
-    }
-    for (uint32_t source_register_index = 0;
-         source_register_index < source_assignment->location_count;
-         ++source_register_index) {
-      status = loom_low_move_location_from_assignment_unit(
-          result_assignment, result_register_index,
-          &moves[result_register_index].destination);
-      if (!iree_status_is_ok(status)) {
-        break;
-      }
-      status = loom_low_move_location_from_assignment_unit(
-          source_assignment, source_register_index,
-          &moves[result_register_index].source);
-      if (!iree_status_is_ok(status)) {
-        break;
-      }
-      ++result_register_index;
-    }
-  }
-  if (iree_status_is_ok(status) &&
-      result_register_index != result_assignment->location_count) {
-    status = iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU assembly concat source ranges do not fill the result range");
+  if (iree_status_is_ok(status)) {
+    status = loom_low_move_sequence_populate_concat_units(
+        context->allocation, op, moves, move_count);
   }
   if (iree_status_is_ok(status)) {
     status =

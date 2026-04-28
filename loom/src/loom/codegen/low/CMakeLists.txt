@@ -230,6 +230,7 @@ loom_cc_library(
   DEPS
     ::allocation
     iree::base
+    loom::src::loom::ops::low
   PUBLIC
 )
 
