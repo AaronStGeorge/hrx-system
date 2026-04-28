@@ -80,6 +80,8 @@ typedef enum loom_low_schedule_strategy_e {
   LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING = 2,
 } loom_low_schedule_strategy_t;
 
+#define LOOM_LOW_SCHEDULE_MEMORY_ACCESS_RECORD_NONE UINT32_MAX
+
 // One scheduled operation in a low function body.
 typedef struct loom_low_schedule_node_t {
   // Operation represented by this node.
@@ -98,6 +100,8 @@ typedef struct loom_low_schedule_node_t {
   loom_trait_flags_t traits;
   // Descriptor ordinal for descriptor-backed nodes, or NONE.
   uint32_t descriptor_ordinal;
+  // Source memory-access record attached to this node, or NONE.
+  uint32_t memory_access_record_index;
   // Stable descriptor ID for descriptor-backed nodes, or NONE.
   uint64_t descriptor_id;
   // Schedule-class id for descriptor-backed nodes, or NONE.
@@ -407,6 +411,8 @@ typedef struct loom_low_schedule_sidecar_t {
   const loom_op_t* function_op;
   // Resolved target context selected by |function_op|.
   loom_low_resolved_target_t target;
+  // Borrowed source-derived memory summaries attached to scheduled nodes.
+  loom_low_memory_access_table_t memory_access_table;
   // Liveness analysis for the scheduled low function body.
   loom_liveness_analysis_t liveness;
   // Per-block schedule records in region block order.

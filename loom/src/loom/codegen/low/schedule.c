@@ -1140,6 +1140,8 @@ static iree_status_t loom_low_schedule_fill_nodes(
           .kind = LOOM_LOW_SCHEDULE_NODE_STRUCTURAL,
           .traits = loom_op_effective_traits(state->module, op),
           .descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE,
+          .memory_access_record_index =
+              LOOM_LOW_SCHEDULE_MEMORY_ACCESS_RECORD_NONE,
           .descriptor_id = LOOM_LOW_DESCRIPTOR_ID_NONE,
           .schedule_class_id = LOOM_LOW_SCHEDULE_CLASS_NONE,
       };
@@ -1371,6 +1373,8 @@ loom_low_schedule_take_memory_access_summary(
   if (record->op != node->op) {
     return NULL;
   }
+  state->nodes[node_index].memory_access_record_index =
+      (uint32_t)state->memory_access_record_cursor;
   ++state->memory_access_record_cursor;
   if (loom_low_schedule_descriptor_dependency_memory_effect_count(
           state->target.descriptor_set, descriptor) != 1) {
@@ -2389,7 +2393,8 @@ iree_status_t loom_low_schedule_function(
   }
   if (options->memory_access_table.count != 0 &&
       (!options->memory_access_table.values ||
-       options->memory_access_table.function_op != low_func_op)) {
+       options->memory_access_table.function_op != low_func_op ||
+       options->memory_access_table.count > UINT32_MAX)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "low schedule memory access table must match the scheduled function");
@@ -2466,6 +2471,7 @@ iree_status_t loom_low_schedule_function(
       .module = module,
       .function_op = low_func_op,
       .target = state.target,
+      .memory_access_table = options->memory_access_table,
       .liveness = liveness,
       .blocks = state.blocks,
       .block_count = state.body->block_count,

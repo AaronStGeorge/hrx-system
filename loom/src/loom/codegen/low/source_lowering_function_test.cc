@@ -241,6 +241,18 @@ static iree_host_size_t CountDependencies(
   return count;
 }
 
+static iree_host_size_t CountMemoryAccessNodes(
+    const loom_low_schedule_sidecar_t* schedule) {
+  iree_host_size_t count = 0;
+  for (iree_host_size_t i = 0; i < schedule->node_count; ++i) {
+    if (schedule->nodes[i].memory_access_record_index !=
+        LOOM_LOW_SCHEDULE_MEMORY_ACCESS_RECORD_NONE) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 TEST_F(SourceLoweringFunctionTest, LowersScalarFunction) {
   EmissionCollector lower_collector;
   loom_low_lower_result_t lower_result = {};
@@ -543,6 +555,11 @@ TEST_F(SourceLoweringFunctionTest, CarriesMemoryAccessSummariesToSchedule) {
   EXPECT_EQ(CountDependencies(&precise_packetization.schedule,
                               LOOM_LOW_SCHEDULE_DEPENDENCY_EFFECT),
             0u);
+  EXPECT_TRUE(loom_low_memory_access_table_is_empty(
+      conservative_packetization.schedule.memory_access_table));
+  EXPECT_EQ(CountMemoryAccessNodes(&conservative_packetization.schedule), 0u);
+  EXPECT_EQ(precise_packetization.schedule.memory_access_table.count, 2u);
+  EXPECT_EQ(CountMemoryAccessNodes(&precise_packetization.schedule), 2u);
   iree_arena_deinitialize(&sidecar_arena);
 }
 
