@@ -387,11 +387,19 @@ ERR_BACKEND_015 = ErrorDef(
         "dep-latency/latency/projected/killed/produced "
         "{chosen_dependency_latency_cycles}/{chosen_latency_cycles}/"
         "{chosen_projected_live_units}/"
-        "{chosen_killed_live_units}/{chosen_produced_live_units}, rejected "
+        "{chosen_killed_live_units}/{chosen_produced_live_units}, chosen "
+        "cliff class/units/penalty/next "
+        "{chosen_pressure_cliff_reg_class_id}/{chosen_pressure_cliff_units}/"
+        "{chosen_pressure_cliff_penalty}/"
+        "{chosen_units_until_pressure_cliff}, rejected "
         "dep-latency/latency/projected/killed/produced "
         "{rejected_dependency_latency_cycles}/{rejected_latency_cycles}/"
         "{rejected_projected_live_units}/"
-        "{rejected_killed_live_units}/{rejected_produced_live_units}"
+        "{rejected_killed_live_units}/{rejected_produced_live_units}, rejected "
+        "cliff class/units/penalty/next "
+        "{rejected_pressure_cliff_reg_class_id}/"
+        "{rejected_pressure_cliff_units}/{rejected_pressure_cliff_penalty}/"
+        "{rejected_units_until_pressure_cliff}"
     ),
     params=(
         ErrorParam("target_key", ParamKind.STRING),
@@ -408,11 +416,19 @@ ERR_BACKEND_015 = ErrorDef(
         ErrorParam("chosen_projected_live_units", ParamKind.U64),
         ErrorParam("chosen_killed_live_units", ParamKind.U64),
         ErrorParam("chosen_produced_live_units", ParamKind.U64),
+        ErrorParam("chosen_pressure_cliff_reg_class_id", ParamKind.U32),
+        ErrorParam("chosen_pressure_cliff_units", ParamKind.U32),
+        ErrorParam("chosen_pressure_cliff_penalty", ParamKind.U32),
+        ErrorParam("chosen_units_until_pressure_cliff", ParamKind.U32),
         ErrorParam("rejected_dependency_latency_cycles", ParamKind.U32),
         ErrorParam("rejected_latency_cycles", ParamKind.U32),
         ErrorParam("rejected_projected_live_units", ParamKind.U64),
         ErrorParam("rejected_killed_live_units", ParamKind.U64),
         ErrorParam("rejected_produced_live_units", ParamKind.U64),
+        ErrorParam("rejected_pressure_cliff_reg_class_id", ParamKind.U32),
+        ErrorParam("rejected_pressure_cliff_units", ParamKind.U32),
+        ErrorParam("rejected_pressure_cliff_penalty", ParamKind.U32),
+        ErrorParam("rejected_units_until_pressure_cliff", ParamKind.U32),
     ),
 )
 

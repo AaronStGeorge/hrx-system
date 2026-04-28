@@ -9,12 +9,15 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_json.h"
 #include "loom/codegen/low/descriptors_manifest.h"
+#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/packet_json.h"
 #include "loom/codegen/low/packetization.h"
+#include "loom/codegen/low/register_class_map.h"
 #include "loom/codegen/low/schedule.h"
 #include "loom/codegen/low/schedule_json.h"
 #include "loom/codegen/low/source_selection.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
@@ -48,6 +51,21 @@ typedef enum loom_check_emit_source_low_output_e {
   LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_MODULE = 0,
   LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW = 1,
 } loom_check_emit_source_low_output_t;
+
+enum {
+  LOOM_CHECK_EMIT_MAX_SCHEDULE_PRESSURE_CLIFFS = 16,
+};
+
+typedef struct loom_check_emit_pressure_cliff_spec_t {
+  // Stable register-class name.
+  iree_string_view_t register_class;
+  // Live allocation units at which this cliff is crossed.
+  uint32_t cliff_units;
+  // Occupancy or throughput tier before crossing the cliff.
+  uint32_t tier_before;
+  // Occupancy or throughput tier after crossing the cliff.
+  uint32_t tier_after;
+} loom_check_emit_pressure_cliff_spec_t;
 
 static const iree_string_view_t kLoomCheckEmitCoreTargetNames[] = {
     IREE_SVL("liveness-json"),
@@ -93,6 +111,11 @@ typedef struct loom_check_emit_request_t {
   bool has_low_allocation_diagnostics_option;
   // Low scheduler diagnostic feedback requested by the RUN line.
   loom_low_schedule_diagnostic_flags_t low_schedule_diagnostic_flags;
+  // Low scheduler pressure cliffs parsed from the RUN line.
+  loom_check_emit_pressure_cliff_spec_t low_schedule_pressure_cliff_specs
+      [LOOM_CHECK_EMIT_MAX_SCHEDULE_PRESSURE_CLIFFS];
+  // Number of entries in |low_schedule_pressure_cliff_specs|.
+  iree_host_size_t low_schedule_pressure_cliff_spec_count;
   // True once a low scheduler diagnostics option has been parsed.
   bool has_low_schedule_diagnostics_option;
   // Low scheduler candidate-selection strategy requested by the RUN line.
@@ -270,6 +293,59 @@ static iree_status_t loom_check_emit_parse_low_schedule_option(
   iree_string_view_split(token, '=', &name, &value);
   name = iree_string_view_trim(name);
   value = iree_string_view_trim(value);
+  if (iree_string_view_equal(name, IREE_SV("cliff"))) {
+    if (request->low_schedule_pressure_cliff_spec_count >=
+        IREE_ARRAYSIZE(request->low_schedule_pressure_cliff_specs)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "too many low-schedule-json pressure cliffs");
+    }
+    iree_string_view_t register_class = iree_string_view_empty();
+    iree_string_view_t units_and_tiers = iree_string_view_empty();
+    iree_string_view_split(value, ':', &register_class, &units_and_tiers);
+    register_class = iree_string_view_trim(register_class);
+    units_and_tiers = iree_string_view_trim(units_and_tiers);
+
+    iree_string_view_t units_text = iree_string_view_empty();
+    iree_string_view_t tiers_text = iree_string_view_empty();
+    iree_string_view_split(units_and_tiers, ':', &units_text, &tiers_text);
+    units_text = iree_string_view_trim(units_text);
+    tiers_text = iree_string_view_trim(tiers_text);
+
+    iree_string_view_t tier_before_text = iree_string_view_empty();
+    iree_string_view_t tier_after_text = iree_string_view_empty();
+    iree_string_view_split(tiers_text, ':', &tier_before_text,
+                           &tier_after_text);
+    tier_before_text = iree_string_view_trim(tier_before_text);
+    tier_after_text = iree_string_view_trim(tier_after_text);
+    if (iree_string_view_is_empty(register_class) ||
+        iree_string_view_is_empty(units_text) ||
+        iree_string_view_is_empty(tier_before_text) ||
+        iree_string_view_is_empty(tier_after_text) ||
+        iree_string_view_find_char(tier_after_text, ':', 0) !=
+            IREE_STRING_VIEW_NPOS) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low-schedule-json option 'cliff' must have the form "
+          "<register-class>:<units>:<tier-before>:<tier-after>");
+    }
+    uint32_t cliff_units = 0;
+    uint32_t tier_before = 0;
+    uint32_t tier_after = 0;
+    if (!iree_string_view_atoi_uint32(units_text, &cliff_units) ||
+        !iree_string_view_atoi_uint32(tier_before_text, &tier_before) ||
+        !iree_string_view_atoi_uint32(tier_after_text, &tier_after)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "invalid low-schedule-json pressure cliff");
+    }
+    loom_check_emit_pressure_cliff_spec_t* spec =
+        &request->low_schedule_pressure_cliff_specs
+             [request->low_schedule_pressure_cliff_spec_count++];
+    spec->register_class = register_class;
+    spec->cliff_units = cliff_units;
+    spec->tier_before = tier_before;
+    spec->tier_after = tier_after;
+    return iree_ok_status();
+  }
   if (iree_string_view_equal(name, IREE_SV("strategy"))) {
     if (request->has_low_schedule_strategy_option) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -830,14 +906,59 @@ static iree_status_t loom_check_emit_write_liveness_json(
 static iree_status_t loom_check_emit_write_low_schedule_json(
     loom_module_t* module, iree_string_view_t symbol_name,
     const loom_low_descriptor_registry_t* descriptor_registry,
+    const loom_check_emit_pressure_cliff_spec_t* pressure_cliff_specs,
+    iree_host_size_t pressure_cliff_spec_count,
     loom_low_schedule_diagnostic_flags_t diagnostic_flags,
     loom_low_schedule_strategy_t strategy, iree_diagnostic_emitter_t emitter,
     iree_arena_allocator_t* analysis_arena, loom_check_result_t* result) {
   loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
       module, symbol_name, &low_function));
+  const loom_low_schedule_pressure_cliff_t* pressure_cliffs = NULL;
+  if (pressure_cliff_spec_count != 0) {
+    loom_low_resolved_target_t target = {0};
+    IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
+        module, low_function, descriptor_registry, emitter, &target));
+    if (!target.descriptor_set) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low-schedule-json target did not resolve descriptor set");
+    }
+    loom_low_schedule_pressure_cliff_t* resolved_cliffs = NULL;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        analysis_arena, pressure_cliff_spec_count, sizeof(*resolved_cliffs),
+        (void**)&resolved_cliffs));
+    for (iree_host_size_t i = 0; i < pressure_cliff_spec_count; ++i) {
+      const loom_check_emit_pressure_cliff_spec_t* spec =
+          &pressure_cliff_specs[i];
+      uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+      bool found_reg_class = false;
+      IREE_RETURN_IF_ERROR(loom_low_register_class_try_lookup_name(
+          target.descriptor_set, spec->register_class, &reg_class_id, NULL,
+          &found_reg_class));
+      if (!found_reg_class) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low-schedule-json pressure cliff references unknown register "
+            "class '%.*s'",
+            (int)spec->register_class.size, spec->register_class.data);
+      }
+      resolved_cliffs[i] = (loom_low_schedule_pressure_cliff_t){
+          .descriptor_reg_class_id = reg_class_id,
+          .cliff_units = spec->cliff_units,
+          .tier_before = spec->tier_before,
+          .tier_after = spec->tier_after,
+      };
+    }
+    pressure_cliffs = resolved_cliffs;
+  }
   loom_low_schedule_options_t options = {
       .descriptor_registry = descriptor_registry,
+      .pressure_cliffs =
+          {
+              .values = pressure_cliffs,
+              .count = pressure_cliff_spec_count,
+          },
       .emitter = emitter,
       .diagnostic_flags = diagnostic_flags,
       .strategy = strategy,
@@ -1621,6 +1742,8 @@ iree_status_t loom_check_execute_emit(
       } else if (request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON) {
         status = loom_check_emit_write_low_schedule_json(
             module, request.analysis_symbol_name, &low_registry.registry,
+            request.low_schedule_pressure_cliff_specs,
+            request.low_schedule_pressure_cliff_spec_count,
             request.low_schedule_diagnostic_flags,
             request.low_schedule_strategy,
             (iree_diagnostic_emitter_t){

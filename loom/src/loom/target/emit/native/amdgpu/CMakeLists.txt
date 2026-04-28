@@ -289,6 +289,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::hal_resource_materialization
     loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::arch::amdgpu::lower
+    loom::src::loom::target::arch::amdgpu::occupancy
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::arch::amdgpu::wait_plan

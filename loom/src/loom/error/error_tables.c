@@ -3382,11 +3382,19 @@ static const loom_error_param_def_t loom_err_backend_015_params[] = {
     {"chosen_projected_live_units", LOOM_PARAM_U64},
     {"chosen_killed_live_units", LOOM_PARAM_U64},
     {"chosen_produced_live_units", LOOM_PARAM_U64},
+    {"chosen_pressure_cliff_reg_class_id", LOOM_PARAM_U32},
+    {"chosen_pressure_cliff_units", LOOM_PARAM_U32},
+    {"chosen_pressure_cliff_penalty", LOOM_PARAM_U32},
+    {"chosen_units_until_pressure_cliff", LOOM_PARAM_U32},
     {"rejected_dependency_latency_cycles", LOOM_PARAM_U32},
     {"rejected_latency_cycles", LOOM_PARAM_U32},
     {"rejected_projected_live_units", LOOM_PARAM_U64},
     {"rejected_killed_live_units", LOOM_PARAM_U64},
     {"rejected_produced_live_units", LOOM_PARAM_U64},
+    {"rejected_pressure_cliff_reg_class_id", LOOM_PARAM_U32},
+    {"rejected_pressure_cliff_units", LOOM_PARAM_U32},
+    {"rejected_pressure_cliff_penalty", LOOM_PARAM_U32},
+    {"rejected_units_until_pressure_cliff", LOOM_PARAM_U32},
 };
 static const loom_error_def_t loom_err_backend_015 = {
     .error_id = "ERR_BACKEND_015",
@@ -3402,14 +3410,20 @@ static const loom_error_def_t loom_err_backend_015 = {
         "dep-latency/latency/projected/killed/produced "
         "{chosen_dependency_latency_cycles}/{chosen_latency_cycles}/"
         "{chosen_projected_live_units}/{chosen_killed_live_units}/"
-        "{chosen_produced_live_units}, rejected "
-        "dep-latency/latency/projected/killed/produced "
+        "{chosen_produced_live_units}, chosen cliff class/units/penalty/next "
+        "{chosen_pressure_cliff_reg_class_id}/{chosen_pressure_cliff_units}/"
+        "{chosen_pressure_cliff_penalty}/{chosen_units_until_pressure_cliff}, "
+        "rejected dep-latency/latency/projected/killed/produced "
         "{rejected_dependency_latency_cycles}/{rejected_latency_cycles}/"
         "{rejected_projected_live_units}/{rejected_killed_live_units}/"
-        "{rejected_produced_live_units}",
+        "{rejected_produced_live_units}, rejected cliff "
+        "class/units/penalty/next "
+        "{rejected_pressure_cliff_reg_class_id}/"
+        "{rejected_pressure_cliff_units}/{rejected_pressure_cliff_penalty}/"
+        "{rejected_units_until_pressure_cliff}",
     .fix_hint_template = NULL,
     .param_defs = loom_err_backend_015_params,
-    .param_count = 19,
+    .param_count = 27,
 };
 
 static const loom_error_param_def_t loom_err_backend_016_params[] = {

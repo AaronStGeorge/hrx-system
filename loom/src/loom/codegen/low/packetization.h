@@ -35,6 +35,8 @@ typedef struct loom_low_packetization_options_t {
   const loom_low_descriptor_registry_t* descriptor_registry;
   // Optional source-derived memory summaries for the scheduled low function.
   loom_low_memory_access_table_t memory_access_table;
+  // Optional target-provided register-pressure cliff table.
+  loom_low_schedule_pressure_cliff_list_t schedule_pressure_cliffs;
   // Candidate selection strategy used by the scheduler.
   loom_low_schedule_strategy_t schedule_strategy;
   // Optional structured scheduler feedback to emit.

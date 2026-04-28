@@ -211,6 +211,82 @@ static iree_status_t loom_amdgpu_occupancy_select_model(
       descriptor_set_stable_id);
 }
 
+iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_arena_allocator_t* arena,
+    loom_low_schedule_pressure_cliff_list_t* out_pressure_cliffs) {
+  IREE_ASSERT_ARGUMENT(descriptor_set);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_pressure_cliffs);
+  *out_pressure_cliffs = loom_low_schedule_pressure_cliff_list_empty();
+
+  iree_string_view_t descriptor_set_key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+      descriptor_set, descriptor_set->key_string_offset, &descriptor_set_key));
+  const loom_amdgpu_occupancy_model_t* model = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_select_model(
+      descriptor_set->stable_id, descriptor_set_key, &model));
+  if (model->register_class_count == 0 || model->max_waves_per_simd == 0) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t max_cliff_count = 0;
+  if (!iree_host_size_checked_mul(model->register_class_count,
+                                  model->max_waves_per_simd,
+                                  &max_cliff_count)) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU schedule pressure cliff capacity exceeds host size");
+  }
+  loom_low_schedule_pressure_cliff_t* cliffs = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, max_cliff_count, sizeof(*cliffs), (void**)&cliffs));
+  iree_host_size_t cliff_count = 0;
+
+  for (iree_host_size_t class_index = 0;
+       class_index < model->register_class_count; ++class_index) {
+    const loom_amdgpu_occupancy_register_class_model_t* class_model =
+        &model->register_classes[class_index];
+    uint32_t previous_wave_limit = model->max_waves_per_simd;
+    uint64_t stop_candidate =
+        (uint64_t)class_model->pool_units + class_model->allocation_granularity;
+    if (stop_candidate > UINT32_MAX) {
+      stop_candidate = UINT32_MAX;
+    }
+    for (uint64_t candidate = 1; candidate <= stop_candidate; ++candidate) {
+      uint32_t ignored_rounded_units = 0;
+      uint32_t candidate_wave_limit = 0;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_wave_limit(
+          class_model, model->max_waves_per_simd, (uint32_t)candidate,
+          &ignored_rounded_units, &candidate_wave_limit));
+      if (candidate_wave_limit >= previous_wave_limit) {
+        continue;
+      }
+      if (cliff_count >= max_cliff_count) {
+        return iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "AMDGPU schedule pressure cliff capacity was underestimated");
+      }
+      cliffs[cliff_count++] = (loom_low_schedule_pressure_cliff_t){
+          .descriptor_reg_class_id = class_model->descriptor_reg_class_id,
+          .cliff_units = (uint32_t)candidate,
+          .tier_before = previous_wave_limit,
+          .tier_after = candidate_wave_limit,
+      };
+      previous_wave_limit = candidate_wave_limit;
+      if (candidate_wave_limit == 0) {
+        break;
+      }
+    }
+  }
+
+  *out_pressure_cliffs = (loom_low_schedule_pressure_cliff_list_t){
+      .values = cliffs,
+      .count = cliff_count,
+  };
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_occupancy_find_register_class(
     const loom_low_allocation_sidecar_t* allocation,
     const loom_amdgpu_occupancy_register_class_t* register_classes,

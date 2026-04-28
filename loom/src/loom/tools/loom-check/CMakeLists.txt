@@ -58,6 +58,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::packet_json
     loom::src::loom::codegen::low::packetization
     loom::src::loom::codegen::low::pass_environment
+    loom::src::loom::codegen::low::register_class_map
     loom::src::loom::codegen::low::schedule
     loom::src::loom::codegen::low::schedule_json
     loom::src::loom::codegen::low::source_selection

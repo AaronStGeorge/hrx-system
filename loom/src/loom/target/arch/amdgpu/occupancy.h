@@ -20,6 +20,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/base/string_builder.h"
 #include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/schedule.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -121,6 +122,14 @@ iree_status_t loom_amdgpu_occupancy_build(
     const loom_amdgpu_occupancy_options_t* options,
     iree_arena_allocator_t* arena,
     loom_amdgpu_occupancy_sidecar_t* out_sidecar);
+
+// Builds target-provided schedule pressure cliffs for |descriptor_set|. The
+// returned list is sorted by descriptor register-class ID and cliff unit count
+// and is suitable for loom_low_schedule_options_t::pressure_cliffs.
+iree_status_t loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_arena_allocator_t* arena,
+    loom_low_schedule_pressure_cliff_list_t* out_pressure_cliffs);
 
 // Appends a compact JSON representation of |sidecar| to |builder|.
 iree_status_t loom_amdgpu_occupancy_format_json(

@@ -83,6 +83,43 @@ typedef enum loom_low_schedule_strategy_e {
 } loom_low_schedule_strategy_t;
 
 #define LOOM_LOW_SCHEDULE_MEMORY_ACCESS_RECORD_NONE UINT32_MAX
+#define LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE UINT32_MAX
+
+// One target-provided register-pressure cliff.
+//
+// Cliffs are keyed by descriptor-set-local register-class ID so the scheduler
+// can direct-index them after resolving low register types. The list passed to
+// the scheduler must be sorted by descriptor_reg_class_id and then cliff_units.
+// A candidate that moves projected live units from below |cliff_units| to at or
+// above it receives a penalty based on the resident-wave drop.
+typedef struct loom_low_schedule_pressure_cliff_t {
+  // Descriptor-set-local register class affected by this cliff.
+  uint16_t descriptor_reg_class_id;
+  // Live allocation units at which this cliff is crossed.
+  uint32_t cliff_units;
+  // Occupancy or throughput tier before crossing the cliff.
+  uint32_t tier_before;
+  // Occupancy or throughput tier after crossing the cliff.
+  uint32_t tier_after;
+} loom_low_schedule_pressure_cliff_t;
+
+// List of target-provided register-pressure cliffs.
+typedef struct loom_low_schedule_pressure_cliff_list_t {
+  // Borrowed pressure cliff rows.
+  const loom_low_schedule_pressure_cliff_t* values;
+  // Number of entries in |values|.
+  iree_host_size_t count;
+} loom_low_schedule_pressure_cliff_list_t;
+
+static inline loom_low_schedule_pressure_cliff_list_t
+loom_low_schedule_pressure_cliff_list_empty(void) {
+  return (loom_low_schedule_pressure_cliff_list_t){0};
+}
+
+static inline bool loom_low_schedule_pressure_cliff_list_is_empty(
+    loom_low_schedule_pressure_cliff_list_t list) {
+  return list.count == 0;
+}
 
 // One scheduled operation in a low function body.
 typedef struct loom_low_schedule_node_t {
@@ -202,6 +239,16 @@ typedef struct loom_low_schedule_candidate_decision_t {
   // Target resource table identifier causing the chosen resource stall, or
   // LOOM_LOW_RESOURCE_NONE.
   uint16_t chosen_bottleneck_resource_id;
+  // Chosen target pressure-cliff penalty.
+  uint32_t chosen_pressure_cliff_penalty;
+  // Chosen register class closest to a pressure cliff, or
+  // LOOM_LOW_REG_CLASS_NONE.
+  uint16_t chosen_pressure_cliff_reg_class_id;
+  // Chosen crossed pressure cliff, or LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE.
+  uint32_t chosen_pressure_cliff_units;
+  // Chosen live units remaining before the next pressure cliff, or
+  // LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE.
+  uint32_t chosen_units_until_pressure_cliff;
   // Best rejected cycles until all SSA inputs are ready.
   uint32_t rejected_data_ready_stall_cycles;
   // Best rejected cycles blocked by descriptor resource occupancy.
@@ -213,6 +260,17 @@ typedef struct loom_low_schedule_candidate_decision_t {
   // Target resource table identifier causing the rejected resource stall, or
   // LOOM_LOW_RESOURCE_NONE.
   uint16_t rejected_bottleneck_resource_id;
+  // Best rejected target pressure-cliff penalty.
+  uint32_t rejected_pressure_cliff_penalty;
+  // Best rejected register class closest to a pressure cliff, or
+  // LOOM_LOW_REG_CLASS_NONE.
+  uint16_t rejected_pressure_cliff_reg_class_id;
+  // Best rejected crossed pressure cliff, or
+  // LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE.
+  uint32_t rejected_pressure_cliff_units;
+  // Best rejected live units remaining before the next pressure cliff, or
+  // LOOM_LOW_SCHEDULE_PRESSURE_CLIFF_NONE.
+  uint32_t rejected_units_until_pressure_cliff;
 } loom_low_schedule_candidate_decision_t;
 
 // Descriptor resource use recorded in scheduled order. This is an issue-model
@@ -418,6 +476,8 @@ typedef struct loom_low_schedule_options_t {
   // Optional source-derived memory summaries for |low_func_op|. Empty uses
   // conservative descriptor effect summaries.
   loom_low_memory_access_table_t memory_access_table;
+  // Optional target-provided register-pressure cliff table.
+  loom_low_schedule_pressure_cliff_list_t pressure_cliffs;
   // Structured diagnostic emitter for user IR failures.
   iree_diagnostic_emitter_t emitter;
   // Optional backend feedback diagnostics to emit after scheduling analysis.

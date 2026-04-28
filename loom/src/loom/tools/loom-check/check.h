@@ -32,7 +32,8 @@
 //                           target-low-registry-manifest, and source-low.
 //                           Analysis targets include liveness-json @function,
 //                           low-schedule-json @function [strategy=...]
-//                           [diagnostics=...], low-allocation-json @function
+//                           [diagnostics=...] [cliff=<reg-class>:...],
+//                           low-allocation-json @function
 //                           [diagnostics=...] [class=units...]
 //                           [fixed=%value:<kind>:<base>:<count>],
 //                           and low-packet-json @function.

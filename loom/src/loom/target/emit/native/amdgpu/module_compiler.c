@@ -24,6 +24,7 @@
 #include "loom/target/arch/amdgpu/hal_resource_materialization.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
+#include "loom/target/arch/amdgpu/occupancy.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
@@ -383,10 +384,20 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
   *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){0};
   *out_export = (loom_amdgpu_hal_executable_export_t){0};
 
+  const loom_low_descriptor_set_t* descriptor_set = NULL;
+  IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
+      &low_registry->registry, &plan->entry->bundle_storage.bundle,
+      LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set));
+  loom_low_schedule_pressure_cliff_list_t schedule_pressure_cliffs =
+      loom_low_schedule_pressure_cliff_list_empty();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_occupancy_build_schedule_pressure_cliffs(
+      descriptor_set, sidecar_arena, &schedule_pressure_cliffs));
+
   loom_low_packetization_t packetization = {0};
   const loom_low_packetization_options_t packetization_options = {
       .descriptor_registry = &low_registry->registry,
-      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING,
+      .schedule_pressure_cliffs = schedule_pressure_cliffs,
+      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL,
       .memory_access_table = plan->memory_access_table,
       .allocation_fixed_values = plan->fixed_values,
       .allocation_fixed_value_count = plan->fixed_value_count,

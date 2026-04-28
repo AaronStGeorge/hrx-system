@@ -4934,7 +4934,7 @@
     "severity": 2,
     "severity_name": "remark",
     "summary": "Schedule candidate selection recorded.",
-    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' scheduler chose '{chosen_packet}' over '{rejected_packet}' at block '{block_name}' ordinal {scheduled_ordinal}: {candidate_count} ready candidate(s), chosen dep-latency/latency/projected/killed/produced {chosen_dependency_latency_cycles}/{chosen_latency_cycles}/{chosen_projected_live_units}/{chosen_killed_live_units}/{chosen_produced_live_units}, rejected dep-latency/latency/projected/killed/produced {rejected_dependency_latency_cycles}/{rejected_latency_cycles}/{rejected_projected_live_units}/{rejected_killed_live_units}/{rejected_produced_live_units}",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' scheduler chose '{chosen_packet}' over '{rejected_packet}' at block '{block_name}' ordinal {scheduled_ordinal}: {candidate_count} ready candidate(s), chosen dep-latency/latency/projected/killed/produced {chosen_dependency_latency_cycles}/{chosen_latency_cycles}/{chosen_projected_live_units}/{chosen_killed_live_units}/{chosen_produced_live_units}, chosen cliff class/units/penalty/next {chosen_pressure_cliff_reg_class_id}/{chosen_pressure_cliff_units}/{chosen_pressure_cliff_penalty}/{chosen_units_until_pressure_cliff}, rejected dep-latency/latency/projected/killed/produced {rejected_dependency_latency_cycles}/{rejected_latency_cycles}/{rejected_projected_live_units}/{rejected_killed_live_units}/{rejected_produced_live_units}, rejected cliff class/units/penalty/next {rejected_pressure_cliff_reg_class_id}/{rejected_pressure_cliff_units}/{rejected_pressure_cliff_penalty}/{rejected_units_until_pressure_cliff}",
     "params": [
       {
         "name": "target_key",
@@ -5007,6 +5007,26 @@
         "kind_name": "U64"
       },
       {
+        "name": "chosen_pressure_cliff_reg_class_id",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "chosen_pressure_cliff_units",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "chosen_pressure_cliff_penalty",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "chosen_units_until_pressure_cliff",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
         "name": "rejected_dependency_latency_cycles",
         "kind": 2,
         "kind_name": "U32"
@@ -5030,6 +5050,26 @@
         "name": "rejected_produced_live_units",
         "kind": 5,
         "kind_name": "U64"
+      },
+      {
+        "name": "rejected_pressure_cliff_reg_class_id",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "rejected_pressure_cliff_units",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "rejected_pressure_cliff_penalty",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "rejected_units_until_pressure_cliff",
+        "kind": 2,
+        "kind_name": "U32"
       }
     ]
   },
