@@ -258,6 +258,21 @@ static iree_status_t loom_amdgpu_kernel_record_update_high_water(
   return iree_ok_status();
 }
 
+// AMDGPU unspillable physical classes model singleton architectural state such
+// as SCC, EXEC, and M0. They constrain scheduling/allocation but do not
+// contribute SGPR/VGPR high-water metadata.
+static bool loom_amdgpu_kernel_record_is_metadata_free_register_class(
+    const loom_low_descriptor_set_t* descriptor_set, uint16_t reg_class_id) {
+  if (reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
+      reg_class_id >= descriptor_set->reg_class_count) {
+    return false;
+  }
+  const loom_low_reg_class_t* reg_class =
+      &descriptor_set->reg_classes[reg_class_id];
+  return iree_all_bits_set(reg_class->flags,
+                           LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
+}
+
 static iree_status_t loom_amdgpu_kernel_record_collect_register_usage(
     const loom_low_allocation_sidecar_t* allocation,
     loom_amdgpu_kernel_record_register_usage_t* out_usage) {
@@ -267,6 +282,10 @@ static iree_status_t loom_amdgpu_kernel_record_collect_register_usage(
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
     if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
+      continue;
+    }
+    if (assignment->location_kind !=
+        LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER) {
       continue;
     }
     if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_SGPR) {
@@ -287,6 +306,11 @@ static iree_status_t loom_amdgpu_kernel_record_collect_register_usage(
           IREE_STATUS_UNIMPLEMENTED,
           "AMDGPU kernel emission register class 'amdgpu.agpr' requires "
           "additional kernel descriptor metadata");
+    }
+    if (loom_amdgpu_kernel_record_is_metadata_free_register_class(
+            allocation->target.descriptor_set,
+            assignment->descriptor_reg_class_id)) {
+      continue;
     }
     iree_string_view_t register_class = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
@@ -340,7 +364,9 @@ static iree_status_t loom_amdgpu_kernel_record_validate_kernarg_live_in(
           "live-ins");
     }
     found = true;
-    if (assignment->location_base != 0 ||
+    if (assignment->location_kind !=
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+        assignment->location_base != 0 ||
         assignment->location_count !=
             LOOM_AMDGPU_KERNEL_RECORD_KERNARG_USER_SGPR_COUNT) {
       return iree_make_status(
@@ -448,7 +474,9 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
       found_workgroup_ids[j] = true;
       const uint32_t expected_location_base =
           system_sgpr_base + workgroup_ids[j].expected_location_offset;
-      if (assignment->location_base != expected_location_base ||
+      if (assignment->location_kind !=
+              LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+          assignment->location_base != expected_location_base ||
           assignment->location_count != 1) {
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
@@ -487,7 +515,9 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
         }
       }
       found_packed_workitem_id = true;
-      if (assignment->location_base != 0 || assignment->location_count != 1) {
+      if (assignment->location_kind !=
+              LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+          assignment->location_base != 0 || assignment->location_count != 1) {
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
             "AMDGPU kernel emission requires the %.*s live-in to be fixed to "
@@ -515,7 +545,9 @@ static iree_status_t loom_amdgpu_kernel_record_collect_descriptor_flags(
             (int)workitem_ids[j].label.size, workitem_ids[j].label.data);
       }
       found_workitem_ids[j] = true;
-      if (assignment->location_base != workitem_ids[j].expected_location_base ||
+      if (assignment->location_kind !=
+              LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+          assignment->location_base != workitem_ids[j].expected_location_base ||
           assignment->location_count != 1) {
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
