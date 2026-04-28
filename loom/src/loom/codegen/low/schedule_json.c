@@ -281,27 +281,38 @@ iree_status_t loom_low_schedule_format_json(
           &stream,
           "{\"block\":%" PRIu32 ",\"scheduled_ordinal\":%" PRIu32
           ",\"candidate_count\":%" PRIu32 ",\"chosen_node\":%" PRIu32
+          ",\"chosen_dependency_latency_cycles\":%" PRIu16
+          ",\"chosen_latency_cycles\":%" PRIu16
           ",\"chosen_projected_live_units\":%" PRIu64
           ",\"chosen_killed_live_units\":%" PRIu64
           ",\"chosen_produced_live_units\":%" PRIu64 ",\"rejected_node\":",
           decision->block_index, decision->scheduled_ordinal,
           decision->ready_candidate_count, decision->chosen_node,
+          decision->chosen_dependency_latency_cycles,
+          decision->chosen_latency_cycles,
           decision->chosen_projected_live_units,
           decision->chosen_killed_live_units,
           decision->chosen_produced_live_units));
       if (decision->rejected_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
             &stream,
-            "null,\"rejected_projected_live_units\":null"
+            "null,\"rejected_dependency_latency_cycles\":null"
+            ",\"rejected_latency_cycles\":null"
+            ",\"rejected_projected_live_units\":null"
             ",\"rejected_killed_live_units\":null"
             ",\"rejected_produced_live_units\":null}"));
       } else {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
             &stream,
-            "%" PRIu32 ",\"rejected_projected_live_units\":%" PRIu64
+            "%" PRIu32 ",\"rejected_dependency_latency_cycles\":%" PRIu16
+            ",\"rejected_latency_cycles\":%" PRIu16
+            ",\"rejected_projected_live_units\":%" PRIu64
             ",\"rejected_killed_live_units\":%" PRIu64
             ",\"rejected_produced_live_units\":%" PRIu64 "}",
-            decision->rejected_node, decision->rejected_projected_live_units,
+            decision->rejected_node,
+            decision->rejected_dependency_latency_cycles,
+            decision->rejected_latency_cycles,
+            decision->rejected_projected_live_units,
             decision->rejected_killed_live_units,
             decision->rejected_produced_live_units));
       }

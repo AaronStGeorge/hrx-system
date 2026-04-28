@@ -4934,7 +4934,7 @@
     "severity": 2,
     "severity_name": "remark",
     "summary": "Schedule candidate selection recorded.",
-    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' pressure scheduler chose '{chosen_packet}' over '{rejected_packet}' at block '{block_name}' ordinal {scheduled_ordinal}: {candidate_count} ready candidate(s), chosen projected/killed/produced {chosen_projected_live_units}/{chosen_killed_live_units}/{chosen_produced_live_units}, rejected projected/killed/produced {rejected_projected_live_units}/{rejected_killed_live_units}/{rejected_produced_live_units}",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' scheduler chose '{chosen_packet}' over '{rejected_packet}' at block '{block_name}' ordinal {scheduled_ordinal}: {candidate_count} ready candidate(s), chosen dep-latency/latency/projected/killed/produced {chosen_dependency_latency_cycles}/{chosen_latency_cycles}/{chosen_projected_live_units}/{chosen_killed_live_units}/{chosen_produced_live_units}, rejected dep-latency/latency/projected/killed/produced {rejected_dependency_latency_cycles}/{rejected_latency_cycles}/{rejected_projected_live_units}/{rejected_killed_live_units}/{rejected_produced_live_units}",
     "params": [
       {
         "name": "target_key",
@@ -4982,6 +4982,16 @@
         "kind_name": "STRING"
       },
       {
+        "name": "chosen_dependency_latency_cycles",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "chosen_latency_cycles",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
         "name": "chosen_projected_live_units",
         "kind": 5,
         "kind_name": "U64"
@@ -4995,6 +5005,16 @@
         "name": "chosen_produced_live_units",
         "kind": 5,
         "kind_name": "U64"
+      },
+      {
+        "name": "rejected_dependency_latency_cycles",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "rejected_latency_cycles",
+        "kind": 2,
+        "kind_name": "U32"
       },
       {
         "name": "rejected_projected_live_units",

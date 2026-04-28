@@ -381,12 +381,16 @@ ERR_BACKEND_015 = ErrorDef(
     summary="Schedule candidate selection recorded.",
     message=(
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "'@{function_name}' pressure scheduler chose '{chosen_packet}' over "
+        "'@{function_name}' scheduler chose '{chosen_packet}' over "
         "'{rejected_packet}' at block '{block_name}' ordinal "
         "{scheduled_ordinal}: {candidate_count} ready candidate(s), chosen "
-        "projected/killed/produced {chosen_projected_live_units}/"
+        "dep-latency/latency/projected/killed/produced "
+        "{chosen_dependency_latency_cycles}/{chosen_latency_cycles}/"
+        "{chosen_projected_live_units}/"
         "{chosen_killed_live_units}/{chosen_produced_live_units}, rejected "
-        "projected/killed/produced {rejected_projected_live_units}/"
+        "dep-latency/latency/projected/killed/produced "
+        "{rejected_dependency_latency_cycles}/{rejected_latency_cycles}/"
+        "{rejected_projected_live_units}/"
         "{rejected_killed_live_units}/{rejected_produced_live_units}"
     ),
     params=(
@@ -399,9 +403,13 @@ ERR_BACKEND_015 = ErrorDef(
         ErrorParam("candidate_count", ParamKind.U32),
         ErrorParam("chosen_packet", ParamKind.STRING),
         ErrorParam("rejected_packet", ParamKind.STRING),
+        ErrorParam("chosen_dependency_latency_cycles", ParamKind.U32),
+        ErrorParam("chosen_latency_cycles", ParamKind.U32),
         ErrorParam("chosen_projected_live_units", ParamKind.U64),
         ErrorParam("chosen_killed_live_units", ParamKind.U64),
         ErrorParam("chosen_produced_live_units", ParamKind.U64),
+        ErrorParam("rejected_dependency_latency_cycles", ParamKind.U32),
+        ErrorParam("rejected_latency_cycles", ParamKind.U32),
         ErrorParam("rejected_projected_live_units", ParamKind.U64),
         ErrorParam("rejected_killed_live_units", ParamKind.U64),
         ErrorParam("rejected_produced_live_units", ParamKind.U64),

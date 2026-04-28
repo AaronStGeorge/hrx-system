@@ -3377,9 +3377,13 @@ static const loom_error_param_def_t loom_err_backend_015_params[] = {
     {"candidate_count", LOOM_PARAM_U32},
     {"chosen_packet", LOOM_PARAM_STRING},
     {"rejected_packet", LOOM_PARAM_STRING},
+    {"chosen_dependency_latency_cycles", LOOM_PARAM_U32},
+    {"chosen_latency_cycles", LOOM_PARAM_U32},
     {"chosen_projected_live_units", LOOM_PARAM_U64},
     {"chosen_killed_live_units", LOOM_PARAM_U64},
     {"chosen_produced_live_units", LOOM_PARAM_U64},
+    {"rejected_dependency_latency_cycles", LOOM_PARAM_U32},
+    {"rejected_latency_cycles", LOOM_PARAM_U32},
     {"rejected_projected_live_units", LOOM_PARAM_U64},
     {"rejected_killed_live_units", LOOM_PARAM_U64},
     {"rejected_produced_live_units", LOOM_PARAM_U64},
@@ -3392,17 +3396,20 @@ static const loom_error_def_t loom_err_backend_015 = {
     .summary = "Schedule candidate selection recorded.",
     .message_template =
         "target '{target_key}' export '{export_name}' config '{config_key}' "
-        "'@{function_name}' pressure scheduler chose '{chosen_packet}' over "
+        "'@{function_name}' scheduler chose '{chosen_packet}' over "
         "'{rejected_packet}' at block '{block_name}' ordinal "
         "{scheduled_ordinal}: {candidate_count} ready candidate(s), chosen "
-        "projected/killed/produced "
+        "dep-latency/latency/projected/killed/produced "
+        "{chosen_dependency_latency_cycles}/{chosen_latency_cycles}/"
         "{chosen_projected_live_units}/{chosen_killed_live_units}/"
-        "{chosen_produced_live_units}, rejected projected/killed/produced "
+        "{chosen_produced_live_units}, rejected "
+        "dep-latency/latency/projected/killed/produced "
+        "{rejected_dependency_latency_cycles}/{rejected_latency_cycles}/"
         "{rejected_projected_live_units}/{rejected_killed_live_units}/"
         "{rejected_produced_live_units}",
     .fix_hint_template = NULL,
     .param_defs = loom_err_backend_015_params,
-    .param_count = 15,
+    .param_count = 19,
 };
 
 static const loom_error_param_def_t loom_err_backend_016_params[] = {

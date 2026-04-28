@@ -115,7 +115,7 @@ static iree_status_t loom_amdgpu_loom_check_parse_emit_options(
     loom_amdgpu_loom_check_emit_options_t* out_options) {
   IREE_ASSERT_ARGUMENT(out_options);
   *out_options = (loom_amdgpu_loom_check_emit_options_t){
-      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
+      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING,
       .wait_mode = LOOM_AMDGPU_LOOM_CHECK_WAIT_MODE_AUTO,
   };
 

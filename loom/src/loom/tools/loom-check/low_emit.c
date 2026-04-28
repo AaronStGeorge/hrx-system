@@ -24,9 +24,14 @@ iree_status_t loom_check_low_emit_parse_schedule_strategy(
     *out_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE;
     return iree_ok_status();
   }
+  if (iree_string_view_equal(value, IREE_SV("latency-hiding"))) {
+    *out_strategy = LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING;
+    return iree_ok_status();
+  }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
-      "%.*s option 'strategy' expected 'source' or 'pressure', got '%.*s'",
+      "%.*s option 'strategy' expected 'source', 'pressure', or "
+      "'latency-hiding', got '%.*s'",
       (int)option_scope.size, option_scope.data, (int)value.size, value.data);
 }
 

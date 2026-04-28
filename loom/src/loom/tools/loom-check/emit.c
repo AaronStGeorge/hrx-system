@@ -275,18 +275,8 @@ static iree_status_t loom_check_emit_parse_low_schedule_option(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "duplicate low-schedule-json option 'strategy'");
     }
-    if (iree_string_view_equal(value, IREE_SV("source"))) {
-      request->low_schedule_strategy =
-          LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY;
-    } else if (iree_string_view_equal(value, IREE_SV("pressure"))) {
-      request->low_schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE;
-    } else {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low-schedule-json option 'strategy' expected 'source' or "
-          "'pressure', got '%.*s'",
-          (int)value.size, value.data);
-    }
+    IREE_RETURN_IF_ERROR(loom_check_low_emit_parse_schedule_strategy(
+        value, IREE_SV("low-schedule-json"), &request->low_schedule_strategy));
     request->has_low_schedule_strategy_option = true;
     return iree_ok_status();
   }
@@ -363,18 +353,8 @@ static iree_status_t loom_check_emit_parse_low_packet_option(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "duplicate low-packet-json option 'strategy'");
     }
-    if (iree_string_view_equal(value, IREE_SV("source"))) {
-      request->low_schedule_strategy =
-          LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY;
-    } else if (iree_string_view_equal(value, IREE_SV("pressure"))) {
-      request->low_schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE;
-    } else {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low-packet-json option 'strategy' expected 'source' or 'pressure', "
-          "got '%.*s'",
-          (int)value.size, value.data);
-    }
+    IREE_RETURN_IF_ERROR(loom_check_low_emit_parse_schedule_strategy(
+        value, IREE_SV("low-packet-json"), &request->low_schedule_strategy));
     request->has_low_schedule_strategy_option = true;
     return iree_ok_status();
   }

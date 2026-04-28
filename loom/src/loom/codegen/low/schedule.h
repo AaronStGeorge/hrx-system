@@ -75,6 +75,8 @@ typedef enum loom_low_schedule_strategy_e {
   LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY = 0,
   // Chooses ready nodes using a target-independent register-pressure score.
   LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE = 1,
+  // Chooses ready nodes using latency hiding before register-pressure ties.
+  LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING = 2,
 } loom_low_schedule_strategy_t;
 
 // One scheduled operation in a low function body.
@@ -147,9 +149,9 @@ typedef struct loom_low_schedule_pressure_step_t {
   uint64_t live_units_after;
 } loom_low_schedule_pressure_step_t;
 
-// Pressure-strategy candidate decision recorded when a ready set has an
-// alternative to reject. This is intentionally compact: it captures the chosen
-// candidate and the best rejected alternative, which is enough to explain local
+// Scheduler candidate decision recorded when a ready set has an alternative to
+// reject. This is intentionally compact: it captures the chosen candidate and
+// the best rejected alternative, which is enough to explain local latency and
 // pressure tradeoffs without recording every ready-set member in large blocks.
 typedef struct loom_low_schedule_candidate_decision_t {
   // Region block containing the decision.
@@ -162,6 +164,14 @@ typedef struct loom_low_schedule_candidate_decision_t {
   uint32_t chosen_node;
   // Best rejected schedule node, or LOOM_LOW_SCHEDULE_NODE_NONE.
   uint32_t rejected_node;
+  // Chosen maximum same-block producer latency among SSA operands.
+  uint16_t chosen_dependency_latency_cycles;
+  // Chosen descriptor latency in cycles.
+  uint16_t chosen_latency_cycles;
+  // Best rejected maximum same-block producer latency among SSA operands.
+  uint16_t rejected_dependency_latency_cycles;
+  // Best rejected descriptor latency in cycles.
+  uint16_t rejected_latency_cycles;
   // Chosen aggregate live register units after scheduling the node.
   uint64_t chosen_projected_live_units;
   // Chosen live register units killed by scheduling the node.
@@ -416,11 +426,11 @@ typedef struct loom_low_schedule_sidecar_t {
   const loom_low_schedule_pressure_step_t* pressure_steps;
   // Number of pressure-model steps.
   iree_host_size_t pressure_step_count;
-  // Pressure candidate decisions in scheduled order when requested by
-  // diagnostic flags. Empty for source-priority scheduling and ordinary
-  // pressure scheduling without candidate diagnostics.
+  // Candidate decisions in scheduled order when requested by diagnostic flags.
+  // Empty for source-priority scheduling and scored scheduling without
+  // candidate diagnostics.
   const loom_low_schedule_candidate_decision_t* candidate_decisions;
-  // Number of pressure candidate decision records.
+  // Number of candidate decision records.
   iree_host_size_t candidate_decision_count;
   // Descriptor resource uses in scheduled order. Empty when scheduled nodes do
   // not reference descriptor issue-use rows.

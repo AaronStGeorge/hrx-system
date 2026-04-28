@@ -378,6 +378,7 @@ static iree_status_t loom_amdgpu_module_compile_build_kernel_contribution(
   loom_low_packetization_t packetization = {0};
   const loom_low_packetization_options_t packetization_options = {
       .descriptor_registry = &low_registry->registry,
+      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING,
       .allocation_fixed_values = plan->fixed_values,
       .allocation_fixed_value_count = plan->fixed_value_count,
       .emitter = loom_target_module_compile_emitter(diagnostic_emitter),
