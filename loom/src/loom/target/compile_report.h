@@ -45,7 +45,36 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS = 1u << 6,
   // Source-to-target-low selection rows were recorded or counted.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS = 1u << 7,
+  // Residual target move causes were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES = 1u << 8,
 };
+
+typedef enum loom_target_compile_report_move_cause_e {
+  // No residual target move cause was recorded.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_NONE = 0,
+  // A low constant packet materialized an immediate value into a register.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_CONSTANT_MATERIALIZATION,
+  // A low.copy packet survived allocation and must be emitted as a move.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_COPY,
+  // A low.slice packet survived allocation and must be emitted as moves.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_SLICE,
+  // A low.concat packet survived allocation and must be emitted as moves.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_CONCAT,
+  // A control-flow edge payload must be emitted as moves.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_BRANCH_EDGE,
+  // A tied, destructive, or fixed operand constraint required repair moves.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_CONSTRAINT_REPAIR,
+  // ABI lowering inserted entry, exit, or call-boundary copies.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_ABI_COPY,
+  // Spill or reload materialization inserted target moves.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_SPILL_RELOAD,
+  // Partial-register lowering inserted target moves.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_PARTIAL_REGISTER_REPAIR,
+  // A residual move could not be assigned a more precise structural cause.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_UNKNOWN,
+  // Number of residual target move cause values, including NONE.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT,
+} loom_target_compile_report_move_cause_t;
 
 typedef enum loom_target_compile_report_source_low_selection_kind_e {
   // No source-low selection was recorded.
@@ -55,6 +84,14 @@ typedef enum loom_target_compile_report_source_low_selection_kind_e {
   // Selection came from a target-owned callback plan.
   LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_PLAN = 2,
 } loom_target_compile_report_source_low_selection_kind_t;
+
+// Residual move-cause counters for one category.
+typedef struct loom_target_compile_report_move_cause_counts_t {
+  // Number of target packets attributed to this cause.
+  uint64_t packet_count;
+  // Number of register-unit moves attributed to this cause.
+  uint64_t unit_count;
+} loom_target_compile_report_move_cause_counts_t;
 
 // One register-pressure peak row copied into a compile report.
 typedef struct loom_target_compile_report_pressure_row_t {
@@ -216,6 +253,10 @@ typedef struct loom_target_compile_report_t {
   uint64_t source_low_selected_op_count;
   // Number of low operations emitted during source-to-low lowering.
   uint64_t source_low_emitted_op_count;
+  // Residual target move counts indexed by
+  // loom_target_compile_report_move_cause_t.
+  loom_target_compile_report_move_cause_counts_t
+      move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT];
   // Caller-owned pressure row storage.
   loom_target_compile_report_pressure_row_t* pressure_rows;
   // Capacity of |pressure_rows|.
@@ -280,6 +321,12 @@ void loom_target_compile_report_record_allocation(
     loom_target_compile_report_t* report, uint64_t assignment_count,
     uint64_t spill_count, uint64_t spill_plan_count,
     uint64_t coalesced_copy_count, uint64_t materialized_copy_count);
+
+// Records target move materialization attributed to one residual move cause.
+void loom_target_compile_report_record_move_cause(
+    loom_target_compile_report_t* report,
+    loom_target_compile_report_move_cause_t cause, uint64_t packet_count,
+    uint64_t unit_count);
 
 // Records target emission instruction and code-size summary counts in |report|.
 void loom_target_compile_report_record_emission(

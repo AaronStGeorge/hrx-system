@@ -31,15 +31,17 @@ iree_status_t loom_run_hal_candidate_compile(
       .host_allocator = allocator,
       .backend = backend,
   };
-  loom_target_compile_report_initialize(&out_candidate->compile_report);
-  loom_target_compile_report_set_row_storage(&out_candidate->compile_report,
-                                             &options->report_row_storage);
-  out_candidate->compile_report.artifact_kind =
-      LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
-  out_candidate->compile_report.entry_symbol = options->entry_symbol;
-  out_candidate->compile_report.backend_name = backend->name;
-  out_candidate->compile_report.target_family_name =
-      backend->target_family_name;
+  loom_target_compile_report_t* report =
+      options->report != NULL ? &out_candidate->compile_report : NULL;
+  if (report != NULL) {
+    loom_target_compile_report_initialize(report);
+    loom_target_compile_report_set_row_storage(report,
+                                               &options->report_row_storage);
+    report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
+    report->entry_symbol = options->entry_symbol;
+    report->backend_name = backend->name;
+    report->target_family_name = backend->target_family_name;
+  }
 
   iree_status_t status = iree_ok_status();
   if (backend->select_target == NULL || backend->compile == NULL) {
@@ -53,41 +55,36 @@ iree_status_t loom_run_hal_candidate_compile(
     status = backend->select_target(backend, runtime, allocator,
                                     &out_candidate->target);
   }
-  if (iree_status_is_ok(status)) {
-    out_candidate->compile_report.target_preset_key =
-        out_candidate->target.preset_key;
+  if (iree_status_is_ok(status) && report != NULL) {
+    report->target_preset_key = out_candidate->target.preset_key;
   }
   if (iree_status_is_ok(status)) {
-    status = backend->compile(
-        backend, run_module->module, &out_candidate->target,
-        options->entry_symbol, options->diagnostic_sink,
-        options->source_resolver, options->max_errors,
-        &out_candidate->compile_report, allocator, &out_candidate->executable);
+    status =
+        backend->compile(backend, run_module->module, &out_candidate->target,
+                         options->entry_symbol, options->diagnostic_sink,
+                         options->source_resolver, options->max_errors, report,
+                         allocator, &out_candidate->executable);
     if (iree_status_is_ok(status) &&
         out_candidate->executable.target_bundle == NULL) {
       out_candidate->executable.target_bundle =
           out_candidate->target.target_bundle;
     }
   }
-  out_candidate->compile_report.artifact_kind =
-      LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
-  out_candidate->compile_report.entry_symbol = options->entry_symbol;
-  out_candidate->compile_report.backend_name = backend->name;
-  out_candidate->compile_report.target_family_name =
-      backend->target_family_name;
-  if (iree_status_is_ok(status)) {
-    out_candidate->compile_report.target_preset_key =
-        out_candidate->target.preset_key;
+  if (report != NULL) {
+    report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
+    report->entry_symbol = options->entry_symbol;
+    report->backend_name = backend->name;
+    report->target_family_name = backend->target_family_name;
   }
-  if (iree_status_is_ok(status)) {
-    out_candidate->compile_report.executable_format =
-        out_candidate->executable.executable_format;
+  if (iree_status_is_ok(status) && report != NULL) {
+    report->target_preset_key = out_candidate->target.preset_key;
+    report->executable_format = out_candidate->executable.executable_format;
     loom_target_compile_report_record_artifact_size(
-        &out_candidate->compile_report,
-        out_candidate->executable.executable_data.data_length);
+        report, out_candidate->executable.executable_data.data_length);
   }
-  loom_target_compile_report_record_status(&out_candidate->compile_report,
-                                           status);
+  if (report != NULL) {
+    loom_target_compile_report_record_status(report, status);
+  }
   loom_run_hal_candidate_publish_compile_report(options, out_candidate);
   if (!iree_status_is_ok(status)) {
     loom_run_hal_candidate_deinitialize(out_candidate);

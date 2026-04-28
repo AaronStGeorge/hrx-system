@@ -12,8 +12,12 @@ namespace loom {
 namespace {
 
 TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
+  constexpr uint32_t kSourceAssignmentIndex = 0;
+  constexpr uint32_t kResultAssignmentIndex = 1;
+  constexpr uint32_t kEdgeCopyCount = 1;
   loom_target_compile_report_pressure_row_t pressure_rows[1] = {};
   loom_target_compile_report_spill_row_t spill_rows[1] = {};
+  loom_low_schedule_node_t schedule_nodes[13] = {};
   const loom_target_compile_report_row_storage_t row_storage = {
       .pressure_rows = pressure_rows,
       .pressure_row_capacity = IREE_ARRAYSIZE(pressure_rows),
@@ -66,6 +70,29 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
           .location_count = 1,
       },
   };
+  const loom_low_allocation_copy_decision_t copy_decisions[] = {
+      {
+          .source_value_id = 4,
+          .result_value_id = 5,
+          .source_assignment_index = kSourceAssignmentIndex,
+          .result_assignment_index = kResultAssignmentIndex,
+          .kind = LOOM_LOW_ALLOCATION_COPY_MATERIALIZED,
+      },
+  };
+  const loom_low_allocation_edge_copy_t edge_copies[kEdgeCopyCount] = {
+      {
+          .source_value_id = 4,
+          .destination_value_id = 5,
+          .source_assignment_index = kSourceAssignmentIndex,
+          .destination_assignment_index = kResultAssignmentIndex,
+      },
+  };
+  const loom_low_allocation_edge_copy_group_t edge_copy_groups[] = {
+      {
+          .copy_start = 0,
+          .copy_count = kEdgeCopyCount,
+      },
+  };
   const loom_low_allocation_spill_plan_t spill_plans[] = {
       {
           .value_id = 4,
@@ -91,6 +118,7 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
   const loom_low_packetization_t packetization = {
       .schedule =
           {
+              .nodes = schedule_nodes,
               .node_count = 13,
               .dependency_count = 6,
               .scheduled_node_count = 12,
@@ -110,6 +138,12 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
               .assignment_count = IREE_ARRAYSIZE(assignments),
               .spill_plans = spill_plans,
               .spill_plan_count = IREE_ARRAYSIZE(spill_plans),
+              .copy_decisions = copy_decisions,
+              .copy_decision_count = IREE_ARRAYSIZE(copy_decisions),
+              .edge_copies = edge_copies,
+              .edge_copy_count = IREE_ARRAYSIZE(edge_copies),
+              .edge_copy_groups = edge_copy_groups,
+              .edge_copy_group_count = IREE_ARRAYSIZE(edge_copy_groups),
               .spill_count = IREE_ARRAYSIZE(spill_plans),
               .coalesced_copy_count = 3,
               .materialized_copy_count = 1,
@@ -122,6 +156,8 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION));
+  EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
+                                LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES));
   EXPECT_TRUE(iree_all_bits_set(
       report.detail_flags, LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS));
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
@@ -130,6 +166,20 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
   EXPECT_EQ(report.register_pressure_summary_count, 2u);
   EXPECT_EQ(report.register_pressure_peak_live_units, 11u);
   EXPECT_EQ(report.allocation_spill_count, 2u);
+  EXPECT_EQ(report.move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_COPY]
+                .packet_count,
+            1u);
+  EXPECT_EQ(report.move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_COPY]
+                .unit_count,
+            1u);
+  EXPECT_EQ(
+      report.move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_BRANCH_EDGE]
+          .packet_count,
+      1u);
+  EXPECT_EQ(
+      report.move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_BRANCH_EDGE]
+          .unit_count,
+      1u);
   EXPECT_EQ(report.pressure_row_total_count, 2u);
   EXPECT_EQ(report.pressure_row_count, 1u);
   EXPECT_EQ(report.pressure_rows[0].peak_live_units, 7u);

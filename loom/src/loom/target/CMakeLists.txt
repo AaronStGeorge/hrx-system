@@ -135,6 +135,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::packetization
     loom::src::loom::ir
+    loom::src::loom::ops::low
   PUBLIC
 )
 

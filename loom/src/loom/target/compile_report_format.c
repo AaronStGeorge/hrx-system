@@ -69,6 +69,38 @@ static iree_string_view_t loom_target_compile_report_source_low_selection_name(
   }
 }
 
+typedef struct loom_target_compile_report_move_cause_descriptor_t {
+  // Residual move cause used as the report counter index.
+  loom_target_compile_report_move_cause_t cause;
+  // Stable text name emitted in compile reports.
+  iree_string_view_t name;
+} loom_target_compile_report_move_cause_descriptor_t;
+
+static const loom_target_compile_report_move_cause_descriptor_t
+    loom_target_compile_report_move_cause_descriptors[] = {
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_CONSTANT_MATERIALIZATION,
+         IREE_SVL("constant_materialization")},
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_COPY, IREE_SVL("low_copy")},
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_SLICE,
+         IREE_SVL("low_slice")},
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_CONCAT,
+         IREE_SVL("low_concat")},
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_BRANCH_EDGE,
+         IREE_SVL("branch_edge")},
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_CONSTRAINT_REPAIR,
+         IREE_SVL("operand_constraint_repair")},
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_ABI_COPY, IREE_SVL("abi_copy")},
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_SPILL_RELOAD,
+         IREE_SVL("spill_reload")},
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_PARTIAL_REGISTER_REPAIR,
+         IREE_SVL("partial_register_repair")},
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_UNKNOWN, IREE_SVL("unknown")},
+};
+static_assert(
+    IREE_ARRAYSIZE(loom_target_compile_report_move_cause_descriptors) ==
+        LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT - 1,
+    "move cause descriptor table must cover each reportable move cause");
+
 static iree_string_view_t loom_target_compile_report_type_kind_name(
     uint32_t type_kind) {
   switch (type_kind) {
@@ -115,6 +147,34 @@ static iree_string_view_t loom_target_compile_report_scalar_type_name(
 static iree_string_view_t loom_target_compile_report_non_empty(
     iree_string_view_t value) {
   return iree_string_view_is_empty(value) ? IREE_SV("-") : value;
+}
+
+static void loom_target_compile_report_accumulate_move_cause(
+    const loom_target_compile_report_move_cause_counts_t* counts,
+    uint64_t* kind_count, uint64_t* packet_count, uint64_t* unit_count) {
+  if (counts->packet_count == 0 && counts->unit_count == 0) {
+    return;
+  }
+  ++*kind_count;
+  *packet_count += counts->packet_count;
+  *unit_count += counts->unit_count;
+}
+
+static void loom_target_compile_report_move_cause_totals(
+    const loom_target_compile_report_t* report, uint64_t* out_kind_count,
+    uint64_t* out_packet_count, uint64_t* out_unit_count) {
+  *out_kind_count = 0;
+  *out_packet_count = 0;
+  *out_unit_count = 0;
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(loom_target_compile_report_move_cause_descriptors);
+       ++i) {
+    const loom_target_compile_report_move_cause_descriptor_t* descriptor =
+        &loom_target_compile_report_move_cause_descriptors[i];
+    loom_target_compile_report_accumulate_move_cause(
+        &report->move_causes[descriptor->cause], out_kind_count,
+        out_packet_count, out_unit_count);
+  }
 }
 
 static iree_status_t loom_target_compile_report_append_string_field(
@@ -181,6 +241,20 @@ static iree_status_t loom_target_compile_report_format_summary(
   }
 
   if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES)) {
+    uint64_t kind_count = 0;
+    uint64_t packet_count = 0;
+    uint64_t unit_count = 0;
+    loom_target_compile_report_move_cause_totals(report, &kind_count,
+                                                 &packet_count, &unit_count);
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        "COMPILE-REPORT: move_causes kinds=%" PRIu64 " packets=%" PRIu64
+        " units=%" PRIu64 "\n",
+        kind_count, packet_count, unit_count));
+  }
+
+  if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_EMISSION)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder,
@@ -226,6 +300,35 @@ static iree_status_t loom_target_compile_report_format_summary(
         report->spill_row_count, report->spill_row_total_count));
   }
 
+  return iree_ok_status();
+}
+
+static iree_status_t loom_target_compile_report_format_move_cause(
+    iree_string_builder_t* builder,
+    const loom_target_compile_report_move_cause_descriptor_t* descriptor,
+    const loom_target_compile_report_move_cause_counts_t* counts) {
+  if (counts->packet_count == 0 && counts->unit_count == 0) {
+    return iree_ok_status();
+  }
+  return iree_string_builder_append_format(
+      builder,
+      "COMPILE-REPORT: move_cause[%.*s] packets=%" PRIu64 " units=%" PRIu64
+      "\n",
+      (int)descriptor->name.size, descriptor->name.data, counts->packet_count,
+      counts->unit_count);
+}
+
+static iree_status_t loom_target_compile_report_format_move_causes(
+    const loom_target_compile_report_t* report,
+    iree_string_builder_t* builder) {
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(loom_target_compile_report_move_cause_descriptors);
+       ++i) {
+    const loom_target_compile_report_move_cause_descriptor_t* descriptor =
+        &loom_target_compile_report_move_cause_descriptors[i];
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_format_move_cause(
+        builder, descriptor, &report->move_causes[descriptor->cause]));
+  }
   return iree_ok_status();
 }
 
@@ -343,6 +446,8 @@ iree_status_t loom_target_compile_report_format_text(
   IREE_RETURN_IF_ERROR(
       loom_target_compile_report_format_summary(report, builder));
   if (options->mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_format_move_causes(report, builder));
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_pressure_rows(report, builder));
     IREE_RETURN_IF_ERROR(

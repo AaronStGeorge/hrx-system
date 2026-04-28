@@ -98,6 +98,26 @@ void loom_target_compile_report_record_allocation(
   report->allocation_materialized_copy_count = materialized_copy_count;
 }
 
+void loom_target_compile_report_record_move_cause(
+    loom_target_compile_report_t* report,
+    loom_target_compile_report_move_cause_t cause, uint64_t packet_count,
+    uint64_t unit_count) {
+  IREE_ASSERT_ARGUMENT(report);
+  if (packet_count == 0 && unit_count == 0) {
+    return;
+  }
+  if (cause <= LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_NONE ||
+      cause >= LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT) {
+    IREE_ASSERT(false, "invalid residual move cause");
+    return;
+  }
+  report->detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES;
+  loom_target_compile_report_move_cause_counts_t* counts =
+      &report->move_causes[cause];
+  counts->packet_count += packet_count;
+  counts->unit_count += unit_count;
+}
+
 void loom_target_compile_report_record_emission(
     loom_target_compile_report_t* report, uint64_t instruction_count,
     uint64_t code_byte_count, uint64_t code_storage_byte_count) {

@@ -43,6 +43,8 @@ constexpr char kHalSource[] =
 
 int kFakeHalTarget = 0;
 int kFakeHalRuntime = 0;
+bool g_fake_hal_compile_was_called = false;
+loom_target_compile_report_t* g_fake_hal_compile_report = nullptr;
 const uint8_t kFakeHalExecutableData[] = {0x7F, 'E', 'L', 'F'};
 static const loom_target_snapshot_t kFakeSnapshot = {
     .name = IREE_SVL("fake-snapshot"),
@@ -97,8 +99,9 @@ iree_status_t FakeHalCompile(
   (void)diagnostic_sink;
   (void)source_resolver;
   (void)max_errors;
-  (void)report;
   (void)allocator;
+  g_fake_hal_compile_was_called = true;
+  g_fake_hal_compile_report = report;
   if (target->data != &kFakeHalTarget) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unexpected fake HAL target payload");
@@ -176,9 +179,13 @@ TEST_F(HalCandidateTest, CompileHalExecutableCandidate) {
   options.report = &report;
 
   loom_run_hal_candidate_t candidate = {};
+  g_fake_hal_compile_was_called = false;
+  g_fake_hal_compile_report = nullptr;
   IREE_ASSERT_OK(loom_run_hal_candidate_compile(
       &kFakeHalBackend, FakeHalRuntime(), &run_module, &options,
       iree_allocator_system(), &candidate));
+  EXPECT_TRUE(g_fake_hal_compile_was_called);
+  EXPECT_EQ(g_fake_hal_compile_report, &candidate.compile_report);
   EXPECT_EQ(candidate.backend, &kFakeHalBackend);
   EXPECT_EQ(candidate.target.data, &kFakeHalTarget);
   EXPECT_EQ(candidate.target.target_bundle, &kFakeTargetBundle);
@@ -203,6 +210,29 @@ TEST_F(HalCandidateTest, CompileHalExecutableCandidate) {
 
   loom_run_hal_candidate_deinitialize(&candidate);
   EXPECT_EQ(candidate.backend, nullptr);
+  loom_run_module_deinitialize(&run_module);
+}
+
+TEST_F(HalCandidateTest, CompileHalExecutableCandidateWithoutReport) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kHalSource), &run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCompileOptions(&run_module, &options);
+
+  loom_run_hal_candidate_t candidate = {};
+  g_fake_hal_compile_was_called = false;
+  g_fake_hal_compile_report = nullptr;
+  IREE_ASSERT_OK(loom_run_hal_candidate_compile(
+      &kFakeHalBackend, FakeHalRuntime(), &run_module, &options,
+      iree_allocator_system(), &candidate));
+  EXPECT_TRUE(g_fake_hal_compile_was_called);
+  EXPECT_EQ(g_fake_hal_compile_report, nullptr);
+  EXPECT_EQ(candidate.compile_report.detail_flags,
+            LOOM_TARGET_COMPILE_REPORT_DETAIL_NONE);
+  EXPECT_EQ(candidate.compile_report.artifact_size, 0u);
+
+  loom_run_hal_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);
 }
 

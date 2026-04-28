@@ -66,6 +66,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   loom_target_compile_report_record_artifact_size(&report, 128);
   loom_target_compile_report_record_schedule(&report, 5, 5, 4, 2, 1, 1, 1, 7);
   loom_target_compile_report_record_allocation(&report, 6, 1, 1, 2, 0);
+  loom_target_compile_report_record_move_cause(
+      &report, LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_CONSTANT_MATERIALIZATION,
+      3, 3);
+  loom_target_compile_report_record_move_cause(
+      &report, LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_CONCAT, 2, 8);
   loom_target_compile_report_record_emission(&report, 8, 64, 80);
   loom_target_compile_report_record_memory(&report, 16, 32);
   report.pressure_rows = pressure_rows;
@@ -100,6 +105,16 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("pressure_rows copied=1 total=2"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("move_causes kinds=2 packets=5 "
+                                          "units=11"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("move_cause[low_concat] packets=2 "
+                                          "units=8"),
+                                  0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
       iree_string_view_find(output, IREE_SV("pressure[0] class=test.i32"), 0),

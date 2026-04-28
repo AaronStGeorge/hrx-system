@@ -190,5 +190,26 @@ TEST_F(IreeVmCandidateTest, CompileVmArchiveCandidate) {
   loom_run_module_deinitialize(&run_module);
 }
 
+TEST_F(IreeVmCandidateTest, CompileVmArchiveCandidateWithoutReport) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kVmSource), &run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCompileOptions(&run_module, &options);
+
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_compile(
+      &run_module, &options, iree_allocator_system(), &candidate));
+  EXPECT_GT(candidate.archive.data_length, 0u);
+  EXPECT_EQ(candidate.compile_report.detail_flags,
+            LOOM_TARGET_COMPILE_REPORT_DETAIL_NONE);
+  EXPECT_EQ(candidate.compile_report.artifact_size, 0u);
+  EXPECT_EQ(candidate.compile_report.pressure_rows, nullptr);
+  EXPECT_EQ(candidate.compile_report.source_low_rows, nullptr);
+
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&run_module);
+}
+
 }  // namespace
 }  // namespace loom
