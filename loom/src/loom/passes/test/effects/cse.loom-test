@@ -168,3 +168,30 @@ low.func.def target(@test_target) @descriptor_low_write_blocks_read_cse(%ptr: re
   %out = low.op<test.add.v4i32>(%before, %after) : (reg<test.i32 x4>, reg<test.i32 x4>) -> reg<test.i32 x4>
   low.return %out : reg<test.i32 x4>
 }
+
+// ====
+
+// low.copy and low.concat are virtual-register identity constructors. They may
+// look structurally identical, but each instance names distinct storage and
+// must not be folded by value CSE.
+// RUN: pass cse
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @low_structural_identities_do_not_cse(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x2>, reg<test.i32 x2>) {
+  %copy0 = low.copy %lhs : reg<test.i32> -> reg<test.i32>
+  %copy1 = low.copy %lhs : reg<test.i32> -> reg<test.i32>
+  %pair0 = low.concat(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+  %pair1 = low.concat(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+  low.return %copy0, %copy1, %pair0, %pair1 : reg<test.i32>, reg<test.i32>, reg<test.i32 x2>, reg<test.i32 x2>
+}
+
+// ----
+target.profile @test_target preset("test-low")
+
+low.func.def target(@test_target) @low_structural_identities_do_not_cse(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>, reg<test.i32 x2>, reg<test.i32 x2>) {
+  %copy0 = low.copy %lhs : reg<test.i32> -> reg<test.i32>
+  %copy1 = low.copy %lhs : reg<test.i32> -> reg<test.i32>
+  %pair0 = low.concat(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+  %pair1 = low.concat(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+  low.return %copy0, %copy1, %pair0, %pair1 : reg<test.i32>, reg<test.i32>, reg<test.i32 x2>, reg<test.i32 x2>
+}

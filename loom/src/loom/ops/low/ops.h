@@ -358,7 +358,7 @@ iree_status_t loom_low_const_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_LOW_COPY: Explicit virtual-register copy used by lowering and allocation.
+// LOOM_OP_LOW_COPY: Explicit virtual-register copy used by lowering and allocation. Each copy produces a fresh virtual-register identity.
 // %copy = low.copy %value : reg<amdgpu.vgpr x1> -> reg<amdgpu.vgpr x1>
 LOOM_DEFINE_ISA(loom_low_copy_isa, LOOM_OP_LOW_COPY)
 LOOM_DEFINE_OPERAND(loom_low_copy_source, 0)
@@ -390,7 +390,7 @@ iree_status_t loom_low_slice_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_LOW_CONCAT: Compose one register-range value from ordered register subranges.
+// LOOM_OP_LOW_CONCAT: Compose one fresh register-range identity from ordered register subranges.
 // %pair = low.concat(%lo, %hi) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
 LOOM_DEFINE_ISA(loom_low_concat_isa, LOOM_OP_LOW_CONCAT)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_concat_sources, 0)
