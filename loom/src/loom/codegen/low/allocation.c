@@ -49,6 +49,9 @@ typedef struct loom_low_allocation_build_state_t {
   loom_liveness_analysis_t liveness;
   // Mutable assignment records being built.
   loom_low_allocation_assignment_t* assignments;
+  // Dense liveness-interval-index to assignment-index table. Missing entries
+  // contain UINT32_MAX.
+  uint32_t* assignment_indices_by_interval;
   // Mutable spill materialization plan records being built.
   loom_low_allocation_spill_plan_t* spill_plans;
   // Mutable remark records being built.
@@ -1091,16 +1094,38 @@ static bool loom_low_allocation_assignment_is_coalescable(
       assignment->location_kind);
 }
 
+static bool loom_low_allocation_interval_index_for_value(
+    const loom_low_allocation_build_state_t* state, loom_value_id_t value_id,
+    uint32_t* out_interval_index) {
+  if (value_id >= state->liveness.value_capacity ||
+      !state->liveness.value_interval_indices) {
+    return false;
+  }
+  const uint32_t interval_index =
+      state->liveness.value_interval_indices[value_id];
+  if (interval_index == UINT32_MAX ||
+      interval_index >= state->liveness.interval_count) {
+    return false;
+  }
+  *out_interval_index = interval_index;
+  return true;
+}
+
 static iree_status_t loom_low_allocation_assignment_index_for_value(
     const loom_low_allocation_build_state_t* state, loom_value_id_t value_id,
     uint32_t* out_assignment_index) {
-  for (iree_host_size_t i = 0; i < state->assignment_count; ++i) {
-    if (state->assignments[i].value_id == value_id) {
-      if (i > UINT32_MAX) {
-        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "allocation assignment index exceeds uint32_t");
-      }
-      *out_assignment_index = (uint32_t)i;
+  IREE_ASSERT_ARGUMENT(out_assignment_index);
+  uint32_t interval_index = 0;
+  if (loom_low_allocation_interval_index_for_value(state, value_id,
+                                                   &interval_index)) {
+    const uint32_t assignment_index =
+        state->assignment_indices_by_interval[interval_index];
+    if (assignment_index != UINT32_MAX) {
+      IREE_ASSERT(assignment_index < state->assignment_count,
+                  "assignment index exceeds initialized assignment count");
+      IREE_ASSERT(state->assignments[assignment_index].value_id == value_id,
+                  "assignment index table points at the wrong value");
+      *out_assignment_index = assignment_index;
       return iree_ok_status();
     }
   }
@@ -1110,47 +1135,80 @@ static iree_status_t loom_low_allocation_assignment_index_for_value(
                           (unsigned)value_id);
 }
 
+static iree_status_t loom_low_allocation_append_assignment(
+    loom_low_allocation_build_state_t* state,
+    const loom_low_allocation_assignment_t* assignment,
+    uint32_t* out_assignment_index) {
+  IREE_ASSERT_ARGUMENT(assignment);
+  if (state->assignment_count >= UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "allocation sidecar exceeds uint32_t range");
+  }
+  uint32_t interval_index = 0;
+  if (!loom_low_allocation_interval_index_for_value(state, assignment->value_id,
+                                                    &interval_index)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low allocation saw assignment for value %u outside the analyzed "
+        "liveness value range",
+        (unsigned)assignment->value_id);
+  }
+  if (state->assignment_indices_by_interval[interval_index] != UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "low allocation saw duplicate assignment for value "
+                            "%u",
+                            (unsigned)assignment->value_id);
+  }
+  const uint32_t assignment_index = (uint32_t)state->assignment_count;
+  state->assignments[state->assignment_count++] = *assignment;
+  state->assignment_indices_by_interval[interval_index] = assignment_index;
+  if (out_assignment_index) {
+    *out_assignment_index = assignment_index;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_tied_operand_for_result(
-    const loom_region_t* body, loom_value_id_t result_id, bool* out_has_tie,
+    const loom_module_t* module, loom_value_id_t result_id, bool* out_has_tie,
     loom_value_id_t* out_operand_id) {
   *out_has_tie = false;
   *out_operand_id = LOOM_VALUE_ID_INVALID;
-  loom_block_t* block = NULL;
-  loom_region_for_each_block(body, block) {
-    loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      if (op->tied_result_count == 0) {
-        continue;
-      }
-      const loom_value_id_t* results = loom_op_const_results(op);
-      const loom_value_id_t* operands = loom_op_const_operands(op);
-      const loom_tied_result_t* tied_results = loom_op_tied_results(op);
-      for (uint16_t i = 0; i < op->tied_result_count; ++i) {
-        const loom_tied_result_t tied = tied_results[i];
-        if (tied.result_index >= op->result_count ||
-            tied.operand_index >= op->operand_count) {
-          return iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
-              "low allocation saw malformed tied result metadata");
-        }
-        if (results[tied.result_index] != result_id) {
-          continue;
-        }
-        if (*out_has_tie) {
-          return iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
-              "low allocation result value has multiple tied operands");
-        }
-        if (tied.has_type_change) {
-          return iree_make_status(
-              IREE_STATUS_UNIMPLEMENTED,
-              "low allocation requires explicit materialization for "
-              "type-changing tied results");
-        }
-        *out_has_tie = true;
-        *out_operand_id = operands[tied.operand_index];
-      }
+  const loom_value_t* value = loom_module_value(module, result_id);
+  if (loom_value_is_block_arg(value)) {
+    return iree_ok_status();
+  }
+  const loom_op_t* op = loom_value_def_op(value);
+  if (!op || op->tied_result_count == 0) {
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t* results = loom_op_const_results(op);
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  const loom_tied_result_t* tied_results = loom_op_tied_results(op);
+  for (uint16_t i = 0; i < op->tied_result_count; ++i) {
+    const loom_tied_result_t tied = tied_results[i];
+    if (tied.result_index >= op->result_count ||
+        tied.operand_index >= op->operand_count) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low allocation saw malformed tied result metadata");
     }
+    if (results[tied.result_index] != result_id) {
+      continue;
+    }
+    if (*out_has_tie) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low allocation result value has multiple tied operands");
+    }
+    if (tied.has_type_change) {
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "low allocation requires explicit materialization for "
+          "type-changing tied results");
+    }
+    *out_has_tie = true;
+    *out_operand_id = operands[tied.operand_index];
   }
   return iree_ok_status();
 }
@@ -1162,7 +1220,7 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
   bool has_tie = false;
   loom_value_id_t tied_operand_id = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_allocation_tied_operand_for_result(
-      state->body, interval->value_id, &has_tie, &tied_operand_id));
+      state->module, interval->value_id, &has_tie, &tied_operand_id));
   if (!has_tie) {
     return iree_ok_status();
   }
@@ -1195,19 +1253,19 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
         "overlapping another live interval");
   }
 
-  state->assignments[state->assignment_count++] =
-      (loom_low_allocation_assignment_t){
-          .value_id = interval->value_id,
-          .value_class = interval->value_class,
-          .descriptor_reg_class_id =
-              operand_assignment->descriptor_reg_class_id,
-          .start_point = interval->start_point,
-          .end_point = interval->end_point,
-          .unit_count = interval->unit_count,
-          .location_kind = operand_assignment->location_kind,
-          .location_base = operand_assignment->location_base,
-          .location_count = operand_assignment->location_count,
-      };
+  const loom_low_allocation_assignment_t assignment = {
+      .value_id = interval->value_id,
+      .value_class = interval->value_class,
+      .descriptor_reg_class_id = operand_assignment->descriptor_reg_class_id,
+      .start_point = interval->start_point,
+      .end_point = interval->end_point,
+      .unit_count = interval->unit_count,
+      .location_kind = operand_assignment->location_kind,
+      .location_base = operand_assignment->location_base,
+      .location_count = operand_assignment->location_count,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_append_assignment(state, &assignment, NULL));
   *out_assigned = true;
   return iree_ok_status();
 }
@@ -1221,10 +1279,6 @@ static iree_status_t loom_low_allocation_assign_fixed_interval(
   if (!fixed_value) {
     return iree_ok_status();
   }
-  if (state->assignment_count > UINT32_MAX) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "allocation sidecar exceeds uint32_t range");
-  }
   if (loom_low_allocation_candidate_conflicts(
           state, interval, fixed_value->descriptor_reg_class_id,
           fixed_value->location_kind, fixed_value->location_base,
@@ -1236,18 +1290,19 @@ static iree_status_t loom_low_allocation_assign_fixed_interval(
         "overlapping another live interval or reserved range");
   }
 
-  state->assignments[state->assignment_count++] =
-      (loom_low_allocation_assignment_t){
-          .value_id = interval->value_id,
-          .value_class = interval->value_class,
-          .descriptor_reg_class_id = fixed_value->descriptor_reg_class_id,
-          .start_point = interval->start_point,
-          .end_point = interval->end_point,
-          .unit_count = interval->unit_count,
-          .location_kind = fixed_value->location_kind,
-          .location_base = fixed_value->location_base,
-          .location_count = fixed_value->location_count,
-      };
+  const loom_low_allocation_assignment_t assignment = {
+      .value_id = interval->value_id,
+      .value_class = interval->value_class,
+      .descriptor_reg_class_id = fixed_value->descriptor_reg_class_id,
+      .start_point = interval->start_point,
+      .end_point = interval->end_point,
+      .unit_count = interval->unit_count,
+      .location_kind = fixed_value->location_kind,
+      .location_base = fixed_value->location_base,
+      .location_count = fixed_value->location_count,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_append_assignment(state, &assignment, NULL));
   *out_assigned = true;
   return iree_ok_status();
 }
@@ -1280,18 +1335,19 @@ static iree_status_t loom_low_allocation_append_interval_at_location(
     return iree_ok_status();
   }
 
-  state->assignments[state->assignment_count++] =
-      (loom_low_allocation_assignment_t){
-          .value_id = interval->value_id,
-          .value_class = interval->value_class,
-          .descriptor_reg_class_id = descriptor_reg_class_id,
-          .start_point = interval->start_point,
-          .end_point = interval->end_point,
-          .unit_count = interval->unit_count,
-          .location_kind = location_kind,
-          .location_base = location_base,
-          .location_count = unit_count,
-      };
+  const loom_low_allocation_assignment_t assignment = {
+      .value_id = interval->value_id,
+      .value_class = interval->value_class,
+      .descriptor_reg_class_id = descriptor_reg_class_id,
+      .start_point = interval->start_point,
+      .end_point = interval->end_point,
+      .unit_count = interval->unit_count,
+      .location_kind = location_kind,
+      .location_base = location_base,
+      .location_count = unit_count,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_append_assignment(state, &assignment, NULL));
   *out_assigned = true;
   return iree_ok_status();
 }
@@ -2175,6 +2231,14 @@ static iree_status_t loom_low_allocation_assign_intervals(
       (void**)&state->assignments));
   memset(state->assignments, 0,
          allocatable_count * sizeof(*state->assignments));
+  state->assignment_indices_by_interval = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->arena, state->liveness.interval_count,
+      sizeof(*state->assignment_indices_by_interval),
+      (void**)&state->assignment_indices_by_interval));
+  for (iree_host_size_t i = 0; i < state->liveness.interval_count; ++i) {
+    state->assignment_indices_by_interval[i] = UINT32_MAX;
+  }
   state->spill_plans = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       state->arena, allocatable_count, sizeof(*state->spill_plans),
@@ -2222,8 +2286,7 @@ static iree_status_t loom_low_allocation_assign_intervals(
     loom_low_allocation_class_capacity_t capacity = {0};
     IREE_RETURN_IF_ERROR(loom_low_allocation_class_capacity(
         state, interval->value_class, &capacity));
-    if (state->assignment_count > UINT32_MAX ||
-        state->spill_count > UINT32_MAX) {
+    if (state->spill_count > UINT32_MAX) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "allocation sidecar exceeds uint32_t range");
     }
@@ -2245,9 +2308,7 @@ static iree_status_t loom_low_allocation_assign_intervals(
           (int)reg_class_name.size, reg_class_name.data);
     }
 
-    loom_low_allocation_assignment_t* assignment =
-        &state->assignments[state->assignment_count];
-    *assignment = (loom_low_allocation_assignment_t){
+    const loom_low_allocation_assignment_t assignment = {
         .value_id = interval->value_id,
         .value_class = interval->value_class,
         .descriptor_reg_class_id = capacity.descriptor_reg_class_id,
@@ -2261,7 +2322,9 @@ static iree_status_t loom_low_allocation_assign_intervals(
         .location_count = interval->unit_count,
     };
 
-    uint32_t assignment_index = (uint32_t)state->assignment_count++;
+    uint32_t assignment_index = 0;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_append_assignment(
+        state, &assignment, &assignment_index));
     if (!assigned) {
       ++state->spill_count;
       IREE_RETURN_IF_ERROR(loom_low_allocation_record_spill_plan(
