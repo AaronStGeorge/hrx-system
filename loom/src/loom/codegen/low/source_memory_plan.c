@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "iree/base/api.h"
+#include "loom/codegen/low/memory_access.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/index/ops.h"
@@ -281,6 +282,7 @@ static bool loom_low_source_memory_access_add_view_base_byte_offset(
   *inout_static_byte_offset = static_byte_offset;
   plan->memory_space = view_reference.memory_space;
   plan->root_value_id = view_reference.root_value_id;
+  plan->alias_scope_id = view_reference.alias_scope_id;
   return true;
 }
 
@@ -411,6 +413,115 @@ bool loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
   return loom_value_facts_fit_unsigned_bit_count(offset_facts, bit_count);
 }
 
+static loom_low_memory_space_t loom_low_source_memory_access_space(
+    loom_value_fact_memory_space_t memory_space) {
+  switch (memory_space) {
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR:
+      return LOOM_LOW_MEMORY_SPACE_GLOBAL;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP:
+      return LOOM_LOW_MEMORY_SPACE_WORKGROUP;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE:
+      return LOOM_LOW_MEMORY_SPACE_STACK;
+    case LOOM_VALUE_FACT_MEMORY_SPACE_HOST:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC:
+    case LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN:
+    default:
+      return LOOM_LOW_MEMORY_SPACE_GENERIC;
+  }
+}
+
+static bool loom_low_source_memory_access_lane_byte_envelope(
+    const loom_low_source_memory_access_plan_t* plan, int64_t* out_begin_offset,
+    int64_t* out_end_offset) {
+  IREE_ASSERT_ARGUMENT(plan);
+  IREE_ASSERT_ARGUMENT(out_begin_offset);
+  IREE_ASSERT_ARGUMENT(out_end_offset);
+  *out_begin_offset = 0;
+  *out_end_offset = 0;
+  if (plan->vector_lane_count == 0 || plan->element_byte_count == 0) {
+    return false;
+  }
+
+  int64_t last_lane_offset = 0;
+  if (!iree_checked_mul_i64((int64_t)(plan->vector_lane_count - 1),
+                            plan->vector_lane_byte_stride, &last_lane_offset)) {
+    return false;
+  }
+  int64_t begin_offset = loom_min_i64(0, last_lane_offset);
+  int64_t end_offset = 0;
+  if (!iree_checked_add_i64(loom_max_i64(0, last_lane_offset),
+                            (int64_t)plan->element_byte_count, &end_offset)) {
+    return false;
+  }
+  *out_begin_offset = begin_offset;
+  *out_end_offset = end_offset;
+  return true;
+}
+
+void loom_low_source_memory_access_plan_make_summary(
+    const loom_low_source_memory_access_plan_t* plan,
+    loom_low_byte_interval_t* out_interval,
+    loom_low_memory_access_summary_t* out_summary) {
+  IREE_ASSERT_ARGUMENT(plan);
+  IREE_ASSERT_ARGUMENT(out_interval);
+  IREE_ASSERT_ARGUMENT(out_summary);
+
+  const loom_low_memory_space_t memory_space =
+      loom_low_memory_access_normalize_space(
+          loom_low_source_memory_access_space(plan->memory_space));
+  loom_low_memory_access_precision_flags_t precision_flags = 0;
+  if (memory_space != LOOM_LOW_MEMORY_SPACE_GENERIC) {
+    precision_flags |= LOOM_LOW_MEMORY_ACCESS_PRECISION_SPACE;
+  }
+  uint32_t alias_root_id = LOOM_LOW_MEMORY_ALIAS_ID_NONE;
+  if (plan->alias_scope_id != LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE) {
+    alias_root_id = plan->alias_scope_id;
+    precision_flags |= LOOM_LOW_MEMORY_ACCESS_PRECISION_ROOT;
+  }
+
+  *out_interval = (loom_low_byte_interval_t){0};
+  const loom_low_byte_interval_t* interval = NULL;
+  int64_t lane_begin_offset = 0;
+  int64_t lane_end_offset = 0;
+  if (loom_low_source_memory_access_lane_byte_envelope(plan, &lane_begin_offset,
+                                                       &lane_end_offset)) {
+    loom_value_facts_t begin_facts =
+        loom_value_facts_exact_i64(plan->static_byte_offset);
+    for (uint8_t i = 0; i < plan->dynamic_term_count; ++i) {
+      loom_value_facts_addi(&begin_facts, &plan->dynamic_terms[i].byte_facts,
+                            &begin_facts);
+    }
+    loom_value_facts_t end_facts = begin_facts;
+    const loom_value_facts_t begin_adjustment =
+        loom_value_facts_exact_i64(lane_begin_offset);
+    const loom_value_facts_t end_adjustment =
+        loom_value_facts_exact_i64(lane_end_offset);
+    loom_value_facts_addi(&begin_facts, &begin_adjustment, &begin_facts);
+    loom_value_facts_addi(&end_facts, &end_adjustment, &end_facts);
+    *out_interval = (loom_low_byte_interval_t){
+        .begin_facts = begin_facts,
+        .end_facts = end_facts,
+        .begin_expr_id = LOOM_LOW_MEMORY_EXPR_ID_NONE,
+        .end_expr_id = LOOM_LOW_MEMORY_EXPR_ID_NONE,
+        .precision_flags = LOOM_LOW_BYTE_INTERVAL_PRECISION_BEGIN_RANGE |
+                           LOOM_LOW_BYTE_INTERVAL_PRECISION_END_RANGE |
+                           LOOM_LOW_BYTE_INTERVAL_PRECISION_EXACT_LENGTH,
+    };
+    precision_flags |= LOOM_LOW_MEMORY_ACCESS_PRECISION_INTERVAL;
+    interval = out_interval;
+  }
+
+  *out_summary = (loom_low_memory_access_summary_t){
+      .memory_space = memory_space,
+      .alias_root_id = alias_root_id,
+      .alias_group_id = LOOM_LOW_MEMORY_ALIAS_ID_NONE,
+      .precision_flags = precision_flags,
+      .byte_interval = interval,
+  };
+}
+
 static bool loom_low_source_memory_operation_kind_from_op(
     const loom_op_t* source_op,
     loom_low_source_memory_operation_kind_t* out_operation_kind) {
@@ -484,6 +595,7 @@ static bool loom_low_source_memory_access_plan_from_components(
       .view_value_id = view_value_id,
       .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = LOOM_VALUE_ID_INVALID,
+      .alias_scope_id = LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE,
       .cache_policy = cache_policy,
   };
   *out_diagnostic = (loom_low_source_memory_access_diagnostic_t){0};

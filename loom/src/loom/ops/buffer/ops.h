@@ -22,8 +22,10 @@ extern "C" {
 enum {
   LOOM_OP_BUFFER_ALLOCA = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 0),
   LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 1),
-  LOOM_OP_BUFFER_VIEW = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 2),
-  LOOM_OP_BUFFER_COUNT_ = 3,
+  LOOM_OP_BUFFER_ASSUME_NOALIAS = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 2),
+  LOOM_OP_BUFFER_ASSUME_SAME_ROOT = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 3),
+  LOOM_OP_BUFFER_VIEW = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 4),
+  LOOM_OP_BUFFER_COUNT_ = 5,
 };
 
 // LOOM_OP_BUFFER_ALLOCA: Create a fixed-frame scratch buffer root in workgroup or private memory. Each execution produces a distinct storage identity; identical allocas must not be commoned. The byte length is a physical byte count, and base_alignment is the minimum byte alignment of the root storage base.
@@ -71,6 +73,42 @@ iree_status_t loom_buffer_assume_memory_space_facts(
 iree_status_t loom_buffer_assume_memory_space_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_BUFFER_ASSUME_NOALIAS: Refine an existing buffer root with an explicit noalias contract. The result preserves the same storage identity, extent, memory-space, alignment, and nullability facts, and marks the root identity as comparable for disjointness proofs. External buffer arguments do not gain this proof by default.
+// %unique = buffer.assume.noalias %buffer : buffer
+LOOM_DEFINE_ISA(loom_buffer_assume_noalias_isa, LOOM_OP_BUFFER_ASSUME_NOALIAS)
+LOOM_DEFINE_OPERAND(loom_buffer_assume_noalias_buffer, 0)
+LOOM_DEFINE_RESULT(loom_buffer_assume_noalias_result, 0)
+iree_status_t loom_buffer_assume_noalias_build(
+    loom_builder_t* builder,
+    loom_value_id_t buffer,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_buffer_assume_noalias_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_BUFFER_ASSUME_SAME_ROOT: Refine an existing buffer root to share another buffer's storage root. This is a dominance-scoped assertion for internally specialized dispatches that know two incoming handles refer to the same allocation. The result keeps the first operand's value while inheriting the second operand's root identity and comparable alias scope.
+// %same = buffer.assume.same_root %buffer, %root : buffer
+LOOM_DEFINE_ISA(loom_buffer_assume_same_root_isa, LOOM_OP_BUFFER_ASSUME_SAME_ROOT)
+LOOM_DEFINE_OPERAND(loom_buffer_assume_same_root_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_buffer_assume_same_root_root, 1)
+LOOM_DEFINE_RESULT(loom_buffer_assume_same_root_result, 0)
+iree_status_t loom_buffer_assume_same_root_build(
+    loom_builder_t* builder,
+    loom_value_id_t buffer,
+    loom_value_id_t root,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_buffer_assume_same_root_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_BUFFER_VIEW: Form a typed non-owning view from an opaque buffer root and base byte offset. The result view type carries the address layout.
 // %view = buffer.view %buffer[%offset] : buffer -> view<[%M]xf32, %layout>

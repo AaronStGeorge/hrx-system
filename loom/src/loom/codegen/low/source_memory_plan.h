@@ -18,6 +18,7 @@
 #include <stdint.h>
 
 #include "iree/base/api.h"
+#include "loom/codegen/low/memory_access.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/kernel/ops.h"
@@ -113,6 +114,8 @@ typedef struct loom_low_source_memory_access_plan_t {
   loom_value_fact_memory_space_t memory_space;
   // Source SSA value that represents the storage root.
   loom_value_id_t root_value_id;
+  // Comparable alias scope for disjointness proofs, or NONE.
+  loom_value_fact_alias_scope_id_t alias_scope_id;
   // Byte count of one addressed view element.
   uint32_t element_byte_count;
   // Static number of vector lanes addressed by the operation.
@@ -154,6 +157,14 @@ static inline bool loom_low_source_memory_dynamic_term_fits_unsigned_bit_count(
 bool loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
     const loom_low_source_memory_access_plan_t* plan,
     int64_t static_byte_offset, uint8_t bit_count);
+
+// Builds a dependency/scheduling summary from an already selected source
+// memory access plan. |out_interval| is caller-owned and may be borrowed by the
+// returned summary when interval precision is available.
+void loom_low_source_memory_access_plan_make_summary(
+    const loom_low_source_memory_access_plan_t* plan,
+    loom_low_byte_interval_t* out_interval,
+    loom_low_memory_access_summary_t* out_summary);
 
 // Builds a target-independent source memory plan for indexed source memory ops.
 //

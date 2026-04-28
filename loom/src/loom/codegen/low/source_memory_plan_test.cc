@@ -103,6 +103,13 @@ class SourceMemoryPlanTest : public ::testing::Test {
     return index;
   }
 
+  loom_value_id_t BuildNoalias(loom_value_id_t buffer) {
+    loom_op_t* op = nullptr;
+    IREE_CHECK_OK(loom_buffer_assume_noalias_build(
+        &builder_, buffer, loom_type_buffer(), LOOM_LOCATION_UNKNOWN, &op));
+    return loom_buffer_assume_noalias_result(op);
+  }
+
   loom_op_t* BuildOffsetConstant(int64_t value) {
     loom_op_t* op = nullptr;
     IREE_CHECK_OK(loom_index_constant_build(
@@ -235,6 +242,71 @@ TEST_F(SourceMemoryPlanTest, StaticDenseLoadIncludesViewBase) {
   EXPECT_EQ(plan.vector_lane_byte_stride, 4);
   EXPECT_EQ(plan.static_byte_offset, 28);
   EXPECT_EQ(plan.dynamic_term_count, 0u);
+}
+
+TEST_F(SourceMemoryPlanTest, ExternalBufferArgHasNoComparableAliasScope) {
+  loom_value_id_t buffer = DefineBufferArg();
+  loom_value_id_t layout = BuildDenseLayout();
+  loom_value_id_t base_offset =
+      loom_index_constant_result(BuildOffsetConstant(16));
+
+  loom_op_t* view_op = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(&builder_, buffer, base_offset,
+                                        ViewType1D(32, layout),
+                                        LOOM_LOCATION_UNKNOWN, &view_op));
+  int64_t static_indices[] = {3};
+  loom_op_t* load_op = nullptr;
+  IREE_ASSERT_OK(loom_vector_load_build(
+      &builder_, 0, loom_buffer_view_result(view_op), nullptr, 0,
+      static_indices, IREE_ARRAYSIZE(static_indices), 0, 0, VectorType1D(4),
+      LOOM_LOCATION_UNKNOWN, &load_op));
+
+  loom_value_fact_table_t facts = {0};
+  ComputeFacts(&facts);
+  loom_low_source_memory_access_plan_t plan = {};
+  loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+  ASSERT_TRUE(BuildPlan(&facts, load_op, &plan, &diagnostic));
+  EXPECT_EQ(plan.root_value_id, buffer);
+  EXPECT_EQ(plan.alias_scope_id, LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE);
+
+  loom_low_byte_interval_t interval = {};
+  loom_low_memory_access_summary_t summary = {};
+  loom_low_source_memory_access_plan_make_summary(&plan, &interval, &summary);
+  EXPECT_FALSE(iree_any_bit_set(summary.precision_flags,
+                                LOOM_LOW_MEMORY_ACCESS_PRECISION_ROOT));
+  EXPECT_EQ(summary.alias_root_id, LOOM_LOW_MEMORY_ALIAS_ID_NONE);
+}
+
+TEST_F(SourceMemoryPlanTest, NoaliasBufferArgFeedsComparableAliasScope) {
+  loom_value_id_t buffer = BuildNoalias(DefineBufferArg());
+  loom_value_id_t layout = BuildDenseLayout();
+  loom_value_id_t base_offset =
+      loom_index_constant_result(BuildOffsetConstant(16));
+
+  loom_op_t* view_op = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(&builder_, buffer, base_offset,
+                                        ViewType1D(32, layout),
+                                        LOOM_LOCATION_UNKNOWN, &view_op));
+  int64_t static_indices[] = {3};
+  loom_op_t* load_op = nullptr;
+  IREE_ASSERT_OK(loom_vector_load_build(
+      &builder_, 0, loom_buffer_view_result(view_op), nullptr, 0,
+      static_indices, IREE_ARRAYSIZE(static_indices), 0, 0, VectorType1D(4),
+      LOOM_LOCATION_UNKNOWN, &load_op));
+
+  loom_value_fact_table_t facts = {0};
+  ComputeFacts(&facts);
+  loom_low_source_memory_access_plan_t plan = {};
+  loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+  ASSERT_TRUE(BuildPlan(&facts, load_op, &plan, &diagnostic));
+  EXPECT_NE(plan.alias_scope_id, LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE);
+
+  loom_low_byte_interval_t interval = {};
+  loom_low_memory_access_summary_t summary = {};
+  loom_low_source_memory_access_plan_make_summary(&plan, &interval, &summary);
+  EXPECT_TRUE(iree_any_bit_set(summary.precision_flags,
+                               LOOM_LOW_MEMORY_ACCESS_PRECISION_ROOT));
+  EXPECT_EQ(summary.alias_root_id, plan.alias_scope_id);
 }
 
 TEST_F(SourceMemoryPlanTest, StaticDenseScalarLoadUsesMemoryAccessFacet) {

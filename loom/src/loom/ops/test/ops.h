@@ -72,20 +72,22 @@ enum {
   LOOM_OP_TEST_FACT_BUFFER_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 50),
   LOOM_OP_TEST_FACT_VIEW_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 51),
   LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 52),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 53),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 54),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 55),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 56),
-  LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 57),
-  LOOM_OP_TEST_FACT_BUFFER_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 58),
-  LOOM_OP_TEST_FACT_VIEW_ROOT_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 59),
-  LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 60),
-  LOOM_OP_TEST_REGION_SYNTAX = LOOM_OP_KIND(LOOM_DIALECT_TEST, 61),
-  LOOM_OP_TEST_LOW_ASM_REGION = LOOM_OP_KIND(LOOM_DIALECT_TEST, 62),
-  LOOM_OP_TEST_CLAUSE_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 63),
-  LOOM_OP_TEST_CLAUSE_COPY = LOOM_OP_KIND(LOOM_DIALECT_TEST, 64),
-  LOOM_OP_TEST_TYPED_USE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 65),
-  LOOM_OP_TEST_COUNT_ = 66,
+  LOOM_OP_TEST_FACT_ALIAS_SCOPE_KNOWN = LOOM_OP_KIND(LOOM_DIALECT_TEST, 53),
+  LOOM_OP_TEST_FACT_ALIAS_SCOPE_MATCHES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 54),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 55),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 56),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 57),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 58),
+  LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 59),
+  LOOM_OP_TEST_FACT_BUFFER_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 60),
+  LOOM_OP_TEST_FACT_VIEW_ROOT_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 61),
+  LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 62),
+  LOOM_OP_TEST_REGION_SYNTAX = LOOM_OP_KIND(LOOM_DIALECT_TEST, 63),
+  LOOM_OP_TEST_LOW_ASM_REGION = LOOM_OP_KIND(LOOM_DIALECT_TEST, 64),
+  LOOM_OP_TEST_CLAUSE_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 65),
+  LOOM_OP_TEST_CLAUSE_COPY = LOOM_OP_KIND(LOOM_DIALECT_TEST, 66),
+  LOOM_OP_TEST_TYPED_USE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 67),
+  LOOM_OP_TEST_COUNT_ = 68,
 };
 
 // Function visibility. Absent (0) means private.
@@ -1002,6 +1004,39 @@ iree_status_t loom_test_fact_view_root_matches_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_test_fact_view_root_matches_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_ALIAS_SCOPE_KNOWN: Returns 1 if the input has a comparable storage alias scope, 0 otherwise.
+// %known = test.fact_alias_scope_known %buffer : buffer -> i1
+LOOM_DEFINE_ISA(loom_test_fact_alias_scope_known_isa, LOOM_OP_TEST_FACT_ALIAS_SCOPE_KNOWN)
+LOOM_DEFINE_OPERAND(loom_test_fact_alias_scope_known_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_alias_scope_known_result, 0)
+iree_status_t loom_test_fact_alias_scope_known_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_alias_scope_known_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_ALIAS_SCOPE_MATCHES: Returns 1 if both inputs have the same comparable storage alias scope, 0 otherwise.
+// %same = test.fact_alias_scope_matches %lhs, %rhs : buffer, buffer -> i1
+LOOM_DEFINE_ISA(loom_test_fact_alias_scope_matches_isa, LOOM_OP_TEST_FACT_ALIAS_SCOPE_MATCHES)
+LOOM_DEFINE_OPERAND(loom_test_fact_alias_scope_matches_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_test_fact_alias_scope_matches_rhs, 1)
+LOOM_DEFINE_RESULT(loom_test_fact_alias_scope_matches_result, 0)
+iree_status_t loom_test_fact_alias_scope_matches_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_test_fact_alias_scope_matches_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

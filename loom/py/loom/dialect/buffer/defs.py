@@ -9,6 +9,7 @@
 from loom.assembly import (
     ARROW,
     COLON,
+    COMMA,
     GLUE,
     LBRACKET,
     RBRACKET,
@@ -131,6 +132,67 @@ buffer_assume_memory_space = Op(
 )
 
 # ============================================================================
+# buffer.assume.noalias — refine a buffer root with a comparable noalias scope
+# ============================================================================
+
+buffer_assume_noalias = Op(
+    name="buffer.assume.noalias",
+    group=buffer_ops,
+    doc=(
+        "Refine an existing buffer root with an explicit noalias contract. "
+        "The result preserves the same storage identity, extent, memory-space, "
+        "alignment, and nullability facts, and marks the root identity as "
+        "comparable for disjointness proofs. External buffer arguments do not "
+        "gain this proof by default."
+    ),
+    operands=[Operand("buffer", BUFFER, doc="Buffer root to refine.")],
+    results=[Result("result", BUFFER, doc="Same buffer root with a noalias scope.")],
+    traits=[PURE, FACT_IDENTITY],
+    facts="loom_buffer_assume_noalias_facts",
+    format=[
+        Ref("buffer"),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%unique = buffer.assume.noalias %buffer : buffer",
+    ],
+)
+
+# ============================================================================
+# buffer.assume.same_root — refine a buffer root to share another root identity
+# ============================================================================
+
+buffer_assume_same_root = Op(
+    name="buffer.assume.same_root",
+    group=buffer_ops,
+    doc=(
+        "Refine an existing buffer root to share another buffer's storage root. "
+        "This is a dominance-scoped assertion for internally specialized "
+        "dispatches that know two incoming handles refer to the same allocation. "
+        "The result keeps the first operand's value while inheriting the second "
+        "operand's root identity and comparable alias scope."
+    ),
+    operands=[
+        Operand("buffer", BUFFER, doc="Buffer value to refine."),
+        Operand("root", BUFFER, doc="Buffer whose storage root is shared."),
+    ],
+    results=[Result("result", BUFFER, doc="Same buffer value with refined root identity.")],
+    traits=[PURE],
+    facts="loom_buffer_assume_same_root_facts",
+    format=[
+        Ref("buffer"),
+        COMMA,
+        Ref("root"),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%same = buffer.assume.same_root %buffer, %root : buffer",
+    ],
+)
+
+# ============================================================================
 # buffer.view — form a typed view from a buffer root
 # ============================================================================
 
@@ -169,5 +231,7 @@ buffer_view = Op(
 ALL_BUFFER_OPS: tuple[Op, ...] = (
     buffer_alloca,
     buffer_assume_memory_space,
+    buffer_assume_noalias,
+    buffer_assume_same_root,
     buffer_view,
 )

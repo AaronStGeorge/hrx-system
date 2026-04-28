@@ -46,6 +46,31 @@ class BufferBuilders:
         _operands.append(buffer)
         return cast(ValueRef, self._b.build("buffer.assume.memory_space", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def noalias(self, *, buffer: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Refine an existing buffer root with an explicit noalias contract. The result preserves the same storage identity, extent, memory-space, alignment, and nullability facts, and marks the root identity as comparable for disjointness proofs. External buffer arguments do not gain this proof by default.
+
+        Example::
+            %unique = buffer.assume.noalias %buffer : buffer
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(buffer)
+        return cast(ValueRef, self._b.build("buffer.assume.noalias", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def same_root(self, *, buffer: ValueRef, root: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Refine an existing buffer root to share another buffer's storage root. This is a dominance-scoped assertion for internally specialized dispatches that know two incoming handles refer to the same allocation. The result keeps the first operand's value while inheriting the second operand's root identity and comparable alias scope.
+
+        Example::
+            %same = buffer.assume.same_root %buffer, %root : buffer
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(buffer)
+        _operands.append(root)
+        return cast(ValueRef, self._b.build("buffer.assume.same_root", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def view(self, *, buffer: ValueRef, byte_offset: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Form a typed non-owning view from an opaque buffer root and base byte offset. The result view type carries the address layout.
 

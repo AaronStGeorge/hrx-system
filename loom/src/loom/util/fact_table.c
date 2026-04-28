@@ -178,6 +178,7 @@ static uint32_t loom_value_fact_hash_buffer_reference(
   hash = loom_value_fact_hash_u64(reference.minimum_alignment, hash);
   hash = loom_value_fact_hash_u32((uint32_t)reference.memory_space, hash);
   hash = loom_value_fact_hash_u32(reference.root_value_id, hash);
+  hash = loom_value_fact_hash_u32(reference.alias_scope_id, hash);
   return loom_value_fact_hash_u32(reference.nullability, hash);
 }
 
@@ -190,6 +191,7 @@ static uint32_t loom_value_fact_hash_view_reference(
   hash = loom_value_fact_hash_i64(reference.static_element_byte_count, hash);
   hash = loom_value_fact_hash_u32((uint32_t)reference.memory_space, hash);
   hash = loom_value_fact_hash_u32(reference.root_value_id, hash);
+  hash = loom_value_fact_hash_u32(reference.alias_scope_id, hash);
   return loom_value_fact_hash_u32(reference.nullability, hash);
 }
 
@@ -208,6 +210,7 @@ static bool loom_value_fact_buffer_reference_equal(
          lhs.minimum_alignment == rhs.minimum_alignment &&
          lhs.memory_space == rhs.memory_space &&
          lhs.root_value_id == rhs.root_value_id &&
+         lhs.alias_scope_id == rhs.alias_scope_id &&
          lhs.nullability == rhs.nullability;
 }
 
@@ -222,6 +225,7 @@ static bool loom_value_fact_view_reference_equal(
          lhs.static_element_byte_count == rhs.static_element_byte_count &&
          lhs.memory_space == rhs.memory_space &&
          lhs.root_value_id == rhs.root_value_id &&
+         lhs.alias_scope_id == rhs.alias_scope_id &&
          lhs.nullability == rhs.nullability;
 }
 
@@ -657,6 +661,7 @@ static bool loom_value_fact_table_buffer_reference_equal(
          lhs.minimum_alignment == rhs.minimum_alignment &&
          lhs.memory_space == rhs.memory_space &&
          lhs.root_value_id == rhs.root_value_id &&
+         lhs.alias_scope_id == rhs.alias_scope_id &&
          lhs.nullability == rhs.nullability;
 }
 
@@ -675,6 +680,7 @@ static bool loom_value_fact_table_view_reference_equal(
          lhs.static_element_byte_count == rhs.static_element_byte_count &&
          lhs.memory_space == rhs.memory_space &&
          lhs.root_value_id == rhs.root_value_id &&
+         lhs.alias_scope_id == rhs.alias_scope_id &&
          lhs.nullability == rhs.nullability;
 }
 
@@ -1356,6 +1362,7 @@ static iree_status_t loom_value_fact_table_seed_buffer_arg(
       .minimum_alignment = 1,
       .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = value_id,
+      .alias_scope_id = LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };
   loom_value_facts_t facts = loom_value_facts_unknown();
@@ -1380,6 +1387,7 @@ static iree_status_t loom_value_fact_table_seed_view_arg(
           loom_value_fact_static_element_byte_count(type),
       .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = value_id,
+      .alias_scope_id = LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };
   loom_value_facts_t facts = loom_value_facts_unknown();

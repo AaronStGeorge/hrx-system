@@ -714,6 +714,8 @@ static bool loom_llvmir_target_legality_op_is_supported_core(
     case LOOM_OP_VECTOR_BITCAST:
     case LOOM_OP_BUFFER_ALLOCA:
     case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
+    case LOOM_OP_BUFFER_ASSUME_NOALIAS:
+    case LOOM_OP_BUFFER_ASSUME_SAME_ROOT:
     case LOOM_OP_BUFFER_VIEW:
     case LOOM_OP_VIEW_SUBVIEW:
     case LOOM_OP_VIEW_LOAD:

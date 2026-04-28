@@ -278,6 +278,13 @@ typedef uint32_t loom_value_fact_reference_nullability_t;
 #define LOOM_VALUE_FACT_REFERENCE_NULLABILITY_NON_NULL \
   ((loom_value_fact_reference_nullability_t)2)
 
+// Comparable alias scope for storage-like values. NONE means root_value_id is
+// only provenance for addressing and same-root propagation; consumers must not
+// use it to prove disjointness against another root.
+typedef loom_value_id_t loom_value_fact_alias_scope_id_t;
+#define LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE \
+  ((loom_value_fact_alias_scope_id_t)LOOM_VALUE_ID_INVALID)
+
 // Buffer value is an opaque storage root.
 typedef struct loom_value_fact_buffer_reference_t {
   // Conservative byte extent facts for the root storage allocation.
@@ -292,6 +299,9 @@ typedef struct loom_value_fact_buffer_reference_t {
 
   // SSA value that represents the root storage identity.
   loom_value_id_t root_value_id;
+
+  // Comparable alias scope for disjointness proofs, or NONE.
+  loom_value_fact_alias_scope_id_t alias_scope_id;
 
   // Known nullability for the storage root.
   loom_value_fact_reference_nullability_t nullability;
@@ -321,6 +331,9 @@ typedef struct loom_value_fact_view_reference_t {
 
   // SSA value that represents the root storage identity.
   loom_value_id_t root_value_id;
+
+  // Comparable alias scope for disjointness proofs, or NONE.
+  loom_value_fact_alias_scope_id_t alias_scope_id;
 
   // Known nullability for the underlying storage root.
   loom_value_fact_reference_nullability_t nullability;

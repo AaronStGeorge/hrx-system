@@ -13,6 +13,7 @@
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/buffer/ops.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
@@ -286,6 +287,7 @@ static bool loom_low_lower_op_is_structural(const loom_module_t* module,
     return true;
   }
   switch (op->kind) {
+    case LOOM_OP_BUFFER_ASSUME_SAME_ROOT:
     case LOOM_OP_CFG_BR:
     case LOOM_OP_CFG_COND_BR:
     case LOOM_OP_FUNC_RETURN:
@@ -906,6 +908,13 @@ static iree_status_t loom_low_lower_structural_op(
     return loom_low_lower_bind_identity_results(context, source_op);
   }
   switch (source_op->kind) {
+    case LOOM_OP_BUFFER_ASSUME_SAME_ROOT: {
+      loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+          context, loom_buffer_assume_same_root_buffer(source_op), &low_value));
+      return loom_low_lower_bind_value(
+          context, loom_buffer_assume_same_root_result(source_op), low_value);
+    }
     case LOOM_OP_FUNC_RETURN: {
       loom_value_slice_t values = loom_func_return_operands(source_op);
       loom_value_id_t* low_values = NULL;

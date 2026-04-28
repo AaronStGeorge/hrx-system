@@ -534,6 +534,45 @@ test_fact_view_root_matches = Op(
     ],
 )
 
+test_fact_alias_scope_known = Op(
+    "test.fact_alias_scope_known",
+    group=test_ops,
+    doc="Returns 1 if the input has a comparable storage alias scope, 0 otherwise.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_alias_scope_known_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%known = test.fact_alias_scope_known %buffer : buffer -> i1"],
+)
+
+test_fact_alias_scope_matches = Op(
+    "test.fact_alias_scope_matches",
+    group=test_ops,
+    doc="Returns 1 if both inputs have the same comparable storage alias scope, 0 otherwise.",
+    operands=[
+        Operand("lhs", ANY, doc="First buffer or view value."),
+        Operand("rhs", ANY, doc="Second buffer or view value."),
+    ],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_alias_scope_matches_facts",
+    format=[
+        Ref("lhs"),
+        COMMA,
+        Ref("rhs"),
+        COLON,
+        TypeOf("lhs"),
+        COMMA,
+        TypeOf("rhs"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%same = test.fact_alias_scope_matches %lhs, %rhs : buffer, buffer -> i1",
+    ],
+)
+
 test_fact_view_byte_offset_lo = Op(
     "test.fact_view_byte_offset_lo",
     group=test_ops,
@@ -1700,6 +1739,8 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_buffer_memory_space,
     test_fact_view_memory_space,
     test_fact_view_root_matches,
+    test_fact_alias_scope_known,
+    test_fact_alias_scope_matches,
     test_fact_view_byte_offset_lo,
     test_fact_view_byte_offset_hi,
     test_fact_view_byte_length_lo,

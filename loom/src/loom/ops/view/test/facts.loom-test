@@ -60,6 +60,59 @@ func.def @assume_memory_space_feeds_view(%buffer: buffer, %offset: offset) -> (i
 
 // ====
 
+// External buffer arguments are storage provenance roots but do not get a
+// comparable noalias scope until an explicit contract says so.
+func.def @external_buffer_arg_has_no_alias_scope(%buffer: buffer) -> (i1) {
+  %known = test.fact_alias_scope_known %buffer : buffer -> i1
+  func.return %known : i1
+}
+// ----
+func.def @external_buffer_arg_has_no_alias_scope(%buffer: buffer) -> (i1) {
+  %known = scalar.constant false : i1
+  func.return %known : i1
+}
+
+// ====
+
+// A noalias assumption marks the buffer root comparable and the proof
+// propagates through view construction.
+func.def @assume_noalias_feeds_view_scope(%buffer: buffer, %offset: offset) -> (i1, i1) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %unique = buffer.assume.noalias %buffer : buffer
+  %view = buffer.view %unique[%offset] : buffer -> view<4xf32, %layout>
+  %buffer_known = test.fact_alias_scope_known %unique : buffer -> i1
+  %view_known = test.fact_alias_scope_known %view : view<4xf32, %layout> -> i1
+  func.return %buffer_known, %view_known : i1, i1
+}
+// ----
+func.def @assume_noalias_feeds_view_scope(%buffer: buffer, %offset: offset) -> (i1, i1) {
+  %buffer_known = scalar.constant true : i1
+  %view_known = scalar.constant true : i1
+  func.return %buffer_known, %view_known : i1, i1
+}
+
+// ====
+
+// A same-root assumption moves both root identity and comparable alias scope to
+// the chosen root while preserving the refined buffer value.
+func.def @assume_same_root_feeds_view_scope(%lhs: buffer, %rhs: buffer, %offset: offset) -> (i1, i1) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %lhs_unique = buffer.assume.noalias %lhs : buffer
+  %rhs_same = buffer.assume.same_root %rhs, %lhs_unique : buffer
+  %view = buffer.view %rhs_same[%offset] : buffer -> view<4xf32, %layout>
+  %root_matches = test.fact_view_root_matches %view, %lhs_unique : view<4xf32, %layout>, buffer -> i1
+  %scope_matches = test.fact_alias_scope_matches %view, %lhs_unique : view<4xf32, %layout>, buffer -> i1
+  func.return %root_matches, %scope_matches : i1, i1
+}
+// ----
+func.def @assume_same_root_feeds_view_scope(%lhs: buffer, %rhs: buffer, %offset: offset) -> (i1, i1) {
+  %root_matches = scalar.constant true : i1
+  %scope_matches = scalar.constant true : i1
+  func.return %root_matches, %scope_matches : i1, i1
+}
+
+// ====
+
 // Subview/refine preserve the underlying root memory-space facts.
 func.def @subview_refine_preserves_memory_space() -> (i64, i64) {
   %bytes = index.constant 256 : offset

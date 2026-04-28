@@ -351,6 +351,21 @@ static iree_status_t loom_llvmir_lowering_lower_fact_identity(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_lowering_lower_primary_identity(
+    loom_llvmir_lowering_state_t* state, loom_value_id_t source_value_id,
+    loom_value_id_t result_value_id) {
+  loom_llvmir_value_id_t target_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lookup_value(state, source_value_id, &target_value));
+  uint32_t address_space = state->value_pointer_address_spaces[source_value_id];
+  if (address_space == UINT32_MAX) {
+    return loom_llvmir_lowering_map_value(state, result_value_id, target_value);
+  }
+  return loom_llvmir_lowering_map_pointer_value(
+      state, result_value_id, target_value, address_space,
+      state->value_pointer_alignments[source_value_id]);
+}
+
 static loom_llvmir_linkage_t loom_llvmir_lowering_function_linkage(
     const loom_llvmir_lowering_state_t* state, loom_func_like_t func,
     loom_llvmir_function_kind_t function_kind) {
@@ -789,6 +804,10 @@ static iree_status_t loom_llvmir_lowering_lower_op(
     case LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE:
       return loom_llvmir_lowering_lower_assume_memory_space(state, target_block,
                                                             op);
+    case LOOM_OP_BUFFER_ASSUME_SAME_ROOT:
+      return loom_llvmir_lowering_lower_primary_identity(
+          state, loom_buffer_assume_same_root_buffer(op),
+          loom_buffer_assume_same_root_result(op));
     case LOOM_OP_BUFFER_VIEW:
       return loom_llvmir_lowering_lower_buffer_view(state, target_block, op);
     case LOOM_OP_VIEW_SUBVIEW:

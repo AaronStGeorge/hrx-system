@@ -462,6 +462,7 @@ loom_cc_library(
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::buffer
     loom::src::loom::ops::cfg
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
@@ -484,6 +485,7 @@ loom_cc_library(
   SRCS
     "source_memory_plan.c"
   DEPS
+    ::memory_access
     iree::base
     loom::src::loom::ir
     loom::src::loom::ir::facts

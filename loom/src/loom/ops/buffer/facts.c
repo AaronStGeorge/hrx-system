@@ -36,6 +36,7 @@ static loom_value_fact_buffer_reference_t loom_buffer_default_reference(
       .minimum_alignment = 1,
       .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = buffer_value_id,
+      .alias_scope_id = LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };
 }
@@ -51,6 +52,7 @@ iree_status_t loom_buffer_alloca_facts(loom_fact_context_t* context,
       .minimum_alignment = base_alignment > 0 ? (uint64_t)base_alignment : 1,
       .memory_space = loom_buffer_alloca_memory_space(op),
       .root_value_id = loom_buffer_alloca_result(op),
+      .alias_scope_id = loom_buffer_alloca_result(op),
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_NON_NULL,
   };
   return loom_value_facts_make_buffer_reference(context, reference,
@@ -66,6 +68,44 @@ iree_status_t loom_buffer_assume_memory_space_facts(
   (void)loom_value_facts_query_buffer_reference(context, operand_facts[0],
                                                 &reference);
   reference.memory_space = loom_buffer_assume_memory_space_memory_space(op);
+  return loom_value_facts_make_buffer_reference(context, reference,
+                                                &result_facts[0]);
+}
+
+iree_status_t loom_buffer_assume_noalias_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_buffer_reference_t reference =
+      loom_buffer_default_reference(loom_buffer_assume_noalias_buffer(op));
+  (void)loom_value_facts_query_buffer_reference(context, operand_facts[0],
+                                                &reference);
+  reference.alias_scope_id = reference.root_value_id;
+  return loom_value_facts_make_buffer_reference(context, reference,
+                                                &result_facts[0]);
+}
+
+iree_status_t loom_buffer_assume_same_root_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_buffer_reference_t reference =
+      loom_buffer_default_reference(loom_buffer_assume_same_root_buffer(op));
+  (void)loom_value_facts_query_buffer_reference(context, operand_facts[0],
+                                                &reference);
+
+  loom_value_fact_buffer_reference_t root_reference =
+      loom_buffer_default_reference(loom_buffer_assume_same_root_root(op));
+  (void)loom_value_facts_query_buffer_reference(context, operand_facts[1],
+                                                &root_reference);
+  reference.root_value_id = root_reference.root_value_id;
+  reference.alias_scope_id = root_reference.alias_scope_id;
+  if (reference.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) {
+    reference.memory_space = root_reference.memory_space;
+  }
+  if (reference.minimum_alignment < root_reference.minimum_alignment) {
+    reference.minimum_alignment = root_reference.minimum_alignment;
+  }
   return loom_value_facts_make_buffer_reference(context, reference,
                                                 &result_facts[0]);
 }

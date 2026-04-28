@@ -771,6 +771,31 @@ class TestBuilders:
         _operands.append(root)
         return cast(ValueRef, self._b.build("test.fact_view_root_matches", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def fact_alias_scope_known(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Returns 1 if the input has a comparable storage alias scope, 0 otherwise.
+
+        Example::
+            %known = test.fact_alias_scope_known %buffer : buffer -> i1
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_alias_scope_known", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_alias_scope_matches(self, *, lhs: ValueRef, rhs: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Returns 1 if both inputs have the same comparable storage alias scope, 0 otherwise.
+
+        Example::
+            %same = test.fact_alias_scope_matches %lhs, %rhs : buffer, buffer -> i1
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("test.fact_alias_scope_matches", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def fact_view_byte_offset_lo(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Exposes a view-reference byte-offset lower bound as an i64 constant.
 

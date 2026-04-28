@@ -312,6 +312,47 @@ iree_status_t loom_test_fact_view_root_matches_facts(
   return iree_ok_status();
 }
 
+static loom_value_fact_alias_scope_id_t loom_test_alias_scope_or_none(
+    const loom_fact_context_t* context, loom_value_facts_t facts) {
+  loom_value_fact_buffer_reference_t buffer_reference = {0};
+  if (loom_value_facts_query_buffer_reference(context, facts,
+                                              &buffer_reference)) {
+    return buffer_reference.alias_scope_id;
+  }
+  loom_value_fact_view_reference_t view_reference = {0};
+  if (loom_value_facts_query_view_reference(context, facts, &view_reference)) {
+    return view_reference.alias_scope_id;
+  }
+  return LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE;
+}
+
+iree_status_t loom_test_fact_alias_scope_known_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_test_alias_scope_or_none(context, operand_facts[0]) ==
+              LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE
+          ? 0
+          : 1);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_alias_scope_matches_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_alias_scope_id_t lhs_scope =
+      loom_test_alias_scope_or_none(context, operand_facts[0]);
+  loom_value_fact_alias_scope_id_t rhs_scope =
+      loom_test_alias_scope_or_none(context, operand_facts[1]);
+  result_facts[0] = loom_value_facts_exact_i64(
+      lhs_scope != LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE && lhs_scope == rhs_scope
+          ? 1
+          : 0);
+  return iree_ok_status();
+}
+
 static loom_value_fact_view_reference_t loom_test_view_reference_or_empty(
     const loom_fact_context_t* context, loom_value_facts_t facts) {
   loom_value_fact_view_reference_t reference = {
@@ -322,6 +363,7 @@ static loom_value_fact_view_reference_t loom_test_view_reference_or_empty(
       .static_element_byte_count = -1,
       .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = LOOM_VALUE_ID_INVALID,
+      .alias_scope_id = LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };
   (void)loom_value_facts_query_view_reference(context, facts, &reference);
@@ -381,6 +423,7 @@ iree_status_t loom_test_fact_buffer_min_alignment_facts(
       .minimum_alignment = 0,
       .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = LOOM_VALUE_ID_INVALID,
+      .alias_scope_id = LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };
   (void)loom_value_facts_query_buffer_reference(context, operand_facts[0],
