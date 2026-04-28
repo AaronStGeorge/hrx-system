@@ -85,6 +85,7 @@ class AmdgpuIsaOperandType:
     name: str
     is_partitioned: bool
     predefined_values: tuple[AmdgpuIsaPredefinedValue, ...]
+    fields: tuple[AmdgpuIsaEncodingField, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,6 +359,64 @@ def parse_amdgpu_isa_xml_text(
             f"{source_name}: malformed AMDGPU ISA XML: {exc}"
         ) from exc
     return _parse_spec_root(root, source_name)
+
+
+def compose_amdgpu_isa_partitioned_field(
+    base_field: AmdgpuIsaEncodingField,
+    operand_field: AmdgpuIsaEncodingField,
+) -> AmdgpuIsaEncodingField | None:
+    """Returns the operand subfield mapped into the carrier field, if encodable."""
+
+    base_segments = _base_field_source_segments(base_field)
+    if base_segments is None:
+        return None
+    composed_ranges: list[AmdgpuIsaBitRange] = []
+    for operand_range in operand_field.ranges:
+        remaining_bits = operand_range.bit_count
+        source_bit_offset = operand_range.bit_offset
+        pending_padding_bit_count = operand_range.padding_bit_count
+        while remaining_bits > 0:
+            matching_segment = None
+            for segment in base_segments:
+                source_start, source_end, target_bit_offset = segment
+                if source_start <= source_bit_offset < source_end:
+                    matching_segment = segment
+                    break
+            if matching_segment is None:
+                return None
+            source_start, source_end, target_bit_offset = matching_segment
+            chunk_bit_count = min(remaining_bits, source_end - source_bit_offset)
+            composed_ranges.append(
+                AmdgpuIsaBitRange(
+                    order=len(composed_ranges),
+                    bit_count=chunk_bit_count,
+                    bit_offset=target_bit_offset + source_bit_offset - source_start,
+                    padding_bit_count=pending_padding_bit_count,
+                    padding_value=operand_range.padding_value,
+                )
+            )
+            source_bit_offset += chunk_bit_count
+            remaining_bits -= chunk_bit_count
+            pending_padding_bit_count = 0
+    return AmdgpuIsaEncodingField(
+        name=operand_field.name,
+        is_conditional=operand_field.is_conditional,
+        ranges=tuple(composed_ranges),
+    )
+
+
+def _base_field_source_segments(
+    base_field: AmdgpuIsaEncodingField,
+) -> tuple[tuple[int, int, int], ...] | None:
+    source_bit_offset = 0
+    segments = []
+    for bit_range in base_field.ranges:
+        if bit_range.padding_bit_count != 0:
+            return None
+        source_end = source_bit_offset + bit_range.bit_count
+        segments.append((source_bit_offset, source_end, bit_range.bit_offset))
+        source_bit_offset = source_end
+    return tuple(segments)
 
 
 def _parse_spec_root(root: ElementTree.Element, source_name: str) -> AmdgpuIsaSpec:
@@ -716,6 +775,36 @@ def _parse_operand_type(
 ) -> AmdgpuIsaOperandType:
     name = _required_text(operand_type_element, "OperandTypeName", source_name)
     context = _context("OperandType", name)
+    is_partitioned = _required_boolean_attribute(
+        operand_type_element, "IsPartitioned", source_name, context
+    )
+    microcode_format_element = operand_type_element.find("MicrocodeFormat")
+    fields: tuple[AmdgpuIsaEncodingField, ...]
+    if microcode_format_element is None:
+        fields = ()
+    else:
+        bitmap_element = _required_child(
+            microcode_format_element, "BitMap", source_name
+        )
+        fields = tuple(
+            _parse_encoding_field(field_element, source_name, context)
+            for field_element in bitmap_element.findall("Field")
+        )
+        if not fields:
+            raise AmdgpuIsaXmlError(f"{source_name}: {context} has no fields")
+        _ensure_unique_names(
+            (field.name for field in fields),
+            f"{context} field",
+            source_name,
+        )
+    if is_partitioned and not fields:
+        raise AmdgpuIsaXmlError(
+            f"{source_name}: partitioned {context} has no microcode fields"
+        )
+    if not is_partitioned and fields:
+        raise AmdgpuIsaXmlError(
+            f"{source_name}: non-partitioned {context} has microcode fields"
+        )
     predefined_values_element = operand_type_element.find("OperandPredefinedValues")
     predefined_values: tuple[AmdgpuIsaPredefinedValue, ...]
     if predefined_values_element is None:
@@ -733,10 +822,9 @@ def _parse_operand_type(
         )
     return AmdgpuIsaOperandType(
         name=name,
-        is_partitioned=_required_boolean_attribute(
-            operand_type_element, "IsPartitioned", source_name, context
-        ),
+        is_partitioned=is_partitioned,
         predefined_values=predefined_values,
+        fields=fields,
     )
 
 

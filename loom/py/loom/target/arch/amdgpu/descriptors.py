@@ -721,17 +721,21 @@ def _manual_scalar_move_descriptors(
 _VMCNT_IMMEDIATE = Immediate(
     "vmcnt",
     ImmediateKind.UNSIGNED,
+    flags=(ImmediateFlag.DEFAULT_VALUE,),
     bit_width=6,
     encoding_id=_WAIT_COUNTER_VMEM_ENCODING_ID,
     unsigned_max=(2**6) - 1,
+    default_value=(2**6) - 1,
 )
 
 _LGKMCNT_IMMEDIATE = Immediate(
     "lgkmcnt",
     ImmediateKind.UNSIGNED,
+    flags=(ImmediateFlag.DEFAULT_VALUE,),
     bit_width=6,
     encoding_id=_WAIT_COUNTER_LGKM_ENCODING_ID,
     unsigned_max=(2**6) - 1,
+    default_value=(2**6) - 1,
 )
 
 _LOADCNT_IMMEDIATE = Immediate(
@@ -4901,8 +4905,9 @@ def _s_waitcnt_overlay(
         semantic_tag="control.waitcnt",
         schedule_class=_SCHEDULE_WAIT_MEMORY,
         operands=(),
-        immediate_fields=("SIMM16",),
+        immediate_fields=("VM", "LGKM"),
         immediates=(_VMCNT_IMMEDIATE, _LGKMCNT_IMMEDIATE),
+        fixed_encoding_fields=(("EXP", AmdgpuEncodingFieldAllOnes()),),
         effects=effects,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )

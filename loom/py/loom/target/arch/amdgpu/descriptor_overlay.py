@@ -28,6 +28,7 @@ from loom.target.arch.amdgpu.isa_xml import (
     AmdgpuIsaInstructionEncoding,
     AmdgpuIsaOperand,
     AmdgpuIsaXmlError,
+    compose_amdgpu_isa_partitioned_field,
 )
 from loom.target.low_descriptors import (
     AsmForm,
@@ -235,11 +236,8 @@ def _materialize_encoding_field_values(
     encoding: AmdgpuIsaInstructionEncoding,
 ) -> tuple[EncodingFieldValue, ...]:
     xml_operands = _explicit_xml_operands_by_field_name(encoding, overlay)
-    microcode_encoding = spec.encoding_map().get(overlay.encoding_name)
-    encoding_fields = (
-        {field.name: field for field in microcode_encoding.fields}
-        if microcode_encoding is not None
-        else {}
+    encoding_fields, _partition_carriers = _encoding_fields_and_partition_carriers(
+        spec, overlay, xml_operands
     )
     field_values = [
         _materialize_encoding_field_value(
@@ -260,6 +258,47 @@ def _materialize_encoding_field_values(
         if ignored_operand.fixed_encoding_value is not None
     )
     return tuple(field_values)
+
+
+def _encoding_fields_and_partition_carriers(
+    spec: AmdgpuIsaFactSource,
+    overlay: AmdgpuDescriptorOverlay,
+    xml_operands: dict[str, AmdgpuIsaOperand],
+) -> tuple[dict[str, AmdgpuIsaEncodingField], dict[str, str]]:
+    microcode_encoding = spec.encoding_map().get(overlay.encoding_name)
+    encoding_fields = (
+        {field.name: field for field in microcode_encoding.fields}
+        if microcode_encoding is not None
+        else {}
+    )
+    partition_carriers: dict[str, str] = {}
+    operand_types = spec.operand_type_map()
+    for xml_operand in xml_operands.values():
+        if not xml_operand.is_binary_microcode_required:
+            continue
+        operand_type = operand_types.get(xml_operand.operand_type)
+        if operand_type is None:
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' references "
+                f"missing XML operand type '{xml_operand.operand_type}'"
+            )
+        if not operand_type.is_partitioned:
+            continue
+        if xml_operand.field_name is None:
+            continue
+        base_field = encoding_fields.get(xml_operand.field_name)
+        if base_field is None:
+            continue
+        for field in operand_type.fields:
+            existing_field = encoding_fields.get(field.name)
+            if existing_field is not None:
+                continue
+            composed_field = compose_amdgpu_isa_partitioned_field(base_field, field)
+            if composed_field is None:
+                continue
+            encoding_fields[field.name] = composed_field
+            partition_carriers[field.name] = xml_operand.field_name
+    return encoding_fields, partition_carriers
 
 
 def _materialize_encoding_field_value(
@@ -411,11 +450,8 @@ def _validate_operand_overlay(
 ) -> None:
     _validate_unique_overlay_fields(overlay)
     xml_operands = _explicit_xml_operands_by_field_name(encoding, overlay)
-    microcode_encoding = spec.encoding_map().get(overlay.encoding_name)
-    encoding_fields = (
-        {field.name for field in microcode_encoding.fields}
-        if microcode_encoding is not None
-        else set(xml_operands)
+    encoding_fields, partition_carriers = _encoding_fields_and_partition_carriers(
+        spec, overlay, xml_operands
     )
     covered_fields: set[str] = set()
     for operand_overlay in overlay.operands:
@@ -464,6 +500,8 @@ def _validate_operand_overlay(
                     f"'{immediate_field}' does not describe an input operand"
                 )
             covered_fields.add(immediate_field)
+        elif immediate_field in partition_carriers:
+            covered_fields.add(partition_carriers[immediate_field])
         elif immediate_field not in encoding_fields:
             raise AmdgpuDescriptorOverlayError(
                 f"descriptor overlay '{overlay.descriptor_key}' references "
@@ -485,6 +523,8 @@ def _validate_operand_overlay(
                     f"'{field_name}' does not describe an input operand"
                 )
             covered_fields.add(field_name)
+        elif field_name in partition_carriers:
+            covered_fields.add(partition_carriers[field_name])
 
     missing_fields = sorted(set(xml_operands) - covered_fields)
     if missing_fields:

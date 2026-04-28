@@ -902,50 +902,6 @@ static iree_status_t loom_amdgpu_encode_sopp_simm16(
   return loom_amdgpu_append_encoding_packet(state, &encoded_packet);
 }
 
-static iree_status_t loom_amdgpu_encode_gfx11_waitcnt_immediate(
-    uint16_t vmcnt, uint16_t lgkmcnt, uint16_t* out_immediate) {
-  IREE_ASSERT_ARGUMENT(out_immediate);
-  *out_immediate = 0;
-  if (vmcnt > 63 || lgkmcnt > 63) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU GFX11 waitcnt values must fit vmcnt/lgkmcnt 6-bit fields");
-  }
-  *out_immediate = (uint16_t)(UINT16_C(0x0007) | ((uint16_t)vmcnt << 10) |
-                              ((uint16_t)lgkmcnt << 4));
-  return iree_ok_status();
-}
-
-static iree_status_t loom_amdgpu_encode_sopp_packet(
-    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
-  const uint16_t opcode = packet->descriptor->encoding_id;
-  switch (packet->descriptor->stable_id) {
-    case LOOM_AMDGPU_DESCRIPTOR_ID_S_WAITCNT: {
-      uint16_t vmcnt = 0;
-      uint16_t lgkmcnt = 0;
-      IREE_RETURN_IF_ERROR(
-          loom_amdgpu_read_immediate_u16(state, packet, 0, &vmcnt));
-      IREE_RETURN_IF_ERROR(
-          loom_amdgpu_read_immediate_u16(state, packet, 1, &lgkmcnt));
-      uint16_t immediate = 0;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_encode_gfx11_waitcnt_immediate(
-          vmcnt, lgkmcnt, &immediate));
-      return loom_amdgpu_encode_sopp_simm16(state, opcode, immediate);
-    }
-    case LOOM_AMDGPU_DESCRIPTOR_ID_S_WAITCNT_DEPCTR: {
-      uint16_t depctr = 0;
-      IREE_RETURN_IF_ERROR(
-          loom_amdgpu_read_immediate_u16(state, packet, 0, &depctr));
-      return loom_amdgpu_encode_sopp_simm16(state, opcode, depctr);
-    }
-    default:
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "AMDGPU SOPP special encoder received "
-                              "descriptor id 0x%" PRIx64,
-                              packet->descriptor->stable_id);
-  }
-}
-
 static iree_status_t loom_amdgpu_encode_generic_descriptor_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   if (state->encoding_table == NULL) {
@@ -1041,13 +997,7 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
       }
       return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
     case LOOM_AMDGPU_ENCODING_FORMAT_SOPP:
-      switch (packet->descriptor->stable_id) {
-        case LOOM_AMDGPU_DESCRIPTOR_ID_S_WAITCNT:
-        case LOOM_AMDGPU_DESCRIPTOR_ID_S_WAITCNT_DEPCTR:
-          return loom_amdgpu_encode_sopp_packet(state, packet);
-        default:
-          return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
-      }
+      return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
     case LOOM_AMDGPU_ENCODING_FORMAT_SOP2:
     case LOOM_AMDGPU_ENCODING_FORMAT_SOPC:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP2:
@@ -1283,9 +1233,10 @@ static iree_status_t loom_amdgpu_encode_generic_wait_packet(
                               " is out of range",
                               packet_immediate->descriptor_immediate_index);
     }
-    const uint32_t descriptor_immediate_row =
-        descriptor->immediate_start +
-        packet_immediate->descriptor_immediate_index;
+  }
+
+  for (uint16_t i = 0; i < descriptor->immediate_count; ++i) {
+    const uint32_t descriptor_immediate_row = descriptor->immediate_start + i;
     if (descriptor_immediate_row >= descriptor_set->immediate_count) {
       return iree_make_status(
           IREE_STATUS_OUT_OF_RANGE,
@@ -1298,9 +1249,23 @@ static iree_status_t loom_amdgpu_encode_generic_wait_packet(
     if (descriptor_immediate->encoding_field_id == 0) {
       continue;
     }
+    uint16_t default_value = 0;
+    if (iree_any_bit_set(descriptor_immediate->flags,
+                         LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE)) {
+      if (descriptor_immediate->default_value < 0 ||
+          descriptor_immediate->default_value > UINT16_MAX) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "AMDGPU wait packet default immediate value is not a u16");
+      }
+      default_value = (uint16_t)descriptor_immediate->default_value;
+    }
+    uint16_t value = 0;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_immediate_value(
+        state->wait_packets, wait_packet, i, default_value, &value));
     IREE_RETURN_IF_ERROR(loom_amdgpu_push_encoding_field_value(
         field_values, &field_value_count,
-        descriptor_immediate->encoding_field_id, packet_immediate->value));
+        descriptor_immediate->encoding_field_id, value));
   }
 
   loom_amdgpu_encoding_packet_t encoded_packet;
@@ -1332,28 +1297,6 @@ static iree_status_t loom_amdgpu_encode_wait_packet(
   const loom_low_descriptor_t* descriptor =
       &descriptor_set->descriptors[wait_packet->descriptor_ordinal];
 
-  if (descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_SOPP &&
-      descriptor->stable_id == LOOM_AMDGPU_DESCRIPTOR_ID_S_WAITCNT) {
-    uint16_t vmcnt = 63;
-    uint16_t lgkmcnt = 63;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_immediate_value(
-        state->wait_packets, wait_packet, 0, vmcnt, &vmcnt));
-    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_immediate_value(
-        state->wait_packets, wait_packet, 1, lgkmcnt, &lgkmcnt));
-    uint16_t immediate = 0;
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_encode_gfx11_waitcnt_immediate(vmcnt, lgkmcnt, &immediate));
-    return loom_amdgpu_encode_sopp_simm16(state, descriptor->encoding_id,
-                                          immediate);
-  }
-  if (descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_SOPP &&
-      descriptor->stable_id == LOOM_AMDGPU_DESCRIPTOR_ID_S_WAITCNT_DEPCTR) {
-    uint16_t depctr = 0;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_immediate_value(
-        state->wait_packets, wait_packet, 0, depctr, &depctr));
-    return loom_amdgpu_encode_sopp_simm16(state, descriptor->encoding_id,
-                                          depctr);
-  }
   if (descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_SOPP ||
       descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_SOPK) {
     return loom_amdgpu_encode_generic_wait_packet(state, descriptor,

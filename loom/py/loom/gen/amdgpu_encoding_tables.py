@@ -37,6 +37,8 @@ from loom.target.arch.amdgpu.isa_xml import (  # noqa: E402
     AmdgpuIsaEncoding,
     AmdgpuIsaEncodingField,
     AmdgpuIsaInstruction,
+    AmdgpuIsaOperandType,
+    compose_amdgpu_isa_partitioned_field,
     parse_amdgpu_isa_xml_path,
 )
 from loom.target.arch.amdgpu.target_info import (  # noqa: E402
@@ -106,6 +108,70 @@ def _compile_field_ranges(
     return tuple(compiled_ranges), source_bit_offset
 
 
+def _encoding_fields_by_name(
+    encoding: AmdgpuIsaEncoding,
+) -> dict[str, AmdgpuIsaEncodingField]:
+    return {field.name: field for field in encoding.fields}
+
+
+def _add_encoding_field(
+    fields: dict[str, AmdgpuIsaEncodingField],
+    ambiguous_fields: set[str],
+    field: AmdgpuIsaEncodingField,
+) -> None:
+    if field.name in ambiguous_fields:
+        return
+    existing_field = fields.get(field.name)
+    if existing_field is None:
+        fields[field.name] = field
+        return
+    if existing_field != field:
+        del fields[field.name]
+        ambiguous_fields.add(field.name)
+
+
+def _partitioned_fields_by_encoding(
+    encodings: tuple[AmdgpuIsaEncoding, ...],
+    instructions: tuple[AmdgpuIsaInstruction, ...],
+    operand_types: tuple[AmdgpuIsaOperandType, ...],
+) -> dict[str, tuple[AmdgpuIsaEncodingField, ...]]:
+    encodings_by_name = {encoding.name: encoding for encoding in encodings}
+    operand_types_by_name = {operand_type.name: operand_type for operand_type in operand_types}
+    fields_by_encoding: dict[str, dict[str, AmdgpuIsaEncodingField]] = {encoding.name: {} for encoding in encodings}
+    ambiguous_fields_by_encoding: dict[str, set[str]] = {encoding.name: set() for encoding in encodings}
+    for instruction in instructions:
+        for instruction_encoding in instruction.encodings:
+            encoding = encodings_by_name.get(instruction_encoding.encoding_name)
+            if encoding is None:
+                raise ValueError(f"AMDGPU instruction '{instruction.name}' references missing encoding '{instruction_encoding.encoding_name}'")
+            base_fields = _encoding_fields_by_name(encoding)
+            for operand in instruction_encoding.operands:
+                if not operand.is_binary_microcode_required:
+                    continue
+                operand_type = operand_types_by_name.get(operand.operand_type)
+                if operand_type is None:
+                    raise ValueError(f"AMDGPU instruction '{instruction.name}' references missing operand type '{operand.operand_type}'")
+                if not operand_type.is_partitioned:
+                    continue
+                if operand.field_name is None:
+                    raise ValueError(f"AMDGPU instruction '{instruction.name}' encoding '{instruction_encoding.encoding_name}' has partitioned binary microcode operand without a field name")
+                base_field = base_fields.get(operand.field_name)
+                if base_field is None:
+                    raise ValueError(f"AMDGPU instruction '{instruction.name}' binary microcode operand '{operand.field_name}' is not a field in encoding '{encoding.name}'")
+                for operand_field in operand_type.fields:
+                    if operand_field.name in base_fields:
+                        continue
+                    composed_field = compose_amdgpu_isa_partitioned_field(base_field, operand_field)
+                    if composed_field is None:
+                        continue
+                    _add_encoding_field(
+                        fields_by_encoding[encoding.name],
+                        ambiguous_fields_by_encoding[encoding.name],
+                        composed_field,
+                    )
+    return {encoding_name: tuple(sorted(fields.values(), key=lambda field: field.name)) for encoding_name, fields in fields_by_encoding.items() if fields}
+
+
 def _emit_header(
     *,
     header_guard: str,
@@ -158,6 +224,7 @@ def _emit_header(
 
 def _compile_formats(
     encodings: tuple[AmdgpuIsaEncoding, ...],
+    partitioned_fields_by_encoding: dict[str, tuple[AmdgpuIsaEncodingField, ...]],
 ) -> tuple[list[_CompiledFormat], list[_CompiledField], list[tuple[AmdgpuIsaBitRange, int]]]:
     compiled_formats: list[_CompiledFormat] = []
     compiled_fields: list[_CompiledField] = []
@@ -170,7 +237,9 @@ def _compile_formats(
         if encoding.bit_count > 32 * 4:
             raise ValueError(f"AMDGPU encoding '{encoding.name}' has unsupported {encoding.bit_count}-bit packet width")
         field_start = len(compiled_fields)
-        for field in encoding.fields:
+        fields = list(encoding.fields)
+        fields.extend(partitioned_fields_by_encoding.get(encoding.name, ()))
+        for field in fields:
             try:
                 AMDGPU_ENCODING_FIELD_IDS[field.name]
             except KeyError as exc:
@@ -193,7 +262,7 @@ def _compile_formats(
                 encoding=encoding,
                 format_id=format_id,
                 field_start=field_start,
-                field_count=len(encoding.fields),
+                field_count=len(fields),
                 word_count=_word_count(encoding.bit_count),
             )
         )
@@ -236,13 +305,17 @@ def _emit_source(
     table_function: str,
     encodings: tuple[AmdgpuIsaEncoding, ...],
     instructions: tuple[AmdgpuIsaInstruction, ...],
+    operand_types: tuple[AmdgpuIsaOperandType, ...],
     source_literal: int,
     scalar_inline_u32_zero: int,
     vector_source_vgpr0: int,
     source_path: Path,
     format_output: bool,
 ) -> str:
-    compiled_formats, compiled_fields, compiled_ranges = _compile_formats(encodings)
+    compiled_formats, compiled_fields, compiled_ranges = _compile_formats(
+        encodings,
+        _partitioned_fields_by_encoding(encodings, instructions, operand_types),
+    )
     v_mov_b32_opcode = _instruction_opcode(
         instructions,
         instruction_name="V_MOV_B32",
@@ -412,6 +485,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             table_function=table_function,
             encodings=spec.encodings,
             instructions=spec.instructions,
+            operand_types=spec.operand_types,
             source_literal=source_literal,
             scalar_inline_u32_zero=scalar_inline_u32_zero,
             vector_source_vgpr0=vector_source_vgpr0,
