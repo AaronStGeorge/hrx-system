@@ -1,0 +1,92 @@
+// RUN: emit amdgpu-assembly @gfx11_wmma_base waits=none
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_wmma_base(%a8: reg<amdgpu.vgpr x8>, %b8: reg<amdgpu.vgpr x8>, %a4: reg<amdgpu.vgpr x4>, %b4: reg<amdgpu.vgpr x4>, %a2: reg<amdgpu.vgpr x2>, %b2: reg<amdgpu.vgpr x2>, %acc: reg<amdgpu.vgpr x8>) asm<amdgpu.gfx11.core> {
+  %f32_f16 = v_wmma_f32_16x16x16_f16 %a8, %b8, %acc
+  %f32_bf16 = v_wmma_f32_16x16x16_bf16 %a8, %b8, %f32_f16
+  %f16 = v_wmma_f16_16x16x16_f16 %a8, %b8, %f32_bf16
+  %bf16 = v_wmma_bf16_16x16x16_bf16 %a8, %b8, %f16
+  %i32_iu8 = v_wmma_i32_16x16x16_iu8 %a4, %b4, %bf16
+  %i32_iu4 = v_wmma_i32_16x16x16_iu4 %a2, %b2, %i32_iu8
+  return
+}
+
+// ----
+.Lbb0:
+  v_wmma_f32_16x16x16_f16 v[0:7], v[8:15], v[16:23], v[0:7]
+  v_wmma_f32_16x16x16_bf16 v[0:7], v[8:15], v[16:23], v[0:7]
+  v_wmma_f16_16x16x16_f16 v[0:7], v[8:15], v[16:23], v[0:7]
+  v_wmma_bf16_16x16x16_bf16 v[0:7], v[8:15], v[16:23], v[0:7]
+  v_wmma_i32_16x16x16_iu8 v[0:7], v[24:27], v[28:31], v[0:7]
+  v_wmma_i32_16x16x16_iu4 v[0:7], v[32:33], v[34:35], v[0:7]
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx12_wmma_base waits=none
+target.profile @gfx12_target preset("amdgpu-gfx12")
+
+low.func.def target(@gfx12_target) @gfx12_wmma_base(%a4: reg<amdgpu.vgpr x4>, %b4: reg<amdgpu.vgpr x4>, %a2: reg<amdgpu.vgpr x2>, %b2: reg<amdgpu.vgpr x2>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>, %acc8: reg<amdgpu.vgpr x8>, %acc4: reg<amdgpu.vgpr x4>) asm<amdgpu.gfx12.core> {
+  %f32_f16 = v_wmma_f32_16x16x16_f16 %a4, %b4, %acc8
+  %f32_bf16 = v_wmma_f32_16x16x16_bf16 %a4, %b4, %f32_f16
+  %f16 = v_wmma_f16_16x16x16_f16 %a4, %b4, %acc4
+  %bf16 = v_wmma_bf16_16x16x16_bf16 %a4, %b4, %f16
+  %fp8_fp8 = v_wmma_f32_16x16x16_fp8_fp8 %a2, %b2, %f32_bf16
+  %fp8_bf8 = v_wmma_f32_16x16x16_fp8_bf8 %a2, %b2, %fp8_fp8
+  %bf8_fp8 = v_wmma_f32_16x16x16_bf8_fp8 %a2, %b2, %fp8_bf8
+  %bf8_bf8 = v_wmma_f32_16x16x16_bf8_bf8 %a2, %b2, %bf8_fp8
+  %i32_iu8 = v_wmma_i32_16x16x16_iu8 %a2, %b2, %bf8_bf8
+  %i32_iu4 = v_wmma_i32_16x16x16_iu4 %a1, %b1, %i32_iu8
+  %i32_iu4_32 = v_wmma_i32_16x16x32_iu4 %a2, %b2, %i32_iu4
+  return
+}
+
+// ----
+.Lbb0:
+  v_wmma_f32_16x16x16_f16 v[0:7], v[12:15], v[16:19], v[0:7]
+  v_wmma_f32_16x16x16_bf16 v[0:7], v[12:15], v[16:19], v[0:7]
+  v_wmma_f16_16x16x16_f16 v[8:11], v[12:15], v[16:19], v[8:11]
+  v_wmma_bf16_16x16x16_bf16 v[8:11], v[12:15], v[16:19], v[8:11]
+  v_wmma_f32_16x16x16_fp8_fp8 v[0:7], v[22:23], v[24:25], v[0:7]
+  v_wmma_f32_16x16x16_fp8_bf8 v[0:7], v[22:23], v[24:25], v[0:7]
+  v_wmma_f32_16x16x16_bf8_fp8 v[0:7], v[22:23], v[24:25], v[0:7]
+  v_wmma_f32_16x16x16_bf8_bf8 v[0:7], v[22:23], v[24:25], v[0:7]
+  v_wmma_i32_16x16x16_iu8 v[0:7], v[22:23], v[24:25], v[0:7]
+  v_wmma_i32_16x16x16_iu4 v[0:7], v20, v21, v[0:7]
+  v_wmma_i32_16x16x32_iu4 v[0:7], v[22:23], v[24:25], v[0:7]
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx1250_wmma_base waits=none
+target.profile @gfx1250_target preset("amdgpu-gfx1250")
+
+low.func.def target(@gfx1250_target) @gfx1250_wmma_base(%a4: reg<amdgpu.vgpr x4>, %b4: reg<amdgpu.vgpr x4>, %a2: reg<amdgpu.vgpr x2>, %b2: reg<amdgpu.vgpr x2>, %a1: reg<amdgpu.vgpr>, %b1: reg<amdgpu.vgpr>, %acc8: reg<amdgpu.vgpr x8>, %acc4: reg<amdgpu.vgpr x4>) asm<amdgpu.gfx1250.core> {
+  %f32_f16 = v_wmma_f32_16x16x16_f16 %a4, %b4, %acc8
+  %f32_bf16 = v_wmma_f32_16x16x16_bf16 %a4, %b4, %f32_f16
+  %f16 = v_wmma_f16_16x16x16_f16 %a4, %b4, %acc4
+  %bf16 = v_wmma_bf16_16x16x16_bf16 %a4, %b4, %f16
+  %fp8_fp8 = v_wmma_f32_16x16x16_fp8_fp8 %a2, %b2, %f32_bf16
+  %fp8_bf8 = v_wmma_f32_16x16x16_fp8_bf8 %a2, %b2, %fp8_fp8
+  %bf8_fp8 = v_wmma_f32_16x16x16_bf8_fp8 %a2, %b2, %fp8_bf8
+  %bf8_bf8 = v_wmma_f32_16x16x16_bf8_bf8 %a2, %b2, %bf8_fp8
+  %i32_iu8 = v_wmma_i32_16x16x16_iu8 %a2, %b2, %bf8_bf8
+  %i32_iu4 = v_wmma_i32_16x16x16_iu4 %a1, %b1, %i32_iu8
+  %i32_iu4_32 = v_wmma_i32_16x16x32_iu4 %a2, %b2, %i32_iu4
+  return
+}
+
+// ----
+.Lbb0:
+  v_wmma_f32_16x16x16_f16 v[0:7], v[12:15], v[16:19], v[0:7]
+  v_wmma_f32_16x16x16_bf16 v[0:7], v[12:15], v[16:19], v[0:7]
+  v_wmma_f16_16x16x16_f16 v[8:11], v[12:15], v[16:19], v[8:11]
+  v_wmma_bf16_16x16x16_bf16 v[8:11], v[12:15], v[16:19], v[8:11]
+  v_wmma_f32_16x16x16_fp8_fp8 v[0:7], v[22:23], v[24:25], v[0:7]
+  v_wmma_f32_16x16x16_fp8_bf8 v[0:7], v[22:23], v[24:25], v[0:7]
+  v_wmma_f32_16x16x16_bf8_fp8 v[0:7], v[22:23], v[24:25], v[0:7]
+  v_wmma_f32_16x16x16_bf8_bf8 v[0:7], v[22:23], v[24:25], v[0:7]
+  v_wmma_i32_16x16x16_iu8 v[0:7], v[22:23], v[24:25], v[0:7]
+  v_wmma_i32_16x16x16_iu4 v[0:7], v20, v21, v[0:7]
+  v_wmma_i32_16x16x32_iu4 v[0:7], v[22:23], v[24:25], v[0:7]
+  s_endpgm

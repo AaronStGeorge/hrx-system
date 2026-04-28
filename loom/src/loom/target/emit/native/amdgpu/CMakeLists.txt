@@ -65,6 +65,17 @@ iree_executable_test(
     "loom-check"
 )
 
+iree_executable_test(
+  NAME
+    "test_assembly_wmma"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly_wmma.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
 loom_cc_library(
   NAME
     metadata
