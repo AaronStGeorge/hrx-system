@@ -665,10 +665,10 @@ loom_cc_test(
     iree::base
     loom::src::loom::ops::op_registry
     loom::src::loom::tooling::execution::compile_options
-    loom::src::loom::tooling::execution::execution_backend
     loom::src::loom::tooling::execution::execution_provider
+    loom::src::loom::tooling::execution::hal_candidate
+    loom::src::loom::tooling::execution::hal_invocation
     loom::src::loom::tooling::execution::hal_runtime
-    loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::session
     iree::testing::gtest
     iree::testing::gtest_main
