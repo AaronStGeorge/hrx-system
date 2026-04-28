@@ -131,6 +131,21 @@ typedef struct loom_low_lower_emit_preamble_callback_t {
   void* user_data;
 } loom_low_lower_emit_preamble_callback_t;
 
+typedef iree_status_t (*loom_low_lower_emit_cond_branch_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_op, loom_value_id_t low_condition,
+    loom_block_t* low_true_dest, loom_block_t* low_false_dest);
+
+typedef struct loom_low_lower_emit_cond_branch_callback_t {
+  // Optional callback invoked to emit a target-specific conditional branch.
+  // Targets that provide this callback own all conditional branch emission for
+  // the policy, including falling back to low.cond_br for native condition-code
+  // values when appropriate.
+  loom_low_lower_emit_cond_branch_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_emit_cond_branch_callback_t;
+
 typedef uint64_t loom_low_lower_plan_id_t;
 
 #define LOOM_LOW_LOWER_PLAN_ID_NONE UINT64_MAX
@@ -246,6 +261,9 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_map_argument_callback_t map_argument;
   // Optionally emits target live-ins or other structural preamble packets.
   loom_low_lower_emit_preamble_callback_t emit_preamble;
+  // Optionally emits conditional branches that need target-specific structural
+  // control packets instead of plain low.cond_br.
+  loom_low_lower_emit_cond_branch_callback_t emit_cond_branch;
   // Optional table-driven source-op lowering rule sets in selection order. Rule
   // sets may overlap; the first matching rule wins and failed diagnostics use
   // the most-specific rejected candidate.
@@ -465,6 +483,12 @@ iree_status_t loom_low_lower_map_value(loom_low_lower_context_t* context,
 iree_status_t loom_low_lower_lookup_value(loom_low_lower_context_t* context,
                                           loom_value_id_t source_value_id,
                                           loom_value_id_t* out_low_value_id);
+
+// Looks up the emitted low block corresponding to |source_block| in the source
+// function currently being lowered.
+iree_status_t loom_low_lower_lookup_block(loom_low_lower_context_t* context,
+                                          const loom_block_t* source_block,
+                                          loom_block_t** out_low_block);
 
 // Binds one source SSA value to the corresponding low SSA value. The source
 // value's display name is copied when available.

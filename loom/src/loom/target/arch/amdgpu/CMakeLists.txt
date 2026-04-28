@@ -500,6 +500,7 @@ loom_cc_library(
     "lower/bitpack.c"
     "lower/buffer.c"
     "lower/compare_rules.c"
+    "lower/control.c"
     "lower/dot.c"
     "lower/dot_rules.c"
     "lower/emit_support.c"
@@ -538,6 +539,7 @@ loom_cc_library(
     loom::src::loom::ops::atomic
     loom::src::loom::ops::buffer
     loom::src::loom::ops::cache
+    loom::src::loom::ops::cfg
     loom::src::loom::ops::encoding
     loom::src::loom::ops::index
     loom::src::loom::ops::kernel

@@ -1356,12 +1356,23 @@ static iree_status_t loom_amdgpu_append_matrix_packet(
   return loom_amdgpu_append_canonical_asm_form_packet(context);
 }
 
+static iree_status_t loom_amdgpu_append_exec_restore_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "s_mov_b64 exec"));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  return loom_amdgpu_append_operand(context, 0);
+}
+
 static iree_status_t loom_amdgpu_append_descriptor_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
   const loom_low_descriptor_set_t* descriptor_set =
       context->schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  if (descriptor->stable_id == LOOM_AMDGPU_DESCRIPTOR_ID_S_MOV_B64_EXEC) {
+    return loom_amdgpu_append_exec_restore_packet(context);
+  }
   bool has_read_effect = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_has_effect(
       descriptor_set, descriptor, LOOM_LOW_EFFECT_KIND_READ, &has_read_effect));

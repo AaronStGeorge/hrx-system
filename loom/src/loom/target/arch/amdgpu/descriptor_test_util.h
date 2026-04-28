@@ -26,6 +26,20 @@ inline const loom_low_descriptor_t* LookupAmdgpuDescriptorForTest(
   return loom_low_descriptor_set_descriptor_at(descriptor_set, ordinal);
 }
 
+inline void ExpectAmdgpuRegisterClassForTest(
+    const loom_low_descriptor_set_t* descriptor_set, uint16_t reg_class_id,
+    iree_string_view_t expected_name) {
+  ASSERT_LT(reg_class_id, descriptor_set->reg_class_count);
+  const loom_low_reg_class_t* reg_class =
+      &descriptor_set->reg_classes[reg_class_id];
+  iree_string_view_t actual_name = iree_string_view_empty();
+  IREE_EXPECT_OK(loom_low_descriptor_set_string(
+      descriptor_set, reg_class->name_string_offset, &actual_name));
+  EXPECT_TRUE(iree_string_view_equal(actual_name, expected_name));
+  EXPECT_NE(reg_class->flags & LOOM_LOW_REG_CLASS_FLAG_PHYSICAL, 0u);
+  EXPECT_GT(reg_class->physical_count, 0u);
+}
+
 inline void ExpectAmdgpuOperandRegisterClassForTest(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_operand_t* operand, iree_string_view_t expected_name) {

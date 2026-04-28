@@ -543,7 +543,7 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
                                         comment_count);
 }
 
-static iree_status_t loom_parse_op(loom_parser_t* parser) {
+iree_status_t loom_parse_op(loom_parser_t* parser) {
   loom_parsed_op_t* parsed = NULL;
   IREE_RETURN_IF_ERROR(loom_parser_acquire_parsed_op(parser, &parsed));
   iree_status_t status = loom_parse_op_into(parser, parsed);
@@ -635,6 +635,64 @@ iree_status_t loom_parser_seed_region_entry_block(loom_parser_t* parser,
   return iree_ok_status();
 }
 
+iree_status_t loom_parser_parse_optional_block_label(loom_parser_t* parser,
+                                                     loom_region_t* region,
+                                                     loom_block_t* block,
+                                                     bool* out_present) {
+  IREE_ASSERT_ARGUMENT(out_present);
+  *out_present = false;
+  if (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_BLOCK_LABEL)) {
+    return iree_ok_status();
+  }
+
+  const iree_string_view_t* comments = NULL;
+  iree_host_size_t comment_count = 0;
+  loom_tokenizer_take_pending_comments(&parser->tokenizer, &comments,
+                                       &comment_count);
+  loom_token_t label_token = loom_tokenizer_next(&parser->tokenizer);
+  loom_string_id_t label_id = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(parser->module, label_token.text, &label_id));
+  if (loom_parser_find_block_by_label(parser, region, label_token.text)) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(label_token.text),
+    };
+    return loom_parser_emit(parser,
+                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 33),
+                            params, IREE_ARRAYSIZE(params), label_token);
+  }
+  block->label_id = label_id;
+  IREE_RETURN_IF_ERROR(loom_module_attach_block_comments(
+      parser->module, block, comments, comment_count));
+
+  if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LPAREN)) {
+    while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RPAREN) &&
+           !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+      if (block->arg_count > 0) {
+        if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+          break;
+        }
+      }
+      loom_token_t arg_name_token = loom_token_none();
+      LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &arg_name_token);
+      LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
+      loom_type_t arg_type = {0};
+      IREE_RETURN_IF_ERROR(
+          loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &arg_type));
+
+      loom_value_id_t arg_value_id = 0;
+      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
+          &parser->builder, block, arg_type, &arg_value_id));
+      LOOM_PARSE_DEFINE_VALUE_NAME(parser, arg_name_token, arg_value_id);
+    }
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RPAREN, NULL);
+  }
+
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
+  *out_present = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_parse_region_body(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_region_t* region, const void* user_data,
@@ -664,55 +722,9 @@ static iree_status_t loom_parse_region_body(
           loom_region_append_block(parser->module, region, &block));
     }
 
-    // Parse optional block label: ^label(args):
-    if (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_BLOCK_LABEL)) {
-      const iree_string_view_t* comments = NULL;
-      iree_host_size_t comment_count = 0;
-      loom_tokenizer_take_pending_comments(&parser->tokenizer, &comments,
-                                           &comment_count);
-      loom_token_t label_token = loom_tokenizer_next(&parser->tokenizer);
-      loom_string_id_t label_id = 0;
-      IREE_RETURN_IF_ERROR(loom_module_intern_string(
-          parser->module, label_token.text, &label_id));
-      if (loom_parser_find_block_by_label(parser, region, label_token.text)) {
-        loom_diagnostic_param_t params[] = {
-            loom_param_string(label_token.text),
-        };
-        return loom_parser_emit(
-            parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 33), params,
-            IREE_ARRAYSIZE(params), label_token);
-      }
-      block->label_id = label_id;
-      IREE_RETURN_IF_ERROR(loom_module_attach_block_comments(
-          parser->module, block, comments, comment_count));
-
-      // Parse optional block args: (arg: type, ...).
-      if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LPAREN)) {
-        while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RPAREN) &&
-               !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
-          if (block->arg_count > 0) {
-            if (!loom_tokenizer_try_consume(&parser->tokenizer,
-                                            LOOM_TOKEN_COMMA)) {
-              break;
-            }
-          }
-          loom_token_t arg_name_token = loom_token_none();
-          LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &arg_name_token);
-          LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
-          loom_type_t arg_type = {0};
-          IREE_RETURN_IF_ERROR(
-              loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &arg_type));
-
-          loom_value_id_t arg_value_id = 0;
-          IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
-              &parser->builder, block, arg_type, &arg_value_id));
-          LOOM_PARSE_DEFINE_VALUE_NAME(parser, arg_name_token, arg_value_id);
-        }
-        LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RPAREN, NULL);
-      }
-
-      LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
-    }
+    bool has_label = false;
+    IREE_RETURN_IF_ERROR(loom_parser_parse_optional_block_label(
+        parser, region, block, &has_label));
 
     const uint32_t block_errors_before = parser->error_count;
     IREE_RETURN_IF_ERROR(loom_parse_block_body(parser, block));

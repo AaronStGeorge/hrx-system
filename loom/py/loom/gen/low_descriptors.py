@@ -368,8 +368,6 @@ def _validate_descriptor_operands(descriptor: Descriptor) -> int:
                 raise ValueError(f"descriptor '{descriptor.key}' state operand '{operand.field_name}' must name exactly one register-class alternative")
             if operand.reg_alts[0].reg_class is None:
                 raise ValueError(f"descriptor '{descriptor.key}' state operand '{operand.field_name}' must name a concrete register class")
-            if operand.role is OperandRole.IMPLICIT and state_flags != {OperandFlag.STATE_WRITE}:
-                raise ValueError(f"descriptor '{descriptor.key}' implicit state operand '{operand.field_name}' must be a write-only clobber")
     return result_count
 
 

@@ -27,6 +27,7 @@ using ::loom::testing::ExpectAmdgpuFlatAtomicDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuGlobalSaddrMemoryDescriptors;
 using ::loom::testing::ExpectAmdgpuInstructionPrefetchDistanceDescriptor;
+using ::loom::testing::ExpectAmdgpuRegisterClassForTest;
 using ::loom::testing::ExpectAmdgpuWmmaDescriptorForTest;
 using ::loom::testing::LowFuncAsmRoundTripHarness;
 using ::loom::testing::LowTextAsmRoundTripHarness;
@@ -61,7 +62,14 @@ TEST(AmdgpuDescriptorsTest, Gfx11CoreDescriptorSetVerifies) {
   EXPECT_GE(descriptor_set->descriptor_count, 10u);
   EXPECT_EQ(descriptor_set->descriptor_ref_count,
             descriptor_set->descriptor_count);
-  EXPECT_EQ(descriptor_set->reg_class_count, 4u);
+  ExpectAmdgpuRegisterClassForTest(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR, IREE_SV("amdgpu.sgpr"));
+  ExpectAmdgpuRegisterClassForTest(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR, IREE_SV("amdgpu.vgpr"));
+  ExpectAmdgpuRegisterClassForTest(descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SCC,
+                                   IREE_SV("amdgpu.scc"));
+  ExpectAmdgpuRegisterClassForTest(
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_EXEC, IREE_SV("amdgpu.exec"));
   EXPECT_GE(descriptor_set->schedule_class_count, 7u);
   EXPECT_GE(descriptor_set->resource_count, 7u);
   for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {

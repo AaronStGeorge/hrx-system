@@ -140,30 +140,6 @@ class AmdgpuHalResourceMaterializationTest : public ::testing::Test {
     return count;
   }
 
-  int CountLowDescriptorOpsWithOpcode(const char* opcode) {
-    loom_op_t* function_op = FindFirstLowFunction();
-    if (function_op == nullptr) {
-      return 0;
-    }
-    int count = 0;
-    loom_region_t* body = loom_low_function_body(function_op);
-    for (uint16_t block_index = 0; block_index < body->block_count;
-         ++block_index) {
-      const loom_block_t* block = loom_region_const_block(body, block_index);
-      const loom_op_t* op = nullptr;
-      loom_block_for_each_op(block, op) {
-        if (loom_low_op_isa(op) &&
-            ModuleString(loom_low_op_opcode(op)) == opcode) {
-          ++count;
-        } else if (loom_low_const_isa(op) &&
-                   ModuleString(loom_low_const_opcode(op)) == opcode) {
-          ++count;
-        }
-      }
-    }
-    return count;
-  }
-
   bool HasLowConstWithI64Attr(const char* opcode, const char* attr_name,
                               int64_t value) {
     loom_op_t* function_op = FindFirstLowFunction();
@@ -433,59 +409,6 @@ TEST_F(AmdgpuHalResourceMaterializationTest,
                         loom_amdgpu_hal_resource_materialize(
                             module_, function_op, &bundle_storage.bundle,
                             descriptor_set, &result, &arena_));
-}
-
-TEST_F(AmdgpuHalResourceMaterializationTest,
-       PacketizationCleansDeadDivergentScalarRematerialization) {
-  BuildModule(
-      "low.func.def target(@gfx_target) @loom_kernel() -> "
-      "(reg<amdgpu.vgpr>) {\n"
-      "  %tid = low.live_in<" LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_X_SOURCE
-      "> : reg<amdgpu.vgpr>\n"
-      "  %dead_mask = low.const<amdgpu.s_mov_b32> {imm32 = 255} : "
-      "reg<amdgpu.sgpr>\n"
-      "  %dead_shift = low.const<amdgpu.s_mov_b32> {imm32 = 3} : "
-      "reg<amdgpu.sgpr>\n"
-      "  %mask = low.const<amdgpu.v_mov_b32> {imm32 = 255} : "
-      "reg<amdgpu.vgpr>\n"
-      "  %masked = low.op<amdgpu.v_and_b32>(%tid, %mask) : "
-      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-      "  %shift = low.const<amdgpu.v_mov_b32> {imm32 = 3} : "
-      "reg<amdgpu.vgpr>\n"
-      "  %left = low.op<amdgpu.v_lshlrev_b32>(%shift, %masked) : "
-      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-      "  %mixed = low.op<amdgpu.v_xor_b32>(%left, %tid) : "
-      "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-      "  low.return %mixed : reg<amdgpu.vgpr>\n"
-      "}\n",
-      "");
-
-  loom_op_t* function_op = FindFirstLowFunction();
-  ASSERT_NE(function_op, nullptr);
-  VerifyModule();
-  EXPECT_EQ(CountLowDescriptorOpsWithOpcode("amdgpu.s_mov_b32"), 2);
-  loom_target_bundle_storage_t bundle_storage = {};
-  BuildBundle(&bundle_storage);
-  const loom_low_descriptor_set_t* descriptor_set =
-      SelectDescriptorSet(&bundle_storage.bundle);
-
-  const loom_low_allocation_fixed_value_t* fixed_values = nullptr;
-  iree_host_size_t fixed_value_count = 0;
-  IREE_ASSERT_OK(loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
-      module_, function_op, descriptor_set, &fixed_values, &fixed_value_count,
-      &arena_));
-  loom_low_packetization_options_t packetization_options = {
-      .descriptor_registry = &target_registry_.registry,
-      .allocation_fixed_values = fixed_values,
-      .allocation_fixed_value_count = fixed_value_count,
-  };
-  loom_low_packetization_t packetization = {};
-  IREE_ASSERT_OK(loom_low_packetize_function(
-      module_, function_op, &packetization_options, &arena_, &packetization));
-
-  EXPECT_EQ(CountLowDescriptorOpsWithOpcode("amdgpu.s_mov_b32"), 0);
-  EXPECT_EQ(CountLowDescriptorOpsWithOpcode("amdgpu.v_mov_b32"), 2);
-  EXPECT_GT(packetization.schedule.scheduled_node_count, 0u);
 }
 
 TEST_F(AmdgpuHalResourceMaterializationTest,

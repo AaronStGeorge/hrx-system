@@ -183,6 +183,24 @@ iree_status_t loom_low_lower_allocate_plan_data(
                                                out_data);
 }
 
+iree_status_t loom_low_lower_lookup_block(loom_low_lower_context_t* context,
+                                          const loom_block_t* source_block,
+                                          loom_block_t** out_low_block) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(out_low_block);
+  *out_low_block = NULL;
+  loom_region_t* source_body = loom_func_like_body(context->source_function);
+  uint16_t source_index = 0;
+  if (!source_body ||
+      !loom_region_try_block_index(source_body, source_block, &source_index)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "branch target block is outside the source region");
+  }
+  IREE_ASSERT(context->block_map[source_index] != NULL);
+  *out_low_block = context->block_map[source_index];
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_lower_register_class_string_id(
     loom_low_lower_context_t* context, uint16_t reg_class_id,
     loom_string_id_t* out_string_id) {

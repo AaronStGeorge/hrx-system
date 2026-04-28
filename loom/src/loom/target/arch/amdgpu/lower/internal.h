@@ -186,6 +186,14 @@ iree_status_t loom_amdgpu_map_argument(
     loom_value_id_t source_argument_id,
     loom_low_lower_abi_argument_t* out_argument);
 
+// Emits a conditional branch, using EXEC narrowing for divergent SGPR masks.
+iree_status_t loom_amdgpu_emit_cond_branch(void* user_data,
+                                           loom_low_lower_context_t* context,
+                                           const loom_op_t* source_op,
+                                           loom_value_id_t low_condition,
+                                           loom_block_t* low_true_dest,
+                                           loom_block_t* low_false_dest);
+
 // Extracts an exact index constant from a module value.
 bool loom_amdgpu_module_value_as_exact_index_constant(
     const loom_module_t* module, loom_value_id_t value_id, int64_t* out_value);

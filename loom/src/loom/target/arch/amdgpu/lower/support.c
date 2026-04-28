@@ -426,6 +426,26 @@ bool loom_amdgpu_value_prefers_vgpr(loom_low_lower_context_t* context,
       loom_low_lower_context_module(context), source_value_id);
 }
 
+static bool loom_amdgpu_value_is_divergent_scalar_cmpi_result(
+    loom_low_lower_context_t* context, loom_value_id_t source_value_id) {
+  const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_t* value = loom_module_value(module, source_value_id);
+  if (loom_value_is_block_arg(value)) {
+    return false;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op || !loom_scalar_cmpi_isa(defining_op)) {
+    return false;
+  }
+  if (loom_value_def_index(value) != 0) {
+    return false;
+  }
+  return loom_amdgpu_value_prefers_vgpr(context,
+                                        loom_scalar_cmpi_lhs(defining_op)) ||
+         loom_amdgpu_value_prefers_vgpr(context,
+                                        loom_scalar_cmpi_rhs(defining_op));
+}
+
 iree_status_t loom_amdgpu_map_type(void* user_data,
                                    loom_low_lower_context_t* context,
                                    const loom_op_t* source_op,
@@ -493,6 +513,11 @@ iree_status_t loom_amdgpu_map_value(void* user_data,
                                     loom_type_t source_type,
                                     loom_type_t* out_low_type) {
   (void)user_data;
+  if (loom_amdgpu_type_is_i1(source_type) &&
+      loom_amdgpu_value_is_divergent_scalar_cmpi_result(context,
+                                                        source_value_id)) {
+    return loom_amdgpu_make_sgpr_range_type(context, 2, out_low_type);
+  }
   if (loom_amdgpu_type_is_f32(source_type)) {
     return loom_amdgpu_make_vgpr_type(context, out_low_type);
   }
@@ -638,11 +663,8 @@ bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,
 
 bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
     loom_low_lower_context_t* context, loom_value_id_t value_id) {
-  int64_t unused_value = 0;
-  const loom_module_t* module = loom_low_lower_context_module(context);
-  return loom_amdgpu_module_value_prefers_vgpr(module, value_id) ||
-         loom_amdgpu_module_value_as_i32_constant(module, value_id,
-                                                  &unused_value);
+  return loom_amdgpu_type_is_i32(
+      loom_module_value_type(loom_low_lower_context_module(context), value_id));
 }
 
 bool loom_amdgpu_value_can_materialize_as_vgpr_address(

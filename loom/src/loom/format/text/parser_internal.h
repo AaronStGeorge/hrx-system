@@ -499,11 +499,21 @@ void loom_parser_pending_block_args_clear(
 iree_status_t loom_parser_seed_region_entry_block(loom_parser_t* parser,
                                                   loom_region_t* region);
 
+// Parses an optional block label and block argument list for |block| in
+// |region|. Sets |out_present| when a label was consumed.
+iree_status_t loom_parser_parse_optional_block_label(loom_parser_t* parser,
+                                                     loom_region_t* region,
+                                                     loom_block_t* block,
+                                                     bool* out_present);
+
 // Appends |region_descriptor|'s implicit terminator to |block| when the block
 // does not already end in an explicit terminator.
 iree_status_t loom_parser_append_implicit_terminator(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_block_t* block);
+
+// Parses one ordinary operation at the current tokenizer position.
+iree_status_t loom_parse_op(loom_parser_t* parser);
 
 // Parses an optional `loc(...)` annotation. Leaves |fallback_location| in place
 // when no explicit annotation is present.

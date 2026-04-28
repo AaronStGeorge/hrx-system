@@ -762,6 +762,37 @@ static iree_status_t loom_parse_low_asm_packet(
   return status;
 }
 
+static bool loom_low_asm_token_is_canonical_control_op(loom_token_t token) {
+  return token.kind == LOOM_TOKEN_OP_NAME &&
+         (iree_string_view_equal(token.text, IREE_SV("low.br")) ||
+          iree_string_view_equal(token.text, IREE_SV("low.cond_br")));
+}
+
+static iree_status_t loom_parse_low_asm_block_body(
+    loom_parser_t* parser,
+    const loom_text_low_asm_descriptor_set_t* descriptor_set,
+    loom_block_t* block) {
+  loom_builder_set_block(&parser->builder, block);
+  while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RBRACE) &&
+         !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF) &&
+         !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_BLOCK_LABEL)) {
+    if (loom_parser_at_error_limit(parser)) {
+      break;
+    }
+    uint32_t errors_before = parser->error_count;
+    if (loom_low_asm_token_is_canonical_control_op(
+            loom_tokenizer_peek(&parser->tokenizer))) {
+      IREE_RETURN_IF_ERROR(loom_parse_op(parser));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_parse_low_asm_packet(parser, descriptor_set));
+    }
+    if (parser->error_count > errors_before) {
+      loom_parser_sync_to_newline(parser);
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_parse_low_asm_region_body(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_region_t* region, const void* user_data,
@@ -773,34 +804,38 @@ static iree_status_t loom_parse_low_asm_region_body(
 
   IREE_RETURN_IF_ERROR(loom_parser_seed_region_entry_block(parser, region));
 
-  loom_block_t* entry_block = loom_region_entry_block(region);
-  loom_builder_set_block(&parser->builder, entry_block);
-  const uint32_t block_errors_before = parser->error_count;
+  bool first_block = true;
   while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RBRACE) &&
          !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
     if (loom_parser_at_error_limit(parser)) {
       break;
     }
 
-    if (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_BLOCK_LABEL)) {
-      loom_token_t label_token = loom_tokenizer_next(&parser->tokenizer);
-      IREE_RETURN_IF_ERROR(loom_parser_emit_low_asm_error(
-          parser, label_token,
-          IREE_SV("block labels are not supported in straight-line low asm")));
-      loom_parser_sync_to_newline(parser);
-      continue;
+    loom_block_t* block = NULL;
+    if (first_block) {
+      block = loom_region_entry_block(region);
+      first_block = false;
+    } else {
+      IREE_RETURN_IF_ERROR(
+          loom_region_append_block(parser->module, region, &block));
     }
 
-    const uint32_t packet_errors_before = parser->error_count;
-    IREE_RETURN_IF_ERROR(loom_parse_low_asm_packet(parser, descriptor_set));
-    if (parser->error_count > packet_errors_before) {
-      loom_parser_sync_to_newline(parser);
+    bool has_label = false;
+    IREE_RETURN_IF_ERROR(loom_parser_parse_optional_block_label(
+        parser, region, block, &has_label));
+
+    const uint32_t block_errors_before = parser->error_count;
+    IREE_RETURN_IF_ERROR(
+        loom_parse_low_asm_block_body(parser, descriptor_set, block));
+    if (parser->error_count == block_errors_before) {
+      IREE_RETURN_IF_ERROR(loom_parser_append_implicit_terminator(
+          parser, region_descriptor, block));
     }
   }
 
-  if (parser->error_count == block_errors_before) {
+  if (first_block && !loom_parser_at_error_limit(parser)) {
     IREE_RETURN_IF_ERROR(loom_parser_append_implicit_terminator(
-        parser, region_descriptor, entry_block));
+        parser, region_descriptor, loom_region_entry_block(region)));
   }
 
   loom_tokenizer_discard_pending_comments(&parser->tokenizer);

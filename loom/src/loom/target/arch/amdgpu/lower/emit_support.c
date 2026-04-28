@@ -320,16 +320,25 @@ iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
   }
 
   int64_t value = 0;
-  if (!loom_amdgpu_value_as_i32_constant(context, source_value, &value)) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "AMDGPU i32 value cannot materialize as a VGPR operand");
+  if (loom_amdgpu_value_as_i32_constant(context, source_value, &value)) {
+    loom_type_t vgpr_type = loom_type_none();
+    IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
+    return loom_amdgpu_emit_const_u32(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
+        (uint32_t)(int32_t)value, vgpr_type, out_low_value);
   }
-  loom_type_t vgpr_type = loom_type_none();
-  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
-  return loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_ID_V_MOV_B32,
-      (uint32_t)(int32_t)value, vgpr_type, out_low_value);
+
+  bool is_sgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+      context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &is_sgpr));
+  if (is_sgpr && loom_type_register_unit_count(low_type) == 1) {
+    return loom_amdgpu_emit_vgpr_b32_copy(context, source_op, low_value,
+                                          out_low_value);
+  }
+
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "AMDGPU i32 value cannot materialize as a VGPR operand");
 }
 
 iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_address(

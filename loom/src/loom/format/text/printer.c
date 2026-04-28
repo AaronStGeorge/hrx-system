@@ -217,8 +217,8 @@ static iree_status_t loom_print_block_label_view(
   }
 }
 
-static bool loom_print_region_needs_synthetic_labels(
-    const loom_print_context_t* ctx, const loom_region_t* region) {
+bool loom_print_region_needs_synthetic_labels(const loom_print_context_t* ctx,
+                                              const loom_region_t* region) {
   if (!region) {
     return false;
   }
@@ -283,8 +283,7 @@ iree_status_t loom_print_successor_ref(loom_print_context_t* ctx,
 // Op and region printing
 //===----------------------------------------------------------------------===//
 
-static iree_status_t loom_print_op(loom_print_context_t* ctx,
-                                   const loom_op_t* op) {
+iree_status_t loom_print_op(loom_print_context_t* ctx, const loom_op_t* op) {
   const loom_op_vtable_t* vtable = NULL;
   if (ctx->module->context) {
     vtable = loom_context_resolve_op(ctx->module->context, op->kind);
@@ -360,9 +359,9 @@ static bool loom_print_should_elide_implicit_terminator(
          op->attribute_count == 0 && op->instance_flags == 0;
 }
 
-static iree_status_t loom_print_block_label_line(loom_print_context_t* ctx,
-                                                 const loom_region_t* region,
-                                                 const loom_block_t* block) {
+iree_status_t loom_print_block_label_line(loom_print_context_t* ctx,
+                                          const loom_region_t* region,
+                                          const loom_block_t* block) {
   uint16_t label_indent = ctx->indent > 0 ? (uint16_t)(ctx->indent - 1) : 0;
   char label_buffer[64];
   iree_string_view_t label = iree_string_view_empty();

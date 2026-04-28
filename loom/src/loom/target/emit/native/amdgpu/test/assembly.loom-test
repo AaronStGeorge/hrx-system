@@ -22,13 +22,13 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x
 // RUN: emit amdgpu-assembly @gfx11_branch waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
-low.func.def target(@gfx11_target) @gfx11_branch() {
+low.func.def target(@gfx11_target) @gfx11_branch() asm<amdgpu.gfx11.core> {
   low.br ^body
 ^body:
-  low.op<amdgpu.s_wait_idle>() : ()
+  s_wait_idle
   low.br ^exit
 ^exit:
-  low.return
+  return
 }
 
 // ----
@@ -45,12 +45,12 @@ low.func.def target(@gfx11_target) @gfx11_branch() {
 // RUN: emit amdgpu-assembly @gfx11_branch_args waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
-low.func.def target(@gfx11_target) @gfx11_branch_args(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.vgpr>) {
+low.func.def target(@gfx11_target) @gfx11_branch_args(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   low.br ^join(%lhs: reg<amdgpu.vgpr>)
 ^join(%incoming: reg<amdgpu.vgpr>):
-  %sum = low.op<amdgpu.v_add_u32>(%incoming, %lhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword>(%sum, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
-  low.return
+  %sum = v_add_u32 %incoming, %lhs
+  buffer_store_dword %sum, %resource, %vaddr, %soffset {offset = 0}
+  return
 }
 
 // ----
@@ -67,12 +67,12 @@ low.func.def target(@gfx11_target) @gfx11_branch_args(%resource: reg<amdgpu.sgpr
 // RUN: emit amdgpu-assembly @gfx11_branch_arg_cycle waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
-low.func.def target(@gfx11_target) @gfx11_branch_arg_cycle(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) {
+low.func.def target(@gfx11_target) @gfx11_branch_arg_cycle(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   low.br ^join(%rhs: reg<amdgpu.vgpr>, %lhs: reg<amdgpu.vgpr>)
 ^join(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>):
-  %sum = low.op<amdgpu.v_add_u32>(%a, %b) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.buffer_store_dword>(%sum, %resource, %vaddr, %soffset) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>)
-  low.return
+  %sum = v_add_u32 %a, %b
+  buffer_store_dword %sum, %resource, %vaddr, %soffset {offset = 0}
+  return
 }
 
 // ----
@@ -91,7 +91,7 @@ low.func.def target(@gfx11_target) @gfx11_branch_arg_cycle(%resource: reg<amdgpu
 // RUN: emit amdgpu-assembly @gfx11_loop_arg_cycle waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
-low.func.def target(@gfx11_target) @gfx11_loop_arg_cycle(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) {
+low.func.def target(@gfx11_target) @gfx11_loop_arg_cycle(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
   low.br ^loop(%rhs: reg<amdgpu.vgpr>, %lhs: reg<amdgpu.vgpr>)
 ^loop(%a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>):
   low.br ^loop(%b: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>)
@@ -114,13 +114,13 @@ low.func.def target(@gfx11_target) @gfx11_loop_arg_cycle(%lhs: reg<amdgpu.vgpr>,
 // RUN: emit amdgpu-assembly @gfx11_cond_branch waits=none
 target.profile @gfx11_target preset("amdgpu-gfx11")
 
-low.func.def target(@gfx11_target) @gfx11_cond_branch(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>) {
-  %cond = low.op<amdgpu.s_cmp_lt_i32>(%lhs, %rhs) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.scc>
+low.func.def target(@gfx11_target) @gfx11_cond_branch(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
+  %cond = s_cmp_lt_i32 %lhs, %rhs
   low.cond_br %cond, ^then, ^else : reg<amdgpu.scc>
 ^then:
-  low.return
+  return
 ^else:
-  low.return
+  return
 }
 
 // ----
@@ -131,6 +131,34 @@ low.func.def target(@gfx11_target) @gfx11_cond_branch(%lhs: reg<amdgpu.sgpr>, %r
 .Lbb1:
   s_endpgm
 .Lbb2:
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx11_exec_mask_branch waits=none
+target.profile @gfx11_target preset("amdgpu-gfx11")
+
+low.func.def target(@gfx11_target) @gfx11_exec_mask_branch(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.gfx11.core> {
+  %mask = v_cmp_lt_i32 %lhs, %rhs
+  %saved_exec, %active = s_and_saveexec_b64 %mask
+  low.cond_br %active, ^then, ^join : reg<amdgpu.scc>
+^then:
+  low.br ^join
+^join:
+  s_mov_b64_exec %saved_exec
+  return
+}
+
+// ----
+.Lbb0:
+  v_cmp_lt_i32 s[0:1], v0, v1
+  s_and_saveexec_b64 s[0:1], s[0:1]
+  s_cbranch_scc1 .Lbb1
+  s_branch .Lbb2
+.Lbb1:
+  s_branch .Lbb2
+.Lbb2:
+  s_mov_b64 exec, s[0:1]
   s_endpgm
 
 // ====

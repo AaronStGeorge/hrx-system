@@ -69,6 +69,7 @@ _REG_VGPR = "amdgpu.vgpr"
 _REG_AGPR = "amdgpu.agpr"
 _REG_M0 = "amdgpu.m0"
 _REG_SCC = "amdgpu.scc"
+_REG_EXEC = "amdgpu.exec"
 
 _REG_PART_VGPR_LOW16 = "amdgpu.vgpr.low16"
 _REG_PART_VGPR_HIGH16 = "amdgpu.vgpr.high16"
@@ -202,6 +203,7 @@ _VGPR_AGPR_CONST_ALT = (
 )
 _M0_ALT = (RegClassAlt(_REG_M0, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 _SCC_ALT = (RegClassAlt(_REG_SCC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
+_EXEC_ALT = (RegClassAlt(_REG_EXEC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 
 _VGPR_REGISTER_PARTS = (
     RegisterPart(_REG_PART_VGPR_LOW16, _REG_VGPR, 0x1),
@@ -480,22 +482,32 @@ def _scc_result(field_name: str = "scc") -> Operand:
     )
 
 
-def _scc_predicate(field_name: str = "scc") -> Operand:
-    return Operand(
-        field_name,
-        OperandRole.PREDICATE,
-        _SCC_ALT,
-        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
-        unit_count=1,
-    )
-
-
 def _scc_clobber(field_name: str = "scc") -> Operand:
     return Operand(
         field_name,
         OperandRole.IMPLICIT,
         _SCC_ALT,
         flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_WRITE),
+        unit_count=1,
+    )
+
+
+def _exec_clobber(field_name: str = "exec") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _EXEC_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_WRITE),
+        unit_count=1,
+    )
+
+
+def _exec_state_read(field_name: str = "exec_in") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _EXEC_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
         unit_count=1,
     )
 
@@ -554,7 +566,7 @@ _U32_IMMEDIATE = Immediate(
 )
 
 
-def _s_mov_b32_descriptors() -> tuple[Descriptor, ...]:
+def _manual_scalar_move_descriptors() -> tuple[Descriptor, ...]:
     return (
         Descriptor(
             key="amdgpu.s_mov_b32",
@@ -589,6 +601,30 @@ def _s_mov_b32_descriptors() -> tuple[Descriptor, ...]:
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="amdgpu.s_mov_b64_exec",
+            mnemonic="s_mov_b64",
+            semantic_tag="control.exec.restore",
+            operands=(
+                Operand(
+                    "src",
+                    OperandRole.OPERAND,
+                    _SGPR_ALT,
+                    encoding_field_id=amdgpu_encoding_field_id("SSRC0"),
+                    unit_count=2,
+                ),
+                _exec_clobber(),
+            ),
+            encoding_field_values=(
+                EncodingFieldValue(amdgpu_encoding_field_id("SDST"), 126),
+            ),
+            asm_forms=_asm(mnemonic="s_mov_b64_exec", operands=("src",)),
+            effects=(_CONVERGENT_EFFECT,),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
+            encoding_id=1,
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
         ),
     )
 
@@ -1431,6 +1467,46 @@ def _s_cmp_i32_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     )
 
 
+def _s_and_saveexec_b64_overlay(
+    encoding_condition: str,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_and_saveexec_b64",
+        instruction_name="S_AND_SAVEEXEC_B64",
+        mnemonic="s_and_saveexec_b64",
+        encoding_name="ENC_SOP1",
+        encoding_condition=encoding_condition,
+        semantic_tag="control.exec.and_save",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(
+            AmdgpuOperandOverlay("SDST", _sgpr_result("saved_exec", units=2)),
+            AmdgpuOperandOverlay("SSRC0", _sgpr_operand("mask", units=2)),
+        ),
+        implicit_operands=(
+            AmdgpuImplicitOperandOverlay(
+                "OPR_SDST_EXEC",
+                descriptor_operand=_exec_clobber("exec_out"),
+                data_format_name="FMT_NUM_M64",
+                size_bits=64,
+                is_input=False,
+                is_output=True,
+            ),
+            AmdgpuImplicitOperandOverlay(
+                "OPR_SDST_EXEC",
+                descriptor_operand=_exec_state_read(),
+                data_format_name="FMT_NUM_M64",
+                size_bits=64,
+                is_input=True,
+                is_output=False,
+            ),
+            _scc_output(_scc_result("active")),
+        ),
+        asm_forms=_asm(results=("saved_exec", "active"), operands=("mask",)),
+        effects=(_CONVERGENT_EFFECT,),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _s_lshl_b32_overlay() -> AmdgpuDescriptorOverlay:
     return _s_binary_u32_overlay(
         descriptor_key="amdgpu.s_lshl_b32",
@@ -1855,7 +1931,7 @@ def _v_mov_b32_copy_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("src")),
         ),
-        asm_forms=(),
+        asm_forms=_asm(mnemonic="v_mov_b32_copy", results=("dst",), operands=("src",)),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -5127,6 +5203,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
         *_s_cmp_i32_overlays(),
+        _s_and_saveexec_b64_overlay("default"),
         _v_add_u32_overlay("V_ADD_U32"),
         _v_sub_u32_overlay("V_SUB_U32", "v_sub_u32"),
         _v_mov_b32_literal_overlay(),
@@ -5292,6 +5369,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
         *_s_cmp_i32_overlays(),
+        _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
@@ -5458,6 +5536,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
         *_s_cmp_i32_overlays(),
+        _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
@@ -5649,6 +5728,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _s_add_u32_overlay(),
         _s_sub_u32_overlay(),
         *_s_cmp_i32_overlays(),
+        _s_and_saveexec_b64_overlay("Nothas_lit_0_Nothas_lit_1"),
         _v_add_u32_overlay("V_ADD_NC_U32"),
         _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
         _v_mov_b32_literal_overlay(),
@@ -5871,6 +5951,13 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             physical_count=1,
         ),
         RegClass(
+            _REG_EXEC,
+            64,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
+        ),
+        RegClass(
             _REG_AGPR,
             32,
             SpillSlotSpace.SCRATCH,
@@ -5931,7 +6018,7 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=_s_mov_b32_descriptors(),
+    descriptors=_manual_scalar_move_descriptors(),
 )
 
 
@@ -5966,6 +6053,13 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         RegClass(
             _REG_SCC,
             1,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
+        ),
+        RegClass(
+            _REG_EXEC,
+            64,
             SpillSlotSpace.PRIVATE,
             flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
             physical_count=1,
@@ -6039,7 +6133,7 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=_s_mov_b32_descriptors(),
+    descriptors=_manual_scalar_move_descriptors(),
 )
 
 _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
@@ -6073,6 +6167,13 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         RegClass(
             _REG_SCC,
             1,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
+        ),
+        RegClass(
+            _REG_EXEC,
+            64,
             SpillSlotSpace.PRIVATE,
             flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
             physical_count=1,
@@ -6164,7 +6265,7 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=_s_mov_b32_descriptors(),
+    descriptors=_manual_scalar_move_descriptors(),
 )
 
 _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
@@ -6198,6 +6299,13 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         RegClass(
             _REG_SCC,
             1,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            physical_count=1,
+        ),
+        RegClass(
+            _REG_EXEC,
+            64,
             SpillSlotSpace.PRIVATE,
             flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
             physical_count=1,
@@ -6307,7 +6415,7 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
     descriptors=(
-        *_s_mov_b32_descriptors(),
+        *_manual_scalar_move_descriptors(),
         Descriptor(
             key="amdgpu.v_wmma_f32_16x16x32_f16",
             mnemonic="v_wmma_f32_16x16x32_f16",
@@ -6703,7 +6811,7 @@ def amdgpu_common_reg_class_ids() -> tuple[tuple[str, int], ...]:
     """Returns descriptor-set-local register-class IDs shared by all AMDGPU sets."""
 
     result: list[tuple[str, int]] = []
-    for reg_class_name in (_REG_SGPR, _REG_VGPR, _REG_SCC):
+    for reg_class_name in (_REG_SGPR, _REG_VGPR, _REG_SCC, _REG_EXEC):
         expected_reg_class_id: int | None = None
         for descriptor_set in _amdgpu_core_descriptor_set_bases():
             reg_class_id = next(

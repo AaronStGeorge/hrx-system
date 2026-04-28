@@ -558,6 +558,7 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
     .map_value = {.fn = loom_amdgpu_map_value, .user_data = NULL},
     .map_argument = {.fn = loom_amdgpu_map_argument, .user_data = NULL},
     .emit_preamble = {.fn = loom_amdgpu_emit_preamble, .user_data = NULL},
+    .emit_cond_branch = {.fn = loom_amdgpu_emit_cond_branch, .user_data = NULL},
     .rule_sets =
         {
             .count = IREE_ARRAYSIZE(kAmdgpuRuleSets),

@@ -858,22 +858,6 @@ static iree_status_t loom_low_lower_emit_preamble(
   return status;
 }
 
-static iree_status_t loom_low_lower_lookup_block(
-    loom_low_lower_context_t* context, loom_region_t* source_body,
-    const loom_block_t* source_block, loom_block_t** out_low_block) {
-  IREE_ASSERT_ARGUMENT(context);
-  IREE_ASSERT_ARGUMENT(out_low_block);
-  *out_low_block = NULL;
-  uint16_t source_index = 0;
-  if (!loom_region_try_block_index(source_body, source_block, &source_index)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "branch target block is outside the source region");
-  }
-  IREE_ASSERT(context->block_map[source_index] != NULL);
-  *out_low_block = context->block_map[source_index];
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_lower_remap_values(
     loom_low_lower_context_t* context, const loom_value_id_t* source_values,
     iree_host_size_t value_count, loom_value_id_t** out_low_values) {
@@ -908,8 +892,8 @@ static iree_status_t loom_low_lower_bind_identity_results(
 }
 
 static iree_status_t loom_low_lower_structural_op(
-    loom_low_lower_context_t* context, loom_region_t* source_body,
-    const loom_op_t* source_op, bool* out_handled) {
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    bool* out_handled) {
   *out_handled = true;
   if (loom_low_lower_op_is_fact_identity(context->module, source_op)) {
     return loom_low_lower_bind_identity_results(context, source_op);
@@ -932,7 +916,7 @@ static iree_status_t loom_low_lower_structural_op(
     case LOOM_OP_CFG_BR: {
       loom_block_t* low_dest = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(
-          context, source_body, loom_cfg_br_dest(source_op), &low_dest));
+          context, loom_cfg_br_dest(source_op), &low_dest));
       loom_value_slice_t args = loom_cfg_br_args(source_op);
       loom_value_id_t* low_args = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(context, args.values,
@@ -944,15 +928,18 @@ static iree_status_t loom_low_lower_structural_op(
     case LOOM_OP_CFG_COND_BR: {
       loom_block_t* low_true_dest = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(
-          context, source_body, loom_cfg_cond_br_true_dest(source_op),
-          &low_true_dest));
+          context, loom_cfg_cond_br_true_dest(source_op), &low_true_dest));
       loom_block_t* low_false_dest = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_lookup_block(
-          context, source_body, loom_cfg_cond_br_false_dest(source_op),
-          &low_false_dest));
+          context, loom_cfg_cond_br_false_dest(source_op), &low_false_dest));
       loom_value_id_t low_condition = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
           context, loom_cfg_cond_br_condition(source_op), &low_condition));
+      if (context->policy->emit_cond_branch.fn != NULL) {
+        return context->policy->emit_cond_branch.fn(
+            context->policy->emit_cond_branch.user_data, context, source_op,
+            low_condition, low_true_dest, low_false_dest);
+      }
       loom_op_t* low_cond_br_op = NULL;
       return loom_low_cond_br_build(&context->builder, low_condition,
                                     low_true_dest, low_false_dest,
@@ -1025,8 +1012,7 @@ static iree_status_t loom_low_lower_emit_body(loom_low_lower_context_t* context,
     loom_op_t* source_op = NULL;
     loom_block_for_each_op(source_block, source_op) {
       bool handled = false;
-      status = loom_low_lower_structural_op(context, source_body, source_op,
-                                            &handled);
+      status = loom_low_lower_structural_op(context, source_op, &handled);
       if (!iree_status_is_ok(status)) {
         break;
       }
@@ -1188,13 +1174,19 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
     if (iree_status_is_ok(status)) {
       status = loom_low_lower_emit_body(&context, source_body);
     }
+    if (iree_status_is_ok(status) && context.result->error_count != 0) {
+      status = loom_op_erase(module, context.low_func_op);
+      context.low_func_op = NULL;
+      out_result->low_func_op = NULL;
+      out_result->low_func_ref = loom_symbol_ref_null();
+    }
     // The replacement low op carries the source symbol while the source op
     // still owns the symbol table entry. Erase clears that entry; relink it to
     // the replacement so callers keep the same symbol identity.
-    if (iree_status_is_ok(status)) {
+    if (iree_status_is_ok(status) && context.result->error_count == 0) {
       status = loom_op_erase(module, source_function.op);
     }
-    if (iree_status_is_ok(status)) {
+    if (iree_status_is_ok(status) && context.result->error_count == 0) {
       loom_module_link_symbol_defining_op(
           module, context.low_func_op,
           loom_op_vtable(module, context.low_func_op));

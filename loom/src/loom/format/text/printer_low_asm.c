@@ -43,6 +43,13 @@ bool loom_print_low_asm_is_requested(loom_print_context_t* ctx) {
   return !iree_string_view_is_empty(ctx->low_asm_descriptor_set_key);
 }
 
+static bool loom_print_low_asm_allows_canonical_control_op(
+    loom_print_context_t* ctx, const loom_op_t* op) {
+  iree_string_view_t op_name = loom_op_name(ctx->module, op);
+  return iree_string_view_equal(op_name, IREE_SV("low.br")) ||
+         iree_string_view_equal(op_name, IREE_SV("low.cond_br"));
+}
+
 static iree_status_t loom_print_low_asm_describe_operation(
     loom_print_context_t* ctx,
     const loom_text_low_asm_descriptor_set_t* descriptor_set,
@@ -303,26 +310,28 @@ static iree_status_t loom_print_low_asm_region_preflight(
   if (!region || region->block_count == 0) {
     return iree_ok_status();
   }
-  if (region->block_count != 1) {
-    *out_available = false;
-    return iree_ok_status();
-  }
-  const loom_block_t* block = loom_region_const_entry_block(region);
-  if (block->arg_count != 0 && !allow_entry_block_args) {
-    *out_available = false;
-    return iree_ok_status();
-  }
-  const loom_op_t* current_op = NULL;
-  loom_block_for_each_op(block, current_op) {
-    loom_text_low_asm_statement_t statement = {0};
-    IREE_RETURN_IF_ERROR(loom_print_low_asm_describe_operation(
-        ctx, descriptor_set, current_op, &statement));
-    if (statement.kind == LOOM_TEXT_LOW_ASM_STATEMENT_UNKNOWN) {
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    const loom_block_t* block = loom_region_const_block(region, block_index);
+    if (block_index == 0 && block->arg_count != 0 && !allow_entry_block_args) {
       *out_available = false;
       return iree_ok_status();
     }
-    IREE_RETURN_IF_ERROR(
-        loom_print_low_asm_validate_statement(ctx, &statement));
+    const loom_op_t* current_op = NULL;
+    loom_block_for_each_op(block, current_op) {
+      loom_text_low_asm_statement_t statement = {0};
+      IREE_RETURN_IF_ERROR(loom_print_low_asm_describe_operation(
+          ctx, descriptor_set, current_op, &statement));
+      if (statement.kind == LOOM_TEXT_LOW_ASM_STATEMENT_UNKNOWN) {
+        if (!loom_print_low_asm_allows_canonical_control_op(ctx, current_op)) {
+          *out_available = false;
+          return iree_ok_status();
+        }
+        continue;
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_print_low_asm_validate_statement(ctx, &statement));
+    }
   }
   return iree_ok_status();
 }
@@ -708,22 +717,35 @@ static iree_status_t loom_print_low_asm_region_body(
   if (!region || region->block_count == 0) {
     return iree_ok_status();
   }
-  const loom_block_t* block = loom_region_const_entry_block(region);
-  const loom_op_t* current_op = NULL;
-  loom_block_for_each_op(block, current_op) {
-    IREE_RETURN_IF_ERROR(loom_print_op_comments(ctx, current_op));
-    IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
-    loom_text_low_asm_statement_t statement = {0};
-    IREE_RETURN_IF_ERROR(loom_print_low_asm_describe_operation(
-        ctx, descriptor_set, current_op, &statement));
-    if (statement.kind == LOOM_TEXT_LOW_ASM_STATEMENT_UNKNOWN) {
-      iree_string_view_t op_name = loom_op_name(ctx->module, current_op);
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "low asm region contains unsupported op '%.*s'",
-                              (int)op_name.size, op_name.data);
+  const bool needs_synthetic_labels =
+      loom_print_region_needs_synthetic_labels(ctx, region);
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    const loom_block_t* block = loom_region_const_block(region, block_index);
+    if (loom_print_block_has_label(ctx, block) || needs_synthetic_labels) {
+      IREE_RETURN_IF_ERROR(loom_print_block_label_line(ctx, region, block));
     }
-    IREE_RETURN_IF_ERROR(loom_print_low_asm_statement(ctx, &statement));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '\n'));
+    const loom_op_t* current_op = NULL;
+    loom_block_for_each_op(block, current_op) {
+      IREE_RETURN_IF_ERROR(loom_print_op_comments(ctx, current_op));
+      loom_text_low_asm_statement_t statement = {0};
+      IREE_RETURN_IF_ERROR(loom_print_low_asm_describe_operation(
+          ctx, descriptor_set, current_op, &statement));
+      if (statement.kind == LOOM_TEXT_LOW_ASM_STATEMENT_UNKNOWN) {
+        if (loom_print_low_asm_allows_canonical_control_op(ctx, current_op)) {
+          IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+          IREE_RETURN_IF_ERROR(loom_print_op(ctx, current_op));
+          continue;
+        }
+        iree_string_view_t op_name = loom_op_name(ctx->module, current_op);
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm region contains unsupported op '%.*s'",
+                                (int)op_name.size, op_name.data);
+      }
+      IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+      IREE_RETURN_IF_ERROR(loom_print_low_asm_statement(ctx, &statement));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '\n'));
+    }
   }
   return iree_ok_status();
 }

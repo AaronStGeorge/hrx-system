@@ -488,16 +488,50 @@ TEST_F(LowAsmParserTest, RejectsUnexpectedNamedImmediate) {
   (void)diagnostics;
 }
 
-TEST_F(LowAsmParserTest, RejectsBlockLabels) {
-  const auto& diagnostics = ParseExpectErrors(
+TEST_F(LowAsmParserTest, BuildsControlFlowBlocks) {
+  loom_module_t* module = ParseOk(
       "test.low_asm_region asm<test.low.core> {\n"
-      "^entry:\n"
-      "  return\n"
+      "  %cond = test.const.i32 1\n"
+      "  low.cond_br %cond, ^then, ^else : reg<test.i32>\n"
+      "^then:\n"
+      "  low.br ^join(%cond: reg<test.i32>)\n"
+      "^else:\n"
+      "  low.br ^join(%cond: reg<test.i32>)\n"
+      "^join(%result: reg<test.i32>):\n"
+      "  return %result\n"
       "}\n");
-  ExpectError(diagnostics[0],
-              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 34));
-  EXPECT_EQ(GetStringParam(diagnostics[0], 0),
-            "block labels are not supported in straight-line low asm");
+  ASSERT_NE(module, nullptr);
+
+  loom_block_t* module_block = loom_module_block(module);
+  ASSERT_EQ(module_block->op_count, 1u);
+  loom_region_t* region =
+      loom_test_low_asm_region_body(loom_block_op(module_block, 0));
+  ASSERT_NE(region, nullptr);
+  ASSERT_EQ(region->block_count, 4u);
+
+  loom_block_t* entry = loom_region_block(region, 0);
+  ASSERT_NE(entry, nullptr);
+  ASSERT_EQ(entry->op_count, 2u);
+  ASSERT_TRUE(loom_low_const_isa(loom_block_op(entry, 0)));
+  ASSERT_TRUE(loom_low_cond_br_isa(loom_block_op(entry, 1)));
+
+  loom_block_t* then_block = loom_region_block(region, 1);
+  ASSERT_NE(then_block, nullptr);
+  ASSERT_EQ(then_block->op_count, 1u);
+  ASSERT_TRUE(loom_low_br_isa(loom_block_op(then_block, 0)));
+
+  loom_block_t* else_block = loom_region_block(region, 2);
+  ASSERT_NE(else_block, nullptr);
+  ASSERT_EQ(else_block->op_count, 1u);
+  ASSERT_TRUE(loom_low_br_isa(loom_block_op(else_block, 0)));
+
+  loom_block_t* join_block = loom_region_block(region, 3);
+  ASSERT_NE(join_block, nullptr);
+  ASSERT_EQ(join_block->arg_count, 1u);
+  ASSERT_EQ(join_block->op_count, 1u);
+  ASSERT_TRUE(loom_low_return_isa(loom_block_op(join_block, 0)));
+
+  loom_module_free(module);
 }
 
 TEST_F(LowAsmParserTest, RejectsTrailingTokenAfterLocation) {

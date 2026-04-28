@@ -1,48 +1,72 @@
-// RUN: pass scf-to-cfg,source-to-low
+// RUN: emit source-low target-preset=amdgpu-gfx11 output=low
 
-target.profile @target preset("amdgpu-gfx11")
-
-func.def target(@target) @scf_if_scalar_compare(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
+func.def @cfg_if_scalar_compare(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
   %cond = scalar.cmpi slt, %lhs, %rhs : i32
-  %result = scf.if %cond -> (i32) {
-    %then = scalar.addi %a, %b : i32
-    scf.yield %then : i32
-  } else {
-    %else = scalar.subi %a, %b : i32
-    scf.yield %else : i32
-  }
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  %then = scalar.addi %a, %b : i32
+  cfg.br ^join(%then: i32)
+^else:
+  %else = scalar.subi %a, %b : i32
+  cfg.br ^join(%else: i32)
+^join(%result: i32):
   func.return %result : i32
 }
 
 // ----
-target.profile @target preset("amdgpu-gfx11")
-
-low.func.def target(@target) abi(hal_kernel) @scf_if_scalar_compare(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %a: reg<amdgpu.sgpr>, %b: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) {
-^_bb0(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %a: reg<amdgpu.sgpr>, %b: reg<amdgpu.sgpr>):
-  %cond = low.op<amdgpu.s_cmp_lt_i32>(%lhs, %rhs) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.scc>
-  low.cond_br %cond, ^_bb1, ^_bb2 : reg<amdgpu.scc>
-^_bb1:
-  %then = low.op<amdgpu.s_add_u32>(%a, %b) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
-  low.br ^_bb3(%then: reg<amdgpu.sgpr>)
-^_bb2:
-  %else = low.op<amdgpu.s_sub_u32>(%a, %b) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
-  low.br ^_bb3(%else: reg<amdgpu.sgpr>)
-^_bb3(%result: reg<amdgpu.sgpr>):
-  low.return %result : reg<amdgpu.sgpr>
+low.func.def target(@target) abi(hal_kernel) @cfg_if_scalar_compare(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %a: reg<amdgpu.sgpr>, %b: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
+  %cond = s_cmp_lt_i32 %lhs, %rhs
+  low.cond_br %cond, ^then, ^else : reg<amdgpu.scc>
+^then:
+  %then = s_add_u32 %a, %b
+  low.br ^join(%then: reg<amdgpu.sgpr>)
+^else:
+  %else = s_sub_u32 %a, %b
+  low.br ^join(%else: reg<amdgpu.sgpr>)
+^join(%result: reg<amdgpu.sgpr>):
+  return %result
 }
 
 // ====
 
-target.profile @target preset("amdgpu-gfx11")
-
-func.def target(@target) @divergent_if(%values: vector<2xi32>, %limit: i32, %a: i32, %b: i32) -> (i32) {
+func.def @divergent_if(%values: vector<2xi32>, %limit: i32) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
-  // ERROR@+1: BACKEND/001 "AMDGPU scalar comparison lowering requires SGPR operands"
   %cond = scalar.cmpi slt, %lane, %limit : i32
-  %result = scf.if %cond -> (i32) {
-    scf.yield %a : i32
-  } else {
-    scf.yield %b : i32
-  }
-  func.return %result : i32
+  // ERROR@+1: BACKEND/001 "AMDGPU divergent branch lowering currently requires a then-only diamond"
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  cfg.br ^join
+^else:
+  cfg.br ^join
+^join:
+  func.return
+}
+
+// ====
+
+func.def @divergent_then_only(%values: vector<2xi32>, %limit: i32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %cond = scalar.cmpi slt, %lane, %limit : i32
+  cfg.cond_br %cond, ^then, ^join : i1
+^then:
+  %biased = scalar.addi %lane, %limit : i32
+  cfg.br ^join
+^join:
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_then_only(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>) asm<amdgpu.gfx11.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %8 = v_mov_b32_copy %limit
+  %cond = v_cmp_lt_i32 %lane, %8
+  %10, %11 = s_and_saveexec_b64 %cond
+  low.cond_br %11, ^then, ^join : reg<amdgpu.scc>
+^then:
+  %12 = v_mov_b32_copy %limit
+  %biased = v_add_u32 %lane, %12
+  low.br ^join
+^join:
+  s_mov_b64_exec %10
+  return
 }

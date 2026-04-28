@@ -93,10 +93,22 @@ iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
 bool loom_print_block_has_label(const loom_print_context_t* ctx,
                                 const loom_block_t* block);
 
+// Returns true when any successor needs a synthetic block label.
+bool loom_print_region_needs_synthetic_labels(const loom_print_context_t* ctx,
+                                              const loom_region_t* region);
+
+// Prints one block label line, including any block arguments.
+iree_status_t loom_print_block_label_line(loom_print_context_t* ctx,
+                                          const loom_region_t* region,
+                                          const loom_block_t* block);
+
 // Prints a successor reference and reports its emitted field range.
 iree_status_t loom_print_successor_ref(loom_print_context_t* ctx,
                                        const loom_op_t* op,
                                        uint8_t successor_index);
+
+// Prints one ordinary operation at the current indentation level.
+iree_status_t loom_print_op(loom_print_context_t* ctx, const loom_op_t* op);
 
 // Prints a canonical attribute payload.
 iree_status_t loom_print_attr(loom_output_stream_t* stream,

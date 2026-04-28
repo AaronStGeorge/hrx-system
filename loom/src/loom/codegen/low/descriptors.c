@@ -1121,14 +1121,6 @@ static iree_status_t loom_low_verify_descriptor_state_operands(
                               " must name one concrete register class",
                               descriptor_index, i);
     }
-    if (operand->role == LOOM_LOW_OPERAND_ROLE_IMPLICIT &&
-        state_flags != LOOM_LOW_OPERAND_FLAG_STATE_WRITE) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "low descriptor %" PRIu32
-                              " implicit state operand row %" PRIu16
-                              " must be a write-only clobber",
-                              descriptor_index, i);
-    }
   }
   return iree_ok_status();
 }
