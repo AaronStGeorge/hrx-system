@@ -320,6 +320,99 @@ SAMPLE_XML = """
         </FunctionalGroup>
       </Instruction>
     </Instructions>
+    <OperandTypes>
+      <OperandType IsPartitioned="false">
+        <OperandTypeName>OPR_SDST</OperandTypeName>
+        <OperandPredefinedValues>
+          <PredefinedValue>
+            <Name>NULL</Name>
+            <Value>124</Value>
+          </PredefinedValue>
+          <PredefinedValue>
+            <Name>M0</Name>
+            <Value>125</Value>
+          </PredefinedValue>
+          <PredefinedValue>
+            <Name>EXEC_LO</Name>
+            <Value>126</Value>
+          </PredefinedValue>
+        </OperandPredefinedValues>
+      </OperandType>
+      <OperandType IsPartitioned="false">
+        <OperandTypeName>OPR_SDST_EXEC</OperandTypeName>
+        <OperandPredefinedValues>
+          <PredefinedValue>
+            <Name>EXEC_LO</Name>
+            <Value>126</Value>
+          </PredefinedValue>
+        </OperandPredefinedValues>
+      </OperandType>
+      <OperandType IsPartitioned="false">
+        <OperandTypeName>OPR_SDST_M0</OperandTypeName>
+        <OperandPredefinedValues>
+          <PredefinedValue>
+            <Name>M0</Name>
+            <Value>125</Value>
+          </PredefinedValue>
+        </OperandPredefinedValues>
+      </OperandType>
+      <OperandType IsPartitioned="false">
+        <OperandTypeName>OPR_SSRC</OperandTypeName>
+        <OperandPredefinedValues>
+          <PredefinedValue>
+            <Name>EXEC_LO</Name>
+            <Value>126</Value>
+          </PredefinedValue>
+          <PredefinedValue>
+            <Name>SRC_LITERAL</Name>
+            <Value>255</Value>
+          </PredefinedValue>
+        </OperandPredefinedValues>
+      </OperandType>
+      <OperandType IsPartitioned="false">
+        <OperandTypeName>OPR_SRC</OperandTypeName>
+        <OperandPredefinedValues>
+          <PredefinedValue>
+            <Name>SRC_LITERAL</Name>
+            <Value>255</Value>
+          </PredefinedValue>
+        </OperandPredefinedValues>
+      </OperandType>
+      <OperandType IsPartitioned="false">
+        <OperandTypeName>OPR_SREG_M0</OperandTypeName>
+        <OperandPredefinedValues>
+          <PredefinedValue>
+            <Name>0</Name>
+            <Value>128</Value>
+          </PredefinedValue>
+          <PredefinedValue>
+            <Name>M0</Name>
+            <Value>125</Value>
+          </PredefinedValue>
+        </OperandPredefinedValues>
+      </OperandType>
+      <OperandType IsPartitioned="false">
+        <OperandTypeName>OPR_SREG</OperandTypeName>
+        <OperandPredefinedValues/>
+      </OperandType>
+      <OperandType IsPartitioned="false">
+        <OperandTypeName>OPR_VGPR</OperandTypeName>
+        <OperandPredefinedValues>
+          <PredefinedValue>
+            <Name>v0</Name>
+            <Value>0</Value>
+          </PredefinedValue>
+        </OperandPredefinedValues>
+      </OperandType>
+      <OperandType IsPartitioned="false">
+        <OperandTypeName>OPR_SSRC_SPECIAL_SCC</OperandTypeName>
+        <OperandPredefinedValues/>
+      </OperandType>
+      <OperandType IsPartitioned="false">
+        <OperandTypeName>OPR_GPUMEM</OperandTypeName>
+        <OperandPredefinedValues/>
+      </OperandType>
+    </OperandTypes>
   </ISA>
 </Spec>
 """
@@ -346,6 +439,20 @@ def test_parse_amdgpu_isa_xml_text_extracts_instruction_facts() -> None:
         "S_WAIT_IDLE",
         "V_ADD_NC_U32",
     ]
+    assert list(spec.operand_type_map()) == [
+        "OPR_GPUMEM",
+        "OPR_SDST",
+        "OPR_SDST_EXEC",
+        "OPR_SDST_M0",
+        "OPR_SRC",
+        "OPR_SREG",
+        "OPR_SREG_M0",
+        "OPR_SSRC",
+        "OPR_SSRC_SPECIAL_SCC",
+        "OPR_VGPR",
+    ]
+    assert spec.operand_predefined_value("OPR_SDST_M0", "M0") == 125
+    assert spec.operand_predefined_value("OPR_SSRC", "SRC_LITERAL") == 255
 
     add_instruction = spec.instruction_map(include_aliases=True)["S_ADD_U32"]
     assert add_instruction.name == "S_ADD_CO_U32"
@@ -466,5 +573,51 @@ def test_parse_amdgpu_isa_xml_rejects_duplicate_instruction_names() -> None:
     with pytest.raises(
         AmdgpuIsaXmlError,
         match="duplicate AMDGPU ISA instruction 'S_ADD_CO_U32'",
+    ):
+        parse_amdgpu_isa_xml_text(duplicate_xml, source_name="broken.xml")
+
+
+def test_operand_predefined_values_accept_exact_duplicates() -> None:
+    duplicate_xml = SAMPLE_XML.replace(
+        "          <PredefinedValue>\n"
+        "            <Name>M0</Name>\n"
+        "            <Value>125</Value>\n"
+        "          </PredefinedValue>",
+        "          <PredefinedValue>\n"
+        "            <Name>M0</Name>\n"
+        "            <Value>125</Value>\n"
+        "          </PredefinedValue>\n"
+        "          <PredefinedValue>\n"
+        "            <Name>M0</Name>\n"
+        "            <Value>125</Value>\n"
+        "          </PredefinedValue>",
+        1,
+    )
+
+    spec = parse_amdgpu_isa_xml_text(duplicate_xml, source_name="duplicate.xml")
+
+    assert spec.operand_predefined_value("OPR_SDST", "M0") == 125
+
+
+def test_operand_predefined_values_reject_conflicting_duplicates() -> None:
+    duplicate_xml = SAMPLE_XML.replace(
+        "          <PredefinedValue>\n"
+        "            <Name>M0</Name>\n"
+        "            <Value>125</Value>\n"
+        "          </PredefinedValue>",
+        "          <PredefinedValue>\n"
+        "            <Name>M0</Name>\n"
+        "            <Value>125</Value>\n"
+        "          </PredefinedValue>\n"
+        "          <PredefinedValue>\n"
+        "            <Name>M0</Name>\n"
+        "            <Value>126</Value>\n"
+        "          </PredefinedValue>",
+        1,
+    )
+
+    with pytest.raises(
+        AmdgpuIsaXmlError,
+        match="OperandType\\(OPR_SDST\\) has conflicting predefined value 'M0'",
     ):
         parse_amdgpu_isa_xml_text(duplicate_xml, source_name="broken.xml")

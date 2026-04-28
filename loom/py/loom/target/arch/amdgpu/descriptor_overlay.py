@@ -22,6 +22,7 @@ from loom.target.arch.amdgpu.encoding import (
     amdgpu_encoding_format_id,
 )
 from loom.target.arch.amdgpu.isa_xml import (
+    AmdgpuIsaEncodingField,
     AmdgpuIsaFactSource,
     AmdgpuIsaInstruction,
     AmdgpuIsaInstructionEncoding,
@@ -56,10 +57,26 @@ class AmdgpuOperandOverlay:
 
 
 @dataclass(frozen=True, slots=True)
+class AmdgpuOperandPredefinedValueRef:
+    value_name: str
+    operand_type: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AmdgpuEncodingFieldAllOnes:
+    pass
+
+
+AmdgpuFixedEncodingValue = (
+    int | AmdgpuOperandPredefinedValueRef | AmdgpuEncodingFieldAllOnes
+)
+
+
+@dataclass(frozen=True, slots=True)
 class AmdgpuIgnoredOperandOverlay:
     xml_field_name: str
     ignore_reason: str
-    fixed_encoding_value: int | None = None
+    fixed_encoding_value: AmdgpuFixedEncodingValue | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +106,7 @@ class AmdgpuDescriptorOverlay:
     encoding_id: int | None = None
     immediate_fields: tuple[str, ...] = ()
     immediates: tuple[Immediate, ...] = ()
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = ()
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = ()
     effects: tuple[Effect, ...] = ()
     constraints: tuple[Constraint, ...] = ()
     feature_mask_words: tuple[int, ...] = ()
@@ -152,20 +169,8 @@ def materialize_amdgpu_descriptor_overlay(
             operand for operand in operands if operand.role is not OperandRole.RESULT
         ),
         immediates=_materialize_immediates(overlay),
-        encoding_field_values=tuple(
-            EncodingFieldValue(
-                amdgpu_encoding_field_id(field_name),
-                value,
-            )
-            for field_name, value in overlay.fixed_encoding_fields
-        )
-        + tuple(
-            EncodingFieldValue(
-                amdgpu_encoding_field_id(ignored_operand.xml_field_name),
-                ignored_operand.fixed_encoding_value,
-            )
-            for ignored_operand in overlay.ignored_operands
-            if ignored_operand.fixed_encoding_value is not None
+        encoding_field_values=_materialize_encoding_field_values(
+            spec, overlay, encoding
         ),
         asm_forms=_asm_forms_for_overlay(overlay),
         effects=overlay.effects,
@@ -222,6 +227,130 @@ def _materialize_immediates(
             f"descriptor overlay '{overlay.descriptor_key}' references unmapped "
             "immediate encoding field"
         ) from exc
+
+
+def _materialize_encoding_field_values(
+    spec: AmdgpuIsaFactSource,
+    overlay: AmdgpuDescriptorOverlay,
+    encoding: AmdgpuIsaInstructionEncoding,
+) -> tuple[EncodingFieldValue, ...]:
+    xml_operands = _explicit_xml_operands_by_field_name(encoding, overlay)
+    microcode_encoding = spec.encoding_map().get(overlay.encoding_name)
+    encoding_fields = (
+        {field.name: field for field in microcode_encoding.fields}
+        if microcode_encoding is not None
+        else {}
+    )
+    field_values = [
+        _materialize_encoding_field_value(
+            spec, overlay, xml_operands, encoding_fields, field_name, value
+        )
+        for field_name, value in overlay.fixed_encoding_fields
+    ]
+    field_values.extend(
+        _materialize_encoding_field_value(
+            spec,
+            overlay,
+            xml_operands,
+            encoding_fields,
+            ignored_operand.xml_field_name,
+            ignored_operand.fixed_encoding_value,
+        )
+        for ignored_operand in overlay.ignored_operands
+        if ignored_operand.fixed_encoding_value is not None
+    )
+    return tuple(field_values)
+
+
+def _materialize_encoding_field_value(
+    spec: AmdgpuIsaFactSource,
+    overlay: AmdgpuDescriptorOverlay,
+    xml_operands: dict[str, AmdgpuIsaOperand],
+    encoding_fields: dict[str, AmdgpuIsaEncodingField],
+    field_name: str,
+    value: AmdgpuFixedEncodingValue,
+) -> EncodingFieldValue:
+    try:
+        field_id = amdgpu_encoding_field_id(field_name)
+    except KeyError as exc:
+        raise AmdgpuDescriptorOverlayError(
+            f"descriptor overlay '{overlay.descriptor_key}' references unmapped "
+            f"encoding field '{field_name}'"
+        ) from exc
+    resolved_value = _resolve_fixed_encoding_value(
+        spec, overlay, xml_operands, encoding_fields, field_name, value
+    )
+    _validate_fixed_encoding_field_width(
+        overlay, encoding_fields, field_name, resolved_value
+    )
+    return EncodingFieldValue(field_id, resolved_value)
+
+
+def _validate_fixed_encoding_field_width(
+    overlay: AmdgpuDescriptorOverlay,
+    encoding_fields: dict[str, AmdgpuIsaEncodingField],
+    field_name: str,
+    value: int,
+) -> None:
+    bit_count = _encoding_field_bit_count(encoding_fields, field_name)
+    if bit_count is None:
+        return
+    if value < 0 or value >= (1 << bit_count):
+        raise AmdgpuDescriptorOverlayError(
+            f"descriptor overlay '{overlay.descriptor_key}' fixed field "
+            f"'{field_name}' value {value} does not fit in {bit_count} bits"
+        )
+
+
+def _resolve_fixed_encoding_value(
+    spec: AmdgpuIsaFactSource,
+    overlay: AmdgpuDescriptorOverlay,
+    xml_operands: dict[str, AmdgpuIsaOperand],
+    encoding_fields: dict[str, AmdgpuIsaEncodingField],
+    field_name: str,
+    value: AmdgpuFixedEncodingValue,
+) -> int:
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, AmdgpuEncodingFieldAllOnes):
+        bit_count = _encoding_field_bit_count(encoding_fields, field_name)
+        if bit_count is None:
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' fixed field "
+                f"'{field_name}' uses all-ones without an XML encoding field"
+            )
+        return (1 << bit_count) - 1
+
+    operand_type = value.operand_type
+    if operand_type is None:
+        xml_operand = xml_operands.get(field_name)
+        if xml_operand is None:
+            raise AmdgpuDescriptorOverlayError(
+                f"descriptor overlay '{overlay.descriptor_key}' fixed field "
+                f"'{field_name}' uses predefined value '{value.value_name}' without "
+                "an XML operand to infer the operand type"
+            )
+        operand_type = xml_operand.operand_type
+
+    try:
+        return spec.operand_predefined_value(operand_type, value.value_name)
+    except AmdgpuIsaXmlError as exc:
+        raise AmdgpuDescriptorOverlayError(
+            f"descriptor overlay '{overlay.descriptor_key}' fixed field "
+            f"'{field_name}' references AMDGPU predefined value "
+            f"'{operand_type}.{value.value_name}'"
+        ) from exc
+
+
+def _encoding_field_bit_count(
+    encoding_fields: dict[str, AmdgpuIsaEncodingField],
+    field_name: str,
+) -> int | None:
+    encoding_field = encoding_fields.get(field_name)
+    if encoding_field is None:
+        return None
+    return sum(bit_range.bit_count for bit_range in encoding_field.ranges)
 
 
 def materialize_amdgpu_descriptor_overlays(

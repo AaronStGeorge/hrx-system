@@ -13,9 +13,12 @@ from pathlib import Path
 
 from loom.target.arch.amdgpu.descriptor_overlay import (
     AmdgpuDescriptorOverlay,
+    AmdgpuEncodingFieldAllOnes,
+    AmdgpuFixedEncodingValue,
     AmdgpuIgnoredOperandOverlay,
     AmdgpuImplicitOperandOverlay,
     AmdgpuOperandOverlay,
+    AmdgpuOperandPredefinedValueRef,
     materialize_amdgpu_descriptor_overlays,
 )
 from loom.target.arch.amdgpu.encoding import (
@@ -121,7 +124,15 @@ _COUNTER_VMEM_STORE = 2
 _COUNTER_LDS = 3
 _COUNTER_SMEM = 4
 _COUNTER_ALU = 5
-_MUBUF_SOFFSET_INLINE_ZERO = 0x80
+
+
+def _predefined(
+    value_name: str, operand_type: str | None = None
+) -> AmdgpuOperandPredefinedValueRef:
+    return AmdgpuOperandPredefinedValueRef(value_name, operand_type)
+
+
+_MUBUF_SOFFSET_INLINE_ZERO = _predefined("0")
 
 _VMEM_LOAD_COUNTER_HAZARD = Hazard(
     HazardKind.WAIT_COUNTER, counter_id=_COUNTER_VMEM_LOAD
@@ -186,8 +197,8 @@ _ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS = frozenset(
     )
 )
 _ADDRESS_OFFSET_IMMEDIATE_FIELD_NAMES = frozenset(("offset", "offset0", "offset1"))
-_GLOBAL_SADDR_OFF = 0x7C
-_GLOBAL_GFX950_SADDR_OFF = 0x7F
+_GLOBAL_SADDR_OFF = _predefined("NULL")
+_GLOBAL_GFX950_SADDR_OFF = AmdgpuEncodingFieldAllOnes()
 
 _SGPR_ALT = (RegClassAlt(_REG_SGPR),)
 _VGPR_ALT = (RegClassAlt(_REG_VGPR),)
@@ -567,7 +578,17 @@ _U32_IMMEDIATE = Immediate(
 )
 
 
-def _manual_scalar_move_descriptors() -> tuple[Descriptor, ...]:
+_MANUAL_SCALAR_MOVE_DESCRIPTOR_KEYS = (
+    "amdgpu.s_mov_b32",
+    "amdgpu.s_mov_b32_m0",
+    "amdgpu.s_mov_b64_exec",
+    "amdgpu.s_xor_b64_exec",
+)
+
+
+def _manual_scalar_move_descriptors(
+    spec: AmdgpuIsaFactSource,
+) -> tuple[Descriptor, ...]:
     return (
         Descriptor(
             key="amdgpu.s_mov_b32",
@@ -594,7 +615,10 @@ def _manual_scalar_move_descriptors() -> tuple[Descriptor, ...]:
                 ),
             ),
             encoding_field_values=(
-                EncodingFieldValue(amdgpu_encoding_field_id("SDST"), 125),
+                EncodingFieldValue(
+                    amdgpu_encoding_field_id("SDST"),
+                    spec.operand_predefined_value("OPR_SDST_M0", "M0"),
+                ),
             ),
             asm_forms=_asm(
                 mnemonic="s_mov_b32_m0", results=("dst",), operands=("src",)
@@ -618,7 +642,10 @@ def _manual_scalar_move_descriptors() -> tuple[Descriptor, ...]:
                 _exec_clobber(),
             ),
             encoding_field_values=(
-                EncodingFieldValue(amdgpu_encoding_field_id("SDST"), 126),
+                EncodingFieldValue(
+                    amdgpu_encoding_field_id("SDST"),
+                    spec.operand_predefined_value("OPR_SDST_EXEC", "EXEC_LO"),
+                ),
             ),
             asm_forms=_asm(mnemonic="s_mov_b64_exec", operands=("src",)),
             effects=(_CONVERGENT_EFFECT,),
@@ -644,8 +671,14 @@ def _manual_scalar_move_descriptors() -> tuple[Descriptor, ...]:
                 _exec_state_read(),
             ),
             encoding_field_values=(
-                EncodingFieldValue(amdgpu_encoding_field_id("SDST"), 126),
-                EncodingFieldValue(amdgpu_encoding_field_id("SSRC1"), 126),
+                EncodingFieldValue(
+                    amdgpu_encoding_field_id("SDST"),
+                    spec.operand_predefined_value("OPR_SDST_EXEC", "EXEC_LO"),
+                ),
+                EncodingFieldValue(
+                    amdgpu_encoding_field_id("SSRC1"),
+                    spec.operand_predefined_value("OPR_SSRC", "EXEC_LO"),
+                ),
             ),
             asm_forms=_asm(
                 mnemonic="s_xor_b64_exec", results=("active",), operands=("src",)
@@ -1944,7 +1977,7 @@ def _v_mov_b32_literal_overlay() -> AmdgpuDescriptorOverlay:
         asm_forms=_asm(results=("dst",), immediates=("imm32",)),
         immediate_fields=("LITERAL",),
         immediates=(_U32_IMMEDIATE,),
-        fixed_encoding_fields=(("SRC0", 255),),
+        fixed_encoding_fields=(("SRC0", _predefined("SRC_LITERAL", "OPR_SRC")),),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -2103,7 +2136,7 @@ def _buffer_load_dword_off_zero_overlay(
             *_cache_immediates(cache_fields),
         ),
         fixed_encoding_fields=(
-            ("VADDR", 0),
+            ("VADDR", _predefined("v0")),
             ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
             ("OFFEN", 0),
         ),
@@ -2252,7 +2285,7 @@ def _buffer_store_dword_off_zero_overlay(
             *_cache_immediates(cache_fields),
         ),
         fixed_encoding_fields=(
-            ("VADDR", 0),
+            ("VADDR", _predefined("v0")),
             ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
             ("OFFEN", 0),
         ),
@@ -2348,7 +2381,7 @@ def _global_load_overlay(
     data_field_name: str,
     offset_field_name: str,
     offset_bit_width: int,
-    saddr_off: int | None,
+    saddr_off: AmdgpuFixedEncodingValue | None,
     width_bits: int,
     units: int,
     address_units: int,
@@ -2366,7 +2399,7 @@ def _global_load_overlay(
             address_field_name, _vgpr_operand("addr", units=address_units)
         ),
     )
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = ()
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = ()
     if saddr_off is None:
         operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
     else:
@@ -2402,7 +2435,7 @@ def _global_store_overlay(
     data_field_name: str,
     offset_field_name: str,
     offset_bit_width: int,
-    saddr_off: int | None,
+    saddr_off: AmdgpuFixedEncodingValue | None,
     width_bits: int,
     units: int,
     address_units: int,
@@ -2420,7 +2453,7 @@ def _global_store_overlay(
         ),
         AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value", units=units)),
     )
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = ()
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = ()
     if saddr_off is None:
         operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
     else:
@@ -2453,7 +2486,7 @@ def _global_load_lds_overlay(
     mnemonic: str,
     width_bits: int,
     address_units: int,
-    saddr_off: int | None,
+    saddr_off: AmdgpuFixedEncodingValue | None,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 13,
     cache_fields: tuple[tuple[str, int], ...] = (),
@@ -2461,7 +2494,7 @@ def _global_load_lds_overlay(
     operands: tuple[AmdgpuOperandOverlay, ...] = (
         AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr", units=address_units)),
     )
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = ()
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = ()
     if saddr_off is None:
         operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
     else:
@@ -2478,7 +2511,7 @@ def _global_load_lds_overlay(
             AmdgpuIgnoredOperandOverlay(
                 "VDST",
                 ignore_reason="legacy-lds-dma-has-no-vgpr-result",
-                fixed_encoding_value=0,
+                fixed_encoding_value=_predefined("v0", "OPR_VGPR"),
             ),
         ),
         implicit_operands=(_implicit_m0_input(),),
@@ -2498,7 +2531,7 @@ def _global_load_lds_overlays(
     *,
     descriptor_key_suffix: str = "",
     address_units: int,
-    saddr_off: int | None,
+    saddr_off: AmdgpuFixedEncodingValue | None,
     cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     variants = (
@@ -2532,7 +2565,7 @@ def _global_memory_overlays(
     store_data_field_name: str,
     offset_field_name: str,
     offset_bit_width: int,
-    saddr_off: int | None,
+    saddr_off: AmdgpuFixedEncodingValue | None,
     address_units: int,
     descriptor_key_suffix: str = "",
     implicit_m0: bool = False,
@@ -2606,7 +2639,7 @@ def _global_atomic_overlay(
     return_field_value: int,
     cache_fields: tuple[tuple[str, int], ...],
     cache_immediate_field_names: tuple[str, ...],
-    saddr_off: int | None,
+    saddr_off: AmdgpuFixedEncodingValue | None,
     address_units: int,
 ) -> AmdgpuDescriptorOverlay:
     schedule_class = (
@@ -2635,7 +2668,7 @@ def _global_atomic_overlay(
             AmdgpuIgnoredOperandOverlay(
                 "VDST",
                 ignore_reason="no-return-global-atomic-has-no-vgpr-result",
-                fixed_encoding_value=0,
+                fixed_encoding_value=_predefined("v0", "OPR_VGPR"),
             ),
         )
 
@@ -2647,7 +2680,7 @@ def _global_atomic_overlay(
     cache_immediate_defaults = {
         return_field_name: return_field_value if returns_old_value else 0
     }
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = tuple(
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = tuple(
         (
             field_name,
             return_field_value
@@ -2706,7 +2739,7 @@ def _global_atomic_cmpswap_overlay(
     return_field_value: int,
     cache_fields: tuple[tuple[str, int], ...],
     cache_immediate_field_names: tuple[str, ...],
-    saddr_off: int | None,
+    saddr_off: AmdgpuFixedEncodingValue | None,
     address_units: int,
     descriptor_key_suffix: str,
 ) -> AmdgpuDescriptorOverlay:
@@ -2716,7 +2749,7 @@ def _global_atomic_cmpswap_overlay(
         if field_name in cache_immediate_field_names
     )
     cache_immediate_defaults = {return_field_name: return_field_value}
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = tuple(
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = tuple(
         (
             field_name,
             return_field_value if field_name == return_field_name else 0,
@@ -2777,7 +2810,7 @@ def _global_atomic_overlays(
     return_field_value: int,
     cache_fields: tuple[tuple[str, int], ...],
     cache_immediate_field_names: tuple[str, ...] = (),
-    saddr_off: int | None,
+    saddr_off: AmdgpuFixedEncodingValue | None,
     address_units: int,
     descriptor_key_suffix: str = "",
     include_packed_half_add: bool = False,
@@ -3052,7 +3085,7 @@ def _flat_atomic_overlay(
             AmdgpuIgnoredOperandOverlay(
                 "VDST",
                 ignore_reason="no-return-flat-atomic-has-no-vgpr-result",
-                fixed_encoding_value=0,
+                fixed_encoding_value=_predefined("v0", "OPR_VGPR"),
             ),
         )
 
@@ -3064,7 +3097,7 @@ def _flat_atomic_overlay(
     cache_immediate_defaults = {
         return_field_name: return_field_value if returns_old_value else 0
     }
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = tuple(
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = tuple(
         (
             field_name,
             return_field_value
@@ -3141,7 +3174,7 @@ def _flat_atomic_cmpswap_overlay(
         if field_name in cache_immediate_field_names
     )
     cache_immediate_defaults = {return_field_name: return_field_value}
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = tuple(
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = tuple(
         (
             field_name,
             return_field_value if field_name == return_field_name else 0,
@@ -3584,7 +3617,10 @@ def _ds_read_overlay(
     width_bits: int,
     units: int,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     suffix = f"b{width_bits}"
     return AmdgpuDescriptorOverlay(
@@ -3612,7 +3648,10 @@ def _ds_read_overlay(
 def _ds_load_u16_d16_overlays(
     *,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         AmdgpuDescriptorOverlay(
@@ -3692,7 +3731,10 @@ def _ds_write_overlay(
     width_bits: int,
     units: int,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     suffix = f"b{width_bits}"
     return AmdgpuDescriptorOverlay(
@@ -3723,7 +3765,9 @@ def _ds_read2_overlay(
     value_units: int,
     offset_encoding_id: int | None = None,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     suffix = f"b{element_width_bits}"
     if offset_encoding_id is None:
@@ -3763,7 +3807,9 @@ def _ds_write2_overlay(
     value_units: int,
     offset_encoding_id: int | None = None,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     suffix = f"b{element_width_bits}"
     if offset_encoding_id is None:
@@ -3807,7 +3853,10 @@ def _ds_atomic_overlay(
     data_format_name: str,
     returns_old_value: bool,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     operands: tuple[AmdgpuOperandOverlay, ...]
     if returns_old_value:
@@ -3851,7 +3900,10 @@ def _ds_atomic_overlay(
 def _ds_atomic_cmpstore_overlay(
     *,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.ds_cmpst_rtn_b32",
@@ -3888,7 +3940,10 @@ def _ds_atomic_cmpstore_overlay(
 def _ds_atomic_overlays(
     *,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
     include_packed_half_add: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     rows = [
@@ -4002,7 +4057,9 @@ def _ds_stride64_read2_overlay(
     element_width_bits: int,
     value_units: int,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     suffix = f"b{element_width_bits}"
     offset_encoding_id = (
@@ -4030,7 +4087,9 @@ def _ds_stride64_write2_overlay(
     element_width_bits: int,
     value_units: int,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     suffix = f"b{element_width_bits}"
     offset_encoding_id = (
@@ -4056,7 +4115,10 @@ def _ds_stride64_write2_overlay(
 def _ds_read_addtid_b32_overlay(
     *,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.ds_read_addtid_b32",
@@ -4081,7 +4143,10 @@ def _ds_read_addtid_b32_overlay(
 def _ds_write_addtid_b32_overlay(
     *,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.ds_write_addtid_b32",
@@ -4110,7 +4175,9 @@ def _ds_crosslane_offset_immediate() -> Immediate:
 def _ds_swizzle_b32_overlay(
     *,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.ds_swizzle_b32",
@@ -4137,7 +4204,9 @@ def _ds_permute_b32_overlay(
     mnemonic: str = "ds_permute_b32",
     semantic_tag: str = "memory.crosslane.permute.u32",
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -4165,7 +4234,9 @@ def _ds_bpermute_b32_overlay(
     mnemonic: str = "ds_bpermute_b32",
     semantic_tag: str = "memory.crosslane.bpermute.u32",
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     return _ds_permute_b32_overlay(
         descriptor_key=descriptor_key,
@@ -4180,7 +4251,7 @@ def _ds_bpermute_b32_overlay(
 def _ds_bpermute_fi_b32_overlay(
     *,
     encoding_name: str = "ENC_VDS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return _ds_bpermute_b32_overlay(
         descriptor_key="amdgpu.ds_bpermute_fi_b32",
@@ -4195,7 +4266,9 @@ def _ds_bpermute_fi_b32_overlay(
 def _ds_crosslane_overlays(
     *,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("GDS", 0),
+    ),
     include_fetch_invalid: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     overlays = (
@@ -4232,7 +4305,9 @@ def _ds_transpose_read_overlay(
     width_bits: int,
     units: int,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("GDS", 0),),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("GDS", 0),
+    ),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -4293,8 +4368,8 @@ def _gfx950_ds_transpose_read_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
 
 
 def _ds_fixed_fields_without_offset1(
-    fixed_encoding_fields: tuple[tuple[str, int], ...],
-) -> tuple[tuple[str, int], ...]:
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...],
+) -> tuple[tuple[str, AmdgpuFixedEncodingValue], ...]:
     return tuple(
         fixed_field
         for fixed_field in fixed_encoding_fields
@@ -4305,7 +4380,10 @@ def _ds_fixed_fields_without_offset1(
 def _ds_memory_overlays(
     *,
     encoding_name: str = "ENC_DS",
-    fixed_encoding_fields: tuple[tuple[str, int], ...] = (("OFFSET1", 0), ("GDS", 0)),
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("OFFSET1", 0),
+        ("GDS", 0),
+    ),
     include_packed_half_atomic_add: bool = False,
     include_u16_d16_loads: bool = False,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
@@ -4831,7 +4909,7 @@ def _s_waitcnt_vscnt_overlay() -> AmdgpuDescriptorOverlay:
         operands=(),
         immediate_fields=("SIMM16",),
         immediates=(_VSCNT_IMMEDIATE,),
-        fixed_encoding_fields=(("SDST", 124),),
+        fixed_encoding_fields=(("SDST", _predefined("NULL", "OPR_SDST")),),
         effects=(_VMEM_STORE_WAIT_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -6054,7 +6132,7 @@ _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=_manual_scalar_move_descriptors(),
+    descriptors=(),
 )
 
 
@@ -6169,7 +6247,7 @@ _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=_manual_scalar_move_descriptors(),
+    descriptors=(),
 )
 
 _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
@@ -6301,7 +6379,7 @@ _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
             model_quality=ModelQuality.FALLBACK,
         ),
     ),
-    descriptors=_manual_scalar_move_descriptors(),
+    descriptors=(),
 )
 
 _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
@@ -6451,7 +6529,6 @@ _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE = DescriptorSet(
         ),
     ),
     descriptors=(
-        *_manual_scalar_move_descriptors(),
         Descriptor(
             key="amdgpu.v_wmma_f32_16x16x32_f16",
             mnemonic="v_wmma_f32_16x16x32_f16",
@@ -6587,6 +6664,7 @@ def _amdgpu_core_descriptor_set_bases() -> tuple[DescriptorSet, ...]:
 
 def _amdgpu_descriptor_id_key_set() -> set[str]:
     keys: set[str] = set()
+    keys.update(_MANUAL_SCALAR_MOVE_DESCRIPTOR_KEYS)
     for descriptor_set in _amdgpu_core_descriptor_set_bases():
         keys.update(descriptor.key for descriptor in descriptor_set.descriptors)
     for overlays in (
@@ -6872,14 +6950,17 @@ def amdgpu_common_reg_class_ids() -> tuple[tuple[str, int], ...]:
 
 def _with_overlay_descriptors(
     base: DescriptorSet,
+    spec: AmdgpuIsaFactSource,
     overlay_descriptors: tuple[Descriptor, ...],
 ) -> DescriptorSet:
+    manual_descriptors = _manual_scalar_move_descriptors(spec)
     descriptor_set = replace(
         base,
         descriptors=(
-            base.descriptors[0],
+            manual_descriptors[0],
             *overlay_descriptors,
-            *base.descriptors[1:],
+            *manual_descriptors[1:],
+            *base.descriptors,
         ),
     )
     _validate_address_immediate_units(descriptor_set)
@@ -6892,6 +6973,7 @@ def build_amdgpu_gfx950_core_descriptor_set(
     spec = parse_amdgpu_isa_xml_path(xml_path)
     return _with_overlay_descriptors(
         _AMDGPU_GFX950_CORE_DESCRIPTOR_SET_BASE,
+        spec,
         _gfx950_core_overlay_descriptors(spec),
     )
 
@@ -6902,6 +6984,7 @@ def build_amdgpu_gfx11_core_descriptor_set(
     spec = parse_amdgpu_isa_xml_path(xml_path)
     return _with_overlay_descriptors(
         _AMDGPU_GFX11_CORE_DESCRIPTOR_SET_BASE,
+        spec,
         _gfx11_core_overlay_descriptors(spec),
     )
 
@@ -6912,6 +6995,7 @@ def build_amdgpu_gfx12_core_descriptor_set(
     spec = parse_amdgpu_isa_xml_path(xml_path)
     return _with_overlay_descriptors(
         _AMDGPU_GFX12_CORE_DESCRIPTOR_SET_BASE,
+        spec,
         _gfx12_core_overlay_descriptors(spec),
     )
 
@@ -6922,6 +7006,7 @@ def build_amdgpu_gfx1250_core_descriptor_set(
     spec = parse_amdgpu_isa_xml_path(xml_path)
     return _with_overlay_descriptors(
         _AMDGPU_GFX1250_CORE_DESCRIPTOR_SET_BASE,
+        spec,
         _gfx1250_core_overlay_descriptors(spec),
     )
 

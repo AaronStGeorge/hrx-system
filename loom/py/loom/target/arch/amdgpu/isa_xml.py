@@ -75,6 +75,19 @@ class AmdgpuIsaOperand:
 
 
 @dataclass(frozen=True, slots=True)
+class AmdgpuIsaPredefinedValue:
+    name: str
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class AmdgpuIsaOperandType:
+    name: str
+    is_partitioned: bool
+    predefined_values: tuple[AmdgpuIsaPredefinedValue, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class AmdgpuIsaInstructionEncoding:
     encoding_name: str
     condition_name: str
@@ -138,6 +151,9 @@ class AmdgpuIsaFactSource(Protocol):
     @property
     def instructions(self) -> tuple[AmdgpuIsaInstruction, ...]: ...
 
+    @property
+    def operand_types(self) -> tuple[AmdgpuIsaOperandType, ...]: ...
+
     def encoding_map(self) -> dict[str, AmdgpuIsaEncoding]: ...
 
     def select_encodings(
@@ -159,6 +175,12 @@ class AmdgpuIsaFactSource(Protocol):
         include_aliases: bool = True,
     ) -> tuple[AmdgpuIsaInstruction, ...]: ...
 
+    def operand_type_map(self) -> dict[str, AmdgpuIsaOperandType]: ...
+
+    def operand_predefined_value(
+        self, operand_type_name: str, value_name: str
+    ) -> int: ...
+
     def instruction_encoding_summaries(
         self,
         names: Iterable[str] | None = None,
@@ -174,6 +196,7 @@ class AmdgpuIsaSpec:
     architecture_id: int
     encodings: tuple[AmdgpuIsaEncoding, ...]
     instructions: tuple[AmdgpuIsaInstruction, ...]
+    operand_types: tuple[AmdgpuIsaOperandType, ...]
 
     def encoding_map(self) -> dict[str, AmdgpuIsaEncoding]:
         return {encoding.name: encoding for encoding in self.encodings}
@@ -260,6 +283,28 @@ class AmdgpuIsaSpec:
                 f"{self.source_name}: unknown AMDGPU ISA instruction(s): {missing_text}"
             )
         return tuple(selected[name] for name in sorted(selected))
+
+    def operand_type_map(self) -> dict[str, AmdgpuIsaOperandType]:
+        return {operand_type.name: operand_type for operand_type in self.operand_types}
+
+    def operand_predefined_value(self, operand_type_name: str, value_name: str) -> int:
+        operand_type = self.operand_type_map().get(operand_type_name)
+        if operand_type is None:
+            raise AmdgpuIsaXmlError(
+                f"{self.source_name}: unknown AMDGPU ISA operand type "
+                f"'{operand_type_name}'"
+            )
+        predefined_values = {
+            predefined_value.name: predefined_value.value
+            for predefined_value in operand_type.predefined_values
+        }
+        value = predefined_values.get(value_name)
+        if value is None:
+            raise AmdgpuIsaXmlError(
+                f"{self.source_name}: AMDGPU ISA operand type "
+                f"'{operand_type_name}' has no predefined value '{value_name}'"
+            )
+        return value
 
     def instruction_encoding_summaries(
         self,
@@ -368,12 +413,33 @@ def _parse_spec_root(root: ElementTree.Element, source_name: str) -> AmdgpuIsaSp
         source_name,
     )
 
+    operand_types_element = _required_child(isa_element, "OperandTypes", source_name)
+    operand_types = tuple(
+        sorted(
+            (
+                _parse_operand_type(operand_type_element, source_name)
+                for operand_type_element in operand_types_element.findall("OperandType")
+            ),
+            key=lambda operand_type: operand_type.name,
+        )
+    )
+    if not operand_types:
+        raise AmdgpuIsaXmlError(
+            f"{source_name}: <OperandTypes> has no <OperandType> rows"
+        )
+    _ensure_unique_names(
+        (operand_type.name for operand_type in operand_types),
+        "operand type",
+        source_name,
+    )
+
     return AmdgpuIsaSpec(
         source_name=source_name,
         architecture_name=architecture_name,
         architecture_id=architecture_id,
         encodings=encodings,
         instructions=instructions,
+        operand_types=operand_types,
     )
 
 
@@ -641,6 +707,71 @@ def _parse_operand(
             source_name,
             context,
         ),
+    )
+
+
+def _parse_operand_type(
+    operand_type_element: ElementTree.Element,
+    source_name: str,
+) -> AmdgpuIsaOperandType:
+    name = _required_text(operand_type_element, "OperandTypeName", source_name)
+    context = _context("OperandType", name)
+    predefined_values_element = operand_type_element.find("OperandPredefinedValues")
+    predefined_values: tuple[AmdgpuIsaPredefinedValue, ...]
+    if predefined_values_element is None:
+        predefined_values = ()
+    else:
+        predefined_values = _normalize_predefined_values(
+            (
+                _parse_predefined_value(predefined_value_element, source_name, context)
+                for predefined_value_element in predefined_values_element.findall(
+                    "PredefinedValue"
+                )
+            ),
+            source_name,
+            context,
+        )
+    return AmdgpuIsaOperandType(
+        name=name,
+        is_partitioned=_required_boolean_attribute(
+            operand_type_element, "IsPartitioned", source_name, context
+        ),
+        predefined_values=predefined_values,
+    )
+
+
+def _parse_predefined_value(
+    predefined_value_element: ElementTree.Element,
+    source_name: str,
+    operand_type_context: str,
+) -> AmdgpuIsaPredefinedValue:
+    name = _required_text(predefined_value_element, "Name", source_name)
+    return AmdgpuIsaPredefinedValue(
+        name=name,
+        value=_required_integer(predefined_value_element, "Value", source_name),
+    )
+
+
+def _normalize_predefined_values(
+    predefined_values: Iterable[AmdgpuIsaPredefinedValue],
+    source_name: str,
+    operand_type_context: str,
+) -> tuple[AmdgpuIsaPredefinedValue, ...]:
+    values_by_name: dict[str, int] = {}
+    for predefined_value in predefined_values:
+        existing_value = values_by_name.get(predefined_value.name)
+        if existing_value is not None:
+            if existing_value != predefined_value.value:
+                raise AmdgpuIsaXmlError(
+                    f"{source_name}: {operand_type_context} has conflicting "
+                    f"predefined value '{predefined_value.name}' values "
+                    f"{existing_value} and {predefined_value.value}"
+                )
+            continue
+        values_by_name[predefined_value.name] = predefined_value.value
+    return tuple(
+        AmdgpuIsaPredefinedValue(name, value)
+        for name, value in sorted(values_by_name.items())
     )
 
 

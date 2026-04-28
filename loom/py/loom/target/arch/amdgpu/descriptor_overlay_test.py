@@ -11,9 +11,11 @@ import pytest
 from loom.target.arch.amdgpu.descriptor_overlay import (
     AmdgpuDescriptorOverlay,
     AmdgpuDescriptorOverlayError,
+    AmdgpuEncodingFieldAllOnes,
     AmdgpuIgnoredOperandOverlay,
     AmdgpuImplicitOperandOverlay,
     AmdgpuOperandOverlay,
+    AmdgpuOperandPredefinedValueRef,
     materialize_amdgpu_descriptor_overlay,
     materialize_amdgpu_descriptor_overlays,
 )
@@ -316,7 +318,10 @@ def test_fixed_encoding_fields_cover_input_xml_operands() -> None:
                 AmdgpuOperandOverlay("VDATA", _result("dst", _VGPR_ALT)),
                 AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
             ),
-            fixed_encoding_fields=(("VADDR", 0), ("SOFFSET", 0)),
+            fixed_encoding_fields=(
+                ("VADDR", AmdgpuOperandPredefinedValueRef("v0")),
+                ("SOFFSET", AmdgpuOperandPredefinedValueRef("0")),
+            ),
             implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
         ),
     )
@@ -325,10 +330,139 @@ def test_fixed_encoding_fields_cover_input_xml_operands() -> None:
         "dst",
         "resource",
     ]
-    assert [field.value for field in descriptor.encoding_field_values] == [0, 0]
+    assert [field.value for field in descriptor.encoding_field_values] == [0, 128]
     assert all(
         field.encoding_field_id != 0 for field in descriptor.encoding_field_values
     )
+
+
+def test_fixed_encoding_fields_resolve_predefined_values() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    descriptor = materialize_amdgpu_descriptor_overlay(
+        spec,
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.buffer_load_dword.off_zero",
+            instruction_name="BUFFER_LOAD_DWORD",
+            mnemonic="buffer_load_dword",
+            encoding_name="ENC_VBUFFER",
+            semantic_tag="memory.load.u32",
+            schedule_class="amdgpu.vmem.load",
+            operands=(
+                AmdgpuOperandOverlay("VDATA", _result("dst", _VGPR_ALT)),
+                AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+            ),
+            fixed_encoding_fields=(
+                ("VADDR", AmdgpuOperandPredefinedValueRef("v0")),
+                ("SOFFSET", AmdgpuOperandPredefinedValueRef("0")),
+            ),
+            implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+        ),
+    )
+
+    assert [field.value for field in descriptor.encoding_field_values] == [0, 128]
+
+
+def test_fixed_encoding_fields_resolve_explicit_predefined_operand_type() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    descriptor = materialize_amdgpu_descriptor_overlay(
+        spec,
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.buffer_load_dword.sbase_zero",
+            instruction_name="BUFFER_LOAD_DWORD",
+            mnemonic="buffer_load_dword",
+            encoding_name="ENC_VBUFFER",
+            semantic_tag="memory.load.u32",
+            schedule_class="amdgpu.vmem.load",
+            operands=(
+                AmdgpuOperandOverlay("VDATA", _result("dst", _VGPR_ALT)),
+                AmdgpuOperandOverlay("VADDR", _operand("vaddr", _VGPR_ALT)),
+                AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+                AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
+            ),
+            fixed_encoding_fields=(
+                ("SBASE", AmdgpuOperandPredefinedValueRef("v0", "OPR_VGPR")),
+            ),
+            implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+        ),
+    )
+
+    assert [field.value for field in descriptor.encoding_field_values] == [0]
+
+
+def test_fixed_encoding_fields_resolve_all_ones_from_xml_field_width() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    descriptor = materialize_amdgpu_descriptor_overlay(
+        spec,
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.buffer_load_dword.sbase_disabled",
+            instruction_name="BUFFER_LOAD_DWORD",
+            mnemonic="buffer_load_dword",
+            encoding_name="ENC_VBUFFER",
+            semantic_tag="memory.load.u32",
+            schedule_class="amdgpu.vmem.load",
+            operands=(
+                AmdgpuOperandOverlay("VDATA", _result("dst", _VGPR_ALT)),
+                AmdgpuOperandOverlay("VADDR", _operand("vaddr", _VGPR_ALT)),
+                AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+                AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
+            ),
+            fixed_encoding_fields=(("SBASE", AmdgpuEncodingFieldAllOnes()),),
+            implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+        ),
+    )
+
+    assert [field.value for field in descriptor.encoding_field_values] == [63]
+
+
+def test_fixed_encoding_fields_reject_literal_outside_xml_field_width() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.buffer_load_dword.sbase_too_wide",
+        instruction_name="BUFFER_LOAD_DWORD",
+        mnemonic="buffer_load_dword",
+        encoding_name="ENC_VBUFFER",
+        semantic_tag="memory.load.u32",
+        schedule_class="amdgpu.vmem.load",
+        operands=(
+            AmdgpuOperandOverlay("VDATA", _result("dst", _VGPR_ALT)),
+            AmdgpuOperandOverlay("VADDR", _operand("vaddr", _VGPR_ALT)),
+            AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+            AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
+        ),
+        fixed_encoding_fields=(("SBASE", 64),),
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="fixed field 'SBASE' value 64 does not fit in 6 bits",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_fixed_encoding_fields_reject_all_ones_without_xml_field_width() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.buffer_load_dword.vaddr_all_ones",
+        instruction_name="BUFFER_LOAD_DWORD",
+        mnemonic="buffer_load_dword",
+        encoding_name="ENC_VBUFFER",
+        semantic_tag="memory.load.u32",
+        schedule_class="amdgpu.vmem.load",
+        operands=(
+            AmdgpuOperandOverlay("VDATA", _result("dst", _VGPR_ALT)),
+            AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+            AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
+        ),
+        fixed_encoding_fields=(("VADDR", AmdgpuEncodingFieldAllOnes()),),
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="fixed field 'VADDR' uses all-ones without an XML encoding field",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
 
 
 def test_materialize_rejects_missing_instruction() -> None:
@@ -426,7 +560,7 @@ def test_materialize_accepts_ignored_fixed_binary_operand() -> None:
                 AmdgpuIgnoredOperandOverlay(
                     "VDATA",
                     ignore_reason="covered-by-target-specific-side-effect",
-                    fixed_encoding_value=0,
+                    fixed_encoding_value=AmdgpuOperandPredefinedValueRef("v0"),
                 ),
             ),
             implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
@@ -440,6 +574,31 @@ def test_materialize_accepts_ignored_fixed_binary_operand() -> None:
     ]
     assert len(descriptor.encoding_field_values) == 1
     assert descriptor.encoding_field_values[0].value == 0
+
+
+def test_materialize_rejects_unknown_predefined_value() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.bad_predefined_value",
+        instruction_name="BUFFER_LOAD_DWORD",
+        mnemonic="buffer_load_dword",
+        encoding_name="ENC_VBUFFER",
+        semantic_tag="memory.load.fixed_vdst",
+        schedule_class="amdgpu.vmem.load",
+        operands=(
+            AmdgpuOperandOverlay("VDATA", _result("dst", _VGPR_ALT)),
+            AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
+            AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
+        ),
+        fixed_encoding_fields=(("VADDR", AmdgpuOperandPredefinedValueRef("v999")),),
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="references AMDGPU predefined value 'OPR_VGPR.v999'",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
 
 
 def test_materialize_rejects_ignored_binary_operand_without_fixed_value() -> None:
