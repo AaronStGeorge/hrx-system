@@ -198,6 +198,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    memory_access
+  HDRS
+    "memory_access.h"
+  SRCS
+    "memory_access.c"
+  DEPS
+    ::descriptors
+    iree::base
+    loom::src::loom::ir::facts
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     allocation
   HDRS
     "allocation.h"
@@ -286,6 +300,7 @@ loom_cc_library(
     ::descriptors
     ::diagnostics
     ::function
+    ::memory_access
     ::register_class_map
     ::requirements
     ::target_binding

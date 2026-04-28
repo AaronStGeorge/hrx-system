@@ -41,6 +41,7 @@ loom_assert_no_dependencies(
         ":diagnostics",
         ":function",
         ":lower",
+        ":memory_access",
         ":move_sequence",
         ":packet",
         ":packet_asm",
@@ -65,6 +66,7 @@ loom_assert_no_dependencies(
         ":descriptor_traits",
         ":diagnostics",
         ":function",
+        ":memory_access",
         ":move_sequence",
         ":packet",
         ":packet_asm",
@@ -234,6 +236,17 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "memory_access",
+    srcs = ["memory_access.c"],
+    hdrs = ["memory_access.h"],
+    deps = [
+        ":descriptors",
+        "//loom/src/loom/ir:facts",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "allocation",
     srcs = ["allocation.c"],
     hdrs = ["allocation.h"],
@@ -308,6 +321,7 @@ loom_cc_library(
         ":descriptors",
         ":diagnostics",
         ":function",
+        ":memory_access",
         ":register_class_map",
         ":requirements",
         ":target_binding",
